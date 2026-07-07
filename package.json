@@ -1,0 +1,23 @@
+{
+  "name": "mtg-pwa-minimal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MTG collection & trading PWA — minimal beta. Local-first PWA + WebSocket trade relay.",
+  "workspaces": [
+    "shared",
+    "client",
+    "server",
+    "pipeline"
+  ],
+  "scripts": {
+    "dev:client": "npm run dev --workspace client",
+    "dev:server": "npm run dev --workspace server",
+    "build:client": "npm run build --workspace client",
+    "build:server": "npm run build --workspace server",
+    "pipeline": "npm run start --workspace pipeline",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

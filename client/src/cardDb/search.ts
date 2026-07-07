@@ -19,10 +19,12 @@ interface Indexed {
 }
 
 let cache: Indexed[] | null = null;
+let nameLookup: Map<string, OracleCard> | null = null;
 
 /** Drop the cache after a card-DB re-import so search reflects new data. */
 export function invalidateSearchIndex(): void {
   cache = null;
+  nameLookup = null;
 }
 
 /** Diacritic-insensitive, lowercased (strips combining marks after NFD). */
@@ -41,6 +43,23 @@ async function getIndex(): Promise<Indexed[]> {
     lowerType: card.typeLine.toLowerCase(),
   }));
   return cache;
+}
+
+/** Resolve a card name to its oracle card (exact, diacritic-insensitive; also matches DFC front faces). For deck import. */
+export async function resolveOracleByName(name: string): Promise<OracleCard | undefined> {
+  if (!nameLookup) {
+    const idx = await getIndex();
+    nameLookup = new Map();
+    for (const e of idx) {
+      if (!nameLookup.has(e.normName)) nameLookup.set(e.normName, e.card);
+      const slash = e.card.name.indexOf(' // ');
+      if (slash !== -1) {
+        const front = normalize(e.card.name.slice(0, slash));
+        if (!nameLookup.has(front)) nameLookup.set(front, e.card);
+      }
+    }
+  }
+  return nameLookup.get(normalize(name));
 }
 
 export interface SearchResult {

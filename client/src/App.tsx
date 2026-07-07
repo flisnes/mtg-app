@@ -7,6 +7,7 @@ import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
 import { Tradelist } from './routes/Tradelist.js';
 import { Decks } from './routes/Decks.js';
+import { DeckDetail } from './routes/DeckDetail.js';
 import { Trade } from './routes/Trade.js';
 import { History } from './routes/History.js';
 import { About } from './routes/About.js';
@@ -57,6 +58,7 @@ export function App() {
           <Route path="/import" element={<Import />} />
           <Route path="/export" element={<Export />} />
           <Route path="/decks" element={<Decks />} />
+          <Route path="/decks/:id" element={<DeckDetail />} />
           <Route path="/trade" element={<Trade />} />
           <Route path="/history" element={<History />} />
           <Route path="/about" element={<About />} />

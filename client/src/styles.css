@@ -509,6 +509,44 @@ button.primary {
   color: var(--text-dim);
 }
 
+/* ---- Deck detail ---- */
+.deck-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.linklike {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: 0.4rem 0;
+  font-size: 1rem;
+}
+.deck-name-input {
+  width: 100%;
+  font-size: 1.4rem;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.25rem 0;
+  margin-bottom: 0.5rem;
+}
+.owned-check {
+  width: 1.4rem;
+  text-align: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.owned-yes {
+  color: var(--ok);
+}
+.owned-no {
+  color: var(--text-dim);
+}
+
 /* ---- Bottom tab bar ---- */
 .tab-bar {
   position: fixed;

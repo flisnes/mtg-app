@@ -1,4 +1,4 @@
-import type { CollectionEntry, Condition, Finish, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Condition, Deck, DeckBoard, DeckCard, Finish, WishlistEntry } from '@mtg/shared';
 import { db } from './schema.js';
 
 // The single mutation path for user data (beta plan §4). All invariants live
@@ -221,6 +221,91 @@ export async function applyImport(lines: ImportLine[]): Promise<{ entries: numbe
     await db.collection.bulkPut(writes);
   });
   return { entries: lines.length, cards };
+}
+
+// ---------------------------------------------------------------------------
+// Decks (beta plan §4). Deck slots reference oracle cards ("4x Lightning Bolt");
+// no format/legality checks in the beta.
+// ---------------------------------------------------------------------------
+
+export async function createDeck(name: string): Promise<string> {
+  const now = Date.now();
+  const deck: Deck = { id: newId(), name: name.trim() || 'Untitled deck', createdAt: now, updatedAt: now };
+  await db.decks.add(deck);
+  return deck.id;
+}
+
+export async function renameDeck(id: string, name: string): Promise<void> {
+  await db.decks.update(id, { name: name.trim() || 'Untitled deck', updatedAt: Date.now() });
+}
+
+export async function deleteDeck(id: string): Promise<void> {
+  await db.transaction('rw', db.decks, db.deckCards, async () => {
+    await db.deckCards.where('deckId').equals(id).delete();
+    await db.decks.delete(id);
+  });
+}
+
+export interface AddDeckCardInput {
+  deckId: string;
+  oracleId: string;
+  quantity?: number;
+  board?: DeckBoard;
+}
+
+/** Add a slot, merging into an existing (deckId, oracleId, board) slot. */
+export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
+  const board = input.board ?? 'main';
+  const quantity = input.quantity ?? 1;
+  await db.transaction('rw', db.deckCards, db.decks, async () => {
+    const existing = await db.deckCards
+      .where('[deckId+board]')
+      .equals([input.deckId, board])
+      .and((c) => c.oracleId === input.oracleId)
+      .first();
+    if (existing) await db.deckCards.update(existing.id, { quantity: existing.quantity + quantity });
+    else await db.deckCards.add({ id: newId(), deckId: input.deckId, oracleId: input.oracleId, quantity, board });
+    await db.decks.update(input.deckId, { updatedAt: Date.now() });
+  });
+}
+
+/** Bulk-add (deck import), merging by (oracleId, board). */
+export async function addDeckCardsBulk(
+  deckId: string,
+  cards: Array<{ oracleId: string; quantity: number; board: DeckBoard }>,
+): Promise<void> {
+  await db.transaction('rw', db.deckCards, db.decks, async () => {
+    const existing = await db.deckCards.where('deckId').equals(deckId).toArray();
+    const keyOf = (c: { oracleId: string; board: DeckBoard }) => `${c.oracleId}|${c.board}`;
+    const map = new Map(existing.map((c) => [keyOf(c), c]));
+    const writes: DeckCard[] = [];
+    for (const c of cards) {
+      const ex = map.get(keyOf(c));
+      if (ex) {
+        ex.quantity += c.quantity;
+        if (!writes.includes(ex)) writes.push(ex);
+      } else {
+        const dc: DeckCard = { id: newId(), deckId, oracleId: c.oracleId, quantity: c.quantity, board: c.board };
+        map.set(keyOf(c), dc);
+        writes.push(dc);
+      }
+    }
+    await db.deckCards.bulkPut(writes);
+    await db.decks.update(deckId, { updatedAt: Date.now() });
+  });
+}
+
+/** Set a slot's quantity; deletes the slot at zero. */
+export async function setDeckCardQuantity(id: string, quantity: number): Promise<void> {
+  if (quantity <= 0) {
+    await db.deckCards.delete(id);
+    return;
+  }
+  await db.deckCards.update(id, { quantity });
+}
+
+export async function removeDeckCard(id: string): Promise<void> {
+  await db.deckCards.delete(id);
 }
 
 /** Wipe every user-data table (About screen: "delete all my data"). Card DB is kept. */

@@ -1,4 +1,5 @@
-import type { Color, Finish, Printing, Rarity } from '@mtg/shared';
+import type { Color, Finish, Format, LegalityStatus, Printing, Rarity } from '@mtg/shared';
+import { FORMATS } from '@mtg/shared';
 
 // Map a raw Scryfall card object down to our slim Printing, tolerating unknown
 // and added fields (beta plan handoff note). Also carries the oracle-invariant
@@ -33,6 +34,7 @@ export interface RawCard {
     image_uris?: { small?: string; normal?: string };
   }>;
   prices?: { eur?: string | null; usd?: string | null };
+  legalities?: Record<string, string>;
 }
 
 const VALID_COLORS = new Set(['W', 'U', 'B', 'R', 'G']);
@@ -56,6 +58,18 @@ function price(value: string | null | undefined): number | null {
   if (value == null) return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+const VALID_LEGALITY = new Set(['legal', 'not_legal', 'banned', 'restricted']);
+
+function legalities(raw: Record<string, string> | undefined): Partial<Record<Format, LegalityStatus>> {
+  const out: Partial<Record<Format, LegalityStatus>> = {};
+  if (!raw) return out;
+  for (const f of FORMATS) {
+    const v = raw[f];
+    if (v && VALID_LEGALITY.has(v)) out[f] = v as LegalityStatus;
+  }
+  return out;
 }
 
 /** Front-face-aware image extraction (handles double-faced / split cards). */
@@ -103,6 +117,7 @@ export interface SlimResult {
     colors: Color[];
     colorIdentity: Color[];
     rarity: Rarity;
+    legalities: Partial<Record<Format, LegalityStatus>>;
   };
 }
 
@@ -142,6 +157,7 @@ export function slimCard(card: RawCard): SlimResult | null {
       colors: of.colors,
       colorIdentity: colors(card.color_identity),
       rarity: rarity(card.rarity),
+      legalities: legalities(card.legalities),
     },
   };
 }

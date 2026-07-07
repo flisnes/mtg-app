@@ -9,7 +9,7 @@
 //  - "Owned" (for deck checkmarks) = sum of quantity over all CollectionEntry
 //    with a matching oracleId (any printing counts).
 
-import type { Finish } from './card.js';
+import type { Finish, Format } from './card.js';
 
 export type Condition = 'NM' | 'LP' | 'MP' | 'HP' | 'DMG';
 
@@ -41,9 +41,25 @@ export interface WishlistEntry {
 
 export type DeckBoard = 'main' | 'side';
 
+/** A deck's format; 'casual' means no legality checks. */
+export type DeckFormat = Format | 'casual';
+
+export const DECK_FORMATS: readonly DeckFormat[] = [
+  'casual',
+  'standard',
+  'pioneer',
+  'modern',
+  'legacy',
+  'vintage',
+  'pauper',
+  'commander',
+];
+
 export interface Deck {
   id: string;
   name: string;
+  /** Missing on decks created before formats existed → treat as 'casual'. */
+  format?: DeckFormat;
   description?: string;
   createdAt: number;
   updatedAt: number;

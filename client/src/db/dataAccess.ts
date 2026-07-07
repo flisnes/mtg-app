@@ -4,6 +4,7 @@ import type {
   Deck,
   DeckBoard,
   DeckCard,
+  DeckFormat,
   Finish,
   Trade,
   TradeLine,
@@ -238,15 +239,19 @@ export async function applyImport(lines: ImportLine[]): Promise<{ entries: numbe
 // no format/legality checks in the beta.
 // ---------------------------------------------------------------------------
 
-export async function createDeck(name: string): Promise<string> {
+export async function createDeck(name: string, format: DeckFormat = 'casual'): Promise<string> {
   const now = Date.now();
-  const deck: Deck = { id: newId(), name: name.trim() || 'Untitled deck', createdAt: now, updatedAt: now };
+  const deck: Deck = { id: newId(), name: name.trim() || 'Untitled deck', format, createdAt: now, updatedAt: now };
   await db.decks.add(deck);
   return deck.id;
 }
 
 export async function renameDeck(id: string, name: string): Promise<void> {
   await db.decks.update(id, { name: name.trim() || 'Untitled deck', updatedAt: Date.now() });
+}
+
+export async function setDeckFormat(id: string, format: DeckFormat): Promise<void> {
+  await db.decks.update(id, { format, updatedAt: Date.now() });
 }
 
 export async function deleteDeck(id: string): Promise<void> {

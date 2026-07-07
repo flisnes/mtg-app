@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { DeckBoard, OracleCard } from '@mtg/shared';
+import { DECK_FORMATS, type DeckBoard, type DeckFormat, type OracleCard } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getOwnedCountsFor, computeDeckWishlistCandidates, type MissingCard } from '../db/queries.js';
 import {
@@ -11,8 +11,10 @@ import {
   removeDeckCard,
   renameDeck,
   setDeckCardQuantity,
+  setDeckFormat,
 } from '../db/dataAccess.js';
 import { addToWishlist } from '../db/dataAccess.js';
+import { checkDeckLegality, formatLabel, type LegalityReport } from '../deck/legality.js';
 import { searchCards } from '../cardDb/search.js';
 import { resolveDeckText, buildDeckText } from '../deck/deckText.js';
 import { downloadText } from '../import/export.js';
@@ -73,6 +75,15 @@ export function DeckDetail() {
     return { need, have };
   }, [data]);
 
+  const legality = useMemo<LegalityReport>(
+    () =>
+      checkDeckLegality(
+        data?.deck?.format,
+        (data?.rows ?? []).map((r) => ({ oracleId: r.oracleId, quantity: r.quantity, board: r.board, oracle: r.oracle })),
+      ),
+    [data],
+  );
+
   if (data === undefined) return <div className="page">Loading…</div>;
   if (!data.deck) return <div className="page">Deck not found.</div>;
   const deck = data.deck;
@@ -122,9 +133,23 @@ export function DeckDetail() {
         aria-label="Deck name"
       />
 
-      <p className="search-meta">
-        You own <strong>{summary.have}</strong> of <strong>{summary.need}</strong> cards
-      </p>
+      <div className="deck-meta">
+        <label className="field" style={{ maxWidth: 160 }}>
+          <span>Format</span>
+          <select value={deck.format ?? 'casual'} onChange={(e) => void setDeckFormat(id, e.target.value as DeckFormat)}>
+            {DECK_FORMATS.map((f) => (
+              <option key={f} value={f}>
+                {formatLabel(f)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="search-meta">
+          You own <strong>{summary.have}</strong> of <strong>{summary.need}</strong> cards
+        </p>
+      </div>
+
+      <LegalityPanel report={legality} format={deck.format ?? 'casual'} />
 
       <div className="list-toolbar">
         <button className={panel === 'add' ? 'primary' : ''} onClick={() => setPanel(panel === 'add' ? 'none' : 'add')}>
@@ -148,8 +173,8 @@ export function DeckDetail() {
         />
       )}
 
-      <Board title="Mainboard" rows={main} view={view} />
-      <Board title="Sideboard" rows={side} view={view} />
+      <Board title="Mainboard" rows={main} view={view} issues={legality.issues} />
+      <Board title="Sideboard" rows={side} view={view} issues={legality.issues} />
 
       {exit && (
         <div className="sheet-backdrop" onClick={() => navigate('/decks')}>
@@ -187,7 +212,32 @@ function byName(a: Row, b: Row): number {
   return (a.oracle?.name ?? '').localeCompare(b.oracle?.name ?? '');
 }
 
-function Board({ title, rows, view }: { title: string; rows: Row[]; view: ViewMode }) {
+function LegalityPanel({ report, format }: { report: LegalityReport; format: DeckFormat }) {
+  if (!report.checked) return <p className="fine-print">Casual — no legality checks.</p>;
+  if (report.legal) return <div className="legality legality-ok">✓ Legal in {formatLabel(format)}</div>;
+  return (
+    <div className="legality legality-bad">
+      <strong>⚠ Not legal in {formatLabel(format)}</strong>
+      <ul>
+        {report.problems.map((p, i) => (
+          <li key={i}>{p}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Board({
+  title,
+  rows,
+  view,
+  issues,
+}: {
+  title: string;
+  rows: Row[];
+  view: ViewMode;
+  issues: Map<string, string>;
+}) {
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
   return (
@@ -201,13 +251,14 @@ function Board({ title, rows, view }: { title: string; rows: Row[]; view: ViewMo
         <CardGrid
           items={rows.map((r): GridItem => {
             const owned = r.owned >= r.quantity;
+            const issue = issues.get(r.oracleId);
             return {
               key: r.id,
               name: r.oracle?.name ?? '(unknown card)',
               image: r.oracle?.imageSmall ?? null,
               count: r.quantity,
-              badge: owned ? '✓' : undefined,
-              badgeClass: 'badge-owned',
+              badge: issue ? '⚠' : owned ? '✓' : undefined,
+              badgeClass: issue ? 'badge-illegal' : 'badge-owned',
               dim: !owned,
               footer: (
                 <>
@@ -235,7 +286,10 @@ function Board({ title, rows, view }: { title: string; rows: Row[]; view: ViewMo
                     <div className="result-thumb" aria-hidden />
                   )}
                   <div className="result-main">
-                    <div className="result-name">{r.oracle?.name ?? '(unknown card)'}</div>
+                    <div className="result-name">
+                      {r.oracle?.name ?? '(unknown card)'}
+                      {issues.get(r.oracleId) && <span className="badge badge-illegal-chip">{issues.get(r.oracleId)}</span>}
+                    </div>
                     <div className="result-sub">owned {r.owned}</div>
                   </div>
                 </div>

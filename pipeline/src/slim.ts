@@ -65,6 +65,7 @@ function toOracleCard(rep: SlimResult): OracleCard {
     defaultScryfallId: printing.scryfallId,
     priceEur: printing.priceEur,
     priceUsd: printing.priceUsd,
+    legalities: oracle.legalities,
   };
 }
 

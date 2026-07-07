@@ -688,6 +688,43 @@ button.primary {
 .owned-no {
   color: var(--text-dim);
 }
+.deck-meta {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+.legality {
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+.legality-ok {
+  background: rgba(78, 201, 123, 0.15);
+  color: var(--ok);
+}
+.legality-bad {
+  background: rgba(255, 92, 92, 0.12);
+  color: var(--text);
+  border: 1px solid rgba(255, 92, 92, 0.4);
+}
+.legality-bad ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+}
+.legality-bad li {
+  margin: 0.15rem 0;
+}
+.tile-badge.badge-illegal {
+  background: var(--danger);
+  color: #fff;
+}
+.badge-illegal-chip {
+  background: var(--danger);
+  color: #fff;
+}
 
 /* ---- Trade ---- */
 .trade-status {

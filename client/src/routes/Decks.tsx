@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useNavigate } from 'react-router-dom';
+import { DECK_FORMATS, type DeckFormat } from '@mtg/shared';
 import { Page } from './Page.js';
 import { db } from '../db/schema.js';
 import { createDeck } from '../db/dataAccess.js';
+import { formatLabel } from '../deck/legality.js';
 
 export function Decks() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
+  const [format, setFormat] = useState<DeckFormat>('casual');
 
   const decks = useLiveQuery(async () => {
     const list = await db.decks.orderBy('updatedAt').reverse().toArray();
@@ -20,7 +23,7 @@ export function Decks() {
   }, []);
 
   async function create() {
-    const id = await createDeck(name || 'Untitled deck');
+    const id = await createDeck(name || 'Untitled deck', format);
     setName('');
     navigate(`/decks/${id}`);
   }
@@ -36,6 +39,13 @@ export function Decks() {
           onKeyDown={(e) => e.key === 'Enter' && create()}
           aria-label="New deck name"
         />
+        <select value={format} onChange={(e) => setFormat(e.target.value as DeckFormat)} aria-label="Format">
+          {DECK_FORMATS.map((f) => (
+            <option key={f} value={f}>
+              {formatLabel(f)}
+            </option>
+          ))}
+        </select>
         <button className="primary" onClick={create}>
           Create
         </button>

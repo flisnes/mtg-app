@@ -11,6 +11,21 @@ export type Rarity = 'common' | 'uncommon' | 'rare' | 'mythic' | 'special' | 'bo
 
 export type Finish = 'nonfoil' | 'foil' | 'etched';
 
+/** Formats we track legality for (a curated subset of Scryfall's ~20). */
+export type Format = 'standard' | 'pioneer' | 'modern' | 'legacy' | 'vintage' | 'pauper' | 'commander';
+
+export type LegalityStatus = 'legal' | 'not_legal' | 'banned' | 'restricted';
+
+export const FORMATS: readonly Format[] = [
+  'standard',
+  'pioneer',
+  'modern',
+  'legacy',
+  'vintage',
+  'pauper',
+  'commander',
+];
+
 /** One functional card (one Scryfall oracle_id). Drives search / decks / wishlist. */
 export interface OracleCard {
   oracleId: string;
@@ -28,6 +43,8 @@ export interface OracleCard {
   defaultScryfallId: string;
   priceEur: number | null;
   priceUsd: number | null;
+  /** Legality per tracked format (oracle-invariant). May be absent on card DBs imported before this field existed. */
+  legalities?: Partial<Record<Format, LegalityStatus>>;
 }
 
 /** One physical printing (one Scryfall card id). Drives the edition picker + collection editing. */

@@ -5,6 +5,7 @@ import type { CollectionEntry, Color, OracleCard, Printing, Rarity } from '@mtg/
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { CardSheet } from './CardSheet.js';
+import { CardGrid, ViewToggle, useViewMode, type GridItem } from './CardGrid.js';
 
 export interface JoinedEntry {
   entry: CollectionEntry;
@@ -47,6 +48,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const [rarity, setRarity] = useState('');
   const [tradeOnly, setTradeOnly] = useState(onlyTrade);
   const [editing, setEditing] = useState<JoinedEntry | null>(null);
+  const [view, setView] = useViewMode();
 
   const sets = useMemo(() => {
     const m = new Map<string, string>();
@@ -118,9 +120,12 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         </label>
       )}
 
-      <p className="search-meta">
-        {filtered.length} entr{filtered.length === 1 ? 'y' : 'ies'} · {totalQty} card{totalQty === 1 ? '' : 's'}
-      </p>
+      <div className="meta-row">
+        <p className="search-meta">
+          {filtered.length} entr{filtered.length === 1 ? 'y' : 'ies'} · {totalQty} card{totalQty === 1 ? '' : 's'}
+        </p>
+        <ViewToggle mode={view} onChange={setView} />
+      </div>
 
       {filtered.length === 0 ? (
         <div className="empty-state">
@@ -129,6 +134,20 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
             <Link to="/">Search for cards</Link> to add some.
           </p>
         </div>
+      ) : view === 'grid' ? (
+        <CardGrid
+          items={filtered.map(
+            (r): GridItem => ({
+              key: r.entry.id,
+              name: r.oracle?.name ?? '(unknown card)',
+              image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
+              count: r.entry.quantity,
+              badge: r.entry.quantityForTrade > 0 ? `${r.entry.quantityForTrade} FT` : undefined,
+              badgeClass: 'badge-trade',
+              onClick: () => setEditing(r),
+            }),
+          )}
+        />
       ) : (
         <ul className="result-list">
           {filtered.map((r) => (

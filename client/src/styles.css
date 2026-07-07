@@ -255,6 +255,134 @@ button.danger-outline {
   transition: width 0.2s ease;
 }
 
+.meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+/* ---- View toggle + card grid ---- */
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.view-toggle button {
+  border: none;
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text-dim);
+  padding: 0.45rem 0.7rem;
+  font-size: 1rem;
+}
+.view-toggle button.active {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+.card-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 0.6rem;
+}
+.card-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.card-tile-dim {
+  opacity: 0.5;
+}
+.card-tile-img {
+  position: relative;
+  padding: 0;
+  border: none;
+  background: var(--surface-2);
+  border-radius: 8px;
+  overflow: hidden;
+  aspect-ratio: 488 / 680;
+  width: 100%;
+  cursor: pointer;
+  display: block;
+}
+.card-tile-img:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.card-tile-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.card-tile-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0.4rem;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+.tile-count {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 0.05rem 0.35rem;
+  border-radius: 6px;
+  line-height: 1.3;
+}
+.tile-badge {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.05rem 0.35rem;
+  border-radius: 6px;
+  line-height: 1.3;
+}
+.tile-badge.badge-owned {
+  background: var(--ok);
+  color: #05230f;
+}
+.tile-badge.badge-trade {
+  background: var(--accent);
+  color: #fff;
+}
+.tile-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+}
+.tile-footer button {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+.tile-footer .qty-pill {
+  min-width: 1.6ch;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
 /* ---- Onboarding ---- */
 .onboard-steps {
   text-align: left;

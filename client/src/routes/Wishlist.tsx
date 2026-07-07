@@ -5,9 +5,11 @@ import { Page } from './Page.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds } from '../db/queries.js';
 import { addToWishlist, removeFromWishlist } from '../db/dataAccess.js';
+import { CardGrid, ViewToggle, useViewMode, type GridItem } from '../components/CardGrid.js';
 
 export function Wishlist() {
   const [name, setName] = useState('');
+  const [view, setView] = useViewMode();
   const rows = useLiveQuery(async () => {
     const entries = await db.wishlist.toArray();
     const oracleMap = await getOracleCardsByIds(entries.map((e) => e.oracleId));
@@ -43,7 +45,29 @@ export function Wishlist() {
             onChange={(e) => setName(e.target.value)}
             aria-label="Filter by name"
           />
-          <p className="search-meta">{filtered.length} card{filtered.length === 1 ? '' : 's'}</p>
+          <div className="meta-row">
+            <p className="search-meta">{filtered.length} card{filtered.length === 1 ? '' : 's'}</p>
+            <ViewToggle mode={view} onChange={setView} />
+          </div>
+          {view === 'grid' ? (
+            <CardGrid
+              items={filtered.map(
+                (r): GridItem => ({
+                  key: r.entry.id,
+                  name: r.oracle?.name ?? '(unknown card)',
+                  image: r.oracle?.imageSmall ?? null,
+                  count: r.entry.quantity,
+                  footer: (
+                    <>
+                      <button title="Remove one" onClick={() => removeFromWishlist(r.entry.id, 1)}>−</button>
+                      <button title="Add one" onClick={() => addToWishlist({ oracleId: r.entry.oracleId, scryfallId: r.entry.scryfallId, quantity: 1 })}>＋</button>
+                      <button title="Remove" onClick={() => removeFromWishlist(r.entry.id)}>✕</button>
+                    </>
+                  ),
+                }),
+              )}
+            />
+          ) : (
           <ul className="result-list">
             {filtered.map((r) => (
               <li key={r.entry.id} className="result-row">
@@ -81,6 +105,7 @@ export function Wishlist() {
               </li>
             ))}
           </ul>
+          )}
         </>
       )}
     </Page>

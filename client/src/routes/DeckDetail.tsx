@@ -17,6 +17,7 @@ import { searchCards } from '../cardDb/search.js';
 import { resolveDeckText, buildDeckText } from '../deck/deckText.js';
 import { downloadText } from '../import/export.js';
 import { useToast } from '../components/Toast.js';
+import { CardGrid, ViewToggle, useViewMode, type GridItem, type ViewMode } from '../components/CardGrid.js';
 
 interface Row {
   id: string;
@@ -34,6 +35,7 @@ export function DeckDetail() {
   const [panel, setPanel] = useState<'none' | 'add' | 'import'>('none');
   const [exit, setExit] = useState<MissingCard[] | null>(null);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [view, setView] = useViewMode();
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -132,6 +134,7 @@ export function DeckDetail() {
           ⬆ Import list
         </button>
         <button onClick={exportDeck}>⬇ Export</button>
+        <ViewToggle mode={view} onChange={setView} />
       </div>
 
       {panel === 'add' && <AddPanel deckId={id} onAdded={(n) => toast(`Added ${n}`)} />}
@@ -145,8 +148,8 @@ export function DeckDetail() {
         />
       )}
 
-      <Board title="Mainboard" rows={main} />
-      <Board title="Sideboard" rows={side} />
+      <Board title="Mainboard" rows={main} view={view} />
+      <Board title="Sideboard" rows={side} view={view} />
 
       {exit && (
         <div className="sheet-backdrop" onClick={() => navigate('/decks')}>
@@ -184,7 +187,7 @@ function byName(a: Row, b: Row): number {
   return (a.oracle?.name ?? '').localeCompare(b.oracle?.name ?? '');
 }
 
-function Board({ title, rows }: { title: string; rows: Row[] }) {
+function Board({ title, rows, view }: { title: string; rows: Row[]; view: ViewMode }) {
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
   return (
@@ -194,6 +197,28 @@ function Board({ title, rows }: { title: string; rows: Row[] }) {
       </h2>
       {rows.length === 0 ? (
         <p className="fine-print">Empty.</p>
+      ) : view === 'grid' ? (
+        <CardGrid
+          items={rows.map((r): GridItem => {
+            const owned = r.owned >= r.quantity;
+            return {
+              key: r.id,
+              name: r.oracle?.name ?? '(unknown card)',
+              image: r.oracle?.imageSmall ?? null,
+              count: r.quantity,
+              badge: owned ? '✓' : undefined,
+              badgeClass: 'badge-owned',
+              dim: !owned,
+              footer: (
+                <>
+                  <button onClick={() => setDeckCardQuantity(r.id, r.quantity - 1)} aria-label="One fewer">−</button>
+                  <button onClick={() => setDeckCardQuantity(r.id, r.quantity + 1)} aria-label="One more">＋</button>
+                  <button onClick={() => removeDeckCard(r.id)} aria-label="Remove">✕</button>
+                </>
+              ),
+            };
+          })}
+        />
       ) : (
         <ul className="result-list">
           {rows.map((r) => {

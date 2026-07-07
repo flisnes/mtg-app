@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import { initPwa } from './pwa.js';
+import { isUpdateAvailable } from './appUpdate.js';
+import { getSetting, setSetting } from './db/settings.js';
+import { Onboarding } from './components/Onboarding.js';
 import { ToastProvider } from './components/Toast.js';
 import { Search } from './routes/Search.js';
 import { Collection } from './routes/Collection.js';
@@ -25,25 +28,60 @@ const PRIMARY_NAV = [
 
 export function App() {
   const [updateReload, setUpdateReload] = useState<(() => void) | null>(null);
+  const [beaconUpdate, setBeaconUpdate] = useState(false);
   const [offlineReady, setOfflineReady] = useState(false);
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
 
   useEffect(() => {
     initPwa({
       onNeedRefresh: (reload) => setUpdateReload(() => reload),
       onOfflineReady: () => setOfflineReady(true),
     });
+    void getSetting<boolean>('onboardingComplete').then((v) => setOnboarded(!!v));
   }, []);
+
+  // Version beacon: check on launch and whenever the app returns to the
+  // foreground (PWAs resume from background for days). Nudge the SW too.
+  useEffect(() => {
+    const check = () => {
+      if (document.visibilityState !== 'visible') return;
+      void isUpdateAvailable().then((available) => {
+        if (available) {
+          setBeaconUpdate(true);
+          void navigator.serviceWorker?.getRegistration().then((r) => r?.update());
+        }
+      });
+    };
+    check();
+    document.addEventListener('visibilitychange', check);
+    return () => document.removeEventListener('visibilitychange', check);
+  }, []);
+
+  const showUpdate = !!updateReload || beaconUpdate;
+  const applyUpdate = () => (updateReload ? updateReload() : window.location.reload());
+
+  if (onboarded === null) return null; // brief: waiting on the onboarding flag
+  if (!onboarded) {
+    return (
+      <Onboarding
+        onDone={() => {
+          void setSetting('onboardingComplete', true);
+          setOnboarded(true);
+        }}
+      />
+    );
+  }
 
   return (
     <ToastProvider>
     <div className="app-shell">
-      {updateReload && (
+      {showUpdate && (
         <div className="banner banner-update" role="status">
           <span>A new version is available.</span>
-          <button onClick={() => updateReload()}>Update now</button>
+          <button onClick={applyUpdate}>Update now</button>
         </div>
       )}
-      {offlineReady && !updateReload && (
+      {offlineReady && !showUpdate && (
         <div className="banner banner-offline" role="status" onAnimationEnd={() => setOfflineReady(false)}>
           Ready to work offline.
         </div>

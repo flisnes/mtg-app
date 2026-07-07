@@ -3,6 +3,7 @@ import { Page } from './Page.js';
 import { APP_VERSION } from '../version.js';
 import { deleteAllUserData } from '../db/dataAccess.js';
 import { getSetting } from '../db/settings.js';
+import { formatDiagnostics } from '../errorLog.js';
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return '—';
@@ -64,6 +65,21 @@ export function About() {
             Delete all my data
           </button>
         )}
+      </section>
+
+      <section className="about-section">
+        <h2>Having trouble?</h2>
+        <p className="fine-print">
+          If something breaks, copy the diagnostic log and send it along — it includes recent errors and your app/device
+          version, but no card data.
+        </p>
+        <button
+          onClick={() => {
+            void navigator.clipboard?.writeText(formatDiagnostics());
+          }}
+        >
+          Copy diagnostic log
+        </button>
       </section>
 
       <section className="about-section">

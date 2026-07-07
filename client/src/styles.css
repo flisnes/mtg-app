@@ -255,6 +255,20 @@ button.danger-outline {
   transition: width 0.2s ease;
 }
 
+/* ---- Onboarding ---- */
+.onboard-steps {
+  text-align: left;
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  line-height: 1.45;
+}
+.onboard-steps strong {
+  color: var(--accent);
+}
+
 /* ---- Search results ---- */
 .filter-row {
   display: flex;

@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Nightly rebuild so card data + prices stay fresh (beta plan §3). Same app
+  # version, so it refreshes data without triggering the update banner.
+  schedule:
+    - cron: '0 5 * * *'
 
 # Permissions the official Pages deploy needs.
 permissions:

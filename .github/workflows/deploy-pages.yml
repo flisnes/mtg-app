@@ -1,0 +1,63 @@
+name: Deploy PWA to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Permissions the official Pages deploy needs.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; let a newer push supersede an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Build the slimmed card DB and serve it same-origin from Pages, so the
+      # app needs no external (HTTPS/TLS) host for card data in the beta.
+      # (Phase 5 moves this to the VM's nightly cron once it has a domain.)
+      - name: Build card database
+        run: npm run pipeline
+
+      - name: Build client
+        run: npm run build --workspace client
+        env:
+          VITE_BASE: /mtg-app/
+          VITE_CARD_DB_URL: https://flisnes.github.io/mtg-app/carddb/
+
+      - name: Stage card DB into the site
+        run: |
+          mkdir -p client/dist/carddb
+          cp pipeline/out/manifest.json pipeline/out/*.json.gz client/dist/carddb/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: client/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

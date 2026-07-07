@@ -47,6 +47,10 @@ jobs:
           cp pipeline/out/manifest.json pipeline/out/*.json.gz client/dist/carddb/
 
       - uses: actions/configure-pages@v5
+        with:
+          # Best-effort: enable Pages (source = GitHub Actions) via the API so
+          # the first deploy works without a manual Settings change.
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:

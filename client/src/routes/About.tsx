@@ -1,11 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Page } from './Page.js';
 import { APP_VERSION } from '../version.js';
 import { deleteAllUserData } from '../db/dataAccess.js';
+import { getSetting } from '../db/settings.js';
+
+function formatDate(iso: string | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString();
+}
 
 export function About() {
   const [confirming, setConfirming] = useState(false);
   const [done, setDone] = useState(false);
+  const [cardDbVersion, setCardDbVersion] = useState<string>();
+  const [pricesUpdatedAt, setPricesUpdatedAt] = useState<string>();
+  const [counts, setCounts] = useState<{ oracle: number; printings: number }>();
+
+  useEffect(() => {
+    void (async () => {
+      setCardDbVersion(await getSetting<string>('cardDbVersion'));
+      setPricesUpdatedAt(await getSetting<string>('pricesUpdatedAt'));
+      setCounts(await getSetting<{ oracle: number; printings: number }>('cardDbCounts'));
+    })();
+  }, []);
 
   async function handleDelete() {
     await deleteAllUserData();
@@ -19,7 +37,11 @@ export function About() {
         <dt>App version</dt>
         <dd>{APP_VERSION}</dd>
         <dt>Card database</dt>
-        <dd>not loaded yet (Phase 1)</dd>
+        <dd>{cardDbVersion ? formatDate(cardDbVersion) : 'not loaded'}</dd>
+        <dt>Cards</dt>
+        <dd>{counts ? `${counts.oracle.toLocaleString()} cards · ${counts.printings.toLocaleString()} printings` : '—'}</dd>
+        <dt>Prices updated</dt>
+        <dd>{formatDate(pricesUpdatedAt)}</dd>
       </dl>
 
       <section className="about-section">

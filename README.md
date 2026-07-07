@@ -30,6 +30,36 @@ npm run dev:server     # trade relay on :8080 (dev)
 npm run typecheck      # typecheck every workspace
 ```
 
+## Card database
+
+The client loads a slimmed Scryfall dataset into IndexedDB on first launch, then
+works offline. Generate the artifacts and point the client at them:
+
+```bash
+# 1. Build the artifacts (downloads Scryfall default_cards, ~556MB, streamed).
+npm run pipeline                       # writes pipeline/out/{oracle-slim,printings-slim}.json.gz + manifest.json
+BULK_TYPE=oracle_cards npm run pipeline # faster dry run (smaller bulk file)
+MAX_CARDS=3000 npm run pipeline         # tiny smoke test (stops the stream early)
+
+# 2. Serve pipeline/out over HTTP with CORS (in prod this is Caddy on the VM),
+#    then tell the client where it lives:
+VITE_CARD_DB_URL=https://cards.example.com/ npm run dev:client
+```
+
+Config env vars:
+
+| Var | Used by | Meaning |
+|---|---|---|
+| `VITE_CARD_DB_URL` | client build/dev | Base URL serving `manifest.json` + the `.gz` artifacts. Unset → Scryfall fallback. |
+| `VITE_BASE` | client build | Base path for GitHub Pages (`/<repo>/`). Defaults to `/`. |
+| `BULK_TYPE` / `MAX_CARDS` / `APP_VERSION` / `OUT_DIR` | pipeline | See `pipeline/src/slim.ts`. |
+
+If the configured URL is unreachable and there's no local DB, the client falls
+back to fetching Scryfall's `oracle_cards` bulk directly (degraded: one printing
+per card). Artifacts are gzipped and decompressed client-side via
+`DecompressionStream`, so the static host must serve raw bytes (no
+`Content-Encoding: gzip`).
+
 ## Deploy targets (Phase 5)
 
 - **Client** → GitHub Pages via GitHub Actions. Requires Vite `base: '/<repo>/'`, PWA scope on the subpath, hash routing.

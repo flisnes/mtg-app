@@ -1,0 +1,130 @@
+import type { Color, Finish, OracleCard, Printing, Rarity } from '@mtg/shared';
+import { db } from '../db/schema.js';
+import { setSetting } from '../db/settings.js';
+import { SCRYFALL_BULK_INDEX } from './config.js';
+
+// Documented fallback (beta plan §3): if our VM is unreachable and there's no
+// local DB yet, fetch Scryfall's `oracle_cards` bulk directly and slim it
+// client-side. This is a degraded path — `oracle_cards` has one printing per
+// card, so the edition picker is limited until the VM is reachable again.
+// Runs on the main thread (rare path); the primary path uses the worker.
+
+const COLORS = new Set(['W', 'U', 'B', 'R', 'G']);
+const FINISHES = new Set(['nonfoil', 'foil', 'etched']);
+const RARITIES = new Set(['common', 'uncommon', 'rare', 'mythic', 'special', 'bonus']);
+
+interface RawCard {
+  id: string;
+  oracle_id?: string;
+  name: string;
+  lang: string;
+  released_at: string;
+  set: string;
+  set_name: string;
+  collector_number: string;
+  mana_cost?: string;
+  cmc?: number;
+  type_line?: string;
+  oracle_text?: string;
+  colors?: string[];
+  color_identity?: string[];
+  rarity: string;
+  finishes?: string[];
+  digital?: boolean;
+  games?: string[];
+  image_uris?: { small?: string; normal?: string };
+  card_faces?: Array<{ mana_cost?: string; type_line?: string; oracle_text?: string; image_uris?: { small?: string; normal?: string } }>;
+  prices?: { eur?: string | null; usd?: string | null };
+}
+
+const asColors = (v?: string[]): Color[] => (v ?? []).filter((c): c is Color => COLORS.has(c));
+const asFinishes = (v?: string[]): Finish[] => {
+  const f = (v ?? []).filter((x): x is Finish => FINISHES.has(x));
+  return f.length ? f : ['nonfoil'];
+};
+const asRarity = (v: string): Rarity => (RARITIES.has(v) ? v : 'common') as Rarity;
+const asPrice = (v?: string | null): number | null => {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+function image(card: RawCard): { small: string | null; normal: string | null } {
+  const u = card.image_uris ?? card.card_faces?.find((f) => f.image_uris)?.image_uris;
+  return { small: u?.small ?? null, normal: u?.normal ?? null };
+}
+
+function slim(card: RawCard): { oracle: OracleCard; printing: Printing } | null {
+  if (!card.oracle_id || !card.name || card.digital) return null;
+  if (card.games && !card.games.includes('paper')) return null;
+  const faces = card.card_faces ?? [];
+  const img = image(card);
+  const printing: Printing = {
+    scryfallId: card.id,
+    oracleId: card.oracle_id,
+    set: card.set,
+    setName: card.set_name,
+    collectorNumber: card.collector_number,
+    lang: card.lang,
+    finishes: asFinishes(card.finishes),
+    releasedAt: card.released_at,
+    imageSmall: img.small,
+    imageNormal: img.normal,
+    priceEur: asPrice(card.prices?.eur),
+    priceUsd: asPrice(card.prices?.usd),
+  };
+  const oracle: OracleCard = {
+    oracleId: card.oracle_id,
+    name: card.name,
+    manaCost: card.mana_cost || faces.map((f) => f.mana_cost).filter(Boolean).join(' // ') || null,
+    cmc: card.cmc ?? 0,
+    typeLine: card.type_line || faces.map((f) => f.type_line).filter(Boolean).join(' // ') || '',
+    oracleText: card.oracle_text ?? (faces.length ? faces.map((f) => f.oracle_text ?? '').join('\n//\n') : null),
+    colors: asColors(card.colors),
+    colorIdentity: asColors(card.color_identity),
+    rarity: asRarity(card.rarity),
+    imageSmall: img.small,
+    imageNormal: img.normal,
+    defaultScryfallId: card.id,
+    priceEur: printing.priceEur,
+    priceUsd: printing.priceUsd,
+  };
+  return { oracle, printing };
+}
+
+export async function runScryfallFallback(onProgress: (fraction: number, label: string) => void): Promise<void> {
+  onProgress(0.02, 'Contacting Scryfall…');
+  const idx = await fetch(SCRYFALL_BULK_INDEX, { headers: { Accept: 'application/json' } });
+  if (!idx.ok) throw new Error(`Scryfall bulk index HTTP ${idx.status}`);
+  const entry = ((await idx.json()) as { data: Array<{ type: string; download_uri: string; updated_at: string }> }).data.find(
+    (d) => d.type === 'oracle_cards',
+  );
+  if (!entry) throw new Error('no oracle_cards bulk entry');
+
+  onProgress(0.08, 'Downloading cards from Scryfall…');
+  const res = await fetch(entry.download_uri);
+  if (!res.ok) throw new Error(`Scryfall download HTTP ${res.status}`);
+  const raw = (await res.json()) as RawCard[];
+
+  onProgress(0.6, 'Preparing cards…');
+  const oracle: OracleCard[] = [];
+  const printings: Printing[] = [];
+  for (const card of raw) {
+    const s = slim(card);
+    if (s) {
+      oracle.push(s.oracle);
+      printings.push(s.printing);
+    }
+  }
+
+  await db.oracleCards.clear();
+  await db.printings.clear();
+  await db.oracleCards.bulkPut(oracle);
+  onProgress(0.85, 'Saving…');
+  await db.printings.bulkPut(printings);
+
+  await setSetting('cardDbVersion', `${entry.updated_at} (scryfall-fallback)`);
+  await setSetting('pricesUpdatedAt', entry.updated_at);
+  await setSetting('cardDbCounts', { oracle: oracle.length, printings: printings.length });
+  onProgress(1, 'Done');
+}

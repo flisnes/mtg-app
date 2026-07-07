@@ -8,10 +8,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mtg/shared": "*"
+    "@mtg/shared": "*",
+    "stream-json": "^1.9.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
+    "@types/stream-json": "^1.7.8",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }

@@ -50,8 +50,12 @@ export async function resolveOracleByName(name: string): Promise<OracleCard | un
   if (!nameLookup) {
     const idx = await getIndex();
     nameLookup = new Map();
+    // Pass 1: exact full names win.
     for (const e of idx) {
       if (!nameLookup.has(e.normName)) nameLookup.set(e.normName, e.card);
+    }
+    // Pass 2: DFC/split front faces only as a fallback.
+    for (const e of idx) {
       const slash = e.card.name.indexOf(' // ');
       if (slash !== -1) {
         const front = normalize(e.card.name.slice(0, slash));

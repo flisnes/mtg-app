@@ -27,6 +27,8 @@ export type Seat = 'a' | 'b';
 /** Snapshot of the whole session the server broadcasts on any change. */
 export interface SessionSnapshot {
   code: string;
+  /** Stable unique id for this session; clients key idempotent completion on it. */
+  sessionId: string;
   state: TradeState;
   /** Offers keyed by seat. Each client learns its own seat from `session_ready`. */
   offers: Record<Seat, TradeLine[]>;
@@ -61,6 +63,7 @@ export type ServerMessage =
       sessionCode: string;
       seat: Seat;
       resumeToken: string;
+      snapshot: SessionSnapshot;
     }
   | {
       v: typeof PROTOCOL_VERSION;

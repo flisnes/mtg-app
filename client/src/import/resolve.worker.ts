@@ -50,11 +50,14 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
     const cards = await db.oracleCards.toArray();
     const nameMap = new Map<string, OracleCard>();
     const looseMap = new Map<string, OracleCard>();
+    // Pass 1: exact full names win.
     for (const c of cards) {
       const n = normalize(c.name);
       if (!nameMap.has(n)) nameMap.set(n, c);
       looseMap.set(alnum(c.name), c);
-      // Index the front face of DFC/split names too ("Front // Back").
+    }
+    // Pass 2: DFC/split front faces ("Front // Back") only as a fallback.
+    for (const c of cards) {
       const slash = c.name.indexOf(' // ');
       if (slash !== -1) {
         const front = normalize(c.name.slice(0, slash));

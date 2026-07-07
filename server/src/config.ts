@@ -14,6 +14,7 @@ export const config = {
   /** In-memory session limits (beta plan §7). */
   maxSessionsPerIp: num('MAX_SESSIONS_PER_IP', 20),
   maxOfferLines: num('MAX_OFFER_LINES', 500),
+  maxMessagesPerSec: num('MAX_MESSAGES_PER_SEC', 20),
   /** Reconnect grace + absolute session lifetime, in ms. */
   reconnectGraceMs: num('RECONNECT_GRACE_MS', 10 * 60 * 1000),
   sessionTtlMs: num('SESSION_TTL_MS', 2 * 60 * 60 * 1000),

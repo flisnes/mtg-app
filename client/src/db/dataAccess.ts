@@ -1,4 +1,14 @@
-import type { CollectionEntry, Condition, Deck, DeckBoard, DeckCard, Finish, WishlistEntry } from '@mtg/shared';
+import type {
+  CollectionEntry,
+  Condition,
+  Deck,
+  DeckBoard,
+  DeckCard,
+  Finish,
+  Trade,
+  TradeLine,
+  WishlistEntry,
+} from '@mtg/shared';
 import { db } from './schema.js';
 
 // The single mutation path for user data (beta plan §4). All invariants live
@@ -306,6 +316,88 @@ export async function setDeckCardQuantity(id: string, quantity: number): Promise
 
 export async function removeDeckCard(id: string): Promise<void> {
   await db.deckCards.delete(id);
+}
+
+// ---------------------------------------------------------------------------
+// Trade completion (beta plan §7). The heart of the app: on `completed`, each
+// client atomically updates its own collection/wishlist and writes a Trade
+// record. Keyed on the server's sessionId so a re-delivered `completed` is a
+// no-op (idempotent).
+// ---------------------------------------------------------------------------
+
+export async function applyCompletedTrade(
+  sessionId: string,
+  given: TradeLine[],
+  received: TradeLine[],
+): Promise<{ applied: boolean }> {
+  return db.transaction('rw', db.collection, db.wishlist, db.trades, async () => {
+    if (await db.trades.get(sessionId)) return { applied: false }; // already applied
+
+    const keyOf = (l: { scryfallId: string; condition: string; finish: string; lang: string }) =>
+      `${l.scryfallId}|${l.condition}|${l.finish}|${l.lang || 'en'}`;
+    const entries = await db.collection.toArray();
+    const byKey = new Map(entries.map((e) => [keyOf(e), e]));
+    const now = Date.now();
+
+    // Remove given cards (decrement matching entries; reduce trade qty with them).
+    for (const line of given) {
+      const ex = byKey.get(keyOf(line));
+      if (!ex) continue;
+      const remaining = ex.quantity - line.quantity;
+      if (remaining <= 0) {
+        await db.collection.delete(ex.id);
+        byKey.delete(keyOf(line));
+      } else {
+        ex.quantity = remaining;
+        ex.quantityForTrade = clamp(ex.quantityForTrade, 0, remaining);
+        ex.updatedAt = now;
+        await db.collection.put(ex);
+      }
+    }
+
+    // Add received cards (merge on the same compound key).
+    for (const line of received) {
+      const lang = line.lang || 'en';
+      const ex = byKey.get(keyOf({ ...line, lang }));
+      if (ex) {
+        ex.quantity += line.quantity;
+        ex.updatedAt = now;
+        await db.collection.put(ex);
+      } else {
+        const entry: CollectionEntry = {
+          id: newId(),
+          oracleId: line.oracleId,
+          scryfallId: line.scryfallId,
+          condition: line.condition,
+          finish: line.finish,
+          lang,
+          quantity: line.quantity,
+          quantityForTrade: 0,
+          createdAt: now,
+          updatedAt: now,
+        };
+        byKey.set(keyOf(entry), entry);
+        await db.collection.add(entry);
+      }
+    }
+
+    // Prune wishlist by received cards (any printing of the oracle card).
+    for (const line of received) {
+      let toRemove = line.quantity;
+      const wl = await db.wishlist.where('oracleId').equals(line.oracleId).toArray();
+      for (const w of wl) {
+        if (toRemove <= 0) break;
+        const dec = Math.min(w.quantity, toRemove);
+        toRemove -= dec;
+        if (w.quantity - dec <= 0) await db.wishlist.delete(w.id);
+        else await db.wishlist.update(w.id, { quantity: w.quantity - dec });
+      }
+    }
+
+    const trade: Trade = { id: sessionId, completedAt: now, partner: null, given, received };
+    await db.trades.add(trade);
+    return { applied: true };
+  });
 }
 
 /** Wipe every user-data table (About screen: "delete all my data"). Card DB is kept. */

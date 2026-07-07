@@ -8,6 +8,8 @@ import type {
   DeckCard,
   Trade,
   Setting,
+  WatchedCard,
+  PriceSnapshot,
 } from '@mtg/shared';
 
 // Local IndexedDB store (beta plan §4). Two kinds of data live here:
@@ -28,6 +30,8 @@ export class MtgDatabase extends Dexie {
   deckCards!: Table<DeckCard, string>;
   trades!: Table<Trade, string>;
   settings!: Table<Setting, string>;
+  watchlist!: Table<WatchedCard, string>;
+  priceSnapshots!: Table<PriceSnapshot, string>;
 
   constructor() {
     super('mtg');
@@ -46,6 +50,12 @@ export class MtgDatabase extends Dexie {
       deckCards: 'id, deckId, oracleId, [deckId+board]',
       trades: 'id, completedAt',
       settings: 'key',
+    });
+
+    // v2: price watchlist + snapshots (existing tables carry over unchanged).
+    this.version(2).stores({
+      watchlist: 'scryfallId, oracleId',
+      priceSnapshots: 'id, scryfallId, [scryfallId+day]',
     });
   }
 }

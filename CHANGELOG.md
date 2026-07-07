@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.4.0
+
+- Price tracker: watch a card's price ("Watch price" on a card's detail sheet), and the app records its value each time you open it. A new "Price tracker" view (under More) shows every watched card with its current price, change, and a sparkline. Track your whole collection at once from About.
+
 ## 0.3.0
 
 - Card grid view (with a quantity badge in the corner) for collection, lists, and decks — toggle list/grid, remembered across views.

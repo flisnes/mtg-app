@@ -97,3 +97,20 @@ export interface Setting {
   key: string;
   value: unknown;
 }
+
+/** A printing whose price the user is tracking. */
+export interface WatchedCard {
+  scryfallId: string;
+  oracleId: string;
+  createdAt: number;
+}
+
+/** A recorded price point, captured when the app opens (deduped per day). */
+export interface PriceSnapshot {
+  id: string;
+  scryfallId: string;
+  at: number; // ms timestamp
+  day: string; // YYYY-MM-DD, dedupe key
+  eur: number | null;
+  usd: number | null;
+}

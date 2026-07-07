@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CollectionEntry, Condition, Finish, OracleCard, Printing } from '@mtg/shared';
 import { CONDITIONS } from '@mtg/shared';
-import { addToCollection, removeFromCollection, updateCollectionEntry } from '../db/dataAccess.js';
+import {
+  addToCollection,
+  isWatched,
+  removeFromCollection,
+  unwatchCard,
+  updateCollectionEntry,
+  watchCard,
+} from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
+import { recordPriceSnapshots } from '../price/tracking.js';
 
 // Bottom-sheet for adding a card to the collection or editing an existing
 // entry. Covers the tradelist via the "for trade" quantity (beta plan §4/§6).
@@ -28,10 +36,26 @@ export function CardSheet({
   const [quantity, setQuantity] = useState(entry?.quantity ?? 1);
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? 0);
   const [busy, setBusy] = useState(false);
+  const [watching, setWatching] = useState(false);
 
   useEffect(() => {
     void getPrintingsForOracle(oracleCard.oracleId).then(setPrintings);
   }, [oracleCard.oracleId]);
+
+  useEffect(() => {
+    void isWatched(scryfallId).then(setWatching);
+  }, [scryfallId]);
+
+  async function toggleWatch() {
+    if (watching) {
+      await unwatchCard(scryfallId);
+      setWatching(false);
+    } else {
+      await watchCard(scryfallId, oracleCard.oracleId);
+      await recordPriceSnapshots();
+      setWatching(true);
+    }
+  }
 
   const printing = useMemo(
     () => printings.find((p) => p.scryfallId === scryfallId),
@@ -149,6 +173,10 @@ export function CardSheet({
             />
           </label>
         </div>
+
+        <button className={`watch-toggle ${watching ? 'watching' : ''}`} onClick={toggleWatch}>
+          {watching ? '★ Watching price' : '☆ Watch price'}
+        </button>
 
         <div className="sheet-actions">
           {editing && (

@@ -4,6 +4,7 @@ import { Page } from './Page.js';
 const LINKS = [
   { to: '/wishlist', label: 'Wishlist', icon: '⭐' },
   { to: '/tradelist', label: 'Tradelist', icon: '🔁' },
+  { to: '/prices', label: 'Price tracker', icon: '📈' },
   { to: '/history', label: 'Trade history', icon: '📜' },
   { to: '/about', label: 'About & settings', icon: 'ℹ️' },
 ];

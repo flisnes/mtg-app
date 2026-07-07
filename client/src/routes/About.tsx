@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Page } from './Page.js';
 import { APP_VERSION } from '../version.js';
-import { deleteAllUserData } from '../db/dataAccess.js';
+import { Link } from 'react-router-dom';
+import { deleteAllUserData, watchAllCollection } from '../db/dataAccess.js';
 import { getSetting } from '../db/settings.js';
 import { formatDiagnostics } from '../errorLog.js';
+import { recordPriceSnapshots } from '../price/tracking.js';
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return '—';
@@ -26,10 +28,18 @@ export function About() {
     })();
   }, []);
 
+  const [tracked, setTracked] = useState<number | null>(null);
+
   async function handleDelete() {
     await deleteAllUserData();
     setConfirming(false);
     setDone(true);
+  }
+
+  async function trackAll() {
+    const n = await watchAllCollection();
+    await recordPriceSnapshots();
+    setTracked(n);
   }
 
   return (
@@ -64,6 +74,19 @@ export function About() {
           <button className="danger-outline" onClick={() => setConfirming(true)}>
             Delete all my data
           </button>
+        )}
+      </section>
+
+      <section className="about-section">
+        <h2>Price tracking</h2>
+        <p className="fine-print">
+          Track cards’ prices over time — a value is recorded each time you open the app.{' '}
+          <Link to="/prices">View tracked cards</Link>.
+        </p>
+        {tracked != null ? (
+          <p role="status">Now tracking {tracked} card{tracked === 1 ? '' : 's'} from your collection.</p>
+        ) : (
+          <button onClick={trackAll}>Track all cards in my collection</button>
         )}
       </section>
 

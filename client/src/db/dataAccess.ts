@@ -405,15 +405,49 @@ export async function applyCompletedTrade(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Price watchlist (records printing prices over time; see price/tracking.ts).
+// ---------------------------------------------------------------------------
+
+export async function watchCard(scryfallId: string, oracleId: string): Promise<void> {
+  await db.watchlist.put({ scryfallId, oracleId, createdAt: Date.now() });
+}
+
+export async function unwatchCard(scryfallId: string): Promise<void> {
+  await db.watchlist.delete(scryfallId);
+}
+
+export async function isWatched(scryfallId: string): Promise<boolean> {
+  return !!(await db.watchlist.get(scryfallId));
+}
+
+/** Watch every distinct printing currently in the collection. Returns the count watched. */
+export async function watchAllCollection(): Promise<number> {
+  const entries = await db.collection.toArray();
+  const now = Date.now();
+  const map = new Map<string, { scryfallId: string; oracleId: string; createdAt: number }>();
+  for (const e of entries) {
+    if (!map.has(e.scryfallId)) map.set(e.scryfallId, { scryfallId: e.scryfallId, oracleId: e.oracleId, createdAt: now });
+  }
+  await db.watchlist.bulkPut([...map.values()]);
+  return map.size;
+}
+
 /** Wipe every user-data table (About screen: "delete all my data"). Card DB is kept. */
 export async function deleteAllUserData(): Promise<void> {
-  await db.transaction('rw', [db.collection, db.wishlist, db.decks, db.deckCards, db.trades], async () => {
-    await Promise.all([
-      db.collection.clear(),
-      db.wishlist.clear(),
-      db.decks.clear(),
-      db.deckCards.clear(),
-      db.trades.clear(),
-    ]);
-  });
+  await db.transaction(
+    'rw',
+    [db.collection, db.wishlist, db.decks, db.deckCards, db.trades, db.watchlist, db.priceSnapshots],
+    async () => {
+      await Promise.all([
+        db.collection.clear(),
+        db.wishlist.clear(),
+        db.decks.clear(),
+        db.deckCards.clear(),
+        db.trades.clear(),
+        db.watchlist.clear(),
+        db.priceSnapshots.clear(),
+      ]);
+    },
+  );
 }

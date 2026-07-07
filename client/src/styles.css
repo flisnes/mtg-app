@@ -585,6 +585,47 @@ button.primary {
   margin-right: auto;
 }
 
+/* ---- Watch toggle + price tracker ---- */
+.watch-toggle {
+  align-self: flex-start;
+}
+.watch-toggle.watching {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.price-now {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.price-change {
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+.price-up {
+  color: var(--ok);
+}
+.price-down {
+  color: var(--danger);
+}
+.price-flat {
+  color: var(--text-dim);
+}
+.spark {
+  display: block;
+}
+.spark-up polyline {
+  stroke: var(--ok);
+}
+.spark-down polyline {
+  stroke: var(--danger);
+}
+.spark-empty {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
 /* ---- Toast ---- */
 .toast-stack {
   position: fixed;

@@ -166,6 +166,63 @@ export async function removeFromWishlist(id: string, quantity = Infinity): Promi
   });
 }
 
+export interface ImportLine {
+  oracleId: string;
+  scryfallId: string;
+  condition: Condition;
+  finish: Finish;
+  lang: string;
+  quantity: number;
+  quantityForTrade: number;
+}
+
+/**
+ * Apply a resolved import in a single transaction, merging into existing
+ * entries on (scryfallId, condition, finish, lang). Same invariants as
+ * addToCollection, but bulk (fast enough for a 1000+ card import).
+ */
+export async function applyImport(lines: ImportLine[]): Promise<{ entries: number; cards: number }> {
+  let cards = 0;
+  await db.transaction('rw', db.collection, async () => {
+    const existing = await db.collection.toArray();
+    const keyOf = (e: { scryfallId: string; condition: string; finish: string; lang: string }) =>
+      `${e.scryfallId}|${e.condition}|${e.finish}|${e.lang}`;
+    const map = new Map(existing.map((e) => [keyOf(e), e]));
+    const now = Date.now();
+    const writes: CollectionEntry[] = [];
+
+    for (const l of lines) {
+      const lang = l.lang || 'en';
+      const k = keyOf({ ...l, lang });
+      cards += l.quantity;
+      const ex = map.get(k);
+      if (ex) {
+        ex.quantity += l.quantity;
+        ex.quantityForTrade = clamp(Math.max(ex.quantityForTrade, l.quantityForTrade), 0, ex.quantity);
+        ex.updatedAt = now;
+        if (!writes.includes(ex)) writes.push(ex);
+      } else {
+        const entry: CollectionEntry = {
+          id: newId(),
+          oracleId: l.oracleId,
+          scryfallId: l.scryfallId,
+          condition: l.condition,
+          finish: l.finish,
+          lang,
+          quantity: l.quantity,
+          quantityForTrade: clamp(l.quantityForTrade, 0, l.quantity),
+          createdAt: now,
+          updatedAt: now,
+        };
+        map.set(k, entry);
+        writes.push(entry);
+      }
+    }
+    await db.collection.bulkPut(writes);
+  });
+  return { entries: lines.length, cards };
+}
+
 /** Wipe every user-data table (About screen: "delete all my data"). Card DB is kept. */
 export async function deleteAllUserData(): Promise<void> {
   await db.transaction('rw', [db.collection, db.wishlist, db.decks, db.deckCards, db.trades], async () => {

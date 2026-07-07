@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import { initPwa } from './pwa.js';
+import { ToastProvider } from './components/Toast.js';
 import { Search } from './routes/Search.js';
 import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
@@ -10,6 +11,8 @@ import { Trade } from './routes/Trade.js';
 import { History } from './routes/History.js';
 import { About } from './routes/About.js';
 import { More } from './routes/More.js';
+import { Import } from './routes/Import.js';
+import { Export } from './routes/Export.js';
 
 const PRIMARY_NAV = [
   { to: '/', label: 'Search', icon: '🔍', end: true },
@@ -31,6 +34,7 @@ export function App() {
   }, []);
 
   return (
+    <ToastProvider>
     <div className="app-shell">
       {updateReload && (
         <div className="banner banner-update" role="status">
@@ -50,6 +54,8 @@ export function App() {
           <Route path="/collection" element={<Collection />} />
           <Route path="/wishlist" element={<Wishlist />} />
           <Route path="/tradelist" element={<Tradelist />} />
+          <Route path="/import" element={<Import />} />
+          <Route path="/export" element={<Export />} />
           <Route path="/decks" element={<Decks />} />
           <Route path="/trade" element={<Trade />} />
           <Route path="/history" element={<History />} />
@@ -75,5 +81,6 @@ export function App() {
         ))}
       </nav>
     </div>
+    </ToastProvider>
   );
 }

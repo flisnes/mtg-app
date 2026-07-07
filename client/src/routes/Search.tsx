@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import type { OracleCard, Rarity } from '@mtg/shared';
 import { Page } from './Page.js';
 import { searchCards, type SearchFilters } from '../cardDb/search.js';
+import { addToCollection, addToWishlist } from '../db/dataAccess.js';
+import { CardSheet } from '../components/CardSheet.js';
+import { useToast } from '../components/Toast.js';
 
 const RARITIES: Rarity[] = ['common', 'uncommon', 'rare', 'mythic'];
 const COLORS = [
@@ -25,11 +28,11 @@ export function Search() {
   const [results, setResults] = useState<OracleCard[]>([]);
   const [total, setTotal] = useState(0);
   const [searching, setSearching] = useState(false);
+  const [sheetCard, setSheetCard] = useState<OracleCard | null>(null);
+  const toast = useToast();
 
   const hasCriteria = query.trim().length > 0 || !!filters.color || !!filters.rarity || !!filters.type;
 
-  // Debounced search. searchCards is in-memory after the first call, so this is
-  // fast; the debounce just avoids re-running on every keystroke.
   useEffect(() => {
     if (!hasCriteria) {
       setResults([]);
@@ -47,10 +50,23 @@ export function Search() {
   }, [query, filters, hasCriteria]);
 
   const setFilter = useMemo(
-    () => (key: keyof SearchFilters, value: string) =>
-      setFilters((f) => ({ ...f, [key]: value || undefined })),
+    () => (key: keyof SearchFilters, value: string) => setFilters((f) => ({ ...f, [key]: value || undefined })),
     [],
   );
+
+  // Quick-add uses the default printing / NM / nonfoil / en; the sheet is for detail.
+  async function quickCollection(card: OracleCard) {
+    await addToCollection({ oracleId: card.oracleId, scryfallId: card.defaultScryfallId, condition: 'NM', finish: 'nonfoil', lang: 'en' });
+    toast(`Added ${card.name} to collection`);
+  }
+  async function quickWishlist(card: OracleCard) {
+    await addToWishlist({ oracleId: card.oracleId, scryfallId: null });
+    toast(`Added ${card.name} to wishlist`);
+  }
+  async function quickTradelist(card: OracleCard) {
+    await addToCollection({ oracleId: card.oracleId, scryfallId: card.defaultScryfallId, condition: 'NM', finish: 'nonfoil', lang: 'en', quantityForTrade: 1 });
+    toast(`Added ${card.name} to tradelist`);
+  }
 
   return (
     <Page title="Search" subtitle="Find cards to add to your collection, wishlist, or tradelist.">
@@ -93,29 +109,46 @@ export function Search() {
 
       {hasCriteria && (
         <p className="search-meta">
-          {searching ? 'Searching…' : `${total} result${total === 1 ? '' : 's'}${total > results.length ? ` (showing ${results.length})` : ''}`}
+          {searching
+            ? 'Searching…'
+            : `${total} result${total === 1 ? '' : 's'}${total > results.length ? ` (showing ${results.length})` : ''}`}
         </p>
       )}
 
       <ul className="result-list">
         {results.map((card) => (
           <li key={card.oracleId} className="result-row">
-            {card.imageSmall ? (
-              <img className="result-thumb" src={card.imageSmall} alt="" loading="lazy" width={46} height={64} />
-            ) : (
-              <div className="result-thumb" aria-hidden />
-            )}
-            <div className="result-main">
-              <div className="result-name">{card.name}</div>
-              <div className="result-sub">
-                <span className={`rarity-dot rarity-${card.rarity}`} aria-hidden />
-                {card.typeLine}
+            <button className="result-open" onClick={() => setSheetCard(card)} aria-label={`Edit ${card.name}`}>
+              {card.imageSmall ? (
+                <img className="result-thumb" src={card.imageSmall} alt="" loading="lazy" width={46} height={64} />
+              ) : (
+                <div className="result-thumb" aria-hidden />
+              )}
+              <div className="result-main">
+                <div className="result-name">{card.name}</div>
+                <div className="result-sub">
+                  <span className={`rarity-dot rarity-${card.rarity}`} aria-hidden />
+                  {card.typeLine}
+                </div>
               </div>
+              <div className="result-price">{price(card)}</div>
+            </button>
+            <div className="quick-actions">
+              <button title="Add to collection" onClick={() => quickCollection(card)}>
+                +🗃️
+              </button>
+              <button title="Add to wishlist" onClick={() => quickWishlist(card)}>
+                +⭐
+              </button>
+              <button title="Add to tradelist" onClick={() => quickTradelist(card)}>
+                +🔁
+              </button>
             </div>
-            <div className="result-price">{price(card)}</div>
           </li>
         ))}
       </ul>
+
+      {sheetCard && <CardSheet oracleCard={sheetCard} onClose={() => setSheetCard(null)} />}
     </Page>
   );
 }

@@ -1,12 +1,22 @@
-import { Page, EmptyState } from './Page.js';
+import { Link } from 'react-router-dom';
+import { Page } from './Page.js';
+import { CollectionListView } from '../components/CollectionListView.js';
 
 export function Collection() {
   return (
     <Page title="Collection" subtitle="Everything you own — filter, edit, import, and export.">
-      <EmptyState phase="Phase 2">
-        Your collection is empty. You’ll be able to add cards from search or import a Moxfield / Archidekt / plain-text
-        list.
-      </EmptyState>
+      <div className="list-toolbar">
+        <Link className="chip" to="/">
+          ＋ Add cards
+        </Link>
+        <Link className="chip" to="/import">
+          ⬆ Import
+        </Link>
+        <Link className="chip" to="/export">
+          ⬇ Export
+        </Link>
+      </div>
+      <CollectionListView />
     </Page>
   );
 }

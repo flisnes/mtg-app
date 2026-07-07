@@ -14,6 +14,12 @@ function post(msg: WorkerResponse): void {
   (self as DedicatedWorkerGlobalScope).postMessage(msg);
 }
 
+/** Hex SHA-256 of a string (matches the pipeline's hash of the uncompressed JSON). */
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 function progress(p: ImportProgress): void {
   post({ type: 'progress', progress: p });
 }
@@ -72,10 +78,12 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
     const printingsUrl = new URL(req.printings.url, req.baseUrl).href;
 
     const oracleText = await downloadDecompressed(oracleUrl, req.oracle.bytes, 'oracle');
+    if ((await sha256Hex(oracleText)) !== req.oracle.sha256) throw new Error('oracle-slim checksum mismatch — download corrupt');
     const oracleCards = JSON.parse(oracleText) as OracleCard[];
     await importOracle(oracleCards);
 
     const printingsText = await downloadDecompressed(printingsUrl, req.printings.bytes, 'printings');
+    if ((await sha256Hex(printingsText)) !== req.printings.sha256) throw new Error('printings-slim checksum mismatch — download corrupt');
     const printings = JSON.parse(printingsText) as Printing[];
     await importPrintings(printings);
 

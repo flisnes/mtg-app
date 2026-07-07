@@ -16,27 +16,25 @@ export async function recordPriceSnapshots(): Promise<number> {
   const watched = await db.watchlist.toArray();
   if (!watched.length) return 0;
   const day = today();
-  const printings = await getPrintingsByIds(watched.map((w) => w.scryfallId));
 
-  let added = 0;
-  await db.transaction('rw', db.priceSnapshots, async () => {
-    for (const w of watched) {
-      const p = printings.get(w.scryfallId);
-      if (!p) continue;
-      const already = await db.priceSnapshots.where('[scryfallId+day]').equals([w.scryfallId, day]).count();
-      if (already) continue;
-      await db.priceSnapshots.add({
-        id: crypto.randomUUID(),
-        scryfallId: w.scryfallId,
-        at: Date.now(),
-        day,
-        eur: p.priceEur,
-        usd: p.priceUsd,
-      });
-      added++;
-    }
-  });
-  return added;
+  // One query for today's existing snapshots (compound index) + one bulk write,
+  // instead of a per-card count in a loop.
+  const [printings, existing] = await Promise.all([
+    getPrintingsByIds(watched.map((w) => w.scryfallId)),
+    db.priceSnapshots.where('[scryfallId+day]').anyOf(watched.map((w) => [w.scryfallId, day])).toArray(),
+  ]);
+  const have = new Set(existing.map((s) => s.scryfallId));
+
+  const now = Date.now();
+  const toAdd: PriceSnapshot[] = [];
+  for (const w of watched) {
+    if (have.has(w.scryfallId)) continue;
+    const p = printings.get(w.scryfallId);
+    if (!p) continue;
+    toAdd.push({ id: crypto.randomUUID(), scryfallId: w.scryfallId, at: now, day, eur: p.priceEur, usd: p.priceUsd });
+  }
+  if (toAdd.length) await db.priceSnapshots.bulkAdd(toAdd);
+  return toAdd.length;
 }
 
 export interface WatchedRow {
@@ -49,10 +47,13 @@ export interface WatchedRow {
 /** All watched cards joined with display data + their price history (ascending). */
 export async function getWatchedRows(): Promise<WatchedRow[]> {
   const watched = await db.watchlist.toArray();
+  if (!watched.length) return [];
+  const watchedIds = watched.map((w) => w.scryfallId);
   const [oracleMap, printMap, allSnaps] = await Promise.all([
     getOracleCardsByIds(watched.map((w) => w.oracleId)),
-    getPrintingsByIds(watched.map((w) => w.scryfallId)),
-    db.priceSnapshots.toArray(),
+    getPrintingsByIds(watchedIds),
+    // Only this watchlist's snapshots (indexed), not the whole table.
+    db.priceSnapshots.where('scryfallId').anyOf(watchedIds).toArray(),
   ]);
   const byCard = new Map<string, PriceSnapshot[]>();
   for (const s of allSnaps) {

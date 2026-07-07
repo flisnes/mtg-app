@@ -333,8 +333,14 @@ export async function removeDeckCard(id: string): Promise<void> {
 export async function applyCompletedTrade(
   sessionId: string,
   given: TradeLine[],
-  received: TradeLine[],
+  receivedRaw: TradeLine[],
 ): Promise<{ applied: boolean }> {
+  // Verify received cards are real (defence against a malicious peer sending
+  // fabricated ids). Lines whose oracle card isn't in our card DB are dropped.
+  const oracleKnown = await db.oracleCards.bulkGet([...new Set(receivedRaw.map((l) => l.oracleId))]);
+  const knownOracles = new Set(oracleKnown.filter(Boolean).map((c) => c!.oracleId));
+  const received = receivedRaw.filter((l) => knownOracles.has(l.oracleId));
+
   return db.transaction('rw', db.collection, db.wishlist, db.trades, async () => {
     if (await db.trades.get(sessionId)) return { applied: false }; // already applied
 

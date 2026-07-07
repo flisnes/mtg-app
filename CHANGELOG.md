@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.4.1 — hardening
+
+- Trade offers received from a partner are now validated before display or import (quantities clamped, condition/finish enforced, fabricated cards dropped).
+- Card-database downloads are checksum-verified before import.
+- Trade connections use a heartbeat so they survive long inspection pauses.
+- Price tracking made faster for large watchlists.
+
 ## 0.4.0
 
 - Price tracker: watch a card's price ("Watch price" on a card's detail sheet), and the app records its value each time you open it. A new "Price tracker" view (under More) shows every watched card with its current price, change, and a sparkline. Track your whole collection at once from About.

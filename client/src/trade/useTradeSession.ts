@@ -10,6 +10,7 @@ import {
 import { applyCompletedTrade } from '../db/dataAccess.js';
 import { getSetting, setSetting } from '../db/settings.js';
 import { TRADE_WS_URL } from './config.js';
+import { sanitizeOffer } from './validate.js';
 
 // Client trade transport (beta plan §7). Owns the WebSocket, mirrors the
 // server-authoritative snapshot, applies the completion mutation idempotently,
@@ -76,7 +77,12 @@ export function useTradeSession(): TradeSession {
   }, []);
 
   const handleSnapshot = useCallback(
-    (snap: SessionSnapshot, mySeat: Seat) => {
+    (raw: SessionSnapshot, mySeat: Seat) => {
+      // The peer is untrusted — sanitize both offers before anything uses them.
+      const snap: SessionSnapshot = {
+        ...raw,
+        offers: { a: sanitizeOffer(raw.offers?.a), b: sanitizeOffer(raw.offers?.b) },
+      };
       setSnapshot(snap);
       setPeerPresent(snap.present[otherSeat(mySeat)]);
       if (snap.state === 'completed' && !appliedRef.current) {

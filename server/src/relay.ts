@@ -76,6 +76,26 @@ export function registerTradeRelay(app: FastifyInstance): void {
   app.get('/ws', { websocket: true }, (socket: WebSocket, req) => {
     const ctx: SocketCtx = { ip: req.ip, tokens: config.maxMessagesPerSec, last: Date.now() };
 
+    // Heartbeat: ping every 30s; terminate a socket that misses a pong. Keeps
+    // NAT/proxy paths alive during the physical-inspection window and reaps
+    // half-dead sockets (browsers answer pings automatically).
+    let alive = true;
+    socket.on('pong', () => {
+      alive = true;
+    });
+    const heartbeat = setInterval(() => {
+      if (!alive) {
+        socket.terminate();
+        return;
+      }
+      alive = false;
+      try {
+        socket.ping();
+      } catch {
+        socket.terminate();
+      }
+    }, 30_000);
+
     socket.on('message', (raw: Buffer) => {
       const now = Date.now();
       if (!allow(ctx, now)) return sendError(socket, 'rate_limited', 'slow down');
@@ -102,6 +122,7 @@ export function registerTradeRelay(app: FastifyInstance): void {
     });
 
     socket.on('close', () => {
+      clearInterval(heartbeat);
       if (!ctx.code || !ctx.seat) return;
       const session = store.get(ctx.code);
       const bySeat = sockets.get(ctx.code);

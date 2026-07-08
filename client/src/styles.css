@@ -541,11 +541,39 @@ button.danger-outline {
 }
 .sheet-head {
   display: flex;
-  gap: 0.75rem;
-  align-items: center;
+  gap: 1rem;
+  align-items: flex-start;
 }
-.sheet-thumb {
-  border-radius: 6px;
+.sheet-card {
+  width: 45%;
+  max-width: 210px;
+  aspect-ratio: 488 / 680;
+  object-fit: cover;
+  border-radius: 10px;
+  background: var(--surface-2);
+  flex-shrink: 0;
+}
+.sheet-card-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.sheet-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.25rem;
+}
+.sheet-name {
+  font-weight: 700;
+  font-size: 1.15rem;
+  line-height: 1.25;
 }
 .field {
   display: flex;

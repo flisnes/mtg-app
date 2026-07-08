@@ -63,6 +63,12 @@ export function CardSheet({
   );
   const availableFinishes = printing?.finishes ?? (['nonfoil'] as Finish[]);
 
+  // Full-size image + price for the currently-selected printing (falls back to the oracle default).
+  const cardImage = printing?.imageNormal ?? oracleCard.imageNormal ?? printing?.imageSmall ?? oracleCard.imageSmall ?? null;
+  const eur = printing?.priceEur ?? oracleCard.priceEur;
+  const usd = printing?.priceUsd ?? oracleCard.priceUsd;
+  const cardPrice = eur != null ? `€${eur.toFixed(2)}` : usd != null ? `$${usd.toFixed(2)}` : '—';
+
   // Keep finish valid for the chosen printing.
   useEffect(() => {
     if (printing && !printing.finishes.includes(finish)) setFinish(printing.finishes[0] ?? 'nonfoil');
@@ -106,10 +112,16 @@ export function CardSheet({
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`${editing ? 'Edit' : 'Add'} ${oracleCard.name}`}>
         <div className="sheet-head">
-          {oracleCard.imageSmall && <img className="sheet-thumb" src={oracleCard.imageSmall} alt="" width={46} height={64} />}
-          <div>
-            <div className="result-name">{oracleCard.name}</div>
+          {cardImage ? (
+            <img className="sheet-card" src={cardImage} alt={oracleCard.name} />
+          ) : (
+            <div className="sheet-card sheet-card-ph">{oracleCard.name}</div>
+          )}
+          <div className="sheet-info">
+            <div className="sheet-name">{oracleCard.name}</div>
+            {oracleCard.manaCost && <div className="result-sub">{oracleCard.manaCost}</div>}
             <div className="result-sub">{oracleCard.typeLine}</div>
+            <div className="result-price">{cardPrice}</div>
           </div>
         </div>
 

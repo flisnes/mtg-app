@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.4.2
+
+- Tapping a card now shows a large, readable card image in its detail sheet (with mana cost, type, and price), instead of a tiny thumbnail. The image follows the selected edition.
+
 ## 0.4.1 — hardening
 
 - Trade offers received from a partner are now validated before display or import (quantities clamped, condition/finish enforced, fabricated cards dropped).

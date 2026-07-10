@@ -44,6 +44,7 @@ jobs:
         env:
           VITE_BASE: /mtg-app/
           VITE_CARD_DB_URL: https://flisnes.github.io/mtg-app/carddb/
+          VITE_TRADE_WS_URL: wss://79-76-41-163.sslip.io/ws
 
       - name: Stage card DB into the site
         run: |

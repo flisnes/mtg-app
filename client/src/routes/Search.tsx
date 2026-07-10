@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { OracleCard, Rarity } from '@mtg/shared';
+import type { OracleCard, Priced, Rarity } from '@mtg/shared';
 import { Page } from './Page.js';
 import { searchCards, type SearchFilters } from '../cardDb/search.js';
 import { addToCollection, addToWishlist } from '../db/dataAccess.js';
@@ -16,7 +16,7 @@ const COLORS = [
 ] as const;
 const TYPES = ['Creature', 'Instant', 'Sorcery', 'Artifact', 'Enchantment', 'Planeswalker', 'Land'];
 
-function price(card: OracleCard): string {
+function price(card: Priced<OracleCard>): string {
   if (card.priceEur != null) return `€${card.priceEur.toFixed(2)}`;
   if (card.priceUsd != null) return `$${card.priceUsd.toFixed(2)}`;
   return '—';
@@ -25,10 +25,10 @@ function price(card: OracleCard): string {
 export function Search() {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({});
-  const [results, setResults] = useState<OracleCard[]>([]);
+  const [results, setResults] = useState<Priced<OracleCard>[]>([]);
   const [total, setTotal] = useState(0);
   const [searching, setSearching] = useState(false);
-  const [sheetCard, setSheetCard] = useState<OracleCard | null>(null);
+  const [sheetCard, setSheetCard] = useState<Priced<OracleCard> | null>(null);
   const toast = useToast();
 
   const hasCriteria = query.trim().length > 0 || !!filters.color || !!filters.rarity || !!filters.type;

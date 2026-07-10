@@ -2,21 +2,32 @@ import type { CardDbArtifactMeta } from '@mtg/shared';
 
 // Message contract between the main thread and the import worker. The worker
 // downloads + decompresses (DecompressionStream) + bulk-imports into Dexie so
-// the UI thread stays responsive during the ~14MB import (beta plan §3).
+// the UI thread stays responsive. It receives only the chunks that actually
+// changed (plus the prices file when prices moved), not the whole card DB.
+
+export interface ChunkTask {
+  artifact: 'oracle' | 'printings';
+  /** First hex char of the ids this chunk covers. */
+  key: string;
+  url: string;
+  bytes: number;
+  sha256: string;
+  count: number;
+}
 
 export interface ImportRequest {
   baseUrl: string;
-  cardDbVersion: string;
+  /** Identity of the full card data set (manifest v2 dataVersion). */
+  dataVersion: string;
+  /** Scryfall bulk `updated_at`, for the About screen. */
+  cardDbUpdatedAt: string;
   pricesUpdatedAt: string;
-  oracle: CardDbArtifactMeta;
-  printings: CardDbArtifactMeta;
+  chunks: ChunkTask[];
+  /** Null when prices haven't changed since the installed set. */
+  prices: CardDbArtifactMeta | null;
 }
 
-export type ImportProgress =
-  | { phase: 'download'; artifact: 'oracle' | 'printings'; loaded: number; total: number }
-  | { phase: 'import'; artifact: 'oracle' | 'printings'; done: number; total: number };
-
 export type WorkerResponse =
-  | { type: 'progress'; progress: ImportProgress }
+  | { type: 'progress'; fraction: number; label: string }
   | { type: 'done' }
   | { type: 'error'; message: string };

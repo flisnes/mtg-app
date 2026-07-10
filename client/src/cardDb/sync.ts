@@ -2,13 +2,17 @@ import type { CardDbManifest } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getSetting } from '../db/settings.js';
 import { CARD_DB_BASE } from './config.js';
-import type { ImportRequest, WorkerResponse } from './messages.js';
+import type { ChunkTask, ImportRequest, WorkerResponse } from './messages.js';
 import { runScryfallFallback } from './fallback.js';
+import { invalidateSearchIndex } from './search.js';
+import { invalidatePriceCache } from './prices.js';
 
-// Orchestrates card-DB freshness (beta plan §3): compare the served manifest
-// version to what's installed, and if they differ (or nothing is installed),
-// download + import via the worker. Offline with a local DB is fine — the app
-// just runs on what it has.
+// Orchestrates card-DB freshness (beta plan §3). The manifest describes the
+// card data as 16 hash-named chunks per artifact plus a separate prices file;
+// we download only the pieces whose hash differs from what's installed. Card
+// data changes rarely, prices churn daily — so the typical daily update is the
+// small prices file, not the full ~14 MB. Offline with a local DB is fine —
+// the app just runs on what it has.
 
 export type SyncState =
   | { status: 'checking' }
@@ -17,21 +21,27 @@ export type SyncState =
   | { status: 'offline-no-db' }
   | { status: 'error'; message: string };
 
+type InstalledChunks = Record<'oracle' | 'printings', Record<string, { sha256: string; count: number }>>;
+
 interface InstalledInfo {
   version: string | undefined;
   counts: { oracle: number; printings: number } | undefined;
+  chunks: InstalledChunks | undefined;
+  pricesSha: string | undefined;
   actualOracle: number;
   actualPrintings: number;
 }
 
 async function readInstalled(): Promise<InstalledInfo> {
-  const [version, counts, actualOracle, actualPrintings] = await Promise.all([
+  const [version, counts, chunks, pricesSha, actualOracle, actualPrintings] = await Promise.all([
     getSetting<string>('cardDbVersion'),
     getSetting<{ oracle: number; printings: number }>('cardDbCounts'),
+    getSetting<InstalledChunks>('cardDbChunks'),
+    getSetting<string>('pricesSha256'),
     db.oracleCards.count(),
     db.printings.count(),
   ]);
-  return { version, counts, actualOracle, actualPrintings };
+  return { version, counts, chunks, pricesSha, actualOracle, actualPrintings };
 }
 
 /** A local DB is usable if a version is recorded and the row counts still match it. */
@@ -46,32 +56,25 @@ async function fetchManifest(base: string): Promise<CardDbManifest> {
   return (await res.json()) as CardDbManifest;
 }
 
+/** Chunks whose served hash differs from the installed one (all of them on a fresh/unusable DB). */
+function changedChunks(manifest: NonNullable<CardDbManifest['v2']>, installed: InstalledChunks | undefined): ChunkTask[] {
+  const out: ChunkTask[] = [];
+  for (const artifact of ['oracle', 'printings'] as const) {
+    for (const chunk of manifest.chunks[artifact]) {
+      if (installed?.[artifact]?.[chunk.key]?.sha256 !== chunk.sha256) out.push({ artifact, ...chunk });
+    }
+  }
+  return out;
+}
+
 function runImportWorker(req: ImportRequest, onState: (s: SyncState) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./import.worker.ts', import.meta.url), { type: 'module' });
-    const totalBytes = req.oracle.bytes + req.printings.bytes;
 
     worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       const msg = e.data;
       if (msg.type === 'progress') {
-        const p = msg.progress;
-        if (p.phase === 'download') {
-          const prior = p.artifact === 'printings' ? req.oracle.bytes : 0;
-          const fraction = totalBytes ? (prior + p.loaded) / totalBytes : 0;
-          const mb = (n: number) => (n / 1e6).toFixed(1);
-          onState({
-            status: 'progress',
-            fraction: Math.min(0.85, fraction * 0.85),
-            label: `Downloading ${p.artifact === 'oracle' ? 'cards' : 'editions'} (${mb(p.loaded)}/${mb(p.total)} MB)`,
-          });
-        } else {
-          const base = p.artifact === 'oracle' ? 0.85 : 0.93;
-          onState({
-            status: 'progress',
-            fraction: base + (p.total ? (p.done / p.total) * 0.07 : 0),
-            label: `Preparing ${p.artifact === 'oracle' ? 'cards' : 'editions'}…`,
-          });
-        }
+        onState({ status: 'progress', fraction: Math.min(1, msg.fraction), label: msg.label });
       } else if (msg.type === 'done') {
         worker.terminate();
         resolve();
@@ -108,23 +111,35 @@ export async function syncCardDb(onState: (s: SyncState) => void): Promise<void>
     return runFallback(onState, haveLocal);
   }
 
-  const upToDate = haveLocal && installed.version === manifest.cardDbVersion;
-  if (upToDate) return onState({ status: 'ready' });
+  // A manifest without v2 shouldn't occur (our pipeline always emits it), but
+  // don't brick the app over it.
+  if (!manifest.v2) {
+    if (haveLocal) return onState({ status: 'ready' });
+    return runFallback(onState, haveLocal);
+  }
+
+  const chunks = changedChunks(manifest.v2, haveLocal ? installed.chunks : undefined);
+  const pricesChanged = !haveLocal || installed.pricesSha !== manifest.v2.prices.sha256;
+  if (!chunks.length && !pricesChanged) return onState({ status: 'ready' });
 
   try {
     await runImportWorker(
       {
         baseUrl: CARD_DB_BASE,
-        cardDbVersion: manifest.cardDbVersion,
+        dataVersion: manifest.v2.dataVersion,
+        cardDbUpdatedAt: manifest.cardDbVersion,
         pricesUpdatedAt: manifest.pricesUpdatedAt,
-        oracle: manifest.artifacts.oracle,
-        printings: manifest.artifacts.printings,
+        chunks,
+        prices: pricesChanged ? manifest.v2.prices : null,
       },
       onState,
     );
+    invalidateSearchIndex();
+    invalidatePriceCache();
     onState({ status: 'ready' });
   } catch (err) {
-    // A failed refresh still leaves a usable older DB behind.
+    // A failed refresh still leaves a usable older DB behind (chunk imports are
+    // atomic, so a partial update is a consistent mix of old and new chunks).
     if (haveLocal) return onState({ status: 'ready' });
     onState({ status: 'error', message: err instanceof Error ? err.message : String(err) });
   }
@@ -133,6 +148,8 @@ export async function syncCardDb(onState: (s: SyncState) => void): Promise<void>
 async function runFallback(onState: (s: SyncState) => void, haveLocal: boolean): Promise<void> {
   try {
     await runScryfallFallback((fraction, label) => onState({ status: 'progress', fraction, label }));
+    invalidateSearchIndex();
+    invalidatePriceCache();
     onState({ status: 'ready' });
   } catch (err) {
     if (haveLocal) return onState({ status: 'ready' });

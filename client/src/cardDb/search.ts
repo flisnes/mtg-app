@@ -1,5 +1,6 @@
-import type { Color, OracleCard, Rarity } from '@mtg/shared';
+import type { Color, OracleCard, Priced, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
+import { withPrices } from './prices.js';
 
 // Card search (beta plan §2, §6). The oracle set (~37k) is small enough to hold
 // in memory, which gives fast substring matching (a name-prefix index alone
@@ -67,7 +68,7 @@ export async function resolveOracleByName(name: string): Promise<OracleCard | un
 }
 
 export interface SearchResult {
-  cards: OracleCard[];
+  cards: Priced<OracleCard>[];
   total: number;
 }
 
@@ -101,8 +102,9 @@ export async function searchCards(
 
   matches.sort((a, b) => b.score - a.score || a.card.name.localeCompare(b.card.name));
 
+  // Prices are joined only for the returned page, not the whole match set.
   return {
-    cards: matches.slice(0, limit).map((m) => m.card),
+    cards: await withPrices(matches.slice(0, limit).map((m) => m.card), (c) => c.defaultScryfallId),
     total: matches.length,
   };
 }

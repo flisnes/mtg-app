@@ -10,6 +10,7 @@ import type {
   Setting,
   WatchedCard,
   PriceSnapshot,
+  PriceShard,
 } from '@mtg/shared';
 
 // Local IndexedDB store (beta plan §4). Two kinds of data live here:
@@ -32,6 +33,7 @@ export class MtgDatabase extends Dexie {
   settings!: Table<Setting, string>;
   watchlist!: Table<WatchedCard, string>;
   priceSnapshots!: Table<PriceSnapshot, string>;
+  priceShards!: Table<PriceShard, string>;
 
   constructor() {
     super('mtg');
@@ -56,6 +58,12 @@ export class MtgDatabase extends Dexie {
     this.version(2).stores({
       watchlist: 'scryfallId, oracleId',
       priceSnapshots: 'id, scryfallId, [scryfallId+day]',
+    });
+
+    // v3: prices live in 16 shard blobs instead of on every card row, so the
+    // daily price refresh writes 16 rows, not ~150k.
+    this.version(3).stores({
+      priceShards: 'key',
     });
   }
 }

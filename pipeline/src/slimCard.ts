@@ -107,6 +107,8 @@ function oracleFields(card: RawCard): {
 
 export interface SlimResult {
   printing: Printing;
+  /** Current prices, kept out of the printing so card data and prices version independently. */
+  prices: { eur: number | null; usd: number | null };
   /** Fields for building the representative OracleCard (rarity is the rep printing's). */
   oracle: {
     name: string;
@@ -142,12 +144,11 @@ export function slimCard(card: RawCard): SlimResult | null {
     releasedAt: card.released_at,
     imageSmall: img.small,
     imageNormal: img.normal,
-    priceEur: price(card.prices?.eur),
-    priceUsd: price(card.prices?.usd),
   };
 
   return {
     printing,
+    prices: { eur: price(card.prices?.eur), usd: price(card.prices?.usd) },
     oracle: {
       name: card.name,
       manaCost: of.manaCost,

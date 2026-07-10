@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CollectionEntry, Condition, Finish, OracleCard, Printing } from '@mtg/shared';
+import type { CollectionEntry, Condition, Finish, OracleCard, Priced, Printing } from '@mtg/shared';
 import { CONDITIONS } from '@mtg/shared';
 import {
   addToCollection,
@@ -23,12 +23,12 @@ export function CardSheet({
   entry,
   onClose,
 }: {
-  oracleCard: OracleCard;
+  oracleCard: Priced<OracleCard>;
   entry?: CollectionEntry;
   onClose: () => void;
 }) {
   const editing = !!entry;
-  const [printings, setPrintings] = useState<Printing[]>([]);
+  const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
   const [scryfallId, setScryfallId] = useState(entry?.scryfallId ?? oracleCard.defaultScryfallId);
   const [condition, setCondition] = useState<Condition>(entry?.condition ?? 'NM');
   const [finish, setFinish] = useState<Finish>(entry?.finish ?? 'nonfoil');

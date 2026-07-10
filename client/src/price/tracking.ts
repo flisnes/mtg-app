@@ -1,4 +1,4 @@
-import type { OracleCard, PriceSnapshot, Printing, WatchedCard } from '@mtg/shared';
+import type { OracleCard, Priced, PriceSnapshot, Printing, WatchedCard } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 
@@ -39,8 +39,8 @@ export async function recordPriceSnapshots(): Promise<number> {
 
 export interface WatchedRow {
   watched: WatchedCard;
-  oracle?: OracleCard;
-  printing?: Printing;
+  oracle?: Priced<OracleCard>;
+  printing?: Priced<Printing>;
   snapshots: PriceSnapshot[];
 }
 

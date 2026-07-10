@@ -4,6 +4,8 @@ Testers: the app shows an "Update now" banner when a new version is published.
 
 ## Unreleased
 
+- Updates no longer re-download the whole card database. Card data is now served as 32 hash-addressed chunks plus a separate daily prices file, and the app fetches only the pieces that changed — a typical day costs a few hundred KB (fresh prices) instead of the full ~14 MB. First install is unchanged.
+- The slow "Preparing editions" step now only runs for chunks that actually changed, and the daily price refresh writes 16 small rows instead of rewriting ~150k card rows — so refreshes on mobile are near-instant. An interrupted update resumes where it left off instead of starting over.
 - Import no longer marks cards for trade by default. Moxfield CSVs carry a "Tradelist Count" column (often set for every card), and the importer used to honor it silently — now a "Tradelist" option on the Import page chooses between ignoring it (default), using the file's counts, or marking everything for trade, and the review screen shows how many cards will be marked before you confirm.
 - Tradelist: new "Remove all from tradelist" button — clears the trade markings without touching your collection (undoes an import that marked everything).
 

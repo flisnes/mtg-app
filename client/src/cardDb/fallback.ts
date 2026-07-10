@@ -1,7 +1,8 @@
-import type { Color, Finish, OracleCard, Printing, Rarity } from '@mtg/shared';
+import type { Color, Finish, OracleCard, PriceMap, Printing, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { setSetting } from '../db/settings.js';
 import { SCRYFALL_BULK_INDEX } from './config.js';
+import { buildPriceShards } from './prices.js';
 
 // Documented fallback (beta plan §3): if our VM is unreachable and there's no
 // local DB yet, fetch Scryfall's `oracle_cards` bulk directly and slim it
@@ -54,7 +55,7 @@ function image(card: RawCard): { small: string | null; normal: string | null } {
   return { small: u?.small ?? null, normal: u?.normal ?? null };
 }
 
-function slim(card: RawCard): { oracle: OracleCard; printing: Printing } | null {
+function slim(card: RawCard): { oracle: OracleCard; printing: Printing; prices: [number | null, number | null] } | null {
   if (!card.oracle_id || !card.name || card.digital) return null;
   if (card.games && !card.games.includes('paper')) return null;
   const faces = card.card_faces ?? [];
@@ -70,8 +71,6 @@ function slim(card: RawCard): { oracle: OracleCard; printing: Printing } | null 
     releasedAt: card.released_at,
     imageSmall: img.small,
     imageNormal: img.normal,
-    priceEur: asPrice(card.prices?.eur),
-    priceUsd: asPrice(card.prices?.usd),
   };
   const oracle: OracleCard = {
     oracleId: card.oracle_id,
@@ -86,10 +85,8 @@ function slim(card: RawCard): { oracle: OracleCard; printing: Printing } | null 
     imageSmall: img.small,
     imageNormal: img.normal,
     defaultScryfallId: card.id,
-    priceEur: printing.priceEur,
-    priceUsd: printing.priceUsd,
   };
-  return { oracle, printing };
+  return { oracle, printing, prices: [asPrice(card.prices?.eur), asPrice(card.prices?.usd)] };
 }
 
 export async function runScryfallFallback(onProgress: (fraction: number, label: string) => void): Promise<void> {
@@ -109,11 +106,13 @@ export async function runScryfallFallback(onProgress: (fraction: number, label: 
   onProgress(0.6, 'Preparing cards…');
   const oracle: OracleCard[] = [];
   const printings: Printing[] = [];
+  const prices: PriceMap = {};
   for (const card of raw) {
     const s = slim(card);
     if (s) {
       oracle.push(s.oracle);
       printings.push(s.printing);
+      if (s.prices[0] != null || s.prices[1] != null) prices[s.printing.scryfallId] = s.prices;
     }
   }
 
@@ -122,9 +121,14 @@ export async function runScryfallFallback(onProgress: (fraction: number, label: 
   await db.oracleCards.bulkPut(oracle);
   onProgress(0.85, 'Saving…');
   await db.printings.bulkPut(printings);
+  await db.priceShards.bulkPut(buildPriceShards(prices));
 
   await setSetting('cardDbVersion', `${entry.updated_at} (scryfall-fallback)`);
+  await setSetting('cardDbUpdatedAt', entry.updated_at);
   await setSetting('pricesUpdatedAt', entry.updated_at);
   await setSetting('cardDbCounts', { oracle: oracle.length, printings: printings.length });
+  // Reset chunk/price bookkeeping so the next successful VM sync replaces everything.
+  await setSetting('cardDbChunks', undefined);
+  await setSetting('pricesSha256', '(scryfall-fallback)');
   onProgress(1, 'Done');
 }

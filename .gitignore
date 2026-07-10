@@ -24,3 +24,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# vite-plugin-pwa dev artifacts
+client/dev-dist/

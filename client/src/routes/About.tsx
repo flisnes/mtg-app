@@ -22,7 +22,9 @@ export function About() {
 
   useEffect(() => {
     void (async () => {
-      setCardDbVersion(await getSetting<string>('cardDbVersion'));
+      // cardDbUpdatedAt is the human-readable bulk timestamp; older installs
+      // only have the (formerly timestamp-shaped) cardDbVersion.
+      setCardDbVersion((await getSetting<string>('cardDbUpdatedAt')) ?? (await getSetting<string>('cardDbVersion')));
       setPricesUpdatedAt(await getSetting<string>('pricesUpdatedAt'));
       setCounts(await getSetting<{ oracle: number; printings: number }>('cardDbCounts'));
     })();

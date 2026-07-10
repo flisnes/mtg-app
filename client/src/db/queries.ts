@@ -1,43 +1,42 @@
-import type { OracleCard, Printing } from '@mtg/shared';
+import type { OracleCard, Priced, Printing } from '@mtg/shared';
 import { db } from './schema.js';
+import { withPrices } from '../cardDb/prices.js';
 
 // Read queries against the card DB, for joining user data (which stores only
-// ids) with display data (names, images, sets, prices). Views use these via
-// dexie-react-hooks useLiveQuery for reactivity.
+// ids) with display data (names, images, sets, prices). Card rows don't carry
+// prices (those live in the shard store); these queries join them in, so views
+// always see Priced rows. Views use these via dexie-react-hooks useLiveQuery
+// for reactivity.
 
-export async function getOracleCard(oracleId: string): Promise<OracleCard | undefined> {
-  return db.oracleCards.get(oracleId);
+export async function getOracleCard(oracleId: string): Promise<Priced<OracleCard> | undefined> {
+  const card = await db.oracleCards.get(oracleId);
+  return card && (await withPrices([card], (c) => c.defaultScryfallId))[0];
 }
 
-export async function getPrinting(scryfallId: string): Promise<Printing | undefined> {
-  return db.printings.get(scryfallId);
+export async function getPrinting(scryfallId: string): Promise<Priced<Printing> | undefined> {
+  const printing = await db.printings.get(scryfallId);
+  return printing && (await withPrices([printing], (p) => p.scryfallId))[0];
 }
 
 /** All printings of a functional card, newest first (for the edition picker). */
-export async function getPrintingsForOracle(oracleId: string): Promise<Printing[]> {
+export async function getPrintingsForOracle(oracleId: string): Promise<Priced<Printing>[]> {
   const printings = await db.printings.where('oracleId').equals(oracleId).toArray();
   printings.sort((a, b) => b.releasedAt.localeCompare(a.releasedAt));
-  return printings;
+  return withPrices(printings, (p) => p.scryfallId);
 }
 
-export async function getOracleCardsByIds(ids: Iterable<string>): Promise<Map<string, OracleCard>> {
+export async function getOracleCardsByIds(ids: Iterable<string>): Promise<Map<string, Priced<OracleCard>>> {
   const unique = [...new Set(ids)];
-  const cards = await db.oracleCards.bulkGet(unique);
-  const map = new Map<string, OracleCard>();
-  cards.forEach((c) => {
-    if (c) map.set(c.oracleId, c);
-  });
-  return map;
+  const cards = (await db.oracleCards.bulkGet(unique)).filter((c): c is OracleCard => !!c);
+  const priced = await withPrices(cards, (c) => c.defaultScryfallId);
+  return new Map(priced.map((c) => [c.oracleId, c]));
 }
 
-export async function getPrintingsByIds(ids: Iterable<string>): Promise<Map<string, Printing>> {
+export async function getPrintingsByIds(ids: Iterable<string>): Promise<Map<string, Priced<Printing>>> {
   const unique = [...new Set(ids)];
-  const printings = await db.printings.bulkGet(unique);
-  const map = new Map<string, Printing>();
-  printings.forEach((p) => {
-    if (p) map.set(p.scryfallId, p);
-  });
-  return map;
+  const printings = (await db.printings.bulkGet(unique)).filter((p): p is Printing => !!p);
+  const priced = await withPrices(printings, (p) => p.scryfallId);
+  return new Map(priced.map((p) => [p.scryfallId, p]));
 }
 
 /** Total owned copies per oracleId (summed across all printings), for deck ownership. */

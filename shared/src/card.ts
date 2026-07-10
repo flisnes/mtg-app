@@ -41,8 +41,6 @@ export interface OracleCard {
   imageNormal: string | null;
   /** A representative printing used when the user hasn't picked one. */
   defaultScryfallId: string;
-  priceEur: number | null;
-  priceUsd: number | null;
   /** Legality per tracked format (oracle-invariant). May be absent on card DBs imported before this field existed. */
   legalities?: Partial<Record<Format, LegalityStatus>>;
 }
@@ -59,24 +57,57 @@ export interface Printing {
   releasedAt: string; // ISO date
   imageSmall: string | null;
   imageNormal: string | null;
-  priceEur: number | null;
-  priceUsd: number | null;
+}
+
+// Prices are versioned and shipped separately from the card data: they churn
+// daily (which used to force a full 14 MB re-download + re-import), while the
+// card data itself only changes when Scryfall's underlying data does.
+
+/** A card row enriched with its current prices (joined at read time on the client). */
+export type Priced<T> = T & { priceEur: number | null; priceUsd: number | null };
+
+/** scryfallId → [eur, usd]. Entries with both prices null are omitted. */
+export type PriceMap = Record<string, [number | null, number | null]>;
+
+/** One stored shard of the price map (sharded by first hex char of scryfallId). */
+export interface PriceShard {
+  key: string;
+  prices: PriceMap;
 }
 
 /** Served alongside the slim artifacts; drives DB-refresh + app-update prompts (beta plan §3.1). */
 export interface CardDbManifest {
-  /** Card-DB version = Scryfall bulk `updated_at`. */
+  /**
+   * Legacy card-DB version = Scryfall bulk `updated_at`. Pre-chunking clients
+   * key their full re-download off this; new clients use `v2`.
+   */
   cardDbVersion: string;
   /** Latest published app build version; client compares to its embedded version. */
   latestAppVersion: string;
   /** Optional hard floor: clients below this get the trade view blocked. */
   minSupportedVersion?: string;
+  /** Legacy whole-file artifacts (prices embedded), kept for pre-chunking clients. */
   artifacts: {
     oracle: CardDbArtifactMeta;
     printings: CardDbArtifactMeta;
   };
   /** ISO timestamp prices were captured; shown as "prices updated <date>". */
   pricesUpdatedAt: string;
+  /** Chunked artifacts + separate prices: clients download only what changed. */
+  v2?: {
+    /** Identity of the price-less card data (hash over the chunk hashes). */
+    dataVersion: string;
+    chunks: {
+      oracle: CardDbChunkMeta[];
+      printings: CardDbChunkMeta[];
+    };
+    prices: CardDbArtifactMeta;
+  };
+}
+
+/** One chunk of an artifact: all rows whose id starts with `key` (one hex char). */
+export interface CardDbChunkMeta extends CardDbArtifactMeta {
+  key: string;
 }
 
 export interface CardDbArtifactMeta {

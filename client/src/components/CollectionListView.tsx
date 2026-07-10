@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
-import type { CollectionEntry, Color, OracleCard, Printing, Rarity } from '@mtg/shared';
+import type { CollectionEntry, Color, OracleCard, Priced, Printing, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { CardSheet } from './CardSheet.js';
@@ -9,8 +9,8 @@ import { CardGrid, ViewToggle, useViewMode, type GridItem } from './CardGrid.js'
 
 export interface JoinedEntry {
   entry: CollectionEntry;
-  oracle?: OracleCard;
-  printing?: Printing;
+  oracle?: Priced<OracleCard>;
+  printing?: Priced<Printing>;
 }
 
 const COLORS: Color[] = ['W', 'U', 'B', 'R', 'G'];
@@ -32,7 +32,7 @@ function useJoinedCollection(): JoinedEntry[] | undefined {
   }, []);
 }
 
-function priceOf(p?: Printing, o?: OracleCard): string {
+function priceOf(p?: Priced<Printing>, o?: Priced<OracleCard>): string {
   const eur = p?.priceEur ?? o?.priceEur;
   const usd = p?.priceUsd ?? o?.priceUsd;
   if (eur != null) return `€${eur.toFixed(2)}`;

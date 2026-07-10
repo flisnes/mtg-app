@@ -1,22 +1,36 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Link } from 'react-router-dom';
-import type { OracleCard, Priced } from '@mtg/shared';
+import type { OracleCard, Priced, Printing, WishlistEntry } from '@mtg/shared';
 import { Page } from './Page.js';
 import { db } from '../db/schema.js';
-import { getOracleCardsByIds } from '../db/queries.js';
+import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { addToWishlist, removeFromWishlist } from '../db/dataAccess.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
+import { useOpenSearch } from '../components/GlobalSearch.js';
+
+interface WishRow {
+  entry: WishlistEntry;
+  oracle?: Priced<OracleCard>;
+  printing?: Priced<Printing>;
+}
 
 export function Wishlist() {
   const [name, setName] = useState('');
   const [view, setView] = useViewMode();
-  const [info, setInfo] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
-  const rows = useLiveQuery(async () => {
+  const openSearch = useOpenSearch();
+  const [editing, setEditing] = useState<WishRow | null>(null);
+  const rows = useLiveQuery(async (): Promise<WishRow[]> => {
     const entries = await db.wishlist.toArray();
-    const oracleMap = await getOracleCardsByIds(entries.map((e) => e.oracleId));
-    return entries.map((entry) => ({ entry, oracle: oracleMap.get(entry.oracleId) }));
+    const [oracleMap, printMap] = await Promise.all([
+      getOracleCardsByIds(entries.map((e) => e.oracleId)),
+      getPrintingsByIds(entries.map((e) => e.scryfallId).filter((id): id is string => id !== null)),
+    ]);
+    return entries.map((entry) => ({
+      entry,
+      oracle: oracleMap.get(entry.oracleId),
+      printing: entry.scryfallId ? printMap.get(entry.scryfallId) : undefined,
+    }));
   }, []);
 
   const filtered = useMemo(() => {
@@ -35,7 +49,7 @@ export function Wishlist() {
         <div className="empty-state">
           <p>Nothing on your wishlist yet.</p>
           <p className="empty-phase">
-            <Link to="/">Search for cards</Link> and tap ＋⭐.
+            <button className="linklike" onClick={openSearch}>Search for cards</button> and tap ＋⭐.
           </p>
         </div>
       ) : (
@@ -58,12 +72,14 @@ export function Wishlist() {
               (r): CardItem => ({
                 key: r.entry.id,
                 name: r.oracle?.name ?? '(unknown card)',
-                image: r.oracle?.imageSmall ?? null,
+                image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
                 count: r.entry.quantity,
-                sub: r.entry.scryfallId ? 'specific printing' : 'any printing',
-                onClick: r.oracle
-                  ? () => setInfo({ oracle: r.oracle!, scryfallId: r.entry.scryfallId ?? undefined })
-                  : undefined,
+                sub: r.entry.scryfallId
+                  ? r.printing
+                    ? `${r.printing.setName} · #${r.printing.collectorNumber}`
+                    : 'specific printing'
+                  : 'any printing',
+                onClick: r.oracle ? () => setEditing(r) : undefined,
                 actions: (
                   <>
                     <button title="Remove one" onClick={() => removeFromWishlist(r.entry.id, 1)}>−</button>
@@ -82,8 +98,8 @@ export function Wishlist() {
         </>
       )}
 
-      {info && (
-        <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
+      {editing?.oracle && (
+        <CardSheet oracleCard={editing.oracle} wishEntry={editing.entry} onClose={() => setEditing(null)} />
       )}
     </Page>
   );

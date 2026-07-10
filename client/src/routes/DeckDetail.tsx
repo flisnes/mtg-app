@@ -39,7 +39,7 @@ export function DeckDetail() {
   const [exit, setExit] = useState<MissingCard[] | null>(null);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [view, setView] = useViewMode();
-  const [info, setInfo] = useState<Priced<OracleCard> | null>(null);
+  const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard?: { id: string; quantity: number } } | null>(null);
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -164,7 +164,7 @@ export function DeckDetail() {
         <ViewToggle mode={view} onChange={setView} />
       </div>
 
-      {panel === 'add' && <AddPanel deckId={id} onAdded={(n) => toast(`Added ${n}`)} onInfo={setInfo} />}
+      {panel === 'add' && <AddPanel deckId={id} onAdded={(n) => toast(`Added ${n}`)} onInfo={(card) => setInfo({ card })} />}
       {panel === 'import' && (
         <ImportPanel
           deckId={id}
@@ -175,10 +175,12 @@ export function DeckDetail() {
         />
       )}
 
-      <Board title="Mainboard" rows={main} view={view} issues={legality.issues} onInfo={setInfo} />
-      <Board title="Sideboard" rows={side} view={view} issues={legality.issues} onInfo={setInfo} />
+      <Board title="Mainboard" rows={main} view={view} issues={legality.issues} onEdit={setInfo} />
+      <Board title="Sideboard" rows={side} view={view} issues={legality.issues} onEdit={setInfo} />
 
-      {info && <CardSheet oracleCard={info} readOnly onClose={() => setInfo(null)} />}
+      {info && (
+        <CardSheet oracleCard={info.card} deckCard={info.deckCard} readOnly={!info.deckCard} onClose={() => setInfo(null)} />
+      )}
 
       {exit && (
         <div className="sheet-backdrop" onClick={() => navigate('/decks')}>
@@ -236,13 +238,13 @@ function Board({
   rows,
   view,
   issues,
-  onInfo,
+  onEdit,
 }: {
   title: string;
   rows: Row[];
   view: ViewMode;
   issues: Map<string, string>;
-  onInfo: (card: Priced<OracleCard>) => void;
+  onEdit: (target: { card: Priced<OracleCard>; deckCard: { id: string; quantity: number } }) => void;
 }) {
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
@@ -274,7 +276,9 @@ function Board({
                   {issue && <span className="badge badge-illegal-chip">{issue}</span>}
                 </>
               ),
-              onClick: r.oracle ? () => onInfo(r.oracle!) : undefined,
+              onClick: r.oracle
+                ? () => onEdit({ card: r.oracle!, deckCard: { id: r.id, quantity: r.quantity } })
+                : undefined,
               actions: (
                 <>
                   <button onClick={() => setDeckCardQuantity(r.id, r.quantity - 1)} aria-label="One fewer">−</button>

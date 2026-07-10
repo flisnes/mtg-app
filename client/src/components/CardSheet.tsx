@@ -1,21 +1,33 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CollectionEntry, Condition, Finish, OracleCard, Priced, Printing } from '@mtg/shared';
+import { createPortal } from 'react-dom';
+import type { CollectionEntry, Condition, Finish, OracleCard, Priced, Printing, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS } from '@mtg/shared';
 import {
   addToCollection,
   isWatched,
+  removeDeckCard,
   removeFromCollection,
+  removeFromWishlist,
+  setDeckCardQuantity,
   unwatchCard,
   updateCollectionEntry,
+  updateWishlistEntry,
   watchCard,
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
 import { recordPriceSnapshots } from '../price/tracking.js';
 
-// Bottom-sheet for adding a card to the collection or editing an existing
-// entry. Covers the tradelist via the "for trade" quantity (beta plan §4/§6).
-// With readOnly it doubles as the app-wide "card info" sheet (trade lines,
-// wishlist, deck cards): image, printings, price, watch — no collection edits.
+// Bottom-sheet for a card's details, in five modes:
+//  - add (default): add the card to the collection (edition/condition/qty/…)
+//  - edit (entry): edit an existing collection entry — covers the tradelist
+//    via the "for trade" quantity (beta plan §4/§6)
+//  - wish (wishEntry): edit a wishlist line — edition (incl. "any printing")
+//    and quantity
+//  - deck (deckCard): edit a deck slot's quantity
+//  - info (readOnly): app-wide card info — image, printings, price, watch
+
+/** Sentinel for the "any printing" edition option in wish mode. */
+const ANY_PRINTING = '';
 
 const FINISH_LABELS: Record<Finish, string> = { nonfoil: 'Nonfoil', foil: 'Foil', etched: 'Etched' };
 const LANGS = ['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht'];
@@ -23,25 +35,37 @@ const LANGS = ['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht
 export function CardSheet({
   oracleCard,
   entry,
+  wishEntry,
+  deckCard,
   initialScryfallId,
   readOnly = false,
   onClose,
 }: {
   oracleCard: Priced<OracleCard>;
   entry?: CollectionEntry;
+  /** Edit this wishlist line (edition + quantity) instead of the collection. */
+  wishEntry?: WishlistEntry;
+  /** Edit this deck slot's quantity instead of the collection. */
+  deckCard?: { id: string; quantity: number };
   /** Preselect a specific printing (e.g. the one named in a trade line). */
   initialScryfallId?: string;
   /** Info-only: show the card and its printings, no collection editing. */
   readOnly?: boolean;
   onClose: () => void;
 }) {
-  const editing = !!entry;
+  const mode = wishEntry ? 'wish' : deckCard ? 'deck' : entry ? 'edit' : readOnly ? 'info' : 'add';
+  const editing = mode === 'edit';
   const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
-  const [scryfallId, setScryfallId] = useState(entry?.scryfallId ?? initialScryfallId ?? oracleCard.defaultScryfallId);
+  // In wish mode the empty string means "any printing" (no specific edition).
+  const [scryfallId, setScryfallId] = useState(
+    wishEntry !== undefined
+      ? wishEntry.scryfallId ?? ANY_PRINTING
+      : entry?.scryfallId ?? initialScryfallId ?? oracleCard.defaultScryfallId,
+  );
   const [condition, setCondition] = useState<Condition>(entry?.condition ?? 'NM');
   const [finish, setFinish] = useState<Finish>(entry?.finish ?? 'nonfoil');
   const [lang, setLang] = useState(entry?.lang ?? 'en');
-  const [quantity, setQuantity] = useState(entry?.quantity ?? 1);
+  const [quantity, setQuantity] = useState(entry?.quantity ?? wishEntry?.quantity ?? deckCard?.quantity ?? 1);
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? 0);
   const [busy, setBusy] = useState(false);
   const [watching, setWatching] = useState(false);
@@ -50,16 +74,18 @@ export function CardSheet({
     void getPrintingsForOracle(oracleCard.oracleId).then(setPrintings);
   }, [oracleCard.oracleId]);
 
+  // Price-watching needs a concrete printing; "any printing" falls back to the default one.
+  const watchId = scryfallId || oracleCard.defaultScryfallId;
   useEffect(() => {
-    void isWatched(scryfallId).then(setWatching);
-  }, [scryfallId]);
+    void isWatched(watchId).then(setWatching);
+  }, [watchId]);
 
   async function toggleWatch() {
     if (watching) {
-      await unwatchCard(scryfallId);
+      await unwatchCard(watchId);
       setWatching(false);
     } else {
-      await watchCard(scryfallId, oracleCard.oracleId);
+      await watchCard(watchId, oracleCard.oracleId);
       await recordPriceSnapshots();
       setWatching(true);
     }
@@ -86,7 +112,11 @@ export function CardSheet({
 
   async function save() {
     setBusy(true);
-    if (editing && entry) {
+    if (wishEntry) {
+      await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, quantity });
+    } else if (deckCard) {
+      await setDeckCardQuantity(deckCard.id, quantity);
+    } else if (editing && entry) {
       await updateCollectionEntry(entry.id, {
         scryfallId,
         condition,
@@ -110,19 +140,22 @@ export function CardSheet({
   }
 
   async function del() {
-    if (!entry) return;
     setBusy(true);
-    await removeFromCollection(entry.id);
+    if (wishEntry) await removeFromWishlist(wishEntry.id);
+    else if (deckCard) await removeDeckCard(deckCard.id);
+    else if (entry) await removeFromCollection(entry.id);
     onClose();
   }
 
-  return (
+  // Portal to <body>: the sheet must escape any stacking context its opener
+  // lives in (e.g. the search overlay), or the tab bar can cover its buttons.
+  return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div
         className="sheet"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label={readOnly ? oracleCard.name : `${editing ? 'Edit' : 'Add'} ${oracleCard.name}`}
+        aria-label={mode === 'info' ? oracleCard.name : `${mode === 'add' ? 'Add' : 'Edit'} ${oracleCard.name}`}
       >
         <div className="sheet-head">
           {cardImage ? (
@@ -141,6 +174,7 @@ export function CardSheet({
         <label className="field">
           <span>Edition</span>
           <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)}>
+            {mode === 'wish' && <option value={ANY_PRINTING}>Any printing</option>}
             {printings.map((p) => (
               <option key={p.scryfallId} value={p.scryfallId}>
                 {p.setName} · #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
@@ -149,7 +183,7 @@ export function CardSheet({
           </select>
         </label>
 
-        {!readOnly && (
+        {(mode === 'add' || mode === 'edit') && (
         <div className="field-grid">
           <label className="field">
             <span>Condition</span>
@@ -184,22 +218,24 @@ export function CardSheet({
         </div>
         )}
 
-        {!readOnly && (
+        {mode !== 'info' && (
         <div className="field-grid">
           <label className="field">
             <span>Quantity</span>
             <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))} />
           </label>
-          <label className="field">
-            <span>For trade</span>
-            <input
-              type="number"
-              min={0}
-              max={quantity}
-              value={clampedForTrade}
-              onChange={(e) => setForTrade(Math.max(0, Number(e.target.value) || 0))}
-            />
-          </label>
+          {(mode === 'add' || mode === 'edit') && (
+            <label className="field">
+              <span>For trade</span>
+              <input
+                type="number"
+                min={0}
+                max={quantity}
+                value={clampedForTrade}
+                onChange={(e) => setForTrade(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </label>
+          )}
         </div>
         )}
 
@@ -207,7 +243,7 @@ export function CardSheet({
           {watching ? '★ Watching price' : '☆ Watch price'}
         </button>
 
-        {readOnly ? (
+        {mode === 'info' ? (
           <div className="sheet-actions">
             <button className="primary" onClick={onClose}>
               Close
@@ -215,7 +251,7 @@ export function CardSheet({
           </div>
         ) : (
           <div className="sheet-actions">
-            {editing && (
+            {mode !== 'add' && (
               <button className="danger-outline" onClick={del} disabled={busy}>
                 Remove
               </button>
@@ -224,11 +260,12 @@ export function CardSheet({
               Cancel
             </button>
             <button className="primary" onClick={save} disabled={busy}>
-              {editing ? 'Save' : 'Add to collection'}
+              {mode === 'add' ? 'Add to collection' : 'Save'}
             </button>
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -2,8 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
-## Unreleased
+## 0.7.0
 
+- Search is no longer a tab — it lives in a bar at the top of the app, reachable from every screen. Tap it (or "＋ Add cards" in Collection) to search the whole card database, with the same filters and quick-add buttons as before; Esc, ✕, or switching tabs closes it. Collection is now the home tab.
+- Trade: wishlists are exchanged automatically when both partners connect, and a "Wishlist matches" panel shows both directions — cards you have that they want, and cards they have that you want — with one-tap add to your offer.
+- Wishlist entries without a specific edition ("any printing", the default) now match every printing of that card during a trade. A wish pinned to a specific edition matches only that edition.
+- Tap any card in the wishlist to edit it: quantity and edition, including switching back to "any printing".
+- Tap any card in a deck to edit its quantity or remove it (collection and tradelist cards already opened their editor on tap).
 - Updates no longer re-download the whole card database. Card data is now served as 32 hash-addressed chunks plus a separate daily prices file, and the app fetches only the pieces that changed — a typical day costs a few hundred KB (fresh prices) instead of the full ~14 MB. First install is unchanged.
 - The slow "Preparing editions" step now only runs for chunks that actually changed, and the daily price refresh writes 16 small rows instead of rewriting ~150k card rows — so refreshes on mobile are near-instant. An interrupted update resumes where it left off instead of starting over.
 - Import no longer marks cards for trade by default. Moxfield CSVs carry a "Tradelist Count" column (often set for every card), and the importer used to honor it silently — now a "Tradelist" option on the Import page chooses between ignoring it (default), using the file's counts, or marking everything for trade, and the review screen shows how many cards will be marked before you confirm.

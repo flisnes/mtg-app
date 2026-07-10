@@ -65,6 +65,26 @@ function OwnBadge({ own }: { own: Owned | undefined }) {
 /** What the card-info sheet should show when a trade line is tapped. */
 type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string };
 
+/**
+ * Wishlist⇄tradelist match rule: a wish with scryfallId null ("any printing")
+ * matches every printing of that card; a wish for a specific printing matches
+ * only that printing. Returns how many copies the wishlist wants of a given
+ * (oracleId, scryfallId) — 0 means no match.
+ */
+function wishMatcher(lines: Array<{ oracleId: string; scryfallId: string | null; quantity: number }>) {
+  const byOracle = new Map<string, Array<{ scryfallId: string | null; quantity: number }>>();
+  for (const w of lines) {
+    const list = byOracle.get(w.oracleId) ?? [];
+    list.push({ scryfallId: w.scryfallId, quantity: w.quantity });
+    byOracle.set(w.oracleId, list);
+  }
+  return (oracleId: string, scryfallId: string): number =>
+    (byOracle.get(oracleId) ?? []).reduce(
+      (sum, w) => sum + (w.scryfallId === null || w.scryfallId === scryfallId ? w.quantity : 0),
+      0,
+    );
+}
+
 function linePrice(p?: Priced<Printing>): string | undefined {
   if (p?.priceEur != null) return `€${p.priceEur.toFixed(2)}`;
   if (p?.priceUsd != null) return `$${p.priceUsd.toFixed(2)}`;
@@ -424,7 +444,7 @@ function MatchesPanel({
   onAdd: (line: TradeLine, max: number) => void;
   onInfo: (oracle: Priced<OracleCard>, scryfallId?: string) => void;
 }) {
-  // My tradelist entries (with display data) and my wishlist wants per oracle.
+  // My tradelist entries (with display data) and my wishlist lines.
   const mine = useLiveQuery(async () => {
     const entries = (await db.collection.toArray()).filter((e) => e.quantityForTrade > 0);
     const wish = await db.wishlist.toArray();
@@ -432,17 +452,12 @@ function MatchesPanel({
       getOracleCardsByIds(entries.map((e) => e.oracleId)),
       getPrintingsByIds(entries.map((e) => e.scryfallId)),
     ]);
-    const wishQty = new Map<string, number>();
-    for (const w of wish) wishQty.set(w.oracleId, (wishQty.get(w.oracleId) ?? 0) + w.quantity);
-    return { entries, oracles, printings, wishQty };
+    return { entries, oracles, printings, wish };
   }, []);
 
-  // How many copies the partner wishes for, per oracle card.
-  const theirWishQty = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const w of peerWishlist ?? []) m.set(w.oracleId, (m.get(w.oracleId) ?? 0) + w.quantity);
-    return m;
-  }, [peerWishlist]);
+  // How many copies the partner wishes for of a given printing.
+  const theirWanted = useMemo(() => wishMatcher(peerWishlist ?? []), [peerWishlist]);
+  const myWanted = useMemo(() => wishMatcher(mine?.wish ?? []), [mine?.wish]);
 
   // Display data for the partner's tradelist lines.
   const theirs = useLiveQuery(async () => {
@@ -455,8 +470,8 @@ function MatchesPanel({
   }, [(peerTradelist ?? []).map((l) => l.scryfallId).join(',')]);
 
   if (!mine) return null;
-  const theyWant = peerWishlist === null ? [] : mine.entries.filter((e) => theirWishQty.has(e.oracleId));
-  const iWant = (peerTradelist ?? []).filter((l) => mine.wishQty.has(l.oracleId));
+  const theyWant = peerWishlist === null ? [] : mine.entries.filter((e) => theirWanted(e.oracleId, e.scryfallId) > 0);
+  const iWant = (peerTradelist ?? []).filter((l) => myWanted(l.oracleId, l.scryfallId) > 0);
 
   // Quiet until both lists have arrived; then either the matches or one line.
   if (peerWishlist === null && peerTradelist === null) return null;
@@ -479,7 +494,7 @@ function MatchesPanel({
               const oracle = mine.oracles.get(e.oracleId);
               const printing = mine.printings.get(e.scryfallId);
               const name = oracle?.name ?? '(unknown card)';
-              const wanted = theirWishQty.get(e.oracleId) ?? 1;
+              const wanted = theirWanted(e.oracleId, e.scryfallId);
               return {
                 key: e.id,
                 name,
@@ -521,7 +536,7 @@ function MatchesPanel({
             items={iWant.map((l): CardItem => {
               const oracle = theirs?.oracles.get(l.oracleId);
               const printing = theirs?.printings.get(l.scryfallId);
-              const wanted = mine.wishQty.get(l.oracleId) ?? 1;
+              const wanted = myWanted(l.oracleId, l.scryfallId);
               return {
                 key: lineKey(l),
                 name: l.name,

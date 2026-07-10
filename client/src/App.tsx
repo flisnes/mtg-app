@@ -5,7 +5,7 @@ import { isUpdateAvailable } from './appUpdate.js';
 import { getSetting, setSetting } from './db/settings.js';
 import { Onboarding } from './components/Onboarding.js';
 import { ToastProvider } from './components/Toast.js';
-import { Search } from './routes/Search.js';
+import { GlobalSearchBar, GlobalSearchProvider } from './components/GlobalSearch.js';
 import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
 import { Tradelist } from './routes/Tradelist.js';
@@ -21,8 +21,7 @@ import { Prices } from './routes/Prices.js';
 import { recordPriceSnapshots } from './price/tracking.js';
 
 const PRIMARY_NAV = [
-  { to: '/', label: 'Search', icon: '🔍', end: true },
-  { to: '/collection', label: 'Collection', icon: '🗃️' },
+  { to: '/', label: 'Collection', icon: '🗃️', end: true },
   { to: '/decks', label: 'Decks', icon: '🃏' },
   { to: '/trade', label: 'Trade', icon: '🤝' },
   { to: '/more', label: 'More', icon: '⋯' },
@@ -78,7 +77,9 @@ export function App() {
 
   return (
     <ToastProvider>
+    <GlobalSearchProvider>
     <div className="app-shell">
+      <GlobalSearchBar />
       {showUpdate && (
         <div className="banner banner-update" role="status">
           <span>A new version is available.</span>
@@ -93,7 +94,7 @@ export function App() {
 
       <main className="app-main">
         <Routes>
-          <Route path="/" element={<Search />} />
+          <Route path="/" element={<Collection />} />
           <Route path="/collection" element={<Collection />} />
           <Route path="/wishlist" element={<Wishlist />} />
           <Route path="/tradelist" element={<Tradelist />} />
@@ -106,7 +107,7 @@ export function App() {
           <Route path="/prices" element={<Prices />} />
           <Route path="/about" element={<About />} />
           <Route path="/more" element={<More />} />
-          <Route path="*" element={<Search />} />
+          <Route path="*" element={<Collection />} />
         </Routes>
       </main>
 
@@ -126,6 +127,7 @@ export function App() {
         ))}
       </nav>
     </div>
+    </GlobalSearchProvider>
     </ToastProvider>
   );
 }

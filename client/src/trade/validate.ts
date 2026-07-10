@@ -52,7 +52,8 @@ export function sanitizeWishLine(raw: unknown): WishLine | null {
 
   return {
     oracleId,
-    scryfallId: typeof l.scryfallId === 'string' ? l.scryfallId.slice(0, 64) : null,
+    // Empty string would match no printing at all; treat it as "any printing".
+    scryfallId: typeof l.scryfallId === 'string' && l.scryfallId ? l.scryfallId.slice(0, 64) : null,
     name: typeof l.name === 'string' ? l.name.slice(0, 200) : '(unknown card)',
     quantity,
   };

@@ -163,6 +163,30 @@ export async function addToWishlist(input: AddToWishlistInput): Promise<string> 
   });
 }
 
+/**
+ * Update a wishlist line's printing and/or quantity. If the new printing
+ * collides with another line for the same card, the two lines merge.
+ */
+export async function updateWishlistEntry(
+  id: string,
+  patch: { scryfallId?: string | null; quantity?: number },
+): Promise<void> {
+  await db.transaction('rw', db.wishlist, async () => {
+    const entry = await db.wishlist.get(id);
+    if (!entry) return;
+    const scryfallId = patch.scryfallId !== undefined ? patch.scryfallId : entry.scryfallId;
+    const quantity = Math.max(1, patch.quantity ?? entry.quantity);
+    const candidates = await db.wishlist.where('oracleId').equals(entry.oracleId).toArray();
+    const dup = candidates.find((w) => w.id !== id && w.scryfallId === scryfallId);
+    if (dup) {
+      await db.wishlist.update(dup.id, { quantity: dup.quantity + quantity });
+      await db.wishlist.delete(id);
+    } else {
+      await db.wishlist.update(id, { scryfallId, quantity });
+    }
+  });
+}
+
 /** Decrement a wishlist entry by quantity; deletes it at zero. */
 export async function removeFromWishlist(id: string, quantity = Infinity): Promise<void> {
   await db.transaction('rw', db.wishlist, async () => {

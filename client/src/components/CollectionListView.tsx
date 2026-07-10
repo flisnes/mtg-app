@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Link } from 'react-router-dom';
 import type { CollectionEntry, Color, OracleCard, Priced, Printing, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
+import { useOpenSearch } from './GlobalSearch.js';
 
 export interface JoinedEntry {
   entry: CollectionEntry;
@@ -49,6 +49,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const [tradeOnly, setTradeOnly] = useState(onlyTrade);
   const [editing, setEditing] = useState<JoinedEntry | null>(null);
   const [view, setView] = useViewMode();
+  const openSearch = useOpenSearch();
 
   const sets = useMemo(() => {
     const m = new Map<string, string>();
@@ -131,7 +132,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         <div className="empty-state">
           <p>Nothing here yet.</p>
           <p className="empty-phase">
-            <Link to="/">Search for cards</Link> to add some.
+            <button className="linklike" onClick={openSearch}>Search for cards</button> to add some.
           </p>
         </div>
       ) : (

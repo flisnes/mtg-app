@@ -10,7 +10,9 @@
   --danger: #ff5c5c;
   --ok: #4ec97b;
   --tab-h: 60px;
+  --header-h: 58px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
   color-scheme: dark;
 }
 
@@ -76,6 +78,48 @@ button.danger-outline {
   margin: 0 auto;
 }
 
+/* ---- Global search header ---- */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  height: calc(var(--header-h) + var(--safe-top));
+  padding: var(--safe-top) 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.app-header .search-input {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0.55rem 1rem;
+}
+.header-close {
+  flex-shrink: 0;
+  padding: 0.5rem 0.8rem;
+  border-radius: 12px;
+}
+.search-overlay {
+  position: fixed;
+  top: calc(var(--header-h) + var(--safe-top));
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 15; /* below the tab bar (20): tabs stay tappable and close search */
+  overflow-y: auto;
+  background: var(--bg);
+  padding: 1rem 1rem calc(var(--tab-h) + var(--safe-bottom) + 1rem);
+}
+.search-overlay-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 /* ---- Banners ---- */
 .banner {
   display: flex;
@@ -89,7 +133,7 @@ button.danger-outline {
   background: var(--accent);
   color: var(--accent-text);
   position: sticky;
-  top: 0;
+  top: calc(var(--header-h) + var(--safe-top));
   z-index: 10;
 }
 .banner-update button {
@@ -947,6 +991,9 @@ button.primary {
   .app-main {
     max-width: 1100px;
   }
+  .search-overlay-inner {
+    max-width: 1100px;
+  }
   .card-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 0.8rem;
@@ -963,6 +1010,9 @@ button.primary {
 }
 @media (min-width: 1500px) {
   .app-main {
+    max-width: 1280px;
+  }
+  .search-overlay-inner {
     max-width: 1280px;
   }
 }

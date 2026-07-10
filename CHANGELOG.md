@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.6.0
+
+- Trading is live! The Trade tab now connects to the trade server, so two phones (or a phone + PC) can trade with a 6-character code.
+- Trade: "＋ Add cards" now searches the entire card database — you can offer any card, not just tradelist entries. Each offered card shows whether it's in your tradelist (⇄), owned but not for trade (✓), or not in your collection (❓).
+- Trade: your own tradelist is no longer rendered inline (long tradelists made the page enormous) — it appears as quick-picks inside the height-capped "Add cards" panel instead.
+- Trade: "View their tradelist" — either side can ask to browse the other's tradelist during a trade.
+- Wide screens: the app now uses more of a desktop monitor — wider content column, larger grid tiles, centered tabs.
+
 ## 0.5.0
 
 - Grid is now the default card view.

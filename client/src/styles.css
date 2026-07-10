@@ -841,7 +841,45 @@ button.primary {
   }
   .offer-pane {
     flex: 1;
+    min-width: 0;
   }
+}
+
+/* Add-cards / peer-tradelist panels: never let a long list stretch the page. */
+.picker-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.picker-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* Ownership indicators (does an offered card exist in my collection/tradelist?) */
+.own-ind {
+  display: inline-block;
+  width: 1.3em;
+  cursor: help;
+}
+.own-ind.own-trade,
+.badge.own-trade {
+  color: var(--accent);
+}
+.own-ind.own-yes,
+.badge.own-yes {
+  color: var(--ok);
+}
+.own-ind.own-unknown,
+.badge.own-unknown {
+  color: var(--text-dim);
+}
+.badge.own-trade {
+  background: rgba(124, 108, 255, 0.2);
+}
+.badge.own-yes {
+  background: rgba(78, 201, 123, 0.15);
 }
 
 /* ---- Bottom tab bar ---- */
@@ -874,4 +912,32 @@ button.primary {
 .tab-icon {
   font-size: 1.25rem;
   line-height: 1;
+}
+
+/* ---- Wide screens (desktop) ----
+   The app is phone-first, but on a monitor it shouldn't be a narrow strip:
+   widen the content column, let grid tiles grow, and keep the tab bar centered
+   instead of stretching each tab across the full width. */
+@media (min-width: 900px) {
+  .app-main {
+    max-width: 1100px;
+  }
+  .card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.8rem;
+  }
+  .tab-bar {
+    justify-content: center;
+  }
+  .tab {
+    flex: 0 1 130px;
+  }
+  .picker-scroll {
+    max-height: 420px;
+  }
+}
+@media (min-width: 1500px) {
+  .app-main {
+    max-width: 1280px;
+  }
 }

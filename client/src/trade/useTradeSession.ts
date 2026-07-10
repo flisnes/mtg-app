@@ -8,6 +8,8 @@ import {
   type TradeLine,
 } from '@mtg/shared';
 import { applyCompletedTrade } from '../db/dataAccess.js';
+import { getOracleCardsByIds } from '../db/queries.js';
+import { db } from '../db/schema.js';
 import { getSetting, setSetting } from '../db/settings.js';
 import { TRADE_WS_URL } from './config.js';
 import { sanitizeOffer } from './validate.js';
@@ -33,15 +35,35 @@ export interface TradeSession {
   snapshot: SessionSnapshot | null;
   peerPresent: boolean;
   error: string | null;
+  /** Partner's tradelist, if they've answered a request. null = never asked/answered. */
+  peerTradelist: TradeLine[] | null;
+  /** True while a tradelist request is in flight. */
+  peerTradelistLoading: boolean;
   create: () => void;
   join: (code: string) => void;
   resume: (t: ActiveTrade) => void;
   sendOffer: (lines: TradeLine[]) => void;
+  requestTradelist: () => void;
   accept: () => void;
   unaccept: () => void;
   confirmComplete: () => void;
   cancel: () => void;
   reset: () => void;
+}
+
+/** Snapshot the local tradelist as self-contained TradeLines (to answer a peer's request). */
+async function readOwnTradelist(): Promise<TradeLine[]> {
+  const entries = (await db.collection.toArray()).filter((e) => e.quantityForTrade > 0);
+  const names = await getOracleCardsByIds(entries.map((e) => e.oracleId));
+  return entries.slice(0, 500).map((e) => ({
+    oracleId: e.oracleId,
+    scryfallId: e.scryfallId,
+    name: names.get(e.oracleId)?.name ?? '(unknown card)',
+    quantity: e.quantityForTrade,
+    condition: e.condition,
+    finish: e.finish,
+    lang: e.lang,
+  }));
 }
 
 export function otherSeat(seat: Seat): Seat {
@@ -59,6 +81,8 @@ export function useTradeSession(): TradeSession {
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
   const [peerPresent, setPeerPresent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [peerTradelist, setPeerTradelist] = useState<TradeLine[] | null>(null);
+  const [peerTradelistLoading, setPeerTradelistLoading] = useState(false);
 
   const ws = useRef<WebSocket | null>(null);
   const active = useRef<Partial<ActiveTrade>>({});
@@ -132,6 +156,22 @@ export function useTradeSession(): TradeSession {
         case 'peer_reconnected':
           setPeerPresent(true);
           break;
+        case 'tradelist_requested': {
+          // Partner asked to browse our tradelist — answer with a snapshot.
+          // The tradelist is by definition the "shown to trade partners" list.
+          const c = active.current.code;
+          void readOwnTradelist().then((lines) => {
+            const s = ws.current;
+            if (c && s && s.readyState === WebSocket.OPEN) {
+              s.send(JSON.stringify({ v: PROTOCOL_VERSION, type: 'tradelist_share', sessionCode: c, lines }));
+            }
+          });
+          break;
+        }
+        case 'tradelist_shared':
+          setPeerTradelist(sanitizeOffer(msg.lines));
+          setPeerTradelistLoading(false);
+          break;
         case 'error':
           setError(msg.message);
           if (msg.code === 'unknown_session' || msg.code === 'bad_resume' || msg.code === 'session_full') {
@@ -196,6 +236,13 @@ export function useTradeSession(): TradeSession {
     const c = code();
     if (c) send({ v: PROTOCOL_VERSION, type: 'offer_update', sessionCode: c, lines });
   }, [send]);
+  const requestTradelist = useCallback(() => {
+    const c = code();
+    if (c) {
+      setPeerTradelistLoading(true);
+      send({ v: PROTOCOL_VERSION, type: 'tradelist_request', sessionCode: c });
+    }
+  }, [send]);
   const accept = useCallback(() => { const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'accept', sessionCode: c }); }, [send]);
   const unaccept = useCallback(() => { const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'unaccept', sessionCode: c }); }, [send]);
   const confirmComplete = useCallback(() => { const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'confirm_complete', sessionCode: c }); }, [send]);
@@ -212,6 +259,8 @@ export function useTradeSession(): TradeSession {
     setSnapshot(null);
     setPeerPresent(false);
     setError(null);
+    setPeerTradelist(null);
+    setPeerTradelistLoading(false);
     void clearPersisted();
   }, [clearPersisted]);
 
@@ -223,5 +272,5 @@ export function useTradeSession(): TradeSession {
     };
   }, []);
 
-  return { status, seat, snapshot, peerPresent, error, create, join, resume, sendOffer, accept, unaccept, confirmComplete, cancel, reset };
+  return { status, seat, snapshot, peerPresent, error, peerTradelist, peerTradelistLoading, create, join, resume, sendOffer, requestTradelist, accept, unaccept, confirmComplete, cancel, reset };
 }

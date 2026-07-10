@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
-import type { Seat, TradeLine } from '@mtg/shared';
+import type { CollectionEntry, OracleCard, Seat, TradeLine } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { searchCards } from '../cardDb/search.js';
 import { TRADE_ENABLED } from '../trade/config.js';
 import {
   getPersistedTrade,
@@ -15,6 +16,49 @@ import {
 
 const lineKey = (l: { scryfallId: string; condition: string; finish: string; lang: string }) =>
   `${l.scryfallId}|${l.condition}|${l.finish}|${l.lang}`;
+
+/** Per-oracle ownership summary, for the "do I actually have this?" indicators. */
+interface Owned {
+  qty: number;
+  forTrade: number;
+  /** A representative entry (prefers one marked for trade) for sensible add defaults. */
+  entry: CollectionEntry;
+}
+
+function useOwnership(): Map<string, Owned> | undefined {
+  return useLiveQuery(async () => {
+    const entries = await db.collection.toArray();
+    const map = new Map<string, Owned>();
+    for (const e of entries) {
+      const cur = map.get(e.oracleId);
+      if (cur) {
+        cur.qty += e.quantity;
+        cur.forTrade += e.quantityForTrade;
+        if (e.quantityForTrade > 0 && cur.entry.quantityForTrade === 0) cur.entry = e;
+      } else {
+        map.set(e.oracleId, { qty: e.quantity, forTrade: e.quantityForTrade, entry: e });
+      }
+    }
+    return map;
+  }, []);
+}
+
+/** ⇄ in tradelist / ✓ owned / ❓ not in collection. */
+function ownIndicator(own: Owned | undefined): { icon: string; label: string; cls: string } {
+  if (!own) return { icon: '❓', label: 'Not in your collection', cls: 'own-unknown' };
+  if (own.forTrade > 0) return { icon: '⇄', label: `In your tradelist (${own.forTrade} for trade)`, cls: 'own-trade' };
+  return { icon: '✓', label: `In your collection (×${own.qty}), but not marked for trade`, cls: 'own-yes' };
+}
+
+function OwnBadge({ own }: { own: Owned | undefined }) {
+  const ind = ownIndicator(own);
+  const text = !own ? 'not in collection' : own.forTrade > 0 ? `tradelist ×${own.forTrade}` : `owned ×${own.qty}`;
+  return (
+    <span className={`badge ${ind.cls}`} title={ind.label}>
+      {ind.icon} {text}
+    </span>
+  );
+}
 
 export function Trade() {
   const trade = useTradeSession();
@@ -88,6 +132,8 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const peer = otherSeat(seat);
   const [myOffer, setMyOffer] = useState<TradeLine[]>([]);
   const [showPicker, setShowPicker] = useState(false);
+  const [showTheirs, setShowTheirs] = useState(false);
+  const ownership = useOwnership();
   const inited = useRef(false);
 
   // On (re)connect, seed the local offer from the server snapshot once.
@@ -175,11 +221,11 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           <h3>
             Your offer <span className="badge">€{totalOf(myOffer).toFixed(2)}</span>
           </h3>
-          <OfferList lines={myOffer} editable={editable} onQty={setQty} />
+          <OfferList lines={myOffer} editable={editable} onQty={setQty} ownership={ownership} />
           {editable && (
-            <button onClick={() => setShowPicker((s) => !s)}>{showPicker ? 'Done adding' : '＋ Add from tradelist'}</button>
+            <button onClick={() => setShowPicker((s) => !s)}>{showPicker ? 'Done adding' : '＋ Add cards'}</button>
           )}
-          {showPicker && editable && <TradelistPicker onAdd={addLine} />}
+          {showPicker && editable && <AddCardsPanel ownership={ownership} onAdd={addLine} />}
         </div>
 
         <div className="offer-pane">
@@ -188,6 +234,27 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           </h3>
           <OfferList lines={theirOffer} editable={false} />
           <p className="fine-print">{peerAccepted ? '✓ they accepted' : '…not accepted yet'}</p>
+          {showTheirs ? (
+            <PeerTradelistPanel
+              lines={trade.peerTradelist}
+              loading={trade.peerTradelistLoading}
+              onRefresh={trade.requestTradelist}
+              onHide={() => setShowTheirs(false)}
+            />
+          ) : (
+            <>
+              <button
+                disabled={!trade.peerPresent}
+                onClick={() => {
+                  setShowTheirs(true);
+                  trade.requestTradelist();
+                }}
+              >
+                View their tradelist
+              </button>
+              <p className="fine-print">Either side can ask to see the other’s tradelist during a trade.</p>
+            </>
+          )}
         </div>
       </div>
 
@@ -229,73 +296,203 @@ function OfferList({
   lines,
   editable,
   onQty,
+  ownership,
 }: {
   lines: TradeLine[];
   editable: boolean;
   onQty?: (key: string, qty: number) => void;
+  /** When given (own offer), each line shows an ownership indicator. */
+  ownership?: Map<string, Owned>;
 }) {
   if (lines.length === 0) return <p className="fine-print">No cards yet.</p>;
   return (
     <ul className="result-list">
-      {lines.map((l) => (
-        <li key={lineKey(l)} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
-          <div className="result-main">
-            <div className="result-name">
-              {l.quantity}× {l.name}
+      {lines.map((l) => {
+        const ind = ownership ? ownIndicator(ownership.get(l.oracleId)) : null;
+        return (
+          <li key={lineKey(l)} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
+            <div className="result-main">
+              <div className="result-name">
+                {ind && (
+                  <span className={`own-ind ${ind.cls}`} title={ind.label} aria-label={ind.label}>
+                    {ind.icon}
+                  </span>
+                )}
+                {l.quantity}× {l.name}
+              </div>
+              <div className="result-sub">
+                {l.condition} · {l.finish}
+                {l.lang !== 'en' ? ` · ${l.lang}` : ''}
+              </div>
             </div>
-            <div className="result-sub">
-              {l.condition} · {l.finish}
-              {l.lang !== 'en' ? ` · ${l.lang}` : ''}
-            </div>
-          </div>
-          {editable && onQty && (
-            <div className="quick-actions">
-              <button onClick={() => onQty(lineKey(l), l.quantity - 1)}>−</button>
-              <button onClick={() => onQty(lineKey(l), l.quantity + 1)}>＋</button>
-            </div>
-          )}
-        </li>
-      ))}
+            {editable && onQty && (
+              <div className="quick-actions">
+                <button onClick={() => onQty(lineKey(l), l.quantity - 1)}>−</button>
+                <button onClick={() => onQty(lineKey(l), l.quantity + 1)}>＋</button>
+              </div>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
-function TradelistPicker({ onAdd }: { onAdd: (line: TradeLine, max: number) => void }) {
-  const rows = useLiveQuery(async () => {
+/**
+ * Add cards to the offer: with no query, quick-picks from your tradelist;
+ * typing searches the whole card database (you can offer cards you haven't
+ * registered — they get a ❓ indicator).
+ */
+function AddCardsPanel({
+  ownership,
+  onAdd,
+}: {
+  ownership: Map<string, Owned> | undefined;
+  onAdd: (line: TradeLine, max: number) => void;
+}) {
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<OracleCard[]>([]);
+
+  const tradelist = useLiveQuery(async () => {
     const entries = (await db.collection.toArray()).filter((e) => e.quantityForTrade > 0);
     const oracleMap = await getOracleCardsByIds(entries.map((e) => e.oracleId));
     return entries.map((e) => ({ e, name: oracleMap.get(e.oracleId)?.name ?? '(unknown card)' }));
   }, []);
 
-  if (!rows) return <p className="fine-print">Loading tradelist…</p>;
-  if (rows.length === 0) return <p className="fine-print">Your tradelist is empty. Mark cards “for trade” first.</p>;
+  useEffect(() => {
+    if (!q.trim()) {
+      setResults([]);
+      return;
+    }
+    const h = setTimeout(async () => setResults((await searchCards(q, {}, 20)).cards), 120);
+    return () => clearTimeout(h);
+  }, [q]);
+
+  const addFromSearch = (card: OracleCard) => {
+    const own = ownership?.get(card.oracleId);
+    const e = own?.entry;
+    onAdd(
+      e
+        ? { oracleId: e.oracleId, scryfallId: e.scryfallId, name: card.name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang }
+        : { oracleId: card.oracleId, scryfallId: card.defaultScryfallId, name: card.name, quantity: 1, condition: 'NM', finish: 'nonfoil', lang: 'en' },
+      999,
+    );
+  };
 
   return (
-    <ul className="result-list">
-      {rows.map(({ e, name }) => (
-        <li key={e.id} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
-          <button
-            className="result-open"
-            style={{ cursor: 'pointer' }}
-            onClick={() =>
-              onAdd(
-                { oracleId: e.oracleId, scryfallId: e.scryfallId, name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang },
-                e.quantityForTrade,
-              )
-            }
-          >
-            <div className="result-main">
-              <div className="result-name">{name}</div>
-              <div className="result-sub">
-                {e.condition} · {e.finish} · {e.quantityForTrade} for trade
-              </div>
-            </div>
-            <span className="menu-chevron" aria-hidden>
-              ＋
-            </span>
+    <div className="picker-panel">
+      <input
+        className="search-input"
+        placeholder="Search any card…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        aria-label="Search cards to add"
+      />
+      {q.trim() ? (
+        results.length === 0 ? (
+          <p className="fine-print">No cards match.</p>
+        ) : (
+          <ul className="result-list picker-scroll">
+            {results.map((c) => (
+              <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
+                <button className="result-open" style={{ cursor: 'pointer' }} onClick={() => addFromSearch(c)}>
+                  <div className="result-main">
+                    <div className="result-name">{c.name}</div>
+                    <div className="result-sub">
+                      {c.typeLine} <OwnBadge own={ownership?.get(c.oracleId)} />
+                    </div>
+                  </div>
+                  <span className="menu-chevron" aria-hidden>
+                    ＋
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )
+      ) : !tradelist ? (
+        <p className="fine-print">Loading tradelist…</p>
+      ) : tradelist.length === 0 ? (
+        <p className="fine-print">Your tradelist is empty — search above to add any card.</p>
+      ) : (
+        <>
+          <p className="fine-print">From your tradelist (or search above for any card):</p>
+          <ul className="result-list picker-scroll">
+            {tradelist.map(({ e, name }) => (
+              <li key={e.id} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
+                <button
+                  className="result-open"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() =>
+                    onAdd(
+                      { oracleId: e.oracleId, scryfallId: e.scryfallId, name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang },
+                      e.quantityForTrade,
+                    )
+                  }
+                >
+                  <div className="result-main">
+                    <div className="result-name">{name}</div>
+                    <div className="result-sub">
+                      {e.condition} · {e.finish} · {e.quantityForTrade} for trade
+                    </div>
+                  </div>
+                  <span className="menu-chevron" aria-hidden>
+                    ＋
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The partner's tradelist, shown on request (view-only). */
+function PeerTradelistPanel({
+  lines,
+  loading,
+  onRefresh,
+  onHide,
+}: {
+  lines: TradeLine[] | null;
+  loading: boolean;
+  onRefresh: () => void;
+  onHide: () => void;
+}) {
+  return (
+    <div className="picker-panel">
+      <div className="meta-row">
+        <strong>Their tradelist{lines ? ` (${lines.length})` : ''}</strong>
+        <span>
+          <button className="chip" onClick={onRefresh} disabled={loading}>
+            {loading ? 'Loading…' : '↻ Refresh'}
+          </button>{' '}
+          <button className="chip" onClick={onHide}>
+            Hide
           </button>
-        </li>
-      ))}
-    </ul>
+        </span>
+      </div>
+      {!lines ? (
+        <p className="fine-print">{loading ? 'Waiting for their tradelist…' : 'No tradelist received yet.'}</p>
+      ) : lines.length === 0 ? (
+        <p className="fine-print">Their tradelist is empty.</p>
+      ) : (
+        <ul className="result-list picker-scroll">
+          {lines.map((l) => (
+            <li key={lineKey(l)} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
+              <div className="result-main">
+                <div className="result-name">{l.name}</div>
+                <div className="result-sub">
+                  {l.condition} · {l.finish} · {l.quantity} for trade
+                  {l.lang !== 'en' ? ` · ${l.lang}` : ''}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

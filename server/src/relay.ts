@@ -188,6 +188,24 @@ function handle(socket: WebSocket, ctx: SocketCtx, msg: ClientMessage): void {
       const session = requireSession(socket, ctx, msg.sessionCode);
       if (!session || !ctx.seat) return;
       const seat = ctx.seat;
+
+      // Tradelist browsing is pure peer relay — no state-machine involvement,
+      // nothing stored. Same line cap as offers.
+      if (msg.type === 'tradelist_request' || msg.type === 'tradelist_share') {
+        const peer: Seat = seat === 'a' ? 'b' : 'a';
+        const peerSocket = sockets.get(session.code)?.[peer];
+        if (!peerSocket) return;
+        if (msg.type === 'tradelist_request') {
+          send(peerSocket, { v: PROTOCOL_VERSION, type: 'tradelist_requested', sessionCode: session.code });
+        } else {
+          if (!Array.isArray(msg.lines) || msg.lines.length > config.maxOfferLines) {
+            return sendError(socket, 'offer_too_large', `tradelist exceeds ${config.maxOfferLines} lines`);
+          }
+          send(peerSocket, { v: PROTOCOL_VERSION, type: 'tradelist_shared', sessionCode: session.code, lines: msg.lines });
+        }
+        return;
+      }
+
       switch (msg.type) {
         case 'offer_update':
           store.offerUpdate(session, seat, msg.lines);

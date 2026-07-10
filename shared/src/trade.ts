@@ -50,7 +50,11 @@ export type ClientMessage =
   | { v: typeof PROTOCOL_VERSION; type: 'accept'; sessionCode: string }
   | { v: typeof PROTOCOL_VERSION; type: 'unaccept'; sessionCode: string }
   | { v: typeof PROTOCOL_VERSION; type: 'confirm_complete'; sessionCode: string }
-  | { v: typeof PROTOCOL_VERSION; type: 'cancel'; sessionCode: string };
+  | { v: typeof PROTOCOL_VERSION; type: 'cancel'; sessionCode: string }
+  // Tradelist browsing: ask the partner for their tradelist / answer such a
+  // request. Relayed peer-to-peer; the server never stores the lines.
+  | { v: typeof PROTOCOL_VERSION; type: 'tradelist_request'; sessionCode: string }
+  | { v: typeof PROTOCOL_VERSION; type: 'tradelist_share'; sessionCode: string; lines: TradeLine[] };
 
 // ---------------------------------------------------------------------------
 // Server -> client
@@ -76,6 +80,9 @@ export type ServerMessage =
   | { v: typeof PROTOCOL_VERSION; type: 'state_sync'; sessionCode: string; snapshot: SessionSnapshot }
   | { v: typeof PROTOCOL_VERSION; type: 'peer_disconnected'; sessionCode: string }
   | { v: typeof PROTOCOL_VERSION; type: 'peer_reconnected'; sessionCode: string }
+  // Relayed tradelist browsing (see ClientMessage above).
+  | { v: typeof PROTOCOL_VERSION; type: 'tradelist_requested'; sessionCode: string }
+  | { v: typeof PROTOCOL_VERSION; type: 'tradelist_shared'; sessionCode: string; lines: TradeLine[] }
   | { v: typeof PROTOCOL_VERSION; type: 'error'; code: TradeErrorCode; message: string };
 
 export type TradeErrorCode =

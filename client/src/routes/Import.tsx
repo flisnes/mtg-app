@@ -5,7 +5,7 @@ import { Page } from './Page.js';
 import { applyImport, type ImportLine } from '../db/dataAccess.js';
 import { useToast } from '../components/Toast.js';
 import { resolveOracleByName, searchCards } from '../cardDb/search.js';
-import type { ResolveResponse, ResolveResult, ResolvedLine, UnmatchedLine } from '../import/types.js';
+import type { ResolveResponse, ResolveResult, ResolvedLine, TradelistMode, UnmatchedLine } from '../import/types.js';
 
 type Status =
   | { kind: 'idle' }
@@ -15,7 +15,7 @@ type Status =
 
 export function Import() {
   const [text, setText] = useState('');
-  const [asTradelist, setAsTradelist] = useState(false);
+  const [tradelistMode, setTradelistMode] = useState<TradelistMode>('none');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const workerRef = useRef<Worker | null>(null);
   const toast = useToast();
@@ -41,7 +41,7 @@ export function Import() {
       setStatus({ kind: 'error', message: e.message || 'import worker crashed' });
       worker.terminate();
     };
-    worker.postMessage({ text: input, asTradelist });
+    worker.postMessage({ text: input, tradelistMode });
   }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -71,7 +71,12 @@ export function Import() {
             onChange={(e) => setText(e.target.value)}
           />
           <label className="chip" style={{ alignSelf: 'flex-start' }}>
-            <input type="checkbox" checked={asTradelist} onChange={(e) => setAsTradelist(e.target.checked)} /> Also add to tradelist
+            Tradelist:{' '}
+            <select value={tradelistMode} onChange={(e) => setTradelistMode(e.target.value as TradelistMode)}>
+              <option value="none">don’t mark anything for trade</option>
+              <option value="file">use tradelist counts from the file</option>
+              <option value="all">mark all imported cards for trade</option>
+            </select>
           </label>
           <div className="list-toolbar">
             <button className="primary" onClick={() => analyze(text)} disabled={!text.trim()}>
@@ -90,7 +95,7 @@ export function Import() {
       ) : (
         <ReviewScreen
           result={status.result}
-          asTradelist={asTradelist}
+          tradelistMode={tradelistMode}
           onConfirm={confirmImport}
           onCancel={() => setStatus({ kind: 'idle' })}
         />
@@ -99,13 +104,13 @@ export function Import() {
   );
 }
 
-function toResolved(u: UnmatchedLine, card: OracleCard, asTradelist: boolean): ResolvedLine {
+function toResolved(u: UnmatchedLine, card: OracleCard, tradelistMode: TradelistMode): ResolvedLine {
   return {
     oracleId: card.oracleId,
     scryfallId: card.defaultScryfallId,
     name: card.name,
     quantity: u.quantity,
-    quantityForTrade: asTradelist ? u.quantity : 0,
+    quantityForTrade: tradelistMode === 'all' ? u.quantity : 0,
     condition: 'NM',
     finish: u.finish ?? 'nonfoil',
     lang: 'en',
@@ -114,12 +119,12 @@ function toResolved(u: UnmatchedLine, card: OracleCard, asTradelist: boolean): R
 
 function ReviewScreen({
   result,
-  asTradelist,
+  tradelistMode,
   onConfirm,
   onCancel,
 }: {
   result: ResolveResult;
-  asTradelist: boolean;
+  tradelistMode: TradelistMode;
   onConfirm: (lines: ImportLine[]) => void;
   onCancel: () => void;
 }) {
@@ -128,7 +133,7 @@ function ReviewScreen({
   const [picking, setPicking] = useState<number | null>(null);
 
   const resolve = (index: number, card: OracleCard) => {
-    setFixed((m) => new Map(m).set(index, toResolved(result.unmatched[index]!, card, asTradelist)));
+    setFixed((m) => new Map(m).set(index, toResolved(result.unmatched[index]!, card, tradelistMode)));
     setPicking(null);
   };
   const unfix = (index: number) =>
@@ -140,6 +145,7 @@ function ReviewScreen({
 
   const allLines = [...result.resolved, ...fixed.values()];
   const stillUnmatched = result.unmatched.length - fixed.size;
+  const forTrade = allLines.reduce((s, l) => s + l.quantityForTrade, 0);
 
   return (
     <>
@@ -152,6 +158,8 @@ function ReviewScreen({
         </dd>
         <dt>Unmatched</dt>
         <dd>{stillUnmatched}</dd>
+        <dt>For trade</dt>
+        <dd>{forTrade === 0 ? 'nothing' : `${forTrade} cards`}</dd>
       </dl>
 
       {result.unmatched.length > 0 && (

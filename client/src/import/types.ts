@@ -47,11 +47,19 @@ export interface ResolveResult {
   resolvedQuantity: number;
 }
 
+/**
+ * What to do about the tradelist when importing:
+ *  - 'none' (default): nothing gets marked for trade, even if the file has
+ *    tradelist counts (Moxfield exports often mark everything tradable).
+ *  - 'file': honor the file's tradelist counts (e.g. Moxfield "Tradelist Count").
+ *  - 'all': mark every imported copy for trade.
+ */
+export type TradelistMode = 'none' | 'file' | 'all';
+
 // Worker messages
 export interface ResolveRequest {
   text: string;
-  /** Import into the collection as tradelist copies too (adds quantityForTrade). */
-  asTradelist?: boolean;
+  tradelistMode?: TradelistMode;
 }
 
 export type ResolveResponse =

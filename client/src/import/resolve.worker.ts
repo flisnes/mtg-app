@@ -59,7 +59,7 @@ function resolvePrinting(line: ParsedLine, oracle: OracleCard, printings: Printi
 
 self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
   try {
-    const { text, asTradelist } = e.data;
+    const { text, tradelistMode = 'none' } = e.data;
 
     post({ type: 'progress', label: 'Parsing…', fraction: 0.05 });
     const { format, lines } = parseImport(text);
@@ -134,10 +134,12 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
         unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, finish: line.finish, suggestions: [] });
         continue;
       }
-      const quantityForTrade = Math.min(
-        line.quantity,
-        line.quantityForTrade ?? (asTradelist ? line.quantity : 0),
-      );
+      const quantityForTrade =
+        tradelistMode === 'all'
+          ? line.quantity
+          : tradelistMode === 'file'
+            ? Math.min(line.quantity, line.quantityForTrade ?? 0)
+            : 0;
       resolved.push({
         oracleId: oracle.oracleId,
         scryfallId: printing.scryfallId,

@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## Unreleased
+
+- Import no longer marks cards for trade by default. Moxfield CSVs carry a "Tradelist Count" column (often set for every card), and the importer used to honor it silently — now a "Tradelist" option on the Import page chooses between ignoring it (default), using the file's counts, or marking everything for trade, and the review screen shows how many cards will be marked before you confirm.
+- Tradelist: new "Remove all from tradelist" button — clears the trade markings without touching your collection (undoes an import that marked everything).
+
 ## 0.6.0
 
 - Trading is live! The Trade tab now connects to the trade server, so two phones (or a phone + PC) can trade with a 6-character code.

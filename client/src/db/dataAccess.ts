@@ -234,6 +234,14 @@ export async function applyImport(lines: ImportLine[]): Promise<{ entries: numbe
   return { entries: lines.length, cards };
 }
 
+/** Take every card off the tradelist (quantityForTrade → 0). Returns entries changed. */
+export async function clearTradelist(): Promise<number> {
+  return db.collection
+    .where('quantityForTrade')
+    .above(0)
+    .modify({ quantityForTrade: 0, updatedAt: Date.now() });
+}
+
 // ---------------------------------------------------------------------------
 // Decks (beta plan §4). Deck slots reference oracle cards ("4x Lightning Bolt");
 // no format/legality checks in the beta.

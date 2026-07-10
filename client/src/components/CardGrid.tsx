@@ -10,9 +10,9 @@ const KEY = 'cardViewMode';
 export function useViewMode(): [ViewMode, (m: ViewMode) => void] {
   const [mode, setMode] = useState<ViewMode>(() => {
     try {
-      return (localStorage.getItem(KEY) as ViewMode) || 'list';
+      return (localStorage.getItem(KEY) as ViewMode) || 'grid';
     } catch {
-      return 'list';
+      return 'grid';
     }
   });
   const set = (m: ViewMode) => {

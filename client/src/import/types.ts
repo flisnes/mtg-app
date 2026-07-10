@@ -35,6 +35,7 @@ export interface UnmatchedLine {
   raw: string;
   name: string;
   quantity: number;
+  finish?: Finish;
   suggestions: string[];
 }
 

@@ -12,6 +12,24 @@ const COMBINING = /\p{M}/gu;
 const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(COMBINING, '').trim();
 const alnum = (s: string) => normalize(s).replace(/[^a-z0-9]/g, '');
 
+/** Levenshtein edit distance (two-row DP) for ranking typo suggestions. */
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  let cur = new Array<number>(b.length + 1);
+  for (let i = 1; i <= a.length; i++) {
+    cur[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + cost);
+    }
+    [prev, cur] = [cur, prev];
+  }
+  return prev[b.length]!;
+}
+
 function pickFinish(line: ParsedLine, printing: Printing): Finish {
   const wanted = line.finish;
   if (wanted && printing.finishes.includes(wanted)) return wanted;
@@ -72,24 +90,28 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
       const key = normalize(line.name);
       const oracle = nameMap.get(key) ?? looseMap.get(alnum(line.name));
       if (oracle) matched.push({ line, oracle });
-      else unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, suggestions: [] });
+      else unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, finish: line.finish, suggestions: [] });
     }
 
-    // Suggestions for unmatched (cheap prefix/substring scan).
+    // Suggestions for unmatched: gather plausible candidates (shared prefix,
+    // shared word, or substring) then rank by edit distance so the closest
+    // name comes first — good for typos like "Lightnng Bolt" → "Lightning Bolt".
     if (unmatched.length) {
       post({ type: 'progress', label: 'Finding suggestions…', fraction: 0.55 });
       const names = cards.map((c) => ({ name: c.name, norm: normalize(c.name) }));
       for (const u of unmatched) {
         const q = normalize(u.name);
-        const head = q.slice(0, 4);
-        const hits: string[] = [];
+        const head = q.slice(0, 3);
+        const words = q.split(/\s+/).filter((w) => w.length >= 4);
+        const cand: Array<{ name: string; d: number }> = [];
         for (const n of names) {
-          if (n.norm.includes(q) || (head.length >= 3 && n.norm.startsWith(head))) {
-            hits.push(n.name);
-            if (hits.length >= 3) break;
+          if (n.norm.includes(q) || (head.length >= 3 && n.norm.startsWith(head)) || words.some((w) => n.norm.includes(w))) {
+            cand.push({ name: n.name, d: editDistance(q, n.norm) });
+            if (cand.length > 4000) break;
           }
         }
-        u.suggestions = hits;
+        cand.sort((a, b) => a.d - b.d);
+        u.suggestions = cand.slice(0, 3).map((c) => c.name);
       }
     }
 
@@ -109,7 +131,7 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
       const printings = byOracle.get(oracle.oracleId) ?? [];
       const printing = resolvePrinting(line, oracle, printings);
       if (!printing) {
-        unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, suggestions: [] });
+        unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, finish: line.finish, suggestions: [] });
         continue;
       }
       const quantityForTrade = Math.min(

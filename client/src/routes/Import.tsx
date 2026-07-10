@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
-import { applyImport } from '../db/dataAccess.js';
+import { applyImport, type ImportLine } from '../db/dataAccess.js';
 import { useToast } from '../components/Toast.js';
-import type { ResolveResponse, ResolveResult } from '../import/types.js';
+import { resolveOracleByName, searchCards } from '../cardDb/search.js';
+import type { ResolveResponse, ResolveResult, ResolvedLine, UnmatchedLine } from '../import/types.js';
 
 type Status =
   | { kind: 'idle' }
@@ -50,8 +52,8 @@ export function Import() {
     analyze(content);
   }
 
-  async function confirmImport(result: ResolveResult) {
-    const res = await applyImport(result.resolved);
+  async function confirmImport(lines: ImportLine[]) {
+    const res = await applyImport(lines);
     toast(`Imported ${res.cards} cards (${res.entries} entries)`);
     navigate('/collection');
   }
@@ -86,21 +88,59 @@ export function Import() {
           </div>
         </>
       ) : (
-        <ReviewScreen result={status.result} onConfirm={confirmImport} onCancel={() => setStatus({ kind: 'idle' })} />
+        <ReviewScreen
+          result={status.result}
+          asTradelist={asTradelist}
+          onConfirm={confirmImport}
+          onCancel={() => setStatus({ kind: 'idle' })}
+        />
       )}
     </Page>
   );
 }
 
+function toResolved(u: UnmatchedLine, card: OracleCard, asTradelist: boolean): ResolvedLine {
+  return {
+    oracleId: card.oracleId,
+    scryfallId: card.defaultScryfallId,
+    name: card.name,
+    quantity: u.quantity,
+    quantityForTrade: asTradelist ? u.quantity : 0,
+    condition: 'NM',
+    finish: u.finish ?? 'nonfoil',
+    lang: 'en',
+  };
+}
+
 function ReviewScreen({
   result,
+  asTradelist,
   onConfirm,
   onCancel,
 }: {
   result: ResolveResult;
-  onConfirm: (r: ResolveResult) => void;
+  asTradelist: boolean;
+  onConfirm: (lines: ImportLine[]) => void;
   onCancel: () => void;
 }) {
+  // Manually-resolved unmatched lines, keyed by their index.
+  const [fixed, setFixed] = useState<Map<number, ResolvedLine>>(new Map());
+  const [picking, setPicking] = useState<number | null>(null);
+
+  const resolve = (index: number, card: OracleCard) => {
+    setFixed((m) => new Map(m).set(index, toResolved(result.unmatched[index]!, card, asTradelist)));
+    setPicking(null);
+  };
+  const unfix = (index: number) =>
+    setFixed((m) => {
+      const next = new Map(m);
+      next.delete(index);
+      return next;
+    });
+
+  const allLines = [...result.resolved, ...fixed.values()];
+  const stillUnmatched = result.unmatched.length - fixed.size;
+
   return (
     <>
       <dl className="kv">
@@ -108,35 +148,100 @@ function ReviewScreen({
         <dd>{result.format}</dd>
         <dt>Matched</dt>
         <dd>
-          {result.resolved.length} entries · {result.resolvedQuantity} cards
+          {allLines.length} entries{fixed.size > 0 ? ` (${fixed.size} fixed by hand)` : ''}
         </dd>
         <dt>Unmatched</dt>
-        <dd>{result.unmatched.length}</dd>
+        <dd>{stillUnmatched}</dd>
       </dl>
 
       {result.unmatched.length > 0 && (
         <div className="about-section">
           <h2>Unmatched lines</h2>
-          <p className="fine-print">These won’t be imported. Check spelling or set codes and re-import them.</p>
+          <p className="fine-print">Tap a suggestion or search to fix a line so it imports with the rest.</p>
           <ul className="result-list">
-            {result.unmatched.slice(0, 100).map((u, i) => (
-              <li key={i} className="result-row" style={{ padding: '0.5rem' }}>
-                <div className="result-main">
-                  <div className="result-name">{u.name}</div>
-                  {u.suggestions.length > 0 && <div className="result-sub">Did you mean: {u.suggestions.join(', ')}?</div>}
-                </div>
-              </li>
-            ))}
+            {result.unmatched.map((u, i) => {
+              const chosen = fixed.get(i);
+              return (
+                <li key={i} className="result-row" style={{ flexDirection: 'column', alignItems: 'stretch', padding: '0.6rem', gap: '0.4rem' }}>
+                  <div className="result-main">
+                    <div className="result-name">
+                      {u.quantity}× {u.name}
+                      {chosen && <span className="badge badge-trade">→ {chosen.name}</span>}
+                    </div>
+                    <div className="result-sub" style={{ whiteSpace: 'normal' }}>{u.raw}</div>
+                  </div>
+
+                  {chosen ? (
+                    <button onClick={() => unfix(i)} style={{ alignSelf: 'flex-start' }}>
+                      Undo fix
+                    </button>
+                  ) : (
+                    <div className="chips">
+                      {u.suggestions.map((s) => (
+                        <button
+                          key={s}
+                          className="chip"
+                          onClick={async () => {
+                            const card = await resolveOracleByName(s);
+                            if (card) resolve(i, card);
+                          }}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                      <button className="chip" onClick={() => setPicking(picking === i ? null : i)}>
+                        🔍 Search…
+                      </button>
+                    </div>
+                  )}
+
+                  {picking === i && !chosen && <CardPicker onPick={(card) => resolve(i, card)} />}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
 
       <div className="sheet-actions">
         <button onClick={onCancel}>Back</button>
-        <button className="primary" onClick={() => onConfirm(result)} disabled={result.resolved.length === 0}>
-          Import {result.resolved.length} entries
+        <button className="primary" onClick={() => onConfirm(allLines)} disabled={allLines.length === 0}>
+          Import {allLines.length} entries
         </button>
       </div>
     </>
+  );
+}
+
+function CardPicker({ onPick }: { onPick: (card: OracleCard) => void }) {
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<OracleCard[]>([]);
+  useEffect(() => {
+    if (!q.trim()) {
+      setResults([]);
+      return;
+    }
+    const h = setTimeout(async () => setResults((await searchCards(q, {}, 12)).cards), 120);
+    return () => clearTimeout(h);
+  }, [q]);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+      <input className="search-input" placeholder="Search for the right card…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+      {results.length > 0 && (
+        <ul className="result-list">
+          {results.map((c) => (
+            <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
+              <button className="result-open" style={{ cursor: 'pointer' }} onClick={() => onPick(c)}>
+                {c.imageSmall && <img className="result-thumb" src={c.imageSmall} alt="" loading="lazy" width={40} height={56} />}
+                <div className="result-main">
+                  <div className="result-name">{c.name}</div>
+                  <div className="result-sub">{c.typeLine}</div>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

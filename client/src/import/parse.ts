@@ -62,9 +62,17 @@ export function parseText(text: string): ParsedLine[] {
       rest = rest.slice(qtyMatch[0].length).trim();
     }
 
+    // Manabox/Moxfield foil marker at the end: "*F*" (foil) / "*E*" (etched).
+    let finish: Finish | undefined;
+    const foilM = rest.match(/\s*\*([FE])\*\s*$/i);
+    if (foilM) {
+      finish = foilM[1]!.toUpperCase() === 'E' ? 'etched' : 'foil';
+      rest = rest.slice(0, foilM.index).trim();
+    }
+
     let setCode: string | undefined;
     let collectorNumber: string | undefined;
-    // Trailing "(SET) 123" or "(SET)".
+    // Trailing "(SET) 123" or "(SET)" (Manabox puts the collector number after the set).
     const tail = rest.match(/\s*\(([A-Za-z0-9]{2,6})\)\s*([A-Za-z0-9★-]+)?\s*$/);
     if (tail) {
       setCode = tail[1]!.toLowerCase();
@@ -72,7 +80,7 @@ export function parseText(text: string): ParsedLine[] {
       rest = rest.slice(0, tail.index).trim();
     }
     if (!rest) continue;
-    lines.push({ raw, quantity, name: rest, setCode, collectorNumber });
+    lines.push({ raw, quantity, name: rest, setCode, collectorNumber, finish });
   }
   return lines;
 }

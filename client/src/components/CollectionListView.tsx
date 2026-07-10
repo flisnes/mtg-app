@@ -5,7 +5,7 @@ import type { CollectionEntry, Color, OracleCard, Priced, Printing, Rarity } fro
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { CardSheet } from './CardSheet.js';
-import { CardGrid, ViewToggle, useViewMode, type GridItem } from './CardGrid.js';
+import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 
 export interface JoinedEntry {
   entry: CollectionEntry;
@@ -134,46 +134,30 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
             <Link to="/">Search for cards</Link> to add some.
           </p>
         </div>
-      ) : view === 'grid' ? (
-        <CardGrid
+      ) : (
+        <CardItems
+          view={view}
           items={filtered.map(
-            (r): GridItem => ({
+            (r): CardItem => ({
               key: r.entry.id,
               name: r.oracle?.name ?? '(unknown card)',
               image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
               count: r.entry.quantity,
               badge: r.entry.quantityForTrade > 0 ? `${r.entry.quantityForTrade} FT` : undefined,
               badgeClass: 'badge-trade',
+              badgeTitle: r.entry.quantityForTrade > 0 ? `${r.entry.quantityForTrade} for trade` : undefined,
+              sub: (
+                <>
+                  {r.printing ? `${r.printing.setName} · #${r.printing.collectorNumber} · ` : ''}
+                  {r.entry.condition} · {r.entry.finish}
+                  {r.entry.lang !== 'en' ? ` · ${r.entry.lang}` : ''}
+                </>
+              ),
+              price: priceOf(r.printing, r.oracle),
               onClick: () => setEditing(r),
             }),
           )}
         />
-      ) : (
-        <ul className="result-list">
-          {filtered.map((r) => (
-            <li key={r.entry.id} className="result-row">
-              <button className="result-open" onClick={() => setEditing(r)} aria-label={`Edit ${r.oracle?.name ?? 'card'}`}>
-                {r.printing?.imageSmall ?? r.oracle?.imageSmall ? (
-                  <img className="result-thumb" src={r.printing?.imageSmall ?? r.oracle?.imageSmall ?? ''} alt="" loading="lazy" width={46} height={64} />
-                ) : (
-                  <div className="result-thumb" aria-hidden />
-                )}
-                <div className="result-main">
-                  <div className="result-name">
-                    {r.oracle?.name ?? '(unknown card)'}
-                    {r.entry.quantityForTrade > 0 && <span className="badge badge-trade">{r.entry.quantityForTrade} for trade</span>}
-                  </div>
-                  <div className="result-sub">
-                    {r.printing ? `${r.printing.setName} · #${r.printing.collectorNumber}` : ''} · {r.entry.condition} · {r.entry.finish}
-                    {r.entry.lang !== 'en' ? ` · ${r.entry.lang}` : ''}
-                  </div>
-                </div>
-                <div className="result-price">{priceOf(r.printing, r.oracle)}</div>
-                <div className="qty-pill">×{r.entry.quantity}</div>
-              </button>
-            </li>
-          ))}
-        </ul>
       )}
 
       {editing?.oracle && <CardSheet oracleCard={editing.oracle} entry={editing.entry} onClose={() => setEditing(null)} />}

@@ -7,7 +7,7 @@
 // "Both agree" (agreed) and "trade complete" (completed) are deliberately
 // separate steps — the gap is the physical inspection window.
 
-import type { TradeLine } from './user.js';
+import type { TradeLine, WishLine } from './user.js';
 
 export const PROTOCOL_VERSION = 1 as const;
 
@@ -54,7 +54,11 @@ export type ClientMessage =
   // Tradelist browsing: ask the partner for their tradelist / answer such a
   // request. Relayed peer-to-peer; the server never stores the lines.
   | { v: typeof PROTOCOL_VERSION; type: 'tradelist_request'; sessionCode: string }
-  | { v: typeof PROTOCOL_VERSION; type: 'tradelist_share'; sessionCode: string; lines: TradeLine[] };
+  | { v: typeof PROTOCOL_VERSION; type: 'tradelist_share'; sessionCode: string; lines: TradeLine[] }
+  // Wishlist exchange, same relay mechanics — powers "you have what they want"
+  // match highlighting. The wishlist is by definition shown to trade partners.
+  | { v: typeof PROTOCOL_VERSION; type: 'wishlist_request'; sessionCode: string }
+  | { v: typeof PROTOCOL_VERSION; type: 'wishlist_share'; sessionCode: string; lines: WishLine[] };
 
 // ---------------------------------------------------------------------------
 // Server -> client
@@ -80,9 +84,11 @@ export type ServerMessage =
   | { v: typeof PROTOCOL_VERSION; type: 'state_sync'; sessionCode: string; snapshot: SessionSnapshot }
   | { v: typeof PROTOCOL_VERSION; type: 'peer_disconnected'; sessionCode: string }
   | { v: typeof PROTOCOL_VERSION; type: 'peer_reconnected'; sessionCode: string }
-  // Relayed tradelist browsing (see ClientMessage above).
+  // Relayed tradelist browsing / wishlist exchange (see ClientMessage above).
   | { v: typeof PROTOCOL_VERSION; type: 'tradelist_requested'; sessionCode: string }
   | { v: typeof PROTOCOL_VERSION; type: 'tradelist_shared'; sessionCode: string; lines: TradeLine[] }
+  | { v: typeof PROTOCOL_VERSION; type: 'wishlist_requested'; sessionCode: string }
+  | { v: typeof PROTOCOL_VERSION; type: 'wishlist_shared'; sessionCode: string; lines: WishLine[] }
   | { v: typeof PROTOCOL_VERSION; type: 'error'; code: TradeErrorCode; message: string };
 
 export type TradeErrorCode =

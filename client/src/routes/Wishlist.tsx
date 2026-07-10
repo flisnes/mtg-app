@@ -1,15 +1,18 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
+import type { OracleCard, Priced } from '@mtg/shared';
 import { Page } from './Page.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds } from '../db/queries.js';
 import { addToWishlist, removeFromWishlist } from '../db/dataAccess.js';
-import { CardGrid, ViewToggle, useViewMode, type GridItem } from '../components/CardGrid.js';
+import { CardSheet } from '../components/CardSheet.js';
+import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
 
 export function Wishlist() {
   const [name, setName] = useState('');
   const [view, setView] = useViewMode();
+  const [info, setInfo] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
   const rows = useLiveQuery(async () => {
     const entries = await db.wishlist.toArray();
     const oracleMap = await getOracleCardsByIds(entries.map((e) => e.oracleId));
@@ -49,64 +52,38 @@ export function Wishlist() {
             <p className="search-meta">{filtered.length} card{filtered.length === 1 ? '' : 's'}</p>
             <ViewToggle mode={view} onChange={setView} />
           </div>
-          {view === 'grid' ? (
-            <CardGrid
-              items={filtered.map(
-                (r): GridItem => ({
-                  key: r.entry.id,
-                  name: r.oracle?.name ?? '(unknown card)',
-                  image: r.oracle?.imageSmall ?? null,
-                  count: r.entry.quantity,
-                  footer: (
-                    <>
-                      <button title="Remove one" onClick={() => removeFromWishlist(r.entry.id, 1)}>−</button>
-                      <button title="Add one" onClick={() => addToWishlist({ oracleId: r.entry.oracleId, scryfallId: r.entry.scryfallId, quantity: 1 })}>＋</button>
-                      <button title="Remove" onClick={() => removeFromWishlist(r.entry.id)}>✕</button>
-                    </>
-                  ),
-                }),
-              )}
-            />
-          ) : (
-          <ul className="result-list">
-            {filtered.map((r) => (
-              <li key={r.entry.id} className="result-row">
-                <div className="result-open">
-                  {r.oracle?.imageSmall ? (
-                    <img className="result-thumb" src={r.oracle.imageSmall} alt="" loading="lazy" width={46} height={64} />
-                  ) : (
-                    <div className="result-thumb" aria-hidden />
-                  )}
-                  <div className="result-main">
-                    <div className="result-name">{r.oracle?.name ?? '(unknown card)'}</div>
-                    <div className="result-sub">{r.entry.scryfallId ? 'specific printing' : 'any printing'}</div>
-                  </div>
-                </div>
-                <div className="quick-actions">
-                  <button
-                    title="Remove one"
-                    onClick={() => removeFromWishlist(r.entry.id, 1)}
-                  >
-                    −
-                  </button>
-                  <span className="qty-pill" style={{ padding: '0 0.4rem', alignSelf: 'center' }}>
-                    {r.entry.quantity}
-                  </span>
-                  <button
-                    title="Add one"
-                    onClick={() => addToWishlist({ oracleId: r.entry.oracleId, scryfallId: r.entry.scryfallId, quantity: 1 })}
-                  >
-                    ＋
-                  </button>
-                  <button title="Remove" onClick={() => removeFromWishlist(r.entry.id)}>
-                    ✕
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          )}
+          <CardItems
+            view={view}
+            items={filtered.map(
+              (r): CardItem => ({
+                key: r.entry.id,
+                name: r.oracle?.name ?? '(unknown card)',
+                image: r.oracle?.imageSmall ?? null,
+                count: r.entry.quantity,
+                sub: r.entry.scryfallId ? 'specific printing' : 'any printing',
+                onClick: r.oracle
+                  ? () => setInfo({ oracle: r.oracle!, scryfallId: r.entry.scryfallId ?? undefined })
+                  : undefined,
+                actions: (
+                  <>
+                    <button title="Remove one" onClick={() => removeFromWishlist(r.entry.id, 1)}>−</button>
+                    <button
+                      title="Add one"
+                      onClick={() => addToWishlist({ oracleId: r.entry.oracleId, scryfallId: r.entry.scryfallId, quantity: 1 })}
+                    >
+                      ＋
+                    </button>
+                    <button title="Remove" onClick={() => removeFromWishlist(r.entry.id)}>✕</button>
+                  </>
+                ),
+              }),
+            )}
+          />
         </>
+      )}
+
+      {info && (
+        <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
       )}
     </Page>
   );

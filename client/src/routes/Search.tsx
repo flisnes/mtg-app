@@ -4,6 +4,7 @@ import { Page } from './Page.js';
 import { searchCards, type SearchFilters } from '../cardDb/search.js';
 import { addToCollection, addToWishlist } from '../db/dataAccess.js';
 import { CardSheet } from '../components/CardSheet.js';
+import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
 import { useToast } from '../components/Toast.js';
 
 const RARITIES: Rarity[] = ['common', 'uncommon', 'rare', 'mythic'];
@@ -29,6 +30,7 @@ export function Search() {
   const [total, setTotal] = useState(0);
   const [searching, setSearching] = useState(false);
   const [sheetCard, setSheetCard] = useState<Priced<OracleCard> | null>(null);
+  const [view, setView] = useViewMode();
   const toast = useToast();
 
   const hasCriteria = query.trim().length > 0 || !!filters.color || !!filters.rarity || !!filters.type;
@@ -108,45 +110,47 @@ export function Search() {
       </div>
 
       {hasCriteria && (
-        <p className="search-meta">
-          {searching
-            ? 'Searching…'
-            : `${total} result${total === 1 ? '' : 's'}${total > results.length ? ` (showing ${results.length})` : ''}`}
-        </p>
+        <div className="meta-row">
+          <p className="search-meta">
+            {searching
+              ? 'Searching…'
+              : `${total} result${total === 1 ? '' : 's'}${total > results.length ? ` (showing ${results.length})` : ''}`}
+          </p>
+          <ViewToggle mode={view} onChange={setView} />
+        </div>
       )}
 
-      <ul className="result-list">
-        {results.map((card) => (
-          <li key={card.oracleId} className="result-row">
-            <button className="result-open" onClick={() => setSheetCard(card)} aria-label={`Edit ${card.name}`}>
-              {card.imageSmall ? (
-                <img className="result-thumb" src={card.imageSmall} alt="" loading="lazy" width={46} height={64} />
-              ) : (
-                <div className="result-thumb" aria-hidden />
-              )}
-              <div className="result-main">
-                <div className="result-name">{card.name}</div>
-                <div className="result-sub">
-                  <span className={`rarity-dot rarity-${card.rarity}`} aria-hidden />
-                  {card.typeLine}
-                </div>
-              </div>
-              <div className="result-price">{price(card)}</div>
-            </button>
-            <div className="quick-actions">
-              <button title="Add to collection" onClick={() => quickCollection(card)}>
-                +🗃️
-              </button>
-              <button title="Add to wishlist" onClick={() => quickWishlist(card)}>
-                +⭐
-              </button>
-              <button title="Add to tradelist" onClick={() => quickTradelist(card)}>
-                +🔁
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <CardItems
+        view={view}
+        items={results.map(
+          (card): CardItem => ({
+            key: card.oracleId,
+            name: card.name,
+            image: card.imageSmall ?? null,
+            sub: (
+              <>
+                <span className={`rarity-dot rarity-${card.rarity}`} aria-hidden />
+                {card.typeLine}
+              </>
+            ),
+            price: price(card),
+            onClick: () => setSheetCard(card),
+            actions: (
+              <>
+                <button title="Add to collection" onClick={() => quickCollection(card)}>
+                  +🗃️
+                </button>
+                <button title="Add to wishlist" onClick={() => quickWishlist(card)}>
+                  +⭐
+                </button>
+                <button title="Add to tradelist" onClick={() => quickTradelist(card)}>
+                  +🔁
+                </button>
+              </>
+            ),
+          }),
+        )}
+      />
 
       {sheetCard && <CardSheet oracleCard={sheetCard} onClose={() => setSheetCard(null)} />}
     </Page>

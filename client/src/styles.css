@@ -500,6 +500,9 @@ button.danger-outline {
   text-align: left;
   color: inherit;
 }
+.result-row-dim {
+  opacity: 0.55;
+}
 .quick-actions {
   display: flex;
   border-left: 1px solid var(--border);
@@ -880,6 +883,28 @@ button.primary {
 }
 .badge.own-yes {
   background: rgba(78, 201, 123, 0.15);
+}
+/* Wishlist⇄tradelist matches during a trade. */
+.matches-pane {
+  border-color: rgba(234, 197, 79, 0.45);
+}
+.badge.badge-wish {
+  background: rgba(234, 197, 79, 0.15);
+  color: #eac54f;
+}
+.tile-badge.badge-wish {
+  color: #eac54f;
+}
+
+/* Ownership badges on grid tiles keep the dark chip, tinted per state. */
+.tile-badge.own-trade {
+  color: #b1a7ff;
+}
+.tile-badge.own-yes {
+  color: var(--ok);
+}
+.tile-badge.own-unknown {
+  color: #d0d0d8;
 }
 
 /* ---- Bottom tab bar ---- */

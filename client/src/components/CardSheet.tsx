@@ -14,6 +14,8 @@ import { recordPriceSnapshots } from '../price/tracking.js';
 
 // Bottom-sheet for adding a card to the collection or editing an existing
 // entry. Covers the tradelist via the "for trade" quantity (beta plan §4/§6).
+// With readOnly it doubles as the app-wide "card info" sheet (trade lines,
+// wishlist, deck cards): image, printings, price, watch — no collection edits.
 
 const FINISH_LABELS: Record<Finish, string> = { nonfoil: 'Nonfoil', foil: 'Foil', etched: 'Etched' };
 const LANGS = ['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht'];
@@ -21,15 +23,21 @@ const LANGS = ['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht
 export function CardSheet({
   oracleCard,
   entry,
+  initialScryfallId,
+  readOnly = false,
   onClose,
 }: {
   oracleCard: Priced<OracleCard>;
   entry?: CollectionEntry;
+  /** Preselect a specific printing (e.g. the one named in a trade line). */
+  initialScryfallId?: string;
+  /** Info-only: show the card and its printings, no collection editing. */
+  readOnly?: boolean;
   onClose: () => void;
 }) {
   const editing = !!entry;
   const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
-  const [scryfallId, setScryfallId] = useState(entry?.scryfallId ?? oracleCard.defaultScryfallId);
+  const [scryfallId, setScryfallId] = useState(entry?.scryfallId ?? initialScryfallId ?? oracleCard.defaultScryfallId);
   const [condition, setCondition] = useState<Condition>(entry?.condition ?? 'NM');
   const [finish, setFinish] = useState<Finish>(entry?.finish ?? 'nonfoil');
   const [lang, setLang] = useState(entry?.lang ?? 'en');
@@ -110,7 +118,12 @@ export function CardSheet({
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`${editing ? 'Edit' : 'Add'} ${oracleCard.name}`}>
+      <div
+        className="sheet"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label={readOnly ? oracleCard.name : `${editing ? 'Edit' : 'Add'} ${oracleCard.name}`}
+      >
         <div className="sheet-head">
           {cardImage ? (
             <img className="sheet-card" src={cardImage} alt={oracleCard.name} />
@@ -136,6 +149,7 @@ export function CardSheet({
           </select>
         </label>
 
+        {!readOnly && (
         <div className="field-grid">
           <label className="field">
             <span>Condition</span>
@@ -168,7 +182,9 @@ export function CardSheet({
             </select>
           </label>
         </div>
+        )}
 
+        {!readOnly && (
         <div className="field-grid">
           <label className="field">
             <span>Quantity</span>
@@ -185,24 +201,33 @@ export function CardSheet({
             />
           </label>
         </div>
+        )}
 
         <button className={`watch-toggle ${watching ? 'watching' : ''}`} onClick={toggleWatch}>
           {watching ? '★ Watching price' : '☆ Watch price'}
         </button>
 
-        <div className="sheet-actions">
-          {editing && (
-            <button className="danger-outline" onClick={del} disabled={busy}>
-              Remove
+        {readOnly ? (
+          <div className="sheet-actions">
+            <button className="primary" onClick={onClose}>
+              Close
             </button>
-          )}
-          <button onClick={onClose} disabled={busy}>
-            Cancel
-          </button>
-          <button className="primary" onClick={save} disabled={busy}>
-            {editing ? 'Save' : 'Add to collection'}
-          </button>
-        </div>
+          </div>
+        ) : (
+          <div className="sheet-actions">
+            {editing && (
+              <button className="danger-outline" onClick={del} disabled={busy}>
+                Remove
+              </button>
+            )}
+            <button onClick={onClose} disabled={busy}>
+              Cancel
+            </button>
+            <button className="primary" onClick={save} disabled={busy}>
+              {editing ? 'Save' : 'Add to collection'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

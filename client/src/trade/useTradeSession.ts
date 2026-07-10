@@ -6,13 +6,14 @@ import {
   type ServerMessage,
   type SessionSnapshot,
   type TradeLine,
+  type WishLine,
 } from '@mtg/shared';
 import { applyCompletedTrade } from '../db/dataAccess.js';
 import { getOracleCardsByIds } from '../db/queries.js';
 import { db } from '../db/schema.js';
 import { getSetting, setSetting } from '../db/settings.js';
 import { TRADE_WS_URL } from './config.js';
-import { sanitizeOffer } from './validate.js';
+import { sanitizeOffer, sanitizeWishlist } from './validate.js';
 
 // Client trade transport (beta plan §7). Owns the WebSocket, mirrors the
 // server-authoritative snapshot, applies the completion mutation idempotently,
@@ -39,11 +40,14 @@ export interface TradeSession {
   peerTradelist: TradeLine[] | null;
   /** True while a tradelist request is in flight. */
   peerTradelistLoading: boolean;
+  /** Partner's wishlist (for match highlighting). null = never asked/answered. */
+  peerWishlist: WishLine[] | null;
   create: () => void;
   join: (code: string) => void;
   resume: (t: ActiveTrade) => void;
   sendOffer: (lines: TradeLine[]) => void;
   requestTradelist: () => void;
+  requestWishlist: () => void;
   accept: () => void;
   unaccept: () => void;
   confirmComplete: () => void;
@@ -66,6 +70,18 @@ async function readOwnTradelist(): Promise<TradeLine[]> {
   }));
 }
 
+/** Snapshot the local wishlist as self-contained WishLines (to answer a peer's request). */
+async function readOwnWishlist(): Promise<WishLine[]> {
+  const entries = await db.wishlist.toArray();
+  const names = await getOracleCardsByIds(entries.map((e) => e.oracleId));
+  return entries.slice(0, 500).map((e) => ({
+    oracleId: e.oracleId,
+    scryfallId: e.scryfallId,
+    name: names.get(e.oracleId)?.name ?? '(unknown card)',
+    quantity: e.quantity,
+  }));
+}
+
 export function otherSeat(seat: Seat): Seat {
   return seat === 'a' ? 'b' : 'a';
 }
@@ -83,6 +99,7 @@ export function useTradeSession(): TradeSession {
   const [error, setError] = useState<string | null>(null);
   const [peerTradelist, setPeerTradelist] = useState<TradeLine[] | null>(null);
   const [peerTradelistLoading, setPeerTradelistLoading] = useState(false);
+  const [peerWishlist, setPeerWishlist] = useState<WishLine[] | null>(null);
 
   const ws = useRef<WebSocket | null>(null);
   const active = useRef<Partial<ActiveTrade>>({});
@@ -172,6 +189,21 @@ export function useTradeSession(): TradeSession {
           setPeerTradelist(sanitizeOffer(msg.lines));
           setPeerTradelistLoading(false);
           break;
+        case 'wishlist_requested': {
+          // Partner wants match highlighting — answer with a wishlist snapshot.
+          // The wishlist is by definition surfaced to trade partners.
+          const c = active.current.code;
+          void readOwnWishlist().then((lines) => {
+            const s = ws.current;
+            if (c && s && s.readyState === WebSocket.OPEN) {
+              s.send(JSON.stringify({ v: PROTOCOL_VERSION, type: 'wishlist_share', sessionCode: c, lines }));
+            }
+          });
+          break;
+        }
+        case 'wishlist_shared':
+          setPeerWishlist(sanitizeWishlist(msg.lines));
+          break;
         case 'error':
           setError(msg.message);
           if (msg.code === 'unknown_session' || msg.code === 'bad_resume' || msg.code === 'session_full') {
@@ -243,6 +275,10 @@ export function useTradeSession(): TradeSession {
       send({ v: PROTOCOL_VERSION, type: 'tradelist_request', sessionCode: c });
     }
   }, [send]);
+  const requestWishlist = useCallback(() => {
+    const c = code();
+    if (c) send({ v: PROTOCOL_VERSION, type: 'wishlist_request', sessionCode: c });
+  }, [send]);
   const accept = useCallback(() => { const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'accept', sessionCode: c }); }, [send]);
   const unaccept = useCallback(() => { const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'unaccept', sessionCode: c }); }, [send]);
   const confirmComplete = useCallback(() => { const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'confirm_complete', sessionCode: c }); }, [send]);
@@ -261,6 +297,7 @@ export function useTradeSession(): TradeSession {
     setError(null);
     setPeerTradelist(null);
     setPeerTradelistLoading(false);
+    setPeerWishlist(null);
     void clearPersisted();
   }, [clearPersisted]);
 
@@ -272,5 +309,5 @@ export function useTradeSession(): TradeSession {
     };
   }, []);
 
-  return { status, seat, snapshot, peerPresent, error, peerTradelist, peerTradelistLoading, create, join, resume, sendOffer, requestTradelist, accept, unaccept, confirmComplete, cancel, reset };
+  return { status, seat, snapshot, peerPresent, error, peerTradelist, peerTradelistLoading, peerWishlist, create, join, resume, sendOffer, requestTradelist, requestWishlist, accept, unaccept, confirmComplete, cancel, reset };
 }

@@ -93,6 +93,18 @@ export interface TradeLine {
   lang: string;
 }
 
+/**
+ * A single wishlist line shared during a trade (for wishlist⇄tradelist match
+ * highlighting). Self-contained (carries name) like TradeLine.
+ */
+export interface WishLine {
+  oracleId: string;
+  /** null = "any printing". */
+  scryfallId: string | null;
+  name: string;
+  quantity: number;
+}
+
 export interface Setting {
   key: string;
   value: unknown;

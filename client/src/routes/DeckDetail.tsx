@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
-import { DECK_FORMATS, type DeckBoard, type DeckFormat, type OracleCard } from '@mtg/shared';
+import { DECK_FORMATS, type DeckBoard, type DeckFormat, type OracleCard, type Priced } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getOwnedCountsFor, computeDeckWishlistCandidates, type MissingCard } from '../db/queries.js';
 import {
@@ -19,14 +19,15 @@ import { searchCards } from '../cardDb/search.js';
 import { resolveDeckText, buildDeckText } from '../deck/deckText.js';
 import { downloadText } from '../import/export.js';
 import { useToast } from '../components/Toast.js';
-import { CardGrid, ViewToggle, useViewMode, type GridItem, type ViewMode } from '../components/CardGrid.js';
+import { CardSheet } from '../components/CardSheet.js';
+import { CardItems, CardList, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 
 interface Row {
   id: string;
   oracleId: string;
   quantity: number;
   board: DeckBoard;
-  oracle?: OracleCard;
+  oracle?: Priced<OracleCard>;
   owned: number;
 }
 
@@ -38,6 +39,7 @@ export function DeckDetail() {
   const [exit, setExit] = useState<MissingCard[] | null>(null);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [view, setView] = useViewMode();
+  const [info, setInfo] = useState<Priced<OracleCard> | null>(null);
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -162,7 +164,7 @@ export function DeckDetail() {
         <ViewToggle mode={view} onChange={setView} />
       </div>
 
-      {panel === 'add' && <AddPanel deckId={id} onAdded={(n) => toast(`Added ${n}`)} />}
+      {panel === 'add' && <AddPanel deckId={id} onAdded={(n) => toast(`Added ${n}`)} onInfo={setInfo} />}
       {panel === 'import' && (
         <ImportPanel
           deckId={id}
@@ -173,8 +175,10 @@ export function DeckDetail() {
         />
       )}
 
-      <Board title="Mainboard" rows={main} view={view} issues={legality.issues} />
-      <Board title="Sideboard" rows={side} view={view} issues={legality.issues} />
+      <Board title="Mainboard" rows={main} view={view} issues={legality.issues} onInfo={setInfo} />
+      <Board title="Sideboard" rows={side} view={view} issues={legality.issues} onInfo={setInfo} />
+
+      {info && <CardSheet oracleCard={info} readOnly onClose={() => setInfo(null)} />}
 
       {exit && (
         <div className="sheet-backdrop" onClick={() => navigate('/decks')}>
@@ -232,11 +236,13 @@ function Board({
   rows,
   view,
   issues,
+  onInfo,
 }: {
   title: string;
   rows: Row[];
   view: ViewMode;
   issues: Map<string, string>;
+  onInfo: (card: Priced<OracleCard>) => void;
 }) {
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
@@ -247,9 +253,10 @@ function Board({
       </h2>
       {rows.length === 0 ? (
         <p className="fine-print">Empty.</p>
-      ) : view === 'grid' ? (
-        <CardGrid
-          items={rows.map((r): GridItem => {
+      ) : (
+        <CardItems
+          view={view}
+          items={rows.map((r): CardItem => {
             const owned = r.owned >= r.quantity;
             const issue = issues.get(r.oracleId);
             return {
@@ -259,8 +266,16 @@ function Board({
               count: r.quantity,
               badge: issue ? '⚠' : owned ? '✓' : undefined,
               badgeClass: issue ? 'badge-illegal' : 'badge-owned',
+              badgeTitle: issue,
               dim: !owned,
-              footer: (
+              sub: (
+                <>
+                  owned {r.owned}
+                  {issue && <span className="badge badge-illegal-chip">{issue}</span>}
+                </>
+              ),
+              onClick: r.oracle ? () => onInfo(r.oracle!) : undefined,
+              actions: (
                 <>
                   <button onClick={() => setDeckCardQuantity(r.id, r.quantity - 1)} aria-label="One fewer">−</button>
                   <button onClick={() => setDeckCardQuantity(r.id, r.quantity + 1)} aria-label="One more">＋</button>
@@ -270,55 +285,22 @@ function Board({
             };
           })}
         />
-      ) : (
-        <ul className="result-list">
-          {rows.map((r) => {
-            const owned = r.owned >= r.quantity;
-            return (
-              <li key={r.id} className="result-row">
-                <div className="result-open" style={{ cursor: 'default' }}>
-                  <span className={`owned-check ${owned ? 'owned-yes' : 'owned-no'}`} aria-hidden>
-                    {owned ? '✓' : '○'}
-                  </span>
-                  {r.oracle?.imageSmall ? (
-                    <img className="result-thumb" src={r.oracle.imageSmall} alt="" loading="lazy" width={46} height={64} />
-                  ) : (
-                    <div className="result-thumb" aria-hidden />
-                  )}
-                  <div className="result-main">
-                    <div className="result-name">
-                      {r.oracle?.name ?? '(unknown card)'}
-                      {issues.get(r.oracleId) && <span className="badge badge-illegal-chip">{issues.get(r.oracleId)}</span>}
-                    </div>
-                    <div className="result-sub">owned {r.owned}</div>
-                  </div>
-                </div>
-                <div className="quick-actions">
-                  <button onClick={() => setDeckCardQuantity(r.id, r.quantity - 1)} aria-label="One fewer">
-                    −
-                  </button>
-                  <span className="qty-pill" style={{ padding: '0 0.4rem', alignSelf: 'center' }}>
-                    {r.quantity}
-                  </span>
-                  <button onClick={() => setDeckCardQuantity(r.id, r.quantity + 1)} aria-label="One more">
-                    ＋
-                  </button>
-                  <button onClick={() => removeDeckCard(r.id)} aria-label="Remove">
-                    ✕
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
       )}
     </div>
   );
 }
 
-function AddPanel({ deckId, onAdded }: { deckId: string; onAdded: (name: string) => void }) {
+function AddPanel({
+  deckId,
+  onAdded,
+  onInfo,
+}: {
+  deckId: string;
+  onAdded: (name: string) => void;
+  onInfo: (card: Priced<OracleCard>) => void;
+}) {
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<OracleCard[]>([]);
+  const [results, setResults] = useState<Priced<OracleCard>[]>([]);
   useEffect(() => {
     if (!q.trim()) {
       setResults([]);
@@ -336,23 +318,23 @@ function AddPanel({ deckId, onAdded }: { deckId: string; onAdded: (name: string)
   return (
     <div className="about-section">
       <input className="search-input" placeholder="Search cards to add…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
-      <ul className="result-list">
-        {results.map((card) => (
-          <li key={card.oracleId} className="result-row">
-            <div className="result-open" style={{ cursor: 'default' }}>
-              {card.imageSmall && <img className="result-thumb" src={card.imageSmall} alt="" loading="lazy" width={46} height={64} />}
-              <div className="result-main">
-                <div className="result-name">{card.name}</div>
-                <div className="result-sub">{card.typeLine}</div>
-              </div>
-            </div>
-            <div className="quick-actions">
-              <button onClick={() => add(card, 'main')}>+Main</button>
-              <button onClick={() => add(card, 'side')}>+SB</button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <CardList
+        items={results.map(
+          (card): CardItem => ({
+            key: card.oracleId,
+            name: card.name,
+            image: card.imageSmall ?? null,
+            sub: card.typeLine,
+            onClick: () => onInfo(card),
+            actions: (
+              <>
+                <button onClick={() => add(card, 'main')}>+Main</button>
+                <button onClick={() => add(card, 'side')}>+SB</button>
+              </>
+            ),
+          }),
+        )}
+      />
     </div>
   );
 }

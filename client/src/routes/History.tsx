@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { Trade } from '@mtg/shared';
+import type { OracleCard, Priced, Trade } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
+import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { CardSheet } from '../components/CardSheet.js';
+import { CardList, type CardItem } from '../components/CardViews.js';
 
 function summarize(lines: { quantity: number }[]): number {
   return lines.reduce((s, l) => s + l.quantity, 0);
@@ -11,6 +14,7 @@ function summarize(lines: { quantity: number }[]): number {
 export function History() {
   const trades = useLiveQuery(() => db.trades.orderBy('completedAt').reverse().toArray(), []);
   const [open, setOpen] = useState<Trade | null>(null);
+  const [info, setInfo] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
 
   return (
     <Page title="Trade history" subtitle="Completed trades, stored only on this device.">
@@ -48,9 +52,9 @@ export function History() {
             <h2 style={{ margin: 0 }}>Trade with Other User</h2>
             <p className="fine-print">{new Date(open.completedAt).toLocaleString()}</p>
             <h3>You gave</h3>
-            <TradeLines lines={open.given} />
+            <TradeLines lines={open.given} onInfo={(oracle, scryfallId) => setInfo({ oracle, scryfallId })} />
             <h3>You received</h3>
-            <TradeLines lines={open.received} />
+            <TradeLines lines={open.received} onInfo={(oracle, scryfallId) => setInfo({ oracle, scryfallId })} />
             <div className="sheet-actions">
               <button className="primary" onClick={() => setOpen(null)}>
                 Close
@@ -59,27 +63,48 @@ export function History() {
           </div>
         </div>
       )}
+
+      {info && (
+        <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
+      )}
     </Page>
   );
 }
 
-function TradeLines({ lines }: { lines: Trade['given'] }) {
+function TradeLines({
+  lines,
+  onInfo,
+}: {
+  lines: Trade['given'];
+  onInfo: (oracle: Priced<OracleCard>, scryfallId?: string) => void;
+}) {
+  const printMap = useLiveQuery(
+    () => getPrintingsByIds(lines.map((l) => l.scryfallId)),
+    [lines.map((l) => l.scryfallId).join(',')],
+  );
+  const oracleMap = useLiveQuery(
+    () => getOracleCardsByIds(lines.map((l) => l.oracleId)),
+    [lines.map((l) => l.oracleId).join(',')],
+  );
   if (lines.length === 0) return <p className="fine-print">Nothing.</p>;
   return (
-    <ul className="result-list">
-      {lines.map((l, i) => (
-        <li key={i} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
-          <div className="result-main">
-            <div className="result-name">
-              {l.quantity}× {l.name}
-            </div>
-            <div className="result-sub">
+    <CardList
+      items={lines.map((l, i): CardItem => {
+        const oracle = oracleMap?.get(l.oracleId);
+        return {
+          key: `${i}-${l.scryfallId}`,
+          name: l.name,
+          image: printMap?.get(l.scryfallId)?.imageSmall ?? oracle?.imageSmall ?? null,
+          count: l.quantity,
+          sub: (
+            <>
               {l.condition} · {l.finish}
               {l.lang !== 'en' ? ` · ${l.lang}` : ''}
-            </div>
-          </div>
-        </li>
-      ))}
-    </ul>
+            </>
+          ),
+          onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
+        };
+      })}
+    />
   );
 }

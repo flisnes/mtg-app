@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
-import type { CollectionEntry, OracleCard, Seat, TradeLine } from '@mtg/shared';
+import type { CollectionEntry, OracleCard, Priced, Printing, Seat, TradeLine, WishLine } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { searchCards } from '../cardDb/search.js';
+import { CardSheet } from '../components/CardSheet.js';
+import { CardItems, CardList, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import { TRADE_ENABLED } from '../trade/config.js';
 import {
   getPersistedTrade,
@@ -58,6 +60,15 @@ function OwnBadge({ own }: { own: Owned | undefined }) {
       {ind.icon} {text}
     </span>
   );
+}
+
+/** What the card-info sheet should show when a trade line is tapped. */
+type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string };
+
+function linePrice(p?: Priced<Printing>): string | undefined {
+  if (p?.priceEur != null) return `€${p.priceEur.toFixed(2)}`;
+  if (p?.priceUsd != null) return `$${p.priceUsd.toFixed(2)}`;
+  return undefined;
 }
 
 export function Trade() {
@@ -133,6 +144,8 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const [myOffer, setMyOffer] = useState<TradeLine[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [showTheirs, setShowTheirs] = useState(false);
+  const [view, setView] = useViewMode();
+  const [info, setInfo] = useState<InfoTarget | null>(null);
   const ownership = useOwnership();
   const inited = useRef(false);
 
@@ -146,6 +159,16 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
 
   const theirOffer = snap.offers[peer];
   const editable = snap.state !== 'completed' && snap.state !== 'cancelled';
+
+  // Exchange wishlists + tradelists whenever the partner (re)appears, so
+  // wishlist⇄tradelist matches surface without anyone pressing anything.
+  const { requestWishlist, requestTradelist } = trade;
+  useEffect(() => {
+    if (trade.peerPresent) {
+      requestWishlist();
+      requestTradelist();
+    }
+  }, [trade.peerPresent, requestWishlist, requestTradelist]);
 
   function commit(next: TradeLine[]) {
     setMyOffer(next);
@@ -168,11 +191,14 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
     commit(next);
   }
 
-  // Prices for both offers.
+  // Printings (images + prices) and oracle cards for both offers.
   const scryfallIds = [...myOffer, ...theirOffer].map((l) => l.scryfallId);
-  const priceMap = useLiveQuery(() => getPrintingsByIds(scryfallIds), [scryfallIds.join(',')]);
+  const oracleIds = [...myOffer, ...theirOffer].map((l) => l.oracleId);
+  const printMap = useLiveQuery(() => getPrintingsByIds(scryfallIds), [scryfallIds.join(',')]);
+  const oracleMap = useLiveQuery(() => getOracleCardsByIds(oracleIds), [oracleIds.join(',')]);
   const totalOf = (lines: TradeLine[]) =>
-    lines.reduce((sum, l) => sum + (priceMap?.get(l.scryfallId)?.priceEur ?? 0) * l.quantity, 0);
+    lines.reduce((sum, l) => sum + (printMap?.get(l.scryfallId)?.priceEur ?? 0) * l.quantity, 0);
+  const openInfo = (oracle: Priced<OracleCard>, scryfallId?: string) => setInfo({ oracle, scryfallId });
 
   const iAccepted = snap.accepted[seat];
   const peerAccepted = snap.accepted[peer];
@@ -216,28 +242,53 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
         </div>
       </div>
 
+      <div className="meta-row">
+        <p className="search-meta">Tap a card for details.</p>
+        <ViewToggle mode={view} onChange={setView} />
+      </div>
+
+      <MatchesPanel
+        peerWishlist={trade.peerWishlist}
+        peerTradelist={trade.peerTradelist}
+        view={view}
+        editable={editable}
+        onAdd={addLine}
+        onInfo={openInfo}
+      />
+
       <div className="offer-panes">
         <div className="offer-pane">
           <h3>
             Your offer <span className="badge">€{totalOf(myOffer).toFixed(2)}</span>
           </h3>
-          <OfferList lines={myOffer} editable={editable} onQty={setQty} ownership={ownership} />
+          <OfferList
+            lines={myOffer}
+            editable={editable}
+            onQty={setQty}
+            ownership={ownership}
+            view={view}
+            printings={printMap}
+            oracles={oracleMap}
+            onInfo={openInfo}
+          />
           {editable && (
             <button onClick={() => setShowPicker((s) => !s)}>{showPicker ? 'Done adding' : '＋ Add cards'}</button>
           )}
-          {showPicker && editable && <AddCardsPanel ownership={ownership} onAdd={addLine} />}
+          {showPicker && editable && <AddCardsPanel ownership={ownership} onAdd={addLine} onInfo={openInfo} />}
         </div>
 
         <div className="offer-pane">
           <h3>
             Other User’s offer <span className="badge">€{totalOf(theirOffer).toFixed(2)}</span>
           </h3>
-          <OfferList lines={theirOffer} editable={false} />
+          <OfferList lines={theirOffer} editable={false} view={view} printings={printMap} oracles={oracleMap} onInfo={openInfo} />
           <p className="fine-print">{peerAccepted ? '✓ they accepted' : '…not accepted yet'}</p>
           {showTheirs ? (
             <PeerTradelistPanel
               lines={trade.peerTradelist}
               loading={trade.peerTradelistLoading}
+              view={view}
+              onInfo={openInfo}
               onRefresh={trade.requestTradelist}
               onHide={() => setShowTheirs(false)}
             />
@@ -288,6 +339,10 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           </div>
         )}
       </div>
+
+      {info && (
+        <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
+      )}
     </Page>
   );
 }
@@ -297,44 +352,198 @@ function OfferList({
   editable,
   onQty,
   ownership,
+  view,
+  printings,
+  oracles,
+  onInfo,
 }: {
   lines: TradeLine[];
   editable: boolean;
   onQty?: (key: string, qty: number) => void;
   /** When given (own offer), each line shows an ownership indicator. */
   ownership?: Map<string, Owned>;
+  view: ViewMode;
+  printings: Map<string, Priced<Printing>> | undefined;
+  oracles: Map<string, Priced<OracleCard>> | undefined;
+  onInfo: (oracle: Priced<OracleCard>, scryfallId?: string) => void;
 }) {
   if (lines.length === 0) return <p className="fine-print">No cards yet.</p>;
   return (
-    <ul className="result-list">
-      {lines.map((l) => {
+    <CardItems
+      view={view}
+      items={lines.map((l): CardItem => {
         const ind = ownership ? ownIndicator(ownership.get(l.oracleId)) : null;
-        return (
-          <li key={lineKey(l)} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
-            <div className="result-main">
-              <div className="result-name">
-                {ind && (
-                  <span className={`own-ind ${ind.cls}`} title={ind.label} aria-label={ind.label}>
-                    {ind.icon}
-                  </span>
-                )}
-                {l.quantity}× {l.name}
-              </div>
-              <div className="result-sub">
-                {l.condition} · {l.finish}
-                {l.lang !== 'en' ? ` · ${l.lang}` : ''}
-              </div>
-            </div>
-            {editable && onQty && (
-              <div className="quick-actions">
-                <button onClick={() => onQty(lineKey(l), l.quantity - 1)}>−</button>
-                <button onClick={() => onQty(lineKey(l), l.quantity + 1)}>＋</button>
-              </div>
-            )}
-          </li>
-        );
+        const printing = printings?.get(l.scryfallId);
+        const oracle = oracles?.get(l.oracleId);
+        return {
+          key: lineKey(l),
+          name: l.name,
+          image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+          count: l.quantity,
+          badge: ind?.icon,
+          badgeClass: ind?.cls,
+          badgeTitle: ind?.label,
+          sub: (
+            <>
+              {l.condition} · {l.finish}
+              {l.lang !== 'en' ? ` · ${l.lang}` : ''}
+            </>
+          ),
+          price: linePrice(printing),
+          onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
+          actions:
+            editable && onQty ? (
+              <>
+                <button onClick={() => onQty(lineKey(l), l.quantity - 1)} aria-label="One fewer">−</button>
+                <button onClick={() => onQty(lineKey(l), l.quantity + 1)} aria-label="One more">＋</button>
+              </>
+            ) : undefined,
+        };
       })}
-    </ul>
+    />
+  );
+}
+
+/**
+ * Wishlist⇄tradelist matches, both directions: cards on your tradelist that
+ * the partner wishes for, and cards on their tradelist that you wish for.
+ * Lists are exchanged automatically once both sides are connected.
+ */
+function MatchesPanel({
+  peerWishlist,
+  peerTradelist,
+  view,
+  editable,
+  onAdd,
+  onInfo,
+}: {
+  peerWishlist: WishLine[] | null;
+  peerTradelist: TradeLine[] | null;
+  view: ViewMode;
+  editable: boolean;
+  onAdd: (line: TradeLine, max: number) => void;
+  onInfo: (oracle: Priced<OracleCard>, scryfallId?: string) => void;
+}) {
+  // My tradelist entries (with display data) and my wishlist wants per oracle.
+  const mine = useLiveQuery(async () => {
+    const entries = (await db.collection.toArray()).filter((e) => e.quantityForTrade > 0);
+    const wish = await db.wishlist.toArray();
+    const [oracles, printings] = await Promise.all([
+      getOracleCardsByIds(entries.map((e) => e.oracleId)),
+      getPrintingsByIds(entries.map((e) => e.scryfallId)),
+    ]);
+    const wishQty = new Map<string, number>();
+    for (const w of wish) wishQty.set(w.oracleId, (wishQty.get(w.oracleId) ?? 0) + w.quantity);
+    return { entries, oracles, printings, wishQty };
+  }, []);
+
+  // How many copies the partner wishes for, per oracle card.
+  const theirWishQty = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const w of peerWishlist ?? []) m.set(w.oracleId, (m.get(w.oracleId) ?? 0) + w.quantity);
+    return m;
+  }, [peerWishlist]);
+
+  // Display data for the partner's tradelist lines.
+  const theirs = useLiveQuery(async () => {
+    const lines = peerTradelist ?? [];
+    const [oracles, printings] = await Promise.all([
+      getOracleCardsByIds(lines.map((l) => l.oracleId)),
+      getPrintingsByIds(lines.map((l) => l.scryfallId)),
+    ]);
+    return { oracles, printings };
+  }, [(peerTradelist ?? []).map((l) => l.scryfallId).join(',')]);
+
+  if (!mine) return null;
+  const theyWant = peerWishlist === null ? [] : mine.entries.filter((e) => theirWishQty.has(e.oracleId));
+  const iWant = (peerTradelist ?? []).filter((l) => mine.wishQty.has(l.oracleId));
+
+  // Quiet until both lists have arrived; then either the matches or one line.
+  if (peerWishlist === null && peerTradelist === null) return null;
+  if (theyWant.length === 0 && iWant.length === 0) {
+    if (peerWishlist === null || peerTradelist === null) return null;
+    return <p className="fine-print">No wishlist matches between you two.</p>;
+  }
+
+  return (
+    <div className="offer-pane matches-pane">
+      <h3>
+        Wishlist matches <span className="badge badge-wish">⭐ {theyWant.length + iWant.length}</span>
+      </h3>
+      {theyWant.length > 0 && (
+        <>
+          <p className="fine-print">You have — they want:</p>
+          <CardItems
+            view={view}
+            items={theyWant.map((e): CardItem => {
+              const oracle = mine.oracles.get(e.oracleId);
+              const printing = mine.printings.get(e.scryfallId);
+              const name = oracle?.name ?? '(unknown card)';
+              const wanted = theirWishQty.get(e.oracleId) ?? 1;
+              return {
+                key: e.id,
+                name,
+                image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+                count: e.quantityForTrade,
+                badge: '⭐',
+                badgeClass: 'badge-wish',
+                badgeTitle: `They want ×${wanted}`,
+                sub: (
+                  <>
+                    {e.condition} · {e.finish} · they want ×{wanted}
+                  </>
+                ),
+                price: linePrice(printing),
+                onClick: oracle ? () => onInfo(oracle, e.scryfallId) : undefined,
+                actions: editable ? (
+                  <button
+                    title="Add to your offer"
+                    onClick={() =>
+                      onAdd(
+                        { oracleId: e.oracleId, scryfallId: e.scryfallId, name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang },
+                        e.quantityForTrade,
+                      )
+                    }
+                  >
+                    ＋
+                  </button>
+                ) : undefined,
+              };
+            })}
+          />
+        </>
+      )}
+      {iWant.length > 0 && (
+        <>
+          <p className="fine-print">They have — you want:</p>
+          <CardItems
+            view={view}
+            items={iWant.map((l): CardItem => {
+              const oracle = theirs?.oracles.get(l.oracleId);
+              const printing = theirs?.printings.get(l.scryfallId);
+              const wanted = mine.wishQty.get(l.oracleId) ?? 1;
+              return {
+                key: lineKey(l),
+                name: l.name,
+                image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+                count: l.quantity,
+                badge: '⭐',
+                badgeClass: 'badge-wish',
+                badgeTitle: `On your wishlist (×${wanted})`,
+                sub: (
+                  <>
+                    {l.condition} · {l.finish} · {l.quantity} for trade · you want ×{wanted}
+                  </>
+                ),
+                price: linePrice(printing),
+                onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
+              };
+            })}
+          />
+          <p className="fine-print">Ask them to add these to their offer.</p>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -346,17 +555,19 @@ function OfferList({
 function AddCardsPanel({
   ownership,
   onAdd,
+  onInfo,
 }: {
   ownership: Map<string, Owned> | undefined;
   onAdd: (line: TradeLine, max: number) => void;
+  onInfo: (oracle: Priced<OracleCard>, scryfallId?: string) => void;
 }) {
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<OracleCard[]>([]);
+  const [results, setResults] = useState<Priced<OracleCard>[]>([]);
 
   const tradelist = useLiveQuery(async () => {
     const entries = (await db.collection.toArray()).filter((e) => e.quantityForTrade > 0);
     const oracleMap = await getOracleCardsByIds(entries.map((e) => e.oracleId));
-    return entries.map((e) => ({ e, name: oracleMap.get(e.oracleId)?.name ?? '(unknown card)' }));
+    return entries.map((e) => ({ e, oracle: oracleMap.get(e.oracleId) }));
   }, []);
 
   useEffect(() => {
@@ -392,23 +603,27 @@ function AddCardsPanel({
         results.length === 0 ? (
           <p className="fine-print">No cards match.</p>
         ) : (
-          <ul className="result-list picker-scroll">
-            {results.map((c) => (
-              <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
-                <button className="result-open" style={{ cursor: 'pointer' }} onClick={() => addFromSearch(c)}>
-                  <div className="result-main">
-                    <div className="result-name">{c.name}</div>
-                    <div className="result-sub">
-                      {c.typeLine} <OwnBadge own={ownership?.get(c.oracleId)} />
-                    </div>
-                  </div>
-                  <span className="menu-chevron" aria-hidden>
+          <CardList
+            className="picker-scroll"
+            items={results.map(
+              (c): CardItem => ({
+                key: c.oracleId,
+                name: c.name,
+                image: c.imageSmall ?? null,
+                sub: (
+                  <>
+                    {c.typeLine} <OwnBadge own={ownership?.get(c.oracleId)} />
+                  </>
+                ),
+                onClick: () => onInfo(c),
+                actions: (
+                  <button title="Add to offer" onClick={() => addFromSearch(c)}>
                     ＋
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+                  </button>
+                ),
+              }),
+            )}
+          />
         )
       ) : !tradelist ? (
         <p className="fine-print">Loading tradelist…</p>
@@ -417,32 +632,36 @@ function AddCardsPanel({
       ) : (
         <>
           <p className="fine-print">From your tradelist (or search above for any card):</p>
-          <ul className="result-list picker-scroll">
-            {tradelist.map(({ e, name }) => (
-              <li key={e.id} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
-                <button
-                  className="result-open"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() =>
-                    onAdd(
-                      { oracleId: e.oracleId, scryfallId: e.scryfallId, name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang },
-                      e.quantityForTrade,
-                    )
-                  }
-                >
-                  <div className="result-main">
-                    <div className="result-name">{name}</div>
-                    <div className="result-sub">
-                      {e.condition} · {e.finish} · {e.quantityForTrade} for trade
-                    </div>
-                  </div>
-                  <span className="menu-chevron" aria-hidden>
+          <CardList
+            className="picker-scroll"
+            items={tradelist.map(({ e, oracle }): CardItem => {
+              const name = oracle?.name ?? '(unknown card)';
+              return {
+                key: e.id,
+                name,
+                image: oracle?.imageSmall ?? null,
+                sub: (
+                  <>
+                    {e.condition} · {e.finish} · {e.quantityForTrade} for trade
+                  </>
+                ),
+                onClick: oracle ? () => onInfo(oracle, e.scryfallId) : undefined,
+                actions: (
+                  <button
+                    title="Add to offer"
+                    onClick={() =>
+                      onAdd(
+                        { oracleId: e.oracleId, scryfallId: e.scryfallId, name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang },
+                        e.quantityForTrade,
+                      )
+                    }
+                  >
                     ＋
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+                  </button>
+                ),
+              };
+            })}
+          />
         </>
       )}
     </div>
@@ -453,14 +672,27 @@ function AddCardsPanel({
 function PeerTradelistPanel({
   lines,
   loading,
+  view,
+  onInfo,
   onRefresh,
   onHide,
 }: {
   lines: TradeLine[] | null;
   loading: boolean;
+  view: ViewMode;
+  onInfo: (oracle: Priced<OracleCard>, scryfallId?: string) => void;
   onRefresh: () => void;
   onHide: () => void;
 }) {
+  // Their lines reference cards by id; the local card DB has the display data.
+  const printMap = useLiveQuery(
+    () => getPrintingsByIds((lines ?? []).map((l) => l.scryfallId)),
+    [(lines ?? []).map((l) => l.scryfallId).join(',')],
+  );
+  const oracleMap = useLiveQuery(
+    () => getOracleCardsByIds((lines ?? []).map((l) => l.oracleId)),
+    [(lines ?? []).map((l) => l.oracleId).join(',')],
+  );
   return (
     <div className="picker-panel">
       <div className="meta-row">
@@ -479,19 +711,28 @@ function PeerTradelistPanel({
       ) : lines.length === 0 ? (
         <p className="fine-print">Their tradelist is empty.</p>
       ) : (
-        <ul className="result-list picker-scroll">
-          {lines.map((l) => (
-            <li key={lineKey(l)} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
-              <div className="result-main">
-                <div className="result-name">{l.name}</div>
-                <div className="result-sub">
+        <CardItems
+          view={view}
+          className="picker-scroll"
+          items={lines.map((l): CardItem => {
+            const printing = printMap?.get(l.scryfallId);
+            const oracle = oracleMap?.get(l.oracleId);
+            return {
+              key: lineKey(l),
+              name: l.name,
+              image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+              count: l.quantity,
+              sub: (
+                <>
                   {l.condition} · {l.finish} · {l.quantity} for trade
                   {l.lang !== 'en' ? ` · ${l.lang}` : ''}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+                </>
+              ),
+              price: linePrice(printing),
+              onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
+            };
+          })}
+        />
       )}
     </div>
   );

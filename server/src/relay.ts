@@ -189,19 +189,25 @@ function handle(socket: WebSocket, ctx: SocketCtx, msg: ClientMessage): void {
       if (!session || !ctx.seat) return;
       const seat = ctx.seat;
 
-      // Tradelist browsing is pure peer relay — no state-machine involvement,
-      // nothing stored. Same line cap as offers.
-      if (msg.type === 'tradelist_request' || msg.type === 'tradelist_share') {
-        const peer: Seat = seat === 'a' ? 'b' : 'a';
-        const peerSocket = sockets.get(session.code)?.[peer];
+      // Tradelist browsing and wishlist exchange are pure peer relay — no
+      // state-machine involvement, nothing stored. Same line cap as offers.
+      if (msg.type === 'tradelist_request' || msg.type === 'wishlist_request') {
+        const peerSocket = sockets.get(session.code)?.[seat === 'a' ? 'b' : 'a'];
         if (!peerSocket) return;
-        if (msg.type === 'tradelist_request') {
-          send(peerSocket, { v: PROTOCOL_VERSION, type: 'tradelist_requested', sessionCode: session.code });
-        } else {
-          if (!Array.isArray(msg.lines) || msg.lines.length > config.maxOfferLines) {
-            return sendError(socket, 'offer_too_large', `tradelist exceeds ${config.maxOfferLines} lines`);
-          }
+        const requested = msg.type === 'tradelist_request' ? 'tradelist_requested' : 'wishlist_requested';
+        send(peerSocket, { v: PROTOCOL_VERSION, type: requested, sessionCode: session.code });
+        return;
+      }
+      if (msg.type === 'tradelist_share' || msg.type === 'wishlist_share') {
+        const peerSocket = sockets.get(session.code)?.[seat === 'a' ? 'b' : 'a'];
+        if (!peerSocket) return;
+        if (!Array.isArray(msg.lines) || msg.lines.length > config.maxOfferLines) {
+          return sendError(socket, 'offer_too_large', `list exceeds ${config.maxOfferLines} lines`);
+        }
+        if (msg.type === 'tradelist_share') {
           send(peerSocket, { v: PROTOCOL_VERSION, type: 'tradelist_shared', sessionCode: session.code, lines: msg.lines });
+        } else {
+          send(peerSocket, { v: PROTOCOL_VERSION, type: 'wishlist_shared', sessionCode: session.code, lines: msg.lines });
         }
         return;
       }

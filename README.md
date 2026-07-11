@@ -3,11 +3,6 @@
 A local-first Magic: The Gathering **collection & trading** app for a small local-community beta.
 All user data lives on-device (IndexedDB); the server is a stateless trade relay.
 
-See the plans:
-
-- **[`mtg-pwa-beta-plan.md`](./mtg-pwa-beta-plan.md)** — the authoritative build plan for this beta. Where it conflicts with the ultraplan, this wins.
-- **[`mtg-app-ultraplan.md`](./mtg-app-ultraplan.md)** — long-term architecture reference.
-
 ## Repo layout
 
 | Dir | What | Stack |
@@ -17,7 +12,7 @@ See the plans:
 | `shared/` | Types shared by client and server (card DB, user data, trade protocol). | TypeScript |
 | `pipeline/` | Nightly cron: download Scryfall bulk data, slim it, emit `oracle-slim` / `printings-slim` + `manifest.json`. | TypeScript (Node) |
 
-This is a **single repo with npm workspaces**, deliberately not a monorepo tool (see beta plan §2).
+This is a **single repo with npm workspaces**, deliberately not a monorepo tool.
 
 ## Getting started
 

@@ -18,6 +18,9 @@ npm-debug.log*
 .env.*
 !.env.example
 
+# local planning notes — never commit (public repo)
+notes/
+
 # editor / OS
 .DS_Store
 Thumbs.db

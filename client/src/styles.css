@@ -931,34 +931,167 @@ button.primary {
 }
 .presence-on { color: var(--ok); }
 .presence-off { color: var(--text-dim); }
-.offer-panes {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+
+/* The board: give-column | tool rail | get-column, always side by side. */
+.trade-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: stretch;
 }
-.offer-pane {
+.trade-col {
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 0.75rem;
-}
-.offer-pane h3 {
-  margin: 0 0 0.5rem;
+  padding: 0.6rem;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.trade-col h3 {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: center;
+}
+.trade-rail {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  font-size: 1rem;
+  gap: 0.6rem;
+  padding-top: 1.8rem;
 }
-.trade-footer {
-  margin-top: 0.5rem;
+.rail-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-@media (min-width: 620px) {
-  .offer-panes {
-    flex-direction: row;
-  }
-  .offer-pane {
-    flex: 1;
-    min-width: 0;
-  }
+.trade-empty {
+  margin: 0;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 0.9rem 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  text-align: center;
+}
+.trade-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  font-size: 0.85rem;
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-dim);
+}
+.tile-price {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Column totals + the difference between them, aligned under the board. */
+.trade-totals {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+}
+.trade-total {
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.55rem 0.25rem;
+}
+.trade-diff {
+  min-width: 76px;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  line-height: 1.25;
+}
+.trade-diff strong {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+}
+.trade-diff span {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+.diff-even strong {
+  color: var(--ok);
+}
+.diff-off strong {
+  color: #eac54f;
+}
+
+/* Wishlist-match shortcut chips. */
+.match-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+button.chip {
+  cursor: pointer;
+}
+.chip-wish {
+  border-color: rgba(234, 197, 79, 0.45);
+  background: rgba(234, 197, 79, 0.08);
+  color: #eac54f;
+}
+
+/* Sticky dock: totals + action bar stay visible while the board scrolls. */
+.trade-dock {
+  position: sticky;
+  bottom: calc(var(--tab-h) + var(--safe-bottom));
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--bg);
+  padding: 0.5rem 0;
+  margin-bottom: -1rem;
+}
+.trade-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.6rem 0.75rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.trade-bar-status {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.trade-bar button {
+  flex-shrink: 0;
+}
+
+/* Sheet header for the trade tool sheets. */
+.sheet-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 /* Add-cards / peer-tradelist panels: never let a long list stretch the page. */
@@ -996,10 +1129,6 @@ button.primary {
 }
 .badge.own-yes {
   background: rgba(78, 201, 123, 0.15);
-}
-/* Wishlist⇄tradelist matches during a trade. */
-.matches-pane {
-  border-color: rgba(234, 197, 79, 0.45);
 }
 .badge.badge-wish {
   background: rgba(234, 197, 79, 0.15);

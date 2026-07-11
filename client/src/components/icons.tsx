@@ -15,7 +15,9 @@ export type IconName =
   | 'prices'
   | 'history'
   | 'about'
-  | 'more';
+  | 'more'
+  | 'balance'
+  | 'plus';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -74,6 +76,23 @@ const PATHS: Record<IconName, ReactElement> = {
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="16" x2="12" y2="12" />
       <line x1="12" y1="8" x2="12.01" y2="8" />
+    </>
+  ),
+  // Balance scale — evening out a trade's value.
+  balance: (
+    <>
+      <path d="M12 3v18" />
+      <path d="M7 21h10" />
+      <path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" />
+      <path d="M2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1z" />
+      <path d="M16 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1z" />
+    </>
+  ),
+  // Plus — add cards.
+  plus: (
+    <>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
     </>
   ),
   // Horizontal ellipsis — the "More" overflow.

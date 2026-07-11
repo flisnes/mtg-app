@@ -313,6 +313,49 @@ button.danger-outline {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.meta-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+/* ---- Sort / group controls ---- */
+.sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.sort-controls select {
+  padding: 0.45rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+.sort-controls .sort-dir {
+  background: var(--surface);
+  color: var(--text-dim);
+  padding: 0.45rem 0.7rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.card-group + .card-group {
+  margin-top: 0.9rem;
+}
+.card-group-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 /* ---- View toggle + card grid ---- */

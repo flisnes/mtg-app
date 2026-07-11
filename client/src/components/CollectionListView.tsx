@@ -5,6 +5,7 @@ import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
+import { SortControls, priceValue, sortCards, useCardSort } from './CardSorting.js';
 import { useOpenSearch } from './GlobalSearch.js';
 
 export interface JoinedEntry {
@@ -49,6 +50,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const [tradeOnly, setTradeOnly] = useState(onlyTrade);
   const [editing, setEditing] = useState<JoinedEntry | null>(null);
   const [view, setView] = useViewMode();
+  const [sort, setSort] = useCardSort(onlyTrade ? 'tradelist' : 'collection');
   const openSearch = useOpenSearch();
 
   const sets = useMemo(() => {
@@ -60,17 +62,20 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const filtered = useMemo(() => {
     if (!rows) return [];
     const q = name.trim().toLowerCase();
-    return rows
-      .filter((r) => {
-        if ((onlyTrade || tradeOnly) && r.entry.quantityForTrade <= 0) return false;
-        if (q && !(r.oracle?.name.toLowerCase().includes(q) ?? false)) return false;
-        if (set && r.printing?.set !== set) return false;
-        if (color && !(r.oracle?.colorIdentity.includes(color as Color) ?? false)) return false;
-        if (rarity && r.oracle?.rarity !== rarity) return false;
-        return true;
-      })
-      .sort((a, b) => (a.oracle?.name ?? '').localeCompare(b.oracle?.name ?? ''));
-  }, [rows, name, set, color, rarity, tradeOnly, onlyTrade]);
+    const matching = rows.filter((r) => {
+      if ((onlyTrade || tradeOnly) && r.entry.quantityForTrade <= 0) return false;
+      if (q && !(r.oracle?.name.toLowerCase().includes(q) ?? false)) return false;
+      if (set && r.printing?.set !== set) return false;
+      if (color && !(r.oracle?.colorIdentity.includes(color as Color) ?? false)) return false;
+      if (rarity && r.oracle?.rarity !== rarity) return false;
+      return true;
+    });
+    return sortCards(
+      matching,
+      (r) => ({ name: r.oracle?.name, cmc: r.oracle?.cmc, price: priceValue(r.printing, r.oracle) }),
+      sort,
+    );
+  }, [rows, name, set, color, rarity, tradeOnly, onlyTrade, sort]);
 
   const totalQty = filtered.reduce((s, r) => s + r.entry.quantity, 0);
 
@@ -125,7 +130,10 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         <p className="search-meta">
           {filtered.length} entr{filtered.length === 1 ? 'y' : 'ies'} · {totalQty} card{totalQty === 1 ? '' : 's'}
         </p>
-        <ViewToggle mode={view} onChange={setView} />
+        <div className="meta-actions">
+          <SortControls prefs={sort} onChange={setSort} />
+          <ViewToggle mode={view} onChange={setView} />
+        </div>
       </div>
 
       {filtered.length === 0 ? (

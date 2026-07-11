@@ -7,6 +7,7 @@ import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { addToWishlist, removeFromWishlist } from '../db/dataAccess.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
+import { SortControls, priceValue, sortCards, useCardSort } from '../components/CardSorting.js';
 import { useOpenSearch } from '../components/GlobalSearch.js';
 import { Icon } from '../components/icons.js';
 
@@ -19,6 +20,7 @@ interface WishRow {
 export function Wishlist() {
   const [name, setName] = useState('');
   const [view, setView] = useViewMode();
+  const [sort, setSort] = useCardSort('wishlist');
   const openSearch = useOpenSearch();
   const [editing, setEditing] = useState<WishRow | null>(null);
   const rows = useLiveQuery(async (): Promise<WishRow[]> => {
@@ -37,10 +39,12 @@ export function Wishlist() {
   const filtered = useMemo(() => {
     if (!rows) return [];
     const q = name.trim().toLowerCase();
-    return rows
-      .filter((r) => !q || (r.oracle?.name.toLowerCase().includes(q) ?? false))
-      .sort((a, b) => (a.oracle?.name ?? '').localeCompare(b.oracle?.name ?? ''));
-  }, [rows, name]);
+    return sortCards(
+      rows.filter((r) => !q || (r.oracle?.name.toLowerCase().includes(q) ?? false)),
+      (r) => ({ name: r.oracle?.name, cmc: r.oracle?.cmc, price: priceValue(r.printing, r.oracle) }),
+      sort,
+    );
+  }, [rows, name, sort]);
 
   return (
     <Page title="Wishlist" subtitle="Cards you’re after — surfaced to trade partners during a session.">
@@ -66,7 +70,10 @@ export function Wishlist() {
           />
           <div className="meta-row">
             <p className="search-meta">{filtered.length} card{filtered.length === 1 ? '' : 's'}</p>
-            <ViewToggle mode={view} onChange={setView} />
+            <div className="meta-actions">
+              <SortControls prefs={sort} onChange={setSort} />
+              <ViewToggle mode={view} onChange={setView} />
+            </div>
           </div>
           <CardItems
             view={view}

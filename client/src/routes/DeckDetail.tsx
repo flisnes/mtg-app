@@ -19,6 +19,15 @@ import { downloadText } from '../import/export.js';
 import { useToast } from '../components/Toast.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
+import {
+  SortControls,
+  groupCards,
+  priceValue,
+  sortCards,
+  useCardSort,
+  type CardSortPrefs,
+  type GroupKey,
+} from '../components/CardSorting.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 
 interface Row {
@@ -38,6 +47,7 @@ export function DeckDetail() {
   const [exit, setExit] = useState<MissingCard[] | null>(null);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [view, setView] = useViewMode();
+  const [sort, setSort] = useCardSort('deck', { group: 'type' });
   const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: { id: string; quantity: number } } | null>(null);
 
   const data = useLiveQuery(async () => {
@@ -88,8 +98,8 @@ export function DeckDetail() {
   if (data === undefined) return <div className="page">Loading…</div>;
   if (!data.deck) return <div className="page">Deck not found.</div>;
   const deck = data.deck;
-  const main = data.rows.filter((r) => r.board === 'main').sort(byName);
-  const side = data.rows.filter((r) => r.board === 'side').sort(byName);
+  const main = sortRows(data.rows.filter((r) => r.board === 'main'), sort);
+  const side = sortRows(data.rows.filter((r) => r.board === 'side'), sort);
 
   async function goBack() {
     const candidates = await computeDeckWishlistCandidates(id);
@@ -168,6 +178,7 @@ export function DeckDetail() {
 
       <div className="list-toolbar">
         <p className="search-meta grow">Search above to add cards to this deck.</p>
+        <SortControls prefs={sort} onChange={setSort} groups />
         <ViewToggle mode={view} onChange={setView} />
       </div>
 
@@ -181,8 +192,8 @@ export function DeckDetail() {
         />
       )}
 
-      <Board title="Mainboard" rows={main} view={view} issues={legality.issues} onEdit={setInfo} />
-      <Board title="Sideboard" rows={side} view={view} issues={legality.issues} onEdit={setInfo} />
+      <Board title="Mainboard" rows={main} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} />
+      <Board title="Sideboard" rows={side} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} />
 
       {info && <CardSheet oracleCard={info.card} deckCard={info.deckCard} onClose={() => setInfo(null)} />}
 
@@ -218,8 +229,12 @@ export function DeckDetail() {
   );
 }
 
-function byName(a: Row, b: Row): number {
-  return (a.oracle?.name ?? '').localeCompare(b.oracle?.name ?? '');
+function sortRows(rows: Row[], prefs: CardSortPrefs): Row[] {
+  return sortCards(
+    rows,
+    (r) => ({ name: r.oracle?.name, cmc: r.oracle?.cmc, price: priceValue(r.oracle) }),
+    prefs,
+  );
 }
 
 function LegalityPanel({ report, format }: { report: LegalityReport; format: DeckFormat }) {
@@ -240,18 +255,51 @@ function LegalityPanel({ report, format }: { report: LegalityReport; format: Dec
 function Board({
   title,
   rows,
+  group,
   view,
   issues,
   onEdit,
 }: {
   title: string;
   rows: Row[];
+  group: GroupKey;
   view: ViewMode;
   issues: Map<string, string>;
   onEdit: (target: { card: Priced<OracleCard>; deckCard: { id: string; quantity: number } }) => void;
 }) {
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
+  const toItem = (r: Row): CardItem => {
+    const owned = r.owned >= r.quantity;
+    const issue = issues.get(r.oracleId);
+    return {
+      key: r.id,
+      name: r.oracle?.name ?? '(unknown card)',
+      image: r.oracle?.imageSmall ?? null,
+      count: r.quantity,
+      badge: issue ? '⚠' : owned ? '✓' : undefined,
+      badgeClass: issue ? 'badge-illegal' : 'badge-owned',
+      badgeTitle: issue,
+      dim: !owned,
+      sub: (
+        <>
+          owned {r.owned}
+          {issue && <span className="badge badge-illegal-chip">{issue}</span>}
+        </>
+      ),
+      onClick: r.oracle
+        ? () => onEdit({ card: r.oracle!, deckCard: { id: r.id, quantity: r.quantity } })
+        : undefined,
+      actions: (
+        <>
+          <button onClick={() => setDeckCardQuantity(r.id, r.quantity - 1)} aria-label="One fewer">−</button>
+          <button onClick={() => setDeckCardQuantity(r.id, r.quantity + 1)} aria-label="One more">＋</button>
+          <button onClick={() => removeDeckCard(r.id)} aria-label="Remove">✕</button>
+        </>
+      ),
+    };
+  };
+  const groups = group === 'none' ? null : groupCards(rows, (r) => r.oracle, group);
   return (
     <div className="about-section">
       <h2>
@@ -259,40 +307,17 @@ function Board({
       </h2>
       {rows.length === 0 ? (
         <p className="fine-print">Empty.</p>
+      ) : groups ? (
+        groups.map((g) => (
+          <div key={g.label} className="card-group">
+            <h3 className="card-group-title">
+              {g.label} <span className="badge">{g.items.reduce((s, r) => s + r.quantity, 0)}</span>
+            </h3>
+            <CardItems view={view} items={g.items.map(toItem)} />
+          </div>
+        ))
       ) : (
-        <CardItems
-          view={view}
-          items={rows.map((r): CardItem => {
-            const owned = r.owned >= r.quantity;
-            const issue = issues.get(r.oracleId);
-            return {
-              key: r.id,
-              name: r.oracle?.name ?? '(unknown card)',
-              image: r.oracle?.imageSmall ?? null,
-              count: r.quantity,
-              badge: issue ? '⚠' : owned ? '✓' : undefined,
-              badgeClass: issue ? 'badge-illegal' : 'badge-owned',
-              badgeTitle: issue,
-              dim: !owned,
-              sub: (
-                <>
-                  owned {r.owned}
-                  {issue && <span className="badge badge-illegal-chip">{issue}</span>}
-                </>
-              ),
-              onClick: r.oracle
-                ? () => onEdit({ card: r.oracle!, deckCard: { id: r.id, quantity: r.quantity } })
-                : undefined,
-              actions: (
-                <>
-                  <button onClick={() => setDeckCardQuantity(r.id, r.quantity - 1)} aria-label="One fewer">−</button>
-                  <button onClick={() => setDeckCardQuantity(r.id, r.quantity + 1)} aria-label="One more">＋</button>
-                  <button onClick={() => removeDeckCard(r.id)} aria-label="Remove">✕</button>
-                </>
-              ),
-            };
-          })}
-        />
+        <CardItems view={view} items={rows.map(toItem)} />
       )}
     </div>
   );

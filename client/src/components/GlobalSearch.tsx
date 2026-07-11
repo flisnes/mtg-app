@@ -121,7 +121,7 @@ export function GlobalSearchBar() {
           ref={inputRef}
           className="search-input"
           type="search"
-          placeholder="Search cards… (try “bolt”)"
+          placeholder='Search cards… (bolt, t:goblin, o:"draw a card")'
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(true)}
@@ -290,10 +290,17 @@ function SearchOverlay({
             <ViewToggle mode={view} onChange={setView} />
           </div>
         ) : (
-          <p className="search-meta">
-            Type a card name, or pick a filter, to search the whole card database.
-            {targetHint && ` ${targetHint}`}
-          </p>
+          <>
+            <p className="search-meta">
+              Type a card name, or pick a filter, to search the whole card database.
+              {targetHint && ` ${targetHint}`}
+            </p>
+            <p className="search-meta search-syntax-hint">
+              Scryfall syntax works too: <code>o:"whenever ~ enters"</code> <code>t:legendary</code> <code>c:ug</code>{' '}
+              <code>id&lt;=bg</code> <code>mv&lt;=2</code> <code>r:mythic</code> <code>f:modern</code> — prefix{' '}
+              <code>-</code> to negate.
+            </p>
+          </>
         )}
 
         <CardItems

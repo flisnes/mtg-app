@@ -322,6 +322,15 @@ button.danger-outline {
   margin-left: auto;
 }
 
+.search-syntax-hint code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
 /* ---- Sort / group controls ---- */
 .sort-controls {
   display: flex;

@@ -1,11 +1,16 @@
 import type { Color, OracleCard, Priced, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { withPrices } from './prices.js';
+import { matchesQuery, normalize, parseSearchQuery, type SearchableEntry } from './querySyntax.js';
 
 // Card search (beta plan §2, §6). The oracle set (~37k) is small enough to hold
 // in memory, which gives fast substring matching (a name-prefix index alone
 // would miss "bolt" → "Lightning Bolt") and cheap in-memory filtering. If this
 // ever gets slow, the plan's escape hatch is MiniSearch — not needed at 37k.
+//
+// Queries support Scryfall-style syntax (o:/t:/c:/id:/r:/mv:/f:, negation with
+// `-`) — see querySyntax.ts. Bare words still match names, so plain queries
+// from the import and trade pickers behave as before.
 
 export interface SearchFilters {
   color?: Color | '';
@@ -13,11 +18,7 @@ export interface SearchFilters {
   rarity?: Rarity | '';
 }
 
-interface Indexed {
-  card: OracleCard;
-  normName: string;
-  lowerType: string;
-}
+type Indexed = SearchableEntry;
 
 let cache: Indexed[] | null = null;
 let nameLookup: Map<string, OracleCard> | null = null;
@@ -28,21 +29,28 @@ export function invalidateSearchIndex(): void {
   nameLookup = null;
 }
 
-/** Diacritic-insensitive, lowercased (strips combining marks after NFD). */
-const COMBINING_MARKS = /\p{M}/gu;
-function normalize(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(COMBINING_MARKS, '');
-}
-
-/** Load (and cache) the oracle set for in-memory search, with names pre-normalised. */
+/** Load (and cache) the oracle set for in-memory search, with match fields pre-normalised. */
 async function getIndex(): Promise<Indexed[]> {
   if (cache) return cache;
   const cards = await db.oracleCards.toArray();
-  cache = cards.map((card) => ({
-    card,
-    normName: normalize(card.name),
-    lowerType: card.typeLine.toLowerCase(),
-  }));
+  cache = cards.map((card) => {
+    const normOracle = card.oracleText ? normalize(card.oracleText) : '';
+    // Self-references in oracle text become ~ so o:"whenever ~ enters" works.
+    let normOracleTilde = normOracle;
+    if (normOracle) {
+      for (const face of card.name.split(' // ')) {
+        const normFace = normalize(face);
+        if (normFace) normOracleTilde = normOracleTilde.split(normFace).join('~');
+      }
+    }
+    return {
+      card,
+      normName: normalize(card.name),
+      lowerType: card.typeLine.toLowerCase(),
+      normOracle,
+      normOracleTilde,
+    };
+  });
   return cache;
 }
 
@@ -78,24 +86,26 @@ export async function searchCards(
   limit = 60,
 ): Promise<SearchResult> {
   const index = await getIndex();
-  const q = normalize(query.trim());
+  const parsed = parseSearchQuery(query.trim());
 
   const matches: Array<{ card: OracleCard; score: number }> = [];
   for (const entry of index) {
     if (filters.color && !entry.card.colors.includes(filters.color)) continue;
     if (filters.rarity && entry.card.rarity !== filters.rarity) continue;
     if (filters.type && !entry.lowerType.includes(filters.type.toLowerCase())) continue;
+    if (!matchesQuery(entry, parsed)) continue;
 
+    // Rank: exact > prefix > word-start > substring > scattered words. Terms
+    // other than name text don't affect ranking, only membership.
     let score = 0;
-    if (q) {
+    if (parsed.hasNameTerms) {
       const name = entry.normName;
-      const idx = name.indexOf(q);
-      if (idx === -1) continue;
-      // Rank: exact > prefix > word-start > substring.
-      if (name === q) score = 4;
-      else if (idx === 0) score = 3;
-      else if (name[idx - 1] === ' ') score = 2;
-      else score = 1;
+      const idx = name.indexOf(parsed.namePhrase);
+      if (idx === -1) score = 1;
+      else if (name === parsed.namePhrase) score = 5;
+      else if (idx === 0) score = 4;
+      else if (name[idx - 1] === ' ') score = 3;
+      else score = 2;
     }
     matches.push({ card: entry.card, score });
   }

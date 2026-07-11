@@ -6,6 +6,7 @@ import { Page } from './Page.js';
 import { db } from '../db/schema.js';
 import { createDeck } from '../db/dataAccess.js';
 import { formatLabel } from '../deck/legality.js';
+import { Icon } from '../components/icons.js';
 
 export function Decks() {
   const navigate = useNavigate();
@@ -64,7 +65,7 @@ export function Decks() {
             <li key={deck.id}>
               <Link className="menu-item" to={`/decks/${deck.id}`}>
                 <span className="menu-icon" aria-hidden>
-                  🃏
+                  <Icon name="decks" />
                 </span>
                 <span>
                   {deck.name}

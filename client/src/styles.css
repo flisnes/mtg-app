@@ -569,6 +569,14 @@ button.danger-outline {
   font-size: 0.85rem;
   border-left: 1px solid var(--border);
 }
+/* Buttons that pair a "+" with an SVG glyph: keep them on one baseline. */
+.quick-actions button,
+.tile-footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
 .quick-actions button:first-child {
   border-left: none;
 }
@@ -1039,9 +1047,15 @@ button.primary {
 .tab-active {
   color: var(--accent);
 }
-.tab-icon {
-  font-size: 1.25rem;
+.tab-icon,
+.menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
+}
+.menu-icon {
+  color: var(--text-dim);
 }
 
 /* ---- Wide screens (desktop) ----

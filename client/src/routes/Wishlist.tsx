@@ -8,6 +8,7 @@ import { addToWishlist, removeFromWishlist } from '../db/dataAccess.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
 import { useOpenSearch } from '../components/GlobalSearch.js';
+import { Icon } from '../components/icons.js';
 
 interface WishRow {
   entry: WishlistEntry;
@@ -49,7 +50,8 @@ export function Wishlist() {
         <div className="empty-state">
           <p>Nothing on your wishlist yet.</p>
           <p className="empty-phase">
-            <button className="linklike" onClick={openSearch}>Search for cards</button> and tap ＋⭐.
+            <button className="linklike" onClick={openSearch}>Search for cards</button> and tap +
+            <Icon name="wishlist" size={14} />.
           </p>
         </div>
       ) : (

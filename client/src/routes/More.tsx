@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
 import { Page } from './Page.js';
+import { Icon, type IconName } from '../components/icons.js';
 
-const LINKS = [
-  { to: '/wishlist', label: 'Wishlist', icon: '⭐' },
-  { to: '/tradelist', label: 'Tradelist', icon: '🔁' },
-  { to: '/prices', label: 'Price tracker', icon: '📈' },
-  { to: '/history', label: 'Trade history', icon: '📜' },
-  { to: '/about', label: 'About & settings', icon: 'ℹ️' },
+const LINKS: { to: string; label: string; icon: IconName }[] = [
+  { to: '/wishlist', label: 'Wishlist', icon: 'wishlist' },
+  { to: '/tradelist', label: 'Tradelist', icon: 'tradelist' },
+  { to: '/prices', label: 'Price tracker', icon: 'prices' },
+  { to: '/history', label: 'Trade history', icon: 'history' },
+  { to: '/about', label: 'About & settings', icon: 'about' },
 ];
 
 export function More() {
@@ -17,7 +18,7 @@ export function More() {
           <li key={l.to}>
             <Link className="menu-item" to={l.to}>
               <span className="menu-icon" aria-hidden>
-                {l.icon}
+                <Icon name={l.icon} />
               </span>
               <span>{l.label}</span>
               <span className="menu-chevron" aria-hidden>

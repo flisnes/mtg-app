@@ -6,6 +6,7 @@ import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
+import { Icon } from '../components/icons.js';
 
 function summarize(lines: { quantity: number }[]): number {
   return lines.reduce((s, l) => s + l.quantity, 0);
@@ -28,7 +29,7 @@ export function History() {
             <li key={t.id}>
               <button className="menu-item" style={{ width: '100%' }} onClick={() => setOpen(t)}>
                 <span className="menu-icon" aria-hidden>
-                  🤝
+                  <Icon name="trade" />
                 </span>
                 <span>
                   Trade with Other User

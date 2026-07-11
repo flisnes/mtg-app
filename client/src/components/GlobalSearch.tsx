@@ -14,6 +14,7 @@ import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { useToast } from './Toast.js';
+import { Icon } from './icons.js';
 
 // Card search is the front door to the hobby, so it lives in a persistent
 // header instead of a tab: the input is reachable from every screen, and
@@ -209,32 +210,32 @@ function SearchOverlay({
       case 'collection':
         return (
           <button title="Add to collection" onClick={() => quickCollection(card)}>
-            +🗃️
+            +<Icon name="collection" size={16} />
           </button>
         );
       case 'wishlist':
         return (
           <button title="Add to wishlist" onClick={() => quickWishlist(card)}>
-            +⭐
+            +<Icon name="wishlist" size={16} />
           </button>
         );
       case 'tradelist':
         return (
           <button title="Add to tradelist" onClick={() => quickTradelist(card)}>
-            +🔁
+            +<Icon name="tradelist" size={16} />
           </button>
         );
       default:
         return (
           <>
             <button title="Add to collection" onClick={() => quickCollection(card)}>
-              +🗃️
+              +<Icon name="collection" size={16} />
             </button>
             <button title="Add to wishlist" onClick={() => quickWishlist(card)}>
-              +⭐
+              +<Icon name="wishlist" size={16} />
             </button>
             <button title="Add to tradelist" onClick={() => quickTradelist(card)}>
-              +🔁
+              +<Icon name="tradelist" size={16} />
             </button>
           </>
         );

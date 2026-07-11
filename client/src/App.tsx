@@ -19,12 +19,13 @@ import { Import } from './routes/Import.js';
 import { Export } from './routes/Export.js';
 import { Prices } from './routes/Prices.js';
 import { recordPriceSnapshots } from './price/tracking.js';
+import { Icon, type IconName } from './components/icons.js';
 
-const PRIMARY_NAV = [
-  { to: '/', label: 'Collection', icon: '🗃️', end: true },
-  { to: '/decks', label: 'Decks', icon: '🃏' },
-  { to: '/trade', label: 'Trade', icon: '🤝' },
-  { to: '/more', label: 'More', icon: '⋯' },
+const PRIMARY_NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
+  { to: '/', label: 'Collection', icon: 'collection', end: true },
+  { to: '/decks', label: 'Decks', icon: 'decks' },
+  { to: '/trade', label: 'Trade', icon: 'trade' },
+  { to: '/more', label: 'More', icon: 'more' },
 ];
 
 export function App() {
@@ -120,7 +121,7 @@ export function App() {
             className={({ isActive }) => (isActive ? 'tab tab-active' : 'tab')}
           >
             <span className="tab-icon" aria-hidden>
-              {item.icon}
+              <Icon name={item.icon} size={22} />
             </span>
             <span className="tab-label">{item.label}</span>
           </NavLink>

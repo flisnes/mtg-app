@@ -7,10 +7,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { matchPath, useLocation } from 'react-router-dom';
-import type { DeckBoard, OracleCard, Priced, Rarity } from '@mtg/shared';
+import type { Color, DeckBoard, DeckFormat, OracleCard, Priced, Rarity } from '@mtg/shared';
 import { searchCards, type SearchFilters } from '../cardDb/search.js';
+import { db } from '../db/schema.js';
 import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
+import { formatLabel } from '../deck/legality.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { useToast } from './Toast.js';
@@ -152,8 +155,29 @@ function SearchOverlay({
   const [searching, setSearching] = useState(false);
   const [sheetCard, setSheetCard] = useState<Priced<OracleCard> | null>(null);
   const [view, setView] = useViewMode();
+  const [deckLegalOnly, setDeckLegalOnly] = useState(true);
   const toast = useToast();
   const target = useSearchTarget();
+
+  // Searching from a deck filters to cards you could actually play there: legal
+  // in the deck's format and, for Commander, within the commander's identity.
+  const deckId = target.kind === 'deck' ? target.deckId : undefined;
+  const deckCtx = useLiveQuery(async () => {
+    if (!deckId) return null;
+    const deck = await db.decks.get(deckId);
+    if (!deck) return null;
+    const format: DeckFormat = deck.format ?? 'casual';
+    let identity: Color[] | null = null;
+    if (format === 'commander') {
+      const commanders = await db.deckCards.where('[deckId+board]').equals([deckId, 'commander']).toArray();
+      if (commanders.length) {
+        const oracles = await db.oracleCards.bulkGet(commanders.map((c) => c.oracleId));
+        identity = [...new Set(oracles.filter(Boolean).flatMap((o) => o!.colorIdentity))];
+      }
+    }
+    return { format, identity };
+  }, [deckId]);
+  const deckFilterActive = deckLegalOnly && !!deckCtx && deckCtx.format !== 'casual';
 
   const hasCriteria = query.trim().length > 0 || !!filters.color || !!filters.rarity || !!filters.type;
 
@@ -165,13 +189,16 @@ function SearchOverlay({
     }
     setSearching(true);
     const handle = setTimeout(async () => {
-      const res = await searchCards(query, filters);
+      const effective: SearchFilters = deckFilterActive
+        ? { ...filters, legalIn: deckCtx!.format, identity: deckCtx!.identity ?? undefined }
+        : filters;
+      const res = await searchCards(query, effective);
       setResults(res.cards);
       setTotal(res.total);
       setSearching(false);
     }, 120);
     return () => clearTimeout(handle);
-  }, [query, filters, hasCriteria]);
+  }, [query, filters, hasCriteria, deckFilterActive, deckCtx]);
 
   const setFilter = (key: keyof SearchFilters, value: string) =>
     setFilters((f) => ({ ...f, [key]: value || undefined }));
@@ -191,7 +218,8 @@ function SearchOverlay({
   }
   async function quickDeck(card: OracleCard, deckId: string, board: DeckBoard) {
     await addDeckCard({ deckId, oracleId: card.oracleId, board });
-    toast(`Added ${card.name}${board === 'side' ? ' (sideboard)' : ''} to deck`);
+    const suffix = board === 'side' ? ' (sideboard)' : board === 'commander' ? ' (commander)' : '';
+    toast(`Added ${card.name}${suffix} to deck`);
   }
 
   function actionsFor(card: Priced<OracleCard>): ReactNode {
@@ -205,6 +233,11 @@ function SearchOverlay({
             <button title="Add to sideboard" onClick={() => quickDeck(card, target.deckId, 'side')}>
               +SB
             </button>
+            {deckCtx?.format === 'commander' && (
+              <button title="Add as commander" onClick={() => quickDeck(card, target.deckId, 'commander')}>
+                +Cmdr
+              </button>
+            )}
           </>
         );
       case 'collection':
@@ -278,6 +311,13 @@ function SearchOverlay({
               </option>
             ))}
           </select>
+          {deckCtx && deckCtx.format !== 'casual' && (
+            <label className="deck-filter-toggle" title="Hide cards this deck can't legally play">
+              <input type="checkbox" checked={deckLegalOnly} onChange={(e) => setDeckLegalOnly(e.target.checked)} />
+              {formatLabel(deckCtx.format)}-legal
+              {deckCtx.identity && ` · ${deckCtx.identity.length ? deckCtx.identity.join('') : 'C'} identity`}
+            </label>
+          )}
         </div>
 
         {hasCriteria ? (
@@ -326,7 +366,13 @@ function SearchOverlay({
         {sheetCard && (
           <CardSheet
             oracleCard={sheetCard}
-            addTarget={target.kind === 'default' ? undefined : target}
+            addTarget={
+              target.kind === 'default'
+                ? undefined
+                : target.kind === 'deck'
+                  ? { ...target, format: deckCtx?.format }
+                  : target
+            }
             onClose={() => setSheetCard(null)}
           />
         )}

@@ -26,7 +26,11 @@ function parseDeckLines(text: string): DeckTextLine[] {
       board = 'side';
       continue;
     }
-    if (/^(deck|commander|companion|maybeboard|about)\b/i.test(line) && !/^\d/.test(line)) {
+    if (/^commander\b/i.test(line) && !/^\d/.test(line)) {
+      board = 'commander';
+      continue;
+    }
+    if (/^(deck|companion|maybeboard|about)\b/i.test(line) && !/^\d/.test(line)) {
       board = 'main';
       continue;
     }
@@ -59,8 +63,13 @@ export async function resolveDeckText(text: string): Promise<DeckImportResult> {
 export function buildDeckText(
   main: Array<{ name: string; quantity: number }>,
   side: Array<{ name: string; quantity: number }>,
+  commander: Array<{ name: string; quantity: number }> = [],
 ): string {
-  const lines = ['Deck', ...main.map((c) => `${c.quantity} ${c.name}`)];
+  const lines: string[] = [];
+  if (commander.length) {
+    lines.push('Commander', ...commander.map((c) => `${c.quantity} ${c.name}`), '');
+  }
+  lines.push('Deck', ...main.map((c) => `${c.quantity} ${c.name}`));
   if (side.length) {
     lines.push('', 'Sideboard', ...side.map((c) => `${c.quantity} ${c.name}`));
   }

@@ -1,4 +1,4 @@
-import type { Color, OracleCard, Priced, Rarity } from '@mtg/shared';
+import type { Color, DeckFormat, Format, OracleCard, Priced, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { withPrices } from './prices.js';
 import { matchesQuery, normalize, parseSearchQuery, type SearchableEntry } from './querySyntax.js';
@@ -16,6 +16,10 @@ export interface SearchFilters {
   color?: Color | '';
   type?: string;
   rarity?: Rarity | '';
+  /** Only cards legal (or restricted) in this format; 'casual' is a no-op. */
+  legalIn?: DeckFormat;
+  /** Only cards whose color identity fits within this set (Commander). */
+  identity?: readonly Color[];
 }
 
 type Indexed = SearchableEntry;
@@ -87,12 +91,19 @@ export async function searchCards(
 ): Promise<SearchResult> {
   const index = await getIndex();
   const parsed = parseSearchQuery(query.trim());
+  const legalIn = filters.legalIn && filters.legalIn !== 'casual' ? (filters.legalIn as Format) : undefined;
 
   const matches: Array<{ card: OracleCard; score: number }> = [];
   for (const entry of index) {
     if (filters.color && !entry.card.colors.includes(filters.color)) continue;
     if (filters.rarity && entry.card.rarity !== filters.rarity) continue;
     if (filters.type && !entry.lowerType.includes(filters.type.toLowerCase())) continue;
+    if (legalIn && entry.card.legalities) {
+      // Cards imported before legality data existed pass (no data ≠ illegal).
+      const status = entry.card.legalities[legalIn];
+      if (status !== 'legal' && status !== 'restricted') continue;
+    }
+    if (filters.identity && !entry.card.colorIdentity.every((c) => filters.identity!.includes(c))) continue;
     if (!matchesQuery(entry, parsed)) continue;
 
     // Rank: exact > prefix > word-start > substring > scattered words. Terms

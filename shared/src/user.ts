@@ -39,7 +39,8 @@ export interface WishlistEntry {
   createdAt: number;
 }
 
-export type DeckBoard = 'main' | 'side';
+/** 'commander' is the command zone: counts toward Commander's 100, sets the color identity. */
+export type DeckBoard = 'main' | 'side' | 'commander';
 
 /** A deck's format; 'casual' means no legality checks. */
 export type DeckFormat = Format | 'casual';

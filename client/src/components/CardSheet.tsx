@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { CollectionEntry, Condition, DeckBoard, Finish, OracleCard, Priced, Printing, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Condition, DeckBoard, DeckFormat, Finish, OracleCard, Priced, Printing, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS } from '@mtg/shared';
 import {
   addDeckCard,
@@ -34,7 +34,7 @@ export type AddTarget =
   | { kind: 'collection' }
   | { kind: 'wishlist' }
   | { kind: 'tradelist' }
-  | { kind: 'deck'; deckId: string };
+  | { kind: 'deck'; deckId: string; format?: DeckFormat };
 
 const ADD_LABEL: Record<AddTarget['kind'], string> = {
   collection: 'Add to collection',
@@ -293,6 +293,11 @@ export function CardSheet({
             <button onClick={onClose} disabled={busy}>
               Cancel
             </button>
+            {deckAdd && addTo.kind === 'deck' && addTo.format === 'commander' && (
+              <button onClick={() => save('commander')} disabled={busy}>
+                Add as commander
+              </button>
+            )}
             {deckAdd && (
               <button onClick={() => save('side')} disabled={busy}>
                 Add to sideboard

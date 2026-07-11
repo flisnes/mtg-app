@@ -268,7 +268,7 @@ export async function clearTradelist(): Promise<number> {
 
 // ---------------------------------------------------------------------------
 // Decks (beta plan §4). Deck slots reference oracle cards ("4x Lightning Bolt");
-// no format/legality checks in the beta.
+// legality checking lives in deck/legality.ts.
 // ---------------------------------------------------------------------------
 
 export async function createDeck(name: string, format: DeckFormat = 'casual'): Promise<string> {
@@ -339,6 +339,26 @@ export async function addDeckCardsBulk(
     }
     await db.deckCards.bulkPut(writes);
     await db.decks.update(deckId, { updatedAt: Date.now() });
+  });
+}
+
+/** Move a slot to another board, merging into an existing slot for the same card there. */
+export async function moveDeckCard(id: string, board: DeckBoard): Promise<void> {
+  await db.transaction('rw', db.deckCards, db.decks, async () => {
+    const card = await db.deckCards.get(id);
+    if (!card || card.board === board) return;
+    const existing = await db.deckCards
+      .where('[deckId+board]')
+      .equals([card.deckId, board])
+      .and((c) => c.oracleId === card.oracleId)
+      .first();
+    if (existing) {
+      await db.deckCards.update(existing.id, { quantity: existing.quantity + card.quantity });
+      await db.deckCards.delete(id);
+    } else {
+      await db.deckCards.update(id, { board });
+    }
+    await db.decks.update(card.deckId, { updatedAt: Date.now() });
   });
 }
 

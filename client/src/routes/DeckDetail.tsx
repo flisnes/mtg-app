@@ -7,6 +7,7 @@ import { getOracleCardsByIds, getOwnedCountsFor, computeDeckWishlistCandidates, 
 import {
   addDeckCardsBulk,
   deleteDeck,
+  moveDeckCard,
   removeDeckCard,
   renameDeck,
   setDeckCardQuantity,
@@ -98,6 +99,8 @@ export function DeckDetail() {
   if (data === undefined) return <div className="page">Loading…</div>;
   if (!data.deck) return <div className="page">Deck not found.</div>;
   const deck = data.deck;
+  const isCommander = (deck.format ?? 'casual') === 'commander';
+  const commander = sortRows(data.rows.filter((r) => r.board === 'commander'), sort);
   const main = sortRows(data.rows.filter((r) => r.board === 'main'), sort);
   const side = sortRows(data.rows.filter((r) => r.board === 'side'), sort);
 
@@ -117,6 +120,7 @@ export function DeckDetail() {
     const text = buildDeckText(
       main.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
       side.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
+      commander.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
     );
     downloadText(`${deck.name.replace(/[^\w-]+/g, '_')}.txt`, text);
     toast('Exported deck');
@@ -192,8 +196,20 @@ export function DeckDetail() {
         />
       )}
 
-      <Board title="Mainboard" rows={main} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} />
-      <Board title="Sideboard" rows={side} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} />
+      {(isCommander || commander.length > 0) && (
+        <Board
+          title="Commander"
+          rows={commander}
+          group="none"
+          view={view}
+          issues={legality.issues}
+          onEdit={setInfo}
+          commanderDeck={isCommander}
+          emptyHint="No commander yet — use ♛ on a card below, or the +Cmdr button in search."
+        />
+      )}
+      <Board title="Mainboard" rows={main} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} />
+      <Board title="Sideboard" rows={side} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} />
 
       {info && <CardSheet oracleCard={info.card} deckCard={info.deckCard} onClose={() => setInfo(null)} />}
 
@@ -259,6 +275,8 @@ function Board({
   view,
   issues,
   onEdit,
+  commanderDeck = false,
+  emptyHint,
 }: {
   title: string;
   rows: Row[];
@@ -266,6 +284,9 @@ function Board({
   view: ViewMode;
   issues: Map<string, string>;
   onEdit: (target: { card: Priced<OracleCard>; deckCard: { id: string; quantity: number } }) => void;
+  /** Commander-format deck: show move-to/from-command-zone actions. */
+  commanderDeck?: boolean;
+  emptyHint?: string;
 }) {
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
@@ -292,6 +313,12 @@ function Board({
         : undefined,
       actions: (
         <>
+          {commanderDeck &&
+            (r.board === 'commander' ? (
+              <button onClick={() => moveDeckCard(r.id, 'main')} aria-label="Move to mainboard" title="Move to mainboard">↓</button>
+            ) : (
+              <button onClick={() => moveDeckCard(r.id, 'commander')} aria-label="Make commander" title="Make commander">♛</button>
+            ))}
           <button onClick={() => setDeckCardQuantity(r.id, r.quantity - 1)} aria-label="One fewer">−</button>
           <button onClick={() => setDeckCardQuantity(r.id, r.quantity + 1)} aria-label="One more">＋</button>
           <button onClick={() => removeDeckCard(r.id)} aria-label="Remove">✕</button>
@@ -306,7 +333,7 @@ function Board({
         {title} <span className="badge">{count}</span>
       </h2>
       {rows.length === 0 ? (
-        <p className="fine-print">Empty.</p>
+        <p className="fine-print">{emptyHint ?? 'Empty.'}</p>
       ) : groups ? (
         groups.map((g) => (
           <div key={g.label} className="card-group">

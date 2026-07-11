@@ -6,17 +6,23 @@ import type { ReactNode } from 'react';
 export function Page({
   title,
   subtitle,
+  menu,
   children,
 }: {
   title: string;
   subtitle?: string;
+  /** Page-specific options, top-right of the header (usually an OptionsMenu). */
+  menu?: ReactNode;
   children?: ReactNode;
 }) {
   return (
     <section className="page">
       <header className="page-header">
-        <h1>{title}</h1>
-        {subtitle && <p className="page-subtitle">{subtitle}</p>}
+        <div className="page-header-text">
+          <h1>{title}</h1>
+          {subtitle && <p className="page-subtitle">{subtitle}</p>}
+        </div>
+        {menu}
       </header>
       <div className="page-body">{children}</div>
     </section>

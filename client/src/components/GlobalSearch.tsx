@@ -7,10 +7,10 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { useLocation } from 'react-router-dom';
-import type { OracleCard, Priced, Rarity } from '@mtg/shared';
+import { matchPath, useLocation } from 'react-router-dom';
+import type { DeckBoard, OracleCard, Priced, Rarity } from '@mtg/shared';
 import { searchCards, type SearchFilters } from '../cardDb/search.js';
-import { addToCollection, addToWishlist } from '../db/dataAccess.js';
+import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { useToast } from './Toast.js';
@@ -29,6 +29,26 @@ const COLORS = [
   { value: 'G', label: 'Green' },
 ] as const;
 const TYPES = ['Creature', 'Instant', 'Sorcery', 'Artifact', 'Enchantment', 'Planeswalker', 'Land'];
+
+// What the quick-action buttons on each result do depends on where the user
+// searched from: the deck editor adds to that deck, the collection adds to the
+// collection, and so on. Everywhere else offers the generic trio.
+type SearchTarget =
+  | { kind: 'deck'; deckId: string }
+  | { kind: 'collection' }
+  | { kind: 'wishlist' }
+  | { kind: 'tradelist' }
+  | { kind: 'default' };
+
+function useSearchTarget(): SearchTarget {
+  const { pathname } = useLocation();
+  const deckId = matchPath('/decks/:id', pathname)?.params.id;
+  if (deckId) return { kind: 'deck', deckId };
+  if (pathname === '/' || pathname === '/collection') return { kind: 'collection' };
+  if (pathname === '/wishlist') return { kind: 'wishlist' };
+  if (pathname === '/tradelist') return { kind: 'tradelist' };
+  return { kind: 'default' };
+}
 
 function price(card: Priced<OracleCard>): string {
   if (card.priceEur != null) return `€${card.priceEur.toFixed(2)}`;
@@ -137,6 +157,7 @@ function SearchOverlay({
   const [sheetCard, setSheetCard] = useState<Priced<OracleCard> | null>(null);
   const [view, setView] = useViewMode();
   const toast = useToast();
+  const target = useSearchTarget();
 
   const hasCriteria = query.trim().length > 0 || !!filters.color || !!filters.rarity || !!filters.type;
 
@@ -172,6 +193,66 @@ function SearchOverlay({
     await addToCollection({ oracleId: card.oracleId, scryfallId: card.defaultScryfallId, condition: 'NM', finish: 'nonfoil', lang: 'en', quantityForTrade: 1 });
     toast(`Added ${card.name} to tradelist`);
   }
+  async function quickDeck(card: OracleCard, deckId: string, board: DeckBoard) {
+    await addDeckCard({ deckId, oracleId: card.oracleId, board });
+    toast(`Added ${card.name}${board === 'side' ? ' (sideboard)' : ''} to deck`);
+  }
+
+  function actionsFor(card: Priced<OracleCard>): ReactNode {
+    switch (target.kind) {
+      case 'deck':
+        return (
+          <>
+            <button title="Add to mainboard" onClick={() => quickDeck(card, target.deckId, 'main')}>
+              +Main
+            </button>
+            <button title="Add to sideboard" onClick={() => quickDeck(card, target.deckId, 'side')}>
+              +SB
+            </button>
+          </>
+        );
+      case 'collection':
+        return (
+          <button title="Add to collection" onClick={() => quickCollection(card)}>
+            +🗃️
+          </button>
+        );
+      case 'wishlist':
+        return (
+          <button title="Add to wishlist" onClick={() => quickWishlist(card)}>
+            +⭐
+          </button>
+        );
+      case 'tradelist':
+        return (
+          <button title="Add to tradelist" onClick={() => quickTradelist(card)}>
+            +🔁
+          </button>
+        );
+      default:
+        return (
+          <>
+            <button title="Add to collection" onClick={() => quickCollection(card)}>
+              +🗃️
+            </button>
+            <button title="Add to wishlist" onClick={() => quickWishlist(card)}>
+              +⭐
+            </button>
+            <button title="Add to tradelist" onClick={() => quickTradelist(card)}>
+              +🔁
+            </button>
+          </>
+        );
+    }
+  }
+
+  const targetHint = {
+    deck: 'Results add straight into this deck (main or sideboard).',
+    collection: 'Results add straight into your collection.',
+    wishlist: 'Results add straight onto your wishlist.',
+    tradelist: 'Results add to your collection, marked for trade.',
+    default: null,
+  }[target.kind];
 
   return (
     <div className="search-overlay">
@@ -213,7 +294,10 @@ function SearchOverlay({
             <ViewToggle mode={view} onChange={setView} />
           </div>
         ) : (
-          <p className="search-meta">Type a card name, or pick a filter, to search the whole card database.</p>
+          <p className="search-meta">
+            Type a card name, or pick a filter, to search the whole card database.
+            {targetHint && ` ${targetHint}`}
+          </p>
         )}
 
         <CardItems
@@ -231,19 +315,7 @@ function SearchOverlay({
               ),
               price: price(card),
               onClick: () => setSheetCard(card),
-              actions: (
-                <>
-                  <button title="Add to collection" onClick={() => quickCollection(card)}>
-                    +🗃️
-                  </button>
-                  <button title="Add to wishlist" onClick={() => quickWishlist(card)}>
-                    +⭐
-                  </button>
-                  <button title="Add to tradelist" onClick={() => quickTradelist(card)}>
-                    +🔁
-                  </button>
-                </>
-              ),
+              actions: actionsFor(card),
             }),
           )}
         />

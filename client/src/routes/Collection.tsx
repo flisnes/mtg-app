@@ -1,23 +1,24 @@
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Page } from './Page.js';
 import { CollectionListView } from '../components/CollectionListView.js';
-import { useOpenSearch } from '../components/GlobalSearch.js';
+import { OptionsMenu } from '../components/OptionsMenu.js';
 
 export function Collection() {
-  const openSearch = useOpenSearch();
+  const navigate = useNavigate();
   return (
-    <Page title="Collection" subtitle="Everything you own — filter, edit, import, and export.">
-      <div className="list-toolbar">
-        <button className="chip" onClick={openSearch}>
-          ＋ Add cards
-        </button>
-        <Link className="chip" to="/import">
-          ⬆ Import
-        </Link>
-        <Link className="chip" to="/export">
-          ⬇ Export
-        </Link>
-      </div>
+    <Page
+      title="Collection"
+      subtitle="Everything you own — search above to add cards."
+      menu={
+        <OptionsMenu
+          label="Collection options"
+          actions={[
+            { label: 'Import', icon: '⬆', onClick: () => navigate('/import') },
+            { label: 'Export', icon: '⬇', onClick: () => navigate('/export') },
+          ]}
+        />
+      }
+    >
       <CollectionListView />
     </Page>
   );

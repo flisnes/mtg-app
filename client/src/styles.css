@@ -148,6 +148,15 @@ button.danger-outline {
 }
 
 /* ---- Pages ---- */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.page-header-text {
+  min-width: 0;
+}
 .page-header h1 {
   margin: 0.25rem 0 0.25rem;
   font-size: 1.5rem;
@@ -765,6 +774,58 @@ button.primary {
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text-dim);
+}
+
+/* ---- Options (⋯) menu ---- */
+.options-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+.options-trigger {
+  font-size: 1.3rem;
+  line-height: 1;
+  padding: 0.35rem 0.7rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+}
+.options-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  z-index: 40;
+}
+.options-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.options-item:active {
+  background: var(--surface);
+}
+.options-item-danger {
+  color: var(--danger);
+}
+.options-icon {
+  width: 1.2rem;
+  text-align: center;
 }
 
 /* ---- Deck detail ---- */

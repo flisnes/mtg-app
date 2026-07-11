@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DECK_FORMATS, type DeckBoard, type DeckFormat, type OracleCard, type Priced } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getOwnedCountsFor, computeDeckWishlistCandidates, type MissingCard } from '../db/queries.js';
 import {
-  addDeckCard,
   addDeckCardsBulk,
   deleteDeck,
   removeDeckCard,
@@ -15,12 +14,12 @@ import {
 } from '../db/dataAccess.js';
 import { addToWishlist } from '../db/dataAccess.js';
 import { checkDeckLegality, formatLabel, type LegalityReport } from '../deck/legality.js';
-import { searchCards } from '../cardDb/search.js';
 import { resolveDeckText, buildDeckText } from '../deck/deckText.js';
 import { downloadText } from '../import/export.js';
 import { useToast } from '../components/Toast.js';
 import { CardSheet } from '../components/CardSheet.js';
-import { CardItems, CardList, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
+import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
+import { OptionsMenu } from '../components/OptionsMenu.js';
 
 interface Row {
   id: string;
@@ -35,11 +34,11 @@ export function DeckDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const [panel, setPanel] = useState<'none' | 'add' | 'import'>('none');
+  const [showImport, setShowImport] = useState(false);
   const [exit, setExit] = useState<MissingCard[] | null>(null);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [view, setView] = useViewMode();
-  const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard?: { id: string; quantity: number } } | null>(null);
+  const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: { id: string; quantity: number } } | null>(null);
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -119,9 +118,23 @@ export function DeckDetail() {
         <button className="linklike" onClick={goBack}>
           ‹ Decks
         </button>
-        <button className="danger-outline" onClick={async () => { await deleteDeck(id); navigate('/decks'); }}>
-          Delete
-        </button>
+        <OptionsMenu
+          label="Deck options"
+          actions={[
+            { label: 'Import list', icon: '⬆', onClick: () => setShowImport((v) => !v) },
+            { label: 'Export', icon: '⬇', onClick: exportDeck },
+            {
+              label: 'Delete deck',
+              icon: '🗑',
+              danger: true,
+              onClick: async () => {
+                if (!window.confirm(`Delete “${deck.name}”? This can’t be undone.`)) return;
+                await deleteDeck(id);
+                navigate('/decks');
+              },
+            },
+          ]}
+        />
       </div>
 
       <input
@@ -154,22 +167,15 @@ export function DeckDetail() {
       <LegalityPanel report={legality} format={deck.format ?? 'casual'} />
 
       <div className="list-toolbar">
-        <button className={panel === 'add' ? 'primary' : ''} onClick={() => setPanel(panel === 'add' ? 'none' : 'add')}>
-          ＋ Add cards
-        </button>
-        <button className={panel === 'import' ? 'primary' : ''} onClick={() => setPanel(panel === 'import' ? 'none' : 'import')}>
-          ⬆ Import list
-        </button>
-        <button onClick={exportDeck}>⬇ Export</button>
+        <p className="search-meta grow">Search above to add cards to this deck.</p>
         <ViewToggle mode={view} onChange={setView} />
       </div>
 
-      {panel === 'add' && <AddPanel deckId={id} onAdded={(n) => toast(`Added ${n}`)} onInfo={(card) => setInfo({ card })} />}
-      {panel === 'import' && (
+      {showImport && (
         <ImportPanel
           deckId={id}
           onDone={(added, unmatched) => {
-            setPanel('none');
+            setShowImport(false);
             toast(`Imported ${added} cards${unmatched ? `, ${unmatched} unmatched` : ''}`);
           }}
         />
@@ -178,9 +184,7 @@ export function DeckDetail() {
       <Board title="Mainboard" rows={main} view={view} issues={legality.issues} onEdit={setInfo} />
       <Board title="Sideboard" rows={side} view={view} issues={legality.issues} onEdit={setInfo} />
 
-      {info && (
-        <CardSheet oracleCard={info.card} deckCard={info.deckCard} readOnly={!info.deckCard} onClose={() => setInfo(null)} />
-      )}
+      {info && <CardSheet oracleCard={info.card} deckCard={info.deckCard} onClose={() => setInfo(null)} />}
 
       {exit && (
         <div className="sheet-backdrop" onClick={() => navigate('/decks')}>
@@ -290,55 +294,6 @@ function Board({
           })}
         />
       )}
-    </div>
-  );
-}
-
-function AddPanel({
-  deckId,
-  onAdded,
-  onInfo,
-}: {
-  deckId: string;
-  onAdded: (name: string) => void;
-  onInfo: (card: Priced<OracleCard>) => void;
-}) {
-  const [q, setQ] = useState('');
-  const [results, setResults] = useState<Priced<OracleCard>[]>([]);
-  useEffect(() => {
-    if (!q.trim()) {
-      setResults([]);
-      return;
-    }
-    const h = setTimeout(async () => setResults((await searchCards(q, {}, 20)).cards), 120);
-    return () => clearTimeout(h);
-  }, [q]);
-
-  async function add(card: OracleCard, board: DeckBoard) {
-    await addDeckCard({ deckId, oracleId: card.oracleId, board });
-    onAdded(`${card.name}${board === 'side' ? ' (SB)' : ''}`);
-  }
-
-  return (
-    <div className="about-section">
-      <input className="search-input" placeholder="Search cards to add…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
-      <CardList
-        items={results.map(
-          (card): CardItem => ({
-            key: card.oracleId,
-            name: card.name,
-            image: card.imageSmall ?? null,
-            sub: card.typeLine,
-            onClick: () => onInfo(card),
-            actions: (
-              <>
-                <button onClick={() => add(card, 'main')}>+Main</button>
-                <button onClick={() => add(card, 'side')}>+SB</button>
-              </>
-            ),
-          }),
-        )}
-      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { Page } from './Page.js';
 import { CollectionListView } from '../components/CollectionListView.js';
+import { OptionsMenu } from '../components/OptionsMenu.js';
 import { clearTradelist } from '../db/dataAccess.js';
 import { useToast } from '../components/Toast.js';
 
@@ -13,11 +14,17 @@ export function Tradelist() {
   }
 
   return (
-    <Page title="Tradelist" subtitle="Copies you’ve marked for trade (these also live in your collection).">
+    <Page
+      title="Tradelist"
+      subtitle="Copies you’ve marked for trade (these also live in your collection)."
+      menu={
+        <OptionsMenu
+          label="Tradelist options"
+          actions={[{ label: 'Remove all from tradelist', icon: '✕', danger: true, onClick: onClearAll }]}
+        />
+      }
+    >
       <CollectionListView onlyTrade />
-      <button onClick={onClearAll} style={{ alignSelf: 'flex-start' }}>
-        Remove all from tradelist
-      </button>
     </Page>
   );
 }

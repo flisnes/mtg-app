@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Page } from './Page.js';
 import { APP_VERSION } from '../version.js';
 import { Link } from 'react-router-dom';
+import { DataTransfer } from '../components/DataTransfer.js';
 import { deleteAllUserData, watchAllCollection } from '../db/dataAccess.js';
 import { getSetting } from '../db/settings.js';
 import { formatDiagnostics } from '../errorLog.js';
@@ -63,6 +64,11 @@ export function About() {
           Everything is stored only on this device. The trade server never stores your data — trades live on your
           device. Clearing your browser data will erase your collection, so export regularly (Phase 2).
         </p>
+        <p className="fine-print">
+          Moving to a new phone or browser? Transfer your collection, lists and decks with a one-time code — the data
+          goes straight to the other device and is never stored on the server.
+        </p>
+        <DataTransfer />
         {done ? (
           <p role="status">All local data deleted.</p>
         ) : confirming ? (

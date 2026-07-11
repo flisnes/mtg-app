@@ -1,21 +1,15 @@
-import { randomInt, randomUUID } from 'node:crypto';
-import {
-  CODE_ALPHABET,
-  CODE_LENGTH,
-  type Seat,
-  type SessionSnapshot,
-  type TradeErrorCode,
-  type TradeLine,
-  type TradeState,
-} from '@mtg/shared';
+import { randomUUID } from 'node:crypto';
+import type { Seat, SessionSnapshot, TradeLine, TradeState } from '@mtg/shared';
+import { CodeStore, TransitionError, type CodeEntry } from './codeStore.js';
 import { config } from './config.js';
+
+export { TransitionError };
 
 // In-memory trade sessions (beta plan §7). The server is authoritative for
 // STATE; it holds only the opaque offers, the state machine, and ephemeral
 // resume tokens — no names, no persistence. Clients own their card data.
 
-export interface Session {
-  code: string;
+export interface Session extends CodeEntry {
   sessionId: string;
   state: TradeState;
   offers: Record<Seat, TradeLine[]>;
@@ -23,63 +17,42 @@ export interface Session {
   confirmed: Record<Seat, boolean>;
   tokens: { a: string; b: string | null };
   present: Record<Seat, boolean>;
-  ip: string;
-  createdAt: number;
-  ttlTimer?: ReturnType<typeof setTimeout>;
-}
-
-export class TransitionError extends Error {
-  constructor(public code: TradeErrorCode, message?: string) {
-    super(message ?? code);
-  }
+  /** Per-seat disconnect timers (beta plan §7 reconnect window). */
+  graceTimers: Partial<Record<Seat, ReturnType<typeof setTimeout>>>;
 }
 
 const PRE_COMPLETE: TradeState[] = ['open', 'paired', 'building', 'one_accepted', 'agreed'];
 
-export class SessionStore {
-  private sessions = new Map<string, Session>();
-  private ipCounts = new Map<string, number>();
-
+export class SessionStore extends CodeStore<Session> {
   counters = { sessionsCreated: 0, sessionsCompleted: 0, sessionsCancelled: 0 };
 
-  get(code: string): Session | undefined {
-    return this.sessions.get(code);
-  }
+  /** Invoked when a disconnect grace window lapses and the store cancels the trade itself. */
+  onGraceExpired?: (session: Session) => void;
 
-  private genCode(): string {
-    for (let attempt = 0; attempt < 100; attempt++) {
-      let code = '';
-      for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
-      if (!this.sessions.has(code)) return code;
-    }
-    throw new TransitionError('rate_limited', 'could not allocate a code');
+  constructor() {
+    super({ maxPerIp: config.maxSessionsPerIp, ttlMs: config.sessionTtlMs });
   }
 
   create(ip: string): Session {
-    const count = this.ipCounts.get(ip) ?? 0;
-    if (count >= config.maxSessionsPerIp) throw new TransitionError('rate_limited', 'too many sessions');
-
-    const session: Session = {
-      code: this.genCode(),
+    const session = this.register(ip, (code) => ({
+      code,
+      ip,
+      createdAt: Date.now(),
       sessionId: randomUUID(),
-      state: 'open',
+      state: 'open' as TradeState,
       offers: { a: [], b: [] },
       accepted: { a: false, b: false },
       confirmed: { a: false, b: false },
       tokens: { a: randomUUID(), b: null },
       present: { a: true, b: false },
-      ip,
-      createdAt: Date.now(),
-    };
-    this.sessions.set(session.code, session);
-    this.ipCounts.set(ip, count + 1);
+      graceTimers: {},
+    }));
     this.counters.sessionsCreated++;
-    this.armTtl(session);
     return session;
   }
 
   join(code: string): { session: Session; token: string } {
-    const session = this.sessions.get(code);
+    const session = this.get(code);
     if (!session) throw new TransitionError('unknown_session');
     if (session.tokens.b) throw new TransitionError('session_full');
     session.tokens.b = randomUUID();
@@ -90,12 +63,36 @@ export class SessionStore {
 
   /** Reattach a dropped participant. */
   resume(code: string, token: string): { session: Session; seat: Seat } {
-    const session = this.sessions.get(code);
+    const session = this.get(code);
     if (!session) throw new TransitionError('unknown_session');
     const seat: Seat | null = session.tokens.a === token ? 'a' : session.tokens.b === token ? 'b' : null;
     if (!seat) throw new TransitionError('bad_resume');
     session.present[seat] = true;
+    this.clearGrace(session, seat);
     return { session, seat };
+  }
+
+  /**
+   * A participant dropped: give them the reconnect grace window to resume,
+   * then cancel the trade (beta plan §7). The absolute TTL still applies.
+   */
+  armGrace(session: Session, seat: Seat): void {
+    this.clearGrace(session, seat);
+    if (!PRE_COMPLETE.includes(session.state)) return;
+    session.graceTimers[seat] = setTimeout(() => {
+      delete session.graceTimers[seat];
+      if (session.present[seat] || !PRE_COMPLETE.includes(session.state)) return;
+      this.cancel(session);
+      this.onGraceExpired?.(session);
+    }, config.reconnectGraceMs);
+  }
+
+  private clearGrace(session: Session, seat: Seat): void {
+    const timer = session.graceTimers[seat];
+    if (timer) {
+      clearTimeout(timer);
+      delete session.graceTimers[seat];
+    }
   }
 
   offerUpdate(session: Session, seat: Seat, lines: TradeLine[]): void {
@@ -121,16 +118,14 @@ export class SessionStore {
     session.state = session.accepted.a || session.accepted.b ? 'one_accepted' : 'building';
   }
 
-  confirmComplete(session: Session, seat: Seat): 'completed' | 'agreed' {
+  confirmComplete(session: Session, seat: Seat): void {
     this.assertState(session, ['agreed']);
     session.confirmed[seat] = true;
     if (session.confirmed.a && session.confirmed.b) {
       session.state = 'completed';
       this.counters.sessionsCompleted++;
       this.scheduleRemoval(session);
-      return 'completed';
     }
-    return 'agreed';
   }
 
   cancel(session: Session): void {
@@ -156,22 +151,16 @@ export class SessionStore {
     if (!allowed.includes(session.state)) throw new TransitionError('invalid_transition', `not allowed in ${session.state}`);
   }
 
-  private armTtl(session: Session): void {
-    session.ttlTimer = setTimeout(() => this.remove(session.code), config.sessionTtlMs);
-  }
-
   /** Drop a terminal session shortly after, giving clients time to apply mutations. */
   private scheduleRemoval(session: Session): void {
     setTimeout(() => this.remove(session.code), 30_000);
   }
 
-  remove(code: string): void {
-    const session = this.sessions.get(code);
-    if (!session) return;
-    if (session.ttlTimer) clearTimeout(session.ttlTimer);
-    this.sessions.delete(code);
-    const count = (this.ipCounts.get(session.ip) ?? 1) - 1;
-    if (count <= 0) this.ipCounts.delete(session.ip);
-    else this.ipCounts.set(session.ip, count);
+  override remove(code: string): void {
+    const session = this.get(code);
+    if (session) {
+      for (const seat of ['a', 'b'] as Seat[]) this.clearGrace(session, seat);
+    }
+    super.remove(code);
   }
 }

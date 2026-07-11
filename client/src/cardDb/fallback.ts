@@ -1,6 +1,6 @@
 import type { Color, Finish, OracleCard, PriceMap, Printing, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
-import { setSetting } from '../db/settings.js';
+import { deleteSetting, setSetting } from '../db/settings.js';
 import { SCRYFALL_BULK_INDEX } from './config.js';
 import { buildPriceShards } from './prices.js';
 
@@ -116,19 +116,23 @@ export async function runScryfallFallback(onProgress: (fraction: number, label: 
     }
   }
 
-  await db.oracleCards.clear();
-  await db.printings.clear();
-  await db.oracleCards.bulkPut(oracle);
   onProgress(0.85, 'Saving…');
-  await db.printings.bulkPut(printings);
-  await db.priceShards.bulkPut(buildPriceShards(prices));
+  // One transaction so an interrupted rebuild can't leave the tables cleared
+  // but unfilled (the worker path replaces chunks transactionally too).
+  await db.transaction('rw', [db.oracleCards, db.printings, db.priceShards], async () => {
+    await db.oracleCards.clear();
+    await db.printings.clear();
+    await db.oracleCards.bulkPut(oracle);
+    await db.printings.bulkPut(printings);
+    await db.priceShards.bulkPut(buildPriceShards(prices));
+  });
 
   await setSetting('cardDbVersion', `${entry.updated_at} (scryfall-fallback)`);
   await setSetting('cardDbUpdatedAt', entry.updated_at);
   await setSetting('pricesUpdatedAt', entry.updated_at);
   await setSetting('cardDbCounts', { oracle: oracle.length, printings: printings.length });
   // Reset chunk/price bookkeeping so the next successful VM sync replaces everything.
-  await setSetting('cardDbChunks', undefined);
+  await deleteSetting('cardDbChunks');
   await setSetting('pricesSha256', '(scryfall-fallback)');
   onProgress(1, 'Done');
 }

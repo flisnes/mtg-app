@@ -1,4 +1,4 @@
-import type { OracleCard, Priced, Printing } from '@mtg/shared';
+import type { CollectionEntry, OracleCard, Priced, Printing } from '@mtg/shared';
 import { db } from './schema.js';
 import { withPrices } from '../cardDb/prices.js';
 
@@ -37,6 +37,25 @@ export async function getPrintingsByIds(ids: Iterable<string>): Promise<Map<stri
   const printings = (await db.printings.bulkGet(unique)).filter((p): p is Printing => !!p);
   const priced = await withPrices(printings, (p) => p.scryfallId);
   return new Map(priced.map((p) => [p.scryfallId, p]));
+}
+
+export interface JoinedEntry {
+  entry: CollectionEntry;
+  oracle?: Priced<OracleCard>;
+  printing?: Priced<Printing>;
+}
+
+/** Join collection entries with their oracle + printing display data. */
+export async function joinCollectionEntries(entries: CollectionEntry[]): Promise<JoinedEntry[]> {
+  const [oracleMap, printMap] = await Promise.all([
+    getOracleCardsByIds(entries.map((e) => e.oracleId)),
+    getPrintingsByIds(entries.map((e) => e.scryfallId)),
+  ]);
+  return entries.map((entry) => ({
+    entry,
+    oracle: oracleMap.get(entry.oracleId),
+    printing: printMap.get(entry.scryfallId),
+  }));
 }
 
 /** Total owned copies per oracleId (summed across all printings), for deck ownership. */

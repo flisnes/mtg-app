@@ -6,12 +6,13 @@ import {
   type ServerMessage,
   type SessionSnapshot,
   type TradeLine,
+  type TradeState,
   type WishLine,
 } from '@mtg/shared';
 import { applyCompletedTrade } from '../db/dataAccess.js';
 import { getOracleCardsByIds } from '../db/queries.js';
 import { db } from '../db/schema.js';
-import { getSetting, setSetting } from '../db/settings.js';
+import { deleteSetting, getSetting, setSetting } from '../db/settings.js';
 import { TRADE_WS_URL } from './config.js';
 import { sanitizeOffer, sanitizeWishlist } from './validate.js';
 
@@ -91,6 +92,11 @@ export async function getPersistedTrade(): Promise<ActiveTrade | undefined> {
   return getSetting<ActiveTrade>(ACTIVE_KEY);
 }
 
+/** Forget the persisted in-flight trade (the resume prompt's "Discard"). */
+export async function clearPersistedTrade(): Promise<void> {
+  await deleteSetting(ACTIVE_KEY);
+}
+
 export function useTradeSession(): TradeSession {
   const [status, setStatus] = useState<TradeStatus>('idle');
   const [seat, setSeat] = useState<Seat | null>(null);
@@ -105,6 +111,10 @@ export function useTradeSession(): TradeSession {
   const active = useRef<Partial<ActiveTrade>>({});
   const appliedRef = useRef(false);
   const intentionalClose = useRef(false);
+  // Mirrors snapshot.state for the socket's onclose handler: the closure there
+  // is created before any snapshot arrives, so reading the state prop directly
+  // would always see null and auto-resume would never fire.
+  const stateRef = useRef<TradeState | null>(null);
 
   const persist = useCallback(async () => {
     const a = active.current;
@@ -114,7 +124,7 @@ export function useTradeSession(): TradeSession {
   }, []);
 
   const clearPersisted = useCallback(async () => {
-    await setSetting(ACTIVE_KEY, undefined);
+    await clearPersistedTrade();
   }, []);
 
   const handleSnapshot = useCallback(
@@ -124,6 +134,7 @@ export function useTradeSession(): TradeSession {
         ...raw,
         offers: { a: sanitizeOffer(raw.offers?.a), b: sanitizeOffer(raw.offers?.b) },
       };
+      stateRef.current = snap.state;
       setSnapshot(snap);
       setPeerPresent(snap.present[otherSeat(mySeat)]);
       if (snap.state === 'completed' && !appliedRef.current) {
@@ -230,7 +241,7 @@ export function useTradeSession(): TradeSession {
         if (intentionalClose.current) return;
         // Auto-resume if we dropped mid-trade and the session may still be alive.
         const a = active.current;
-        const state = snapshot?.state;
+        const state = stateRef.current;
         if (a.code && a.resumeToken && state && state !== 'completed' && state !== 'cancelled') {
           setStatus('connecting');
           setTimeout(() => {
@@ -240,7 +251,7 @@ export function useTradeSession(): TradeSession {
         }
       };
     },
-    [onMessage, snapshot],
+    [onMessage],
   );
 
   const send = useCallback((msg: ClientMessage) => {
@@ -290,6 +301,7 @@ export function useTradeSession(): TradeSession {
     ws.current = null;
     active.current = {};
     appliedRef.current = false;
+    stateRef.current = null;
     setStatus('idle');
     setSeat(null);
     setSnapshot(null);

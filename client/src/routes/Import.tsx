@@ -4,7 +4,8 @@ import type { OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
 import { applyImport, type ImportLine } from '../db/dataAccess.js';
 import { useToast } from '../components/Toast.js';
-import { resolveOracleByName, searchCards } from '../cardDb/search.js';
+import { resolveOracleByName } from '../cardDb/search.js';
+import { useCardSearch } from '../cardDb/useCardSearch.js';
 import type { ResolveResponse, ResolveResult, ResolvedLine, TradelistMode, UnmatchedLine } from '../import/types.js';
 
 type Status =
@@ -21,9 +22,13 @@ export function Import() {
   const toast = useToast();
   const navigate = useNavigate();
 
+  // Kill any in-flight analysis when leaving the screen (or re-analyzing).
+  useEffect(() => () => workerRef.current?.terminate(), []);
+
   function analyze(input: string) {
     if (!input.trim()) return;
     setStatus({ kind: 'working', label: 'Starting…', fraction: 0 });
+    workerRef.current?.terminate();
     const worker = new Worker(new URL('../import/resolve.worker.ts', import.meta.url), { type: 'module' });
     workerRef.current = worker;
     worker.onmessage = (e: MessageEvent<ResolveResponse>) => {
@@ -223,15 +228,7 @@ function ReviewScreen({
 
 function CardPicker({ onPick }: { onPick: (card: OracleCard) => void }) {
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<OracleCard[]>([]);
-  useEffect(() => {
-    if (!q.trim()) {
-      setResults([]);
-      return;
-    }
-    const h = setTimeout(async () => setResults((await searchCards(q, {}, 12)).cards), 120);
-    return () => clearTimeout(h);
-  }, [q]);
+  const { results } = useCardSearch(q, { limit: 12 });
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
       <input className="search-input" placeholder="Search for the right card…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />

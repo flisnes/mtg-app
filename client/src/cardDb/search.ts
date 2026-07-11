@@ -58,24 +58,31 @@ async function getIndex(): Promise<Indexed[]> {
   return cache;
 }
 
-/** Resolve a card name to its oracle card (exact, diacritic-insensitive; also matches DFC front faces). For deck import. */
-export async function resolveOracleByName(name: string): Promise<OracleCard | undefined> {
-  if (!nameLookup) {
-    const idx = await getIndex();
-    nameLookup = new Map();
-    // Pass 1: exact full names win.
-    for (const e of idx) {
-      if (!nameLookup.has(e.normName)) nameLookup.set(e.normName, e.card);
-    }
-    // Pass 2: DFC/split front faces only as a fallback.
-    for (const e of idx) {
-      const slash = e.card.name.indexOf(' // ');
-      if (slash !== -1) {
-        const front = normalize(e.card.name.slice(0, slash));
-        if (!nameLookup.has(front)) nameLookup.set(front, e.card);
-      }
+/**
+ * Build a normalized-name → oracle-card lookup (also used by the import
+ * worker): exact full names win, DFC/split front faces fall back.
+ */
+export function buildNameIndex(cards: OracleCard[]): Map<string, OracleCard> {
+  const map = new Map<string, OracleCard>();
+  // Pass 1: exact full names win.
+  for (const c of cards) {
+    const n = normalize(c.name);
+    if (!map.has(n)) map.set(n, c);
+  }
+  // Pass 2: DFC/split front faces only as a fallback.
+  for (const c of cards) {
+    const slash = c.name.indexOf(' // ');
+    if (slash !== -1) {
+      const front = normalize(c.name.slice(0, slash));
+      if (!map.has(front)) map.set(front, c);
     }
   }
+  return map;
+}
+
+/** Resolve a card name to its oracle card (exact, diacritic-insensitive; also matches DFC front faces). For deck import. */
+export async function resolveOracleByName(name: string): Promise<OracleCard | undefined> {
+  if (!nameLookup) nameLookup = buildNameIndex((await getIndex()).map((e) => e.card));
   return nameLookup.get(normalize(name));
 }
 

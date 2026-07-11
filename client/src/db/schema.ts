@@ -69,3 +69,18 @@ export class MtgDatabase extends Dexie {
 }
 
 export const db = new MtgDatabase();
+
+/**
+ * The user-data tables — the set serialized by device transfer and wiped by
+ * "delete all my data". Card DB (oracleCards/printings/priceShards) and
+ * settings are deliberately not included. Keep in sync with TransferPayload.
+ */
+export const USER_DATA_TABLES = [
+  db.collection,
+  db.wishlist,
+  db.decks,
+  db.deckCards,
+  db.trades,
+  db.watchlist,
+  db.priceSnapshots,
+];

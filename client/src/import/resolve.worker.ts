@@ -1,5 +1,7 @@
 /// <reference lib="webworker" />
 import type { Finish, OracleCard, Printing } from '@mtg/shared';
+import { normalize as normalizeText } from '../cardDb/querySyntax.js';
+import { buildNameIndex } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
 import { parseImport } from './parse.js';
 import type { ParsedLine, ResolveRequest, ResolveResponse, ResolvedLine, UnmatchedLine } from './types.js';
@@ -8,8 +10,7 @@ function post(msg: ResolveResponse): void {
   (self as DedicatedWorkerGlobalScope).postMessage(msg);
 }
 
-const COMBINING = /\p{M}/gu;
-const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(COMBINING, '').trim();
+const normalize = (s: string) => normalizeText(s).trim();
 const alnum = (s: string) => normalize(s).replace(/[^a-z0-9]/g, '');
 
 /** Levenshtein edit distance (two-row DP) for ranking typo suggestions. */
@@ -66,22 +67,10 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
 
     post({ type: 'progress', label: 'Indexing card names…', fraction: 0.15 });
     const cards = await db.oracleCards.toArray();
-    const nameMap = new Map<string, OracleCard>();
+    const nameMap = buildNameIndex(cards);
+    // Loose fallback: names reduced to alphanumerics, for punctuation mismatches.
     const looseMap = new Map<string, OracleCard>();
-    // Pass 1: exact full names win.
-    for (const c of cards) {
-      const n = normalize(c.name);
-      if (!nameMap.has(n)) nameMap.set(n, c);
-      looseMap.set(alnum(c.name), c);
-    }
-    // Pass 2: DFC/split front faces ("Front // Back") only as a fallback.
-    for (const c of cards) {
-      const slash = c.name.indexOf(' // ');
-      if (slash !== -1) {
-        const front = normalize(c.name.slice(0, slash));
-        if (!nameMap.has(front)) nameMap.set(front, c);
-      }
-    }
+    for (const c of cards) looseMap.set(alnum(c.name), c);
 
     // First pass: match lines to oracle cards.
     const matched: Array<{ line: ParsedLine; oracle: OracleCard }> = [];

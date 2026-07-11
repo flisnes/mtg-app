@@ -10,7 +10,8 @@ import type {
   TradeLine,
   WishlistEntry,
 } from '@mtg/shared';
-import { db } from './schema.js';
+import { db, USER_DATA_TABLES } from './schema.js';
+import type { TransferPayload } from '../transfer/payload.js';
 
 // The single mutation path for user data (beta plan §4). All invariants live
 // here, never in UI code, so that trade completion (Phase 4) reuses the exact
@@ -21,6 +22,11 @@ import { db } from './schema.js';
 
 function newId(): string {
   return crypto.randomUUID();
+}
+
+/** The uniqueness key for a collection entry (or trade line merging into one). */
+export function collectionKey(e: { scryfallId: string; condition: string; finish: string; lang?: string }): string {
+  return `${e.scryfallId}|${e.condition}|${e.finish}|${e.lang || 'en'}`;
 }
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -220,15 +226,13 @@ export async function applyImport(lines: ImportLine[]): Promise<{ entries: numbe
   let cards = 0;
   await db.transaction('rw', db.collection, async () => {
     const existing = await db.collection.toArray();
-    const keyOf = (e: { scryfallId: string; condition: string; finish: string; lang: string }) =>
-      `${e.scryfallId}|${e.condition}|${e.finish}|${e.lang}`;
-    const map = new Map(existing.map((e) => [keyOf(e), e]));
+    const map = new Map(existing.map((e) => [collectionKey(e), e]));
     const now = Date.now();
     const writes: CollectionEntry[] = [];
 
     for (const l of lines) {
       const lang = l.lang || 'en';
-      const k = keyOf({ ...l, lang });
+      const k = collectionKey({ ...l, lang });
       cards += l.quantity;
       const ex = map.get(k);
       if (ex) {
@@ -396,20 +400,18 @@ export async function applyCompletedTrade(
   return db.transaction('rw', db.collection, db.wishlist, db.trades, async () => {
     if (await db.trades.get(sessionId)) return { applied: false }; // already applied
 
-    const keyOf = (l: { scryfallId: string; condition: string; finish: string; lang: string }) =>
-      `${l.scryfallId}|${l.condition}|${l.finish}|${l.lang || 'en'}`;
     const entries = await db.collection.toArray();
-    const byKey = new Map(entries.map((e) => [keyOf(e), e]));
+    const byKey = new Map(entries.map((e) => [collectionKey(e), e]));
     const now = Date.now();
 
     // Remove given cards (decrement matching entries; reduce trade qty with them).
     for (const line of given) {
-      const ex = byKey.get(keyOf(line));
+      const ex = byKey.get(collectionKey(line));
       if (!ex) continue;
       const remaining = ex.quantity - line.quantity;
       if (remaining <= 0) {
         await db.collection.delete(ex.id);
-        byKey.delete(keyOf(line));
+        byKey.delete(collectionKey(line));
       } else {
         ex.quantity = remaining;
         ex.quantityForTrade = clamp(ex.quantityForTrade, 0, remaining);
@@ -421,7 +423,7 @@ export async function applyCompletedTrade(
     // Add received cards (merge on the same compound key).
     for (const line of received) {
       const lang = line.lang || 'en';
-      const ex = byKey.get(keyOf({ ...line, lang }));
+      const ex = byKey.get(collectionKey(line));
       if (ex) {
         ex.quantity += line.quantity;
         ex.updatedAt = now;
@@ -439,7 +441,7 @@ export async function applyCompletedTrade(
           createdAt: now,
           updatedAt: now,
         };
-        byKey.set(keyOf(entry), entry);
+        byKey.set(collectionKey(entry), entry);
         await db.collection.add(entry);
       }
     }
@@ -491,21 +493,31 @@ export async function watchAllCollection(): Promise<number> {
   return map.size;
 }
 
+async function clearUserDataTables(): Promise<void> {
+  await Promise.all(USER_DATA_TABLES.map((t) => t.clear()));
+}
+
+/**
+ * Replace every user-data table with a device transfer's (already sanitized)
+ * contents, atomically. Card DB and settings are kept — transferred rows
+ * reference cards by id only, resolved against this device's card DB.
+ */
+export async function replaceAllUserData(data: Omit<TransferPayload, 'version'>): Promise<void> {
+  await db.transaction('rw', USER_DATA_TABLES, async () => {
+    await clearUserDataTables();
+    await Promise.all([
+      db.collection.bulkAdd(data.collection),
+      db.wishlist.bulkAdd(data.wishlist),
+      db.decks.bulkAdd(data.decks),
+      db.deckCards.bulkAdd(data.deckCards),
+      db.trades.bulkAdd(data.trades),
+      db.watchlist.bulkAdd(data.watchlist),
+      db.priceSnapshots.bulkAdd(data.priceSnapshots),
+    ]);
+  });
+}
+
 /** Wipe every user-data table (About screen: "delete all my data"). Card DB is kept. */
 export async function deleteAllUserData(): Promise<void> {
-  await db.transaction(
-    'rw',
-    [db.collection, db.wishlist, db.decks, db.deckCards, db.trades, db.watchlist, db.priceSnapshots],
-    async () => {
-      await Promise.all([
-        db.collection.clear(),
-        db.wishlist.clear(),
-        db.decks.clear(),
-        db.deckCards.clear(),
-        db.trades.clear(),
-        db.watchlist.clear(),
-        db.priceSnapshots.clear(),
-      ]);
-    },
-  );
+  await db.transaction('rw', USER_DATA_TABLES, () => clearUserDataTables());
 }

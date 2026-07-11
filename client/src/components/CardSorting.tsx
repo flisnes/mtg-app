@@ -49,11 +49,18 @@ export interface SortFields {
   price?: number | null;
 }
 
-/** Numeric price for sorting/display: EUR from any source, else USD (matches priceOf). */
+/** Numeric price for sorting: EUR from any source, else USD (matches formatPrice). */
 export function priceValue(...sources: ({ priceEur: number | null; priceUsd: number | null } | undefined)[]): number | null {
   for (const s of sources) if (s?.priceEur != null) return s.priceEur;
   for (const s of sources) if (s?.priceUsd != null) return s.priceUsd;
   return null;
+}
+
+/** Display price with its currency: EUR from any source, else USD, else undefined. */
+export function formatPrice(...sources: ({ priceEur: number | null; priceUsd: number | null } | undefined)[]): string | undefined {
+  for (const s of sources) if (s?.priceEur != null) return `€${s.priceEur.toFixed(2)}`;
+  for (const s of sources) if (s?.priceUsd != null) return `$${s.priceUsd.toFixed(2)}`;
+  return undefined;
 }
 
 export function sortCards<T>(items: T[], get: (t: T) => SortFields, prefs: Pick<CardSortPrefs, 'key' | 'dir'>): T[] {
@@ -92,14 +99,14 @@ const TYPE_GROUP_ORDER = ['Creature', 'Planeswalker', 'Battle', 'Instant', 'Sorc
 const COLOR_NAMES: Record<Color, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
 const COLOR_GROUP_ORDER = ['White', 'Blue', 'Black', 'Red', 'Green', 'Multicolor', 'Colorless', 'Land', 'Other'];
 
-export function typeGroup(typeLine: string | undefined): string {
+function typeGroup(typeLine: string | undefined): string {
   if (!typeLine) return 'Other';
   const front = typeLine.split('//')[0]!;
   for (const t of TYPE_PRIORITY) if (front.includes(t)) return t;
   return 'Other';
 }
 
-export function colorGroup(card: GroupableCard | undefined): string {
+function colorGroup(card: GroupableCard | undefined): string {
   if (!card) return 'Other';
   if (card.colors.length > 1) return 'Multicolor';
   if (card.colors.length === 1) return COLOR_NAMES[card.colors[0]!];

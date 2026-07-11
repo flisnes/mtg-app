@@ -25,7 +25,7 @@ export function Prices() {
       {rows === undefined ? (
         <p className="search-meta">Loading…</p>
       ) : rows.length === 0 ? (
-        <EmptyState phase="tracking">
+        <EmptyState>
           You’re not tracking any cards yet. Open a card and tap “Watch price”, or track your whole collection from{' '}
           <Link to="/about">About</Link>.
         </EmptyState>

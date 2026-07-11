@@ -18,6 +18,7 @@ import {
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
 import { recordPriceSnapshots } from '../price/tracking.js';
+import { formatPrice } from './CardSorting.js';
 
 // Bottom-sheet for a card's details, in five modes:
 //  - add (default): add the card somewhere new — where depends on addTarget
@@ -125,9 +126,7 @@ export function CardSheet({
 
   // Full-size image + price for the currently-selected printing (falls back to the oracle default).
   const cardImage = printing?.imageNormal ?? oracleCard.imageNormal ?? printing?.imageSmall ?? oracleCard.imageSmall ?? null;
-  const eur = printing?.priceEur ?? oracleCard.priceEur;
-  const usd = printing?.priceUsd ?? oracleCard.priceUsd;
-  const cardPrice = eur != null ? `€${eur.toFixed(2)}` : usd != null ? `$${usd.toFixed(2)}` : '—';
+  const cardPrice = formatPrice(printing, oracleCard) ?? '—';
 
   // Keep finish valid for the chosen printing.
   useEffect(() => {

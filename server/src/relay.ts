@@ -1,33 +1,55 @@
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import {
+  MAX_TRANSFER_CHUNKS,
   PROTOCOL_VERSION,
+  TRANSFER_CHUNK_CHARS,
   type ClientMessage,
   type Seat,
   type ServerMessage,
   type TradeErrorCode,
+  type TransferClientMessage,
+  type TransferServerMessage,
 } from '@mtg/shared';
 import { config } from './config.js';
 import { SessionStore, TransitionError, type Session } from './session.js';
+import { TransferStore } from './transfer.js';
 
 // WebSocket trade relay (beta plan §7). Server-authoritative state machine over
 // an in-memory session store; clients own their card data. No persistence, no
-// names — only aggregate counters are logged.
+// names — only aggregate counters are logged. The same socket endpoint also
+// carries device transfers (transfer_* messages): pure peer relay of opaque
+// payload chunks, handled by handleTransfer below.
 
 const store = new SessionStore();
+const transfers = new TransferStore();
+
+// seat -> socket, per session code, for broadcasts.
+const sockets = new Map<string, Partial<Record<Seat, WebSocket>>>();
+
+// The stores own session lifetime (TTL, grace expiry, explicit removal); hook
+// their removals so socket-map entries can't outlive their session, peers hear
+// about a transfer ending however it ends, and a lapsed reconnect window
+// pushes the cancelled state to whoever is still connected.
+store.onRemove = (session) => sockets.delete(session.code);
+store.onGraceExpired = (session) => broadcast(session);
+transfers.onRemove = (t) => {
+  for (const s of [t.sender, t.receiver]) {
+    if (s) send(s, { v: PROTOCOL_VERSION, type: 'transfer_cancelled', transferCode: t.code });
+  }
+};
 
 interface SocketCtx {
   code?: string;
   seat?: Seat;
+  transferCode?: string;
+  transferRole?: 'sender' | 'receiver';
   ip: string;
   tokens: number; // rate-limit bucket
   last: number;
 }
 
-// seat -> socket, per session code, for broadcasts.
-const sockets = new Map<string, Partial<Record<Seat, WebSocket>>>();
-
-function send(socket: WebSocket, msg: ServerMessage): void {
+function send(socket: WebSocket, msg: ServerMessage | TransferServerMessage): void {
   if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(msg));
 }
 
@@ -74,6 +96,16 @@ function allow(ctx: SocketCtx, now: number): boolean {
 
 export function registerTradeRelay(app: FastifyInstance): void {
   app.get('/ws', { websocket: true }, (socket: WebSocket, req) => {
+    // Cross-site WebSocket hijacking guard: browsers always send Origin on WS
+    // handshakes, so an allowlist (when configured) shuts out foreign pages.
+    if (config.allowedOrigins.length > 0) {
+      const origin = req.headers.origin;
+      if (!origin || !config.allowedOrigins.includes(origin)) {
+        socket.close(1008, 'origin not allowed');
+        return;
+      }
+    }
+
     const ctx: SocketCtx = { ip: req.ip, tokens: config.maxMessagesPerSec, last: Date.now() };
 
     // Heartbeat: ping every 30s; terminate a socket that misses a pong. Keeps
@@ -100,7 +132,7 @@ export function registerTradeRelay(app: FastifyInstance): void {
       const now = Date.now();
       if (!allow(ctx, now)) return sendError(socket, 'rate_limited', 'slow down');
 
-      let msg: ClientMessage;
+      let msg: ClientMessage | TransferClientMessage;
       try {
         msg = JSON.parse(raw.toString());
       } catch {
@@ -111,7 +143,8 @@ export function registerTradeRelay(app: FastifyInstance): void {
       }
 
       try {
-        handle(socket, ctx, msg);
+        if (isTransferMessage(msg)) handleTransfer(socket, ctx, msg);
+        else handle(socket, ctx, msg);
       } catch (err) {
         if (err instanceof TransitionError) sendError(socket, err.code, err.message);
         else {
@@ -123,6 +156,9 @@ export function registerTradeRelay(app: FastifyInstance): void {
 
     socket.on('close', () => {
       clearInterval(heartbeat);
+      // A dropped socket cancels its transfer (no resume for transfers); the
+      // store's onRemove hook notifies whichever peer is still connected.
+      if (ctx.transferCode) transfers.remove(ctx.transferCode);
       if (!ctx.code || !ctx.seat) return;
       const session = store.get(ctx.code);
       const bySeat = sockets.get(ctx.code);
@@ -130,12 +166,107 @@ export function registerTradeRelay(app: FastifyInstance): void {
       if (session) {
         session.present[ctx.seat] = false;
         notifyPeer(session, ctx.seat, 'peer_disconnected');
-        // Session survives for resume within its TTL (beta plan §7 reconnect window).
+        // Beta plan §7 reconnect window: the dropped seat has a grace period
+        // to resume before the trade is cancelled (absolute TTL still applies).
+        store.armGrace(session, ctx.seat);
       }
     });
   });
 
-  app.get('/metrics', async () => store.counters);
+  app.get('/metrics', async () => ({ ...store.counters, ...transfers.counters }));
+}
+
+function isTransferMessage(msg: ClientMessage | TransferClientMessage): msg is TransferClientMessage {
+  return msg.type.startsWith('transfer_');
+}
+
+// Device transfers are pure peer relay: no state machine, nothing stored. The
+// server validates only frame shape/size; payload integrity (SHA-256) and
+// content sanitization are the receiving client's job.
+function handleTransfer(socket: WebSocket, ctx: SocketCtx, msg: TransferClientMessage): void {
+  switch (msg.type) {
+    case 'transfer_create': {
+      const t = transfers.create(ctx.ip, socket);
+      ctx.transferCode = t.code;
+      ctx.transferRole = 'sender';
+      send(socket, { v: PROTOCOL_VERSION, type: 'transfer_created', transferCode: t.code });
+      return;
+    }
+
+    case 'transfer_join': {
+      const t = transfers.join(String(msg.transferCode).trim().toUpperCase(), socket);
+      ctx.transferCode = t.code;
+      ctx.transferRole = 'receiver';
+      send(socket, { v: PROTOCOL_VERSION, type: 'transfer_joined', transferCode: t.code });
+      send(t.sender, { v: PROTOCOL_VERSION, type: 'transfer_peer_joined', transferCode: t.code });
+      return;
+    }
+
+    default: {
+      const t = transfers.get(msg.transferCode);
+      if (!t || ctx.transferCode !== msg.transferCode || !ctx.transferRole) {
+        return sendError(socket, 'unknown_session', 'not joined to this transfer');
+      }
+      const peer = ctx.transferRole === 'sender' ? t.receiver : t.sender;
+
+      switch (msg.type) {
+        case 'transfer_begin': {
+          if (
+            ctx.transferRole !== 'sender' ||
+            !Number.isInteger(msg.totalChunks) ||
+            msg.totalChunks < 1 ||
+            msg.totalChunks > MAX_TRANSFER_CHUNKS ||
+            !Number.isInteger(msg.totalChars) ||
+            msg.totalChars < 0 ||
+            typeof msg.sha256 !== 'string' ||
+            !/^[0-9a-f]{64}$/.test(msg.sha256)
+          ) {
+            return sendError(socket, 'malformed', 'bad transfer_begin');
+          }
+          if (peer) {
+            send(peer, {
+              v: PROTOCOL_VERSION,
+              type: 'transfer_begin',
+              transferCode: t.code,
+              totalChunks: msg.totalChunks,
+              totalChars: msg.totalChars,
+              sha256: msg.sha256,
+            });
+          }
+          return;
+        }
+
+        case 'transfer_chunk': {
+          if (ctx.transferRole !== 'sender' || !Number.isInteger(msg.seq) || msg.seq < 0) {
+            return sendError(socket, 'malformed', 'bad transfer_chunk');
+          }
+          if (typeof msg.data !== 'string' || msg.data.length > TRANSFER_CHUNK_CHARS) {
+            return sendError(socket, 'offer_too_large', `chunk exceeds ${TRANSFER_CHUNK_CHARS} chars`);
+          }
+          if (peer) {
+            send(peer, { v: PROTOCOL_VERSION, type: 'transfer_chunk', transferCode: t.code, seq: msg.seq, data: msg.data });
+          }
+          return;
+        }
+
+        case 'transfer_ack': {
+          if (ctx.transferRole !== 'receiver' || !Number.isInteger(msg.seq) || msg.seq < 0) {
+            return sendError(socket, 'malformed', 'bad transfer_ack');
+          }
+          if (peer) send(peer, { v: PROTOCOL_VERSION, type: 'transfer_ack', transferCode: t.code, seq: msg.seq });
+          return;
+        }
+
+        case 'transfer_cancel': {
+          // The store's onRemove hook sends transfer_cancelled to both sides.
+          transfers.remove(t.code);
+          ctx.transferCode = undefined;
+          ctx.transferRole = undefined;
+          return;
+        }
+      }
+    }
+  }
 }
 
 function handle(socket: WebSocket, ctx: SocketCtx, msg: ClientMessage): void {

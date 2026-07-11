@@ -2,6 +2,7 @@
 import type { OracleCard, PriceMap, Printing } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getSetting, setSetting } from '../db/settings.js';
+import { sha256Hex } from '../util/sha256.js';
 import { buildPriceShards } from './prices.js';
 import type { ChunkTask, ImportRequest, WorkerResponse } from './messages.js';
 
@@ -15,12 +16,6 @@ type InstalledChunks = Record<'oracle' | 'printings', Record<string, { sha256: s
 
 function post(msg: WorkerResponse): void {
   (self as DedicatedWorkerGlobalScope).postMessage(msg);
-}
-
-/** Hex SHA-256 of a string (matches the pipeline's hash of the uncompressed JSON). */
-async function sha256Hex(text: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** Download a .gz artifact, reporting byte progress, and return decompressed text. */

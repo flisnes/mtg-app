@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import type { OracleCard, Priced, Trade } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
-import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { useCardMaps } from '../db/useCardMaps.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
 import { Icon } from '../components/icons.js';
@@ -22,7 +22,7 @@ export function History() {
       {trades === undefined ? (
         <p className="search-meta">Loading…</p>
       ) : trades.length === 0 ? (
-        <EmptyState phase="a trade">No trades yet.</EmptyState>
+        <EmptyState>No trades yet.</EmptyState>
       ) : (
         <ul className="menu-list">
           {trades.map((t) => (
@@ -79,14 +79,7 @@ function TradeLines({
   lines: Trade['given'];
   onInfo: (oracle: Priced<OracleCard>, scryfallId?: string) => void;
 }) {
-  const printMap = useLiveQuery(
-    () => getPrintingsByIds(lines.map((l) => l.scryfallId)),
-    [lines.map((l) => l.scryfallId).join(',')],
-  );
-  const oracleMap = useLiveQuery(
-    () => getOracleCardsByIds(lines.map((l) => l.oracleId)),
-    [lines.map((l) => l.oracleId).join(',')],
-  );
+  const { printMap, oracleMap } = useCardMaps(lines);
   if (lines.length === 0) return <p className="fine-print">Nothing.</p>;
   return (
     <CardList

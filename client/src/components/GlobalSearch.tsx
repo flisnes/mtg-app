@@ -10,12 +10,14 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { matchPath, useLocation } from 'react-router-dom';
 import type { Color, DeckBoard, DeckFormat, OracleCard, Priced, Rarity } from '@mtg/shared';
-import { searchCards, type SearchFilters } from '../cardDb/search.js';
+import type { SearchFilters } from '../cardDb/search.js';
+import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { db } from '../db/schema.js';
 import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
 import { formatLabel } from '../deck/legality.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
+import { formatPrice } from './CardSorting.js';
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
 
@@ -48,12 +50,6 @@ function useSearchTarget(): SearchTarget {
   if (pathname === '/wishlist') return { kind: 'wishlist' };
   if (pathname === '/tradelist') return { kind: 'tradelist' };
   return { kind: 'default' };
-}
-
-function price(card: Priced<OracleCard>): string {
-  if (card.priceEur != null) return `€${card.priceEur.toFixed(2)}`;
-  if (card.priceUsd != null) return `$${card.priceUsd.toFixed(2)}`;
-  return '—';
 }
 
 interface SearchCtx {
@@ -151,10 +147,7 @@ function SearchOverlay({
   filters: SearchFilters;
   setFilters: React.Dispatch<React.SetStateAction<SearchFilters>>;
 }) {
-  const [results, setResults] = useState<Priced<OracleCard>[]>([]);
-  const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(PAGE_SIZE);
-  const [searching, setSearching] = useState(false);
   const [sheetCard, setSheetCard] = useState<Priced<OracleCard> | null>(null);
   const [view, setView] = useViewMode();
   const [deckLegalOnly, setDeckLegalOnly] = useState(true);
@@ -183,30 +176,24 @@ function SearchOverlay({
 
   const hasCriteria = query.trim().length > 0 || !!filters.color || !!filters.rarity || !!filters.type;
 
-  // New criteria start back at the first page. The debounce below swallows the
-  // extra effect run this triggers, so only one search fires.
+  // New criteria start back at the first page. The debounce in useCardSearch
+  // swallows the extra effect run this triggers, so only one search fires.
   useEffect(() => {
     setLimit(PAGE_SIZE);
   }, [query, filters, deckFilterActive, deckCtx]);
 
-  useEffect(() => {
-    if (!hasCriteria) {
-      setResults([]);
-      setTotal(0);
-      return;
-    }
-    setSearching(true);
-    const handle = setTimeout(async () => {
-      const effective: SearchFilters = deckFilterActive
+  const effectiveFilters = useMemo<SearchFilters>(
+    () =>
+      deckFilterActive
         ? { ...filters, legalIn: deckCtx!.format, identity: deckCtx!.identity ?? undefined }
-        : filters;
-      const res = await searchCards(query, effective, limit);
-      setResults(res.cards);
-      setTotal(res.total);
-      setSearching(false);
-    }, 120);
-    return () => clearTimeout(handle);
-  }, [query, filters, hasCriteria, deckFilterActive, deckCtx, limit]);
+        : filters,
+    [filters, deckFilterActive, deckCtx],
+  );
+  const { results, total, searching } = useCardSearch(query, {
+    filters: effectiveFilters,
+    limit,
+    enabled: hasCriteria,
+  });
 
   const setFilter = (key: keyof SearchFilters, value: string) =>
     setFilters((f) => ({ ...f, [key]: value || undefined }));
@@ -364,7 +351,7 @@ function SearchOverlay({
                   {card.typeLine}
                 </>
               ),
-              price: price(card),
+              price: formatPrice(card) ?? '—',
               onClick: () => setSheetCard(card),
               actions: actionsFor(card),
             }),

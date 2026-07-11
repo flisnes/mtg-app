@@ -1,44 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { CollectionEntry, Color, OracleCard, Priced, Printing, Rarity } from '@mtg/shared';
+import type { Color, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
-import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
-import { SortControls, priceValue, sortCards, useCardSort } from './CardSorting.js';
+import { SortControls, formatPrice, priceValue, sortCards, useCardSort } from './CardSorting.js';
 import { useOpenSearch } from './GlobalSearch.js';
-
-export interface JoinedEntry {
-  entry: CollectionEntry;
-  oracle?: Priced<OracleCard>;
-  printing?: Priced<Printing>;
-}
 
 const COLORS: Color[] = ['W', 'U', 'B', 'R', 'G'];
 const RARITIES: Rarity[] = ['common', 'uncommon', 'rare', 'mythic'];
 
 /** Join collection entries with their card + printing display data. */
 function useJoinedCollection(): JoinedEntry[] | undefined {
-  return useLiveQuery(async () => {
-    const entries = await db.collection.toArray();
-    const [oracleMap, printMap] = await Promise.all([
-      getOracleCardsByIds(entries.map((e) => e.oracleId)),
-      getPrintingsByIds(entries.map((e) => e.scryfallId)),
-    ]);
-    return entries.map((entry) => ({
-      entry,
-      oracle: oracleMap.get(entry.oracleId),
-      printing: printMap.get(entry.scryfallId),
-    }));
-  }, []);
-}
-
-function priceOf(p?: Priced<Printing>, o?: Priced<OracleCard>): string {
-  const eur = p?.priceEur ?? o?.priceEur;
-  const usd = p?.priceUsd ?? o?.priceUsd;
-  if (eur != null) return `€${eur.toFixed(2)}`;
-  if (usd != null) return `$${usd.toFixed(2)}`;
-  return '—';
+  return useLiveQuery(async () => joinCollectionEntries(await db.collection.toArray()), []);
 }
 
 export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean }) {
@@ -162,7 +137,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
                   {r.entry.lang !== 'en' ? ` · ${r.entry.lang}` : ''}
                 </>
               ),
-              price: priceOf(r.printing, r.oracle),
+              price: formatPrice(r.printing, r.oracle) ?? '—',
               onClick: () => setEditing(r),
             }),
           )}

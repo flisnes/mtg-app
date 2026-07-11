@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 
-// Shared page scaffold. Views are intentionally empty in Phase 0 — the goal is
-// that every route navigates and renders its purpose.
+// Shared page scaffold and empty-state placeholder.
 
 export function Page({
   title,
@@ -29,11 +28,11 @@ export function Page({
   );
 }
 
-export function EmptyState({ phase, children }: { phase: string; children: ReactNode }) {
+export function EmptyState({ hint, children }: { hint?: ReactNode; children: ReactNode }) {
   return (
     <div className="empty-state">
       <p>{children}</p>
-      <p className="empty-phase">Coming in {phase}.</p>
+      {hint && <p className="empty-phase">{hint}</p>}
     </div>
   );
 }

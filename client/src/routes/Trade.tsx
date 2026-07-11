@@ -5,22 +5,26 @@ import { Link } from 'react-router-dom';
 import type { CollectionEntry, OracleCard, Priced, Printing, Seat, TradeLine } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
-import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
-import { searchCards } from '../cardDb/search.js';
+import { collectionKey } from '../db/dataAccess.js';
+import { getOracleCardsByIds, getPrintingsByIds, joinCollectionEntries } from '../db/queries.js';
+import { useCardMaps } from '../db/useCardMaps.js';
+import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { CardSheet } from '../components/CardSheet.js';
+import { formatPrice } from '../components/CardSorting.js';
 import { CardItems, CardList, type CardItem } from '../components/CardViews.js';
 import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { TRADE_ENABLED } from '../trade/config.js';
 import {
+  clearPersistedTrade,
   getPersistedTrade,
   otherSeat,
   useTradeSession,
   type ActiveTrade,
 } from '../trade/useTradeSession.js';
 
-const lineKey = (l: { scryfallId: string; condition: string; finish: string; lang: string }) =>
-  `${l.scryfallId}|${l.condition}|${l.finish}|${l.lang}`;
+/** Offer lines merge on the same compound key as collection entries. */
+const lineKey = collectionKey;
 
 /** Per-oracle ownership summary, for the "do I actually have this?" indicators. */
 interface Owned {
@@ -91,12 +95,6 @@ function wishMatcher(lines: Array<{ oracleId: string; scryfallId: string | null;
     );
 }
 
-function linePrice(p?: Priced<Printing>): string | undefined {
-  if (p?.priceEur != null) return `€${p.priceEur.toFixed(2)}`;
-  if (p?.priceUsd != null) return `$${p.priceUsd.toFixed(2)}`;
-  return undefined;
-}
-
 /** Values below this (EUR) count as "the trade is even". */
 const BALANCE_EPSILON = 0.5;
 
@@ -112,7 +110,7 @@ export function Trade() {
   if (!TRADE_ENABLED) {
     return (
       <Page title="Trade" subtitle="Trade in person: share a code, build offers, confirm after inspecting.">
-        <EmptyState phase="a later update">
+        <EmptyState hint="Coming in a later update.">
           Trading needs a secure connection to the trade server, which isn’t configured for this build yet.
         </EmptyState>
       </Page>
@@ -130,7 +128,7 @@ export function Trade() {
               <button className="primary" onClick={() => trade.resume(resumable)}>
                 Resume
               </button>
-              <button onClick={() => { void db.settings.delete('activeTrade'); setResumable(null); }}>Discard</button>
+              <button onClick={() => { void clearPersistedTrade(); setResumable(null); }}>Discard</button>
             </div>
           </div>
         )}
@@ -233,10 +231,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   }
 
   // Printings (images + prices) and oracle cards for both offers.
-  const scryfallIds = [...myOffer, ...theirOffer].map((l) => l.scryfallId);
-  const oracleIds = [...myOffer, ...theirOffer].map((l) => l.oracleId);
-  const printMap = useLiveQuery(() => getPrintingsByIds(scryfallIds), [scryfallIds.join(',')]);
-  const oracleMap = useLiveQuery(() => getOracleCardsByIds(oracleIds), [oracleIds.join(',')]);
+  const { printMap, oracleMap } = useCardMaps([...myOffer, ...theirOffer]);
   const totalOf = (lines: TradeLine[]) =>
     lines.reduce((sum, l) => sum + (printMap?.get(l.scryfallId)?.priceEur ?? 0) * l.quantity, 0);
   const openInfo: OpenInfo = (oracle, scryfallId) => setInfo({ oracle, scryfallId });
@@ -516,7 +511,7 @@ function OfferColumn({
                   −
                 </button>
               )}
-              <span className="tile-price">{linePrice(printing) ?? '—'}</span>
+              <span className="tile-price">{formatPrice(printing) ?? '—'}</span>
               {editable && onQty && (
                 <button onClick={() => onQty(lineKey(l), l.quantity + 1)} aria-label="One more">
                   ＋
@@ -779,25 +774,12 @@ function AddCardsPanel({
   onInfo: OpenInfo;
 }) {
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<Priced<OracleCard>[]>([]);
+  const { results } = useCardSearch(q, { limit: 20 });
 
   const tradelist = useLiveQuery(async () => {
     const entries = (await db.collection.toArray()).filter((e) => e.quantityForTrade > 0);
-    const [oracleMap, printMap] = await Promise.all([
-      getOracleCardsByIds(entries.map((e) => e.oracleId)),
-      getPrintingsByIds(entries.map((e) => e.scryfallId)),
-    ]);
-    return entries.map((e) => ({ e, oracle: oracleMap.get(e.oracleId), printing: printMap.get(e.scryfallId) }));
+    return joinCollectionEntries(entries);
   }, []);
-
-  useEffect(() => {
-    if (!q.trim()) {
-      setResults([]);
-      return;
-    }
-    const h = setTimeout(async () => setResults((await searchCards(q, {}, 20)).cards), 120);
-    return () => clearTimeout(h);
-  }, [q]);
 
   const addFromSearch = (card: OracleCard) => {
     const own = ownership?.get(card.oracleId);
@@ -811,7 +793,7 @@ function AddCardsPanel({
   };
 
   const sortedTradelist = (tradelist ?? [])
-    .map((t) => ({ ...t, wanted: theirWanted(t.e.oracleId, t.e.scryfallId) }))
+    .map((t) => ({ ...t, wanted: theirWanted(t.entry.oracleId, t.entry.scryfallId) }))
     .sort((a, b) => b.wanted - a.wanted);
 
   return (
@@ -858,7 +840,7 @@ function AddCardsPanel({
           <p className="fine-print">From your tradelist (or search above for any card):</p>
           <CardList
             className="picker-scroll"
-            items={sortedTradelist.map(({ e, oracle, printing, wanted }): CardItem => {
+            items={sortedTradelist.map(({ entry: e, oracle, printing, wanted }): CardItem => {
               const name = oracle?.name ?? '(unknown card)';
               return {
                 key: e.id,
@@ -873,7 +855,7 @@ function AddCardsPanel({
                     {wanted > 0 ? ` · they want ×${wanted}` : ''}
                   </>
                 ),
-                price: linePrice(printing),
+                price: formatPrice(printing),
                 onClick: oracle ? () => onInfo(oracle, e.scryfallId) : undefined,
                 actions: (
                   <button
@@ -912,14 +894,7 @@ function PeerTradelistPanel({
   onRefresh: () => void;
 }) {
   // Their lines reference cards by id; the local card DB has the display data.
-  const printMap = useLiveQuery(
-    () => getPrintingsByIds((lines ?? []).map((l) => l.scryfallId)),
-    [(lines ?? []).map((l) => l.scryfallId).join(',')],
-  );
-  const oracleMap = useLiveQuery(
-    () => getOracleCardsByIds((lines ?? []).map((l) => l.oracleId)),
-    [(lines ?? []).map((l) => l.oracleId).join(',')],
-  );
+  const { printMap, oracleMap } = useCardMaps(lines ?? []);
 
   const sorted = [...(lines ?? [])]
     .map((l) => ({ l, wanted: myWanted(l.oracleId, l.scryfallId) }))
@@ -958,7 +933,7 @@ function PeerTradelistPanel({
                   {wanted > 0 ? ` · you want ×${wanted}` : ''}
                 </>
               ),
-              price: linePrice(printing),
+              price: formatPrice(printing),
               onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
             };
           })}

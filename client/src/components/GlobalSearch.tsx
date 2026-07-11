@@ -11,7 +11,7 @@ import { matchPath, useLocation } from 'react-router-dom';
 import type { DeckBoard, OracleCard, Priced, Rarity } from '@mtg/shared';
 import { searchCards, type SearchFilters } from '../cardDb/search.js';
 import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
-import { CardSheet } from './CardSheet.js';
+import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { useToast } from './Toast.js';
 
@@ -33,12 +33,7 @@ const TYPES = ['Creature', 'Instant', 'Sorcery', 'Artifact', 'Enchantment', 'Pla
 // What the quick-action buttons on each result do depends on where the user
 // searched from: the deck editor adds to that deck, the collection adds to the
 // collection, and so on. Everywhere else offers the generic trio.
-type SearchTarget =
-  | { kind: 'deck'; deckId: string }
-  | { kind: 'collection' }
-  | { kind: 'wishlist' }
-  | { kind: 'tradelist' }
-  | { kind: 'default' };
+type SearchTarget = AddTarget | { kind: 'default' };
 
 function useSearchTarget(): SearchTarget {
   const { pathname } = useLocation();
@@ -320,7 +315,13 @@ function SearchOverlay({
           )}
         />
 
-        {sheetCard && <CardSheet oracleCard={sheetCard} onClose={() => setSheetCard(null)} />}
+        {sheetCard && (
+          <CardSheet
+            oracleCard={sheetCard}
+            addTarget={target.kind === 'default' ? undefined : target}
+            onClose={() => setSheetCard(null)}
+          />
+        )}
       </div>
     </div>
   );

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { CollectionEntry, Condition, Finish, OracleCard, Priced, Printing, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Condition, DeckBoard, Finish, OracleCard, Priced, Printing, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS } from '@mtg/shared';
 import {
+  addDeckCard,
   addToCollection,
+  addToWishlist,
   isWatched,
   removeDeckCard,
   removeFromCollection,
@@ -18,13 +20,28 @@ import { getPrintingsForOracle } from '../db/queries.js';
 import { recordPriceSnapshots } from '../price/tracking.js';
 
 // Bottom-sheet for a card's details, in five modes:
-//  - add (default): add the card to the collection (edition/condition/qty/…)
+//  - add (default): add the card somewhere new — where depends on addTarget
+//    (collection with edition/condition/qty/…, wishlist, tradelist, or a deck)
 //  - edit (entry): edit an existing collection entry — covers the tradelist
 //    via the "for trade" quantity (beta plan §4/§6)
 //  - wish (wishEntry): edit a wishlist line — edition (incl. "any printing")
 //    and quantity
 //  - deck (deckCard): edit a deck slot's quantity
 //  - info (readOnly): app-wide card info — image, printings, price, watch
+
+/** Where add mode sends the card (mirrors the context-sensitive search). */
+export type AddTarget =
+  | { kind: 'collection' }
+  | { kind: 'wishlist' }
+  | { kind: 'tradelist' }
+  | { kind: 'deck'; deckId: string };
+
+const ADD_LABEL: Record<AddTarget['kind'], string> = {
+  collection: 'Add to collection',
+  wishlist: 'Add to wishlist',
+  tradelist: 'Add to tradelist',
+  deck: 'Add to mainboard',
+};
 
 /** Sentinel for the "any printing" edition option in wish mode. */
 const ANY_PRINTING = '';
@@ -38,6 +55,7 @@ export function CardSheet({
   wishEntry,
   deckCard,
   initialScryfallId,
+  addTarget,
   readOnly = false,
   onClose,
 }: {
@@ -49,24 +67,32 @@ export function CardSheet({
   deckCard?: { id: string; quantity: number };
   /** Preselect a specific printing (e.g. the one named in a trade line). */
   initialScryfallId?: string;
+  /** Add mode only: where the add goes (defaults to the collection). */
+  addTarget?: AddTarget;
   /** Info-only: show the card and its printings, no collection editing. */
   readOnly?: boolean;
   onClose: () => void;
 }) {
   const mode = wishEntry ? 'wish' : deckCard ? 'deck' : entry ? 'edit' : readOnly ? 'info' : 'add';
   const editing = mode === 'edit';
+  const addTo: AddTarget = (mode === 'add' && addTarget) || { kind: 'collection' };
+  // Wishlist adds default to "any printing"; deck slots don't store an edition
+  // at all, so those variants drop the collection-specific fields below.
+  const wishAdd = mode === 'add' && addTo.kind === 'wishlist';
+  const deckAdd = mode === 'add' && addTo.kind === 'deck';
+  const collectionFields = mode === 'edit' || (mode === 'add' && (addTo.kind === 'collection' || addTo.kind === 'tradelist'));
   const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
   // In wish mode the empty string means "any printing" (no specific edition).
   const [scryfallId, setScryfallId] = useState(
-    wishEntry !== undefined
-      ? wishEntry.scryfallId ?? ANY_PRINTING
+    wishEntry !== undefined || wishAdd
+      ? wishEntry?.scryfallId ?? ANY_PRINTING
       : entry?.scryfallId ?? initialScryfallId ?? oracleCard.defaultScryfallId,
   );
   const [condition, setCondition] = useState<Condition>(entry?.condition ?? 'NM');
   const [finish, setFinish] = useState<Finish>(entry?.finish ?? 'nonfoil');
   const [lang, setLang] = useState(entry?.lang ?? 'en');
   const [quantity, setQuantity] = useState(entry?.quantity ?? wishEntry?.quantity ?? deckCard?.quantity ?? 1);
-  const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? 0);
+  const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
   const [busy, setBusy] = useState(false);
   const [watching, setWatching] = useState(false);
 
@@ -110,7 +136,7 @@ export function CardSheet({
 
   const clampedForTrade = Math.min(forTrade, quantity);
 
-  async function save() {
+  async function save(board: DeckBoard = 'main') {
     setBusy(true);
     if (wishEntry) {
       await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, quantity });
@@ -125,7 +151,13 @@ export function CardSheet({
         quantity,
         quantityForTrade: clampedForTrade,
       });
+    } else if (addTo.kind === 'wishlist') {
+      await addToWishlist({ oracleId: oracleCard.oracleId, scryfallId: scryfallId || null, quantity });
+    } else if (addTo.kind === 'deck') {
+      await addDeckCard({ deckId: addTo.deckId, oracleId: oracleCard.oracleId, board, quantity });
     } else {
+      // 'collection' and 'tradelist' both add a collection entry; the latter
+      // just starts with copies marked for trade.
       await addToCollection({
         oracleId: oracleCard.oracleId,
         scryfallId,
@@ -171,19 +203,21 @@ export function CardSheet({
           </div>
         </div>
 
-        <label className="field">
-          <span>Edition</span>
-          <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)}>
-            {mode === 'wish' && <option value={ANY_PRINTING}>Any printing</option>}
-            {printings.map((p) => (
-              <option key={p.scryfallId} value={p.scryfallId}>
-                {p.setName} · #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!deckAdd && (
+          <label className="field">
+            <span>Edition</span>
+            <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)}>
+              {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
+              {printings.map((p) => (
+                <option key={p.scryfallId} value={p.scryfallId}>
+                  {p.setName} · #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
-        {(mode === 'add' || mode === 'edit') && (
+        {collectionFields && (
         <div className="field-grid">
           <label className="field">
             <span>Condition</span>
@@ -224,7 +258,7 @@ export function CardSheet({
             <span>Quantity</span>
             <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))} />
           </label>
-          {(mode === 'add' || mode === 'edit') && (
+          {collectionFields && (
             <label className="field">
               <span>For trade</span>
               <input
@@ -259,8 +293,13 @@ export function CardSheet({
             <button onClick={onClose} disabled={busy}>
               Cancel
             </button>
-            <button className="primary" onClick={save} disabled={busy}>
-              {mode === 'add' ? 'Add to collection' : 'Save'}
+            {deckAdd && (
+              <button onClick={() => save('side')} disabled={busy}>
+                Add to sideboard
+              </button>
+            )}
+            <button className="primary" onClick={() => save()} disabled={busy}>
+              {mode === 'add' ? ADD_LABEL[addTo.kind] : 'Save'}
             </button>
           </div>
         )}

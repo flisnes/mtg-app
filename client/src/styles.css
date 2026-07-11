@@ -602,6 +602,10 @@ button.danger-outline {
   font-size: 0.8rem;
   margin: 0.5rem 0 0;
 }
+.show-more {
+  align-self: center;
+  padding: 0.6rem 1.75rem;
+}
 
 /* ---- Search result row: tappable body + quick actions ---- */
 .result-row {

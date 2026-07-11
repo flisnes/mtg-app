@@ -33,6 +33,7 @@ const COLORS = [
   { value: 'G', label: 'Green' },
 ] as const;
 const TYPES = ['Creature', 'Instant', 'Sorcery', 'Artifact', 'Enchantment', 'Planeswalker', 'Land'];
+const PAGE_SIZE = 60;
 
 // What the quick-action buttons on each result do depends on where the user
 // searched from: the deck editor adds to that deck, the collection adds to the
@@ -152,6 +153,7 @@ function SearchOverlay({
 }) {
   const [results, setResults] = useState<Priced<OracleCard>[]>([]);
   const [total, setTotal] = useState(0);
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const [searching, setSearching] = useState(false);
   const [sheetCard, setSheetCard] = useState<Priced<OracleCard> | null>(null);
   const [view, setView] = useViewMode();
@@ -181,6 +183,12 @@ function SearchOverlay({
 
   const hasCriteria = query.trim().length > 0 || !!filters.color || !!filters.rarity || !!filters.type;
 
+  // New criteria start back at the first page. The debounce below swallows the
+  // extra effect run this triggers, so only one search fires.
+  useEffect(() => {
+    setLimit(PAGE_SIZE);
+  }, [query, filters, deckFilterActive, deckCtx]);
+
   useEffect(() => {
     if (!hasCriteria) {
       setResults([]);
@@ -192,13 +200,13 @@ function SearchOverlay({
       const effective: SearchFilters = deckFilterActive
         ? { ...filters, legalIn: deckCtx!.format, identity: deckCtx!.identity ?? undefined }
         : filters;
-      const res = await searchCards(query, effective);
+      const res = await searchCards(query, effective, limit);
       setResults(res.cards);
       setTotal(res.total);
       setSearching(false);
     }, 120);
     return () => clearTimeout(handle);
-  }, [query, filters, hasCriteria, deckFilterActive, deckCtx]);
+  }, [query, filters, hasCriteria, deckFilterActive, deckCtx, limit]);
 
   const setFilter = (key: keyof SearchFilters, value: string) =>
     setFilters((f) => ({ ...f, [key]: value || undefined }));
@@ -362,6 +370,16 @@ function SearchOverlay({
             }),
           )}
         />
+
+        {total > results.length && (
+          <button
+            className="show-more"
+            onClick={() => setLimit((l) => l + PAGE_SIZE)}
+            disabled={searching}
+          >
+            {searching ? 'Loading…' : `Show ${Math.min(PAGE_SIZE, total - results.length)} more`}
+          </button>
+        )}
 
         {sheetCard && (
           <CardSheet

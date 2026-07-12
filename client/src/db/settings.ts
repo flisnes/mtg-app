@@ -8,6 +8,9 @@ import { db } from './schema.js';
 //   pricesSha256    — installed prices-artifact hash (compared to manifest)
 //   pricesUpdatedAt — ISO date shown as "prices updated <date>"
 //   activeTrade     — persisted in-flight trade session (resume prompt)
+//   accountSession  — signed-in account {token, username} (account/session.ts)
+//   accountLastBackup / accountSyncConflict / accountAutoBackup /
+//   accountLastAutoBackupAt — backup bookkeeping (account/session.ts)
 
 export async function getSetting<T = unknown>(key: string): Promise<T | undefined> {
   const row = await db.settings.get(key);

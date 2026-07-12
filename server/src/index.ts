@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import { config } from './config.js';
+import { registerAccountRoutes } from './accounts.js';
 import { registerTradeRelay } from './relay.js';
 
 async function main() {
@@ -24,6 +25,7 @@ async function main() {
   });
 
   registerTradeRelay(app);
+  registerAccountRoutes(app);
 
   try {
     await app.listen({ host: config.host, port: config.port });

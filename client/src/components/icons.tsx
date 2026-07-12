@@ -18,7 +18,9 @@ export type IconName =
   | 'about'
   | 'more'
   | 'balance'
-  | 'plus';
+  | 'plus'
+  | 'account'
+  | 'community';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -109,6 +111,22 @@ const PATHS: Record<IconName, ReactElement> = {
       <circle cx="5" cy="12" r="1.6" />
       <circle cx="12" cy="12" r="1.6" />
       <circle cx="19" cy="12" r="1.6" />
+    </>
+  ),
+  // Single person — account & sync.
+  account: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
+    </>
+  ),
+  // Two people — the community.
+  community: (
+    <>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20v-.8A5.5 5.5 0 0 1 8 13.7h2a5.5 5.5 0 0 1 5.5 5.5v.8" />
+      <path d="M16 4.6a3.5 3.5 0 0 1 0 6.8" />
+      <path d="M18.2 13.9a5.5 5.5 0 0 1 3.3 5v.8" />
     </>
   ),
 };

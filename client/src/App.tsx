@@ -15,9 +15,12 @@ import { Trade } from './routes/Trade.js';
 import { History } from './routes/History.js';
 import { PriceMovers } from './routes/PriceMovers.js';
 import { About } from './routes/About.js';
+import { Account } from './routes/Account.js';
+import { Community } from './routes/Community.js';
 import { More } from './routes/More.js';
 import { Import } from './routes/Import.js';
 import { Export } from './routes/Export.js';
+import { maybeAutoBackup } from './account/session.js';
 import { recordCollectionPrices } from './price/tracking.js';
 import { Icon, type IconName } from './components/icons.js';
 
@@ -42,6 +45,8 @@ export function App() {
     void getSetting<boolean>('onboardingComplete').then((v) => setOnboarded(!!v));
     // Record today's price for every card in the collection (deduped per day).
     void recordCollectionPrices();
+    // Signed-in + opted-in: push a fresh backup at most every few hours.
+    void maybeAutoBackup();
   }, []);
 
   // Version beacon: check on launch and whenever the app returns to the
@@ -107,6 +112,8 @@ export function App() {
           <Route path="/history" element={<History />} />
           <Route path="/movers" element={<PriceMovers />} />
           <Route path="/about" element={<About />} />
+          <Route path="/account" element={<Account />} />
+          <Route path="/community" element={<Community />} />
           <Route path="/more" element={<More />} />
           <Route path="*" element={<Collection />} />
         </Routes>

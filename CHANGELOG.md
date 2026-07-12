@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.9.0
+
+- **Optional accounts** (More → Account & sync): create an account with an invite code to back up your collection, lists and decks to the server — then sign in on another device and restore. The app still works fully without one, and everything stays on your device unless you opt in.
+- One combined agreement at signup covers what the feature does: your data is stored on a small hobby server (keep local exports too!), and your **tradelist and wishlist become visible to other signed-in users**. Your collection, decks and price history stay private.
+- Backups happen when you tap "Back up now" and automatically now and then when you open the app (you can turn that off). If another device saved a newer backup, the app warns you before anything is overwritten — restore it or overwrite it, your choice.
+- New **Community** page (More → Community): browse everyone's trade and wishlists. Cards you want on someone's tradelist and cards you have that they want are highlighted and sorted first — same matching rule as in-person trades ("any printing" wishes match every edition).
+- Delete your account any time from the Account screen; it removes your backup and shared lists from the server while local data stays put.
+
 ## 0.8.0
 
 - Every card in your collection now has its price tracked automatically — a reading is recorded each day you open the app, with no setup. (The separate price-tracker watchlist is gone; the card sheet shows each printing's sparkline and change since tracking began.)

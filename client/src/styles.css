@@ -1363,3 +1363,140 @@ button.chip {
     max-width: 1280px;
   }
 }
+
+/* ---- Account & sync ---- */
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent);
+  padding: 0.4rem 0.6rem;
+}
+.seg-row {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+.seg {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text-dim);
+}
+.seg-active {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+.account-disclaimer {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.25rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--surface);
+}
+.account-disclaimer ul {
+  padding-left: 1.1rem;
+  margin: 0.5rem 0 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 420px;
+}
+.agree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+  color: var(--text);
+  margin: 0.5rem 0;
+}
+.agree-row input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent);
+}
+.form-error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin: 0;
+}
+.conflict-panel {
+  border: 1px solid var(--danger);
+  border-radius: 12px;
+  padding: 0.25rem 1rem 1rem;
+  margin: 0.75rem 0;
+}
+.account-form .primary,
+.confirm-row .primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ---- Community ---- */
+.menu-item-btn {
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font: inherit;
+}
+.community-user {
+  font-weight: 600;
+}
+.community-meta {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.community-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.community-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+.community-line:last-child {
+  border-bottom: none;
+}
+.community-line.match {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.line-qty {
+  color: var(--text-dim);
+  min-width: 2ch;
+}
+.line-name {
+  font-weight: 500;
+}
+.line-detail {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.community-line .badge {
+  margin-left: auto;
+}
+.match-summary {
+  margin-top: 0;
+}

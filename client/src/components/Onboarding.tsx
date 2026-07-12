@@ -22,7 +22,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         </ol>
         <p className="gate-note">
           On iPhone, tap Safari’s Share button then “Add to Home Screen” to install. Everything is stored on your
-          device — export a backup from About now and then.
+          device — export a backup from About now and then, or create an optional account under More to back up
+          to the server.
         </p>
         <button className="primary" onClick={onDone}>
           Get started

@@ -6,7 +6,9 @@ const LINKS: { to: string; label: string; icon: IconName }[] = [
   { to: '/wishlist', label: 'Wishlist', icon: 'wishlist' },
   { to: '/tradelist', label: 'Tradelist', icon: 'tradelist' },
   { to: '/movers', label: 'Price movers', icon: 'prices' },
+  { to: '/community', label: 'Community', icon: 'community' },
   { to: '/history', label: 'Trade history', icon: 'history' },
+  { to: '/account', label: 'Account & sync', icon: 'account' },
   { to: '/about', label: 'About & settings', icon: 'about' },
 ];
 

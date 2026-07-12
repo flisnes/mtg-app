@@ -25,4 +25,14 @@ export const config = {
   sessionTtlMs: num('SESSION_TTL_MS', 2 * 60 * 60 * 1000),
   /** Device-transfer sessions are short-lived; no resume, so a tight TTL. */
   transferTtlMs: num('TRANSFER_TTL_MS', 15 * 60 * 1000),
+  /** Where the accounts SQLite file lives. */
+  dataDir: process.env.DATA_DIR ?? './data',
+  /**
+   * Registration invite code, handed out by the operator. Empty (unset) means
+   * registration is closed — existing accounts still work.
+   */
+  inviteCode: process.env.INVITE_CODE ?? '',
+  /** Failed/total auth attempts allowed per IP per window (register+login). */
+  authAttemptsPerWindow: num('AUTH_ATTEMPTS_PER_WINDOW', 20),
+  authWindowMs: num('AUTH_WINDOW_MS', 15 * 60 * 1000),
 } as const;

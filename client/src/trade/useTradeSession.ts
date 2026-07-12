@@ -10,8 +10,7 @@ import {
   type WishLine,
 } from '@mtg/shared';
 import { applyCompletedTrade } from '../db/dataAccess.js';
-import { getOracleCardsByIds } from '../db/queries.js';
-import { db } from '../db/schema.js';
+import { readOwnTradelist, readOwnWishlist } from '../db/ownLists.js';
 import { deleteSetting, getSetting, setSetting } from '../db/settings.js';
 import { TRADE_WS_URL } from './config.js';
 import { sanitizeOffer, sanitizeWishlist } from './validate.js';
@@ -56,32 +55,8 @@ export interface TradeSession {
   reset: () => void;
 }
 
-/** Snapshot the local tradelist as self-contained TradeLines (to answer a peer's request). */
-async function readOwnTradelist(): Promise<TradeLine[]> {
-  const entries = (await db.collection.toArray()).filter((e) => e.quantityForTrade > 0);
-  const names = await getOracleCardsByIds(entries.map((e) => e.oracleId));
-  return entries.slice(0, 500).map((e) => ({
-    oracleId: e.oracleId,
-    scryfallId: e.scryfallId,
-    name: names.get(e.oracleId)?.name ?? '(unknown card)',
-    quantity: e.quantityForTrade,
-    condition: e.condition,
-    finish: e.finish,
-    lang: e.lang,
-  }));
-}
-
-/** Snapshot the local wishlist as self-contained WishLines (to answer a peer's request). */
-async function readOwnWishlist(): Promise<WishLine[]> {
-  const entries = await db.wishlist.toArray();
-  const names = await getOracleCardsByIds(entries.map((e) => e.oracleId));
-  return entries.slice(0, 500).map((e) => ({
-    oracleId: e.oracleId,
-    scryfallId: e.scryfallId,
-    name: names.get(e.oracleId)?.name ?? '(unknown card)',
-    quantity: e.quantity,
-  }));
-}
+/** The relay caps shared lists at 500 lines (server maxOfferLines). */
+const SHARE_LINE_CAP = 500;
 
 export function otherSeat(seat: Seat): Seat {
   return seat === 'a' ? 'b' : 'a';
@@ -188,7 +163,7 @@ export function useTradeSession(): TradeSession {
           // Partner asked to browse our tradelist — answer with a snapshot.
           // The tradelist is by definition the "shown to trade partners" list.
           const c = active.current.code;
-          void readOwnTradelist().then((lines) => {
+          void readOwnTradelist(SHARE_LINE_CAP).then((lines) => {
             const s = ws.current;
             if (c && s && s.readyState === WebSocket.OPEN) {
               s.send(JSON.stringify({ v: PROTOCOL_VERSION, type: 'tradelist_share', sessionCode: c, lines }));
@@ -204,7 +179,7 @@ export function useTradeSession(): TradeSession {
           // Partner wants match highlighting — answer with a wishlist snapshot.
           // The wishlist is by definition surfaced to trade partners.
           const c = active.current.code;
-          void readOwnWishlist().then((lines) => {
+          void readOwnWishlist(SHARE_LINE_CAP).then((lines) => {
             const s = ws.current;
             if (c && s && s.readyState === WebSocket.OPEN) {
               s.send(JSON.stringify({ v: PROTOCOL_VERSION, type: 'wishlist_share', sessionCode: c, lines }));

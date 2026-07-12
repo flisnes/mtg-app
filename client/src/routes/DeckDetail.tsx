@@ -30,6 +30,7 @@ import {
   type GroupKey,
 } from '../components/CardSorting.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
+import { useEscapeToClose } from '../components/useEscapeToClose.js';
 
 interface Row {
   id: string;
@@ -50,6 +51,8 @@ export function DeckDetail() {
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('deck', { group: 'type' });
   const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: { id: string; quantity: number } } | null>(null);
+  // Escape on the exit sheet = "skip" (same as clicking the backdrop).
+  useEscapeToClose(exit ? () => navigate('/decks') : null);
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -158,6 +161,10 @@ export function DeckDetail() {
         onBlur={() => {
           if (nameDraft !== null && nameDraft !== deck.name) void renameDeck(id, nameDraft);
           setNameDraft(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur(); // commits via onBlur
+          else if (e.key === 'Escape') setNameDraft(null); // discard edits
         }}
         aria-label="Deck name"
       />

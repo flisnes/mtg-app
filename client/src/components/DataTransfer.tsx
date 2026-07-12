@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { TRADE_ENABLED } from '../trade/config.js';
 import { useTransfer } from '../transfer/useTransfer.js';
+import { CodeJoinForm } from './CodeJoinForm.js';
 
 // "Your data" section of About & settings: move everything (collection, lists,
 // decks, history) to another device with a one-time code, trade-style. The
@@ -9,7 +10,6 @@ import { useTransfer } from '../transfer/useTransfer.js';
 export function DataTransfer() {
   const t = useTransfer();
   const [joining, setJoining] = useState(false);
-  const [joinCode, setJoinCode] = useState('');
 
   if (!TRADE_ENABLED) {
     return (
@@ -24,20 +24,11 @@ export function DataTransfer() {
       return (
         <div className="transfer-panel">
           <p className="fine-print">Enter the code shown on the device you’re transferring from.</p>
-          <div className="list-toolbar">
-            <input
-              className="search-input grow"
-              placeholder="Enter code…"
-              value={joinCode}
-              maxLength={6}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              aria-label="Transfer code"
-            />
-            <button className="primary" onClick={() => t.startReceive(joinCode)} disabled={joinCode.length < 6}>
-              Receive
+          <CodeJoinForm label="Transfer code" submitLabel="Receive" primary autoFocus onSubmit={t.startReceive}>
+            <button type="button" onClick={() => setJoining(false)}>
+              Cancel
             </button>
-            <button onClick={() => setJoining(false)}>Cancel</button>
-          </div>
+          </CodeJoinForm>
         </div>
       );
     }

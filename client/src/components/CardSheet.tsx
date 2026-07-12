@@ -19,6 +19,7 @@ import {
 import { getPrintingsForOracle } from '../db/queries.js';
 import { recordPriceSnapshots } from '../price/tracking.js';
 import { formatPrice } from './CardSorting.js';
+import { useEscapeToClose } from './useEscapeToClose.js';
 
 // Bottom-sheet for a card's details, in five modes:
 //  - add (default): add the card somewhere new — where depends on addTarget
@@ -96,6 +97,7 @@ export function CardSheet({
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
   const [busy, setBusy] = useState(false);
   const [watching, setWatching] = useState(false);
+  useEscapeToClose(busy ? null : onClose);
 
   useEffect(() => {
     void getPrintingsForOracle(oracleCard.oracleId).then(setPrintings);
@@ -168,6 +170,11 @@ export function CardSheet({
       });
     }
     onClose();
+  }
+
+  /** Enter in a quantity field commits the sheet, like a form submit. */
+  function saveOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' && !busy) void save();
   }
 
   async function del() {
@@ -255,7 +262,13 @@ export function CardSheet({
         <div className="field-grid">
           <label className="field">
             <span>Quantity</span>
-            <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))} />
+            <input
+              type="number"
+              min={1}
+              value={quantity}
+              onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+              onKeyDown={saveOnEnter}
+            />
           </label>
           {collectionFields && (
             <label className="field">
@@ -266,6 +279,7 @@ export function CardSheet({
                 max={quantity}
                 value={clampedForTrade}
                 onChange={(e) => setForTrade(Math.max(0, Number(e.target.value) || 0))}
+                onKeyDown={saveOnEnter}
               />
             </label>
           )}

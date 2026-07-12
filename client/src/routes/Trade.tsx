@@ -12,8 +12,10 @@ import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { formatPrice } from '../components/CardSorting.js';
 import { CardItems, CardList, type CardItem } from '../components/CardViews.js';
+import { CodeJoinForm } from '../components/CodeJoinForm.js';
 import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
+import { useEscapeToClose } from '../components/useEscapeToClose.js';
 import { TRADE_ENABLED } from '../trade/config.js';
 import {
   clearPersistedTrade,
@@ -100,7 +102,6 @@ const BALANCE_EPSILON = 0.5;
 
 export function Trade() {
   const trade = useTradeSession();
-  const [joinCode, setJoinCode] = useState('');
   const [resumable, setResumable] = useState<ActiveTrade | null>(null);
 
   useEffect(() => {
@@ -137,19 +138,7 @@ export function Trade() {
             Start a trade
           </button>
         </div>
-        <div className="list-toolbar">
-          <input
-            className="search-input grow"
-            placeholder="Enter code…"
-            value={joinCode}
-            maxLength={6}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            aria-label="Join code"
-          />
-          <button onClick={() => trade.join(joinCode)} disabled={joinCode.length < 6}>
-            Join
-          </button>
-        </div>
+        <CodeJoinForm label="Join code" submitLabel="Join" onSubmit={trade.join} />
       </Page>
     );
   }
@@ -527,6 +516,7 @@ function OfferColumn({
 
 /** Generic bottom sheet for the trade tools (portals to <body>, like CardSheet). */
 function TradeSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useEscapeToClose(onClose);
   return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>

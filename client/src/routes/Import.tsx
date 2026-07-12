@@ -231,7 +231,16 @@ function CardPicker({ onPick }: { onPick: (card: OracleCard) => void }) {
   const { results } = useCardSearch(q, { limit: 12 });
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-      <input className="search-input" placeholder="Search for the right card…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+      <input
+        className="search-input"
+        placeholder="Search for the right card…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        // Enter picks the top match — usually the right one after a few letters.
+        onKeyDown={(e) => e.key === 'Enter' && results[0] && onPick(results[0])}
+        enterKeyHint="done"
+        autoFocus
+      />
       {results.length > 0 && (
         <ul className="result-list">
           {results.map((c) => (

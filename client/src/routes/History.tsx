@@ -7,6 +7,7 @@ import { useCardMaps } from '../db/useCardMaps.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
 import { Icon } from '../components/icons.js';
+import { useEscapeToClose } from '../components/useEscapeToClose.js';
 
 function summarize(lines: { quantity: number }[]): number {
   return lines.reduce((s, l) => s + l.quantity, 0);
@@ -16,6 +17,7 @@ export function History() {
   const trades = useLiveQuery(() => db.trades.orderBy('completedAt').reverse().toArray(), []);
   const [open, setOpen] = useState<Trade | null>(null);
   const [info, setInfo] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
+  useEscapeToClose(open ? () => setOpen(null) : null);
 
   return (
     <Page title="Trade history" subtitle="Completed trades, stored only on this device.">

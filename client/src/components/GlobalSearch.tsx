@@ -125,6 +125,12 @@ export function GlobalSearchBar() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(true)}
+          // Results update live; Enter just dismisses the (mobile) keyboard
+          // so it stops covering them. The overlay stays open.
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+          }}
+          enterKeyHint="search"
           aria-label="Search cards"
         />
         {open && (

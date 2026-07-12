@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
-import type { OracleCard, PriceMap, Printing } from '@mtg/shared';
+import type { Table } from 'dexie';
+import type { PriceMap } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getSetting, setSetting } from '../db/settings.js';
 import { sha256Hex } from '../util/sha256.js';
@@ -43,19 +44,27 @@ async function downloadDecompressed(
   return await new Response(stream).text();
 }
 
-/** Atomically replace one chunk's id-range: delete rows with the key prefix, insert the new set. */
-async function importChunk(task: ChunkTask, rows: unknown[]): Promise<void> {
-  if (task.artifact === 'oracle') {
-    await db.transaction('rw', db.oracleCards, async () => {
-      await db.oracleCards.where(':id').startsWith(task.key).delete();
-      await db.oracleCards.bulkPut(rows as OracleCard[]);
+// How much of a chunk's byte share the download phase covers; the rest is the
+// IndexedDB import, which on typical hardware takes about as long again.
+const DOWNLOAD_SHARE = 0.6;
+const IMPORT_BATCH = 2000;
+
+/**
+ * Atomically replace one chunk's id-range: delete rows with the key prefix,
+ * insert the new set. Rows go in batches so progress keeps moving during the
+ * write (still one transaction, so interruption can't leave a partial chunk).
+ */
+async function importChunk(task: ChunkTask, rows: unknown[], onRows: (fraction: number) => void): Promise<void> {
+  const replace = <T>(table: Table<T, string>) =>
+    db.transaction('rw', table, async () => {
+      await table.where(':id').startsWith(task.key).delete();
+      for (let i = 0; i < rows.length; i += IMPORT_BATCH) {
+        await table.bulkPut(rows.slice(i, i + IMPORT_BATCH) as T[]);
+        onRows(Math.min(1, (i + IMPORT_BATCH) / rows.length));
+      }
     });
-  } else {
-    await db.transaction('rw', db.printings, async () => {
-      await db.printings.where(':id').startsWith(task.key).delete();
-      await db.printings.bulkPut(rows as Printing[]);
-    });
-  }
+  if (task.artifact === 'oracle') await replace(db.oracleCards);
+  else await replace(db.printings);
 }
 
 async function readChunkState(): Promise<InstalledChunks> {
@@ -72,8 +81,7 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
     const downloadProgress = (label: string) => (loaded: number) =>
       post({
         type: 'progress',
-        // A chunk's byte share is 85% download, 15% import.
-        fraction: totalBytes ? (doneBytes + loaded * 0.85) / totalBytes : 0,
+        fraction: totalBytes ? (doneBytes + loaded * DOWNLOAD_SHARE) / totalBytes : 0,
         label: `${label} (${mb(doneBytes + loaded)}/${mb(totalBytes)} MB)`,
       });
 
@@ -85,12 +93,15 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
       if ((await sha256Hex(text)) !== task.sha256) {
         throw new Error(`${task.artifact} chunk ${task.key} checksum mismatch — download corrupt`);
       }
-      post({
-        type: 'progress',
-        fraction: totalBytes ? (doneBytes + task.bytes * 0.85) / totalBytes : 0,
-        label: `Preparing ${task.artifact === 'oracle' ? 'cards' : 'editions'}…`,
-      });
-      await importChunk(task, JSON.parse(text) as unknown[]);
+      const label = `Installing ${task.artifact === 'oracle' ? 'cards' : 'editions'}…`;
+      const importProgress = (rowFraction: number) =>
+        post({
+          type: 'progress',
+          fraction: totalBytes ? (doneBytes + task.bytes * (DOWNLOAD_SHARE + (1 - DOWNLOAD_SHARE) * rowFraction)) / totalBytes : 0,
+          label,
+        });
+      importProgress(0);
+      await importChunk(task, JSON.parse(text) as unknown[], importProgress);
 
       // Persist bookkeeping after every chunk so an interrupted update resumes.
       chunkState[task.artifact][task.key] = { sha256: task.sha256, count: task.count };
@@ -105,7 +116,7 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
       const url = new URL(req.prices.url, req.baseUrl).href;
       const text = await downloadDecompressed(url, req.prices.bytes, downloadProgress('Downloading prices'));
       if ((await sha256Hex(text)) !== req.prices.sha256) throw new Error('prices checksum mismatch — download corrupt');
-      post({ type: 'progress', fraction: totalBytes ? (doneBytes + req.prices.bytes * 0.85) / totalBytes : 0, label: 'Updating prices…' });
+      post({ type: 'progress', fraction: totalBytes ? (doneBytes + req.prices.bytes * DOWNLOAD_SHARE) / totalBytes : 0, label: 'Updating prices…' });
       await db.priceShards.bulkPut(buildPriceShards(JSON.parse(text) as PriceMap));
       await setSetting('pricesSha256', req.prices.sha256);
       await setSetting('pricesUpdatedAt', req.pricesUpdatedAt);

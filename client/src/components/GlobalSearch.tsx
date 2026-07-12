@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { matchPath, useLocation } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import type { Color, DeckBoard, DeckFormat, OracleCard, Priced, Rarity } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { useCardSearch } from '../cardDb/useCardSearch.js';
@@ -20,6 +20,7 @@ import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.j
 import { formatPrice } from './CardSorting.js';
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
+import { useAccount } from '../account/useAccount.js';
 
 // Card search is the front door to the hobby, so it lives in a persistent
 // header instead of a tab: the input is reachable from every screen, and
@@ -83,6 +84,9 @@ export function GlobalSearchBar() {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({});
   const location = useLocation();
+  const navigate = useNavigate();
+  const { enabled: accountsEnabled, session } = useAccount();
+  const signedIn = !!session;
 
   // Navigating away (tab bar stays tappable under the overlay) closes search.
   const path = location.pathname;
@@ -133,10 +137,22 @@ export function GlobalSearchBar() {
           enterKeyHint="search"
           aria-label="Search cards"
         />
-        {open && (
+        {open ? (
           <button className="header-close" onClick={close} aria-label="Close search">
             ✕
           </button>
+        ) : (
+          accountsEnabled && (
+            <button
+              className="header-account"
+              onClick={() => navigate('/account')}
+              aria-label={signedIn ? `Account: signed in as ${session!.username}` : 'Account & sync'}
+              title={signedIn ? `Signed in as ${session!.username}` : 'Account & sync'}
+            >
+              <Icon name="account" size={22} />
+              {signedIn && <span className="header-account-dot" aria-hidden />}
+            </button>
+          )
         )}
       </header>
       {open && <SearchOverlay query={query} filters={filters} setFilters={setFilters} />}

@@ -101,6 +101,27 @@ button.danger-outline {
   padding: 0.5rem 0.8rem;
   border-radius: 12px;
 }
+.header-account {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem;
+  border-radius: 999px;
+  color: var(--text-dim);
+  background: var(--surface-2);
+}
+.header-account-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ok);
+  border: 2px solid var(--surface);
+}
 .search-overlay {
   position: fixed;
   top: calc(var(--header-h) + var(--safe-top));
@@ -521,6 +542,35 @@ button.danger-outline {
   line-height: 1.45;
 }
 .onboard-steps strong {
+  color: var(--accent);
+}
+.onboard-account {
+  text-align: left;
+  margin: 0.5rem 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.onboard-account-head {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.onboard-account-note {
+  margin: 0.5rem 0 0.35rem;
+}
+.onboard-account-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.onboard-account strong {
   color: var(--accent);
 }
 

@@ -233,7 +233,7 @@ export function DeckDetail() {
                 <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
                   <div className="result-main">
                     <div className="result-name">
-                      {c.name} <span className="badge">×{c.addQty}</span>
+                      {c.name} {c.addQty !== 1 && <span className="badge">×{c.addQty}</span>}
                     </div>
                   </div>
                 </li>

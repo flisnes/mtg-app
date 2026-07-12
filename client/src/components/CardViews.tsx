@@ -54,7 +54,7 @@ export interface CardItem {
   key: string;
   name: string;
   image: string | null;
-  /** Quantity: pill in list rows, corner badge on grid tiles. */
+  /** Quantity: pill in list rows, corner badge on grid tiles. Hidden when exactly 1. */
   count?: number;
   /** Small badge: after the name in list rows, top-left on grid tiles. */
   badge?: string;
@@ -99,7 +99,7 @@ export function CardList({ items, className }: { items: CardItem[]; className?: 
               {it.sub && <div className="result-sub">{it.sub}</div>}
             </div>
             {it.price && <div className="result-price">{it.price}</div>}
-            {it.count != null && <div className="qty-pill">×{it.count}</div>}
+            {it.count != null && it.count !== 1 && <div className="qty-pill">×{it.count}</div>}
           </>
         );
         return (
@@ -135,7 +135,7 @@ export function CardGrid({ items, className }: { items: CardItem[]; className?: 
                 {it.badge}
               </span>
             )}
-            {it.count != null && <span className="tile-count">×{it.count}</span>}
+            {it.count != null && it.count !== 1 && <span className="tile-count">×{it.count}</span>}
           </button>
           {it.actions && <div className="tile-footer">{it.actions}</div>}
         </li>

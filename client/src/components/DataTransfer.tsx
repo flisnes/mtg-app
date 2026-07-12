@@ -91,8 +91,7 @@ export function DataTransfer() {
           Received {c.cards.toLocaleString()} card{c.cards === 1 ? '' : 's'} (
           {c.collectionEntries.toLocaleString()} collection entries), {c.wishlist.toLocaleString()} wishlist{' '}
           {c.wishlist === 1 ? 'entry' : 'entries'}, {c.decks.toLocaleString()} deck{c.decks === 1 ? '' : 's'},{' '}
-          {c.trades.toLocaleString()} recorded trade{c.trades === 1 ? '' : 's'} and price tracking for{' '}
-          {c.watchedCards.toLocaleString()} card{c.watchedCards === 1 ? '' : 's'}.
+          {c.trades.toLocaleString()} recorded trade{c.trades === 1 ? '' : 's'} and the collection's price history.
         </p>
         <p className="fine-print">
           Applying will <strong>replace</strong> the collection, lists and decks currently on this device.

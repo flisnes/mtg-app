@@ -6,19 +6,18 @@ import {
   addDeckCard,
   addToCollection,
   addToWishlist,
-  isWatched,
   removeDeckCard,
   removeFromCollection,
   removeFromWishlist,
   setDeckCardQuantity,
-  unwatchCard,
   updateCollectionEntry,
   updateWishlistEntry,
-  watchCard,
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
-import { recordPriceSnapshots } from '../price/tracking.js';
+import { getPriceHistory } from '../price/tracking.js';
+import { historyChange, type HistoryChange } from '../price/history.js';
 import { formatPrice } from './CardSorting.js';
+import { Sparkline } from './Sparkline.js';
 import { useEscapeToClose } from './useEscapeToClose.js';
 
 // Bottom-sheet for a card's details, in five modes:
@@ -29,7 +28,7 @@ import { useEscapeToClose } from './useEscapeToClose.js';
 //  - wish (wishEntry): edit a wishlist line — edition (incl. "any printing")
 //    and quantity
 //  - deck (deckCard): edit a deck slot's quantity
-//  - info (readOnly): app-wide card info — image, printings, price, watch
+//  - info (readOnly): app-wide card info — image, printings, price + history
 
 /** Where add mode sends the card (mirrors the context-sensitive search). */
 export type AddTarget =
@@ -96,29 +95,25 @@ export function CardSheet({
   const [quantity, setQuantity] = useState(entry?.quantity ?? wishEntry?.quantity ?? deckCard?.quantity ?? 1);
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
   const [busy, setBusy] = useState(false);
-  const [watching, setWatching] = useState(false);
+  const [trend, setTrend] = useState<HistoryChange | null>(null);
   useEscapeToClose(busy ? null : onClose);
 
   useEffect(() => {
     void getPrintingsForOracle(oracleCard.oracleId).then(setPrintings);
   }, [oracleCard.oracleId]);
 
-  // Price-watching needs a concrete printing; "any printing" falls back to the default one.
-  const watchId = scryfallId || oracleCard.defaultScryfallId;
+  // Recorded price history for the shown printing (collection cards are
+  // tracked automatically); "any printing" falls back to the default one.
+  const shownId = scryfallId || oracleCard.defaultScryfallId;
   useEffect(() => {
-    void isWatched(watchId).then(setWatching);
-  }, [watchId]);
-
-  async function toggleWatch() {
-    if (watching) {
-      await unwatchCard(watchId);
-      setWatching(false);
-    } else {
-      await watchCard(watchId, oracleCard.oracleId);
-      await recordPriceSnapshots();
-      setWatching(true);
-    }
-  }
+    let live = true;
+    void getPriceHistory(shownId).then((h) => {
+      if (live) setTrend(h ? historyChange(h) : null);
+    });
+    return () => {
+      live = false;
+    };
+  }, [shownId]);
 
   const printing = useMemo(
     () => printings.find((p) => p.scryfallId === scryfallId),
@@ -206,6 +201,7 @@ export function CardSheet({
             {oracleCard.manaCost && <div className="result-sub">{oracleCard.manaCost}</div>}
             <div className="result-sub">{oracleCard.typeLine}</div>
             <div className="result-price">{cardPrice}</div>
+            {trend && trend.points > 1 && <PriceTrend trend={trend} />}
           </div>
         </div>
 
@@ -286,10 +282,6 @@ export function CardSheet({
         </div>
         )}
 
-        <button className={`watch-toggle ${watching ? 'watching' : ''}`} onClick={toggleWatch}>
-          {watching ? '★ Watching price' : '☆ Watch price'}
-        </button>
-
         {mode === 'info' ? (
           <div className="sheet-actions">
             <button className="primary" onClick={onClose}>
@@ -324,5 +316,22 @@ export function CardSheet({
       </div>
     </div>,
     document.body,
+  );
+}
+
+/** Recorded price movement of the shown printing: sparkline + change since tracking began. */
+function PriceTrend({ trend }: { trend: HistoryChange }) {
+  const dir = trend.delta > 0.001 ? 'up' : trend.delta < -0.001 ? 'down' : 'flat';
+  const sym = trend.cur === 'eur' ? '€' : '$';
+  return (
+    <div className="sheet-price-trend">
+      <Sparkline values={trend.series} />
+      <div className={`price-change price-${dir}`}>
+        {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·'} {sym}
+        {Math.abs(trend.delta).toFixed(2)}
+        {trend.pct != null && ` (${trend.pct >= 0 ? '+' : '−'}${Math.abs(trend.pct).toFixed(1)}%)`}
+        <span className="fine-print"> · {trend.points} pts</span>
+      </div>
+    </div>
   );
 }

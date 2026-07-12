@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Page } from './Page.js';
 import { APP_VERSION } from '../version.js';
-import { Link } from 'react-router-dom';
 import { DataTransfer } from '../components/DataTransfer.js';
-import { deleteAllUserData, watchAllCollection } from '../db/dataAccess.js';
+import { deleteAllUserData } from '../db/dataAccess.js';
 import { getSetting } from '../db/settings.js';
 import { formatDiagnostics } from '../errorLog.js';
-import { recordPriceSnapshots } from '../price/tracking.js';
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return '—';
@@ -31,18 +29,10 @@ export function About() {
     })();
   }, []);
 
-  const [tracked, setTracked] = useState<number | null>(null);
-
   async function handleDelete() {
     await deleteAllUserData();
     setConfirming(false);
     setDone(true);
-  }
-
-  async function trackAll() {
-    const n = await watchAllCollection();
-    await recordPriceSnapshots();
-    setTracked(n);
   }
 
   return (
@@ -86,19 +76,6 @@ export function About() {
       </section>
 
       <section className="about-section">
-        <h2>Price tracking</h2>
-        <p className="fine-print">
-          Track cards’ prices over time — a value is recorded each time you open the app.{' '}
-          <Link to="/prices">View tracked cards</Link>.
-        </p>
-        {tracked != null ? (
-          <p role="status">Now tracking {tracked} card{tracked === 1 ? '' : 's'} from your collection.</p>
-        ) : (
-          <button onClick={trackAll}>Track all cards in my collection</button>
-        )}
-      </section>
-
-      <section className="about-section">
         <h2>Having trouble?</h2>
         <p className="fine-print">
           If something breaks, copy the diagnostic log and send it along — it includes recent errors and your app/device
@@ -117,7 +94,8 @@ export function About() {
         <h2>Attribution</h2>
         <p className="fine-print">
           Card data and images are provided by <a href="https://scryfall.com">Scryfall</a>. Prices are sourced from
-          Scryfall bulk data and may be up to 24 hours stale.
+          Scryfall bulk data and may be up to 24 hours stale. Your collection’s price history is recorded
+          automatically each time you open the app — tap any card to see its trend.
         </p>
         <p className="fine-print">
           Portions of the materials are property of Wizards of the Coast. This is unofficial Fan Content permitted under

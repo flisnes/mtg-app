@@ -771,19 +771,12 @@ button.primary {
   margin-right: auto;
 }
 
-/* ---- Watch toggle + price tracker ---- */
-.watch-toggle {
-  align-self: flex-start;
-}
-.watch-toggle.watching {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.price-now {
+/* ---- Price history (card sheet) ---- */
+.sheet-price-trend {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
 }
 .price-change {
   font-size: 0.8rem;

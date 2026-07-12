@@ -17,8 +17,7 @@ import { About } from './routes/About.js';
 import { More } from './routes/More.js';
 import { Import } from './routes/Import.js';
 import { Export } from './routes/Export.js';
-import { Prices } from './routes/Prices.js';
-import { recordPriceSnapshots } from './price/tracking.js';
+import { recordCollectionPrices } from './price/tracking.js';
 import { Icon, type IconName } from './components/icons.js';
 
 const PRIMARY_NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
@@ -40,8 +39,8 @@ export function App() {
       onOfflineReady: () => setOfflineReady(true),
     });
     void getSetting<boolean>('onboardingComplete').then((v) => setOnboarded(!!v));
-    // Record today's price for every watched card (deduped per day).
-    void recordPriceSnapshots();
+    // Record today's price for every card in the collection (deduped per day).
+    void recordCollectionPrices();
   }, []);
 
   // Version beacon: check on launch and whenever the app returns to the
@@ -105,7 +104,6 @@ export function App() {
           <Route path="/decks/:id" element={<DeckDetail />} />
           <Route path="/trade" element={<Trade />} />
           <Route path="/history" element={<History />} />
-          <Route path="/prices" element={<Prices />} />
           <Route path="/about" element={<About />} />
           <Route path="/more" element={<More />} />
           <Route path="*" element={<Collection />} />

@@ -465,34 +465,6 @@ export async function applyCompletedTrade(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Price watchlist (records printing prices over time; see price/tracking.ts).
-// ---------------------------------------------------------------------------
-
-export async function watchCard(scryfallId: string, oracleId: string): Promise<void> {
-  await db.watchlist.put({ scryfallId, oracleId, createdAt: Date.now() });
-}
-
-export async function unwatchCard(scryfallId: string): Promise<void> {
-  await db.watchlist.delete(scryfallId);
-}
-
-export async function isWatched(scryfallId: string): Promise<boolean> {
-  return !!(await db.watchlist.get(scryfallId));
-}
-
-/** Watch every distinct printing currently in the collection. Returns the count watched. */
-export async function watchAllCollection(): Promise<number> {
-  const entries = await db.collection.toArray();
-  const now = Date.now();
-  const map = new Map<string, { scryfallId: string; oracleId: string; createdAt: number }>();
-  for (const e of entries) {
-    if (!map.has(e.scryfallId)) map.set(e.scryfallId, { scryfallId: e.scryfallId, oracleId: e.oracleId, createdAt: now });
-  }
-  await db.watchlist.bulkPut([...map.values()]);
-  return map.size;
-}
-
 async function clearUserDataTables(): Promise<void> {
   await Promise.all(USER_DATA_TABLES.map((t) => t.clear()));
 }
@@ -511,8 +483,7 @@ export async function replaceAllUserData(data: Omit<TransferPayload, 'version'>)
       db.decks.bulkAdd(data.decks),
       db.deckCards.bulkAdd(data.deckCards),
       db.trades.bulkAdd(data.trades),
-      db.watchlist.bulkAdd(data.watchlist),
-      db.priceSnapshots.bulkAdd(data.priceSnapshots),
+      db.priceHistories.bulkAdd(data.priceHistories),
     ]);
   });
 }

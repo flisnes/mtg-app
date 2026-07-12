@@ -111,19 +111,17 @@ export interface Setting {
   value: unknown;
 }
 
-/** A printing whose price the user is tracking. */
-export interface WatchedCard {
+/**
+ * Compact price history for one collection printing (every printing in the
+ * collection is tracked automatically): one row per card, not one per
+ * card-day. `eur[i]`/`usd[i]` are integer cents for the day `startDay + i`
+ * (UTC); days with no reading (app not opened, no price) are null. A few bytes
+ * per card per day, so tracking a whole collection stays ~20 MB/year instead
+ * of ~1 GB with row-per-day snapshot objects.
+ */
+export interface PriceHistory {
   scryfallId: string;
-  oracleId: string;
-  createdAt: number;
-}
-
-/** A recorded price point, captured when the app opens (deduped per day). */
-export interface PriceSnapshot {
-  id: string;
-  scryfallId: string;
-  at: number; // ms timestamp
-  day: string; // YYYY-MM-DD, dedupe key
-  eur: number | null;
-  usd: number | null;
+  startDay: string; // YYYY-MM-DD (UTC) of index 0
+  eur: (number | null)[]; // integer cents per day
+  usd: (number | null)[]; // integer cents per day; same length as eur
 }

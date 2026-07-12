@@ -8,10 +8,10 @@ import type {
   DeckCard,
   Trade,
   Setting,
-  WatchedCard,
-  PriceSnapshot,
+  PriceHistory,
   PriceShard,
 } from '@mtg/shared';
+import { recordDay, toCents } from '../price/history.js';
 
 // Local IndexedDB store (beta plan §4). Two kinds of data live here:
 //  - Card database (oracleCards, printings): read-only, replaced wholesale when
@@ -31,8 +31,7 @@ export class MtgDatabase extends Dexie {
   deckCards!: Table<DeckCard, string>;
   trades!: Table<Trade, string>;
   settings!: Table<Setting, string>;
-  watchlist!: Table<WatchedCard, string>;
-  priceSnapshots!: Table<PriceSnapshot, string>;
+  priceHistories!: Table<PriceHistory, string>;
   priceShards!: Table<PriceShard, string>;
 
   constructor() {
@@ -65,6 +64,44 @@ export class MtgDatabase extends Dexie {
     this.version(3).stores({
       priceShards: 'key',
     });
+
+    // v4: compact price history — one row per watched card (cents indexed by
+    // day offset) instead of one indexed snapshot object per card-day, so
+    // watching a whole collection costs ~20 MB/year instead of ~1 GB.
+    // Existing snapshots are folded into histories here; v5 drops the table
+    // (a table can only be deleted in a version after the one that reads it).
+    this.version(4)
+      .stores({ priceHistories: 'scryfallId' })
+      .upgrade(async (tx) => {
+        const snaps: { scryfallId: string; day: string; eur: number | null; usd: number | null }[] =
+          await tx.table('priceSnapshots').toArray();
+        const byCard = new Map<string, typeof snaps>();
+        for (const s of snaps) {
+          const arr = byCard.get(s.scryfallId);
+          if (arr) arr.push(s);
+          else byCard.set(s.scryfallId, [s]);
+        }
+        const histories: PriceHistory[] = [];
+        byCard.forEach((list, scryfallId) => {
+          list.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+          const first = list[0]!;
+          const h: PriceHistory = { scryfallId, startDay: first.day, eur: [toCents(first.eur)], usd: [toCents(first.usd)] };
+          for (let i = 1; i < list.length; i++) {
+            const s = list[i]!;
+            recordDay(h, s.day, toCents(s.eur), toCents(s.usd));
+          }
+          histories.push(h);
+        });
+        if (histories.length) await tx.table('priceHistories').bulkAdd(histories);
+      });
+
+    // v5: row-per-day snapshots are gone (migrated in v4).
+    this.version(5).stores({ priceSnapshots: null });
+
+    // v6: the whole collection is tracked automatically, so the manual
+    // watchlist is gone. Histories of unowned cards are pruned at runtime
+    // by recordCollectionPrices, not here.
+    this.version(6).stores({ watchlist: null });
   }
 }
 
@@ -81,6 +118,5 @@ export const USER_DATA_TABLES = [
   db.decks,
   db.deckCards,
   db.trades,
-  db.watchlist,
-  db.priceSnapshots,
+  db.priceHistories,
 ];

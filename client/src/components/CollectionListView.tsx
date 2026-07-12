@@ -6,6 +6,7 @@ import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { SortControls, formatPrice, priceValue, sortCards, useCardSort } from './CardSorting.js';
+import { historyChange } from '../price/history.js';
 import { useOpenSearch } from './GlobalSearch.js';
 
 const COLORS: Color[] = ['W', 'U', 'B', 'R', 'G'];
@@ -28,6 +29,19 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const [sort, setSort] = useCardSort(onlyTrade ? 'tradelist' : 'collection');
   const openSearch = useOpenSearch();
 
+  // scryfallId → recorded price change; only loaded while a change sort is
+  // active (the histories table is the biggest user-data table).
+  const needChanges = sort.key === 'change' || sort.key === 'changePct';
+  const changes = useLiveQuery(async () => {
+    if (!needChanges) return undefined;
+    const m = new Map<string, { delta: number; pct: number | null }>();
+    for (const h of await db.priceHistories.toArray()) {
+      const c = historyChange(h);
+      if (c) m.set(h.scryfallId, { delta: c.delta, pct: c.pct });
+    }
+    return m;
+  }, [needChanges]);
+
   const sets = useMemo(() => {
     const m = new Map<string, string>();
     rows?.forEach((r) => r.printing && m.set(r.printing.set, r.printing.setName));
@@ -47,10 +61,16 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     });
     return sortCards(
       matching,
-      (r) => ({ name: r.oracle?.name, cmc: r.oracle?.cmc, price: priceValue(r.printing, r.oracle) }),
+      (r) => ({
+        name: r.oracle?.name,
+        cmc: r.oracle?.cmc,
+        price: priceValue(r.printing, r.oracle),
+        change: changes?.get(r.entry.scryfallId)?.delta ?? null,
+        changePct: changes?.get(r.entry.scryfallId)?.pct ?? null,
+      }),
       sort,
     );
-  }, [rows, name, set, color, rarity, tradeOnly, onlyTrade, sort]);
+  }, [rows, name, set, color, rarity, tradeOnly, onlyTrade, sort, changes]);
 
   const totalQty = filtered.reduce((s, r) => s + r.entry.quantity, 0);
 
@@ -106,7 +126,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           {filtered.length} entr{filtered.length === 1 ? 'y' : 'ies'} · {totalQty} card{totalQty === 1 ? '' : 's'}
         </p>
         <div className="meta-actions">
-          <SortControls prefs={sort} onChange={setSort} />
+          <SortControls prefs={sort} onChange={setSort} withChange />
           <ViewToggle mode={view} onChange={setView} />
         </div>
       </div>

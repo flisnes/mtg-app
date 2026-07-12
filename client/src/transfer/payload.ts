@@ -9,13 +9,13 @@ import {
   type DeckCard,
   type DeckFormat,
   type Finish,
-  type PriceSnapshot,
+  type PriceHistory,
   type Trade,
-  type WatchedCard,
   type WishlistEntry,
 } from '@mtg/shared';
 import { collectionKey } from '../db/dataAccess.js';
 import { db, USER_DATA_TABLES } from '../db/schema.js';
+import { recordDay, toCents } from '../price/history.js';
 import { sanitizeOffer } from '../trade/validate.js';
 
 // Device-transfer payload: every user-data table, serialized on the sending
@@ -36,8 +36,7 @@ export interface TransferPayload {
   decks: Deck[];
   deckCards: DeckCard[];
   trades: Trade[];
-  watchlist: WatchedCard[];
-  priceSnapshots: PriceSnapshot[];
+  priceHistories: PriceHistory[];
 }
 
 /** What a received payload contains, for the receiver's confirm screen. */
@@ -47,7 +46,6 @@ export interface TransferCounts {
   wishlist: number;
   decks: number;
   trades: number;
-  watchedCards: number;
 }
 
 /** Snapshot every user-data table (the same set deleteAllUserData clears). */
@@ -62,8 +60,7 @@ export async function exportUserData(): Promise<TransferPayload> {
       decks: await db.decks.toArray(),
       deckCards: await db.deckCards.toArray(),
       trades: await db.trades.toArray(),
-      watchlist: await db.watchlist.toArray(),
-      priceSnapshots: await db.priceSnapshots.toArray(),
+      priceHistories: await db.priceHistories.toArray(),
     }),
   );
 }
@@ -75,7 +72,6 @@ export function countsOf(p: TransferPayload): TransferCounts {
     wishlist: p.wishlist.length,
     decks: p.decks.length,
     trades: p.trades.length,
-    watchedCards: p.watchlist.length,
   };
 }
 
@@ -99,9 +95,20 @@ const CAPS = {
   decks: 2_000,
   deckCards: 200_000,
   trades: 10_000,
-  watchlist: 100_000,
-  priceSnapshots: 500_000,
+  priceHistories: 100_000,
+  priceSnapshots: 500_000, // legacy row-per-day senders only
 } as const;
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** ~11 years of daily readings per card. */
+const MAX_HISTORY_DAYS = 4000;
+
+/** Stored price value: integer cents, bounded; anything unparseable → null. */
+function cents(v: unknown): number | null {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(10_000_000, Math.max(0, Math.round(n))) : null;
+}
 
 function id(v: unknown): string | null {
   return typeof v === 'string' && v ? v.slice(0, MAX_ID) : null;
@@ -235,37 +242,56 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
     });
   }
 
-  // Price watchlist: keyed on scryfallId.
-  const watchlist: WatchedCard[] = [];
-  const watchIds = new Set<string>();
-  for (const r of rows(p.watchlist, CAPS.watchlist)) {
+  // Price history: one compact row per card, unique on scryfallId. Arrays are
+  // length-capped, forced to equal length, and every element re-bounded.
+  const priceHistories: PriceHistory[] = [];
+  const histIds = new Set<string>();
+  for (const r of rows(p.priceHistories, CAPS.priceHistories)) {
     const scryfallId = id(r.scryfallId);
-    const oracleId = id(r.oracleId);
-    if (!scryfallId || !oracleId || watchIds.has(scryfallId)) continue;
-    watchIds.add(scryfallId);
-    watchlist.push({ scryfallId, oracleId, createdAt: ts(r.createdAt) });
-  }
-
-  // Price history: unique on id and on the (scryfallId, day) dedupe key.
-  const priceSnapshots: PriceSnapshot[] = [];
-  const snapIds = new Set<string>();
-  const snapKeys = new Set<string>();
-  for (const r of rows(p.priceSnapshots, CAPS.priceSnapshots)) {
-    const snapId = id(r.id);
-    const scryfallId = id(r.scryfallId);
-    const day = typeof r.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.day) ? r.day : null;
-    if (!snapId || !scryfallId || !day || snapIds.has(snapId) || snapKeys.has(`${scryfallId}|${day}`)) continue;
-    snapIds.add(snapId);
-    snapKeys.add(`${scryfallId}|${day}`);
-    priceSnapshots.push({
-      id: snapId,
+    const startDay = typeof r.startDay === 'string' && DAY_RE.test(r.startDay) ? r.startDay : null;
+    if (!scryfallId || !startDay || histIds.has(scryfallId)) continue;
+    const eurRaw = Array.isArray(r.eur) ? r.eur.slice(0, MAX_HISTORY_DAYS) : [];
+    const usdRaw = Array.isArray(r.usd) ? r.usd.slice(0, MAX_HISTORY_DAYS) : [];
+    const len = Math.max(eurRaw.length, usdRaw.length);
+    if (!len) continue;
+    histIds.add(scryfallId);
+    priceHistories.push({
       scryfallId,
-      at: ts(r.at),
-      day,
-      eur: Number.isFinite(Number(r.eur)) && r.eur !== null ? Number(r.eur) : null,
-      usd: Number.isFinite(Number(r.usd)) && r.usd !== null ? Number(r.usd) : null,
+      startDay,
+      eur: Array.from({ length: len }, (_, i) => cents(eurRaw[i])),
+      usd: Array.from({ length: len }, (_, i) => cents(usdRaw[i])),
     });
   }
 
-  return { version: PAYLOAD_VERSION, collection, wishlist, decks, deckCards, trades, watchlist, priceSnapshots };
+  // Legacy senders (pre-compact history) ship row-per-day priceSnapshots
+  // instead; fold them into histories so upgrading via transfer loses nothing.
+  if (!priceHistories.length && Array.isArray(p.priceSnapshots)) {
+    const byCard = new Map<string, { day: string; eur: number | null; usd: number | null }[]>();
+    for (const r of rows(p.priceSnapshots, CAPS.priceSnapshots)) {
+      const scryfallId = id(r.scryfallId);
+      const day = typeof r.day === 'string' && DAY_RE.test(r.day) ? r.day : null;
+      if (!scryfallId || !day) continue;
+      const snap = {
+        day,
+        eur: toCents(typeof r.eur === 'number' ? r.eur : null),
+        usd: toCents(typeof r.usd === 'number' ? r.usd : null),
+      };
+      const arr = byCard.get(scryfallId);
+      if (arr) arr.push(snap);
+      else byCard.set(scryfallId, [snap]);
+    }
+    byCard.forEach((list, scryfallId) => {
+      if (priceHistories.length >= CAPS.priceHistories) return;
+      list.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+      const first = list[0]!;
+      const h: PriceHistory = { scryfallId, startDay: first.day, eur: [first.eur], usd: [first.usd] };
+      for (let i = 1; i < list.length; i++) recordDay(h, list[i]!.day, list[i]!.eur, list[i]!.usd);
+      priceHistories.push(h);
+    });
+  }
+
+  // Legacy senders also include a `watchlist` table; it's obsolete (the whole
+  // collection is tracked automatically) and simply ignored.
+
+  return { version: PAYLOAD_VERSION, collection, wishlist, decks, deckCards, trades, priceHistories };
 }

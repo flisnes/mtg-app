@@ -7,7 +7,7 @@ import type { Color, OracleCard } from '@mtg/shared';
 // own preference under `cardSort:<key>` (localStorage, synchronous — same
 // pattern as useViewMode).
 
-export type SortKey = 'name' | 'cmc' | 'price';
+export type SortKey = 'name' | 'cmc' | 'price' | 'change' | 'changePct';
 export type SortDir = 'asc' | 'desc';
 export type GroupKey = 'none' | 'type' | 'color';
 
@@ -47,6 +47,9 @@ export interface SortFields {
   name?: string;
   cmc?: number;
   price?: number | null;
+  /** Recorded price change (absolute / percent) — collection views only. */
+  change?: number | null;
+  changePct?: number | null;
 }
 
 /** Numeric price for sorting: EUR from any source, else USD (matches formatPrice). */
@@ -71,6 +74,8 @@ export function sortCards<T>(items: T[], get: (t: T) => SortFields, prefs: Pick<
     let cmp = 0;
     if (prefs.key === 'cmc') cmp = compareNullable(fa.cmc, fb.cmc, mul);
     else if (prefs.key === 'price') cmp = compareNullable(fa.price, fb.price, mul);
+    else if (prefs.key === 'change') cmp = compareNullable(fa.change, fb.change, mul);
+    else if (prefs.key === 'changePct') cmp = compareNullable(fa.changePct, fb.changePct, mul);
     if (cmp === 0) {
       cmp = (fa.name ?? '').localeCompare(fb.name ?? '');
       if (prefs.key === 'name') cmp *= mul;
@@ -138,6 +143,11 @@ const SORT_OPTIONS: [SortKey, string][] = [
   ['cmc', 'Sort: Mana value'],
   ['price', 'Sort: Price'],
 ];
+// Only where recorded price history is wired up (collection/tradelist).
+const CHANGE_OPTIONS: [SortKey, string][] = [
+  ['change', 'Sort: Price change'],
+  ['changePct', 'Sort: Price change %'],
+];
 const GROUP_OPTIONS: [GroupKey, string][] = [
   ['none', 'Group: None'],
   ['type', 'Group: Card type'],
@@ -148,13 +158,17 @@ export function SortControls({
   prefs,
   onChange,
   groups = false,
+  withChange = false,
 }: {
   prefs: CardSortPrefs;
   onChange: (p: CardSortPrefs) => void;
   /** Show the group-by select (deck views). */
   groups?: boolean;
+  /** Offer price-change sorts (views that supply SortFields.change). */
+  withChange?: boolean;
 }) {
   const asc = prefs.dir === 'asc';
+  const sortOptions = withChange ? [...SORT_OPTIONS, ...CHANGE_OPTIONS] : SORT_OPTIONS;
   return (
     <div className="sort-controls" role="group" aria-label="Sort and group">
       {groups && (
@@ -167,7 +181,7 @@ export function SortControls({
         </select>
       )}
       <select value={prefs.key} onChange={(e) => onChange({ ...prefs, key: e.target.value as SortKey })} aria-label="Sort by">
-        {SORT_OPTIONS.map(([value, label]) => (
+        {sortOptions.map(([value, label]) => (
           <option key={value} value={value}>
             {label}
           </option>

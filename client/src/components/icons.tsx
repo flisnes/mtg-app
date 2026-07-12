@@ -13,6 +13,7 @@ export type IconName =
   | 'tradelist'
   | 'wishlist'
   | 'prices'
+  | 'pricesDown'
   | 'history'
   | 'about'
   | 'more'
@@ -61,6 +62,13 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
       <polyline points="17 6 23 6 23 12" />
+    </>
+  ),
+  // Falling line — the 'prices' glyph mirrored, for falling movers.
+  pricesDown: (
+    <>
+      <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+      <polyline points="17 18 23 18 23 12" />
     </>
   ),
   // Clock — trade history.

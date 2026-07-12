@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.8.0
+
+- Every card in your collection now has its price tracked automatically — a reading is recorded each day you open the app, with no setup. (The separate price-tracker watchlist is gone; the card sheet shows each printing's sparkline and change since tracking began.)
+- Wishlist cards are price-tracked too: a specific-edition wish follows that edition, an "any printing" wish follows the card's default edition — so you can watch for a dip before buying.
+- New **Price movers** page (More → Price movers): cards that recently rose or fell substantially, over the last 7 days, 30 days, or since tracking began. "Substantial" blends absolute and percentage change, so a €5 move on an expensive card and a 25% move on a cheap one both count — and tiny penny-card swings don't.
+- Price movers also lists **steady trends**: cards drifting consistently in one direction day after day, even in small steps.
+- Movers are flagged everywhere you browse: a green rising / red falling chart marker appears on card tiles and rows in Collection, Wishlist, and Tradelist. On the Price movers page, cards on your tradelist or wishlist carry their tag/star symbol so you can spot "should I trade this now?" at a glance.
+
 ## 0.7.0
 
 - Search is no longer a tab — it lives in a bar at the top of the app, reachable from every screen. Tap it (or "＋ Add cards" in Collection) to search the whole card database, with the same filters and quick-add buttons as before; Esc, ✕, or switching tabs closes it. Collection is now the home tab.

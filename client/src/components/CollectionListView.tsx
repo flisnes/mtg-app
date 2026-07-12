@@ -7,6 +7,7 @@ import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { SortControls, formatPrice, priceValue, sortCards, useCardSort } from './CardSorting.js';
 import { historyChange } from '../price/history.js';
+import { useMoverFlags } from '../price/useMoverFlags.js';
 import { useOpenSearch } from './GlobalSearch.js';
 
 const COLORS: Color[] = ['W', 'U', 'B', 'R', 'G'];
@@ -28,6 +29,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort(onlyTrade ? 'tradelist' : 'collection');
   const openSearch = useOpenSearch();
+  const moverFlags = useMoverFlags();
 
   // scryfallId → recorded price change; only loaded while a change sort is
   // active (the histories table is the biggest user-data table).
@@ -158,6 +160,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
                 </>
               ),
               price: formatPrice(r.printing, r.oracle) ?? '—',
+              trend: moverFlags?.get(r.entry.scryfallId),
               onClick: () => setEditing(r),
             }),
           )}

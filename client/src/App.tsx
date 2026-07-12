@@ -13,6 +13,7 @@ import { Decks } from './routes/Decks.js';
 import { DeckDetail } from './routes/DeckDetail.js';
 import { Trade } from './routes/Trade.js';
 import { History } from './routes/History.js';
+import { PriceMovers } from './routes/PriceMovers.js';
 import { About } from './routes/About.js';
 import { More } from './routes/More.js';
 import { Import } from './routes/Import.js';
@@ -104,6 +105,7 @@ export function App() {
           <Route path="/decks/:id" element={<DeckDetail />} />
           <Route path="/trade" element={<Trade />} />
           <Route path="/history" element={<History />} />
+          <Route path="/movers" element={<PriceMovers />} />
           <Route path="/about" element={<About />} />
           <Route path="/more" element={<More />} />
           <Route path="*" element={<Collection />} />

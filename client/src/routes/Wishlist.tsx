@@ -10,6 +10,7 @@ import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components
 import { SortControls, priceValue, sortCards, useCardSort } from '../components/CardSorting.js';
 import { useOpenSearch } from '../components/GlobalSearch.js';
 import { Icon } from '../components/icons.js';
+import { useMoverFlags } from '../price/useMoverFlags.js';
 
 interface WishRow {
   entry: WishlistEntry;
@@ -23,6 +24,7 @@ export function Wishlist() {
   const [sort, setSort] = useCardSort('wishlist');
   const openSearch = useOpenSearch();
   const [editing, setEditing] = useState<WishRow | null>(null);
+  const moverFlags = useMoverFlags();
   const rows = useLiveQuery(async (): Promise<WishRow[]> => {
     const entries = await db.wishlist.toArray();
     const [oracleMap, printMap] = await Promise.all([
@@ -88,6 +90,8 @@ export function Wishlist() {
                     ? `${r.printing.setName} · #${r.printing.collectorNumber}`
                     : 'specific printing'
                   : 'any printing',
+                // "Any printing" wishes are tracked via the oracle's default printing.
+                trend: moverFlags?.get(r.entry.scryfallId ?? r.oracle?.defaultScryfallId ?? ''),
                 onClick: r.oracle ? () => setEditing(r) : undefined,
                 actions: (
                   <>

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { Icon } from './icons.js';
 
 // The one way cards are displayed anywhere in the app: a list of CardItems
 // rendered as rows (CardList) or a tile grid (CardGrid), switched by the
@@ -57,7 +58,7 @@ export interface CardItem {
   /** Quantity: pill in list rows, corner badge on grid tiles. Hidden when exactly 1. */
   count?: number;
   /** Small badge: after the name in list rows, top-left on grid tiles. */
-  badge?: string;
+  badge?: ReactNode;
   badgeClass?: string;
   badgeTitle?: string;
   /** Dim the entry (e.g. unowned deck cards). */
@@ -68,6 +69,8 @@ export interface CardItem {
   sub?: ReactNode;
   /** Right-aligned price, list view only. */
   price?: string;
+  /** Recent price movement marker: chart glyph by the price / tile corner. */
+  trend?: 'up' | 'down';
   /** Action buttons: right edge of list rows, under the image on grid tiles. */
   actions?: ReactNode;
 }
@@ -98,6 +101,7 @@ export function CardList({ items, className }: { items: CardItem[]; className?: 
               </div>
               {it.sub && <div className="result-sub">{it.sub}</div>}
             </div>
+            {it.trend && <TrendMark dir={it.trend} />}
             {it.price && <div className="result-price">{it.price}</div>}
             {it.count != null && it.count !== 1 && <div className="qty-pill">×{it.count}</div>}
           </>
@@ -119,6 +123,18 @@ export function CardList({ items, className }: { items: CardItem[]; className?: 
   );
 }
 
+/** Green rising / red falling chart glyph for cards that moved in price. */
+function TrendMark({ dir, tile = false }: { dir: 'up' | 'down'; tile?: boolean }) {
+  return (
+    <span
+      className={`${tile ? 'tile-trend' : 'result-trend'} trend-${dir}`}
+      title={dir === 'up' ? 'Price rising' : 'Price falling'}
+    >
+      <Icon name={dir === 'up' ? 'prices' : 'pricesDown'} size={tile ? 12 : 14} />
+    </span>
+  );
+}
+
 export function CardGrid({ items, className }: { items: CardItem[]; className?: string }) {
   return (
     <ul className={`card-grid${className ? ` ${className}` : ''}`}>
@@ -136,6 +152,7 @@ export function CardGrid({ items, className }: { items: CardItem[]; className?: 
               </span>
             )}
             {it.count != null && it.count !== 1 && <span className="tile-count">×{it.count}</span>}
+            {it.trend && <TrendMark dir={it.trend} tile />}
           </button>
           {it.actions && <div className="tile-footer">{it.actions}</div>}
         </li>

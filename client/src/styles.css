@@ -805,6 +805,62 @@ button.primary {
   font-size: 0.8rem;
 }
 
+/* ---- Mover badges in card lists ---- */
+.trend-up {
+  color: var(--ok);
+}
+.trend-down {
+  color: var(--danger);
+}
+.result-trend {
+  display: inline-flex;
+  align-items: center;
+}
+.tile-trend {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 2px 3px;
+  border-radius: 6px;
+}
+
+/* ---- Price movers ---- */
+.list-glyph {
+  display: inline-flex;
+  vertical-align: -1px;
+}
+.list-glyph + .list-glyph {
+  margin-left: 4px;
+}
+.glyph-trade {
+  color: var(--accent);
+}
+.glyph-wish {
+  color: #eac54f;
+}
+.mover-section {
+  margin-top: 0.5rem;
+}
+.mover-section h3 {
+  margin: 0 0 0.25rem;
+}
+.mover-section .fine-print {
+  margin: 0 0 0.5rem;
+}
+.mover-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.mover-sub .spark {
+  display: inline-block;
+  vertical-align: middle;
+}
+
 /* ---- Toast ---- */
 .toast-stack {
   position: fixed;

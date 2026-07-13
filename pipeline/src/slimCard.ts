@@ -84,6 +84,18 @@ function images(card: RawCard): { small: string | null; normal: string | null } 
   return { small: null, normal: null };
 }
 
+/**
+ * Back-face images. Only truly double-faced cards (transform, modal DFC,
+ * reversible, …) have per-face image_uris and no card-level ones; split /
+ * adventure / flip cards share one image and get no back.
+ */
+function backImages(card: RawCard): { small: string | null; normal: string | null } | null {
+  if (card.image_uris) return null;
+  const back = card.card_faces?.[1]?.image_uris;
+  if (!back) return null;
+  return { small: back.small ?? null, normal: back.normal ?? null };
+}
+
 /** Oracle-invariant text fields, joining faces for DFC/split cards. */
 function oracleFields(card: RawCard): {
   manaCost: string | null;
@@ -131,6 +143,7 @@ export function slimCard(card: RawCard): SlimResult | null {
   if (card.games && !card.games.includes('paper')) return null;
 
   const img = images(card);
+  const back = backImages(card);
   const of = oracleFields(card);
 
   const printing: Printing = {
@@ -144,6 +157,8 @@ export function slimCard(card: RawCard): SlimResult | null {
     releasedAt: card.released_at,
     imageSmall: img.small,
     imageNormal: img.normal,
+    // Omitted (not null) for single-faced cards to keep the artifacts slim.
+    ...(back ? { imageBackSmall: back.small, imageBackNormal: back.normal } : {}),
   };
 
   return {

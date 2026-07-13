@@ -72,6 +72,9 @@ function toOracleCard(rep: SlimResult): OracleCard {
     rarity: oracle.rarity,
     imageSmall: printing.imageSmall,
     imageNormal: printing.imageNormal,
+    ...(printing.imageBackSmall != null || printing.imageBackNormal != null
+      ? { imageBackSmall: printing.imageBackSmall ?? null, imageBackNormal: printing.imageBackNormal ?? null }
+      : {}),
     defaultScryfallId: printing.scryfallId,
     legalities: oracle.legalities,
   };

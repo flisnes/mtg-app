@@ -430,6 +430,86 @@ button.danger-outline {
   color: var(--accent);
 }
 
+/* Goblin mode: the pile view — cards scattered in a heap you dig through. */
+.pile-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.pile {
+  position: relative;
+  width: 100%;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.04), transparent 60%),
+    var(--surface);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  /* The pile owns horizontal drags; only vertical panning scrolls the page. */
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.pile-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  cursor: grab;
+  border-radius: 6px;
+  /* Seat the card on the pile with a soft drop shadow. */
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
+  will-change: transform;
+  outline: none;
+  touch-action: none;
+}
+.pile-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pile-dragging {
+  cursor: grabbing;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.6));
+}
+.pile-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.35s;
+  transform-style: preserve-3d;
+}
+.pile-flipped {
+  transform: rotateY(180deg);
+}
+.pile-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background: var(--surface-2);
+}
+.pile-back {
+  transform: rotateY(180deg);
+}
+.pile-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+.pile-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0.3rem;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
 .card-grid {
   list-style: none;
   margin: 0;

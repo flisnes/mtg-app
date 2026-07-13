@@ -39,6 +39,9 @@ export interface OracleCard {
   rarity: Rarity;
   imageSmall: string | null;
   imageNormal: string | null;
+  /** Back-face images for double-faced cards (absent for single-faced ones and on card DBs built before this field). */
+  imageBackSmall?: string | null;
+  imageBackNormal?: string | null;
   /** A representative printing used when the user hasn't picked one. */
   defaultScryfallId: string;
   /** Legality per tracked format (oracle-invariant). May be absent on card DBs imported before this field existed. */
@@ -57,6 +60,9 @@ export interface Printing {
   releasedAt: string; // ISO date
   imageSmall: string | null;
   imageNormal: string | null;
+  /** Back-face images for double-faced cards (absent for single-faced ones and on card DBs built before this field). */
+  imageBackSmall?: string | null;
+  imageBackNormal?: string | null;
 }
 
 // Prices are versioned and shipped separately from the card data: they churn

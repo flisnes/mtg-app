@@ -9,6 +9,7 @@ import { db } from './schema.js';
 //   pricesUpdatedAt — ISO date shown as "prices updated <date>"
 //   activeTrade     — persisted in-flight trade session (resume prompt)
 //   accountSession  — signed-in account {token, username} (account/session.ts)
+//   goblinMode      — unlocks the collection pile view (useGoblinMode.ts)
 //   accountLastBackup / accountSyncConflict / accountAutoBackup /
 //   accountLastAutoBackupAt — backup bookkeeping (account/session.ts)
 

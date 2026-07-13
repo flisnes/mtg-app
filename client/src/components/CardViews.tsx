@@ -4,12 +4,14 @@ import { Icon } from './icons.js';
 // The one way cards are displayed anywhere in the app: a list of CardItems
 // rendered as rows (CardList) or a tile grid (CardGrid), switched by the
 // shared list⇄grid preference (localStorage, synchronous). Tapping a card
-// opens whatever the caller wires up — usually the CardSheet.
+// opens whatever the caller wires up — usually the CardSheet. The collection
+// additionally supports 'pile' (goblin mode, PileView.tsx); callers that
+// don't pass allowPile see 'grid' instead of a stored 'pile'.
 
-export type ViewMode = 'list' | 'grid';
+export type ViewMode = 'list' | 'grid' | 'pile';
 const KEY = 'cardViewMode';
 
-export function useViewMode(): [ViewMode, (m: ViewMode) => void] {
+export function useViewMode(allowPile = false): [ViewMode, (m: ViewMode) => void] {
   const [mode, setMode] = useState<ViewMode>(() => {
     try {
       return (localStorage.getItem(KEY) as ViewMode) || 'grid';
@@ -25,10 +27,19 @@ export function useViewMode(): [ViewMode, (m: ViewMode) => void] {
       /* ignore */
     }
   };
-  return [mode, set];
+  return [mode === 'pile' && !allowPile ? 'grid' : mode, set];
 }
 
-export function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
+export function ViewToggle({
+  mode,
+  onChange,
+  showPile = false,
+}: {
+  mode: ViewMode;
+  onChange: (m: ViewMode) => void;
+  /** Offer the pile view (goblin mode, collection only). */
+  showPile?: boolean;
+}) {
   return (
     <div className="view-toggle" role="group" aria-label="View mode">
       <button
@@ -47,6 +58,16 @@ export function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: V
       >
         ▦
       </button>
+      {showPile && (
+        <button
+          className={mode === 'pile' ? 'active' : ''}
+          onClick={() => onChange('pile')}
+          aria-pressed={mode === 'pile'}
+          title="Pile view (goblin mode)"
+        >
+          🂠
+        </button>
+      )}
     </div>
   );
 }

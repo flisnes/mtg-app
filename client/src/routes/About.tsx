@@ -4,6 +4,7 @@ import { APP_VERSION } from '../version.js';
 import { DataTransfer } from '../components/DataTransfer.js';
 import { deleteAllUserData } from '../db/dataAccess.js';
 import { getSetting } from '../db/settings.js';
+import { setGoblinMode, useGoblinMode } from '../components/useGoblinMode.js';
 import { formatDiagnostics } from '../errorLog.js';
 
 function formatDate(iso: string | undefined): string {
@@ -13,6 +14,7 @@ function formatDate(iso: string | undefined): string {
 }
 
 export function About() {
+  const goblinMode = useGoblinMode();
   const [confirming, setConfirming] = useState(false);
   const [done, setDone] = useState(false);
   const [cardDbVersion, setCardDbVersion] = useState<string>();
@@ -47,6 +49,19 @@ export function About() {
         <dt>Prices updated</dt>
         <dd>{formatDate(pricesUpdatedAt)}</dd>
       </dl>
+
+      <section className="about-section">
+        <h2>Goblin mode</h2>
+        <p className="fine-print">
+          Adds a third way to view your collection: one big, unsorted pile. Shove cards around with your finger to dig
+          through it, double-tap a card to flip it over, and press and hold one for its details. Sorting and filtering
+          are for humans.
+        </p>
+        <label className="agree-row">
+          <input type="checkbox" checked={goblinMode} onChange={(e) => void setGoblinMode(e.target.checked)} />
+          <span>Enable goblin mode</span>
+        </label>
+      </section>
 
       <section className="about-section">
         <h2>Your data</h2>

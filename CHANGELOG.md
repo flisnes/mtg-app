@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.10.0
+
+- **Goblin mode** (About & settings): flip it on to unlock a third way to view your collection. Off by default — humans keep their sorting and filtering.
+- New **pile view** in Collection (the 🂠 button, once goblin mode is on): your whole collection dumped out in one glorious scattered heap. There's no sorting or filtering — you find a card the way you'd dig through a shoebox, shoving cards around with your finger and scrolling down through the pile.
+- **Double-tap** a card to flip it over. Some cards land face down showing the classic Magic card back; double-faced cards (transform, modal DFCs) flip to their actual back face.
+- **Press and hold** a card for its details. Hold a face-down single-faced card and you'll get the card back's "details" instead — no peeking at what it really is until you flip it.
+- Card images now include real back faces for double-faced cards (used by the pile view's flip).
+
 ## 0.9.0
 
 - **Optional accounts** (More → Account & sync): create an account with an invite code to back up your collection, lists and decks to the server — then sign in on another device and restore. The app still works fully without one, and everything stays on your device unless you opt in.

@@ -49,7 +49,7 @@ export function Wishlist() {
   }, [rows, name, sort]);
 
   return (
-    <Page title="Wishlist" subtitle="Cards you’re after — surfaced to trade partners during a session.">
+    <Page title="Wishlist" subtitle="Cards you’re after, shown to trade partners during a session.">
       {rows === undefined ? (
         <p className="search-meta">Loading…</p>
       ) : rows.length === 0 ? (

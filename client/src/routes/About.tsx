@@ -67,11 +67,11 @@ export function About() {
         <h2>Your data</h2>
         <p className="fine-print">
           Everything is stored on this device. The server only keeps a copy if you create an account and back up
-          (More → Account &amp; sync) — trades themselves always live on your device. Clearing your browser data will
+          (More → Account &amp; sync). Trades themselves always live on your device. Clearing your browser data will
           erase your collection, so export regularly or keep a backup.
         </p>
         <p className="fine-print">
-          Moving to a new phone or browser? Transfer your collection, lists and decks with a one-time code — the data
+          Moving to a new phone or browser? Transfer your collection, lists and decks with a one-time code. The data
           goes straight to the other device and is never stored on the server.
         </p>
         <DataTransfer />

@@ -26,8 +26,8 @@ export class ApiError extends Error {
   }
 
   get friendlyMessage(): string {
-    if (this.status === 0) return 'Could not reach the server — check your connection and try again.';
-    return this.body?.message ?? 'Something went wrong on the server — try again later.';
+    if (this.status === 0) return 'Could not reach the server. Check your connection and try again.';
+    return this.body?.message ?? 'Something went wrong on the server. Try again later.';
   }
 }
 

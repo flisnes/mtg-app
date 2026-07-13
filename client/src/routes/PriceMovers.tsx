@@ -81,7 +81,7 @@ export function PriceMovers() {
         <p className="search-meta">Loading…</p>
       ) : data.movers.length === 0 ? (
         <EmptyState hint="A reading is recorded each day you open the app, so movements show up after a few days.">
-          {data.tracked === 0 ? 'No prices tracked yet — add cards to your collection first.' : 'Not enough price history yet.'}
+          {data.tracked === 0 ? 'No prices tracked yet. Add cards to your collection first.' : 'Not enough price history yet.'}
         </EmptyState>
       ) : (
         <>
@@ -106,7 +106,7 @@ export function PriceMovers() {
             subtitle="Cards moving consistently in one direction since tracking began, even in small steps."
             movers={steady}
             onOpen={setInfo}
-            empty="No consistent trends yet — these need at least five readings."
+            empty="No consistent trends yet. These need at least five readings."
           />
         </>
       )}

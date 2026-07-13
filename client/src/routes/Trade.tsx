@@ -274,12 +274,12 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const barStatus =
     snap.state === 'agreed'
       ? iConfirmed
-        ? 'You confirmed — waiting for them.'
+        ? 'You confirmed. Waiting for them.'
         : peerConfirmed
           ? 'They confirmed. Inspect the cards, then confirm.'
           : 'Both accepted. Swap the cards, then confirm.'
       : iAccepted
-        ? 'You accepted — waiting for them. Editing an offer resets acceptance.'
+        ? 'You accepted. Waiting for them. Editing an offer resets acceptance.'
         : peerAccepted
           ? 'They accepted this deal. Accept to lock it in.'
           : trade.peerPresent
@@ -370,7 +370,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
         <section className="trade-col" aria-label="Cards you get">
           <h3>You get</h3>
           <OfferColumn lines={theirOffer} editable={false} printings={printMap} oracles={oracleMap} onInfo={openInfo} />
-          {theirOffer.length === 0 && <p className="trade-empty">Nothing yet — they add cards on their device.</p>}
+          {theirOffer.length === 0 && <p className="trade-empty">Nothing yet. They add cards on their device.</p>}
         </section>
       </div>
 
@@ -619,7 +619,7 @@ function BalancePanel({
   }
   const iGiveMore = diff > 0;
   if (iGiveMore && peerTradelist === null) {
-    return <p className="fine-print">You’re giving more, but their tradelist hasn’t arrived yet — try again in a moment.</p>;
+    return <p className="fine-print">You’re giving more, but their tradelist hasn’t arrived yet. Try again in a moment.</p>;
   }
 
   // What's already in the lighter side's offer can't be suggested again.
@@ -733,7 +733,7 @@ function BalancePanel({
         Prices are EUR estimates; unpriced cards are skipped.
       </p>
       {iGiveMore ? (
-        <p className="fine-print">Only they can add cards to their side — show them this list.</p>
+        <p className="fine-print">Only they can add cards to their side. Show them this list.</p>
       ) : (
         <button
           className="primary"
@@ -824,7 +824,7 @@ function AddCardsPanel({
       ) : !tradelist ? (
         <p className="fine-print">Loading tradelist…</p>
       ) : tradelist.length === 0 ? (
-        <p className="fine-print">Your tradelist is empty — search above to add any card.</p>
+        <p className="fine-print">Your tradelist is empty. Search above to add any card.</p>
       ) : (
         <>
           <p className="fine-print">From your tradelist (or search above for any card):</p>

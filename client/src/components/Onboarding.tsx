@@ -15,7 +15,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <strong>Search</strong> any Magic card and add it to your collection, wishlist, or tradelist.
           </li>
           <li>
-            <strong>Import</strong> your collection from Moxfield, Archidekt, or a plain list — then build decks.
+            <strong>Import</strong> your collection from Moxfield, Archidekt, or a plain list, then build decks.
           </li>
           <li>
             <strong>Trade</strong> in person: one of you starts a trade, the other joins with the 6-character code.

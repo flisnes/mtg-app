@@ -132,7 +132,7 @@ export function PileView({ items }: { items: PileEntry[] }) {
   return (
     <>
       <p className="pile-hint">
-        Shove cards around to dig through the pile. Double-tap to flip a card over, press and hold for details.
+        Time to rummage. Double-tap to flip a card over, press and hold for details.
       </p>
       <div className="pile" ref={containerRef} style={{ height }}>
         {width > 0 &&
@@ -404,7 +404,7 @@ export function CardBackSheet({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <p className="fine-print">
-          This card is face down, so this is all you get. Double-tap it to see what it actually is — or savor the
+          This card is face down, so this is all you get. Double-tap it to see what it actually is or savor the
           mystery.
         </p>
         <div className="sheet-actions">

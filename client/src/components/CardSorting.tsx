@@ -190,7 +190,7 @@ export function SortControls({
       <button
         className="sort-dir"
         onClick={() => onChange({ ...prefs, dir: asc ? 'desc' : 'asc' })}
-        title={asc ? 'Ascending — tap for descending' : 'Descending — tap for ascending'}
+        title={asc ? 'Ascending' : 'Descending'}
         aria-label={asc ? 'Sort ascending' : 'Sort descending'}
       >
         {asc ? '↑' : '↓'}

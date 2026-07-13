@@ -8,7 +8,7 @@ export function Collection() {
   return (
     <Page
       title="Collection"
-      subtitle="Everything you own — search above to add cards."
+      subtitle="Everything you own, search above to add cards."
       menu={
         <OptionsMenu
           label="Collection options"

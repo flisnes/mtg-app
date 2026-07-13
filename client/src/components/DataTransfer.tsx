@@ -77,7 +77,7 @@ export function DataTransfer() {
   if (t.status === 'sent') {
     return (
       <div className="transfer-panel">
-        <p role="status">Everything sent — finish the transfer on the other device.</p>
+        <p role="status">Everything sent. Finish the transfer on the other device.</p>
         <button onClick={t.reset}>Done</button>
       </div>
     );
@@ -113,7 +113,7 @@ export function DataTransfer() {
   if (t.status === 'done') {
     return (
       <div className="transfer-panel">
-        <p role="status">Transfer complete — your data is now on this device.</p>
+        <p role="status">Transfer complete. Your data is now on this device.</p>
         <button onClick={t.reset}>Done</button>
       </div>
     );

@@ -62,7 +62,7 @@ interface RecvState {
 }
 
 function errorText(code: TradeErrorCode, message: string): string {
-  if (code === 'unknown_session') return 'No transfer found for that code — check it and try again.';
+  if (code === 'unknown_session') return 'No transfer found for that code. Check it and try again.';
   if (code === 'session_full') return 'Another device already joined that transfer.';
   return message || 'Transfer failed.';
 }
@@ -210,7 +210,7 @@ export function useTransfer(): TransferSession {
             try {
               const json = r.chunks.join('');
               if (json.length !== r.totalChars || (await sha256Hex(json)) !== r.sha256) {
-                fail('The transfer arrived corrupted — please try again.');
+                fail('The transfer arrived corrupted. Please try again.');
                 return;
               }
               const payload = sanitizeTransferPayload(JSON.parse(json));
@@ -223,7 +223,7 @@ export function useTransfer(): TransferSession {
               setStat('review');
               closeSocket();
             } catch {
-              fail('The transfer arrived corrupted — please try again.');
+              fail('The transfer arrived corrupted. Please try again.');
             }
           })();
           break;
@@ -237,7 +237,7 @@ export function useTransfer(): TransferSession {
           const r = recv.current;
           const payloadComplete = !!r && r.received >= r.totalChunks;
           if (!payloadComplete && (s === 'connecting' || s === 'waiting' || s === 'transferring')) {
-            fail('The other device disconnected — start the transfer again.');
+            fail('The other device disconnected. Start the transfer again.');
           }
           break;
         }
@@ -266,7 +266,7 @@ export function useTransfer(): TransferSession {
         if (r && r.received >= r.totalChunks) return; // payload fully received; verification proceeds
         const s = statusRef.current;
         if (s === 'connecting' || s === 'waiting' || s === 'transferring') {
-          setError('Connection lost — start the transfer again.');
+          setError('Connection lost. Start the transfer again.');
           setStat('error');
         }
       };

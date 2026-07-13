@@ -37,16 +37,16 @@ function errText(err: unknown): string {
 
 const DISCLAIMER = (
   <div className="account-disclaimer">
-    <p className="fine-print">Creating an account is optional — the app works fully without one. By creating one you agree to all of this:</p>
+    <p className="fine-print">Creating an account is optional, the app works fully without one. By creating one you agree to all of this:</p>
     <ul className="fine-print">
       <li>
         Your collection, lists and decks are stored on a <strong>small hobby server</strong>. It is run with care
-        but with no uptime or durability promises — it could go away or lose data at any time. Keep making local
+        but with no uptime or durability promises. It could go away or lose data at any time. Keep making local
         exports of anything you can’t afford to lose.
       </li>
       <li>
-        Your <strong>tradelist and wishlist are visible to every other signed-in user</strong> (that’s the point —
-        so you can find trades). Your collection, decks and prices stay private.
+        Your <strong>tradelist and wishlist are visible to every other signed-in user</strong> (so you can find trades).
+        Your collection, decks and prices stay private.
       </li>
       <li>
         Don’t reuse a password from anywhere else. Your data is sent over HTTPS and your password is stored only as
@@ -102,7 +102,7 @@ function SignedOut() {
     try {
       if (creating) {
         await signUp(username.trim(), password, invite.trim());
-        toast('Account created — back up your data below.');
+        toast('Account created. Back up your data below.');
       } else {
         await signIn(username.trim(), password);
         toast(`Signed in as ${username.trim()}.`);

@@ -249,7 +249,7 @@ export function checkDeckLegality(format: DeckFormat | undefined, cards: Legalit
   if (rule.commander) {
     const commanders = cards.filter((c) => c.board === 'commander');
     if (commanderCount === 0) {
-      problems.push('No commander — mark a legendary creature as your commander.');
+      problems.push('No commander. Mark a legendary creature as your commander.');
     } else if (commanderCount > 2) {
       problems.push(`${commanderCount} commanders; a deck has one (or two that can share the command zone).`);
     } else if (commanderCount === 2 && commanders.length === 2) {
@@ -321,7 +321,7 @@ export function checkDeckLegality(format: DeckFormat | undefined, cards: Legalit
   if (rule.maxSideboard != null && sideCount > rule.maxSideboard) {
     problems.push(`Sideboard has ${sideCount} cards; max ${rule.maxSideboard}.`);
   }
-  if (missingData) problems.push('Some cards have no legality data yet — refresh the card database from About.');
+  if (missingData) problems.push('Some cards have no legality data yet. Refresh the card database from About.');
 
   return { checked: true, legal: problems.length === 0, problems, issues };
 }

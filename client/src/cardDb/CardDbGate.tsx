@@ -70,8 +70,7 @@ export function CardDbGate({ children }: { children: ReactNode }) {
               {state.sizeBytes ? ` (~${mb(state.sizeBytes)} MB)` : ' (~14 MB)'}.
             </p>
             <p className="gate-note">
-              This is a large download — best on Wi-Fi. It’s stored on your device and works offline
-              afterwards.
+              It’s stored on your device and works offline afterwards.
             </p>
             <button onClick={startDownload}>Download</button>
           </>

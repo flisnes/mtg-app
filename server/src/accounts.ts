@@ -155,7 +155,7 @@ export function registerAccountRoutes(app: FastifyInstance): void {
   // --- Auth -----------------------------------------------------------------
 
   app.post('/api/register', async (req, reply) => {
-    if (throttled(req.ip)) return fail(reply, 429, { error: 'rate_limited', message: 'Too many attempts — try again later.' });
+    if (throttled(req.ip)) return fail(reply, 429, { error: 'rate_limited', message: 'Too many attempts. Try again later.' });
     if (!config.inviteCode) {
       return fail(reply, 403, { error: 'registration_closed', message: 'Registration is closed right now.' });
     }
@@ -180,7 +180,7 @@ export function registerAccountRoutes(app: FastifyInstance): void {
   });
 
   app.post('/api/login', async (req, reply) => {
-    if (throttled(req.ip)) return fail(reply, 429, { error: 'rate_limited', message: 'Too many attempts — try again later.' });
+    if (throttled(req.ip)) return fail(reply, 429, { error: 'rate_limited', message: 'Too many attempts. Try again later.' });
     const b = (req.body ?? {}) as Record<string, unknown>;
     const username = typeof b.username === 'string' ? b.username.trim() : '';
     const password = typeof b.password === 'string' ? b.password : '';

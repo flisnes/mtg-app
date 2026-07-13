@@ -64,7 +64,7 @@ export function Import() {
   }
 
   return (
-    <Page title="Import" subtitle="Paste a list or upload a CSV — Moxfield, Archidekt, or plain text.">
+    <Page title="Import" subtitle="Paste a list or upload a CSV, Moxfield, Archidekt, or plain text.">
       {status.kind === 'idle' || status.kind === 'error' ? (
         <>
           {status.kind === 'error' && <p className="gate-error">Error: {status.message}</p>}

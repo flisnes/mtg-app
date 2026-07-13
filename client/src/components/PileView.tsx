@@ -7,7 +7,7 @@ import { useEscapeToClose } from './useEscapeToClose.js';
 // filtering — you find cards by shoving them around with your finger.
 //
 // Gestures (all per card):
-//  - drag        move the card (mouse: immediately; touch: hold ~180ms first,
+//  - drag        move the card (mouse: immediately; touch: hold ~240ms first,
 //                or start sideways — a plain vertical swipe scrolls the page)
 //  - double-tap  flip the card over (DFCs show their real back face,
 //                everything else the classic Magic card back)
@@ -42,9 +42,9 @@ const COVERAGE = 1.9;
 
 const LONG_PRESS_MS = 500;
 /** Touch: hold this long before a move becomes a drag instead of a scroll. */
-const ARM_MS = 180;
+const ARM_MS = 240;
 const DRAG_SLOP = 4;
-const SCROLL_SLOP = 12;
+const SCROLL_SLOP = 14;
 const TAP_SLOP = 10;
 const DOUBLE_TAP_MS = 350;
 

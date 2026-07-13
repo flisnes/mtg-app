@@ -449,6 +449,9 @@ button.danger-outline {
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
+  /* Contain the cards' ever-climbing z-index so the heap can't paint over the
+     sticky header, tab bar or card sheet. */
+  isolation: isolate;
 }
 .pile-card {
   position: absolute;
@@ -460,7 +463,10 @@ button.danger-outline {
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
   will-change: transform;
   outline: none;
-  touch-action: none;
+  /* pan-y (not none): a vertical swipe scrolls the pile natively even when it
+     starts on a card; we cancel that scroll (non-passive touchmove) only once
+     a drag actually arms, so hold-to-drag and sideways drag still work. */
+  touch-action: pan-y;
 }
 .pile-card:focus-visible {
   outline: 2px solid var(--accent);

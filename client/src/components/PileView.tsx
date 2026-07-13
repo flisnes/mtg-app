@@ -24,6 +24,8 @@ export interface PileEntry {
   image: string | null;
   /** Real back face (double-faced cards); null → the generic Magic card back. */
   imageBack: string | null;
+  /** Iridescent foil sheen over the front face (foil / etched finishes). */
+  foil?: boolean;
   /** Physical copies owned; the pile renders up to MAX_COPIES of them. */
   count: number;
   /** Long-press / keyboard open. faceDown tells the caller what's showing. */
@@ -376,6 +378,7 @@ function PileCard({
           ) : (
             <span className="pile-ph">{entry.name}</span>
           )}
+          {entry.foil && entry.image && <span className="foil-sheen" aria-hidden />}
         </div>
         <div className="pile-face pile-back">
           <img src={entry.imageBack ?? CARD_BACK_URL} alt="" loading="lazy" draggable={false} />

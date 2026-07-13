@@ -171,6 +171,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
                 name: r.oracle?.name ?? '(unknown card)',
                 image: r.printing?.imageNormal ?? r.oracle?.imageNormal ?? r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
                 imageBack: r.printing?.imageBackNormal ?? r.oracle?.imageBackNormal ?? r.printing?.imageBackSmall ?? r.oracle?.imageBackSmall ?? null,
+                foil: r.entry.finish !== 'nonfoil',
                 count: r.entry.quantity,
                 onLongPress: (faceDown) => {
                   // Face-down single-faced card: only the generic back is
@@ -193,6 +194,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
               key: r.entry.id,
               name: r.oracle?.name ?? '(unknown card)',
               image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
+              foil: r.entry.finish !== 'nonfoil',
               count: r.entry.quantity,
               badge: r.entry.quantityForTrade > 0 ? `${r.entry.quantityForTrade} FT` : undefined,
               badgeClass: 'badge-trade',

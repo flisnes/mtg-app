@@ -84,6 +84,8 @@ export interface CardItem {
   badgeTitle?: string;
   /** Dim the entry (e.g. unowned deck cards). */
   dim?: boolean;
+  /** Iridescent foil sheen over the image (foil / etched finishes). */
+  foil?: boolean;
   /** Open card info / edit. Rows and tiles are inert without it. */
   onClick?: () => void;
   /** Subtitle line, list view only (set, condition, …). */
@@ -107,7 +109,10 @@ export function CardList({ items, className }: { items: CardItem[]; className?: 
         const body = (
           <>
             {it.image ? (
-              <img className="result-thumb" src={it.image} alt="" loading="lazy" width={46} height={64} />
+              <span className="result-thumb-wrap">
+                <img className="result-thumb" src={it.image} alt="" loading="lazy" width={46} height={64} />
+                {it.foil && <span className="foil-sheen" aria-hidden />}
+              </span>
             ) : (
               <div className="result-thumb" aria-hidden />
             )}
@@ -167,6 +172,7 @@ export function CardGrid({ items, className }: { items: CardItem[]; className?: 
             ) : (
               <span className="card-tile-ph">{it.name}</span>
             )}
+            {it.foil && it.image && <span className="foil-sheen" aria-hidden />}
             {it.badge && (
               <span className={`tile-badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
                 {it.badge}

@@ -192,7 +192,10 @@ export function CardSheet({
       >
         <div className="sheet-head">
           {cardImage ? (
-            <img className="sheet-card" src={cardImage} alt={oracleCard.name} />
+            <div className="sheet-card-wrap">
+              <img className="sheet-card" src={cardImage} alt={oracleCard.name} />
+              {finish !== 'nonfoil' && <span className="foil-sheen" aria-hidden />}
+            </div>
           ) : (
             <div className="sheet-card sheet-card-ph">{oracleCard.name}</div>
           )}

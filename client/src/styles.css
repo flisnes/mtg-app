@@ -569,6 +569,66 @@ button.danger-outline {
   color: var(--text-dim);
   text-align: center;
 }
+
+/* Foil sheen: an iridescent overlay for foil / etched cards. Every host — grid
+   tile, list thumb, pile face, card sheet — gives it a positioned, clipped box
+   to fill, so it inherits that box's rounding and sits above the card art. */
+.foil-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+}
+.foil-sheen::before,
+.foil-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+/* Drifting rainbow — the colour that "catches the light" as a foil tilts. */
+.foil-sheen::before {
+  background: linear-gradient(
+    115deg,
+    rgba(255, 0, 128, 0.6) 0%,
+    rgba(255, 200, 0, 0.6) 20%,
+    rgba(0, 255, 170, 0.6) 40%,
+    rgba(0, 170, 255, 0.6) 60%,
+    rgba(180, 0, 255, 0.6) 80%,
+    rgba(255, 0, 128, 0.6) 100%
+  );
+  background-size: 300% 300%;
+  mix-blend-mode: color-dodge;
+  opacity: 0.3;
+  animation: foil-drift 6s linear infinite;
+}
+/* A brighter specular band sweeping the other way. */
+.foil-sheen::after {
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.5) 48%,
+    rgba(255, 255, 255, 0.5) 52%,
+    transparent 70%
+  );
+  background-size: 250% 250%;
+  mix-blend-mode: soft-light;
+  animation: foil-drift 6s linear infinite reverse;
+}
+@keyframes foil-drift {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 100% 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .foil-sheen::before,
+  .foil-sheen::after {
+    animation: none;
+  }
+}
 .tile-count {
   position: absolute;
   right: 4px;
@@ -723,6 +783,18 @@ button.danger-outline {
   background: var(--surface-2);
   flex-shrink: 0;
 }
+.result-thumb-wrap {
+  position: relative;
+  display: block;
+  width: 46px;
+  height: 64px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.result-thumb-wrap .result-thumb {
+  border-radius: 0;
+}
 .result-main {
   flex: 1;
   min-width: 0;
@@ -851,6 +923,21 @@ button.danger-outline {
   border-radius: 10px;
   background: var(--surface-2);
   flex-shrink: 0;
+}
+.sheet-card-wrap {
+  position: relative;
+  width: 45%;
+  max-width: 210px;
+  aspect-ratio: 488 / 680;
+  flex-shrink: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  align-self: flex-start;
+}
+.sheet-card-wrap .sheet-card {
+  width: 100%;
+  max-width: none;
+  border-radius: 0;
 }
 .sheet-card-ph {
   display: flex;

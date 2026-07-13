@@ -162,6 +162,11 @@ button.danger-outline {
   border-color: transparent;
   color: #fff;
 }
+.banner-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
 .banner-offline {
   background: var(--surface-2);
   color: var(--text-dim);

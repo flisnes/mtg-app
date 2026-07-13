@@ -1,21 +1,55 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { syncCardDb, type SyncState } from './sync.js';
+import { hasUsableLocalDb, prepareInitialDownload, type RunSync, type SyncState } from './sync.js';
 
-// Gates the app on a ready card database (beta plan §3). On first launch (or a
-// version change) it shows a progress screen while the worker imports; once
-// ready it renders the app. Offline with no DB is handled explicitly.
+// Gates the app on a ready card database (beta plan §3). When a usable local DB
+// already exists the app renders immediately and any refresh happens in the
+// background (see useCardDbUpdate). Only the first run — when there's no data to
+// run on — blocks here, and even then it asks before spending data: the ~14 MB
+// download starts on a tap, not automatically. Offline with no DB is handled
+// explicitly.
+
+type GateState =
+  | { status: 'checking' }
+  | { status: 'confirm'; sizeBytes?: number }
+  | SyncState;
+
+const mb = (n: number) => Math.max(1, Math.round(n / 1e6));
 
 export function CardDbGate({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<SyncState>({ status: 'checking' });
+  const [state, setState] = useState<GateState>({ status: 'checking' });
   const [attempt, setAttempt] = useState(0);
   const lastAttempt = useRef(-1);
+  const run = useRef<RunSync | null>(null);
 
   useEffect(() => {
     // Run once per distinct attempt — immune to StrictMode's dev double-invoke.
     if (lastAttempt.current === attempt) return;
     lastAttempt.current = attempt;
-    void syncCardDb(setState);
+
+    void (async () => {
+      setState({ status: 'checking' });
+      if (await hasUsableLocalDb()) return setState({ status: 'ready' });
+      const plan = await prepareInitialDownload();
+      if (plan.kind === 'offline-no-db') return setState({ status: 'offline-no-db' });
+      if (plan.kind === 'error') return setState({ status: 'error', message: plan.message });
+      run.current = plan.run;
+      setState({ status: 'confirm', sizeBytes: plan.sizeBytes });
+    })();
   }, [attempt]);
+
+  const startDownload = () => {
+    const r = run.current;
+    if (!r) return;
+    void (async () => {
+      try {
+        await r((s) => setState(s));
+        setState({ status: 'ready' });
+      } catch (err) {
+        if (!navigator.onLine) return setState({ status: 'offline-no-db' });
+        setState({ status: 'error', message: err instanceof Error ? err.message : String(err) });
+      }
+    })();
+  };
 
   if (state.status === 'ready') return <>{children}</>;
 
@@ -29,13 +63,27 @@ export function CardDbGate({ children }: { children: ReactNode }) {
 
         {state.status === 'checking' && <p className="gate-msg">Checking for card data…</p>}
 
+        {state.status === 'confirm' && (
+          <>
+            <p className="gate-msg">
+              One-time setup downloads the card database
+              {state.sizeBytes ? ` (~${mb(state.sizeBytes)} MB)` : ' (~14 MB)'}.
+            </p>
+            <p className="gate-note">
+              This is a large download — best on Wi-Fi. It’s stored on your device and works offline
+              afterwards.
+            </p>
+            <button onClick={startDownload}>Download</button>
+          </>
+        )}
+
         {state.status === 'progress' && (
           <>
             <p className="gate-msg">{state.label}</p>
             <div className="progress" role="progressbar" aria-valuenow={Math.round(state.fraction * 100)}>
               <div className="progress-bar" style={{ width: `${Math.round(state.fraction * 100)}%` }} />
             </div>
-            <p className="gate-note">One-time download (~14 MB). Best on Wi-Fi.</p>
+            <p className="gate-note">Downloading card data. Best on Wi-Fi.</p>
           </>
         )}
 

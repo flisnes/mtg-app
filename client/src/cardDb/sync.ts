@@ -1,4 +1,4 @@
-import type { CardDbManifest } from '@mtg/shared';
+import type { CardDbArtifactMeta, CardDbManifest } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getSetting } from '../db/settings.js';
 import { CARD_DB_BASE } from './config.js';
@@ -20,6 +20,21 @@ export type SyncState =
   | { status: 'ready' }
   | { status: 'offline-no-db' }
   | { status: 'error'; message: string };
+
+/** Executes one download+import, relaying progress; caller decides ready/error. */
+export type RunSync = (onState: (s: SyncState) => void) => Promise<void>;
+
+/** What the blocking first-run path needs to do (no usable local DB yet). */
+export type InitialPlan =
+  | { kind: 'download'; sizeBytes?: number; run: RunSync }
+  | { kind: 'offline-no-db' }
+  | { kind: 'error'; message: string };
+
+/** What a background refresh should do when a usable local DB already exists. */
+export type BgUpdate =
+  | { kind: 'none' }
+  | { kind: 'prices'; run: RunSync }
+  | { kind: 'card-data'; sizeBytes: number; run: RunSync };
 
 type InstalledChunks = Record<'oracle' | 'printings', Record<string, { sha256: string; count: number }>>;
 
@@ -91,70 +106,108 @@ function runImportWorker(req: ImportRequest, onState: (s: SyncState) => void): P
   });
 }
 
-export async function syncCardDb(onState: (s: SyncState) => void): Promise<void> {
-  onState({ status: 'checking' });
-  const installed = await readInstalled();
-  const haveLocal = localDbUsable(installed);
+/** Total download bytes for a set of chunks plus (optionally) the prices file. */
+function totalBytes(chunks: ChunkTask[], prices: CardDbArtifactMeta | null): number {
+  return chunks.reduce((s, c) => s + c.bytes, 0) + (prices?.bytes ?? 0);
+}
 
-  // No VM configured: rely on local DB, else the Scryfall fallback.
-  if (!CARD_DB_BASE) {
-    if (haveLocal) return onState({ status: 'ready' });
-    return runFallback(onState, haveLocal);
-  }
-
-  let manifest: CardDbManifest;
-  try {
-    manifest = await fetchManifest(CARD_DB_BASE);
-  } catch {
-    // Offline or VM down. Run on the local DB if we have one, else fall back.
-    if (haveLocal) return onState({ status: 'ready' });
-    return runFallback(onState, haveLocal);
-  }
-
-  // A manifest without v2 shouldn't occur (our pipeline always emits it), but
-  // don't brick the app over it.
-  if (!manifest.v2) {
-    if (haveLocal) return onState({ status: 'ready' });
-    return runFallback(onState, haveLocal);
-  }
-
-  const chunks = changedChunks(manifest.v2, haveLocal ? installed.chunks : undefined);
-  const pricesChanged = !haveLocal || installed.pricesSha !== manifest.v2.prices.sha256;
-  if (!chunks.length && !pricesChanged) return onState({ status: 'ready' });
-
-  try {
+/** Build a run that imports the given chunks + prices via the worker, then refreshes caches. */
+function workerRun(
+  manifest: NonNullable<CardDbManifest['v2']>,
+  meta: Pick<CardDbManifest, 'cardDbVersion' | 'pricesUpdatedAt'>,
+  chunks: ChunkTask[],
+  prices: CardDbArtifactMeta | null,
+): RunSync {
+  return async (onState) => {
     await runImportWorker(
       {
-        baseUrl: CARD_DB_BASE,
-        dataVersion: manifest.v2.dataVersion,
-        cardDbUpdatedAt: manifest.cardDbVersion,
-        pricesUpdatedAt: manifest.pricesUpdatedAt,
+        baseUrl: CARD_DB_BASE!,
+        dataVersion: manifest.dataVersion,
+        cardDbUpdatedAt: meta.cardDbVersion,
+        pricesUpdatedAt: meta.pricesUpdatedAt,
         chunks,
-        prices: pricesChanged ? manifest.v2.prices : null,
+        prices,
       },
       onState,
     );
     invalidateSearchIndex();
     invalidatePriceCache();
-    onState({ status: 'ready' });
-  } catch (err) {
-    // A failed refresh still leaves a usable older DB behind (chunk imports are
-    // atomic, so a partial update is a consistent mix of old and new chunks).
-    if (haveLocal) return onState({ status: 'ready' });
-    onState({ status: 'error', message: err instanceof Error ? err.message : String(err) });
-  }
+  };
 }
 
-async function runFallback(onState: (s: SyncState) => void, haveLocal: boolean): Promise<void> {
-  try {
+/** Build a run that rebuilds the DB from Scryfall directly (degraded, main-thread). */
+function fallbackRun(): RunSync {
+  return async (onState) => {
     await runScryfallFallback((fraction, label) => onState({ status: 'progress', fraction, label }));
     invalidateSearchIndex();
     invalidatePriceCache();
-    onState({ status: 'ready' });
-  } catch (err) {
-    if (haveLocal) return onState({ status: 'ready' });
-    // Distinguish "just offline, nothing cached" from a real error.
-    if (!navigator.onLine) return onState({ status: 'offline-no-db' });
-    onState({ status: 'error', message: err instanceof Error ? err.message : String(err) });
+  };
+}
+
+/** Cheap, network-free check: is there a complete local DB we can run the app on right now? */
+export async function hasUsableLocalDb(): Promise<boolean> {
+  return localDbUsable(await readInstalled());
+}
+
+/**
+ * Plan the first-run download (call only when there's no usable local DB — the
+ * app can't run without card data). Fetches the manifest to size the download,
+ * but does NOT start it: the caller confirms before spending data.
+ */
+export async function prepareInitialDownload(): Promise<InitialPlan> {
+  // No VM configured, or VM/manifest unreachable → Scryfall fallback (size unknown).
+  const fallback = (): InitialPlan =>
+    navigator.onLine ? { kind: 'download', run: fallbackRun() } : { kind: 'offline-no-db' };
+
+  if (!CARD_DB_BASE) return fallback();
+
+  let manifest: CardDbManifest;
+  try {
+    manifest = await fetchManifest(CARD_DB_BASE);
+  } catch {
+    return fallback();
   }
+  // A manifest without v2 shouldn't occur (our pipeline always emits it), but
+  // don't brick the app over it — degrade to the fallback.
+  if (!manifest.v2) return fallback();
+
+  const chunks = changedChunks(manifest.v2, undefined); // fresh DB → every chunk
+  return {
+    kind: 'download',
+    sizeBytes: totalBytes(chunks, manifest.v2.prices),
+    run: workerRun(manifest.v2, manifest, chunks, manifest.v2.prices),
+  };
+}
+
+/**
+ * Plan a background refresh (call only when a usable local DB exists). Returns
+ * silently ('none') on any error/offline — the app keeps running on current
+ * data. Prices-only changes are meant to run silently; card-data changes are
+ * meant to be confirmed first (prices ride along in the same download).
+ */
+export async function checkForBackgroundUpdate(): Promise<BgUpdate> {
+  if (!CARD_DB_BASE) return { kind: 'none' };
+
+  let manifest: CardDbManifest;
+  try {
+    manifest = await fetchManifest(CARD_DB_BASE);
+  } catch {
+    return { kind: 'none' }; // offline / VM down → stay on what we have
+  }
+  if (!manifest.v2) return { kind: 'none' };
+
+  const installed = await readInstalled();
+  const chunks = changedChunks(manifest.v2, installed.chunks);
+  const pricesChanged = installed.pricesSha !== manifest.v2.prices.sha256;
+  if (!chunks.length && !pricesChanged) return { kind: 'none' };
+
+  const prices = pricesChanged ? manifest.v2.prices : null;
+  if (chunks.length) {
+    return {
+      kind: 'card-data',
+      sizeBytes: totalBytes(chunks, prices),
+      run: workerRun(manifest.v2, manifest, chunks, prices),
+    };
+  }
+  return { kind: 'prices', run: workerRun(manifest.v2, manifest, [], manifest.v2.prices) };
 }

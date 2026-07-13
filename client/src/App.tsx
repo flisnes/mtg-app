@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import { initPwa } from './pwa.js';
 import { isUpdateAvailable } from './appUpdate.js';
+import { useCardDbUpdate } from './cardDb/useCardDbUpdate.js';
 import { getSetting, setSetting } from './db/settings.js';
 import { Onboarding } from './components/Onboarding.js';
-import { ToastProvider } from './components/Toast.js';
+import { ToastProvider, useToast } from './components/Toast.js';
 import { GlobalSearchBar, GlobalSearchProvider } from './components/GlobalSearch.js';
 import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
@@ -32,21 +33,57 @@ const PRIMARY_NAV: { to: string; label: string; icon: IconName; end?: boolean }[
 ];
 
 export function App() {
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    void getSetting<boolean>('onboardingComplete').then((v) => setOnboarded(!!v));
+    // Record today's price for every card in the collection (deduped per day).
+    void recordCollectionPrices();
+    // Signed-in + opted-in: push a fresh backup at most every few hours.
+    void maybeAutoBackup();
+  }, []);
+
+  if (onboarded === null) return null; // brief: waiting on the onboarding flag
+  if (!onboarded) {
+    return (
+      <Onboarding
+        onDone={() => {
+          void setSetting('onboardingComplete', true);
+          setOnboarded(true);
+        }}
+      />
+    );
+  }
+
+  // AppShell lives inside the providers so it can use toasts for the card-data
+  // update feedback (ToastProvider must be an ancestor of useToast).
+  return (
+    <ToastProvider>
+      <GlobalSearchProvider>
+        <AppShell />
+      </GlobalSearchProvider>
+    </ToastProvider>
+  );
+}
+
+function AppShell() {
   const [updateReload, setUpdateReload] = useState<(() => void) | null>(null);
   const [beaconUpdate, setBeaconUpdate] = useState(false);
   const [offlineReady, setOfflineReady] = useState(false);
-  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  const toast = useToast();
+  const {
+    prompt: cardDataPrompt,
+    downloading: updatingCardData,
+    epoch,
+    applyUpdate: applyCardData,
+    dismiss: dismissCardData,
+  } = useCardDbUpdate();
 
   useEffect(() => {
     initPwa({
       onNeedRefresh: (reload) => setUpdateReload(() => reload),
       onOfflineReady: () => setOfflineReady(true),
     });
-    void getSetting<boolean>('onboardingComplete').then((v) => setOnboarded(!!v));
-    // Record today's price for every card in the collection (deduped per day).
-    void recordCollectionPrices();
-    // Signed-in + opted-in: push a fresh backup at most every few hours.
-    void maybeAutoBackup();
   }, []);
 
   // Version beacon: check on launch and whenever the app returns to the
@@ -66,24 +103,16 @@ export function App() {
     return () => document.removeEventListener('visibilitychange', check);
   }, []);
 
+  // A completed background card-data update bumps epoch — toast + re-query.
+  useEffect(() => {
+    if (epoch > 0) toast('Card data updated');
+  }, [epoch, toast]);
+
   const showUpdate = !!updateReload || beaconUpdate;
   const applyUpdate = () => (updateReload ? updateReload() : window.location.reload());
-
-  if (onboarded === null) return null; // brief: waiting on the onboarding flag
-  if (!onboarded) {
-    return (
-      <Onboarding
-        onDone={() => {
-          void setSetting('onboardingComplete', true);
-          setOnboarded(true);
-        }}
-      />
-    );
-  }
+  const mb = (n: number) => Math.max(1, Math.round(n / 1e6));
 
   return (
-    <ToastProvider>
-    <GlobalSearchProvider>
     <div className="app-shell">
       <GlobalSearchBar />
       {showUpdate && (
@@ -92,13 +121,28 @@ export function App() {
           <button onClick={applyUpdate}>Update now</button>
         </div>
       )}
-      {offlineReady && !showUpdate && (
+      {cardDataPrompt && !showUpdate && (
+        <div className="banner banner-update" role="status">
+          {updatingCardData ? (
+            <span>Updating card data…</span>
+          ) : (
+            <>
+              <span>Card data update available (~{mb(cardDataPrompt.sizeBytes)} MB).</span>
+              <span className="banner-actions">
+                <button onClick={applyCardData}>Update</button>
+                <button onClick={dismissCardData}>Not now</button>
+              </span>
+            </>
+          )}
+        </div>
+      )}
+      {offlineReady && !showUpdate && !cardDataPrompt && (
         <div className="banner banner-offline" role="status" onAnimationEnd={() => setOfflineReady(false)}>
           Ready to work offline.
         </div>
       )}
 
-      <main className="app-main">
+      <main className="app-main" key={epoch}>
         <Routes>
           <Route path="/" element={<Collection />} />
           <Route path="/collection" element={<Collection />} />
@@ -135,7 +179,5 @@ export function App() {
         ))}
       </nav>
     </div>
-    </GlobalSearchProvider>
-    </ToastProvider>
   );
 }

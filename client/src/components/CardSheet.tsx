@@ -17,7 +17,7 @@ import { getPrintingsForOracle } from '../db/queries.js';
 import { getPriceHistory } from '../price/tracking.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
 import { formatPrice } from './CardSorting.js';
-import { ManaCost } from './ManaCost.js';
+import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
 import { Sparkline } from './Sparkline.js';
 import { useEscapeToClose } from './useEscapeToClose.js';
@@ -213,6 +213,10 @@ export function CardSheet({
             {trend && trend.points > 1 && <PriceTrend trend={trend} />}
           </div>
         </div>
+
+        {oracleCard.oracleText && (
+          <SymbolText className="oracle-text" text={oracleCard.oracleText} />
+        )}
 
         {!deckAdd && (
           <label className="field">

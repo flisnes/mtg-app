@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.15.0
+
+- **Card rules text** now appears on the details sheet. Each ability is on its own line, and the mana, tap and other symbols in the text render as the same icons introduced in 0.14.0 — so a cost like "{T}: Add {G}" shows real pips inline instead of plain braces.
+
 ## 0.14.0
 
 - **Mana symbols** now render as proper icons instead of plain text. A card's mana cost on its details sheet shows the familiar coloured pips — white, blue, black, red, green, colourless and generic numbers — including hybrid, Phyrexian, snow and tap/untap symbols. The font is bundled with the app and works offline.

@@ -1023,6 +1023,25 @@ button.danger-outline {
   align-items: center;
   gap: 0.15em;
 }
+.oracle-text {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+.oracle-text p {
+  margin: 0 0 0.5em;
+}
+.oracle-text p:last-child {
+  margin-bottom: 0;
+}
+.oracle-text p:empty {
+  display: none;
+}
+.oracle-text .ms-cost {
+  margin: 0 0.05em;
+  vertical-align: -0.05em;
+}
 .sheet-actions {
   display: flex;
   gap: 0.5rem;

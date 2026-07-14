@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.12.1
+
+- Fixed the bottom navigation bar on Android: it no longer stays stretched tall, and it stops jittering when you change scroll direction. The cause was the browser's URL bar sliding in and out as the whole page scrolled; the app now scrolls its content internally so the browser chrome — and the tab bar — stay put.
+
 ## 0.10.1
 
 - Pile view fixes: the heap no longer paints over the search bar, the bottom navigation, or the card details sheet — the app chrome always stays on top and tappable. Scrolling down through a tall pile on a phone is much easier too: a vertical swipe now scrolls even when it starts on a card, while holding briefly (or dragging sideways) still picks a card up.

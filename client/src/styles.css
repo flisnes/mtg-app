@@ -64,14 +64,24 @@ button.danger-outline {
 }
 
 /* ---- App shell ---- */
+/* The shell fills the viewport exactly and never overflows: only .app-main
+   scrolls, not the document. This is deliberate — on Android Chrome, scrolling
+   the *root* document is what drives the URL bar in and out, which shifts the
+   fixed tab bar (jitter on scroll-direction change) and makes
+   env(safe-area-inset-bottom) oscillate (the tab bar resizing). Scrolling an
+   inner container keeps the browser chrome pinned, so neither happens. */
 .app-shell {
-  min-height: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .app-main {
   flex: 1;
+  min-height: 0; /* let the flex child shrink so it, not the shell, scrolls */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 1rem 1rem calc(var(--tab-h) + var(--safe-bottom) + 1rem);
   max-width: 720px;
   width: 100%;

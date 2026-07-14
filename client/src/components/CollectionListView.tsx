@@ -5,6 +5,7 @@ import { db } from '../db/schema.js';
 import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
+import { SetSymbol } from './SetSymbol.js';
 import { PileView, CardBackSheet, type PileEntry } from './PileView.js';
 import { SortControls, formatPrice, priceValue, sortCards, useCardSort } from './CardSorting.js';
 import { historyChange } from '../price/history.js';
@@ -201,6 +202,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
               badgeTitle: r.entry.quantityForTrade > 0 ? `${r.entry.quantityForTrade} for trade` : undefined,
               sub: (
                 <>
+                  {r.printing && <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />}
                   {r.printing ? `${r.printing.setName} · #${r.printing.collectorNumber} · ` : ''}
                   {r.entry.condition} · {r.entry.finish}
                   {r.entry.lang !== 'en' ? ` · ${r.entry.lang}` : ''}

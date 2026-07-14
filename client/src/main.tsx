@@ -5,6 +5,7 @@ import { App } from './App.js';
 import { CardDbGate } from './cardDb/CardDbGate.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { installGlobalErrorHandlers } from './errorLog.js';
+import './vendor/keyrune/keyrune.css';
 import './styles.css';
 
 installGlobalErrorHandlers();

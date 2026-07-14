@@ -8,6 +8,7 @@ import { moverStats, type MoverStats } from '../price/movers.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { Sparkline } from '../components/Sparkline.js';
+import { SetSymbol } from '../components/SetSymbol.js';
 import { Icon } from '../components/icons.js';
 
 // Price movers: which collection cards recently moved substantially (combined
@@ -175,7 +176,12 @@ function MoverSub({ m }: { m: Mover }) {
   const dir = s.delta > 0 ? 'up' : s.delta < 0 ? 'down' : 'flat';
   return (
     <span className="mover-sub">
-      {m.printing && `${m.printing.setName} · `}
+      {m.printing && (
+        <>
+          <SetSymbol set={m.printing.set} className="sub-set-symbol" title={m.printing.setName} />
+          {`${m.printing.setName} · `}
+        </>
+      )}
       <span className={`price-${dir}`}>
         {dir === 'up' ? '▲' : '▼'} {formatMoney(s.cur, Math.abs(s.delta))}
         {s.pct != null && ` (${s.pct >= 0 ? '+' : '−'}${Math.abs(s.pct).toFixed(1)}%)`}

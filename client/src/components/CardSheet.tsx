@@ -17,6 +17,7 @@ import { getPrintingsForOracle } from '../db/queries.js';
 import { getPriceHistory } from '../price/tracking.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
 import { formatPrice } from './CardSorting.js';
+import { SetSymbol } from './SetSymbol.js';
 import { Sparkline } from './Sparkline.js';
 import { useEscapeToClose } from './useEscapeToClose.js';
 
@@ -211,14 +212,17 @@ export function CardSheet({
         {!deckAdd && (
           <label className="field">
             <span>Edition</span>
-            <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)}>
-              {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
-              {printings.map((p) => (
-                <option key={p.scryfallId} value={p.scryfallId}>
-                  {p.setName} · #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
-                </option>
-              ))}
-            </select>
+            <div className={`edition-select${printing ? ' with-symbol' : ''}`}>
+              {printing && <SetSymbol set={printing.set} className="edition-symbol" title={printing.setName} />}
+              <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)}>
+                {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
+                {printings.map((p) => (
+                  <option key={p.scryfallId} value={p.scryfallId}>
+                    {p.setName} · #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
+                  </option>
+                ))}
+              </select>
+            </div>
           </label>
         )}
 

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.13.0
+
+- **Set symbols** now appear next to card printings — the little expansion icon you see on a physical card. They show up in the Edition picker when you add or edit a card, and beside the set name in your Collection, Wishlist and Price movers lists, so you can tell editions apart at a glance. The symbols are bundled with the app and work offline.
+
 ## 0.12.1
 
 - Fixed the bottom navigation bar on Android: it no longer stays stretched tall, and it stops jittering when you change scroll direction. The cause was the browser's URL bar sliding in and out as the whole page scrolled; the app now scrolls its content internally so the browser chrome — and the tab bar — stay put.

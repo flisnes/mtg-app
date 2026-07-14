@@ -992,6 +992,32 @@ button.danger-outline {
   grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
 }
+/* Edition picker: keep the native <select>, overlay the selected printing's
+   set symbol on its left edge. */
+.edition-select {
+  position: relative;
+}
+.edition-select select {
+  width: 100%;
+}
+.edition-select.with-symbol select {
+  padding-left: 2.1rem;
+}
+.edition-symbol {
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.2rem;
+  color: var(--text);
+  pointer-events: none;
+}
+/* Set symbol inline before a printing's name in list rows (inherits the dim
+   sub-text color). */
+.sub-set-symbol {
+  margin-right: 0.35em;
+  font-size: 1.05em;
+}
 .sheet-actions {
   display: flex;
   gap: 0.5rem;

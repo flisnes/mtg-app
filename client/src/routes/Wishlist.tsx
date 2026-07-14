@@ -7,6 +7,7 @@ import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { addToWishlist, removeFromWishlist } from '../db/dataAccess.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
+import { SetSymbol } from '../components/SetSymbol.js';
 import { SortControls, priceValue, sortCards, useCardSort } from '../components/CardSorting.js';
 import { useOpenSearch } from '../components/GlobalSearch.js';
 import { Icon } from '../components/icons.js';
@@ -85,11 +86,18 @@ export function Wishlist() {
                 name: r.oracle?.name ?? '(unknown card)',
                 image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
                 count: r.entry.quantity,
-                sub: r.entry.scryfallId
-                  ? r.printing
-                    ? `${r.printing.setName} · #${r.printing.collectorNumber}`
-                    : 'specific printing'
-                  : 'any printing',
+                sub: r.entry.scryfallId ? (
+                  r.printing ? (
+                    <>
+                      <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />
+                      {`${r.printing.setName} · #${r.printing.collectorNumber}`}
+                    </>
+                  ) : (
+                    'specific printing'
+                  )
+                ) : (
+                  'any printing'
+                ),
                 // "Any printing" wishes are tracked via the oracle's default printing.
                 trend: moverFlags?.get(r.entry.scryfallId ?? r.oracle?.defaultScryfallId ?? ''),
                 onClick: r.oracle ? () => setEditing(r) : undefined,

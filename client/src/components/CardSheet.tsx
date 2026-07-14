@@ -17,6 +17,7 @@ import { getPrintingsForOracle } from '../db/queries.js';
 import { getPriceHistory } from '../price/tracking.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
 import { formatPrice } from './CardSorting.js';
+import { ManaCost } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
 import { Sparkline } from './Sparkline.js';
 import { useEscapeToClose } from './useEscapeToClose.js';
@@ -202,7 +203,11 @@ export function CardSheet({
           )}
           <div className="sheet-info">
             <div className="sheet-name">{oracleCard.name}</div>
-            {oracleCard.manaCost && <div className="result-sub">{oracleCard.manaCost}</div>}
+            {oracleCard.manaCost && (
+              <div className="result-sub">
+                <ManaCost cost={oracleCard.manaCost} />
+              </div>
+            )}
             <div className="result-sub">{oracleCard.typeLine}</div>
             <div className="result-price">{cardPrice}</div>
             {trend && trend.points > 1 && <PriceTrend trend={trend} />}

@@ -1018,6 +1018,11 @@ button.danger-outline {
   margin-right: 0.35em;
   font-size: 1.05em;
 }
+.mana-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15em;
+}
 .sheet-actions {
   display: flex;
   gap: 0.5rem;

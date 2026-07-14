@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.14.0
+
+- **Mana symbols** now render as proper icons instead of plain text. A card's mana cost on its details sheet shows the familiar coloured pips — white, blue, black, red, green, colourless and generic numbers — including hybrid, Phyrexian, snow and tap/untap symbols. The font is bundled with the app and works offline.
+
 ## 0.13.0
 
 - **Set symbols** now appear next to card printings — the little expansion icon you see on a physical card. They show up in the Edition picker when you add or edit a card, and beside the set name in your Collection, Wishlist and Price movers lists, so you can tell editions apart at a glance. The symbols are bundled with the app and work offline.

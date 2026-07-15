@@ -107,6 +107,25 @@ interface StartingDeck {
   rule: FormatRule;
 }
 
+// Some cards override the format copy limit in their own text, e.g.
+// "A deck can have any number of cards named Shadowborn Apostle." (unlimited)
+// or "A deck can have up to nine cards named Nazgûl." (a raised cap). Returns
+// the allowed number of copies, or null if the card carries no such clause.
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+  seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+};
+function deckCopyOverride(o: OracleCard): number | null {
+  const body = text(o);
+  if (/A deck can have any number of cards named/i.test(body)) return Infinity;
+  const m = /A deck can have up to (\w+) cards named/i.exec(body);
+  if (m) {
+    const n = NUMBER_WORDS[m[1]!.toLowerCase()] ?? Number(m[1]);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
 const isLandCard = (o: OracleCard) => /\bLand\b/.test(o.typeLine);
 const isPermanentCard = (o: OracleCard) => /\b(Creature|Artifact|Enchantment|Land|Planeswalker|Battle)\b/.test(o.typeLine);
 
@@ -255,9 +274,14 @@ export function checkDeckLegality(format: DeckFormat | undefined, cards: Legalit
     } else if (status === 'restricted' && qty > 1) {
       problems.push(`${name} is restricted (max 1) in ${rule.label}.`);
       issues.set(oracleId, 'restricted');
-    } else if (rule.maxCopies && !isBasic && status !== 'restricted' && qty > rule.maxCopies) {
-      problems.push(`${qty}× ${name} exceeds the ${rule.maxCopies}-copy limit.`);
-      issues.set(oracleId, `max ${rule.maxCopies}`);
+    } else if (rule.maxCopies && !isBasic && status !== 'restricted') {
+      // A card's own text may raise the copy limit (Shadowborn Apostle → any
+      // number, Nazgûl → nine…). Infinity means no cap, so nothing to report.
+      const limit = deckCopyOverride(oracle) ?? rule.maxCopies;
+      if (qty > limit) {
+        problems.push(`${qty}× ${name} exceeds the ${limit}-copy limit.`);
+        issues.set(oracleId, `max ${limit}`);
+      }
     }
   }
 

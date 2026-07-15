@@ -74,6 +74,7 @@ function AppShell() {
   const {
     prompt: cardDataPrompt,
     downloading: updatingCardData,
+    progress: cardDataProgress,
     epoch,
     applyUpdate: applyCardData,
     dismiss: dismissCardData,
@@ -124,7 +125,12 @@ function AppShell() {
       {cardDataPrompt && !showUpdate && (
         <div className="banner banner-update" role="status">
           {updatingCardData ? (
-            <span>Updating card data…</span>
+            <div className="banner-progress">
+              <span>{cardDataProgress?.label ?? 'Updating card data…'}</span>
+              <div className="progress">
+                <div className="progress-bar" style={{ width: `${Math.round((cardDataProgress?.fraction ?? 0) * 100)}%` }} />
+              </div>
+            </div>
           ) : (
             <>
               <span>Card data update available (~{mb(cardDataPrompt.sizeBytes)} MB).</span>

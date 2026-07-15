@@ -177,6 +177,19 @@ button.danger-outline {
   gap: 0.5rem;
   flex-shrink: 0;
 }
+.banner-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+}
+/* On the purple ribbon the accent-coloured bar would vanish — invert it. */
+.banner-update .progress {
+  background: rgba(255, 255, 255, 0.22);
+}
+.banner-update .progress-bar {
+  background: #fff;
+}
 .banner-offline {
   background: var(--surface-2);
   color: var(--text-dim);

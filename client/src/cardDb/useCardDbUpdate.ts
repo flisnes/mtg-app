@@ -13,6 +13,8 @@ export interface CardDbUpdate {
   prompt: { sizeBytes: number } | null;
   /** A confirmed card-data update is downloading in the background. */
   downloading: boolean;
+  /** Live download+import progress while `downloading`, else null. */
+  progress: { fraction: number; label: string } | null;
   /** Bumps after a completed card-data update so views re-query the new data. */
   epoch: number;
   applyUpdate: () => void;
@@ -22,6 +24,7 @@ export interface CardDbUpdate {
 export function useCardDbUpdate(): CardDbUpdate {
   const [prompt, setPrompt] = useState<{ sizeBytes: number } | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [progress, setProgress] = useState<{ fraction: number; label: string } | null>(null);
   const [epoch, setEpoch] = useState(0);
   const run = useRef<RunSync | null>(null);
   const dismissed = useRef(false); // "Not now" — suppressed until next launch
@@ -64,7 +67,10 @@ export function useCardDbUpdate(): CardDbUpdate {
     if (!r || busy.current) return;
     busy.current = true;
     setDownloading(true);
-    void r(() => {})
+    setProgress({ fraction: 0, label: 'Starting…' });
+    void r((s) => {
+      if (s.status === 'progress') setProgress({ fraction: s.fraction, label: s.label });
+    })
       .then(() => {
         // Success: drop the prompt and nudge views to re-query the new data.
         setPrompt(null);
@@ -75,6 +81,7 @@ export function useCardDbUpdate(): CardDbUpdate {
       })
       .finally(() => {
         setDownloading(false);
+        setProgress(null);
         busy.current = false;
       });
   }, []);
@@ -84,5 +91,5 @@ export function useCardDbUpdate(): CardDbUpdate {
     setPrompt(null);
   }, []);
 
-  return { prompt, downloading, epoch, applyUpdate, dismiss };
+  return { prompt, downloading, progress, epoch, applyUpdate, dismiss };
 }

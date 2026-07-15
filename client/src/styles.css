@@ -1748,43 +1748,6 @@ button.ghost {
   font-size: 0.8rem;
   white-space: nowrap;
 }
-.community-lines {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-}
-.community-line {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  padding: 0.55rem 0.85rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  flex-wrap: wrap;
-}
-.community-line:last-child {
-  border-bottom: none;
-}
-.community-line.match {
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-}
-.line-qty {
-  color: var(--text-dim);
-  min-width: 2ch;
-}
-.line-name {
-  font-weight: 500;
-}
-.line-detail {
-  color: var(--text-dim);
-  font-size: 0.8rem;
-}
-.community-line .badge {
-  margin-left: auto;
-}
 .match-summary {
   margin-top: 0;
 }

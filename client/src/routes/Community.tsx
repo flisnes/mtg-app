@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { PublicUser, TradeLine, WishLine } from '@mtg/shared';
+import type { OracleCard, Priced, Printing, PublicUser, TradeLine, WishLine } from '@mtg/shared';
 import { ApiError, getUserLists, listUsers } from '../account/api.js';
 import { useAccount } from '../account/useAccount.js';
 import { db } from '../db/schema.js';
+import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { CardSheet } from '../components/CardSheet.js';
+import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
+import { SetSymbol } from '../components/SetSymbol.js';
 import { sanitizeOffer, sanitizeWishlist } from '../trade/validate.js';
 import { EmptyState, Page } from './Page.js';
 
@@ -128,9 +132,20 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
   );
 }
 
+/** Resolved card-DB data for the lines we're showing, from the viewer's local DB. */
+interface CardMaps {
+  oracles: Map<string, Priced<OracleCard>>;
+  printings: Map<string, Priced<Printing>>;
+}
+
+/** The card-info sheet target: an oracle card, optionally pinned to a printing. */
+type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string };
+
 function UserLists({ token, username, onBack }: { token: string; username: string; onBack: () => void }) {
   const [lists, setLists] = useState<{ updatedAt: number; tradelist: TradeLine[]; wishlist: WishLine[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useViewMode();
+  const [info, setInfo] = useState<InfoTarget | null>(null);
   const iWant = useMyWants();
   const iHave = useMyHaves();
 
@@ -154,6 +169,22 @@ function UserLists({ token, username, onBack }: { token: string; username: strin
     };
   }, [token, username]);
 
+  // The wire lines carry only name + ids; resolve images and set/printing detail
+  // from the viewer's own synced card DB (like the own-list screens do).
+  const cards = useLiveQuery<CardMaps>(async () => {
+    if (!lists) return { oracles: new Map(), printings: new Map() };
+    const oracleIds = [...lists.tradelist, ...lists.wishlist].map((l) => l.oracleId);
+    const scryfallIds = [
+      ...lists.tradelist.map((l) => l.scryfallId),
+      ...lists.wishlist.map((l) => l.scryfallId),
+    ].filter((id): id is string => id !== null);
+    const [oracles, printings] = await Promise.all([
+      getOracleCardsByIds(oracleIds),
+      getPrintingsByIds(scryfallIds),
+    ]);
+    return { oracles, printings };
+  }, [lists]);
+
   const trade = useMemo(() => {
     if (!lists) return [];
     return lists.tradelist
@@ -171,6 +202,63 @@ function UserLists({ token, username, onBack }: { token: string; username: strin
   const tradeMatches = trade.filter((t) => t.match).length;
   const wishMatches = wish.filter((w) => w.match).length;
 
+  const tradeItems = useMemo(
+    (): CardItem[] =>
+      trade.map(({ line, match }, i) => {
+        const oracle = cards?.oracles.get(line.oracleId);
+        const printing = cards?.printings.get(line.scryfallId);
+        return {
+          key: `${line.scryfallId}-${i}`,
+          name: oracle?.name ?? line.name,
+          image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+          count: line.quantity,
+          sub: (
+            <>
+              {printing && <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />}
+              {printing ? `${printing.setName} · #${printing.collectorNumber} · ` : ''}
+              {lineDetail(line)}
+            </>
+          ),
+          badge: match ? '⭐ you want this' : undefined,
+          badgeClass: 'own-trade',
+          badgeTitle: 'On your wishlist',
+          onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId }) : undefined,
+        };
+      }),
+    [trade, cards],
+  );
+
+  const wishItems = useMemo(
+    (): CardItem[] =>
+      wish.map(({ line, match }, i) => {
+        const oracle = cards?.oracles.get(line.oracleId);
+        const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
+        return {
+          key: `${line.oracleId}-${i}`,
+          name: oracle?.name ?? line.name,
+          image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+          count: line.quantity,
+          sub: line.scryfallId ? (
+            printing ? (
+              <>
+                <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />
+                {`${printing.setName} · #${printing.collectorNumber}`}
+              </>
+            ) : (
+              'specific printing'
+            )
+          ) : (
+            'any printing'
+          ),
+          badge: match ? '⇄ you have this' : undefined,
+          badgeClass: 'own-trade',
+          badgeTitle: 'In your tradelist',
+          onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId ?? undefined }) : undefined,
+        };
+      }),
+    [wish, cards],
+  );
+
   return (
     <Page
       title={username}
@@ -187,32 +275,26 @@ function UserLists({ token, username, onBack }: { token: string; username: strin
         <p className="fine-print">Loading…</p>
       ) : (
         <>
-          {(tradeMatches > 0 || wishMatches > 0) && (
-            <p className="fine-print match-summary">
-              {tradeMatches > 0 && <>⭐ {tradeMatches} of their trades match your wishlist.</>}{' '}
-              {wishMatches > 0 && <>⇄ {wishMatches} of their wishes match your tradelist.</>}
-            </p>
-          )}
+          <div className="meta-row">
+            {tradeMatches > 0 || wishMatches > 0 ? (
+              <p className="fine-print match-summary">
+                {tradeMatches > 0 && <>⭐ {tradeMatches} of their trades match your wishlist.</>}{' '}
+                {wishMatches > 0 && <>⇄ {wishMatches} of their wishes match your tradelist.</>}
+              </p>
+            ) : (
+              <span />
+            )}
+            <div className="meta-actions">
+              <ViewToggle mode={view} onChange={setView} />
+            </div>
+          </div>
 
           <section className="about-section">
             <h2>Has for trade ({trade.length})</h2>
             {trade.length === 0 ? (
               <p className="fine-print">Nothing marked for trade.</p>
             ) : (
-              <ul className="community-lines">
-                {trade.map(({ line, match }, i) => (
-                  <li key={`${line.scryfallId}-${i}`} className={match ? 'community-line match' : 'community-line'}>
-                    <span className="line-qty">{line.quantity}×</span>
-                    <span className="line-name">{line.name}</span>
-                    <span className="line-detail">{lineDetail(line)}</span>
-                    {match && (
-                      <span className="badge own-trade" title="On your wishlist">
-                        ⭐ you want this
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <CardItems view={view} items={tradeItems} />
             )}
           </section>
 
@@ -221,23 +303,14 @@ function UserLists({ token, username, onBack }: { token: string; username: strin
             {wish.length === 0 ? (
               <p className="fine-print">Empty wishlist.</p>
             ) : (
-              <ul className="community-lines">
-                {wish.map(({ line, match }, i) => (
-                  <li key={`${line.oracleId}-${i}`} className={match ? 'community-line match' : 'community-line'}>
-                    <span className="line-qty">{line.quantity}×</span>
-                    <span className="line-name">{line.name}</span>
-                    <span className="line-detail">{line.scryfallId === null ? 'any printing' : 'specific printing'}</span>
-                    {match && (
-                      <span className="badge own-trade" title="In your tradelist">
-                        ⇄ you have this
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <CardItems view={view} items={wishItems} />
             )}
           </section>
         </>
+      )}
+
+      {info && (
+        <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
       )}
     </Page>
   );

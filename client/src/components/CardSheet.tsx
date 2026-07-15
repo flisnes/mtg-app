@@ -223,7 +223,7 @@ export function CardSheet({
             <span>Edition</span>
             <div className={`edition-select${printing ? ' with-symbol' : ''}`}>
               {printing && <SetSymbol set={printing.set} className="edition-symbol" title={printing.setName} />}
-              <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)}>
+              <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)} disabled={mode === 'info'}>
                 {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
                 {printings.map((p) => (
                   <option key={p.scryfallId} value={p.scryfallId}>

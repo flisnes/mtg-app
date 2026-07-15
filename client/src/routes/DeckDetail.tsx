@@ -20,7 +20,7 @@ import {
   setDeckFormat,
 } from '../db/dataAccess.js';
 import { addToWishlist } from '../db/dataAccess.js';
-import { checkDeckLegality, formatLabel, type LegalityReport } from '../deck/legality.js';
+import { canBeCommander, checkDeckLegality, formatLabel, type LegalityReport } from '../deck/legality.js';
 import { resolveDeckText, buildDeckText } from '../deck/deckText.js';
 import { downloadText } from '../import/export.js';
 import { useToast } from '../components/Toast.js';
@@ -226,8 +226,8 @@ export function DeckDetail() {
           emptyHint="No commander yet. Use ♛ on a card below, or the +Cmdr button in search."
         />
       )}
-      <Board title="Mainboard" rows={main} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} />
-      <Board title="Sideboard" rows={side} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} />
+      <Board title="Mainboard" rows={main} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} hasCommander={commander.length > 0} />
+      <Board title="Sideboard" rows={side} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} hasCommander={commander.length > 0} />
 
       {info && <CardSheet oracleCard={info.card} deckCard={info.deckCard} onClose={() => setInfo(null)} />}
 
@@ -294,6 +294,7 @@ function Board({
   issues,
   onEdit,
   commanderDeck = false,
+  hasCommander = false,
   emptyHint,
 }: {
   title: string;
@@ -304,6 +305,8 @@ function Board({
   onEdit: (target: { card: Priced<OracleCard>; deckCard: { id: string; quantity: number; scryfallId?: string } }) => void;
   /** Commander-format deck: show move-to/from-command-zone actions. */
   commanderDeck?: boolean;
+  /** A commander is already in the command zone: hide "make commander" actions. */
+  hasCommander?: boolean;
   emptyHint?: string;
 }) {
   if (rows.length === 0 && title === 'Sideboard') return null;
@@ -334,9 +337,9 @@ function Board({
           {commanderDeck &&
             (r.board === 'commander' ? (
               <button onClick={() => moveDeckCard(r.id, 'main')} aria-label="Move to mainboard" title="Move to mainboard">↓</button>
-            ) : (
+            ) : !hasCommander && r.oracle && canBeCommander(r.oracle) ? (
               <button onClick={() => moveDeckCard(r.id, 'commander')} aria-label="Make commander" title="Make commander">♛</button>
-            ))}
+            ) : null)}
           <button onClick={() => setDeckCardQuantity(r.id, r.quantity - 1)} aria-label="One fewer">−</button>
           <button onClick={() => setDeckCardQuantity(r.id, r.quantity + 1)} aria-label="One more">＋</button>
           <button onClick={() => removeDeckCard(r.id)} aria-label="Remove">✕</button>

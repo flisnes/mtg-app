@@ -22,6 +22,7 @@ import { More } from './routes/More.js';
 import { Import } from './routes/Import.js';
 import { Export } from './routes/Export.js';
 import { maybeAutoBackup } from './account/session.js';
+import { maybeFetchMatches } from './account/notifications.js';
 import { recordCollectionPrices } from './price/tracking.js';
 import { Icon, type IconName } from './components/icons.js';
 
@@ -39,8 +40,9 @@ export function App() {
     void getSetting<boolean>('onboardingComplete').then((v) => setOnboarded(!!v));
     // Record today's price for every card in the collection (deduped per day).
     void recordCollectionPrices();
-    // Signed-in + opted-in: push a fresh backup at most every few hours.
-    void maybeAutoBackup();
+    // Signed-in + opted-in: push a fresh backup at most every few hours, then
+    // refresh trade-match notifications (throttled).
+    void maybeAutoBackup().then(() => maybeFetchMatches());
   }, []);
 
   if (onboarded === null) return null; // brief: waiting on the onboarding flag
@@ -164,6 +166,7 @@ function AppShell() {
           <Route path="/about" element={<About />} />
           <Route path="/account" element={<Account />} />
           <Route path="/community" element={<Community />} />
+          <Route path="/community/:username" element={<Community />} />
           <Route path="/more" element={<More />} />
           <Route path="*" element={<Collection />} />
         </Routes>

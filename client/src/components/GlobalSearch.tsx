@@ -20,6 +20,7 @@ import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.j
 import { formatPrice } from './CardSorting.js';
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
+import { NotificationBell } from './NotificationBell.js';
 import { useAccount } from '../account/useAccount.js';
 
 // Card search is the front door to the hobby, so it lives in a persistent
@@ -143,15 +144,18 @@ export function GlobalSearchBar() {
           </button>
         ) : (
           accountsEnabled && (
-            <button
-              className="header-account"
-              onClick={() => navigate('/account')}
-              aria-label={signedIn ? `Account: signed in as ${session!.username}` : 'Account & sync'}
-              title={signedIn ? `Signed in as ${session!.username}` : 'Account & sync'}
-            >
-              <Icon name="account" size={22} />
-              {signedIn && <span className="header-account-dot" aria-hidden />}
-            </button>
+            <>
+              {signedIn && <NotificationBell />}
+              <button
+                className="header-account"
+                onClick={() => navigate('/account')}
+                aria-label={signedIn ? `Account: signed in as ${session!.username}` : 'Account & sync'}
+                title={signedIn ? `Signed in as ${session!.username}` : 'Account & sync'}
+              >
+                <Icon name="account" size={22} />
+                {signedIn && <span className="header-account-dot" aria-hidden />}
+              </button>
+            </>
           )
         )}
       </header>

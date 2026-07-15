@@ -63,6 +63,10 @@ async function clearAccountState(): Promise<void> {
     deleteSetting(KEY_LAST_BACKUP),
     deleteSetting(KEY_CONFLICT),
     deleteSetting(KEY_LAST_AUTO_AT),
+    // Match-notification cache (account/notifications.ts). Deleted by literal to
+    // avoid an import cycle; keep in sync with KEY_NOTIFICATIONS / KEY_LAST_FETCH_AT.
+    deleteSetting('matchNotifications'),
+    deleteSetting('matchLastFetchAt'),
   ]);
 }
 

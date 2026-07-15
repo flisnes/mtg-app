@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { OracleCard, Priced, Printing, PublicUser, TradeLine, WishLine } from '@mtg/shared';
 import { ApiError, getUserLists, listUsers } from '../account/api.js';
@@ -80,7 +80,15 @@ export function Community() {
 function CommunityBrowser({ token, me }: { token: string; me: string }) {
   const [users, setUsers] = useState<PublicUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  // Selection lives in the URL (/community/:username) so notifications can
+  // deep-link straight to a user, with ?highlight=oracleId,… for the matches.
+  const { username: selected } = useParams<{ username?: string }>();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const highlight = useMemo(() => {
+    const raw = searchParams.get('highlight') ?? '';
+    return new Set(raw.split(',').filter(Boolean));
+  }, [searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,7 +105,14 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
   }, [token]);
 
   if (selected) {
-    return <UserLists token={token} username={selected} onBack={() => setSelected(null)} />;
+    return (
+      <UserLists
+        token={token}
+        username={selected}
+        highlight={highlight}
+        onBack={() => navigate('/community')}
+      />
+    );
   }
 
   return (
@@ -112,7 +127,10 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
         <ul className="menu-list">
           {users.map((u) => (
             <li key={u.username}>
-              <button className="menu-item menu-item-btn" onClick={() => setSelected(u.username)}>
+              <button
+                className="menu-item menu-item-btn"
+                onClick={() => navigate(`/community/${encodeURIComponent(u.username)}`)}
+              >
                 <span className="community-user">
                   {u.username}
                   {u.username === me && <span className="badge own-yes"> you</span>}
@@ -141,7 +159,18 @@ interface CardMaps {
 /** The card-info sheet target: an oracle card, optionally pinned to a printing. */
 type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string };
 
-function UserLists({ token, username, onBack }: { token: string; username: string; onBack: () => void }) {
+function UserLists({
+  token,
+  username,
+  highlight,
+  onBack,
+}: {
+  token: string;
+  username: string;
+  /** oracleIds to emphasise (the cards a notification matched on). */
+  highlight?: Set<string>;
+  onBack: () => void;
+}) {
   const [lists, setLists] = useState<{ updatedAt: number; tradelist: TradeLine[]; wishlist: WishLine[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useViewMode();
@@ -185,26 +214,29 @@ function UserLists({ token, username, onBack }: { token: string; username: strin
     return { oracles, printings };
   }, [lists]);
 
+  const hiSort = (a: { hi: boolean; match: boolean; line: { name: string } }, b: typeof a) =>
+    Number(b.hi) - Number(a.hi) || Number(b.match) - Number(a.match) || a.line.name.localeCompare(b.line.name);
+
   const trade = useMemo(() => {
     if (!lists) return [];
     return lists.tradelist
-      .map((l) => ({ line: l, match: iWant(l.oracleId, l.scryfallId) }))
-      .sort((a, b) => Number(b.match) - Number(a.match) || a.line.name.localeCompare(b.line.name));
-  }, [lists, iWant]);
+      .map((l) => ({ line: l, match: iWant(l.oracleId, l.scryfallId), hi: highlight?.has(l.oracleId) ?? false }))
+      .sort(hiSort);
+  }, [lists, iWant, highlight]);
 
   const wish = useMemo(() => {
     if (!lists) return [];
     return lists.wishlist
-      .map((l) => ({ line: l, match: iHave(l.oracleId, l.scryfallId) }))
-      .sort((a, b) => Number(b.match) - Number(a.match) || a.line.name.localeCompare(b.line.name));
-  }, [lists, iHave]);
+      .map((l) => ({ line: l, match: iHave(l.oracleId, l.scryfallId), hi: highlight?.has(l.oracleId) ?? false }))
+      .sort(hiSort);
+  }, [lists, iHave, highlight]);
 
   const tradeMatches = trade.filter((t) => t.match).length;
   const wishMatches = wish.filter((w) => w.match).length;
 
   const tradeItems = useMemo(
     (): CardItem[] =>
-      trade.map(({ line, match }, i) => {
+      trade.map(({ line, match, hi }, i) => {
         const oracle = cards?.oracles.get(line.oracleId);
         const printing = cards?.printings.get(line.scryfallId);
         return {
@@ -219,8 +251,8 @@ function UserLists({ token, username, onBack }: { token: string; username: strin
               {lineDetail(line)}
             </>
           ),
-          badge: match ? '⭐ you want this' : undefined,
-          badgeClass: 'own-trade',
+          badge: hi ? '🔔 you want this' : match ? '⭐ you want this' : undefined,
+          badgeClass: hi ? 'badge-match' : 'own-trade',
           badgeTitle: 'On your wishlist',
           onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId }) : undefined,
         };
@@ -230,7 +262,7 @@ function UserLists({ token, username, onBack }: { token: string; username: strin
 
   const wishItems = useMemo(
     (): CardItem[] =>
-      wish.map(({ line, match }, i) => {
+      wish.map(({ line, match, hi }, i) => {
         const oracle = cards?.oracles.get(line.oracleId);
         const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
         return {
@@ -250,8 +282,8 @@ function UserLists({ token, username, onBack }: { token: string; username: strin
           ) : (
             'any printing'
           ),
-          badge: match ? '⇄ you have this' : undefined,
-          badgeClass: 'own-trade',
+          badge: hi ? '🔔 you have this' : match ? '⇄ you have this' : undefined,
+          badgeClass: hi ? 'badge-match' : 'own-trade',
           badgeTitle: 'In your tradelist',
           onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId ?? undefined }) : undefined,
         };

@@ -132,6 +132,121 @@ button.danger-outline {
   background: var(--ok);
   border: 2px solid var(--surface);
 }
+.header-bell-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+}
+.header-bell-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  border: 2px solid var(--surface);
+}
+/* Notifications dropdown, anchored under the bell. */
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(320px, calc(100vw - 1.5rem));
+  max-height: min(70vh, 460px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  z-index: 30;
+}
+.notif-head {
+  padding: 0.7rem 0.9rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.notif-empty {
+  margin: 0;
+  padding: 0.9rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.notif-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.notif-item {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+}
+.notif-list li:last-child.notif-item {
+  border-bottom: none;
+}
+.notif-item-new {
+  background: rgba(124, 108, 255, 0.1);
+}
+.notif-open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: flex-start;
+  text-align: left;
+  padding: 0.7rem 0.9rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--text);
+}
+.notif-user {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+.notif-new-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+.notif-line {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.notif-tag {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.05rem 0.35rem;
+  border-radius: 5px;
+  margin-right: 0.3rem;
+}
+.notif-tag-have {
+  background: rgba(78, 201, 123, 0.15);
+  color: var(--ok);
+}
+.notif-tag-want {
+  background: rgba(124, 108, 255, 0.2);
+  color: var(--accent);
+}
+.notif-dismiss {
+  flex-shrink: 0;
+  align-self: stretch;
+  padding: 0 0.8rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.notif-dismiss:hover {
+  color: var(--text);
+}
 .search-overlay {
   position: fixed;
   top: calc(var(--header-h) + var(--safe-top));
@@ -1580,6 +1695,16 @@ button.chip {
 }
 .tile-badge.badge-wish {
   color: #eac54f;
+}
+/* A card a notification matched on — stronger than the plain match badge. */
+.badge.badge-match {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.tile-badge.badge-match {
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 /* Ownership badges on grid tiles keep the dark chip, tinted per state. */

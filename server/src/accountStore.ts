@@ -216,6 +216,23 @@ export class AccountStore {
     }));
   }
 
+  /** Raw published lists for every user, for on-demand match computation. */
+  allPublicLists(): { userId: number; username: string; updatedAt: number; tradelist: string; wishlist: string }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT p.user_id, u.username, p.updated_at, p.tradelist, p.wishlist
+         FROM public_lists p JOIN users u ON u.id = p.user_id`,
+      )
+      .all() as { user_id: number; username: string; updated_at: number; tradelist: string; wishlist: string }[];
+    return rows.map((r) => ({
+      userId: r.user_id,
+      username: r.username,
+      updatedAt: r.updated_at,
+      tradelist: r.tradelist,
+      wishlist: r.wishlist,
+    }));
+  }
+
   /** Raw published-list JSON for one user (relayed verbatim to the browser). */
   getUserLists(username: string): { username: string; updatedAt: number; tradelist: string; wishlist: string } | null {
     const row = this.db

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   MAX_PASSWORD_CHARS,
@@ -7,6 +8,9 @@ import {
   USERNAME_RE,
   type ApiErrorBody,
   type AuthResponse,
+  type MatchCard,
+  type MatchEntry,
+  type MatchesResponse,
   type MeResponse,
   type SnapshotCounts,
   type SnapshotGetResponse,
@@ -289,6 +293,59 @@ export function registerAccountRoutes(app: FastifyInstance): void {
     };
     return res;
   });
+
+  // --- Match notifications: users whose lists overlap mine (either way) -------
+  app.get('/api/matches', async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const rows = store.allPublicLists();
+    const mine = rows.find((r) => r.userId === user.id);
+    if (!mine) return { matches: [] } satisfies MatchesResponse; // nothing published yet
+
+    // My haves (oracleId → a display name) and my wants (oracleId set).
+    const myHaves = oracleNames(safeLines(mine.tradelist) as TradeLine[]);
+    const myWants = new Set((safeLines(mine.wishlist) as WishLine[]).map((l) => l.oracleId));
+
+    const matches: MatchEntry[] = [];
+    for (const other of rows) {
+      if (other.userId === user.id) continue;
+      const theirHaves = oracleNames(safeLines(other.tradelist) as TradeLine[]);
+      const theirWants = new Set((safeLines(other.wishlist) as WishLine[]).map((l) => l.oracleId));
+
+      // They want a card I have for trade / I want a card they have for trade.
+      const theyWant: MatchCard[] = [];
+      for (const [oracleId, name] of myHaves) if (theirWants.has(oracleId)) theyWant.push({ oracleId, name });
+      const iWant: MatchCard[] = [];
+      for (const [oracleId, name] of theirHaves) if (myWants.has(oracleId)) iWant.push({ oracleId, name });
+
+      if (theyWant.length === 0 && iWant.length === 0) continue;
+      matches.push({
+        username: other.username,
+        updatedAt: other.updatedAt,
+        theyWant,
+        iWant,
+        signature: matchSignature(theyWant, iWant),
+      });
+    }
+    matches.sort((a, b) => b.updatedAt - a.updatedAt);
+    return { matches } satisfies MatchesResponse;
+  });
+}
+
+/** oracleId → display name, deduped (first name wins), for a published list. */
+function oracleNames(lines: { oracleId: string; name: string }[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const l of lines) if (!out.has(l.oracleId)) out.set(l.oracleId, l.name);
+  return out;
+}
+
+/** Order-independent hash of a match's oracleIds, so the client can spot changes. */
+function matchSignature(theyWant: MatchCard[], iWant: MatchCard[]): string {
+  const parts = [
+    ...theyWant.map((c) => `w:${c.oracleId}`),
+    ...iWant.map((c) => `h:${c.oracleId}`),
+  ].sort();
+  return createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16);
 }
 
 function safeLines(json: string): unknown[] {

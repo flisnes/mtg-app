@@ -1,6 +1,7 @@
 import type {
   ApiErrorBody,
   AuthResponse,
+  MatchesResponse,
   MeResponse,
   SnapshotGetResponse,
   SnapshotPutRequest,
@@ -94,4 +95,8 @@ export function listUsers(token: string): Promise<UsersResponse> {
 
 export function getUserLists(token: string, username: string): Promise<UserListsResponse> {
   return request(`/users/${encodeURIComponent(username)}/lists`, { token });
+}
+
+export function getMatches(token: string): Promise<MatchesResponse> {
+  return request('/matches', { token });
 }

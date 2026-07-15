@@ -108,6 +108,39 @@ export interface UserListsResponse {
   wishlist: WishLine[];
 }
 
+// ---------------------------------------------------------------------------
+// Match notifications (GET /api/matches)
+// ---------------------------------------------------------------------------
+//
+// Computed on demand from the published lists: for the signed-in user, every
+// other user whose lists overlap theirs (either direction). Reveals nothing
+// the Community screen doesn't already — it's a convenience view over data any
+// signed-in user can already read. The client tracks seen/dismissed per user
+// locally; `signature` lets it detect when a match's content has changed.
+
+/** One matched card — oracleId drives highlighting, name drives display. */
+export interface MatchCard {
+  oracleId: string;
+  name: string;
+}
+
+/** One matched user. At least one of the two arrays is non-empty. */
+export interface MatchEntry {
+  username: string;
+  /** When their lists last changed (their last backup). */
+  updatedAt: number;
+  /** Cards I have for trade that they want (on my tradelist ∩ their wishlist). */
+  theyWant: MatchCard[];
+  /** Cards they have for trade that I want (their tradelist ∩ my wishlist). */
+  iWant: MatchCard[];
+  /** Stable hash of this match's content; changes when the overlap changes. */
+  signature: string;
+}
+
+export interface MatchesResponse {
+  matches: MatchEntry[];
+}
+
 /**
  * Error envelope for every non-2xx /api response. `error` is a stable code;
  * `message` is human-readable. A 409 on snapshot PUT carries the server's

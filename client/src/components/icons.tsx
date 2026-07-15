@@ -20,7 +20,8 @@ export type IconName =
   | 'balance'
   | 'plus'
   | 'account'
-  | 'community';
+  | 'community'
+  | 'bell';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -127,6 +128,13 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M2.5 20v-.8A5.5 5.5 0 0 1 8 13.7h2a5.5 5.5 0 0 1 5.5 5.5v.8" />
       <path d="M16 4.6a3.5 3.5 0 0 1 0 6.8" />
       <path d="M18.2 13.9a5.5 5.5 0 0 1 3.3 5v.8" />
+    </>
+  ),
+  // Bell — match notifications.
+  bell: (
+    <>
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </>
   ),
 };

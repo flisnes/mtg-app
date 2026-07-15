@@ -215,12 +215,20 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
     if (!slotId || !deckId || !oracleId || slotIds.has(slotId) || !deckIds.has(deckId)) continue;
     slotIds.add(slotId);
     const board = (BOARDS.has(r.board as string) ? r.board : 'main') as DeckBoard;
+    const scryfallId = id(r.scryfallId);
     const key = `${deckId}|${oracleId}|${board}`;
     const ex = slotKeys.get(key);
     if (ex) {
       ex.quantity = Math.min(MAX_QTY, ex.quantity + qty(r.quantity));
     } else {
-      const slot: DeckCard = { id: slotId, deckId, oracleId, quantity: qty(r.quantity), board };
+      const slot: DeckCard = {
+        id: slotId,
+        deckId,
+        oracleId,
+        ...(scryfallId ? { scryfallId } : {}),
+        quantity: qty(r.quantity),
+        board,
+      };
       slotKeys.set(key, slot);
       deckCards.push(slot);
     }

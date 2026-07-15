@@ -70,6 +70,8 @@ export interface DeckCard {
   id: string;
   deckId: string;
   oracleId: string;
+  /** Preferred printing for display (image/price). Undefined = the card's default printing. */
+  scryfallId?: string;
   quantity: number;
   board: DeckBoard;
 }

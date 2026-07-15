@@ -300,6 +300,8 @@ export async function deleteDeck(id: string): Promise<void> {
 export interface AddDeckCardInput {
   deckId: string;
   oracleId: string;
+  /** Preferred printing for the slot; falls back to the card's default. */
+  scryfallId?: string;
   quantity?: number;
   board?: DeckBoard;
 }
@@ -315,7 +317,15 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
       .and((c) => c.oracleId === input.oracleId)
       .first();
     if (existing) await db.deckCards.update(existing.id, { quantity: existing.quantity + quantity });
-    else await db.deckCards.add({ id: newId(), deckId: input.deckId, oracleId: input.oracleId, quantity, board });
+    else
+      await db.deckCards.add({
+        id: newId(),
+        deckId: input.deckId,
+        oracleId: input.oracleId,
+        ...(input.scryfallId ? { scryfallId: input.scryfallId } : {}),
+        quantity,
+        board,
+      });
     await db.decks.update(input.deckId, { updatedAt: Date.now() });
   });
 }
@@ -373,6 +383,15 @@ export async function setDeckCardQuantity(id: string, quantity: number): Promise
     return;
   }
   await db.deckCards.update(id, { quantity });
+}
+
+/** Update a slot's quantity and preferred printing (deck edit sheet). */
+export async function updateDeckCard(id: string, patch: { quantity: number; scryfallId: string }): Promise<void> {
+  if (patch.quantity <= 0) {
+    await db.deckCards.delete(id);
+    return;
+  }
+  await db.deckCards.update(id, { quantity: patch.quantity, scryfallId: patch.scryfallId });
 }
 
 export async function removeDeckCard(id: string): Promise<void> {

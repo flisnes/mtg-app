@@ -9,8 +9,8 @@ import {
   removeDeckCard,
   removeFromCollection,
   removeFromWishlist,
-  setDeckCardQuantity,
   updateCollectionEntry,
+  updateDeckCard,
   updateWishlistEntry,
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
@@ -66,8 +66,8 @@ export function CardSheet({
   entry?: CollectionEntry;
   /** Edit this wishlist line (edition + quantity) instead of the collection. */
   wishEntry?: WishlistEntry;
-  /** Edit this deck slot's quantity instead of the collection. */
-  deckCard?: { id: string; quantity: number };
+  /** Edit this deck slot's quantity + printing instead of the collection. */
+  deckCard?: { id: string; quantity: number; scryfallId?: string };
   /** Preselect a specific printing (e.g. the one named in a trade line). */
   initialScryfallId?: string;
   /** Add mode only: where the add goes (defaults to the collection). */
@@ -89,7 +89,7 @@ export function CardSheet({
   const [scryfallId, setScryfallId] = useState(
     wishEntry !== undefined || wishAdd
       ? wishEntry?.scryfallId ?? ANY_PRINTING
-      : entry?.scryfallId ?? initialScryfallId ?? oracleCard.defaultScryfallId,
+      : entry?.scryfallId ?? deckCard?.scryfallId ?? initialScryfallId ?? oracleCard.defaultScryfallId,
   );
   const [condition, setCondition] = useState<Condition>(entry?.condition ?? 'NM');
   const [finish, setFinish] = useState<Finish>(entry?.finish ?? 'nonfoil');
@@ -139,7 +139,7 @@ export function CardSheet({
     if (wishEntry) {
       await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, quantity });
     } else if (deckCard) {
-      await setDeckCardQuantity(deckCard.id, quantity);
+      await updateDeckCard(deckCard.id, { quantity, scryfallId });
     } else if (editing && entry) {
       await updateCollectionEntry(entry.id, {
         scryfallId,
@@ -152,7 +152,7 @@ export function CardSheet({
     } else if (addTo.kind === 'wishlist') {
       await addToWishlist({ oracleId: oracleCard.oracleId, scryfallId: scryfallId || null, quantity });
     } else if (addTo.kind === 'deck') {
-      await addDeckCard({ deckId: addTo.deckId, oracleId: oracleCard.oracleId, board, quantity });
+      await addDeckCard({ deckId: addTo.deckId, oracleId: oracleCard.oracleId, scryfallId, board, quantity });
     } else {
       // 'collection' and 'tradelist' both add a collection entry; the latter
       // just starts with copies marked for trade.
@@ -218,22 +218,20 @@ export function CardSheet({
           <SymbolText className="oracle-text" text={oracleCard.oracleText} />
         )}
 
-        {!deckAdd && (
-          <label className="field">
-            <span>Edition</span>
-            <div className={`edition-select${printing ? ' with-symbol' : ''}`}>
-              {printing && <SetSymbol set={printing.set} className="edition-symbol" title={printing.setName} />}
-              <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)} disabled={mode === 'info'}>
-                {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
-                {printings.map((p) => (
-                  <option key={p.scryfallId} value={p.scryfallId}>
-                    {p.setName} · #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </label>
-        )}
+        <label className="field">
+          <span>Edition</span>
+          <div className={`edition-select${printing ? ' with-symbol' : ''}`}>
+            {printing && <SetSymbol set={printing.set} className="edition-symbol" title={printing.setName} />}
+            <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)} disabled={mode === 'info'}>
+              {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
+              {printings.map((p) => (
+                <option key={p.scryfallId} value={p.scryfallId}>
+                  {p.setName} · #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </label>
 
         {collectionFields && (
         <div className="field-grid">

@@ -1,9 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
-import { DECK_FORMATS, type DeckBoard, type DeckFormat, type OracleCard, type Priced } from '@mtg/shared';
+import { DECK_FORMATS, type DeckBoard, type DeckFormat, type OracleCard, type Priced, type Printing } from '@mtg/shared';
 import { db } from '../db/schema.js';
-import { getOracleCardsByIds, getOwnedCountsFor, computeDeckWishlistCandidates, type MissingCard } from '../db/queries.js';
+import {
+  getOracleCardsByIds,
+  getOwnedCountsFor,
+  getPrintingsByIds,
+  computeDeckWishlistCandidates,
+  type MissingCard,
+} from '../db/queries.js';
 import {
   addDeckCardsBulk,
   deleteDeck,
@@ -35,9 +41,11 @@ import { useEscapeToClose } from '../components/useEscapeToClose.js';
 interface Row {
   id: string;
   oracleId: string;
+  scryfallId?: string;
   quantity: number;
   board: DeckBoard;
   oracle?: Priced<OracleCard>;
+  printing?: Priced<Printing>;
   owned: number;
 }
 
@@ -50,7 +58,7 @@ export function DeckDetail() {
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('deck', { group: 'type' });
-  const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: { id: string; quantity: number } } | null>(null);
+  const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: { id: string; quantity: number; scryfallId?: string } } | null>(null);
   // Escape on the exit sheet = "skip" (same as clicking the backdrop).
   useEscapeToClose(exit ? () => navigate('/decks') : null);
 
@@ -58,16 +66,19 @@ export function DeckDetail() {
     const deck = await db.decks.get(id);
     if (!deck) return { deck: null, rows: [] as Row[] };
     const cards = await db.deckCards.where('deckId').equals(id).toArray();
-    const [oracleMap, owned] = await Promise.all([
+    const [oracleMap, printMap, owned] = await Promise.all([
       getOracleCardsByIds(cards.map((c) => c.oracleId)),
+      getPrintingsByIds(cards.map((c) => c.scryfallId).filter((s): s is string => !!s)),
       getOwnedCountsFor(cards.map((c) => c.oracleId)),
     ]);
     const rows: Row[] = cards.map((c) => ({
       id: c.id,
       oracleId: c.oracleId,
+      scryfallId: c.scryfallId,
       quantity: c.quantity,
       board: c.board,
       oracle: oracleMap.get(c.oracleId),
+      printing: c.scryfallId ? printMap.get(c.scryfallId) : undefined,
       owned: owned.get(c.oracleId) ?? 0,
     }));
     return { deck, rows };
@@ -255,7 +266,7 @@ export function DeckDetail() {
 function sortRows(rows: Row[], prefs: CardSortPrefs): Row[] {
   return sortCards(
     rows,
-    (r) => ({ name: r.oracle?.name, cmc: r.oracle?.cmc, price: priceValue(r.oracle) }),
+    (r) => ({ name: r.oracle?.name, cmc: r.oracle?.cmc, price: priceValue(r.printing, r.oracle) }),
     prefs,
   );
 }
@@ -290,7 +301,7 @@ function Board({
   group: GroupKey;
   view: ViewMode;
   issues: Map<string, string>;
-  onEdit: (target: { card: Priced<OracleCard>; deckCard: { id: string; quantity: number } }) => void;
+  onEdit: (target: { card: Priced<OracleCard>; deckCard: { id: string; quantity: number; scryfallId?: string } }) => void;
   /** Commander-format deck: show move-to/from-command-zone actions. */
   commanderDeck?: boolean;
   emptyHint?: string;
@@ -303,7 +314,7 @@ function Board({
     return {
       key: r.id,
       name: r.oracle?.name ?? '(unknown card)',
-      image: r.oracle?.imageSmall ?? null,
+      image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
       count: r.quantity,
       badge: issue ? '⚠' : owned ? '✓' : undefined,
       badgeClass: issue ? 'badge-illegal' : 'badge-owned',
@@ -316,7 +327,7 @@ function Board({
         </>
       ),
       onClick: r.oracle
-        ? () => onEdit({ card: r.oracle!, deckCard: { id: r.id, quantity: r.quantity } })
+        ? () => onEdit({ card: r.oracle!, deckCard: { id: r.id, quantity: r.quantity, scryfallId: r.scryfallId } })
         : undefined,
       actions: (
         <>

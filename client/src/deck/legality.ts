@@ -33,10 +33,26 @@ export function formatLabel(format: DeckFormat | undefined): string {
   return RULES[format ?? 'casual']?.label ?? 'Casual';
 }
 
-/** Legendary creature, or a card whose text grants commander-hood ("can be your commander"). */
+/**
+ * Whether a card may be designated as a commander, per rule 903.3:
+ *  - a legendary creature, Vehicle, or Spacecraft (Vehicles/Spacecraft added by
+ *    the Commander Panel with Edge of Eternities, Aug 2025);
+ *  - a card whose text grants commander-hood ("can be your commander"), e.g.
+ *    planeswalkers like Elminster or Lord Windgrace;
+ *  - a card that is a creature everywhere except the battlefield, so it's a
+ *    legendary creature card in the command zone (e.g. Grist, the Hunger Tide).
+ */
 export function canBeCommander(oracle: OracleCard): boolean {
-  if (/\bLegendary\b/.test(oracle.typeLine) && /\bCreature\b/.test(oracle.typeLine)) return true;
-  return !!oracle.oracleText && /can be your commander/i.test(oracle.oracleText);
+  const type = oracle.typeLine;
+  const body = oracle.oracleText ?? '';
+  // The explicit grant works regardless of type line (it's a deckbuild rule).
+  if (/can be your commander/i.test(body)) return true;
+  if (!/\bLegendary\b/.test(type)) return false;
+  if (/\b(?:Creature|Vehicle|Spacecraft)\b/.test(type)) return true;
+  // "As long as ~ isn't on the battlefield, it's a … creature" (Grist-style):
+  // a creature card in every zone but the battlefield, including the command zone.
+  if (/isn't on the battlefield[^.]*\bcreature\b/i.test(body)) return true;
+  return false;
 }
 
 // ---- Two-card command zones ----
@@ -266,7 +282,7 @@ export function checkDeckLegality(format: DeckFormat | undefined, cards: Legalit
     } else if (commanderCount === 1) {
       const c = commanders[0]!;
       if (c.oracle && !canBeCommander(c.oracle)) {
-        problems.push(`${c.oracle.name} can't be your commander (not a legendary creature).`);
+        problems.push(`${c.oracle.name} can't be your commander (not a legendary creature, Vehicle, or Spacecraft, and nothing lets it be your commander).`);
         issues.set(c.oracleId, 'invalid commander');
       }
     }

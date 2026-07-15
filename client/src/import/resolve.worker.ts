@@ -79,7 +79,7 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
       const key = normalize(line.name);
       const oracle = nameMap.get(key) ?? looseMap.get(alnum(line.name));
       if (oracle) matched.push({ line, oracle });
-      else unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, finish: line.finish, suggestions: [] });
+      else unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, finish: line.finish, board: line.board, suggestions: [] });
     }
 
     // Suggestions for unmatched: gather plausible candidates (shared prefix,
@@ -120,7 +120,7 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
       const printings = byOracle.get(oracle.oracleId) ?? [];
       const printing = resolvePrinting(line, oracle, printings);
       if (!printing) {
-        unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, finish: line.finish, suggestions: [] });
+        unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, finish: line.finish, board: line.board, suggestions: [] });
         continue;
       }
       const quantityForTrade =
@@ -138,6 +138,7 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
         condition: line.condition ?? 'NM',
         finish: pickFinish(line, printing),
         lang: line.lang ?? 'en',
+        board: line.board,
       });
     }
 

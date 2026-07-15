@@ -80,10 +80,15 @@ export function buildNameIndex(cards: OracleCard[]): Map<string, OracleCard> {
   return map;
 }
 
-/** Resolve a card name to its oracle card (exact, diacritic-insensitive; also matches DFC front faces). For deck import. */
+/** Resolve a card name to its oracle card (exact, diacritic-insensitive; also matches DFC front faces and single-slash "Front / Back" spellings). */
 export async function resolveOracleByName(name: string): Promise<OracleCard | undefined> {
   if (!nameLookup) nameLookup = buildNameIndex((await getIndex()).map((e) => e.card));
-  return nameLookup.get(normalize(name));
+  // Try the full name, then just the front face for "Front / Back" or "Front // Back".
+  for (const candidate of [name, name.split(/\s*\/\/?\s*/)[0]!]) {
+    const hit = nameLookup.get(normalize(candidate));
+    if (hit) return hit;
+  }
+  return undefined;
 }
 
 export interface SearchResult {

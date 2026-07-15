@@ -1,4 +1,4 @@
-import type { Condition, Finish } from '@mtg/shared';
+import type { Condition, DeckBoard, Finish } from '@mtg/shared';
 import type { ImportFormat, ParsedLine } from './types.js';
 
 // Format auto-detecting parsers (beta plan §5). Priority: plain-text/MTGA is the
@@ -45,14 +45,27 @@ function normLang(v: string | undefined): string | undefined {
 
 const SECTION_RE = /^(deck|sideboard|commander|companion|maybeboard|tokens?|about)\b/i;
 
+/** Which board a lone section header switches to (deck imports; ignored by collection import). */
+function sectionBoard(line: string): DeckBoard | undefined {
+  if (!SECTION_RE.test(line) || /^\d/.test(line)) return undefined;
+  if (/^sideboard\b/i.test(line)) return 'side';
+  if (/^commander\b/i.test(line)) return 'commander';
+  return 'main';
+}
+
 /** Parse "4 Lightning Bolt (MH2) 123" style lines. */
 export function parseText(text: string): ParsedLine[] {
   const lines: ParsedLine[] = [];
+  let board: DeckBoard = 'main';
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line || line.startsWith('//') || line.startsWith('#')) continue;
-    // Lone section headers (no quantity) are skipped.
-    if (SECTION_RE.test(line) && !/^\d/.test(line)) continue;
+    // Lone section headers (no quantity) switch the active board and are skipped.
+    const section = sectionBoard(line);
+    if (section) {
+      board = section;
+      continue;
+    }
 
     let rest = line;
     let quantity = 1;
@@ -80,7 +93,7 @@ export function parseText(text: string): ParsedLine[] {
       rest = rest.slice(0, tail.index).trim();
     }
     if (!rest) continue;
-    lines.push({ raw, quantity, name: rest, setCode, collectorNumber, finish });
+    lines.push({ raw, quantity, name: rest, setCode, collectorNumber, finish, board });
   }
   return lines;
 }

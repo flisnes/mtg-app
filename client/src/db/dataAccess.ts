@@ -333,7 +333,7 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
 /** Bulk-add (deck import), merging by (oracleId, board). */
 export async function addDeckCardsBulk(
   deckId: string,
-  cards: Array<{ oracleId: string; quantity: number; board: DeckBoard }>,
+  cards: Array<{ oracleId: string; quantity: number; board: DeckBoard; scryfallId?: string }>,
 ): Promise<void> {
   await db.transaction('rw', db.deckCards, db.decks, async () => {
     const existing = await db.deckCards.where('deckId').equals(deckId).toArray();
@@ -344,9 +344,11 @@ export async function addDeckCardsBulk(
       const ex = map.get(keyOf(c));
       if (ex) {
         ex.quantity += c.quantity;
+        // Adopt the imported printing if the slot didn't already have one.
+        if (!ex.scryfallId && c.scryfallId) ex.scryfallId = c.scryfallId;
         if (!writes.includes(ex)) writes.push(ex);
       } else {
-        const dc: DeckCard = { id: newId(), deckId, oracleId: c.oracleId, quantity: c.quantity, board: c.board };
+        const dc: DeckCard = { id: newId(), deckId, oracleId: c.oracleId, quantity: c.quantity, board: c.board, scryfallId: c.scryfallId };
         map.set(keyOf(c), dc);
         writes.push(dc);
       }

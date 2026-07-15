@@ -21,8 +21,11 @@ import {
 } from '../db/dataAccess.js';
 import { addToWishlist } from '../db/dataAccess.js';
 import { canBeCommander, checkDeckLegality, formatLabel, type LegalityReport } from '../deck/legality.js';
-import { resolveDeckText, buildDeckText } from '../deck/deckText.js';
+import { buildDeckText } from '../deck/deckText.js';
 import { downloadText } from '../import/export.js';
+import { useImportAnalysis } from '../import/useImportAnalysis.js';
+import { ImportReview } from '../import/ImportReview.js';
+import type { ResolvedLine, UnmatchedLine } from '../import/types.js';
 import { useToast } from '../components/Toast.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
@@ -207,9 +210,9 @@ export function DeckDetail() {
       {showImport && (
         <ImportPanel
           deckId={id}
-          onDone={(added, unmatched) => {
+          onDone={(added) => {
             setShowImport(false);
-            toast(`Imported ${added} cards${unmatched ? `, ${unmatched} unmatched` : ''}`);
+            toast(`Added ${added} cards to the deck`);
           }}
         />
       )}
@@ -371,20 +374,60 @@ function Board({
   );
 }
 
-function ImportPanel({ deckId, onDone }: { deckId: string; onDone: (added: number, unmatched: number) => void }) {
+function ImportPanel({ deckId, onDone }: { deckId: string; onDone: (added: number) => void }) {
   const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
+  const { status, analyze, reset } = useImportAnalysis();
 
-  async function run() {
-    setBusy(true);
-    const { resolved, unmatched } = await resolveDeckText(text);
-    await addDeckCardsBulk(deckId, resolved);
-    setBusy(false);
-    onDone(resolved.reduce((s, r) => s + r.quantity, 0), unmatched.length);
+  // A deck slot keys on oracle + board; keep the resolved printing so the deck
+  // remembers which edition the list used (like a hand-picked printing).
+  const makeResolved = (u: UnmatchedLine, card: OracleCard): ResolvedLine => ({
+    oracleId: card.oracleId,
+    scryfallId: card.defaultScryfallId,
+    name: card.name,
+    quantity: u.quantity,
+    quantityForTrade: 0,
+    condition: 'NM',
+    finish: 'nonfoil',
+    lang: 'en',
+    board: u.board ?? 'main',
+  });
+
+  async function confirm(lines: ResolvedLine[]) {
+    await addDeckCardsBulk(
+      deckId,
+      lines.map((l) => ({ oracleId: l.oracleId, quantity: l.quantity, board: l.board ?? 'main', scryfallId: l.scryfallId })),
+    );
+    onDone(lines.reduce((s, l) => s + l.quantity, 0));
+  }
+
+  if (status.kind === 'review') {
+    return (
+      <div className="about-section">
+        <ImportReview
+          result={status.result}
+          makeResolved={makeResolved}
+          onConfirm={confirm}
+          onCancel={reset}
+          confirmLabel={(n) => `Add ${n} entries to deck`}
+        />
+      </div>
+    );
+  }
+
+  if (status.kind === 'working') {
+    return (
+      <div className="about-section">
+        <p className="gate-msg">{status.label}</p>
+        <div className="progress">
+          <div className="progress-bar" style={{ width: `${Math.round(status.fraction * 100)}%` }} />
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="about-section">
+      {status.kind === 'error' && <p className="gate-error">Error: {status.message}</p>}
       <textarea
         className="search-input"
         style={{ minHeight: 140, fontFamily: 'ui-monospace, monospace' }}
@@ -392,8 +435,8 @@ function ImportPanel({ deckId, onDone }: { deckId: string; onDone: (added: numbe
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
-      <button className="primary" onClick={run} disabled={busy || !text.trim()}>
-        {busy ? 'Importing…' : 'Import into deck'}
+      <button className="primary" onClick={() => analyze(text)} disabled={!text.trim()}>
+        Analyze
       </button>
     </div>
   );

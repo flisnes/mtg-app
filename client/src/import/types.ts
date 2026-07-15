@@ -1,4 +1,4 @@
-import type { Condition, Finish } from '@mtg/shared';
+import type { Condition, DeckBoard, Finish } from '@mtg/shared';
 
 // Import pipeline types (beta plan §5). Text/CSV → ParsedLine → resolved
 // against the card DB → applied to the collection, with unmatched lines sent
@@ -18,6 +18,8 @@ export interface ParsedLine {
   lang?: string;
   /** Some exports (Archidekt) carry the Scryfall id directly. */
   scryfallId?: string;
+  /** Which board a deck-list line belongs to. Ignored by collection import. */
+  board?: DeckBoard;
 }
 
 export interface ResolvedLine {
@@ -29,6 +31,8 @@ export interface ResolvedLine {
   condition: Condition;
   finish: Finish;
   lang: string;
+  /** Set for deck imports so the slot lands on the right board. */
+  board?: DeckBoard;
 }
 
 export interface UnmatchedLine {
@@ -37,6 +41,8 @@ export interface UnmatchedLine {
   quantity: number;
   finish?: Finish;
   suggestions: string[];
+  /** Carried so a hand-fixed line keeps its deck board. */
+  board?: DeckBoard;
 }
 
 export interface ResolveResult {

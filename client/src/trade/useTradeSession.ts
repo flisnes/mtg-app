@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   PROTOCOL_VERSION,
+  USERNAME_RE,
   type ClientMessage,
   type Seat,
   type ServerMessage,
@@ -9,6 +10,7 @@ import {
   type TradeState,
   type WishLine,
 } from '@mtg/shared';
+import { getAccountSession } from '../account/session.js';
 import { applyCompletedTrade } from '../db/dataAccess.js';
 import { readOwnTradelist, readOwnWishlist } from '../db/ownLists.js';
 import { deleteSetting, getSetting, setSetting } from '../db/settings.js';
@@ -86,6 +88,10 @@ export function useTradeSession(): TradeSession {
   const active = useRef<Partial<ActiveTrade>>({});
   const appliedRef = useRef(false);
   const intentionalClose = useRef(false);
+  // Identity exchange: the partner's username (if they shared one) ends up on
+  // the completed Trade record; anonymous sessions leave it null.
+  const peerUsername = useRef<string | null>(null);
+  const sentIdentity = useRef(false);
   // Mirrors snapshot.state for the socket's onclose handler: the closure there
   // is created before any snapshot arrives, so reading the state prop directly
   // would always see null and auto-resume would never fire.
@@ -102,6 +108,19 @@ export function useTradeSession(): TradeSession {
     await clearPersistedTrade();
   }, []);
 
+  /** Share our account username with the partner (no-op when signed out). */
+  const sendIdentity = useCallback(() => {
+    if (sentIdentity.current) return;
+    sentIdentity.current = true;
+    void getAccountSession().then((session) => {
+      const c = active.current.code;
+      const s = ws.current;
+      if (session && c && s && s.readyState === WebSocket.OPEN) {
+        s.send(JSON.stringify({ v: PROTOCOL_VERSION, type: 'identity_share', sessionCode: c, username: session.username }));
+      }
+    });
+  }, []);
+
   const handleSnapshot = useCallback(
     (raw: SessionSnapshot, mySeat: Seat) => {
       // The peer is untrusted — sanitize both offers before anything uses them.
@@ -111,16 +130,20 @@ export function useTradeSession(): TradeSession {
       };
       stateRef.current = snap.state;
       setSnapshot(snap);
-      setPeerPresent(snap.present[otherSeat(mySeat)]);
+      const present = snap.present[otherSeat(mySeat)];
+      setPeerPresent(present);
+      if (present) sendIdentity();
       if (snap.state === 'completed' && !appliedRef.current) {
         appliedRef.current = true;
         const given = snap.offers[mySeat];
         const received = snap.offers[otherSeat(mySeat)];
-        void applyCompletedTrade(snap.sessionId, given, received).finally(() => void clearPersisted());
+        void applyCompletedTrade(snap.sessionId, given, received, peerUsername.current).finally(
+          () => void clearPersisted(),
+        );
       }
       if (snap.state === 'cancelled') void clearPersisted();
     },
-    [clearPersisted],
+    [clearPersisted, sendIdentity],
   );
 
   const onMessage = useCallback(
@@ -158,6 +181,15 @@ export function useTradeSession(): TradeSession {
           break;
         case 'peer_reconnected':
           setPeerPresent(true);
+          // The peer may have missed our identity while away — resend.
+          sentIdentity.current = false;
+          sendIdentity();
+          break;
+        case 'identity_shared':
+          if (typeof msg.username === 'string' && USERNAME_RE.test(msg.username)) {
+            peerUsername.current = msg.username;
+          }
+          sendIdentity(); // mutual: answer with ours if we haven't yet
           break;
         case 'tradelist_requested': {
           // Partner asked to browse our tradelist — answer with a snapshot.
@@ -199,7 +231,7 @@ export function useTradeSession(): TradeSession {
           break;
       }
     },
-    [handleSnapshot, persist, clearPersisted],
+    [handleSnapshot, persist, clearPersisted, sendIdentity],
   );
 
   const connect = useCallback(
@@ -277,6 +309,8 @@ export function useTradeSession(): TradeSession {
     active.current = {};
     appliedRef.current = false;
     stateRef.current = null;
+    peerUsername.current = null;
+    sentIdentity.current = false;
     setStatus('idle');
     setSeat(null);
     setSnapshot(null);

@@ -1,45 +1,45 @@
+import { useSyncExternalStore } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../db/schema.js';
 import { getSetting } from '../db/settings.js';
-import { ACCOUNTS_ENABLED } from './config.js';
 import {
-  KEY_AUTO_BACKUP,
-  KEY_CONFLICT,
-  KEY_LAST_BACKUP,
-  KEY_SESSION,
-  type AccountSession,
-  type LastBackup,
-  type SyncConflict,
-} from './session.js';
+  KEY_SYNC_STATE,
+  getSyncStatusSnapshot,
+  subscribeSyncStatus,
+  type SyncState,
+  type SyncStatus,
+} from '../sync/engine.js';
+import { ACCOUNTS_ENABLED } from './config.js';
+import { KEY_SESSION, type AccountSession } from './session.js';
 
 export interface AccountState {
   enabled: boolean;
   /** undefined while loading, null when signed out. */
   session: AccountSession | null | undefined;
-  lastBackup: LastBackup | null;
-  conflict: SyncConflict | null;
-  autoBackup: boolean;
+  /**
+   * Whether sync is initialized for the signed-in account. False right after
+   * signing into an account that already has data while this device also has
+   * data — the "replace this device?" decision is still pending.
+   */
+  syncReady: boolean;
+  /** Local changes not pushed yet. */
+  pendingChanges: number;
+  sync: SyncStatus;
 }
 
-/** Live view of the account/session settings (updates on every sign-in/backup). */
+/** Live view of the account/session/sync settings. */
 export function useAccount(): AccountState {
   const session = useLiveQuery(
     async () => (await getSetting<AccountSession>(KEY_SESSION)) ?? null,
     [],
   );
-  const lastBackup = useLiveQuery(
-    async () => (await getSetting<LastBackup>(KEY_LAST_BACKUP)) ?? null,
+  const syncState = useLiveQuery(
+    async () => (await getSetting<SyncState>(KEY_SYNC_STATE)) ?? null,
     [],
     null,
   );
-  const conflict = useLiveQuery(
-    async () => (await getSetting<SyncConflict>(KEY_CONFLICT)) ?? null,
-    [],
-    null,
-  );
-  const autoBackup = useLiveQuery(
-    async () => (await getSetting<boolean>(KEY_AUTO_BACKUP)) !== false,
-    [],
-    true,
-  );
-  return { enabled: ACCOUNTS_ENABLED, session, lastBackup, conflict, autoBackup };
+  const pendingChanges = useLiveQuery(() => db.outbox.count(), [], 0);
+  const sync = useSyncExternalStore(subscribeSyncStatus, getSyncStatusSnapshot);
+  const syncReady = !!session && !!syncState && syncState.account === session.username;
+  return { enabled: ACCOUNTS_ENABLED, session, syncReady, pendingChanges, sync };
 }

@@ -21,8 +21,8 @@ import { Community } from './routes/Community.js';
 import { More } from './routes/More.js';
 import { Import } from './routes/Import.js';
 import { Export } from './routes/Export.js';
-import { maybeAutoBackup } from './account/session.js';
 import { maybeFetchMatches } from './account/notifications.js';
+import { initSyncEngine } from './sync/engine.js';
 import { recordCollectionPrices } from './price/tracking.js';
 import { Icon, type IconName } from './components/icons.js';
 
@@ -40,9 +40,10 @@ export function App() {
     void getSetting<boolean>('onboardingComplete').then((v) => setOnboarded(!!v));
     // Record today's price for every card in the collection (deduped per day).
     void recordCollectionPrices();
-    // Signed-in + opted-in: push a fresh backup at most every few hours, then
+    // Signed-in: start the sync engine (live push + outbox drain), then
     // refresh trade-match notifications (throttled).
-    void maybeAutoBackup().then(() => maybeFetchMatches());
+    initSyncEngine();
+    void maybeFetchMatches();
   }, []);
 
   if (onboarded === null) return null; // brief: waiting on the onboarding flag

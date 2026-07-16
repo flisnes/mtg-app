@@ -132,6 +132,13 @@ button.danger-outline {
   background: var(--ok);
   border: 2px solid var(--surface);
 }
+/* Sync state tones: amber = syncing / changes waiting, red = sync error. */
+.header-account-dot-busy {
+  background: #e6a23c;
+}
+.header-account-dot-err {
+  background: var(--danger);
+}
 .header-bell-wrap {
   position: relative;
   flex-shrink: 0;
@@ -1206,6 +1213,77 @@ button.primary {
 }
 .price-flat {
   color: var(--text-dim);
+}
+
+/* ---- Card history tab (card sheet) ---- */
+.sheet-tabs {
+  margin: 0.6rem 0;
+  /* .seg-row's overflow:hidden zeroes its min flex size, and .sheet is a
+     max-height column flexbox — without this the row gets crushed to ~2px. */
+  flex-shrink: 0;
+}
+.history-summary {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  margin: 0.2rem 0 0.6rem;
+}
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.history-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.5rem;
+  border-radius: 10px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+.history-row-editable:hover {
+  background: var(--surface-2);
+}
+.history-row:disabled {
+  opacity: 1; /* non-editable rows are informational, not "disabled" */
+}
+.history-qty {
+  flex-shrink: 0;
+  min-width: 2em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.history-qty-in {
+  color: var(--ok);
+}
+.history-qty-out {
+  color: var(--danger);
+}
+.history-label {
+  flex: 1;
+  min-width: 0;
+}
+.history-when,
+.history-price {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.history-edit {
+  padding: 0.4rem 0.5rem 0.6rem;
+  border-left: 2px solid var(--border);
+  margin: 0 0 0.4rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 .spark {
   display: block;

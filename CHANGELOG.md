@@ -2,6 +2,17 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.17.0
+
+- **Seamless sync between your devices.** Signing in now keeps every device up to date automatically: add, edit or remove a card (or change a deck) on your phone and it appears on your PC within seconds — no more manual backup/restore. Works offline too: changes queue up and sync when you're back online. If the same card is edited on two devices before they meet, the newest edit wins quietly.
+- **Joining a new device:** the first device you sign in on becomes the account's data. Signing in on another device that has its own local data asks once whether to replace it with the account's copy (the app warns you clearly before touching anything).
+- **Card history.** Every card's details sheet has a new **History** tab: when you got your copies (and what they cost at the time), when copies left (assumed sold — tap to correct to traded/lost/other, or fix the price), which decks the card has been in, and its wishlist journey (wished for → fulfilled). Cards you already own get an "owned since" anchor from when you first added them; you can fill in what you paid by hand.
+- The summary line shows how a card's value has moved since you acquired it.
+- **Trades now remember who they were with**: if both traders are signed in, the trade history shows the partner's username instead of "Other User". Anonymous trading still works exactly as before.
+- The account button in the header now doubles as a subtle sync indicator: green = synced, amber = syncing or changes waiting, red = a sync problem.
+- The old manual "Back up now / Restore" flow and its conflict prompts are gone — sync replaces them. Device-to-device transfer is still available when signed out; while signed in it's disabled (your account already does this, better).
+- "Delete all my data" (About) is disabled while signed in, so a device can't silently fall out of step with the account — sign out first, or delete the account itself.
+
 ## 0.15.0
 
 - **Card rules text** now appears on the details sheet. Each ability is on its own line, and the mana, tap and other symbols in the text render as the same icons introduced in 0.14.0 — so a cost like "{T}: Add {G}" shows real pips inline instead of plain braces.

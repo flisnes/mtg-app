@@ -60,6 +60,8 @@ export interface AuthResponse {
 export interface MeResponse {
   username: string;
   snapshot: SnapshotMeta | null;
+  /** Row-sync feed state; absent on pre-sync servers. seq 0 = nothing synced yet. */
+  sync?: { seq: number };
 }
 
 export interface SnapshotPutRequest {

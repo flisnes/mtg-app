@@ -16,6 +16,7 @@ import {
 import { getPrintingsForOracle } from '../db/queries.js';
 import { getPriceHistory } from '../price/tracking.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
+import { CardHistory } from './CardHistory.js';
 import { formatPrice } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
@@ -98,6 +99,7 @@ export function CardSheet({
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
   const [busy, setBusy] = useState(false);
   const [trend, setTrend] = useState<HistoryChange | null>(null);
+  const [tab, setTab] = useState<'details' | 'history'>('details');
   useEscapeToClose(busy ? null : onClose);
 
   useEffect(() => {
@@ -214,6 +216,36 @@ export function CardSheet({
           </div>
         </div>
 
+        <div className="seg-row sheet-tabs" role="tablist" aria-label="Card view">
+          <button
+            role="tab"
+            aria-selected={tab === 'details'}
+            className={tab === 'details' ? 'seg seg-active' : 'seg'}
+            onClick={() => setTab('details')}
+          >
+            Details
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === 'history'}
+            className={tab === 'history' ? 'seg seg-active' : 'seg'}
+            onClick={() => setTab('history')}
+          >
+            History
+          </button>
+        </div>
+
+        {tab === 'history' ? (
+          <>
+            <CardHistory oracleCard={oracleCard} printings={printings} />
+            <div className="sheet-actions">
+              <button className="primary" onClick={onClose}>
+                Close
+              </button>
+            </div>
+          </>
+        ) : (
+        <>
         {oracleCard.oracleText && (
           <SymbolText className="oracle-text" text={oracleCard.oracleText} />
         )}
@@ -326,6 +358,8 @@ export function CardSheet({
               {mode === 'add' ? ADD_LABEL[addTo.kind] : 'Save'}
             </button>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>,

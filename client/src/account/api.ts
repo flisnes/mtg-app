@@ -6,6 +6,8 @@ import type {
   SnapshotGetResponse,
   SnapshotPutRequest,
   SnapshotPutResponse,
+  SyncRequest,
+  SyncResponse,
   UserListsResponse,
   UsersResponse,
 } from '@mtg/shared';
@@ -87,6 +89,10 @@ export function putSnapshot(token: string, body: SnapshotPutRequest): Promise<Sn
 
 export function getSnapshot(token: string): Promise<SnapshotGetResponse> {
   return request('/snapshot', { token });
+}
+
+export function sync(token: string, body: SyncRequest): Promise<SyncResponse> {
+  return request('/sync', { method: 'POST', token, body });
 }
 
 export function listUsers(token: string): Promise<UsersResponse> {

@@ -86,8 +86,24 @@ export function GlobalSearchBar() {
   const [filters, setFilters] = useState<SearchFilters>({});
   const location = useLocation();
   const navigate = useNavigate();
-  const { enabled: accountsEnabled, session } = useAccount();
+  const { enabled: accountsEnabled, session, syncReady, pendingChanges, sync } = useAccount();
   const signedIn = !!session;
+
+  // Subtle sync indicator on the account button: green = synced, amber =
+  // syncing or changes waiting (or the join-account decision pending), red =
+  // sync error. Signed out shows no dot at all.
+  const syncTone =
+    sync.phase === 'error' ? 'err' : sync.phase === 'syncing' || pendingChanges > 0 || !syncReady ? 'busy' : 'ok';
+  const syncLabel =
+    sync.phase === 'error'
+      ? 'sync problem'
+      : sync.phase === 'syncing'
+        ? 'syncing…'
+        : pendingChanges > 0
+          ? `${pendingChanges} ${pendingChanges === 1 ? 'change' : 'changes'} waiting to sync`
+          : !syncReady
+            ? 'sync setup pending'
+            : 'synced';
 
   // Navigating away (tab bar stays tappable under the overlay) closes search.
   const path = location.pathname;
@@ -149,11 +165,11 @@ export function GlobalSearchBar() {
               <button
                 className="header-account"
                 onClick={() => navigate('/account')}
-                aria-label={signedIn ? `Account: signed in as ${session!.username}` : 'Account & sync'}
-                title={signedIn ? `Signed in as ${session!.username}` : 'Account & sync'}
+                aria-label={signedIn ? `Account: signed in as ${session!.username} (${syncLabel})` : 'Account & sync'}
+                title={signedIn ? `Signed in as ${session!.username} — ${syncLabel}` : 'Account & sync'}
               >
                 <Icon name="account" size={22} />
-                {signedIn && <span className="header-account-dot" aria-hidden />}
+                {signedIn && <span className={`header-account-dot header-account-dot-${syncTone}`} aria-hidden />}
               </button>
             </>
           )

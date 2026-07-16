@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Page } from './Page.js';
 import { APP_VERSION } from '../version.js';
+import { useAccount } from '../account/useAccount.js';
 import { DataTransfer } from '../components/DataTransfer.js';
 import { deleteAllUserData } from '../db/dataAccess.js';
 import { getSetting } from '../db/settings.js';
@@ -15,6 +16,7 @@ function formatDate(iso: string | undefined): string {
 
 export function About() {
   const goblinMode = useGoblinMode();
+  const { session } = useAccount();
   const [confirming, setConfirming] = useState(false);
   const [done, setDone] = useState(false);
   const [cardDbVersion, setCardDbVersion] = useState<string>();
@@ -77,6 +79,12 @@ export function About() {
         <DataTransfer />
         {done ? (
           <p role="status">All local data deleted.</p>
+        ) : session ? (
+          <p className="fine-print">
+            “Delete all my data” is disabled while signed in — this device syncs with your account, so a local wipe
+            would quietly fall out of sync. Sign out first (More → Account &amp; sync), or delete the whole account
+            there instead.
+          </p>
         ) : confirming ? (
           <div className="confirm-row">
             <button className="danger" onClick={handleDelete}>

@@ -34,7 +34,7 @@ export function History() {
                   <Icon name="trade" />
                 </span>
                 <span>
-                  Trade with Other User
+                  Trade with {t.partner ?? 'Other User'}
                   <span className="badge">
                     −{summarize(t.given)} / +{summarize(t.received)}
                   </span>
@@ -52,7 +52,7 @@ export function History() {
       {open && (
         <div className="sheet-backdrop" onClick={() => setOpen(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Trade detail">
-            <h2 style={{ margin: 0 }}>Trade with Other User</h2>
+            <h2 style={{ margin: 0 }}>Trade with {open.partner ?? 'Other User'}</h2>
             <p className="fine-print">{new Date(open.completedAt).toLocaleString()}</p>
             <h3>You gave</h3>
             <TradeLines lines={open.given} onInfo={(oracle, scryfallId) => setInfo({ oracle, scryfallId })} />

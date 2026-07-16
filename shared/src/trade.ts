@@ -58,7 +58,16 @@ export type ClientMessage =
   // Wishlist exchange, same relay mechanics — powers "you have what they want"
   // match highlighting. The wishlist is by definition shown to trade partners.
   | { v: typeof PROTOCOL_VERSION; type: 'wishlist_request'; sessionCode: string }
-  | { v: typeof PROTOCOL_VERSION; type: 'wishlist_share'; sessionCode: string; lines: WishLine[] };
+  | { v: typeof PROTOCOL_VERSION; type: 'wishlist_share'; sessionCode: string; lines: WishLine[] }
+  // Optional identity exchange: a signed-in participant shares their account
+  // username so the completed trade can record who it was with. Pure relay;
+  // anonymous trading just never sends this.
+  | { v: typeof PROTOCOL_VERSION; type: 'identity_share'; sessionCode: string; username: string }
+  // Account sync (sync plan): subscribe this socket to the signed-in user's
+  // change feed. Session-independent — the same socket endpoint, no trade
+  // session involved. The server answers with a sync_notify carrying the
+  // current seq (a catch-up check), then pushes one on every later change.
+  | { v: typeof PROTOCOL_VERSION; type: 'sync_sub'; token: string; clientId: string };
 
 // ---------------------------------------------------------------------------
 // Server -> client
@@ -89,6 +98,10 @@ export type ServerMessage =
   | { v: typeof PROTOCOL_VERSION; type: 'tradelist_shared'; sessionCode: string; lines: TradeLine[] }
   | { v: typeof PROTOCOL_VERSION; type: 'wishlist_requested'; sessionCode: string }
   | { v: typeof PROTOCOL_VERSION; type: 'wishlist_shared'; sessionCode: string; lines: WishLine[] }
+  | { v: typeof PROTOCOL_VERSION; type: 'identity_shared'; sessionCode: string; username: string }
+  // Account sync: the user's data changed (another device pushed, or this is
+  // the subscription ack). Pull via POST /api/sync when seq > local cursor.
+  | { v: typeof PROTOCOL_VERSION; type: 'sync_notify'; seq: number }
   | { v: typeof PROTOCOL_VERSION; type: 'error'; code: TradeErrorCode; message: string };
 
 export type TradeErrorCode =
@@ -99,6 +112,7 @@ export type TradeErrorCode =
   | 'rate_limited'
   | 'offer_too_large'
   | 'protocol_version'
+  | 'unauthorized'
   | 'malformed';
 
 /** Length of a join code. Unambiguous alphabet (no 0/O/1/I). */

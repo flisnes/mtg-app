@@ -5,6 +5,9 @@ import {
   MAX_PUBLIC_LINES,
   MAX_SNAPSHOT_CHARS,
   MIN_PASSWORD_CHARS,
+  SYNC_MAX_PUSH,
+  SYNC_MAX_ROW_CHARS,
+  SYNC_TABLES,
   USERNAME_RE,
   type ApiErrorBody,
   type AuthResponse,
@@ -15,13 +18,17 @@ import {
   type SnapshotCounts,
   type SnapshotGetResponse,
   type SnapshotPutResponse,
+  type SyncChange,
+  type SyncResponse,
+  type SyncTable,
   type TradeLine,
   type UserListsResponse,
   type UsersResponse,
   type WishLine,
 } from '@mtg/shared';
 import { config } from './config.js';
-import { AccountStore, type AccountUser } from './accountStore.js';
+import { SyncCapError, type AccountStore, type AccountUser } from './accountStore.js';
+import type { SyncHub } from './syncHub.js';
 
 // Opt-in accounts (HTTP /api/*, alongside the WS relay). The server stores the
 // user's snapshot as an opaque blob plus their published trade/wishlists;
@@ -103,10 +110,7 @@ function normalizeCounts(v: unknown): SnapshotCounts {
   };
 }
 
-export function registerAccountRoutes(app: FastifyInstance): void {
-  const store = new AccountStore(config.dataDir);
-  app.addHook('onClose', () => store.close());
-
+export function registerAccountRoutes(app: FastifyInstance, store: AccountStore, hub: SyncHub): void {
   // --- CORS (the PWA is served from GitHub Pages, a different origin) -------
   app.addHook('onRequest', async (req, reply) => {
     if (!req.url.startsWith('/api')) return;
@@ -205,7 +209,11 @@ export function registerAccountRoutes(app: FastifyInstance): void {
   app.get('/api/me', async (req, reply) => {
     const user = requireUser(req, reply);
     if (!user) return;
-    const res: MeResponse = { username: user.username, snapshot: store.snapshotMeta(user.id) };
+    const res: MeResponse = {
+      username: user.username,
+      snapshot: store.snapshotMeta(user.id),
+      sync: { seq: store.syncSeq(user.id) },
+    };
     return res;
   });
 
@@ -267,6 +275,78 @@ export function registerAccountRoutes(app: FastifyInstance): void {
     const snap = store.getSnapshot(user.id);
     if (!snap) return fail(reply, 404, { error: 'not_found', message: 'No backup stored yet.' });
     const res: SnapshotGetResponse = snap;
+    return res;
+  });
+
+  // --- Row-level sync (sync plan, 2026-07-16) ----------------------------------
+  //
+  // One atomic pull+push per call. Row CONTENT is opaque to the server (same
+  // trust model as the snapshot blob) — only the envelope is validated here;
+  // clients sanitize rows on apply exactly like device-transfer rows.
+
+  const SYNC_TABLE_SET = new Set<string>(SYNC_TABLES);
+
+  app.post('/api/sync', { bodyLimit: 8 * 1024 * 1024 }, async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const clientId = str(b.clientId, 64);
+    const cursor = Math.max(0, Math.floor(Number(b.cursor)) || 0);
+    const rawChanges = Array.isArray(b.changes) ? b.changes : null;
+    if (!clientId || !rawChanges || rawChanges.length > SYNC_MAX_PUSH) {
+      return fail(reply, 400, { error: 'bad_request', message: 'Malformed sync request.' });
+    }
+
+    const changes: SyncChange[] = [];
+    for (const raw of rawChanges) {
+      const r = (raw ?? {}) as Record<string, unknown>;
+      const tbl = SYNC_TABLE_SET.has(r.tbl as string) ? (r.tbl as SyncTable) : null;
+      const rowId = str(r.rowId, 64);
+      const updatedAt = Number(r.updatedAt);
+      if (!tbl || !rowId || !Number.isFinite(updatedAt)) {
+        return fail(reply, 400, { error: 'bad_request', message: 'Malformed sync change.' });
+      }
+      if (r.deleted === true) {
+        changes.push({ tbl, rowId, updatedAt, deleted: true });
+        continue;
+      }
+      if (r.row === undefined || r.row === null) {
+        return fail(reply, 400, { error: 'bad_request', message: 'Sync change is missing its row.' });
+      }
+      if (JSON.stringify(r.row).length > SYNC_MAX_ROW_CHARS) {
+        return fail(reply, 413, { error: 'too_large', message: 'A synced row is too large.' });
+      }
+      changes.push({ tbl, rowId, updatedAt, row: r.row });
+    }
+
+    // Piggybacked public lists (the sync-era replacement for the snapshot upload).
+    if (b.publish && typeof b.publish === 'object') {
+      const p = b.publish as Record<string, unknown>;
+      const tradelist = normalizeTradeLines(p.tradelist);
+      const wishlist = normalizeWishLines(p.wishlist);
+      const tradelistJson = JSON.stringify(tradelist);
+      const wishlistJson = JSON.stringify(wishlist);
+      if (tradelistJson.length > MAX_LIST_JSON_CHARS || wishlistJson.length > MAX_LIST_JSON_CHARS) {
+        return fail(reply, 413, { error: 'too_large', message: 'Published lists are too large.' });
+      }
+      store.putPublicLists(user.id, tradelistJson, tradelist.length, wishlistJson, wishlist.length);
+    }
+
+    let result;
+    try {
+      result = store.syncApply(user.id, cursor, changes, Date.now());
+    } catch (err) {
+      if (err instanceof SyncCapError) {
+        return fail(reply, 413, { error: 'too_large', message: 'This account has hit its sync storage limit.' });
+      }
+      throw err;
+    }
+    if (result.applied > 0) hub.notify(user.id, result.cursor, clientId);
+    const res: SyncResponse = {
+      cursor: result.cursor,
+      changes: result.changes,
+      ...(result.hasMore ? { hasMore: true as const } : {}),
+    };
     return res;
   });
 

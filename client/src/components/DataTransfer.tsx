@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAccount } from '../account/useAccount.js';
 import { TRADE_ENABLED } from '../trade/config.js';
 import { useTransfer } from '../transfer/useTransfer.js';
 import { CodeJoinForm } from './CodeJoinForm.js';
@@ -6,9 +7,14 @@ import { CodeJoinForm } from './CodeJoinForm.js';
 // "Your data" section of About & settings: move everything (collection, lists,
 // decks, history) to another device with a one-time code, trade-style. The
 // relay server forwards the payload chunks but never stores or parses them.
+//
+// Receiving is a wipe-and-replace that bypasses account sync, so it's blocked
+// while signed in — the replaced rows would silently diverge from the account
+// (no tombstones are staged). Sending is always fine.
 
 export function DataTransfer() {
   const t = useTransfer();
+  const { session } = useAccount();
   const [joining, setJoining] = useState(false);
 
   if (!TRADE_ENABLED) {
@@ -35,7 +41,14 @@ export function DataTransfer() {
     return (
       <div className="trade-actions">
         <button onClick={t.startSend}>Send to another device</button>
-        <button onClick={() => setJoining(true)}>Receive from another device</button>
+        {session ? (
+          <p className="fine-print">
+            Receiving is disabled while signed in — your account already syncs between devices. Sign out first if you
+            really want to overwrite this device from another one.
+          </p>
+        ) : (
+          <button onClick={() => setJoining(true)}>Receive from another device</button>
+        )}
       </div>
     );
   }

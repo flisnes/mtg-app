@@ -2,6 +2,9 @@ import {
   CONDITIONS,
   DECK_FORMATS,
   FINISHES,
+  REMOVAL_REASONS,
+  USERNAME_RE,
+  USER_EVENT_KINDS,
   type CollectionEntry,
   type Condition,
   type Deck,
@@ -10,7 +13,10 @@ import {
   type DeckFormat,
   type Finish,
   type PriceHistory,
+  type RemovalReason,
   type Trade,
+  type UserEvent,
+  type UserEventKind,
   type WishlistEntry,
 } from '@mtg/shared';
 import { collectionKey } from '../db/dataAccess.js';
@@ -37,6 +43,8 @@ export interface TransferPayload {
   deckCards: DeckCard[];
   trades: Trade[];
   priceHistories: PriceHistory[];
+  /** Card history (sync plan). Absent from pre-v0.11 senders → sanitized to []. */
+  events: UserEvent[];
 }
 
 /** What a received payload contains, for the receiver's confirm screen. */
@@ -61,6 +69,7 @@ export async function exportUserData(): Promise<TransferPayload> {
       deckCards: await db.deckCards.toArray(),
       trades: await db.trades.toArray(),
       priceHistories: await db.priceHistories.toArray(),
+      events: await db.events.toArray(),
     }),
   );
 }
@@ -97,6 +106,7 @@ const CAPS = {
   trades: 10_000,
   priceHistories: 100_000,
   priceSnapshots: 500_000, // legacy row-per-day senders only
+  events: 500_000,
 } as const;
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -129,6 +139,131 @@ function rows(v: unknown, cap: number): Record<string, unknown>[] {
   return v.slice(0, cap).filter((r): r is Record<string, unknown> => !!r && typeof r === 'object');
 }
 
+// ---------------------------------------------------------------------------
+// Per-row sanitizers. Used by the payload loop below (which adds dedup/merge
+// and cross-table checks) AND by the sync engine, which applies rows one at a
+// time (no cross-table checks possible there — rows arrive independently).
+// ---------------------------------------------------------------------------
+
+export function sanitizeCollectionRow(raw: unknown): CollectionEntry | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const entryId = id(r.id);
+  const oracleId = id(r.oracleId);
+  const scryfallId = id(r.scryfallId);
+  if (!entryId || !oracleId || !scryfallId) return null;
+  const quantity = qty(r.quantity);
+  return {
+    id: entryId,
+    oracleId,
+    scryfallId,
+    condition: (CONDS.has(r.condition as string) ? r.condition : 'NM') as Condition,
+    finish: (FINS.has(r.finish as string) ? r.finish : 'nonfoil') as Finish,
+    lang: typeof r.lang === 'string' && r.lang ? r.lang.slice(0, 10) : 'en',
+    quantity,
+    quantityForTrade: Math.min(qty(r.quantityForTrade, 0), quantity),
+    createdAt: ts(r.createdAt),
+    updatedAt: ts(r.updatedAt),
+  };
+}
+
+export function sanitizeWishlistRow(raw: unknown): WishlistEntry | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const entryId = id(r.id);
+  const oracleId = id(r.oracleId);
+  if (!entryId || !oracleId) return null;
+  const scryfallId = typeof r.scryfallId === 'string' && r.scryfallId ? r.scryfallId.slice(0, MAX_ID) : null;
+  const createdAt = ts(r.createdAt);
+  return {
+    id: entryId,
+    oracleId,
+    scryfallId,
+    quantity: qty(r.quantity),
+    createdAt,
+    // Pre-v0.11 senders have no updatedAt; their createdAt is the best LWW stamp.
+    updatedAt: r.updatedAt !== undefined ? ts(r.updatedAt) : createdAt,
+  };
+}
+
+export function sanitizeDeckRow(raw: unknown): Deck | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const deckId = id(r.id);
+  if (!deckId) return null;
+  return {
+    id: deckId,
+    name: typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, 200) : 'Untitled deck',
+    format: (FORMATS.has(r.format as string) ? r.format : 'casual') as DeckFormat,
+    ...(typeof r.description === 'string' && r.description ? { description: r.description.slice(0, 2000) } : {}),
+    createdAt: ts(r.createdAt),
+    updatedAt: ts(r.updatedAt),
+  };
+}
+
+export function sanitizeDeckCardRow(raw: unknown): DeckCard | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const slotId = id(r.id);
+  const deckId = id(r.deckId);
+  const oracleId = id(r.oracleId);
+  if (!slotId || !deckId || !oracleId) return null;
+  const scryfallId = id(r.scryfallId);
+  return {
+    id: slotId,
+    deckId,
+    oracleId,
+    ...(scryfallId ? { scryfallId } : {}),
+    quantity: qty(r.quantity),
+    board: (BOARDS.has(r.board as string) ? r.board : 'main') as DeckBoard,
+    updatedAt: ts(r.updatedAt),
+  };
+}
+
+export function sanitizeTradeRow(raw: unknown): Trade | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const tradeId = id(r.id);
+  if (!tradeId) return null;
+  return {
+    id: tradeId,
+    completedAt: ts(r.completedAt),
+    partner: typeof r.partner === 'string' && USERNAME_RE.test(r.partner) ? r.partner : null,
+    given: sanitizeOffer(r.given),
+    received: sanitizeOffer(r.received),
+  };
+}
+
+const KINDS = new Set<string>(USER_EVENT_KINDS);
+const REASONS = new Set<string>(REMOVAL_REASONS);
+
+export function sanitizeEventRow(raw: unknown): UserEvent | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const eventId = id(r.id);
+  const oracleId = id(r.oracleId);
+  if (!eventId || !oracleId || !KINDS.has(r.kind as string)) return null;
+  const when = ts(r.ts);
+  return {
+    id: eventId,
+    ts: when,
+    updatedAt: r.updatedAt !== undefined ? ts(r.updatedAt) : when,
+    kind: r.kind as UserEventKind,
+    oracleId,
+    ...(r.scryfallId !== undefined ? { scryfallId: id(r.scryfallId) } : {}),
+    ...(r.qty !== undefined ? { qty: qty(r.qty) } : {}),
+    ...(CONDS.has(r.condition as string) ? { condition: r.condition as Condition } : {}),
+    ...(FINS.has(r.finish as string) ? { finish: r.finish as Finish } : {}),
+    ...(typeof r.lang === 'string' && r.lang ? { lang: r.lang.slice(0, 10) } : {}),
+    ...(r.priceEurCents !== undefined ? { priceEurCents: cents(r.priceEurCents) } : {}),
+    ...(REASONS.has(r.reason as string) ? { reason: r.reason as RemovalReason } : {}),
+    ...(id(r.deckId) ? { deckId: id(r.deckId)! } : {}),
+    ...(typeof r.deckName === 'string' && r.deckName ? { deckName: r.deckName.slice(0, 200) } : {}),
+    ...(BOARDS.has(r.board as string) ? { board: r.board as DeckBoard } : {}),
+    ...(id(r.tradeId) ? { tradeId: id(r.tradeId)! } : {}),
+  };
+}
+
 /**
  * Validate a received payload. Returns null only if the envelope itself is not
  * a payload; individually bad rows are dropped, duplicates merged.
@@ -143,24 +278,9 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
   const seenIds = new Set<string>();
   const byKey = new Map<string, CollectionEntry>();
   for (const r of rows(p.collection, CAPS.collection)) {
-    const entryId = id(r.id);
-    const oracleId = id(r.oracleId);
-    const scryfallId = id(r.scryfallId);
-    if (!entryId || !oracleId || !scryfallId || seenIds.has(entryId)) continue;
-    seenIds.add(entryId);
-    const quantity = qty(r.quantity);
-    const entry: CollectionEntry = {
-      id: entryId,
-      oracleId,
-      scryfallId,
-      condition: (CONDS.has(r.condition as string) ? r.condition : 'NM') as Condition,
-      finish: (FINS.has(r.finish as string) ? r.finish : 'nonfoil') as Finish,
-      lang: typeof r.lang === 'string' && r.lang ? r.lang.slice(0, 10) : 'en',
-      quantity,
-      quantityForTrade: Math.min(qty(r.quantityForTrade, 0), quantity),
-      createdAt: ts(r.createdAt),
-      updatedAt: ts(r.updatedAt),
-    };
+    const entry = sanitizeCollectionRow(r);
+    if (!entry || seenIds.has(entry.id)) continue;
+    seenIds.add(entry.id);
     const key = collectionKey(entry);
     const ex = byKey.get(key);
     if (ex) {
@@ -177,58 +297,37 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
   const wishIds = new Set<string>();
   const wishKeys = new Set<string>();
   for (const r of rows(p.wishlist, CAPS.wishlist)) {
-    const entryId = id(r.id);
-    const oracleId = id(r.oracleId);
-    if (!entryId || !oracleId || wishIds.has(entryId)) continue;
-    const scryfallId = typeof r.scryfallId === 'string' && r.scryfallId ? r.scryfallId.slice(0, MAX_ID) : null;
-    const key = `${oracleId}|${scryfallId ?? ''}`;
+    const entry = sanitizeWishlistRow(r);
+    if (!entry || wishIds.has(entry.id)) continue;
+    const key = `${entry.oracleId}|${entry.scryfallId ?? ''}`;
     if (wishKeys.has(key)) continue;
-    wishIds.add(entryId);
+    wishIds.add(entry.id);
     wishKeys.add(key);
-    wishlist.push({ id: entryId, oracleId, scryfallId, quantity: qty(r.quantity), createdAt: ts(r.createdAt) });
+    wishlist.push(entry);
   }
 
   // Decks, then deck cards restricted to surviving decks.
   const decks: Deck[] = [];
   const deckIds = new Set<string>();
   for (const r of rows(p.decks, CAPS.decks)) {
-    const deckId = id(r.id);
-    if (!deckId || deckIds.has(deckId)) continue;
-    deckIds.add(deckId);
-    decks.push({
-      id: deckId,
-      name: typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, 200) : 'Untitled deck',
-      format: (FORMATS.has(r.format as string) ? r.format : 'casual') as DeckFormat,
-      ...(typeof r.description === 'string' && r.description ? { description: r.description.slice(0, 2000) } : {}),
-      createdAt: ts(r.createdAt),
-      updatedAt: ts(r.updatedAt),
-    });
+    const deck = sanitizeDeckRow(r);
+    if (!deck || deckIds.has(deck.id)) continue;
+    deckIds.add(deck.id);
+    decks.push(deck);
   }
 
   const deckCards: DeckCard[] = [];
   const slotIds = new Set<string>();
   const slotKeys = new Map<string, DeckCard>();
   for (const r of rows(p.deckCards, CAPS.deckCards)) {
-    const slotId = id(r.id);
-    const deckId = id(r.deckId);
-    const oracleId = id(r.oracleId);
-    if (!slotId || !deckId || !oracleId || slotIds.has(slotId) || !deckIds.has(deckId)) continue;
-    slotIds.add(slotId);
-    const board = (BOARDS.has(r.board as string) ? r.board : 'main') as DeckBoard;
-    const scryfallId = id(r.scryfallId);
-    const key = `${deckId}|${oracleId}|${board}`;
+    const slot = sanitizeDeckCardRow(r);
+    if (!slot || slotIds.has(slot.id) || !deckIds.has(slot.deckId)) continue;
+    slotIds.add(slot.id);
+    const key = `${slot.deckId}|${slot.oracleId}|${slot.board}`;
     const ex = slotKeys.get(key);
     if (ex) {
-      ex.quantity = Math.min(MAX_QTY, ex.quantity + qty(r.quantity));
+      ex.quantity = Math.min(MAX_QTY, ex.quantity + slot.quantity);
     } else {
-      const slot: DeckCard = {
-        id: slotId,
-        deckId,
-        oracleId,
-        ...(scryfallId ? { scryfallId } : {}),
-        quantity: qty(r.quantity),
-        board,
-      };
       slotKeys.set(key, slot);
       deckCards.push(slot);
     }
@@ -238,16 +337,10 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
   const trades: Trade[] = [];
   const tradeIds = new Set<string>();
   for (const r of rows(p.trades, CAPS.trades)) {
-    const tradeId = id(r.id);
-    if (!tradeId || tradeIds.has(tradeId)) continue;
-    tradeIds.add(tradeId);
-    trades.push({
-      id: tradeId,
-      completedAt: ts(r.completedAt),
-      partner: null,
-      given: sanitizeOffer(r.given),
-      received: sanitizeOffer(r.received),
-    });
+    const trade = sanitizeTradeRow(r);
+    if (!trade || tradeIds.has(trade.id)) continue;
+    tradeIds.add(trade.id);
+    trades.push(trade);
   }
 
   // Price history: one compact row per card, unique on scryfallId. Arrays are
@@ -301,5 +394,16 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
   // Legacy senders also include a `watchlist` table; it's obsolete (the whole
   // collection is tracked automatically) and simply ignored.
 
-  return { version: PAYLOAD_VERSION, collection, wishlist, decks, deckCards, trades, priceHistories };
+  // Card history events: unique on id, kind/reason enums enforced, optional
+  // fields bounded. Absent from pre-v0.11 senders.
+  const events: UserEvent[] = [];
+  const eventIds = new Set<string>();
+  for (const r of rows(p.events, CAPS.events)) {
+    const ev = sanitizeEventRow(r);
+    if (!ev || eventIds.has(ev.id)) continue;
+    eventIds.add(ev.id);
+    events.push(ev);
+  }
+
+  return { version: PAYLOAD_VERSION, collection, wishlist, decks, deckCards, trades, priceHistories, events };
 }

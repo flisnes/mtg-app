@@ -10,6 +10,8 @@ import type {
   Setting,
   PriceHistory,
   PriceShard,
+  SyncChange,
+  UserEvent,
 } from '@mtg/shared';
 import { recordDay, toCents } from '../price/history.js';
 
@@ -33,6 +35,8 @@ export class MtgDatabase extends Dexie {
   settings!: Table<Setting, string>;
   priceHistories!: Table<PriceHistory, string>;
   priceShards!: Table<PriceShard, string>;
+  events!: Table<UserEvent, string>;
+  outbox!: Table<SyncChange, [string, string]>;
 
   constructor() {
     super('mtg');
@@ -102,6 +106,66 @@ export class MtgDatabase extends Dexie {
     // watchlist is gone. Histories of unowned cards are pruned at runtime
     // by recordCollectionPrices, not here.
     this.version(6).stores({ watchlist: null });
+
+    // v7 (sync + history plan): the event log and the sync outbox.
+    //  - events: append-mostly per-card history (History tab). Backfilled with
+    //    one collection.add per existing entry (ts = createdAt, price unknown)
+    //    and one wish.add per wishlist line, so every card has a timeline
+    //    anchor and an editable acquisition price.
+    //  - outbox: latest pending SyncChange per (tbl, rowId), drained by the
+    //    sync engine when signed in; harmless bookkeeping when signed out.
+    //  - wishlist/deckCards rows gain updatedAt (the LWW comparator).
+    this.version(7)
+      .stores({
+        events: 'id, ts, oracleId, kind',
+        outbox: '[tbl+rowId]',
+      })
+      .upgrade(async (tx) => {
+        const now = Date.now();
+        const events: UserEvent[] = [];
+
+        await tx
+          .table('wishlist')
+          .toCollection()
+          .modify((w: WishlistEntry) => {
+            if (typeof w.updatedAt !== 'number') w.updatedAt = w.createdAt;
+            events.push({
+              id: crypto.randomUUID(),
+              ts: w.createdAt,
+              updatedAt: w.createdAt,
+              kind: 'wish.add',
+              oracleId: w.oracleId,
+              scryfallId: w.scryfallId,
+              qty: w.quantity,
+            });
+          });
+
+        await tx
+          .table('deckCards')
+          .toCollection()
+          .modify((c: DeckCard) => {
+            if (typeof c.updatedAt !== 'number') c.updatedAt = now;
+          });
+
+        const entries: CollectionEntry[] = await tx.table('collection').toArray();
+        for (const e of entries) {
+          events.push({
+            id: crypto.randomUUID(),
+            ts: e.createdAt,
+            updatedAt: e.createdAt,
+            kind: 'collection.add',
+            oracleId: e.oracleId,
+            scryfallId: e.scryfallId,
+            qty: e.quantity,
+            condition: e.condition,
+            finish: e.finish,
+            lang: e.lang,
+            priceEurCents: null,
+          });
+        }
+
+        if (events.length) await tx.table('events').bulkAdd(events);
+      });
   }
 }
 
@@ -109,8 +173,9 @@ export const db = new MtgDatabase();
 
 /**
  * The user-data tables — the set serialized by device transfer and wiped by
- * "delete all my data". Card DB (oracleCards/printings/priceShards) and
- * settings are deliberately not included. Keep in sync with TransferPayload.
+ * "delete all my data". Card DB (oracleCards/printings/priceShards), settings,
+ * and the sync outbox are deliberately not included. Keep in sync with
+ * TransferPayload.
  */
 export const USER_DATA_TABLES = [
   db.collection,
@@ -119,4 +184,5 @@ export const USER_DATA_TABLES = [
   db.deckCards,
   db.trades,
   db.priceHistories,
+  db.events,
 ];

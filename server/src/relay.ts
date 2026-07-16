@@ -12,7 +12,9 @@ import {
   type TransferServerMessage,
 } from '@mtg/shared';
 import { config } from './config.js';
+import type { AccountStore } from './accountStore.js';
 import { SessionStore, TransitionError, type Session } from './session.js';
+import type { SyncHub } from './syncHub.js';
 import { TransferStore } from './transfer.js';
 
 // WebSocket trade relay (beta plan §7). Server-authoritative state machine over
@@ -94,7 +96,7 @@ function allow(ctx: SocketCtx, now: number): boolean {
   return true;
 }
 
-export function registerTradeRelay(app: FastifyInstance): void {
+export function registerTradeRelay(app: FastifyInstance, accounts: AccountStore, hub: SyncHub): void {
   app.get('/ws', { websocket: true }, (socket: WebSocket, req) => {
     // Cross-site WebSocket hijacking guard: browsers always send Origin on WS
     // handshakes, so an allowlist (when configured) shuts out foreign pages.
@@ -144,7 +146,7 @@ export function registerTradeRelay(app: FastifyInstance): void {
 
       try {
         if (isTransferMessage(msg)) handleTransfer(socket, ctx, msg);
-        else handle(socket, ctx, msg);
+        else handle(socket, ctx, msg, accounts, hub);
       } catch (err) {
         if (err instanceof TransitionError) sendError(socket, err.code, err.message);
         else {
@@ -156,6 +158,7 @@ export function registerTradeRelay(app: FastifyInstance): void {
 
     socket.on('close', () => {
       clearInterval(heartbeat);
+      hub.unsubscribe(socket);
       // A dropped socket cancels its transfer (no resume for transfers); the
       // store's onRemove hook notifies whichever peer is still connected.
       if (ctx.transferCode) transfers.remove(ctx.transferCode);
@@ -269,8 +272,26 @@ function handleTransfer(socket: WebSocket, ctx: SocketCtx, msg: TransferClientMe
   }
 }
 
-function handle(socket: WebSocket, ctx: SocketCtx, msg: ClientMessage): void {
+function handle(
+  socket: WebSocket,
+  ctx: SocketCtx,
+  msg: ClientMessage,
+  accounts: AccountStore,
+  hub: SyncHub,
+): void {
   switch (msg.type) {
+    // Account sync live-push subscription. Session-independent: the same
+    // socket may also run a trade. Token-authenticated against the account
+    // store; the ack doubles as a catch-up check (current seq).
+    case 'sync_sub': {
+      const user = typeof msg.token === 'string' ? accounts.userForToken(msg.token) : null;
+      if (!user) return sendError(socket, 'unauthorized', 'sign in again');
+      const clientId = typeof msg.clientId === 'string' ? msg.clientId.slice(0, 64) : '';
+      hub.subscribe(user.id, clientId, socket);
+      send(socket, { v: PROTOCOL_VERSION, type: 'sync_notify', seq: accounts.syncSeq(user.id) });
+      return;
+    }
+
     case 'create_session': {
       const session = store.create(ctx.ip);
       ctx.code = session.code;
@@ -340,6 +361,17 @@ function handle(socket: WebSocket, ctx: SocketCtx, msg: ClientMessage): void {
         } else {
           send(peerSocket, { v: PROTOCOL_VERSION, type: 'wishlist_shared', sessionCode: session.code, lines: msg.lines });
         }
+        return;
+      }
+      // Identity exchange: pure relay, like list sharing. Bounded, not verified
+      // — the receiving client re-validates against the username format.
+      if (msg.type === 'identity_share') {
+        const peerSocket = sockets.get(session.code)?.[seat === 'a' ? 'b' : 'a'];
+        if (!peerSocket) return;
+        if (typeof msg.username !== 'string' || msg.username.length > 20) {
+          return sendError(socket, 'malformed', 'bad identity_share');
+        }
+        send(peerSocket, { v: PROTOCOL_VERSION, type: 'identity_shared', sessionCode: session.code, username: msg.username });
         return;
       }
 

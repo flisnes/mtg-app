@@ -1,8 +1,10 @@
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import { config } from './config.js';
+import { AccountStore } from './accountStore.js';
 import { registerAccountRoutes } from './accounts.js';
 import { registerTradeRelay } from './relay.js';
+import { SyncHub } from './syncHub.js';
 
 async function main() {
   const app = Fastify({
@@ -24,8 +26,15 @@ async function main() {
     return { ok: true, uptimeSec: Math.round(process.uptime()) };
   });
 
-  registerTradeRelay(app);
-  registerAccountRoutes(app);
+  // One store + hub shared by the HTTP accounts API and the WS relay: the
+  // relay authenticates sync_sub subscriptions against the store, and the
+  // sync route notifies subscribed sockets through the hub.
+  const store = new AccountStore(config.dataDir);
+  const hub = new SyncHub();
+  app.addHook('onClose', () => store.close());
+
+  registerTradeRelay(app, store, hub);
+  registerAccountRoutes(app, store, hub);
 
   try {
     await app.listen({ host: config.host, port: config.port });

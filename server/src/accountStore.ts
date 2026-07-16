@@ -2,7 +2,15 @@ import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypt
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { PublicUser, SnapshotCounts, SnapshotMeta } from '@mtg/shared';
+import {
+  SYNC_MAX_PULL,
+  SYNC_MAX_ROWS_PER_USER,
+  type PublicUser,
+  type SnapshotCounts,
+  type SnapshotMeta,
+  type SyncChange,
+  type SyncTable,
+} from '@mtg/shared';
 
 // Account persistence: one SQLite file (node:sqlite, no native deps) holding
 // users, bearer tokens, opaque snapshot blobs, and the published trade/wish
@@ -73,6 +81,21 @@ export class AccountStore {
         tradelist_count INTEGER NOT NULL,
         wishlist_count INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS sync_rows (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tbl TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted INTEGER NOT NULL DEFAULT 0,
+        row TEXT,
+        seq INTEGER NOT NULL,
+        PRIMARY KEY (user_id, tbl, row_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_sync_rows_seq ON sync_rows(user_id, seq);
+      CREATE TABLE IF NOT EXISTS sync_seq (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        max_seq INTEGER NOT NULL
       );
     `);
   }
@@ -182,18 +205,137 @@ export class AccountStore {
              counts = excluded.counts, updated_at = excluded.updated_at`,
         )
         .run(userId, version, payload, JSON.stringify(counts), now);
-      this.db
-        .prepare(
-          `INSERT INTO public_lists (user_id, tradelist, wishlist, tradelist_count, wishlist_count, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT(user_id) DO UPDATE SET
-             tradelist = excluded.tradelist, wishlist = excluded.wishlist,
-             tradelist_count = excluded.tradelist_count, wishlist_count = excluded.wishlist_count,
-             updated_at = excluded.updated_at`,
-        )
-        .run(userId, tradelistJson, wishlistJson, tradelistCount, wishlistCount, now);
+      this.upsertPublicLists(userId, tradelistJson, tradelistCount, wishlistJson, wishlistCount, now);
       this.db.exec('COMMIT');
       return { version, updatedAt: now, conflict: false };
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  private upsertPublicLists(
+    userId: number,
+    tradelistJson: string,
+    tradelistCount: number,
+    wishlistJson: string,
+    wishlistCount: number,
+    now: number,
+  ): void {
+    this.db
+      .prepare(
+        `INSERT INTO public_lists (user_id, tradelist, wishlist, tradelist_count, wishlist_count, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           tradelist = excluded.tradelist, wishlist = excluded.wishlist,
+           tradelist_count = excluded.tradelist_count, wishlist_count = excluded.wishlist_count,
+           updated_at = excluded.updated_at`,
+      )
+      .run(userId, tradelistJson, wishlistJson, tradelistCount, wishlistCount, now);
+  }
+
+  /** Store the published lists on their own (the sync path — no snapshot involved). */
+  putPublicLists(
+    userId: number,
+    tradelistJson: string,
+    tradelistCount: number,
+    wishlistJson: string,
+    wishlistCount: number,
+  ): void {
+    this.upsertPublicLists(userId, tradelistJson, tradelistCount, wishlistJson, wishlistCount, Date.now());
+  }
+
+  // --- Row-level sync (sync plan, 2026-07-16) --------------------------------
+
+  /** Current top of the user's change feed (0 = nothing synced yet). */
+  syncSeq(userId: number): number {
+    const row = this.db.prepare('SELECT max_seq FROM sync_seq WHERE user_id = ?').get(userId) as
+      | { max_seq: number }
+      | undefined;
+    return row?.max_seq ?? 0;
+  }
+
+  /**
+   * One atomic pull+push. Reads everything past `cursor` first (so accepted
+   * pushes are never echoed), then applies the incoming changes last-write-wins
+   * — a pushed change that loses to a stored row gets that winner appended to
+   * the response instead. When the pull is capped (`hasMore`) the push is NOT
+   * applied; the client catches up first and re-sends.
+   */
+  syncApply(
+    userId: number,
+    cursor: number,
+    changes: SyncChange[],
+    now: number,
+  ): { cursor: number; changes: SyncChange[]; hasMore: boolean; applied: number } {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      let maxSeq = this.syncSeq(userId);
+
+      const pulled = this.db
+        .prepare(
+          `SELECT tbl, row_id, updated_at, deleted, row, seq FROM sync_rows
+           WHERE user_id = ? AND seq > ? ORDER BY seq LIMIT ?`,
+        )
+        .all(userId, cursor, SYNC_MAX_PULL + 1) as unknown as SyncRowRecord[];
+      const hasMore = pulled.length > SYNC_MAX_PULL;
+      const window = hasMore ? pulled.slice(0, SYNC_MAX_PULL) : pulled;
+      const out = window.map(recordToChange);
+
+      let applied = 0;
+      let newCursor = hasMore ? window[window.length - 1]!.seq : maxSeq;
+
+      if (!hasMore) {
+        // A device clock far in the future would win LWW forever; clamp.
+        const maxTs = now + 5 * 60 * 1000;
+        const getStmt = this.db.prepare(
+          'SELECT tbl, row_id, updated_at, deleted, row, seq FROM sync_rows WHERE user_id = ? AND tbl = ? AND row_id = ?',
+        );
+        const putStmt = this.db.prepare(
+          `INSERT OR REPLACE INTO sync_rows (user_id, tbl, row_id, updated_at, deleted, row, seq)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        );
+        let totalRows = (
+          this.db.prepare('SELECT COUNT(*) AS n FROM sync_rows WHERE user_id = ?').get(userId) as { n: number }
+        ).n;
+
+        for (const c of changes) {
+          const existing = getStmt.get(userId, c.tbl, c.rowId) as SyncRowRecord | undefined;
+          const incomingTs = Math.min(c.updatedAt, maxTs);
+          if (existing && existing.updated_at >= incomingTs) {
+            // The push lost (or is a replay of what's stored): hand back the winner.
+            out.push(recordToChange(existing));
+            continue;
+          }
+          if (!existing) {
+            totalRows += 1;
+            if (totalRows > SYNC_MAX_ROWS_PER_USER) throw new SyncCapError();
+          }
+          maxSeq += 1;
+          putStmt.run(
+            userId,
+            c.tbl,
+            c.rowId,
+            incomingTs,
+            c.deleted ? 1 : 0,
+            c.deleted ? null : JSON.stringify(c.row ?? null),
+            maxSeq,
+          );
+          applied += 1;
+        }
+        if (applied > 0) {
+          this.db
+            .prepare(
+              `INSERT INTO sync_seq (user_id, max_seq) VALUES (?, ?)
+               ON CONFLICT(user_id) DO UPDATE SET max_seq = excluded.max_seq`,
+            )
+            .run(userId, maxSeq);
+        }
+        newCursor = maxSeq;
+      }
+
+      this.db.exec('COMMIT');
+      return { cursor: newCursor, changes: out, hasMore, applied };
     } catch (err) {
       this.db.exec('ROLLBACK');
       throw err;
@@ -260,4 +402,31 @@ function parseCounts(raw: string | null): SnapshotCounts | null {
   } catch {
     return null;
   }
+}
+
+/** Thrown when a user hits SYNC_MAX_ROWS_PER_USER; the route maps it to 413. */
+export class SyncCapError extends Error {
+  constructor() {
+    super('sync row cap reached');
+  }
+}
+
+interface SyncRowRecord {
+  tbl: string;
+  row_id: string;
+  updated_at: number;
+  deleted: number;
+  row: string | null;
+  seq: number;
+}
+
+function recordToChange(r: SyncRowRecord): SyncChange {
+  if (r.deleted) return { tbl: r.tbl as SyncTable, rowId: r.row_id, updatedAt: r.updated_at, deleted: true };
+  let row: unknown = null;
+  try {
+    row = r.row === null ? null : JSON.parse(r.row);
+  } catch {
+    // unreachable for rows this server wrote; a null row is dropped client-side
+  }
+  return { tbl: r.tbl as SyncTable, rowId: r.row_id, updatedAt: r.updated_at, row };
 }

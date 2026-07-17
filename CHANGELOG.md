@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.18.1
+
+- Shorter bottom navigation bar on mobile so it takes up less of the screen.
+
 ## 0.18.0
 
 - **Scan cards with your camera.** Collection → ⋯ → **Scan cards**: point your phone at a card and the app recognizes it from the artwork — in any language, no typing. A small recognition pack (~4 MB, downloaded once and kept up to date automatically) lets everything run on your device; photos never leave your phone.

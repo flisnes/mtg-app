@@ -9,7 +9,7 @@
   --accent-text: #ffffff;
   --danger: #ff5c5c;
   --ok: #4ec97b;
-  --tab-h: 60px;
+  --tab-h: 50px;
   --header-h: 58px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
@@ -1839,6 +1839,9 @@ button.chip {
    widen the content column, let grid tiles grow, and keep the tab bar centered
    instead of stretching each tab across the full width. */
 @media (min-width: 900px) {
+  :root {
+    --tab-h: 60px;
+  }
   .app-main {
     max-width: 1100px;
   }

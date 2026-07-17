@@ -731,41 +731,47 @@ button.danger-outline {
   position: absolute;
   inset: 0;
 }
-/* Drifting rainbow — the colour that "catches the light" as a foil tilts. */
+/* Drifting rainbow — the colour that "catches the light" as a foil tilts.
+   A *repeating* gradient at 45° (135deg) tiled into a square of side
+   period·√2 phase-aligns across every tile edge, so scrolling the
+   background by exactly one tile returns to an identical frame — the loop
+   has no seam and no jump. The 282.843px size below is 200px·√2. */
 .foil-sheen::before {
-  background: linear-gradient(
-    115deg,
-    rgba(255, 0, 128, 0.6) 0%,
-    rgba(255, 200, 0, 0.6) 20%,
-    rgba(0, 255, 170, 0.6) 40%,
-    rgba(0, 170, 255, 0.6) 60%,
-    rgba(180, 0, 255, 0.6) 80%,
-    rgba(255, 0, 128, 0.6) 100%
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(255, 0, 128, 0.6) 0,
+    rgba(255, 200, 0, 0.6) 40px,
+    rgba(0, 255, 170, 0.6) 80px,
+    rgba(0, 170, 255, 0.6) 120px,
+    rgba(180, 0, 255, 0.6) 160px,
+    rgba(255, 0, 128, 0.6) 200px
   );
-  background-size: 300% 300%;
+  background-size: 282.843px 282.843px;
   mix-blend-mode: color-dodge;
   opacity: 0.3;
   animation: foil-drift 6s linear infinite;
 }
-/* A brighter specular band sweeping the other way. */
+/* A brighter specular band sweeping the other way. Same tiling geometry so
+   it reuses the seamless keyframe below. */
 .foil-sheen::after {
-  background: linear-gradient(
-    115deg,
-    transparent 30%,
-    rgba(255, 255, 255, 0.5) 48%,
-    rgba(255, 255, 255, 0.5) 52%,
-    transparent 70%
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 120px,
+    rgba(255, 255, 255, 0.5) 160px,
+    transparent 200px
   );
-  background-size: 250% 250%;
+  background-size: 282.843px 282.843px;
   mix-blend-mode: soft-light;
   animation: foil-drift 6s linear infinite reverse;
 }
 @keyframes foil-drift {
-  0% {
-    background-position: 0% 0%;
+  from {
+    background-position: 0 0;
   }
-  100% {
-    background-position: 100% 100%;
+  to {
+    /* exactly one tile diagonally — identical frame, so it wraps invisibly */
+    background-position: 282.843px 282.843px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

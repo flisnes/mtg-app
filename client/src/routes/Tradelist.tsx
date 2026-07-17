@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { Page } from './Page.js';
 import { CollectionListView } from '../components/CollectionListView.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
+import { ScanSheet } from '../components/ScanSheet.js';
 import { clearTradelist } from '../db/dataAccess.js';
 import { useToast } from '../components/Toast.js';
 
 export function Tradelist() {
   const toast = useToast();
+  const [scanning, setScanning] = useState(false);
 
   async function onClearAll() {
     if (!window.confirm('Take every card off the tradelist? Your collection is not affected.')) return;
@@ -20,11 +23,15 @@ export function Tradelist() {
       menu={
         <OptionsMenu
           label="Tradelist options"
-          actions={[{ label: 'Remove all from tradelist', icon: '✕', danger: true, onClick: onClearAll }]}
+          actions={[
+            { label: 'Scan cards', icon: '📷', onClick: () => setScanning(true) },
+            { label: 'Remove all from tradelist', icon: '✕', danger: true, onClick: onClearAll },
+          ]}
         />
       }
     >
       <CollectionListView onlyTrade />
+      {scanning && <ScanSheet target={{ kind: 'tradelist' }} onClose={() => setScanning(false)} />}
     </Page>
   );
 }

@@ -2090,9 +2090,17 @@ button.ghost {
   flex: 1;
   font-size: 1.15rem;
 }
+.scan-target {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
 .scan-added {
   color: var(--accent);
   font-size: 0.9rem;
+}
+.scan-board {
+  margin-top: 0.6rem;
 }
 .scan-close {
   padding: 0.3rem 0.6rem;

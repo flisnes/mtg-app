@@ -24,7 +24,7 @@ export function Collection() {
       }
     >
       <CollectionListView />
-      {scanning && <ScanSheet onClose={() => setScanning(false)} />}
+      {scanning && <ScanSheet target={{ kind: 'collection' }} onClose={() => setScanning(false)} />}
     </Page>
   );
 }

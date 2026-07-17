@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { OracleCard, Printing, Priced } from '@mtg/shared';
-import { addToCollection } from '../db/dataAccess.js';
+import type { DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
+import { addDeckCard, addToCollection } from '../db/dataAccess.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { parseHashBlob, type ScanIndex } from '../scan/blob.js';
 import { CameraScan, type LiveScanState } from '../scan/camera.js';
@@ -10,10 +10,32 @@ import { resolveWithOcr } from '../scan/ocr.js';
 import { checkScanDataUpdate, downloadScanData, getInstalledScanData, type ScanDataManifest } from '../scan/store.js';
 import { useToast } from './Toast.js';
 
-// Camera scanning flow (handover §S5): Collection → ⋯ → Scan cards. Live
-// camera locks onto a card (S3 consensus), OCR pins down edition + language
-// (S4), one tap adds it through the normal collection write path — then the
-// camera resumes for the next card (binder-entry speed is the goal).
+// Camera scanning flow (handover §S5). A live camera locks onto a card (S3
+// consensus), OCR pins down edition + language (S4), one tap commits it — then
+// the camera resumes for the next card (binder-entry speed is the goal).
+//
+// The same sheet feeds four destinations (a `ScanTarget`): the collection, the
+// tradelist, a deck, or a live trade offer. Everything up to the commit is
+// identical; only the final write differs, so it dispatches in `add()` through
+// the normal data-access paths (or a callback for the in-memory trade offer).
+
+/** A locked-in scan, ready to be written wherever the target sends it. */
+export interface ScannedCard {
+  oracleId: string;
+  scryfallId: string;
+  name: string;
+  /** From the foil toggle (irrelevant to deck slots, which store no finish). */
+  finish: Finish;
+  /** From OCR, defaulting to English. */
+  lang: string;
+}
+
+/** Where a scan is committed (mirrors CardSheet's context-sensitive AddTarget). */
+export type ScanTarget =
+  | { kind: 'collection' }
+  | { kind: 'tradelist' }
+  | { kind: 'deck'; deckId: string; deckName?: string; format?: DeckFormat }
+  | { kind: 'trade'; onAdd: (card: ScannedCard) => void };
 
 interface Candidate {
   scryfallId: string;
@@ -30,11 +52,54 @@ type Stage =
   | { kind: 'scanning' }
   | { kind: 'confirm'; candidates: Candidate[]; selected: string; ocr: OcrState; lang: string };
 
-export function ScanSheet({ onClose }: { onClose: () => void }) {
+/** Whether the card's finish matters for this target (deck slots ignore it). */
+function finishMatters(target: ScanTarget): boolean {
+  return target.kind !== 'deck';
+}
+
+const BOARD_LABELS: Record<DeckBoard, string> = {
+  main: 'mainboard',
+  side: 'sideboard',
+  commander: 'command zone',
+};
+
+/** Which boards a deck scan can target (commander only for commander decks). */
+function deckBoards(format?: DeckFormat): DeckBoard[] {
+  return format === 'commander' ? ['main', 'side', 'commander'] : ['main', 'side'];
+}
+
+function targetLabel(target: ScanTarget): string {
+  switch (target.kind) {
+    case 'collection':
+      return 'Collection';
+    case 'tradelist':
+      return 'Tradelist';
+    case 'deck':
+      return target.deckName ?? 'Deck';
+    case 'trade':
+      return 'Trade offer';
+  }
+}
+
+function addLabel(target: ScanTarget, board: DeckBoard): string {
+  switch (target.kind) {
+    case 'collection':
+      return 'Add to collection';
+    case 'tradelist':
+      return 'Add to tradelist';
+    case 'deck':
+      return `Add to ${BOARD_LABELS[board]}`;
+    case 'trade':
+      return 'Add to trade';
+  }
+}
+
+export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target?: ScanTarget; onClose: () => void }) {
   const [stage, setStage] = useState<Stage>({ kind: 'setup', message: 'Checking scan data…' });
   const [live, setLive] = useState<LiveScanState | null>(null);
   const [added, setAdded] = useState(0);
   const [foil, setFoil] = useState(false);
+  const [board, setBoard] = useState<DeckBoard>('main');
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraScan | null>(null);
   const indexRef = useRef<ScanIndex | null>(null);
@@ -129,16 +194,32 @@ export function ScanSheet({ onClose }: { onClose: () => void }) {
 
   const add = async (c: Candidate, lang: string) => {
     if (!c.printing) return;
-    await addToCollection({
+    const scanned: ScannedCard = {
       oracleId: c.printing.oracleId,
       scryfallId: c.scryfallId,
-      condition: 'NM',
+      name: c.oracle?.name ?? 'card',
       finish: foil ? 'foil' : 'nonfoil',
       lang,
-      quantity: 1,
-    });
+    };
+    switch (target.kind) {
+      case 'collection':
+        await addToCollection({ ...scanned, condition: 'NM', quantity: 1 });
+        break;
+      case 'tradelist':
+        // Same collection entry, but at least one copy starts marked for trade.
+        await addToCollection({ ...scanned, condition: 'NM', quantity: 1, quantityForTrade: 1 });
+        break;
+      case 'deck':
+        // Deck slots key on oracle + board; keep the scanned printing as the
+        // slot's preferred edition (like a hand-picked printing).
+        await addDeckCard({ deckId: target.deckId, oracleId: scanned.oracleId, scryfallId: scanned.scryfallId, board, quantity: 1 });
+        break;
+      case 'trade':
+        target.onAdd(scanned);
+        break;
+    }
     setAdded((n) => n + 1);
-    toast(`Added ${c.oracle?.name ?? 'card'}`);
+    toast(`Added ${scanned.name}`);
     resume();
   };
 
@@ -152,6 +233,7 @@ export function ScanSheet({ onClose }: { onClose: () => void }) {
       <div className="sheet scan-sheet" role="dialog" aria-label="Scan cards" onClick={(e) => e.stopPropagation()}>
         <div className="scan-sheet-head">
           <h2>Scan cards</h2>
+          <span className="scan-target">→ {targetLabel(target)}</span>
           {added > 0 && <span className="scan-added">+{added} added</span>}
           <button className="scan-close" onClick={close} aria-label="Close">
             ✕
@@ -184,8 +266,11 @@ export function ScanSheet({ onClose }: { onClose: () => void }) {
         {stage.kind === 'confirm' && (
           <ConfirmPanel
             stage={stage}
+            target={target}
             foil={foil}
             setFoil={setFoil}
+            board={board}
+            setBoard={setBoard}
             onSelect={(id) => setStage((s) => (s.kind === 'confirm' ? { ...s, selected: id } : s))}
             onAdd={(c) => void add(c, stage.lang)}
             onSkip={resume}
@@ -199,15 +284,21 @@ export function ScanSheet({ onClose }: { onClose: () => void }) {
 
 function ConfirmPanel({
   stage,
+  target,
   foil,
   setFoil,
+  board,
+  setBoard,
   onSelect,
   onAdd,
   onSkip,
 }: {
   stage: Extract<Stage, { kind: 'confirm' }>;
+  target: ScanTarget;
   foil: boolean;
   setFoil: (v: boolean) => void;
+  board: DeckBoard;
+  setBoard: (b: DeckBoard) => void;
   onSelect: (id: string) => void;
   onAdd: (c: Candidate) => void;
   onSkip: () => void;
@@ -245,11 +336,29 @@ function ConfirmPanel({
             </span>
           )}
           <span className="scan-hint">{ocrLabel[stage.ocr]}</span>
-          <label className="scan-foil">
-            <input type="checkbox" checked={foil} onChange={(e) => setFoil(e.target.checked)} /> Foil
-          </label>
+          {finishMatters(target) && (
+            <label className="scan-foil">
+              <input type="checkbox" checked={foil} onChange={(e) => setFoil(e.target.checked)} /> Foil
+            </label>
+          )}
         </div>
       </div>
+
+      {target.kind === 'deck' && (
+        <div className="seg-row scan-board" role="radiogroup" aria-label="Add to board">
+          {deckBoards(target.format).map((b) => (
+            <button
+              key={b}
+              role="radio"
+              aria-checked={board === b}
+              className={board === b ? 'seg seg-active' : 'seg'}
+              onClick={() => setBoard(b)}
+            >
+              {b === 'main' ? 'Main' : b === 'side' ? 'Side' : 'Commander'}
+            </button>
+          ))}
+        </div>
+      )}
 
       {stage.candidates.length > 1 && (
         <div className="scan-alternatives">
@@ -273,7 +382,7 @@ function ConfirmPanel({
 
       <div className="scan-confirm-actions">
         <button className="primary" disabled={!selected.printing} onClick={() => onAdd(selected)}>
-          Add to collection
+          {addLabel(target, board)}
         </button>
         <button onClick={onSkip}>Skip</button>
       </div>

@@ -39,6 +39,7 @@ import {
   type GroupKey,
 } from '../components/CardSorting.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
+import { ScanSheet } from '../components/ScanSheet.js';
 import { useEscapeToClose } from '../components/useEscapeToClose.js';
 
 interface Row {
@@ -57,6 +58,7 @@ export function DeckDetail() {
   const navigate = useNavigate();
   const toast = useToast();
   const [showImport, setShowImport] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [exit, setExit] = useState<MissingCard[] | null>(null);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [view, setView] = useViewMode();
@@ -152,6 +154,7 @@ export function DeckDetail() {
         <OptionsMenu
           label="Deck options"
           actions={[
+            { label: 'Scan cards', icon: '📷', onClick: () => setScanning(true) },
             { label: 'Import list', icon: '⬆', onClick: () => setShowImport((v) => !v) },
             { label: 'Export', icon: '⬇', onClick: exportDeck },
             {
@@ -233,6 +236,13 @@ export function DeckDetail() {
       <Board title="Sideboard" rows={side} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} hasCommander={commander.length > 0} />
 
       {info && <CardSheet oracleCard={info.card} deckCard={info.deckCard} onClose={() => setInfo(null)} />}
+
+      {scanning && (
+        <ScanSheet
+          target={{ kind: 'deck', deckId: id, deckName: deck.name, format: deck.format }}
+          onClose={() => setScanning(false)}
+        />
+      )}
 
       {exit && (
         <div className="sheet-backdrop" onClick={() => navigate('/decks')}>

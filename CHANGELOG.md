@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.19.0
+
+- **Scan cards straight into a deck, trade or your tradelist** — not just your collection. The same camera scanner is now on the ⋯ menu of each of those screens:
+  - **Deck** → build a deck you've already assembled physically; a Main / Side (and Commander) toggle picks the board, and the scanned edition is remembered for the slot.
+  - **Trade** → scan cards onto your side of the offer as you trade in person, no typing.
+  - **Tradelist** → scan through a stack as you fill your trade binder; each card is added and marked for trade.
+- Confirm each card with one tap and the camera resumes for the next, exactly like collection scanning.
+
 ## 0.18.1
 
 - Shorter bottom navigation bar on mobile so it takes up less of the screen.

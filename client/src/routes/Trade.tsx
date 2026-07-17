@@ -15,6 +15,7 @@ import { CardItems, CardList, type CardItem } from '../components/CardViews.js';
 import { CodeJoinForm } from '../components/CodeJoinForm.js';
 import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
+import { ScanSheet } from '../components/ScanSheet.js';
 import { useEscapeToClose } from '../components/useEscapeToClose.js';
 import { TRADE_ENABLED } from '../trade/config.js';
 import {
@@ -161,6 +162,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const peer = otherSeat(seat);
   const [myOffer, setMyOffer] = useState<TradeLine[]>([]);
   const [sheet, setSheet] = useState<SheetKind | null>(null);
+  const [scanning, setScanning] = useState(false);
   const [info, setInfo] = useState<InfoTarget | null>(null);
   const ownership = useOwnership();
   const inited = useRef(false);
@@ -293,6 +295,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
         <OptionsMenu
           label="Trade options"
           actions={[
+            ...(editable ? [{ label: 'Scan cards', icon: '📷', onClick: () => setScanning(true) }] : []),
             { label: 'Refresh partner lists', icon: '↻', onClick: () => { requestWishlist(); requestTradelist(); } },
             { label: 'Cancel trade', icon: '✕', danger: true, onClick: trade.cancel },
           ]}
@@ -441,6 +444,20 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
 
       {info && (
         <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
+      )}
+
+      {scanning && editable && (
+        <ScanSheet
+          target={{
+            kind: 'trade',
+            onAdd: (c) =>
+              addLine(
+                { oracleId: c.oracleId, scryfallId: c.scryfallId, name: c.name, quantity: 1, condition: 'NM', finish: c.finish, lang: c.lang },
+                999,
+              ),
+          }}
+          onClose={() => setScanning(false)}
+        />
       )}
     </Page>
   );

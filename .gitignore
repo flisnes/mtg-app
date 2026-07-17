@@ -9,6 +9,17 @@ dist/
 pipeline/out/
 *.json.gz
 
+# scanjob local state / output (runs on the VM)
+scanjob/data/
+scanjob/out/
+scanjob/venv/
+scanjob/testphotos/
+scanjob/hashgen-run.log
+scanjob/__pycache__/
+
+# server dev-run state (accounts.db lives on the VM in prod)
+server/data/
+
 # logs
 *.log
 npm-debug.log*

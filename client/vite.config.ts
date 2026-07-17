@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 
 // GitHub Pages serves project sites from /<repo>/. The deploy workflow sets
 // VITE_BASE=/<repo>/; dev and local preview default to '/'. Because Pages has
@@ -17,6 +18,9 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    // HTTPS dev server for camera testing from a phone (getUserMedia needs a
+    // secure context off localhost): VITE_HTTPS=1 npm run dev -- --host
+    ...(process.env.VITE_HTTPS ? [basicSsl()] : []),
     VitePWA({
       registerType: 'prompt',
       injectRegister: null, // registration handled explicitly in src/pwa.ts

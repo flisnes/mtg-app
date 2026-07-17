@@ -1,0 +1,13 @@
+[Unit]
+Description=Binder card-scan hash generation job
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/scanjob
+ExecStart=/home/ubuntu/scanjob/venv/bin/python3 hashgen.py --data-dir /home/ubuntu/scanjob/data --out-dir /srv/binder-scan
+# First full run fetches ~90k images at <10 req/s: several hours.
+TimeoutStartSec=12h
+Nice=10

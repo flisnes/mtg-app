@@ -37,6 +37,7 @@ export class MtgDatabase extends Dexie {
   priceShards!: Table<PriceShard, string>;
   events!: Table<UserEvent, string>;
   outbox!: Table<SyncChange, [string, string]>;
+  scanData!: Table<import('../scan/store.js').ScanDataRow, string>;
 
   constructor() {
     super('mtg');
@@ -166,6 +167,10 @@ export class MtgDatabase extends Dexie {
 
         if (events.length) await tx.table('events').bulkAdd(events);
       });
+
+    // v8 (card scanning S2): the downloaded art-hash blob, one row keyed by
+    // 'current' (replaced wholesale when the scan-data beacon bumps).
+    this.version(8).stores({ scanData: 'key' });
   }
 }
 

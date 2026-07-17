@@ -1,0 +1,5 @@
+requests>=2.31
+Pillow>=10.0
+ijson>=3.2
+# verify.py only (self-match search speed on full blobs):
+numpy>=1.24

@@ -1967,3 +1967,177 @@ button.ghost {
 .match-summary {
   margin-top: 0;
 }
+
+/* ---- Scan test harness (dev, #/scan-test) ---- */
+.scan-section {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  margin-bottom: 1rem;
+}
+.scan-section h2 {
+  font-size: 1.05rem;
+}
+.scan-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.scan-file-btn {
+  display: inline-block;
+  cursor: pointer;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.scan-status {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.scan-hint {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.scan-meta {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-family: ui-monospace, monospace;
+  overflow-wrap: anywhere;
+}
+.scan-canvases {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.scan-preview {
+  max-width: min(100%, 420px);
+  height: auto;
+  border-radius: 8px;
+  cursor: crosshair;
+}
+.scan-stages {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.scan-warped {
+  width: 160px;
+  height: auto;
+  border-radius: 6px;
+}
+.scan-art {
+  width: 160px;
+  height: auto;
+  border-radius: 4px;
+}
+.scan-strip {
+  width: 200px;
+  height: auto;
+  image-rendering: pixelated;
+}
+.scan-candidates {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.scan-candidates li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+.scan-candidates img {
+  width: 52px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.scan-candidates li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.scan-printing {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+.scan-distance {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.scan-video {
+  max-width: min(100%, 420px);
+  border-radius: 8px;
+  margin-top: 0.5rem;
+}
+
+/* ---- Scan sheet (Collection → Scan cards) ---- */
+.scan-sheet {
+  min-height: 40dvh;
+}
+.scan-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.scan-sheet-head h2 {
+  margin: 0;
+  flex: 1;
+  font-size: 1.15rem;
+}
+.scan-added {
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+.scan-close {
+  padding: 0.3rem 0.6rem;
+}
+.scan-sheet-video {
+  width: 100%;
+  border-radius: 10px;
+  background: #000;
+}
+.scan-confirm {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+.scan-confirm-img {
+  width: 110px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.scan-confirm-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.scan-foil {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  font-size: 0.9rem;
+}
+.scan-alternatives {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+}
+.scan-alternative {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.9rem;
+}
+.scan-confirm-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+.scan-confirm-actions .primary {
+  flex: 1;
+}

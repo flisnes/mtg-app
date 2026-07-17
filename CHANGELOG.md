@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.18.0
+
+- **Scan cards with your camera.** Collection → ⋯ → **Scan cards**: point your phone at a card and the app recognizes it from the artwork — in any language, no typing. A small recognition pack (~4 MB, downloaded once and kept up to date automatically) lets everything run on your device; photos never leave your phone.
+- After the art match, the app reads the fine print at the bottom of the card to pick the exact edition and language automatically. When the print is too blurry or sleeved to read, it shows the closest candidates and you tap the right one.
+- Confirm with one tap (foil toggle included) and the card lands in your collection; the camera resumes on its own so you can work through a whole stack.
+
 ## 0.17.0
 
 - **Seamless sync between your devices.** Signing in now keeps every device up to date automatically: add, edit or remove a card (or change a deck) on your phone and it appears on your PC within seconds — no more manual backup/restore. Works offline too: changes queue up and sync when you're back online. If the same card is edited on two devices before they meet, the newest edit wins quietly.

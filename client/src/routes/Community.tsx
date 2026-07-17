@@ -43,19 +43,27 @@ function useMyWants(): (oracleId: string, scryfallId: string) => boolean {
   }, [wishes]);
 }
 
-/** My tradelist as a matcher over their wishlist lines (null = any printing). */
-function useMyHaves(): (oracleId: string, scryfallId: string | null) => boolean {
-  const forTrade = useLiveQuery(
-    () => db.collection.where('quantityForTrade').above(0).toArray(),
-    [],
-    [],
-  );
+/** Matcher over their wishlist lines (null = any printing of the card). */
+type HaveFn = (oracleId: string, scryfallId: string | null) => boolean;
+
+/**
+ * My collection as two matchers over their wishlist lines:
+ *  - `have`: I already have it marked for trade (I'm offering it), and
+ *  - `own`: I own a copy at all (whether or not it's on my tradelist).
+ * Same printing rule as trades: a specific-printing wish matches only that
+ * printing, an "any printing" wish matches every printing of the card.
+ */
+function useMyCollection(): { have: HaveFn; own: HaveFn } {
+  const entries = useLiveQuery(() => db.collection.toArray(), [], []);
   return useMemo(() => {
-    const oracles = new Set(forTrade.map((e) => e.oracleId));
-    const printings = new Set(forTrade.map((e) => e.scryfallId));
-    return (oracleId, scryfallId) =>
-      scryfallId === null ? oracles.has(oracleId) : printings.has(scryfallId);
-  }, [forTrade]);
+    const matcher = (rows: typeof entries): HaveFn => {
+      const oracles = new Set(rows.map((e) => e.oracleId));
+      const printings = new Set(rows.map((e) => e.scryfallId));
+      return (oracleId, scryfallId) =>
+        scryfallId === null ? oracles.has(oracleId) : printings.has(scryfallId);
+    };
+    return { have: matcher(entries.filter((e) => e.quantityForTrade > 0)), own: matcher(entries) };
+  }, [entries]);
 }
 
 export function Community() {
@@ -176,7 +184,7 @@ function UserLists({
   const [view, setView] = useViewMode();
   const [info, setInfo] = useState<InfoTarget | null>(null);
   const iWant = useMyWants();
-  const iHave = useMyHaves();
+  const { have: iHave, own: iOwn } = useMyCollection();
 
   useEffect(() => {
     let cancelled = false;
@@ -214,25 +222,38 @@ function UserLists({
     return { oracles, printings };
   }, [lists]);
 
-  const hiSort = (a: { hi: boolean; match: boolean; line: { name: string } }, b: typeof a) =>
-    Number(b.hi) - Number(a.hi) || Number(b.match) - Number(a.match) || a.line.name.localeCompare(b.line.name);
+  // Sort the strongest signal to the top: notification hit, then a direct
+  // list match, then "you own it but haven't listed it", then by name.
+  const hiSort = (a: { hi: boolean; match: boolean; own: boolean; line: { name: string } }, b: typeof a) =>
+    Number(b.hi) - Number(a.hi) ||
+    Number(b.match) - Number(a.match) ||
+    Number(b.own) - Number(a.own) ||
+    a.line.name.localeCompare(b.line.name);
 
   const trade = useMemo(() => {
     if (!lists) return [];
     return lists.tradelist
-      .map((l) => ({ line: l, match: iWant(l.oracleId, l.scryfallId), hi: highlight?.has(l.oracleId) ?? false }))
+      .map((l) => ({ line: l, match: iWant(l.oracleId, l.scryfallId), own: false, hi: highlight?.has(l.oracleId) ?? false }))
       .sort(hiSort);
   }, [lists, iWant, highlight]);
 
   const wish = useMemo(() => {
     if (!lists) return [];
     return lists.wishlist
-      .map((l) => ({ line: l, match: iHave(l.oracleId, l.scryfallId), hi: highlight?.has(l.oracleId) ?? false }))
+      .map((l) => {
+        const match = iHave(l.oracleId, l.scryfallId);
+        // "own" is the new highlight: a card of theirs sitting in my
+        // collection that I haven't put on my tradelist yet. If it's already
+        // for trade, the ⇄ match badge already says so — don't double-flag.
+        const own = !match && iOwn(l.oracleId, l.scryfallId);
+        return { line: l, match, own, hi: highlight?.has(l.oracleId) ?? false };
+      })
       .sort(hiSort);
-  }, [lists, iHave, highlight]);
+  }, [lists, iHave, iOwn, highlight]);
 
   const tradeMatches = trade.filter((t) => t.match).length;
   const wishMatches = wish.filter((w) => w.match).length;
+  const wishOwned = wish.filter((w) => w.own).length;
 
   const tradeItems = useMemo(
     (): CardItem[] =>
@@ -262,7 +283,7 @@ function UserLists({
 
   const wishItems = useMemo(
     (): CardItem[] =>
-      wish.map(({ line, match, hi }, i) => {
+      wish.map(({ line, match, own, hi }, i) => {
         const oracle = cards?.oracles.get(line.oracleId);
         const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
         return {
@@ -282,9 +303,19 @@ function UserLists({
           ) : (
             'any printing'
           ),
-          badge: hi ? '🔔 you have this' : match ? '⇄ you have this' : undefined,
-          badgeClass: hi ? 'badge-match' : 'own-trade',
-          badgeTitle: 'In your tradelist',
+          badge: hi
+            ? '🔔 you have this'
+            : match
+              ? '⇄ you have this'
+              : own
+                ? '✓ you own this'
+                : undefined,
+          badgeClass: hi ? 'badge-match' : match ? 'own-trade' : 'own-yes',
+          badgeTitle: match
+            ? 'In your tradelist'
+            : own
+              ? 'You own this but haven’t listed it for trade — add it to your tradelist to offer it.'
+              : undefined,
           onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId ?? undefined }) : undefined,
         };
       }),
@@ -308,10 +339,11 @@ function UserLists({
       ) : (
         <>
           <div className="meta-row">
-            {tradeMatches > 0 || wishMatches > 0 ? (
+            {tradeMatches > 0 || wishMatches > 0 || wishOwned > 0 ? (
               <p className="fine-print match-summary">
                 {tradeMatches > 0 && <>⭐ {tradeMatches} of their trades match your wishlist.</>}{' '}
-                {wishMatches > 0 && <>⇄ {wishMatches} of their wishes match your tradelist.</>}
+                {wishMatches > 0 && <>⇄ {wishMatches} of their wishes match your tradelist.</>}{' '}
+                {wishOwned > 0 && <>✓ You own {wishOwned} more of their wishes (not yet on your tradelist).</>}
               </p>
             ) : (
               <span />

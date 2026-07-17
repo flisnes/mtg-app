@@ -2152,3 +2152,117 @@ button.ghost {
 .scan-confirm-actions .primary {
   flex: 1;
 }
+
+/* Add sealed product sheet */
+.sealed-sheet {
+  min-height: 40dvh;
+}
+.sealed-back {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.9rem;
+}
+.sealed-msg {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin: 0.25rem 0;
+}
+.sealed-search {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1rem;
+}
+.sealed-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow-y: auto;
+}
+.sealed-result {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+}
+.sealed-result:hover {
+  border-color: var(--accent);
+}
+.sealed-result-name {
+  font-weight: 600;
+}
+.sealed-result-sub {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+.sealed-detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.sealed-summary {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.sealed-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+}
+.sealed-copies {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+}
+.sealed-copies button {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.sealed-copies-n {
+  min-width: 1.5rem;
+  text-align: center;
+  font-weight: 600;
+}
+.sealed-cardlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  max-height: 40dvh;
+  overflow-y: auto;
+  font-size: 0.85rem;
+}
+.sealed-cardlist li {
+  display: flex;
+  gap: 0.5rem;
+}
+.sealed-card-qty {
+  color: var(--text-dim);
+  flex-shrink: 0;
+  min-width: 2.2rem;
+}
+.sealed-card-name {
+  min-width: 0;
+}
+.sealed-card-set {
+  color: var(--text-dim);
+}

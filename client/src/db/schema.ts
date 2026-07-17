@@ -38,6 +38,7 @@ export class MtgDatabase extends Dexie {
   events!: Table<UserEvent, string>;
   outbox!: Table<SyncChange, [string, string]>;
   scanData!: Table<import('../scan/store.js').ScanDataRow, string>;
+  sealed!: Table<import('../sealed/store.js').SealedStoreRow, string>;
 
   constructor() {
     super('mtg');
@@ -171,6 +172,10 @@ export class MtgDatabase extends Dexie {
     // v8 (card scanning S2): the downloaded art-hash blob, one row keyed by
     // 'current' (replaced wholesale when the scan-data beacon bumps).
     this.version(8).stores({ scanData: 'key' });
+
+    // v9 (sealed products): the lazily-downloaded sealed-product catalog, one
+    // row keyed 'current' (replaced when the manifest's sealed hash moves).
+    this.version(9).stores({ sealed: 'key' });
   }
 }
 

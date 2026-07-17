@@ -38,6 +38,11 @@ jobs:
       # (Phase 5 moves this to the VM's nightly cron once it has a domain.)
       - name: Build card database
         run: npm run pipeline
+        # The sealed-product pass streams MTGJSON AllPrintings (~650 MB
+        # uncompressed) on top of the Scryfall pass; raise the heap so the
+        # nightly build doesn't OOM. (ubuntu-latest has 16 GB.)
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
 
       - name: Build client
         run: npm run build --workspace client

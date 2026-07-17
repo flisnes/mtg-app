@@ -12,6 +12,7 @@ const { streamArray } = streamArrayMod;
 import type { CardDbChunkMeta, CardDbManifest, OracleCard, PriceMap, Priced, Printing } from '@mtg/shared';
 import { getBulkEntry, openBulkStream } from './scryfall.js';
 import { slimCard, type RawCard, type SlimResult } from './slimCard.js';
+import { buildSealedProducts } from './sealed.js';
 
 // Nightly card-DB pipeline (beta plan §3). Downloads Scryfall `default_cards`,
 // slims each card to ~18 fields, and emits:
@@ -176,6 +177,28 @@ async function main(): Promise<void> {
   const sortedPrices: PriceMap = Object.fromEntries(Object.entries(prices).sort(([a], [b]) => (a < b ? -1 : 1)));
   const pricesArtifact = emitHashed('prices', sortedPrices, Object.keys(sortedPrices).length);
 
+  // Sealed products (MTGJSON, expanded against the printings above). Runs
+  // before the legacy whole-file arrays below so its MTGJSON streaming peak
+  // doesn't coexist with them. Best-effort: a MTGJSON outage must not fail the
+  // nightly card-DB build, and a partial-data dry run (oracle_cards / MAX_CARDS)
+  // can't resolve cards, so skip it there. Set SKIP_SEALED=1 to opt out.
+  let sealedArtifact: Artifact | undefined;
+  const wantSealed =
+    !process.env.SKIP_SEALED && (process.env.ALLPRINTINGS_FILE || (BULK_TYPE === 'default_cards' && MAX_CARDS === Infinity));
+  if (wantSealed) {
+    try {
+      const printingsById = new Map(printings.map((p) => [p.scryfallId, p]));
+      const { products, stats } = await buildSealedProducts(printingsById);
+      sealedArtifact = emitHashed('sealed', products, products.length);
+      console.log(
+        `[pipeline]   sealed: ${stats.productsEmitted}/${stats.productsSeen} products from ${stats.setsSeen} sets ` +
+          `(${stats.cardsUnavailable} card refs unavailable)`,
+      );
+    } catch (err) {
+      console.warn('[pipeline] sealed-product build failed; shipping without it:', (err as Error).message);
+    }
+  }
+
   // Legacy whole-file artifacts with prices embedded, for pre-chunking clients.
   const priceOf = (id: string): { priceEur: number | null; priceUsd: number | null } => {
     const p = prices[id];
@@ -199,6 +222,7 @@ async function main(): Promise<void> {
       dataVersion,
       chunks: { oracle: oracleChunks, printings: printingsChunks },
       prices: meta(pricesArtifact),
+      ...(sealedArtifact ? { sealed: meta(sealedArtifact) } : {}),
     },
   };
   writeFileSync(join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));

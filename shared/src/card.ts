@@ -108,12 +108,54 @@ export interface CardDbManifest {
       printings: CardDbChunkMeta[];
     };
     prices: CardDbArtifactMeta;
+    /**
+     * Sealed products expanded against this build's printings. Lazily fetched
+     * by the client only when the "Add sealed product" UI opens. Absent on
+     * builds made before the feature (and on runs where the MTGJSON fetch fails).
+     */
+    sealed?: CardDbArtifactMeta;
   };
 }
 
 /** One chunk of an artifact: all rows whose id starts with `key` (one hex char). */
 export interface CardDbChunkMeta extends CardDbArtifactMeta {
   key: string;
+}
+
+// --- Sealed products (see sealed-products feature) -------------------------
+// A named, non-randomized sealed product (precon deck, Secret Lair, gift box…)
+// expanded server-side from MTGJSON into concrete Scryfall printings, so the
+// client can add "one of everything in this product" to a collection. Shipped
+// as a separate lazily-fetched artifact keyed off the card-DB `dataVersion`
+// (the scryfallIds only make sense against the printings from that build).
+
+/** One resolved card slot in a sealed product. */
+export interface SealedCardRef {
+  scryfallId: string;
+  qty: number;
+  finish: Finish;
+}
+
+/** A sealed product expanded to its deterministic card contents. */
+export interface SealedProduct {
+  /** MTGJSON product uuid — stable id for caching/selection. */
+  id: string;
+  name: string;
+  /** MTGJSON category (e.g. 'deck', 'box_set', 'bundle') — for grouping/labels. */
+  category?: string;
+  /** MTGJSON subtype (e.g. 'commander', 'planeswalker') — for labels. */
+  subtype?: string;
+  /** Set code (lowercased) the product belongs to. */
+  set: string;
+  setName?: string;
+  /** ISO release date, when known. */
+  releaseDate?: string;
+  /** Deterministic cards this product contains (deduped by scryfallId+finish). */
+  cards: SealedCardRef[];
+  /** Count of random components (booster packs / variable) omitted from `cards`. */
+  omittedRandom?: number;
+  /** Count of referenced cards that could not be matched to a printing in this build. */
+  unresolved?: number;
 }
 
 export interface CardDbArtifactMeta {

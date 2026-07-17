@@ -43,8 +43,20 @@ const SNAPSHOT_BODY_LIMIT = 36 * 1024 * 1024;
 const CONDS = new Set(['NM', 'LP', 'MP', 'HP', 'DMG']);
 const FINS = new Set(['nonfoil', 'foil', 'etched']);
 
-function fail(reply: FastifyReply, status: number, body: ApiErrorBody): void {
+export function fail(reply: FastifyReply, status: number, body: ApiErrorBody): void {
   void reply.status(status).send(body);
+}
+
+/** Resolve the request's bearer token to a user, or 401 (shared by /api routes). */
+export function authUser(store: AccountStore, req: FastifyRequest, reply: FastifyReply): AccountUser | null {
+  const auth = req.headers.authorization;
+  const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length) : null;
+  const user = token ? store.userForToken(token) : null;
+  if (!user) {
+    fail(reply, 401, { error: 'unauthorized', message: 'Sign in first.' });
+    return null;
+  }
+  return user;
 }
 
 function str(v: unknown, max: number): string | null {
@@ -149,16 +161,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
   }, 60 * 60 * 1000);
   sweep.unref();
 
-  function requireUser(req: FastifyRequest, reply: FastifyReply): AccountUser | null {
-    const auth = req.headers.authorization;
-    const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length) : null;
-    const user = token ? store.userForToken(token) : null;
-    if (!user) {
-      fail(reply, 401, { error: 'unauthorized', message: 'Sign in first.' });
-      return null;
-    }
-    return user;
-  }
+  const requireUser = (req: FastifyRequest, reply: FastifyReply) => authUser(store, req, reply);
 
   // --- Auth -----------------------------------------------------------------
 

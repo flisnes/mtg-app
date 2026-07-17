@@ -143,6 +143,26 @@ export interface MatchesResponse {
   matches: MatchEntry[];
 }
 
+// ---------------------------------------------------------------------------
+// Server price archive (GET /api/prices/:scryfallId)
+// ---------------------------------------------------------------------------
+//
+// The server appends one reading per printing per day from the published card
+// DB, so a fresh device gets full price charts instead of each device
+// recording its own history from first sight. Same wire shape as the client's
+// local PriceHistory rows (cents indexed by day) so the two merge trivially.
+// Requires a signed-in user — this endpoint is where a future premium tier
+// (e.g. history depth by plan) would be enforced; today everyone gets all of it.
+
+export interface PricesResponse {
+  scryfallId: string;
+  /** YYYY-MM-DD (UTC) of index 0. */
+  startDay: string;
+  /** Integer cents per day; null = no reading that day. Same length as `usd`. */
+  eur: (number | null)[];
+  usd: (number | null)[];
+}
+
 /**
  * Error envelope for every non-2xx /api response. `error` is a stable code;
  * `message` is human-readable. A 409 on snapshot PUT carries the server's

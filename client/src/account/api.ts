@@ -3,6 +3,7 @@ import type {
   AuthResponse,
   MatchesResponse,
   MeResponse,
+  PricesResponse,
   SnapshotGetResponse,
   SnapshotPutRequest,
   SnapshotPutResponse,
@@ -105,4 +106,9 @@ export function getUserLists(token: string, username: string): Promise<UserLists
 
 export function getMatches(token: string): Promise<MatchesResponse> {
   return request('/matches', { token });
+}
+
+/** Server-archived daily price history for one printing (404 = none recorded). */
+export function getPrices(token: string, scryfallId: string): Promise<PricesResponse> {
+  return request(`/prices/${encodeURIComponent(scryfallId)}`, { token });
 }

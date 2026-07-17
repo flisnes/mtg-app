@@ -3,6 +3,9 @@ import websocket from '@fastify/websocket';
 import { config } from './config.js';
 import { AccountStore } from './accountStore.js';
 import { registerAccountRoutes } from './accounts.js';
+import { startPriceArchiver } from './priceArchive.js';
+import { PriceStore } from './priceStore.js';
+import { registerPriceRoutes } from './prices.js';
 import { registerTradeRelay } from './relay.js';
 import { SyncHub } from './syncHub.js';
 
@@ -31,10 +34,18 @@ async function main() {
   // sync route notifies subscribed sockets through the hub.
   const store = new AccountStore(config.dataDir);
   const hub = new SyncHub();
-  app.addHook('onClose', () => store.close());
+  // Daily price archive (Phase E): its own SQLite file, appended in-process.
+  const priceStore = new PriceStore(config.dataDir);
+  const stopArchiver = startPriceArchiver(priceStore, app.log);
+  app.addHook('onClose', () => {
+    stopArchiver();
+    store.close();
+    priceStore.close();
+  });
 
   registerTradeRelay(app, store, hub);
   registerAccountRoutes(app, store, hub);
+  registerPriceRoutes(app, store, priceStore);
 
   try {
     await app.listen({ host: config.host, port: config.port });

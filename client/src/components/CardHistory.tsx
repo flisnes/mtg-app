@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { OracleCard, Priced, Printing, RemovalReason, UserEvent } from '@mtg/shared';
+import type { OracleCard, Priced, PriceHistory, Printing, RemovalReason, UserEvent } from '@mtg/shared';
 import { REMOVAL_REASONS } from '@mtg/shared';
 import { editUserEvent } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
+import { centsAround } from '../price/history.js';
 
 // History tab of the card sheet (sync plan, 2026-07-16): the card's event
 // timeline — acquisitions with the market price at the time, removals with a
@@ -58,9 +59,12 @@ function qtyBadge(e: UserEvent): string | null {
 export function CardHistory({
   oracleCard,
   printings,
+  priceHistory,
 }: {
   oracleCard: Priced<OracleCard>;
   printings: Priced<Printing>[];
+  /** Recorded daily prices of the sheet's shown printing (server-merged when signed in). */
+  priceHistory?: PriceHistory | null;
 }) {
   const events = useLiveQuery(
     () => db.events.where('oracleId').equals(oracleCard.oracleId).toArray(),
@@ -70,6 +74,17 @@ export function CardHistory({
     () => (events ?? []).slice().sort((a, b) => b.ts - a.ts || (a.id < b.id ? 1 : -1)),
     [events],
   );
+
+  /**
+   * Recorded EUR cents around an event's day, as a hint for events whose
+   * acquisition/exit price is unknown. Only when the event names the same
+   * printing the history was fetched for — a price of a different printing
+   * would be a wrong hint, so those show plain "price unknown".
+   */
+  const centsThen = (e: UserEvent): number | null => {
+    if (!priceHistory || e.scryfallId !== priceHistory.scryfallId) return null;
+    return centsAround(priceHistory, new Date(e.ts).toISOString().slice(0, 10));
+  };
 
   /** Current EUR cents for the printing an event names (oracle default as fallback). */
   const centsNow = (scryfallId: string | null | undefined): number | null => {
@@ -124,7 +139,7 @@ export function CardHistory({
       )}
       <ul className="history-list">
         {sorted.map((e) => (
-          <HistoryRow key={e.id} event={e} centsNow={centsNow} />
+          <HistoryRow key={e.id} event={e} centsNow={centsNow} centsThen={centsThen} />
         ))}
       </ul>
     </div>
@@ -134,9 +149,11 @@ export function CardHistory({
 function HistoryRow({
   event: e,
   centsNow,
+  centsThen,
 }: {
   event: UserEvent;
   centsNow: (scryfallId: string | null | undefined) => number | null;
+  centsThen: (e: UserEvent) => number | null;
 }) {
   const editable = e.kind === 'collection.add' || e.kind === 'collection.remove';
   const [editing, setEditing] = useState(false);
@@ -147,6 +164,9 @@ function HistoryRow({
   const now = editable ? centsNow(e.scryfallId) : null;
   const then = e.priceEurCents ?? null;
   const perCopyDelta = then != null && now != null ? now - then : null;
+  // Recorded market price around the event's day — a hint where the user never
+  // set one, not a substitute (it doesn't feed the summary delta above).
+  const hint = editable && then == null ? centsThen(e) : null;
 
   async function save() {
     const trimmed = priceText.trim().replace(',', '.');
@@ -180,7 +200,9 @@ function HistoryRow({
             )}
           </span>
         )}
-        {editable && then == null && <span className="history-price fine-print">price unknown</span>}
+        {editable && then == null && (
+          <span className="history-price fine-print">{hint != null ? `≈ ${fmtCents(hint)}/ea then` : 'price unknown'}</span>
+        )}
       </button>
 
       {editing && (
@@ -189,7 +211,7 @@ function HistoryRow({
             <span>{e.kind === 'collection.add' ? 'Price when acquired (€/ea)' : 'Price when removed (€/ea)'}</span>
             <input
               inputMode="decimal"
-              placeholder="unknown"
+              placeholder={hint != null ? `≈ ${(hint / 100).toFixed(2)}` : 'unknown'}
               value={priceText}
               onChange={(ev) => setPriceText(ev.target.value)}
             />

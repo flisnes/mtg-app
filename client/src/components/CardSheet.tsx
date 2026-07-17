@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { CollectionEntry, Condition, DeckBoard, DeckFormat, Finish, OracleCard, Priced, Printing, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Condition, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS } from '@mtg/shared';
 import {
   addDeckCard,
@@ -15,6 +15,7 @@ import {
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
 import { getPriceHistory } from '../price/tracking.js';
+import { getMergedPriceHistory } from '../price/serverHistory.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
 import { CardHistory } from './CardHistory.js';
 import { formatPrice } from './CardSorting.js';
@@ -99,6 +100,7 @@ export function CardSheet({
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
   const [busy, setBusy] = useState(false);
   const [trend, setTrend] = useState<HistoryChange | null>(null);
+  const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(null);
   const [tab, setTab] = useState<'details' | 'history'>('details');
   useEscapeToClose(busy ? null : onClose);
 
@@ -108,11 +110,22 @@ export function CardSheet({
 
   // Recorded price history for the shown printing (collection cards are
   // tracked automatically); "any printing" falls back to the default one.
+  // The local row paints immediately; signed-in users then get the server
+  // archive merged in (a longer window than any single device recorded).
   const shownId = scryfallId || oracleCard.defaultScryfallId;
   useEffect(() => {
     let live = true;
+    let merged = false;
     void getPriceHistory(shownId).then((h) => {
-      if (live) setTrend(h ? historyChange(h) : null);
+      if (!live || merged) return;
+      setPriceHistory(h ?? null);
+      setTrend(h ? historyChange(h) : null);
+    });
+    void getMergedPriceHistory(shownId).then((h) => {
+      if (!live) return;
+      merged = true;
+      setPriceHistory(h ?? null);
+      setTrend(h ? historyChange(h) : null);
     });
     return () => {
       live = false;
@@ -237,7 +250,7 @@ export function CardSheet({
 
         {tab === 'history' ? (
           <>
-            <CardHistory oracleCard={oracleCard} printings={printings} />
+            <CardHistory oracleCard={oracleCard} printings={printings} priceHistory={priceHistory} />
             <div className="sheet-actions">
               <button className="primary" onClick={onClose}>
                 Close

@@ -34,6 +34,48 @@ export function recordDay(h: PriceHistory, day: string, eur: number | null, usd:
   return true;
 }
 
+/**
+ * Merge two histories of the same printing into one day-aligned row. Readings
+ * are unioned; where both have one for the same day, `b`'s wins. Callers pass
+ * (server, local) so the device's own readings (e.g. today's, not archived
+ * yet) survive on top of the server's longer window.
+ */
+export function mergeHistories(a: PriceHistory, b: PriceHistory): PriceHistory {
+  // An unparseable startDay can't be aligned; the other row wins outright.
+  if (dayOffset(a.startDay, a.startDay) !== 0) return b;
+  if (dayOffset(b.startDay, b.startDay) !== 0) return a;
+  const startDay = a.startDay <= b.startDay ? a.startDay : b.startDay;
+  const offA = dayOffset(startDay, a.startDay);
+  const offB = dayOffset(startDay, b.startDay);
+  const len = Math.max(offA + a.eur.length, offB + b.eur.length);
+  const eur: (number | null)[] = new Array(len).fill(null);
+  const usd: (number | null)[] = new Array(len).fill(null);
+  for (let i = 0; i < a.eur.length; i++) {
+    eur[offA + i] = a.eur[i] ?? null;
+    usd[offA + i] = a.usd[i] ?? null;
+  }
+  for (let i = 0; i < b.eur.length; i++) {
+    if (b.eur[i] != null) eur[offB + i] = b.eur[i]!;
+    if (b.usd[i] != null) usd[offB + i] = b.usd[i]!;
+  }
+  return { scryfallId: b.scryfallId, startDay, eur, usd };
+}
+
+/**
+ * The EUR reading on `day`, or the nearest one up to `lookback` days earlier
+ * (prices move slowly; a reading from a few days before is a fine estimate).
+ * Null when the history doesn't cover that day.
+ */
+export function centsAround(h: PriceHistory, day: string, lookback = 7): number | null {
+  const idx = dayOffset(h.startDay, day);
+  if (idx < 0) return null;
+  for (let i = Math.min(idx, h.eur.length - 1); i >= 0 && idx - i <= lookback; i--) {
+    const v = h.eur[i];
+    if (v != null) return v;
+  }
+  return null;
+}
+
 /** Summary of a card's recorded price movement, in currency units. */
 export interface HistoryChange {
   cur: 'eur' | 'usd';

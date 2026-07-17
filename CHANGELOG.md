@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.22.0
+
+- **Price history from the server.** The server now records every card's market price once a day, for every printing that exists — not just cards you own. When you're signed in, a card's price chart and trend use this shared history, so a fresh device (or a card you just discovered) shows the full recorded window immediately instead of starting from scratch. Histories fetched while online stay available offline.
+- **"What was it worth then?" hints.** On the History tab, acquisitions and removals where you never entered a price now show an approximate market price from the archive (≈ €x.xx/ea then) when the archive covers that day — as a hint next to the entry and inside the price editor. Your own entered prices always take precedence.
+- Signed-out use is unchanged: your device keeps recording prices for your own collection and wishlist locally.
+
 ## 0.19.0
 
 - **Scan cards straight into a deck, trade or your tradelist** — not just your collection. The same camera scanner is now on the ⋯ menu of each of those screens:

@@ -1,7 +1,14 @@
 // Tiny inline price sparkline. Green if the latest value is ≥ the first.
 
+/** More points than ~2 per pixel adds nothing; stride-sample, always keeping the last reading. */
+const MAX_POINTS = 168;
+
 export function Sparkline({ values, width = 84, height = 26 }: { values: number[]; width?: number; height?: number }) {
-  const clean = values.filter((v) => Number.isFinite(v));
+  let clean = values.filter((v) => Number.isFinite(v));
+  if (clean.length > MAX_POINTS) {
+    const stride = (clean.length - 1) / (MAX_POINTS - 1);
+    clean = Array.from({ length: MAX_POINTS }, (_, i) => clean[Math.round(i * stride)]!);
+  }
   if (clean.length < 2) return <span className="spark-empty">—</span>;
 
   const min = Math.min(...clean);

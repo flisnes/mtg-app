@@ -35,4 +35,12 @@ export const config = {
   /** Failed/total auth attempts allowed per IP per window (register+login). */
   authAttemptsPerWindow: num('AUTH_ATTEMPTS_PER_WINDOW', 20),
   authWindowMs: num('AUTH_WINDOW_MS', 15 * 60 * 1000),
+  /**
+   * Published card DB the price archiver reads its daily shard from (no
+   * trailing slash). Set CARD_DB_URL='' to disable archiving entirely.
+   */
+  cardDbUrl: (process.env.CARD_DB_URL ?? 'https://flisnes.github.io/mtg-app/carddb').replace(/\/+$/, ''),
+  /** How often the archiver checks for a new price day, and the boot-time head start. */
+  priceArchiveIntervalMs: num('PRICE_ARCHIVE_INTERVAL_MS', 60 * 60 * 1000),
+  priceArchiveDelayMs: num('PRICE_ARCHIVE_DELAY_MS', 15 * 1000),
 } as const;

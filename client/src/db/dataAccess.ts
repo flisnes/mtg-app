@@ -735,26 +735,29 @@ export async function applyCompletedTrade(
     // Remove given cards (decrement matching entries; reduce trade qty with them).
     for (const line of given) {
       const ex = byKey.get(collectionKey(line));
-      if (!ex) continue;
-      const removed = Math.min(line.quantity, ex.quantity);
-      const remaining = ex.quantity - line.quantity;
-      if (remaining <= 0) {
-        await db.collection.delete(ex.id);
-        await stageDelete('collection', ex.id);
-        byKey.delete(collectionKey(line));
-      } else {
-        ex.quantity = remaining;
-        ex.quantityForTrade = clamp(ex.quantityForTrade, 0, remaining);
-        ex.updatedAt = now;
-        await db.collection.put(ex);
-        await stagePut('collection', ex);
+      if (ex) {
+        const remaining = ex.quantity - line.quantity;
+        if (remaining <= 0) {
+          await db.collection.delete(ex.id);
+          await stageDelete('collection', ex.id);
+          byKey.delete(collectionKey(line));
+        } else {
+          ex.quantity = remaining;
+          ex.quantityForTrade = clamp(ex.quantityForTrade, 0, remaining);
+          ex.updatedAt = now;
+          await db.collection.put(ex);
+          await stagePut('collection', ex);
+        }
       }
+      // The event records the full traded quantity even when the card was
+      // never registered (or under-registered) in the collection — the trade
+      // happened either way, and the card history should say so.
       await emit({
         ts: now,
         kind: 'collection.remove',
         oracleId: line.oracleId,
         scryfallId: line.scryfallId,
-        qty: removed,
+        qty: line.quantity,
         condition: line.condition,
         finish: line.finish,
         lang: line.lang,

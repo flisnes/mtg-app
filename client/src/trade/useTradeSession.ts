@@ -47,7 +47,8 @@ export interface TradeSession {
   create: () => void;
   join: (code: string) => void;
   resume: (t: ActiveTrade) => void;
-  sendOffer: (lines: TradeLine[]) => void;
+  /** Replace one side's offer — either participant may edit either side. */
+  sendOffer: (side: Seat, lines: TradeLine[]) => void;
   requestTradelist: () => void;
   requestWishlist: () => void;
   accept: () => void;
@@ -282,9 +283,9 @@ export function useTradeSession(): TradeSession {
     [connect],
   );
 
-  const sendOffer = useCallback((lines: TradeLine[]) => {
+  const sendOffer = useCallback((side: Seat, lines: TradeLine[]) => {
     const c = code();
-    if (c) send({ v: PROTOCOL_VERSION, type: 'offer_update', sessionCode: c, lines });
+    if (c) send({ v: PROTOCOL_VERSION, type: 'offer_update', sessionCode: c, side, lines });
   }, [send]);
   const requestTradelist = useCallback(() => {
     const c = code();

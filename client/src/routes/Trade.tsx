@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
@@ -155,27 +155,27 @@ export function Trade() {
   return <TradeBoard trade={trade} seat={trade.seat} />;
 }
 
-type SheetKind = 'add' | 'theirs' | 'balance';
+/** Which column an add/scan/balance action targets: 'give' = my offer, 'get' = theirs. */
+type Side = 'give' | 'get';
+type SheetKind = Side | 'balance';
 
 function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>; seat: Seat }) {
   const snap = trade.snapshot!;
   const peer = otherSeat(seat);
-  const [myOffer, setMyOffer] = useState<TradeLine[]>([]);
+  // Server-authoritative offers, mirrored locally so edits render instantly.
+  // Either participant may edit either side (you usually hold each other's
+  // binders), so every snapshot — including echoes of our own edits — simply
+  // replaces the mirror.
+  const [offers, setOffers] = useState<Record<Seat, TradeLine[]>>(snap.offers);
+  useEffect(() => setOffers(snap.offers), [snap.offers]);
   const [sheet, setSheet] = useState<SheetKind | null>(null);
-  const [scanning, setScanning] = useState(false);
+  const [scanFor, setScanFor] = useState<Side | null>(null);
   const [info, setInfo] = useState<InfoTarget | null>(null);
   const ownership = useOwnership();
-  const inited = useRef(false);
 
-  // On (re)connect, seed the local offer from the server snapshot once.
-  useEffect(() => {
-    if (!inited.current && snap.offers[seat].length > 0) {
-      inited.current = true;
-      setMyOffer(snap.offers[seat]);
-    }
-  }, [snap, seat]);
-
-  const theirOffer = snap.offers[peer];
+  const seatOf = (side: Side): Seat => (side === 'give' ? seat : peer);
+  const myOffer = offers[seat];
+  const theirOffer = offers[peer];
   const editable = snap.state !== 'completed' && snap.state !== 'cancelled';
 
   // Exchange wishlists + tradelists whenever the partner (re)appears, so
@@ -188,37 +188,40 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
     }
   }, [trade.peerPresent, requestWishlist, requestTradelist]);
 
-  function commit(next: TradeLine[]) {
-    setMyOffer(next);
-    trade.sendOffer(next);
+  function commit(side: Side, next: TradeLine[]) {
+    const s = seatOf(side);
+    setOffers((cur) => ({ ...cur, [s]: next }));
+    trade.sendOffer(s, next);
   }
 
-  function addLine(line: TradeLine, max: number) {
+  function addLine(side: Side, line: TradeLine, max: number) {
     const key = lineKey(line);
-    const next = [...myOffer];
+    const next = [...offers[seatOf(side)]];
     const idx = next.findIndex((l) => lineKey(l) === key);
     if (idx >= 0) {
       if (next[idx]!.quantity >= max) return;
       next[idx] = { ...next[idx]!, quantity: next[idx]!.quantity + 1 };
     } else next.push({ ...line, quantity: 1 });
-    commit(next);
+    commit(side, next);
   }
 
   /** Add several lines at once (balance "Add all") — one commit, no stale-state races. */
-  function addMany(adds: Array<{ line: TradeLine; count: number; max: number }>) {
-    const next = [...myOffer];
+  function addMany(side: Side, adds: Array<{ line: TradeLine; count: number; max: number }>) {
+    const next = [...offers[seatOf(side)]];
     for (const { line, count, max } of adds) {
       const key = lineKey(line);
       const idx = next.findIndex((l) => lineKey(l) === key);
       if (idx >= 0) next[idx] = { ...next[idx]!, quantity: Math.min(max, next[idx]!.quantity + count) };
       else next.push({ ...line, quantity: Math.min(max, count) });
     }
-    commit(next);
+    commit(side, next);
   }
 
-  function setQty(key: string, qty: number) {
-    const next = myOffer.map((l) => (lineKey(l) === key ? { ...l, quantity: qty } : l)).filter((l) => l.quantity > 0);
-    commit(next);
+  function setQty(side: Side, key: string, qty: number) {
+    const next = offers[seatOf(side)]
+      .map((l) => (lineKey(l) === key ? { ...l, quantity: qty } : l))
+      .filter((l) => l.quantity > 0);
+    commit(side, next);
   }
 
   // Printings (images + prices) and oracle cards for both offers.
@@ -276,16 +279,16 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const barStatus =
     snap.state === 'agreed'
       ? iConfirmed
-        ? 'You confirmed. Waiting for them.'
+        ? 'Waiting for their confirmation…'
         : peerConfirmed
-          ? 'They confirmed. Inspect the cards, then confirm.'
-          : 'Both accepted. Swap the cards, then confirm.'
+          ? 'They confirmed — inspect the cards, then confirm.'
+          : 'Deal! Swap the cards, then both confirm.'
       : iAccepted
-        ? 'You accepted. Waiting for them. Editing an offer resets acceptance.'
+        ? 'Accepted — waiting for them. Any edit resets acceptance.'
         : peerAccepted
-          ? 'They accepted this deal. Accept to lock it in.'
+          ? 'They accepted. Review the deal and accept.'
           : trade.peerPresent
-            ? 'Build the trade, then accept.'
+            ? 'Either of you can add cards to both sides.'
             : 'Waiting for the other user to connect…';
 
   return (
@@ -295,7 +298,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
         <OptionsMenu
           label="Trade options"
           actions={[
-            ...(editable ? [{ label: 'Scan cards', icon: '📷', onClick: () => setScanning(true) }] : []),
+            ...(editable ? [{ label: 'Balance the trade', icon: '⚖', onClick: () => setSheet('balance') }] : []),
             { label: 'Refresh partner lists', icon: '↻', onClick: () => { requestWishlist(); requestTradelist(); } },
             { label: 'Cancel trade', icon: '✕', danger: true, onClick: trade.cancel },
           ]}
@@ -314,12 +317,12 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
       {(theyWantCount > 0 || iWantCount > 0) && (
         <div className="match-chips">
           {theyWantCount > 0 && (
-            <button className="chip chip-wish" onClick={() => setSheet('add')}>
+            <button className="chip chip-wish" onClick={() => setSheet('give')}>
               ⭐ They want {theyWantCount} of your cards
             </button>
           )}
           {iWantCount > 0 && (
-            <button className="chip chip-wish" onClick={() => setSheet('theirs')}>
+            <button className="chip chip-wish" onClick={() => setSheet('get')}>
               ⭐ You want {iWantCount} of theirs
             </button>
           )}
@@ -327,68 +330,53 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
       )}
 
       <div className="trade-board">
-        <section className="trade-col" aria-label="Cards you give">
-          <h3>You give</h3>
-          <OfferColumn
-            lines={myOffer}
-            editable={editable}
-            onQty={setQty}
-            ownership={ownership}
-            printings={printMap}
-            oracles={oracleMap}
-            onInfo={openInfo}
-          />
-          {myOffer.length === 0 && <p className="trade-empty">No cards yet.</p>}
-          {editable && (
-            <button className="trade-add" onClick={() => setSheet('add')}>
-              <Icon name="plus" size={15} /> Add cards
-            </button>
-          )}
-        </section>
-
-        <div className="trade-rail" aria-label="Trade tools">
-          <button
-            className="rail-btn"
-            title="Balance the trade"
-            aria-label="Balance the trade"
-            onClick={() => setSheet('balance')}
-            disabled={!editable}
-          >
-            <Icon name="balance" />
-          </button>
-          <button
-            className="rail-btn"
-            title="Their tradelist"
-            aria-label="View their tradelist"
-            onClick={() => {
-              setSheet('theirs');
-              requestTradelist();
-            }}
-            disabled={!trade.peerPresent && trade.peerTradelist === null}
-          >
-            <Icon name="tradelist" />
-          </button>
-        </div>
-
-        <section className="trade-col" aria-label="Cards you get">
-          <h3>You get</h3>
-          <OfferColumn lines={theirOffer} editable={false} printings={printMap} oracles={oracleMap} onInfo={openInfo} />
-          {theirOffer.length === 0 && <p className="trade-empty">Nothing yet. They add cards on their device.</p>}
-        </section>
+        <OfferPanel
+          side="give"
+          title="You give"
+          total={myTotal}
+          lines={myOffer}
+          empty="No cards yet. Add or scan cards from your binder."
+          editable={editable}
+          onQty={setQty}
+          onAdd={() => setSheet('give')}
+          onScan={() => setScanFor('give')}
+          badge={(l) => (ownership ? ownIndicator(ownership.get(l.oracleId)) : null)}
+          printings={printMap}
+          oracles={oracleMap}
+          onInfo={openInfo}
+        />
+        <OfferPanel
+          side="get"
+          title="You get"
+          total={theirTotal}
+          lines={theirOffer}
+          empty="No cards yet. Pick from their tradelist or scan their binder."
+          editable={editable}
+          onQty={setQty}
+          onAdd={() => setSheet('get')}
+          onScan={() => setScanFor('get')}
+          badge={(l) => {
+            const w = myWanted(l.oracleId, l.scryfallId);
+            return w > 0 ? { icon: '⭐', label: `On your wishlist (×${w})`, cls: 'badge-wish' } : null;
+          }}
+          printings={printMap}
+          oracles={oracleMap}
+          onInfo={openInfo}
+        />
       </div>
 
       <div className="trade-dock">
-        <div className="trade-totals">
-          <div className="trade-total" aria-label="Total you give">
-            €{myTotal.toFixed(2)}
-          </div>
-          <DiffBadge diff={diff} />
-          <div className="trade-total" aria-label="Total you get">
-            €{theirTotal.toFixed(2)}
-          </div>
-        </div>
-
         <div className="trade-bar">
+          <button
+            className={`trade-diff ${Math.abs(diff) < BALANCE_EPSILON ? 'diff-even' : 'diff-off'}`}
+            title="Balance the trade"
+            aria-label="Value difference — tap to balance the trade"
+            onClick={() => setSheet('balance')}
+            disabled={!editable}
+          >
+            <strong>€{Math.abs(diff).toFixed(2)}</strong>
+            <span>{Math.abs(diff) < BALANCE_EPSILON ? 'balanced' : diff > 0 ? 'you give more' : 'you get more'}</span>
+          </button>
           <div className="trade-bar-status">{barStatus}</div>
           {snap.state === 'agreed' ? (
             <button className="primary" onClick={trade.confirmComplete} disabled={iConfirmed}>
@@ -404,20 +392,23 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
         </div>
       </div>
 
-      {sheet === 'add' && editable && (
-        <TradeSheet title="Add to your offer" onClose={() => setSheet(null)}>
-          <AddCardsPanel ownership={ownership} theirWanted={theirWanted} onAdd={addLine} onInfo={openInfo} />
+      {sheet === 'give' && editable && (
+        <TradeSheet title="Add cards you give" onClose={() => setSheet(null)}>
+          <AddCardsPanel
+            ownership={ownership}
+            theirWanted={theirWanted}
+            onAdd={(line, max) => addLine('give', line, max)}
+            onInfo={openInfo}
+          />
         </TradeSheet>
       )}
-      {sheet === 'theirs' && (
-        <TradeSheet
-          title={`Their tradelist${trade.peerTradelist ? ` (${trade.peerTradelist.length})` : ''}`}
-          onClose={() => setSheet(null)}
-        >
-          <PeerTradelistPanel
+      {sheet === 'get' && editable && (
+        <TradeSheet title="Add cards you get" onClose={() => setSheet(null)}>
+          <AddTheirCardsPanel
             lines={trade.peerTradelist}
             loading={trade.peerTradelistLoading}
             myWanted={myWanted}
+            onAdd={(line, max) => addLine('get', line, max)}
             onInfo={openInfo}
             onRefresh={requestTradelist}
           />
@@ -433,8 +424,8 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             theirWanted={theirWanted}
             myWanted={myWanted}
             onAdd={addLine}
-            onAddMany={(adds) => {
-              addMany(adds);
+            onAddMany={(side, adds) => {
+              addMany(side, adds);
               setSheet(null);
             }}
             onInfo={openInfo}
@@ -446,89 +437,117 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
         <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
       )}
 
-      {scanning && editable && (
+      {scanFor && editable && (
         <ScanSheet
           target={{
             kind: 'trade',
+            label: scanFor === 'give' ? 'Trade — you give' : 'Trade — you get',
             onAdd: (c) =>
               addLine(
+                scanFor,
                 { oracleId: c.oracleId, scryfallId: c.scryfallId, name: c.name, quantity: 1, condition: 'NM', finish: c.finish, lang: c.lang },
                 999,
               ),
           }}
-          onClose={() => setScanning(false)}
+          onClose={() => setScanFor(null)}
         />
       )}
     </Page>
   );
 }
 
-/** The value gap between the two columns, shown under the central rail. */
-function DiffBadge({ diff }: { diff: number }) {
-  const even = Math.abs(diff) < BALANCE_EPSILON;
-  return (
-    <div className={`trade-diff ${even ? 'diff-even' : 'diff-off'}`} aria-label="Value difference">
-      <strong>€{Math.abs(diff).toFixed(2)}</strong>
-      <span>{even ? 'balanced' : diff > 0 ? 'you give more' : 'you get more'}</span>
-    </div>
-  );
-}
-
-/** One column of the board: card tiles with per-card value (and ± for your own offer). */
-function OfferColumn({
+/**
+ * One side of the board: title + running total, the card tiles, and the
+ * add/scan actions. Both sides are editable — you usually hold each other's
+ * binders, so adding to "You get" is as normal as adding to "You give".
+ */
+function OfferPanel({
+  side,
+  title,
+  total,
   lines,
+  empty,
   editable,
   onQty,
-  ownership,
+  onAdd,
+  onScan,
+  badge,
   printings,
   oracles,
   onInfo,
 }: {
+  side: Side;
+  title: string;
+  total: number;
   lines: TradeLine[];
+  empty: string;
   editable: boolean;
-  onQty?: (key: string, qty: number) => void;
-  /** When given (own offer), each line shows an ownership indicator. */
-  ownership?: Map<string, Owned>;
+  onQty: (side: Side, key: string, qty: number) => void;
+  onAdd: () => void;
+  onScan: () => void;
+  /** Per-line indicator: ownership for "You give", wishlist match for "You get". */
+  badge: (l: TradeLine) => { icon: string; label: string; cls: string } | null;
   printings: Map<string, Priced<Printing>> | undefined;
   oracles: Map<string, Priced<OracleCard>> | undefined;
   onInfo: OpenInfo;
 }) {
-  if (lines.length === 0) return null;
   return (
-    <CardItems
-      view="grid"
-      items={lines.map((l): CardItem => {
-        const ind = ownership ? ownIndicator(ownership.get(l.oracleId)) : null;
-        const printing = printings?.get(l.scryfallId);
-        const oracle = oracles?.get(l.oracleId);
-        return {
-          key: lineKey(l),
-          name: l.name,
-          image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-          foil: l.finish !== 'nonfoil',
-          count: l.quantity,
-          badge: ind?.icon,
-          badgeClass: ind?.cls,
-          badgeTitle: ind?.label,
-          onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
-          actions: (
-            <>
-              {editable && onQty && (
-                <button onClick={() => onQty(lineKey(l), l.quantity - 1)} aria-label="One fewer">
-                  −
-                </button>
-              )}
-              <span className="tile-price">{formatPrice(printing) ?? '—'}</span>
-              {editable && onQty && (
-                <button onClick={() => onQty(lineKey(l), l.quantity + 1)} aria-label="One more">
-                  ＋
-                </button>
-              )}
-            </>
-          ),
-        };
-      })}
-    />
+    <section className="trade-col" aria-label={`Cards ${title.toLowerCase()}`}>
+      <header className="trade-col-head">
+        <h3>{title}</h3>
+        <span className="trade-col-total" aria-label={`Total ${title.toLowerCase()}`}>
+          €{total.toFixed(2)}
+        </span>
+      </header>
+      {lines.length === 0 ? (
+        <p className="trade-empty">{empty}</p>
+      ) : (
+        <CardItems
+          view="grid"
+          items={lines.map((l): CardItem => {
+            const ind = badge(l);
+            const printing = printings?.get(l.scryfallId);
+            const oracle = oracles?.get(l.oracleId);
+            return {
+              key: lineKey(l),
+              name: l.name,
+              image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+              foil: l.finish !== 'nonfoil',
+              count: l.quantity,
+              badge: ind?.icon,
+              badgeClass: ind?.cls,
+              badgeTitle: ind?.label,
+              onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
+              actions: (
+                <>
+                  {editable && (
+                    <button onClick={() => onQty(side, lineKey(l), l.quantity - 1)} aria-label="One fewer">
+                      −
+                    </button>
+                  )}
+                  <span className="tile-price">{formatPrice(printing) ?? '—'}</span>
+                  {editable && (
+                    <button onClick={() => onQty(side, lineKey(l), l.quantity + 1)} aria-label="One more">
+                      ＋
+                    </button>
+                  )}
+                </>
+              ),
+            };
+          })}
+        />
+      )}
+      {editable && (
+        <div className="trade-col-actions">
+          <button className="trade-add" onClick={onAdd}>
+            <Icon name="plus" size={15} /> Add
+          </button>
+          <button className="trade-add" onClick={onScan}>
+            📷 Scan
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -593,9 +612,9 @@ function suggestBalance(gap: number, pool: BalanceCandidate[]): Map<string, numb
 }
 
 /**
- * The scales button: suggests cards from the lighter side's tradelist to even
- * out the value. Your own suggestions can be added directly; for their side it
- * produces a list to show the partner (only they can edit their offer).
+ * The scales tool: suggests cards from the lighter side's tradelist to even
+ * out the value. Suggestions can be added straight to that side's column —
+ * either participant may edit either side.
  */
 function BalancePanel({
   diff,
@@ -614,8 +633,8 @@ function BalancePanel({
   peerTradelist: TradeLine[] | null;
   theirWanted: WantFn;
   myWanted: WantFn;
-  onAdd: (line: TradeLine, max: number) => void;
-  onAddMany: (adds: Array<{ line: TradeLine; count: number; max: number }>) => void;
+  onAdd: (side: Side, line: TradeLine, max: number) => void;
+  onAddMany: (side: Side, adds: Array<{ line: TradeLine; count: number; max: number }>) => void;
   onInfo: OpenInfo;
 }) {
   // My tradelist (with prices) plus display data for their tradelist.
@@ -704,17 +723,20 @@ function BalancePanel({
   const pickCount = suggestions.reduce((s, c) => s + picks.get(c.key)!, 0);
   const pickedTotal = suggestions.reduce((s, c) => s + c.price * picks.get(c.key)!, 0);
   const after = Math.abs(gap - pickedTotal);
+  const lightSide: Side = iGiveMore ? 'get' : 'give';
 
   return (
     <>
       <p className="fine-print">
         {iGiveMore ? (
           <>
-            You’re giving <strong>€{gap.toFixed(2)}</strong> more. From <strong>their</strong> tradelist, ask them to add:
+            You’re giving <strong>€{gap.toFixed(2)}</strong> more. From <strong>their</strong> tradelist, you could add
+            to what you get:
           </>
         ) : (
           <>
-            You’re getting <strong>€{gap.toFixed(2)}</strong> more. From <strong>your</strong> tradelist, you could add:
+            You’re getting <strong>€{gap.toFixed(2)}</strong> more. From <strong>your</strong> tradelist, you could add
+            to what you give:
           </>
         )}
       </p>
@@ -739,11 +761,14 @@ function BalancePanel({
             ),
             price: `€${c.price.toFixed(2)}`,
             onClick: oracle ? () => onInfo(oracle, c.line.scryfallId) : undefined,
-            actions: !iGiveMore ? (
-              <button title="Add to your offer" onClick={() => onAdd(c.line, c.max)}>
+            actions: (
+              <button
+                title={iGiveMore ? 'Add to what you get' : 'Add to what you give'}
+                onClick={() => onAdd(lightSide, c.line, c.max)}
+              >
                 ＋
               </button>
-            ) : undefined,
+            ),
           };
         })}
       />
@@ -751,16 +776,12 @@ function BalancePanel({
         Adds €{pickedTotal.toFixed(2)}, bringing the difference from €{gap.toFixed(2)} down to €{after.toFixed(2)}.
         Prices are EUR estimates; unpriced cards are skipped.
       </p>
-      {iGiveMore ? (
-        <p className="fine-print">Only they can add cards to their side. Show them this list.</p>
-      ) : (
-        <button
-          className="primary"
-          onClick={() => onAddMany(suggestions.map((c) => ({ line: c.line, count: picks.get(c.key)!, max: c.max })))}
-        >
-          Add all ({pickCount} {pickCount === 1 ? 'card' : 'cards'})
-        </button>
-      )}
+      <button
+        className="primary"
+        onClick={() => onAddMany(lightSide, suggestions.map((c) => ({ line: c.line, count: picks.get(c.key)!, max: c.max })))}
+      >
+        Add all ({pickCount} {pickCount === 1 ? 'card' : 'cards'})
+      </button>
     </>
   );
 }
@@ -889,20 +910,28 @@ function AddCardsPanel({
   );
 }
 
-/** The partner's tradelist (view-only), your wishlist matches starred and sorted first. */
-function PeerTradelistPanel({
+/**
+ * Add cards to what you get: with no query, quick-picks from the partner's
+ * tradelist (your wishlist matches starred and sorted first); typing searches
+ * the whole card database, for cards they hand you that aren't on their list.
+ */
+function AddTheirCardsPanel({
   lines,
   loading,
   myWanted,
+  onAdd,
   onInfo,
   onRefresh,
 }: {
   lines: TradeLine[] | null;
   loading: boolean;
   myWanted: WantFn;
+  onAdd: (line: TradeLine, max: number) => void;
   onInfo: OpenInfo;
   onRefresh: () => void;
 }) {
+  const [q, setQ] = useState('');
+  const { results } = useCardSearch(q, { limit: 20 });
   // Their lines reference cards by id; the local card DB has the display data.
   const { printMap, oracleMap } = useCardMaps(lines ?? []);
 
@@ -912,43 +941,86 @@ function PeerTradelistPanel({
 
   return (
     <div className="picker-panel">
-      <div className="meta-row">
-        <span className="fine-print">Ask them to add cards you want to their offer.</span>
-        <button className="chip" onClick={onRefresh} disabled={loading}>
-          {loading ? 'Loading…' : '↻ Refresh'}
-        </button>
-      </div>
-      {!lines ? (
+      <input
+        className="search-input"
+        placeholder="Search any card…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        aria-label="Search cards to add"
+      />
+      {q.trim() ? (
+        results.length === 0 ? (
+          <p className="fine-print">No cards match.</p>
+        ) : (
+          <CardList
+            className="picker-scroll"
+            items={results.map(
+              (c): CardItem => ({
+                key: c.oracleId,
+                name: c.name,
+                image: c.imageSmall ?? null,
+                sub: c.typeLine,
+                onClick: () => onInfo(c),
+                actions: (
+                  <button
+                    title="Add to what you get"
+                    onClick={() =>
+                      onAdd(
+                        { oracleId: c.oracleId, scryfallId: c.defaultScryfallId, name: c.name, quantity: 1, condition: 'NM', finish: 'nonfoil', lang: 'en' },
+                        999,
+                      )
+                    }
+                  >
+                    ＋
+                  </button>
+                ),
+              }),
+            )}
+          />
+        )
+      ) : !lines ? (
         <p className="fine-print">{loading ? 'Waiting for their tradelist…' : 'No tradelist received yet.'}</p>
       ) : lines.length === 0 ? (
-        <p className="fine-print">Their tradelist is empty.</p>
+        <p className="fine-print">Their tradelist is empty. Search above to add any card they hand you.</p>
       ) : (
-        <CardList
-          className="picker-scroll"
-          items={sorted.map(({ l, wanted }): CardItem => {
-            const printing = printMap?.get(l.scryfallId);
-            const oracle = oracleMap?.get(l.oracleId);
-            return {
-              key: lineKey(l),
-              name: l.name,
-              image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-              foil: l.finish !== 'nonfoil',
-              count: l.quantity,
-              badge: wanted > 0 ? '⭐' : undefined,
-              badgeClass: 'badge-wish',
-              badgeTitle: wanted > 0 ? `On your wishlist (×${wanted})` : undefined,
-              sub: (
-                <>
-                  {l.condition} · {l.finish}
-                  {l.lang !== 'en' ? ` · ${l.lang}` : ''}
-                  {wanted > 0 ? ` · you want ×${wanted}` : ''}
-                </>
-              ),
-              price: formatPrice(printing),
-              onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
-            };
-          })}
-        />
+        <>
+          <div className="meta-row">
+            <span className="fine-print">From their tradelist (or search above for any card):</span>
+            <button className="chip" onClick={onRefresh} disabled={loading}>
+              {loading ? 'Loading…' : '↻ Refresh'}
+            </button>
+          </div>
+          <CardList
+            className="picker-scroll"
+            items={sorted.map(({ l, wanted }): CardItem => {
+              const printing = printMap?.get(l.scryfallId);
+              const oracle = oracleMap?.get(l.oracleId);
+              return {
+                key: lineKey(l),
+                name: l.name,
+                image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+                foil: l.finish !== 'nonfoil',
+                badge: wanted > 0 ? '⭐' : undefined,
+                badgeClass: 'badge-wish',
+                badgeTitle: wanted > 0 ? `On your wishlist (×${wanted})` : undefined,
+                sub: (
+                  <>
+                    {l.condition} · {l.finish}
+                    {l.lang !== 'en' ? ` · ${l.lang}` : ''} · {l.quantity} for trade
+                    {wanted > 0 ? ` · you want ×${wanted}` : ''}
+                  </>
+                ),
+                price: formatPrice(printing),
+                onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
+                actions: (
+                  <button title="Add to what you get" onClick={() => onAdd({ ...l, quantity: 1 }, l.quantity)}>
+                    ＋
+                  </button>
+                ),
+              };
+            })}
+          />
+        </>
       )}
     </div>
   );

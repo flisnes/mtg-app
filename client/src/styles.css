@@ -1569,10 +1569,10 @@ button.primary {
 .presence-on { color: var(--ok); }
 .presence-off { color: var(--text-dim); }
 
-/* The board: give-column | tool rail | get-column, always side by side. */
+/* The board: the two columns side by side, both editable. */
 .trade-board {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.5rem;
   align-items: stretch;
 }
@@ -1585,6 +1585,12 @@ button.primary {
   gap: 0.6rem;
   min-width: 0;
 }
+.trade-col-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
 .trade-col h3 {
   margin: 0;
   font-size: 0.8rem;
@@ -1594,21 +1600,19 @@ button.primary {
   color: var(--text-dim);
   text-align: center;
 }
-.trade-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.6rem;
-  padding-top: 1.8rem;
+.trade-col-total {
+  font-weight: 700;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
 }
-.rail-btn {
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.trade-col-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+.trade-col-actions .trade-add {
+  flex: 1;
+  min-width: 0;
 }
 .trade-empty {
   margin: 0;
@@ -1637,29 +1641,20 @@ button.primary {
   white-space: nowrap;
 }
 
-/* Column totals + the difference between them, aligned under the board. */
-.trade-totals {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 0.5rem;
-  align-items: center;
-}
-.trade-total {
-  text-align: center;
-  font-weight: 700;
-  font-size: 1.05rem;
-  font-variant-numeric: tabular-nums;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0.55rem 0.25rem;
-}
-.trade-diff {
+/* The value difference, a button in the dock that opens the balance tool. */
+button.trade-diff {
   min-width: 76px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  align-items: center;
   text-align: center;
   line-height: 1.25;
+  padding: 0.3rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
 }
 .trade-diff strong {
   font-variant-numeric: tabular-nums;

@@ -377,7 +377,9 @@ function handle(
 
       switch (msg.type) {
         case 'offer_update':
-          store.offerUpdate(session, seat, msg.lines);
+          // Either participant may edit either side; default to the sender's
+          // own seat for clients that predate cross-side editing.
+          store.offerUpdate(session, msg.side === 'a' || msg.side === 'b' ? msg.side : seat, msg.lines);
           break;
         case 'accept':
           store.accept(session, seat);

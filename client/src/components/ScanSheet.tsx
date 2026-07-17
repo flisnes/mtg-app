@@ -35,7 +35,7 @@ export type ScanTarget =
   | { kind: 'collection' }
   | { kind: 'tradelist' }
   | { kind: 'deck'; deckId: string; deckName?: string; format?: DeckFormat }
-  | { kind: 'trade'; onAdd: (card: ScannedCard) => void };
+  | { kind: 'trade'; label?: string; onAdd: (card: ScannedCard) => void };
 
 interface Candidate {
   scryfallId: string;
@@ -77,7 +77,7 @@ function targetLabel(target: ScanTarget): string {
     case 'deck':
       return target.deckName ?? 'Deck';
     case 'trade':
-      return 'Trade offer';
+      return target.label ?? 'Trade offer';
   }
 }
 

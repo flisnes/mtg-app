@@ -95,10 +95,11 @@ export class SessionStore extends CodeStore<Session> {
     }
   }
 
-  offerUpdate(session: Session, seat: Seat, lines: TradeLine[]): void {
+  /** `side` is the offer being edited — either participant may edit either side. */
+  offerUpdate(session: Session, side: Seat, lines: TradeLine[]): void {
     this.assertState(session, ['paired', 'building', 'one_accepted', 'agreed']);
     if (lines.length > config.maxOfferLines) throw new TransitionError('offer_too_large');
-    session.offers[seat] = lines;
+    session.offers[side] = lines;
     // Any edit clears both sides' agreements (beta plan §7).
     session.accepted = { a: false, b: false };
     session.confirmed = { a: false, b: false };

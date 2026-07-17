@@ -46,7 +46,12 @@ export type ClientMessage =
   | { v: typeof PROTOCOL_VERSION; type: 'create_session' }
   | { v: typeof PROTOCOL_VERSION; type: 'join_session'; sessionCode: string }
   | { v: typeof PROTOCOL_VERSION; type: 'resume'; sessionCode: string; resumeToken: string }
-  | { v: typeof PROTOCOL_VERSION; type: 'offer_update'; sessionCode: string; lines: TradeLine[] }
+  // Either participant may edit either side's offer (in-person trades are
+  // built face to face, often from each other's binders). `side` says which
+  // offer the lines replace; omitted means the sender's own seat (older
+  // clients). Any edit still clears both acceptances, so nothing changes
+  // hands without both re-accepting.
+  | { v: typeof PROTOCOL_VERSION; type: 'offer_update'; sessionCode: string; side?: Seat; lines: TradeLine[] }
   | { v: typeof PROTOCOL_VERSION; type: 'accept'; sessionCode: string }
   | { v: typeof PROTOCOL_VERSION; type: 'unaccept'; sessionCode: string }
   | { v: typeof PROTOCOL_VERSION; type: 'confirm_complete'; sessionCode: string }

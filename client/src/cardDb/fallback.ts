@@ -130,7 +130,9 @@ export async function runScryfallFallback(onProgress: (fraction: number, label: 
   await setSetting('cardDbVersion', `${entry.updated_at} (scryfall-fallback)`);
   await setSetting('cardDbUpdatedAt', entry.updated_at);
   await setSetting('pricesUpdatedAt', entry.updated_at);
-  await setSetting('cardDbCounts', { oracle: oracle.length, printings: printings.length });
+  // Actual table counts, not array lengths: duplicate ids collapse on insert
+  // and a mismatch here would re-gate the app on every launch.
+  await setSetting('cardDbCounts', { oracle: await db.oracleCards.count(), printings: await db.printings.count() });
   // Reset chunk/price bookkeeping so the next successful VM sync replaces everything.
   await deleteSetting('cardDbChunks');
   await setSetting('pricesSha256', '(scryfall-fallback)');

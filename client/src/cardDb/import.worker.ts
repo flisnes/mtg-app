@@ -104,10 +104,12 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
       await importChunk(task, JSON.parse(text) as unknown[], importProgress);
 
       // Persist bookkeeping after every chunk so an interrupted update resumes.
+      // Counts come from the tables themselves, not the manifest: a duplicate
+      // id in a chunk collapses on insert, and a manifest-derived count would
+      // then mismatch forever, re-gating the app on every launch.
       chunkState[task.artifact][task.key] = { sha256: task.sha256, count: task.count };
-      const sum = (m: Record<string, { count: number }>) => Object.values(m).reduce((s, c) => s + c.count, 0);
       await setSetting('cardDbChunks', chunkState);
-      await setSetting('cardDbCounts', { oracle: sum(chunkState.oracle), printings: sum(chunkState.printings) });
+      await setSetting('cardDbCounts', { oracle: await db.oracleCards.count(), printings: await db.printings.count() });
 
       doneBytes += task.bytes;
     }

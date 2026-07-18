@@ -134,6 +134,11 @@ async function main(): Promise<void> {
   const printings: Printing[] = [];
   const prices: PriceMap = {};
   const reps = new Map<string, SlimResult>();
+  // Scryfall bulk dumps occasionally contain the same card twice; a duplicate
+  // scryfallId would make chunk counts disagree with what survives the
+  // client's keyed insert, wedging its freshness check.
+  const seenIds = new Set<string>();
+  let duplicates = 0;
 
   let seen = 0;
   let kept = 0;
@@ -142,8 +147,11 @@ async function main(): Promise<void> {
     pipeline.on('data', ({ value }: { value: RawCard }) => {
       seen++;
       const slim = slimCard(value);
-      if (slim) {
+      if (slim && seenIds.has(slim.printing.scryfallId)) {
+        duplicates++;
+      } else if (slim) {
         kept++;
+        seenIds.add(slim.printing.scryfallId);
         printings.push(slim.printing);
         if (slim.prices.eur != null || slim.prices.usd != null) {
           prices[slim.printing.scryfallId] = [slim.prices.eur, slim.prices.usd];
@@ -163,6 +171,7 @@ async function main(): Promise<void> {
   });
 
   console.log(`[pipeline] parsed ${seen} cards, kept ${kept} paper printings, ${reps.size} oracle cards`);
+  if (duplicates > 0) console.warn(`[pipeline] dropped ${duplicates} duplicate printings (same scryfallId seen twice in bulk data)`);
 
   const oracleCards: OracleCard[] = [...reps.values()].map(toOracleCard);
 

@@ -1,0 +1,106 @@
+name: Deploy server to VM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'shared/**'
+      - '.github/workflows/deploy-server.yml'
+  workflow_dispatch:
+
+# One deploy at a time. Never cancel in-flight — a killed run could leave the
+# VM mid-swap; let a newer push queue behind it instead.
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build server bundle
+        run: npm run build --workspace server
+
+      # The VM keeps a slim runtime package.json (just the bundle's externals:
+      # fastify, @fastify/websocket, ws). Derive it from server/package.json so
+      # a dependency bump in the repo propagates to the VM automatically.
+      - name: Generate runtime package.json
+        run: |
+          node -e '
+            const p = require("./server/package.json");
+            const deps = Object.fromEntries(
+              Object.entries(p.dependencies).filter(([k]) => k !== "@mtg/shared"));
+            console.log(JSON.stringify({
+              name: "mtg-server-runtime",
+              version: p.version,
+              private: true,
+              type: "module",
+              description: "MTG trade relay — deployed bundle. Run: node index.js",
+              scripts: { start: "node index.js" },
+              dependencies: deps,
+            }, null, 2));
+          ' > runtime-package.json
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+
+      - name: Upload bundle
+        run: |
+          scp server/dist/index.js ubuntu@79.76.41.163:mtg-server/index.js.new
+          scp runtime-package.json ubuntu@79.76.41.163:mtg-server/package.json
+
+      - name: Install deps, swap in new bundle, restart
+        id: swap
+        run: |
+          ssh ubuntu@79.76.41.163 '
+            set -e
+            cd ~/mtg-server
+            npm install --omit=dev --no-audit --no-fund
+            cp -f index.js index.js.prev
+            mv index.js.new index.js
+            sudo systemctl restart mtg-server
+          '
+
+      - name: Health check
+        id: health
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 5 https://79-76-41-163.sslip.io/healthz; then
+              echo
+              echo "server healthy"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "server did not become healthy after restart" >&2
+          exit 1
+
+      # If the swap or health check failed, put the previous bundle back so
+      # production isn't left down while someone investigates the red run.
+      - name: Roll back on failure
+        if: failure() && (steps.swap.outcome == 'failure' || steps.health.outcome == 'failure')
+        run: |
+          ssh ubuntu@79.76.41.163 '
+            set -e
+            cd ~/mtg-server
+            if [ -f index.js.prev ]; then
+              cp -f index.js.prev index.js
+              sudo systemctl restart mtg-server
+              echo "rolled back to previous bundle"
+            fi
+          '
+          curl -fsS --max-time 5 https://79-76-41-163.sslip.io/healthz && echo " (healthy after rollback)"

@@ -1572,8 +1572,45 @@ button.primary {
   font-size: 1.2rem;
   color: var(--accent);
 }
+.trade-status-code {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.qr-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.45rem;
+  border-radius: 10px;
+}
 .presence-on { color: var(--ok); }
 .presence-off { color: var(--text-dim); }
+
+/* ---- Trade invite (QR) ---- */
+.trade-invite {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+  text-align: center;
+}
+/* Always white behind the modules — a dark-theme QR scans poorly. */
+.qr-card {
+  background: #fff;
+  padding: 0.9rem;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  width: min(70vw, 260px);
+}
+.qr-card svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.trade-invite-code .trade-code {
+  font-size: 1.6rem;
+}
 
 /* The board: the two columns side by side, both editable. */
 .trade-board {

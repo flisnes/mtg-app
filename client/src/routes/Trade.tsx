@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Link } from 'react-router-dom';
-import type { CollectionEntry, OracleCard, Priced, Printing, Seat, TradeLine } from '@mtg/shared';
+import { Link, useSearchParams } from 'react-router-dom';
+import { CODE_LENGTH, type CollectionEntry, type OracleCard, type Priced, type Printing, type Seat, type TradeLine } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { collectionKey } from '../db/dataAccess.js';
@@ -17,6 +17,7 @@ import { CodeJoinForm } from '../components/CodeJoinForm.js';
 import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
+import { TradeQr } from '../components/TradeQr.js';
 import { useEscapeToClose } from '../components/useEscapeToClose.js';
 import { TRADE_ENABLED } from '../trade/config.js';
 import {
@@ -95,10 +96,30 @@ const BALANCE_EPSILON = 0.5;
 export function Trade() {
   const trade = useTradeSession();
   const [resumable, setResumable] = useState<ActiveTrade | null>(null);
+  // Creator chose "Start ahead": show the board while the seat is still open.
+  const [startedAhead, setStartedAhead] = useState(false);
 
   useEffect(() => {
     if (trade.status === 'idle') void getPersistedTrade().then((t) => setResumable(t ?? null));
+    if (trade.status !== 'active') setStartedAhead(false);
   }, [trade.status]);
+
+  // Deep link from a scanned invite QR (#/trade?join=CODE): join right away —
+  // scanning *is* the join gesture, no extra tap. The param is consumed once
+  // and stripped so a reload doesn't re-join a dead session.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const joinParam = searchParams.get('join');
+  const { status, join } = trade;
+  useEffect(() => {
+    if (!TRADE_ENABLED || !joinParam) return;
+    // The status gate is also the re-entry guard: once join() flips us to
+    // 'connecting' this can't fire again. No ref — StrictMode's double-invoke
+    // must re-join, because the hook's unmount cleanup closed the first socket.
+    if (status !== 'idle' && status !== 'error') return;
+    setSearchParams({}, { replace: true });
+    const code = joinParam.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LENGTH);
+    if (code.length === CODE_LENGTH) join(code);
+  }, [joinParam, status, join, setSearchParams]);
 
   if (!TRADE_ENABLED) {
     return (
@@ -143,6 +164,25 @@ export function Trade() {
     );
   }
 
+  // Freshly created, partner seat still empty: show the invite full-screen.
+  // Pairing flips state to 'paired', which lands on the board automatically.
+  if (trade.snapshot.state === 'open' && !startedAhead) {
+    return (
+      <Page title="Trade" subtitle="Have your trade partner scan the QR code, or type in the code.">
+        <TradeQr code={trade.snapshot.code} />
+        <div className="trade-actions">
+          <button className="primary" onClick={() => setStartedAhead(true)}>
+            Start ahead
+          </button>
+          <button onClick={trade.cancel}>Cancel</button>
+        </div>
+        <p className="fine-print">
+          Start ahead to add cards while you wait — they can join whenever they’re ready.
+        </p>
+      </Page>
+    );
+  }
+
   return <TradeBoard trade={trade} seat={trade.seat} />;
 }
 
@@ -160,6 +200,11 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const [offers, setOffers] = useState<Record<Seat, TradeLine[]>>(snap.offers);
   useEffect(() => setOffers(snap.offers), [snap.offers]);
   const [sheet, setSheet] = useState<SheetKind | null>(null);
+  const [showQr, setShowQr] = useState(false);
+  // The invite QR's job is done once the seat fills — drop the sheet.
+  useEffect(() => {
+    if (snap.state !== 'open') setShowQr(false);
+  }, [snap.state]);
   const [scanFor, setScanFor] = useState<Side | null>(null);
   const [info, setInfo] = useState<InfoTarget | null>(null);
   const ownership = useOwnership();
@@ -297,8 +342,13 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
       }
     >
       <div className="trade-status">
-        <div>
+        <div className="trade-status-code">
           Code <strong className="trade-code">{snap.code}</strong>
+          {snap.state === 'open' && (
+            <button className="qr-btn" onClick={() => setShowQr(true)} aria-label="Show invite QR code" title="Show invite QR code">
+              <Icon name="qr" size={18} />
+            </button>
+          )}
         </div>
         <div className={trade.peerPresent ? 'presence-on' : 'presence-off'}>
           {snap.present[peer] ? 'Other User connected' : 'Waiting for other user…'}
@@ -421,6 +471,12 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             }}
             onInfo={openInfo}
           />
+        </TradeSheet>
+      )}
+
+      {showQr && (
+        <TradeSheet title="Invite your trade partner" onClose={() => setShowQr(false)}>
+          <TradeQr code={snap.code} />
         </TradeSheet>
       )}
 

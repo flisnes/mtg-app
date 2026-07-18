@@ -607,6 +607,120 @@ button.danger-outline {
   color: var(--accent);
 }
 
+/* ---- Multi-select ---- */
+.select-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* Grid: circular checkmark overlaid on the tile corner. */
+.tile-select {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.tile-select.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.card-tile.selected .card-tile-img {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+/* List: leading checkbox in the row. */
+.select-box {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid var(--border);
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.select-box.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.result-row.selected {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+/* Bulk-action bar, floating just above the tab bar. */
+.bulk-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--tab-h) + var(--safe-bottom));
+  z-index: 30;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
+  padding: 0.6rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.bulk-bar-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.bulk-count {
+  font-weight: 600;
+}
+.bulk-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+}
+.bulk-selectall {
+  margin-left: auto;
+  font-size: 0.85rem;
+  padding: 0;
+}
+.bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.bulk-actions button {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  padding: 0.55rem 0.7rem;
+  white-space: nowrap;
+}
+
 /* Goblin mode: the pile view — cards scattered in a heap you dig through. */
 .pile-hint {
   margin: 0 0 0.5rem;

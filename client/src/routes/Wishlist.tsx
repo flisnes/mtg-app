@@ -8,10 +8,13 @@ import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
 import { addToWishlist, removeFromWishlist } from '../db/dataAccess.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
+import { BulkActionBar } from '../components/BulkActionBar.js';
+import { useMultiSelect } from '../components/useMultiSelect.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { SortControls, priceValue, sortCards, useCardSort } from '../components/CardSorting.js';
 import { useOpenSearch } from '../components/GlobalSearch.js';
 import { Icon } from '../components/icons.js';
+import { useToast } from '../components/Toast.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 
 interface WishRow {
@@ -27,6 +30,8 @@ export function Wishlist() {
   const openSearch = useOpenSearch();
   const [editing, setEditing] = useState<WishRow | null>(null);
   const moverFlags = useMoverFlags();
+  const toast = useToast();
+  const sel = useMultiSelect();
   const rows = useLiveQuery(async (): Promise<WishRow[]> => {
     const entries = await db.wishlist.toArray();
     const [oracleMap, printMap] = await Promise.all([
@@ -62,6 +67,17 @@ export function Wishlist() {
     );
   }, [rows, searchIndex, name, sort]);
 
+  const selectedRows = filtered.filter((r) => sel.selected.has(r.entry.id));
+  const allKeys = filtered.map((r) => r.entry.id);
+
+  async function bulkDelete() {
+    const n = selectedRows.length;
+    if (!window.confirm(`Remove ${n} ${n === 1 ? 'card' : 'cards'} from your wishlist?`)) return;
+    for (const r of selectedRows) await removeFromWishlist(r.entry.id);
+    toast(`Removed ${n} ${n === 1 ? 'card' : 'cards'} from wishlist`);
+    sel.exit();
+  }
+
   return (
     <Page title="Wishlist" subtitle="Cards you’re after, shown to trade partners during a session.">
       {rows === undefined ? (
@@ -87,12 +103,20 @@ export function Wishlist() {
           <div className="meta-row">
             <p className="search-meta">{filtered.length} card{filtered.length === 1 ? '' : 's'}</p>
             <div className="meta-actions">
+              {!sel.active && filtered.length > 0 && (
+                <button className="select-toggle" onClick={sel.enter} title="Select multiple cards">
+                  <Icon name="check" size={15} /> Select
+                </button>
+              )}
               <SortControls prefs={sort} onChange={setSort} />
               <ViewToggle mode={view} onChange={setView} />
             </div>
           </div>
           <CardItems
             view={view}
+            selectable={sel.active}
+            selectedKeys={sel.selected}
+            onToggleSelect={sel.toggle}
             items={filtered.map(
               (r): CardItem => ({
                 key: r.entry.id,
@@ -130,6 +154,16 @@ export function Wishlist() {
             )}
           />
         </>
+      )}
+
+      {sel.active && (
+        <BulkActionBar
+          count={selectedRows.length}
+          allSelected={allKeys.length > 0 && allKeys.every((k) => sel.selected.has(k))}
+          onToggleAll={() => sel.toggleAll(allKeys)}
+          onCancel={sel.exit}
+          actions={[{ label: 'Remove from wishlist', icon: 'trash', danger: true, onClick: bulkDelete }]}
+        />
       )}
 
       {editing?.oracle && (

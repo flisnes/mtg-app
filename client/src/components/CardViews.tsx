@@ -101,16 +101,49 @@ export interface CardItem {
   actions?: ReactNode;
 }
 
-export function CardItems({ items, view, className }: { items: CardItem[]; view: ViewMode; className?: string }) {
-  return view === 'grid' ? <CardGrid items={items} className={className} /> : <CardList items={items} className={className} />;
+/**
+ * Multi-select props, threaded identically through grid and list. When
+ * `selectable` is on, tapping a row/tile toggles its selection (by CardItem.key)
+ * instead of firing its onClick, per-item actions are hidden, and selected
+ * entries paint a checkmark. Callers drive this with useMultiSelect.
+ */
+export interface SelectProps {
+  selectable?: boolean;
+  selectedKeys?: Set<string>;
+  onToggleSelect?: (key: string) => void;
 }
 
-export function CardList({ items, className }: { items: CardItem[]; className?: string }) {
+export function CardItems({
+  items,
+  view,
+  className,
+  ...sel
+}: { items: CardItem[]; view: ViewMode; className?: string } & SelectProps) {
+  return view === 'grid' ? (
+    <CardGrid items={items} className={className} {...sel} />
+  ) : (
+    <CardList items={items} className={className} {...sel} />
+  );
+}
+
+export function CardList({
+  items,
+  className,
+  selectable = false,
+  selectedKeys,
+  onToggleSelect,
+}: { items: CardItem[]; className?: string } & SelectProps) {
   return (
     <ul className={`result-list${className ? ` ${className}` : ''}`}>
       {items.map((it) => {
+        const selected = selectable && !!selectedKeys?.has(it.key);
         const body = (
           <>
+            {selectable && (
+              <span className={`select-box${selected ? ' checked' : ''}`} aria-hidden>
+                {selected && <Icon name="check" size={14} />}
+              </span>
+            )}
             {it.thumb ? (
               it.thumb
             ) : it.image ? (
@@ -138,15 +171,27 @@ export function CardList({ items, className }: { items: CardItem[]; className?: 
           </>
         );
         return (
-          <li key={it.key} className={`result-row${it.dim ? ' result-row-dim' : ''}`}>
-            {it.onClick ? (
+          <li
+            key={it.key}
+            className={`result-row${it.dim ? ' result-row-dim' : ''}${selected ? ' selected' : ''}`}
+          >
+            {selectable ? (
+              <button
+                className="result-open"
+                onClick={() => onToggleSelect?.(it.key)}
+                aria-label={it.name}
+                aria-pressed={selected}
+              >
+                {body}
+              </button>
+            ) : it.onClick ? (
               <button className="result-open" onClick={it.onClick} aria-label={it.name}>
                 {body}
               </button>
             ) : (
               <div className="result-open">{body}</div>
             )}
-            {it.actions && <div className="quick-actions">{it.actions}</div>}
+            {!selectable && it.actions && <div className="quick-actions">{it.actions}</div>}
           </li>
         );
       })}
@@ -187,29 +232,49 @@ function TrendMark({ dir, tile = false }: { dir: 'up' | 'down'; tile?: boolean }
   );
 }
 
-export function CardGrid({ items, className }: { items: CardItem[]; className?: string }) {
+export function CardGrid({
+  items,
+  className,
+  selectable = false,
+  selectedKeys,
+  onToggleSelect,
+}: { items: CardItem[]; className?: string } & SelectProps) {
   return (
     <ul className={`card-grid${className ? ` ${className}` : ''}`}>
-      {items.map((it) => (
-        <li key={it.key} className={`card-tile${it.dim ? ' card-tile-dim' : ''}`}>
-          <button className="card-tile-img" onClick={it.onClick} disabled={!it.onClick} aria-label={it.name}>
-            {it.image ? (
-              <img src={it.image} alt={it.name} loading="lazy" />
-            ) : (
-              <span className="card-tile-ph">{it.name}</span>
-            )}
-            {it.foil && it.image && <span className="foil-sheen" aria-hidden />}
-            {it.badge && (
-              <span className={`tile-badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
-                {it.badge}
-              </span>
-            )}
-            {it.count != null && it.count !== 1 && <span className="tile-count">×{it.count}</span>}
-            {it.trend && <TrendMark dir={it.trend} tile />}
-          </button>
-          {it.actions && <div className="tile-footer">{it.actions}</div>}
-        </li>
-      ))}
+      {items.map((it) => {
+        const selected = selectable && !!selectedKeys?.has(it.key);
+        return (
+          <li key={it.key} className={`card-tile${it.dim ? ' card-tile-dim' : ''}${selected ? ' selected' : ''}`}>
+            <button
+              className="card-tile-img"
+              onClick={selectable ? () => onToggleSelect?.(it.key) : it.onClick}
+              disabled={!selectable && !it.onClick}
+              aria-label={it.name}
+              aria-pressed={selectable ? selected : undefined}
+            >
+              {it.image ? (
+                <img src={it.image} alt={it.name} loading="lazy" />
+              ) : (
+                <span className="card-tile-ph">{it.name}</span>
+              )}
+              {it.foil && it.image && <span className="foil-sheen" aria-hidden />}
+              {it.badge && (
+                <span className={`tile-badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
+                  {it.badge}
+                </span>
+              )}
+              {it.count != null && it.count !== 1 && <span className="tile-count">×{it.count}</span>}
+              {it.trend && <TrendMark dir={it.trend} tile />}
+              {selectable && (
+                <span className={`tile-select${selected ? ' checked' : ''}`} aria-hidden>
+                  {selected && <Icon name="check" size={16} />}
+                </span>
+              )}
+            </button>
+            {!selectable && it.actions && <div className="tile-footer">{it.actions}</div>}
+          </li>
+        );
+      })}
     </ul>
   );
 }

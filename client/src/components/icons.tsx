@@ -28,6 +28,7 @@ export type IconName =
   | 'trash'
   | 'refresh'
   | 'close'
+  | 'check'
   | 'account'
   | 'community'
   | 'bell'
@@ -175,6 +176,8 @@ const PATHS: Record<IconName, ReactElement> = {
       <line x1="6" y1="6" x2="18" y2="18" />
     </>
   ),
+  // Checkmark — selection / confirm.
+  check: <polyline points="20 6 9 17 4 12" />,
   // Horizontal ellipsis — the "More" overflow.
   more: (
     <>

@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import type { Color, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
+import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { SetSymbol } from './SetSymbol.js';
@@ -59,12 +60,23 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [rows]);
 
+  // Pre-normalise each owned card's search fields once per data change so the
+  // Scryfall-syntax filter (t:/cmc:/o:/…) runs cheaply on every keystroke.
+  const searchIndex = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof toSearchableEntry>>();
+    rows?.forEach((r) => r.oracle && m.set(r.entry.id, toSearchableEntry(r.oracle)));
+    return m;
+  }, [rows]);
+
   const filtered = useMemo(() => {
     if (!rows) return [];
-    const q = name.trim().toLowerCase();
+    const query = compileCardQuery(name);
     const matching = rows.filter((r) => {
       if ((onlyTrade || tradeOnly) && r.entry.quantityForTrade <= 0) return false;
-      if (q && !(r.oracle?.name.toLowerCase().includes(q) ?? false)) return false;
+      if (!query.isEmpty) {
+        const se = searchIndex.get(r.entry.id);
+        if (!se || !query.matches(se)) return false;
+      }
       if (set && r.printing?.set !== set) return false;
       if (color && !(r.oracle?.colorIdentity.includes(color as Color) ?? false)) return false;
       if (rarity && r.oracle?.rarity !== rarity) return false;
@@ -81,7 +93,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       }),
       sort,
     );
-  }, [rows, name, set, color, rarity, tradeOnly, onlyTrade, sort, changes]);
+  }, [rows, searchIndex, name, set, color, rarity, tradeOnly, onlyTrade, sort, changes]);
 
   const totalQty = filtered.reduce((s, r) => s + r.entry.quantity, 0);
 
@@ -107,10 +119,10 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
             <input
               className="search-input grow"
               type="search"
-              placeholder="Filter by name…"
+              placeholder="Filter… (bolt, t:creature, cmc>=3)"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              aria-label="Filter by name"
+              aria-label="Filter cards"
             />
           </div>
           <div className="filter-row">

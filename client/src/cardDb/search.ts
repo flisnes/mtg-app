@@ -1,7 +1,7 @@
 import type { Color, DeckFormat, Format, OracleCard, Priced, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { withPrices } from './prices.js';
-import { matchesQuery, normalize, parseSearchQuery, type SearchableEntry } from './querySyntax.js';
+import { matchesQuery, normalize, parseSearchQuery, toSearchableEntry, type SearchableEntry } from './querySyntax.js';
 
 // Card search (beta plan §2, §6). The oracle set (~37k) is small enough to hold
 // in memory, which gives fast substring matching (a name-prefix index alone
@@ -37,24 +37,7 @@ export function invalidateSearchIndex(): void {
 async function getIndex(): Promise<Indexed[]> {
   if (cache) return cache;
   const cards = await db.oracleCards.toArray();
-  cache = cards.map((card) => {
-    const normOracle = card.oracleText ? normalize(card.oracleText) : '';
-    // Self-references in oracle text become ~ so o:"whenever ~ enters" works.
-    let normOracleTilde = normOracle;
-    if (normOracle) {
-      for (const face of card.name.split(' // ')) {
-        const normFace = normalize(face);
-        if (normFace) normOracleTilde = normOracleTilde.split(normFace).join('~');
-      }
-    }
-    return {
-      card,
-      normName: normalize(card.name),
-      lowerType: card.typeLine.toLowerCase(),
-      normOracle,
-      normOracleTilde,
-    };
-  });
+  cache = cards.map(toSearchableEntry);
   return cache;
 }
 

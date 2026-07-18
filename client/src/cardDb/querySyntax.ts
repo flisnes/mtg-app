@@ -50,6 +50,30 @@ export function normalize(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(COMBINING_MARKS, '');
 }
 
+/**
+ * Pre-normalise a card's match fields into a `SearchableEntry`. Shared by the
+ * full-DB search index (search.ts) and the owned-list filters (collection /
+ * wishlist), so every search bar matches identically.
+ */
+export function toSearchableEntry(card: OracleCard): SearchableEntry {
+  const normOracle = card.oracleText ? normalize(card.oracleText) : '';
+  // Self-references in oracle text become ~ so o:"whenever ~ enters" works.
+  let normOracleTilde = normOracle;
+  if (normOracle) {
+    for (const face of card.name.split(' // ')) {
+      const normFace = normalize(face);
+      if (normFace) normOracleTilde = normOracleTilde.split(normFace).join('~');
+    }
+  }
+  return {
+    card,
+    normName: normalize(card.name),
+    lowerType: card.typeLine.toLowerCase(),
+    normOracle,
+    normOracleTilde,
+  };
+}
+
 const STRING_FIELDS: Record<string, 'name' | 'oracle' | 'type'> = {
   n: 'name',
   name: 'name',
@@ -177,6 +201,18 @@ function parseColorValue(value: string): { set: Color[] | null; special: 'multic
 }
 
 // ---- Matching ----
+
+/**
+ * Compile a query string into a matcher for the owned-list filters (collection /
+ * wishlist). Callers pre-index their rows with `toSearchableEntry` once per data
+ * change, then run `matches` per keystroke (parsing is cheap; normalising isn't).
+ * `isEmpty` lets a blank query short-circuit and keep rows whose card is missing
+ * from the DB — which otherwise can't produce a `SearchableEntry` to match.
+ */
+export function compileCardQuery(query: string): { isEmpty: boolean; matches: (entry: SearchableEntry) => boolean } {
+  const parsed = parseSearchQuery(query.trim());
+  return { isEmpty: parsed.terms.length === 0, matches: (entry) => matchesQuery(entry, parsed) };
+}
 
 export function matchesQuery(entry: SearchableEntry, q: ParsedQuery): boolean {
   for (const t of q.terms) {

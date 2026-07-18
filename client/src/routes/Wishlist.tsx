@@ -4,6 +4,7 @@ import type { OracleCard, Priced, Printing, WishlistEntry } from '@mtg/shared';
 import { Page } from './Page.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
 import { addToWishlist, removeFromWishlist } from '../db/dataAccess.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
@@ -39,15 +40,27 @@ export function Wishlist() {
     }));
   }, []);
 
+  // Pre-normalise each card's search fields once per data change; the
+  // Scryfall-syntax filter (t:/cmc:/o:/…) then runs cheaply per keystroke.
+  const searchIndex = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof toSearchableEntry>>();
+    rows?.forEach((r) => r.oracle && m.set(r.entry.id, toSearchableEntry(r.oracle)));
+    return m;
+  }, [rows]);
+
   const filtered = useMemo(() => {
     if (!rows) return [];
-    const q = name.trim().toLowerCase();
+    const query = compileCardQuery(name);
     return sortCards(
-      rows.filter((r) => !q || (r.oracle?.name.toLowerCase().includes(q) ?? false)),
+      rows.filter((r) => {
+        if (query.isEmpty) return true;
+        const se = searchIndex.get(r.entry.id);
+        return !!se && query.matches(se);
+      }),
       (r) => ({ name: r.oracle?.name, cmc: r.oracle?.cmc, price: priceValue(r.printing, r.oracle) }),
       sort,
     );
-  }, [rows, name, sort]);
+  }, [rows, searchIndex, name, sort]);
 
   return (
     <Page title="Wishlist" subtitle="Cards you’re after, shown to trade partners during a session.">
@@ -66,10 +79,10 @@ export function Wishlist() {
           <input
             className="search-input"
             type="search"
-            placeholder="Filter by name…"
+            placeholder="Filter… (bolt, t:creature, cmc>=3)"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            aria-label="Filter by name"
+            aria-label="Filter cards"
           />
           <div className="meta-row">
             <p className="search-meta">{filtered.length} card{filtered.length === 1 ? '' : 's'}</p>

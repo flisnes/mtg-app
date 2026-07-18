@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
-import { initPwa } from './pwa.js';
+import { forceUpdate, initPwa } from './pwa.js';
 import { isUpdateAvailable } from './appUpdate.js';
 import { useCardDbUpdate } from './cardDb/useCardDbUpdate.js';
 import { getSetting, setSetting } from './db/settings.js';
@@ -74,6 +74,7 @@ export function App() {
 function AppShell() {
   const [updateReload, setUpdateReload] = useState<(() => void) | null>(null);
   const [beaconUpdate, setBeaconUpdate] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [offlineReady, setOfflineReady] = useState(false);
   const toast = useToast();
   const {
@@ -115,7 +116,13 @@ function AppShell() {
   }, [epoch, toast]);
 
   const showUpdate = !!updateReload || beaconUpdate;
-  const applyUpdate = () => (updateReload ? updateReload() : window.location.reload());
+  // Beacon-only state means the new SW may not be installed yet — a plain
+  // reload can't apply anything, so forceUpdate walks the full SW handshake.
+  const applyUpdate = () => {
+    setUpdating(true);
+    if (updateReload) updateReload();
+    else void forceUpdate();
+  };
   const mb = (n: number) => Math.max(1, Math.round(n / 1e6));
 
   return (
@@ -124,7 +131,9 @@ function AppShell() {
       {showUpdate && (
         <div className="banner banner-update" role="status">
           <span>A new version is available.</span>
-          <button onClick={applyUpdate}>Update now</button>
+          <button onClick={applyUpdate} disabled={updating}>
+            {updating ? 'Updating…' : 'Update now'}
+          </button>
         </div>
       )}
       {cardDataPrompt && !showUpdate && (

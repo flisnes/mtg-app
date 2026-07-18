@@ -288,6 +288,8 @@ export interface AddToWishlistInput {
   /** null = "any printing". */
   scryfallId?: string | null;
   quantity?: number;
+  /** How the add was made (edit-history provenance). Defaults to 'manual'. */
+  source?: EventSource;
 }
 
 /** Add to the wishlist, merging by (oracleId, scryfallId). */
@@ -307,9 +309,61 @@ export async function addToWishlist(input: AddToWishlistInput): Promise<string> 
     }
     await db.wishlist.put(entry);
     await stagePut('wishlist', entry);
-    await emit({ ts: now, kind: 'wish.add', oracleId: input.oracleId, scryfallId, qty, source: 'manual' });
+    await emit({ ts: now, kind: 'wish.add', oracleId: input.oracleId, scryfallId, qty, source: input.source ?? 'manual' });
     return entry.id;
   });
+}
+
+export interface WishlistBulkLine {
+  oracleId: string;
+  /** null = "any printing". */
+  scryfallId: string | null;
+  quantity: number;
+}
+
+/**
+ * Bulk-add to the wishlist (import), merging by (oracleId, scryfallId). Mirrors
+ * applyImport: every line shares a batchId so the edit-history view collapses
+ * the whole import into a single entry.
+ */
+export async function addToWishlistBulk(
+  lines: WishlistBulkLine[],
+  meta: { label?: string } = {},
+): Promise<{ entries: number; cards: number }> {
+  let cards = 0;
+  const batchId = newId();
+  const batchExtra = { source: 'import' as const, batchId, ...(meta.label ? { batchLabel: meta.label } : {}) };
+  await db.transaction('rw', WISHLIST_TABLES, async () => {
+    const now = Date.now();
+    const existing = await db.wishlist.toArray();
+    const keyOf = (l: { oracleId: string; scryfallId: string | null }) => `${l.oracleId}|${l.scryfallId ?? ''}`;
+    const map = new Map(existing.map((e) => [keyOf(e), e]));
+    const writes: WishlistEntry[] = [];
+    for (const l of lines) {
+      cards += l.quantity;
+      const ex = map.get(keyOf(l));
+      if (ex) {
+        ex.quantity += l.quantity;
+        ex.updatedAt = now;
+        if (!writes.includes(ex)) writes.push(ex);
+      } else {
+        const entry: WishlistEntry = {
+          id: newId(),
+          oracleId: l.oracleId,
+          scryfallId: l.scryfallId,
+          quantity: l.quantity,
+          createdAt: now,
+          updatedAt: now,
+        };
+        map.set(keyOf(l), entry);
+        writes.push(entry);
+      }
+      await emit({ ts: now, kind: 'wish.add', oracleId: l.oracleId, scryfallId: l.scryfallId, qty: l.quantity, ...batchExtra });
+    }
+    await db.wishlist.bulkPut(writes);
+    for (const w of writes) await stagePut('wishlist', w);
+  });
+  return { entries: lines.length, cards };
 }
 
 /**

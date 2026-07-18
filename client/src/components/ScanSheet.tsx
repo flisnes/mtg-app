@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
-import { addDeckCard, addToCollection } from '../db/dataAccess.js';
+import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { parseHashBlob, type ScanIndex } from '../scan/blob.js';
 import { CameraScan, type LiveScanState } from '../scan/camera.js';
@@ -14,10 +14,11 @@ import { useToast } from './Toast.js';
 // consensus), OCR pins down edition + language (S4), one tap commits it — then
 // the camera resumes for the next card (binder-entry speed is the goal).
 //
-// The same sheet feeds four destinations (a `ScanTarget`): the collection, the
-// tradelist, a deck, or a live trade offer. Everything up to the commit is
-// identical; only the final write differs, so it dispatches in `add()` through
-// the normal data-access paths (or a callback for the in-memory trade offer).
+// The same sheet feeds several destinations (a `ScanTarget`): the collection,
+// the tradelist, the wishlist, a deck, or a live trade offer. Everything up to
+// the commit is identical; only the final write differs, so it dispatches in
+// `add()` through the normal data-access paths (or a callback for the in-memory
+// trade offer).
 
 /** A locked-in scan, ready to be written wherever the target sends it. */
 export interface ScannedCard {
@@ -34,6 +35,7 @@ export interface ScannedCard {
 export type ScanTarget =
   | { kind: 'collection' }
   | { kind: 'tradelist' }
+  | { kind: 'wishlist' }
   | { kind: 'deck'; deckId: string; deckName?: string; format?: DeckFormat }
   | { kind: 'trade'; label?: string; onAdd: (card: ScannedCard) => void };
 
@@ -52,9 +54,9 @@ type Stage =
   | { kind: 'scanning' }
   | { kind: 'confirm'; candidates: Candidate[]; selected: string; ocr: OcrState; lang: string };
 
-/** Whether the card's finish matters for this target (deck slots ignore it). */
+/** Whether the card's finish matters for this target (deck slots and wishlist ignore it). */
 function finishMatters(target: ScanTarget): boolean {
-  return target.kind !== 'deck';
+  return target.kind !== 'deck' && target.kind !== 'wishlist';
 }
 
 const BOARD_LABELS: Record<DeckBoard, string> = {
@@ -74,6 +76,8 @@ function targetLabel(target: ScanTarget): string {
       return 'Collection';
     case 'tradelist':
       return 'Tradelist';
+    case 'wishlist':
+      return 'Wishlist';
     case 'deck':
       return target.deckName ?? 'Deck';
     case 'trade':
@@ -87,6 +91,8 @@ function addLabel(target: ScanTarget, board: DeckBoard): string {
       return 'Add to collection';
     case 'tradelist':
       return 'Add to tradelist';
+    case 'wishlist':
+      return 'Add to wishlist';
     case 'deck':
       return `Add to ${BOARD_LABELS[board]}`;
     case 'trade':
@@ -208,6 +214,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       case 'tradelist':
         // Same collection entry, but at least one copy starts marked for trade.
         await addToCollection({ ...scanned, condition: 'NM', quantity: 1, quantityForTrade: 1, source: 'scan' });
+        break;
+      case 'wishlist':
+        // A scanned card is a specific printing, so the wish is for that edition.
+        await addToWishlist({ oracleId: scanned.oracleId, scryfallId: scanned.scryfallId, quantity: 1, source: 'scan' });
         break;
       case 'deck':
         // Deck slots key on oracle + board; keep the scanned printing as the

@@ -35,8 +35,17 @@ const lineKey = collectionKey;
 interface Owned {
   qty: number;
   forTrade: number;
-  /** A representative entry (prefers one marked for trade) for sensible add defaults. */
+  /** The best entry for add defaults (prefers for-trade copies, then the printing with most copies). */
   entry: CollectionEntry;
+  /** Every entry for this oracle — the edition dropdown highlights these printings. */
+  entries: CollectionEntry[];
+}
+
+/** Add-default preference: for-trade copies beat idle ones, then more copies win. */
+function betterAddDefault(a: CollectionEntry, b: CollectionEntry): boolean {
+  const at = a.quantityForTrade > 0 ? 1 : 0;
+  const bt = b.quantityForTrade > 0 ? 1 : 0;
+  return at !== bt ? at > bt : a.quantity > b.quantity;
 }
 
 function useOwnership(): Map<string, Owned> | undefined {
@@ -48,13 +57,23 @@ function useOwnership(): Map<string, Owned> | undefined {
       if (cur) {
         cur.qty += e.quantity;
         cur.forTrade += e.quantityForTrade;
-        if (e.quantityForTrade > 0 && cur.entry.quantityForTrade === 0) cur.entry = e;
+        cur.entries.push(e);
+        if (betterAddDefault(e, cur.entry)) cur.entry = e;
       } else {
-        map.set(e.oracleId, { qty: e.quantity, forTrade: e.quantityForTrade, entry: e });
+        map.set(e.oracleId, { qty: e.quantity, forTrade: e.quantityForTrade, entry: e, entries: [e] });
       }
     }
     return map;
   }, []);
+}
+
+/** Their highest-quantity tradelist line for an oracle — the best printing guess for "you get". */
+function bestPeerLine(lines: TradeLine[] | null, oracleId: string): TradeLine | undefined {
+  let best: TradeLine | undefined;
+  for (const l of lines ?? []) {
+    if (l.oracleId === oracleId && (!best || l.quantity > best.quantity)) best = l;
+  }
+  return best;
 }
 
 /** ⇄ in tradelist / ✓ owned / ❓ not in collection. */
@@ -64,9 +83,15 @@ function ownIndicator(own: Owned | undefined): { icon: string; label: string; cl
   return { icon: '✓', label: `In your collection (×${own.qty}), but not marked for trade`, cls: 'own-yes' };
 }
 
-/** What the card-info sheet should show when a trade line is tapped. */
-type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string };
-type OpenInfo = (oracle: Priced<OracleCard>, scryfallId?: string) => void;
+/**
+ * What the card-info sheet should show when a card is tapped. `side` says whose
+ * printings to highlight in the edition dropdown ('give' = my collection,
+ * 'get' = their tradelist); `line` is set when tapping an editable offer line,
+ * which makes the edition dropdown re-print that line in place.
+ */
+type InfoCtx = { side: Side; line?: TradeLine };
+type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string; ctx?: InfoCtx };
+type OpenInfo = (oracle: Priced<OracleCard>, scryfallId?: string, ctx?: InfoCtx) => void;
 /** How many copies a wishlist wants of a given printing (0 = no match). */
 type WantFn = (oracleId: string, scryfallId: string) => number;
 
@@ -264,7 +289,53 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const { printMap, oracleMap } = useCardMaps([...myOffer, ...theirOffer]);
   const totalOf = (lines: TradeLine[]) =>
     lines.reduce((sum, l) => sum + (printMap?.get(l.scryfallId)?.priceEur ?? 0) * l.quantity, 0);
-  const openInfo: OpenInfo = (oracle, scryfallId) => setInfo({ oracle, scryfallId });
+  const openInfo: OpenInfo = (oracle, scryfallId, ctx) => setInfo({ oracle, scryfallId, ctx });
+
+  // Editions "the relevant person" has, for the info sheet's edition dropdown:
+  // my collection when looking at a "you give" card, their tradelist for "you get".
+  function infoHighlights(target: InfoTarget): { label: string; notes: Map<string, string> } | undefined {
+    if (!target.ctx) return undefined;
+    if (target.ctx.side === 'give') {
+      const entries = ownership?.get(target.oracle.oracleId)?.entries ?? [];
+      if (entries.length === 0) return undefined;
+      const per = new Map<string, { qty: number; forTrade: number }>();
+      for (const e of entries) {
+        const cur = per.get(e.scryfallId) ?? { qty: 0, forTrade: 0 };
+        cur.qty += e.quantity;
+        cur.forTrade += e.quantityForTrade;
+        per.set(e.scryfallId, cur);
+      }
+      const notes = new Map(
+        [...per].map(([id, v]) => [id, v.forTrade > 0 ? `×${v.qty}, ${v.forTrade} for trade` : `×${v.qty}`]),
+      );
+      return { label: 'In your collection', notes };
+    }
+    const lines = (trade.peerTradelist ?? []).filter((l) => l.oracleId === target.oracle.oracleId);
+    if (lines.length === 0) return undefined;
+    const per = new Map<string, number>();
+    for (const l of lines) per.set(l.scryfallId, (per.get(l.scryfallId) ?? 0) + l.quantity);
+    return { label: 'On their tradelist', notes: new Map([...per].map(([id, q]) => [id, `×${q}`])) };
+  }
+
+  // Re-print an offer line as a different edition. The line key includes the
+  // scryfallId, so this rebuilds the line; if the target edition is already in
+  // the offer the two lines merge. Returns the resulting line so the info sheet
+  // can keep editing the same (now re-keyed) card.
+  function changeEdition(side: Side, line: TradeLine, newScryfallId: string): TradeLine {
+    const updated: TradeLine = { ...line, scryfallId: newScryfallId };
+    const oldKey = lineKey(line);
+    const newKey = lineKey(updated);
+    if (oldKey === newKey) return line;
+    const cur = offers[seatOf(side)];
+    const existing = cur.find((l) => lineKey(l) === newKey);
+    if (existing) {
+      const merged = { ...existing, quantity: existing.quantity + line.quantity };
+      commit(side, cur.filter((l) => lineKey(l) !== oldKey).map((l) => (lineKey(l) === newKey ? merged : l)));
+      return merged;
+    }
+    commit(side, cur.map((l) => (lineKey(l) === oldKey ? updated : l)));
+    return updated;
+  }
 
   // Wishlist⇄tradelist matchers, both directions (for ⭐ badges and balance).
   const lists = useLiveQuery(async () => {
@@ -439,7 +510,9 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             ownership={ownership}
             theirWanted={theirWanted}
             onAdd={(line, max) => addLine('give', line, max)}
-            onInfo={openInfo}
+            onInfo={(oracle, scryfallId) =>
+              openInfo(oracle, scryfallId ?? ownership?.get(oracle.oracleId)?.entry.scryfallId, { side: 'give' })
+            }
           />
         </TradePickerOverlay>
       )}
@@ -450,7 +523,9 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             loading={trade.peerTradelistLoading}
             myWanted={myWanted}
             onAdd={(line, max) => addLine('get', line, max)}
-            onInfo={openInfo}
+            onInfo={(oracle, scryfallId) =>
+              openInfo(oracle, scryfallId ?? bestPeerLine(trade.peerTradelist, oracle.oracleId)?.scryfallId, { side: 'get' })
+            }
             onRefresh={requestTradelist}
           />
         </TradePickerOverlay>
@@ -481,7 +556,21 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
       )}
 
       {info && (
-        <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
+        <CardSheet
+          oracleCard={info.oracle}
+          initialScryfallId={info.scryfallId}
+          readOnly
+          highlightPrintings={infoHighlights(info)}
+          onEditionChange={
+            info.ctx?.line
+              ? (id) => {
+                  const line = changeEdition(info.ctx!.side, info.ctx!.line!, id);
+                  setInfo((cur) => (cur && cur.ctx?.line ? { ...cur, scryfallId: id, ctx: { ...cur.ctx, line } } : cur));
+                }
+              : undefined
+          }
+          onClose={() => setInfo(null)}
+        />
       )}
 
       {scanFor && editable && (
@@ -564,7 +653,7 @@ function OfferPanel({
               badge: ind?.icon,
               badgeClass: ind?.cls,
               badgeTitle: ind?.label,
-              onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
+              onClick: oracle ? () => onInfo(oracle, l.scryfallId, { side, line: editable ? l : undefined }) : undefined,
               actions: (
                 <>
                   {editable && (
@@ -831,7 +920,7 @@ function BalancePanel({
               </>
             ),
             price: `€${c.price.toFixed(2)}`,
-            onClick: oracle ? () => onInfo(oracle, c.line.scryfallId) : undefined,
+            onClick: oracle ? () => onInfo(oracle, c.line.scryfallId, { side: lightSide }) : undefined,
             actions: (
               <button
                 title={iGiveMore ? 'Add to what you get' : 'Add to what you give'}
@@ -991,6 +1080,18 @@ function AddTheirCardsPanel({
   // Their lines reference cards by id; the local card DB has the display data.
   const { printMap, oracleMap } = useCardMaps(lines ?? []);
 
+  // Their tradelist knows the exact printing they registered — prefer it over
+  // the card-DB default (the newest edition, usually the wrong guess).
+  const addFromSearch = (card: OracleCard) => {
+    const listed = bestPeerLine(lines, card.oracleId);
+    if (listed) onAdd({ ...listed, quantity: 1 }, listed.quantity);
+    else
+      onAdd(
+        { oracleId: card.oracleId, scryfallId: card.defaultScryfallId, name: card.name, quantity: 1, condition: 'NM', finish: 'nonfoil', lang: 'en' },
+        999,
+      );
+  };
+
   const sorted = [...(lines ?? [])]
     .map((l) => ({ l, wanted: myWanted(l.oracleId, l.scryfallId) }))
     .sort((a, b) => b.wanted - a.wanted);
@@ -1050,15 +1151,7 @@ function AddTheirCardsPanel({
       setFilters={setFilters}
       emptyState={emptyState}
       actionsFor={(card) => (
-        <button
-          title="Add to what you get"
-          onClick={() =>
-            onAdd(
-              { oracleId: card.oracleId, scryfallId: card.defaultScryfallId, name: card.name, quantity: 1, condition: 'NM', finish: 'nonfoil', lang: 'en' },
-              999,
-            )
-          }
-        >
+        <button title="Add to what you get" onClick={() => addFromSearch(card)}>
           ＋
         </button>
       )}

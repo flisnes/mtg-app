@@ -57,6 +57,16 @@ const ANY_PRINTING = '';
 const FINISH_LABELS: Record<Finish, string> = { nonfoil: 'Nonfoil', foil: 'Foil', etched: 'Etched' };
 const LANGS = ['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht'];
 
+/** One Edition dropdown entry, optionally annotated (e.g. "×2, 1 for trade"). */
+function printingOption(p: Priced<Printing>, note?: string) {
+  return (
+    <option key={p.scryfallId} value={p.scryfallId}>
+      {p.setName} · #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
+      {note ? ` · ${note}` : ''}
+    </option>
+  );
+}
+
 export function CardSheet({
   oracleCard,
   entry,
@@ -66,6 +76,8 @@ export function CardSheet({
   initialTab,
   addTarget,
   readOnly = false,
+  onEditionChange,
+  highlightPrintings,
   onClose,
 }: {
   oracleCard: Priced<OracleCard>;
@@ -82,6 +94,18 @@ export function CardSheet({
   addTarget?: AddTarget;
   /** Info-only: show the card and its printings, no collection editing. */
   readOnly?: boolean;
+  /**
+   * When set, the Edition dropdown stays editable even in info mode and every
+   * change is reported here — the trade board uses this to re-print an offer
+   * line in place without leaving the sheet.
+   */
+  onEditionChange?: (scryfallId: string) => void;
+  /**
+   * Printings to group first in the Edition dropdown, each with a short note
+   * (e.g. "×2, 1 for trade") — the trade board uses this to surface the
+   * editions the relevant person actually has.
+   */
+  highlightPrintings?: { label: string; notes: Map<string, string> };
   onClose: () => void;
 }) {
   const mode = wishEntry ? 'wish' : deckCard ? 'deck' : entry ? 'edit' : readOnly ? 'info' : 'add';
@@ -151,6 +175,9 @@ export function CardSheet({
     () => printings.find((p) => p.scryfallId === scryfallId),
     [printings, scryfallId],
   );
+  // Editions the caller flagged (owned / on a tradelist) group first in the dropdown.
+  const highlighted = highlightPrintings ? printings.filter((p) => highlightPrintings.notes.has(p.scryfallId)) : [];
+  const otherPrintings = highlighted.length > 0 ? printings.filter((p) => !highlightPrintings!.notes.has(p.scryfallId)) : printings;
   const availableFinishes = printing?.finishes ?? (['nonfoil'] as Finish[]);
 
   // Full-size image + price for the currently-selected printing (falls back to the oracle default).
@@ -291,13 +318,25 @@ export function CardSheet({
           <span>Edition</span>
           <div className={`edition-select${printing ? ' with-symbol' : ''}`}>
             {printing && <SetSymbol set={printing.set} className="edition-symbol" title={printing.setName} />}
-            <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)} disabled={!formEditable}>
+            <select
+              value={scryfallId}
+              onChange={(e) => {
+                setScryfallId(e.target.value);
+                onEditionChange?.(e.target.value);
+              }}
+              disabled={!formEditable && !onEditionChange}
+            >
               {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
-              {printings.map((p) => (
-                <option key={p.scryfallId} value={p.scryfallId}>
-                  {p.setName} · #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
-                </option>
-              ))}
+              {highlighted.length > 0 ? (
+                <>
+                  <optgroup label={highlightPrintings!.label}>
+                    {highlighted.map((p) => printingOption(p, highlightPrintings!.notes.get(p.scryfallId)))}
+                  </optgroup>
+                  <optgroup label="Other printings">{otherPrintings.map((p) => printingOption(p))}</optgroup>
+                </>
+              ) : (
+                printings.map((p) => printingOption(p))
+              )}
             </select>
           </div>
         </label>

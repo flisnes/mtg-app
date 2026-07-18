@@ -396,6 +396,33 @@ button.danger-outline {
 .menu-list li:last-child .menu-item {
   border-bottom: none;
 }
+.deck-line {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.deck-name {
+  font-weight: 500;
+}
+.deck-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.deck-format {
+  text-transform: capitalize;
+}
+.deck-meta .badge {
+  margin-left: 0;
+  font-variant-numeric: tabular-nums;
+}
+.deck-colors {
+  font-size: 0.9rem;
+}
 .menu-chevron {
   margin-left: auto;
   color: var(--text-dim);

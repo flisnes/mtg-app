@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useNavigate } from 'react-router-dom';
-import { DECK_FORMATS, type DeckFormat } from '@mtg/shared';
+import { DECK_FORMATS, type Color, type DeckFormat } from '@mtg/shared';
 import { Page } from './Page.js';
 import { db } from '../db/schema.js';
 import { createDeck } from '../db/dataAccess.js';
+import { getOracleCardsByIds } from '../db/queries.js';
 import { formatLabel } from '../deck/legality.js';
 import { Icon } from '../components/icons.js';
+import { ManaCost } from '../components/ManaCost.js';
+
+// Canonical WUBRG order for pip display.
+const COLOR_ORDER: Color[] = ['W', 'U', 'B', 'R', 'G'];
 
 export function Decks() {
   const navigate = useNavigate();
@@ -16,10 +21,19 @@ export function Decks() {
   const decks = useLiveQuery(async () => {
     const list = await db.decks.orderBy('updatedAt').reverse().toArray();
     return Promise.all(
-      list.map(async (deck) => ({
-        deck,
-        count: (await db.deckCards.where('deckId').equals(deck.id).toArray()).reduce((s, c) => s + c.quantity, 0),
-      })),
+      list.map(async (deck) => {
+        const cards = await db.deckCards.where('deckId').equals(deck.id).toArray();
+        // Commander sits in the 100-card deck, so count it toward the mainboard.
+        const main = cards.filter((c) => c.board !== 'side').reduce((s, c) => s + c.quantity, 0);
+        const side = cards.filter((c) => c.board === 'side').reduce((s, c) => s + c.quantity, 0);
+        // Deck colors = union of every card's colour identity (for a legal
+        // commander deck this collapses to the commander's identity).
+        const oracles = await getOracleCardsByIds(cards.map((c) => c.oracleId));
+        const present = new Set<Color>();
+        for (const card of oracles.values()) for (const c of card.colorIdentity) present.add(c);
+        const colors = COLOR_ORDER.filter((c) => present.has(c));
+        return { deck, main, side, colors };
+      }),
     );
   }, []);
 
@@ -61,15 +75,23 @@ export function Decks() {
         </div>
       ) : (
         <ul className="menu-list">
-          {decks.map(({ deck, count }) => (
+          {decks.map(({ deck, main, side, colors }) => (
             <li key={deck.id}>
               <Link className="menu-item" to={`/decks/${deck.id}`}>
                 <span className="menu-icon" aria-hidden>
                   <Icon name="decks" />
                 </span>
-                <span>
-                  {deck.name}
-                  <span className="badge">{count} cards</span>
+                <span className="deck-line">
+                  <span className="deck-name">{deck.name}</span>
+                  <span className="deck-meta">
+                    <span className="deck-format">{formatLabel(deck.format ?? 'casual')}</span>
+                    {colors.length > 0 && (
+                      <ManaCost cost={colors.map((c) => `{${c}}`).join('')} className="deck-colors" />
+                    )}
+                    <span className="badge" title={`${main} mainboard · ${side} sideboard`}>
+                      {main} / {side}
+                    </span>
+                  </span>
                 </span>
                 <span className="menu-chevron" aria-hidden>
                   ›

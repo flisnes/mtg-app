@@ -9,15 +9,13 @@ import {
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { matchPath, useLocation, useNavigate } from 'react-router-dom';
-import type { Color, DeckBoard, DeckFormat, OracleCard, Priced, Rarity } from '@mtg/shared';
+import type { Color, DeckBoard, DeckFormat, OracleCard, Priced } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
-import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { db } from '../db/schema.js';
 import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
 import { formatLabel } from '../deck/legality.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
-import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
-import { formatPrice } from './CardSorting.js';
+import { CardSearchView } from './CardSearchView.js';
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
 import { NotificationBell } from './NotificationBell.js';
@@ -27,17 +25,6 @@ import { useAccount } from '../account/useAccount.js';
 // header instead of a tab: the input is reachable from every screen, and
 // focusing it opens a full results overlay (filters, quick-adds, card sheet).
 // Esc, ✕, or navigating to another tab closes the overlay.
-
-const RARITIES: Rarity[] = ['common', 'uncommon', 'rare', 'mythic'];
-const COLORS = [
-  { value: 'W', label: 'White' },
-  { value: 'U', label: 'Blue' },
-  { value: 'B', label: 'Black' },
-  { value: 'R', label: 'Red' },
-  { value: 'G', label: 'Green' },
-] as const;
-const TYPES = ['Creature', 'Instant', 'Sorcery', 'Artifact', 'Enchantment', 'Planeswalker', 'Land'];
-const PAGE_SIZE = 60;
 
 // What the quick-action buttons on each result do depends on where the user
 // searched from: the deck editor adds to that deck, the collection adds to the
@@ -189,9 +176,7 @@ function SearchOverlay({
   filters: SearchFilters;
   setFilters: React.Dispatch<React.SetStateAction<SearchFilters>>;
 }) {
-  const [limit, setLimit] = useState(PAGE_SIZE);
   const [sheetCard, setSheetCard] = useState<Priced<OracleCard> | null>(null);
-  const [view, setView] = useViewMode();
   const [deckLegalOnly, setDeckLegalOnly] = useState(true);
   const toast = useToast();
   const target = useSearchTarget();
@@ -216,14 +201,6 @@ function SearchOverlay({
   }, [deckId]);
   const deckFilterActive = deckLegalOnly && !!deckCtx && deckCtx.format !== 'casual';
 
-  const hasCriteria = query.trim().length > 0 || !!filters.color || !!filters.rarity || !!filters.type;
-
-  // New criteria start back at the first page. The debounce in useCardSearch
-  // swallows the extra effect run this triggers, so only one search fires.
-  useEffect(() => {
-    setLimit(PAGE_SIZE);
-  }, [query, filters, deckFilterActive, deckCtx]);
-
   const effectiveFilters = useMemo<SearchFilters>(
     () =>
       deckFilterActive
@@ -231,14 +208,6 @@ function SearchOverlay({
         : filters,
     [filters, deckFilterActive, deckCtx],
   );
-  const { results, total, searching } = useCardSearch(query, {
-    filters: effectiveFilters,
-    limit,
-    enabled: hasCriteria,
-  });
-
-  const setFilter = (key: keyof SearchFilters, value: string) =>
-    setFilters((f) => ({ ...f, [key]: value || undefined }));
 
   // Quick-add uses the default printing / NM / nonfoil / en; the sheet is for detail.
   async function quickCollection(card: OracleCard) {
@@ -320,95 +289,41 @@ function SearchOverlay({
     default: null,
   }[target.kind];
 
+  const filterExtras = deckCtx && deckCtx.format !== 'casual' && (
+    <label className="deck-filter-toggle" title="Hide cards this deck can't legally play">
+      <input type="checkbox" checked={deckLegalOnly} onChange={(e) => setDeckLegalOnly(e.target.checked)} />
+      {formatLabel(deckCtx.format)}-legal
+      {deckCtx.identity && ` · ${deckCtx.identity.length ? deckCtx.identity.join('') : 'C'} identity`}
+    </label>
+  );
+
+  const emptyState = (
+    <>
+      <p className="search-meta">
+        Type a card name, or pick a filter, to search the whole card database.
+        {targetHint && ` ${targetHint}`}
+      </p>
+      <p className="search-meta search-syntax-hint">
+        Scryfall syntax works too: <code>o:"whenever ~ enters"</code> <code>t:legendary</code> <code>c:ug</code>{' '}
+        <code>id&lt;=bg</code> <code>mv&lt;=2</code> <code>r:mythic</code> <code>f:modern</code> — prefix{' '}
+        <code>-</code> to negate.
+      </p>
+    </>
+  );
+
   return (
     <div className="search-overlay">
       <div className="search-overlay-inner">
-        <div className="filter-row">
-          <select value={filters.color ?? ''} onChange={(e) => setFilter('color', e.target.value)} aria-label="Color">
-            <option value="">Any color</option>
-            {COLORS.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-          <select value={filters.type ?? ''} onChange={(e) => setFilter('type', e.target.value)} aria-label="Type">
-            <option value="">Any type</option>
-            {TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <select value={filters.rarity ?? ''} onChange={(e) => setFilter('rarity', e.target.value)} aria-label="Rarity">
-            <option value="">Any rarity</option>
-            {RARITIES.map((r) => (
-              <option key={r} value={r}>
-                {r[0]!.toUpperCase() + r.slice(1)}
-              </option>
-            ))}
-          </select>
-          {deckCtx && deckCtx.format !== 'casual' && (
-            <label className="deck-filter-toggle" title="Hide cards this deck can't legally play">
-              <input type="checkbox" checked={deckLegalOnly} onChange={(e) => setDeckLegalOnly(e.target.checked)} />
-              {formatLabel(deckCtx.format)}-legal
-              {deckCtx.identity && ` · ${deckCtx.identity.length ? deckCtx.identity.join('') : 'C'} identity`}
-            </label>
-          )}
-        </div>
-
-        {hasCriteria ? (
-          <div className="meta-row">
-            <p className="search-meta">
-              {searching
-                ? 'Searching…'
-                : `${total} result${total === 1 ? '' : 's'}${total > results.length ? ` (showing ${results.length})` : ''}`}
-            </p>
-            <ViewToggle mode={view} onChange={setView} />
-          </div>
-        ) : (
-          <>
-            <p className="search-meta">
-              Type a card name, or pick a filter, to search the whole card database.
-              {targetHint && ` ${targetHint}`}
-            </p>
-            <p className="search-meta search-syntax-hint">
-              Scryfall syntax works too: <code>o:"whenever ~ enters"</code> <code>t:legendary</code> <code>c:ug</code>{' '}
-              <code>id&lt;=bg</code> <code>mv&lt;=2</code> <code>r:mythic</code> <code>f:modern</code> — prefix{' '}
-              <code>-</code> to negate.
-            </p>
-          </>
-        )}
-
-        <CardItems
-          view={view}
-          items={results.map(
-            (card): CardItem => ({
-              key: card.oracleId,
-              name: card.name,
-              image: card.imageSmall ?? null,
-              sub: (
-                <>
-                  <span className={`rarity-dot rarity-${card.rarity}`} aria-hidden />
-                  {card.typeLine}
-                </>
-              ),
-              price: formatPrice(card) ?? '—',
-              onClick: () => setSheetCard(card),
-              actions: actionsFor(card),
-            }),
-          )}
+        <CardSearchView
+          query={query}
+          filters={filters}
+          setFilters={setFilters}
+          effectiveFilters={effectiveFilters}
+          filterExtras={filterExtras}
+          emptyState={emptyState}
+          actionsFor={actionsFor}
+          onCardClick={setSheetCard}
         />
-
-        {total > results.length && (
-          <button
-            className="show-more"
-            onClick={() => setLimit((l) => l + PAGE_SIZE)}
-            disabled={searching}
-          >
-            {searching ? 'Loading…' : `Show ${Math.min(PAGE_SIZE, total - results.length)} more`}
-          </button>
-        )}
 
         {sheetCard && (
           <CardSheet

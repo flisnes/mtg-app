@@ -8,8 +8,9 @@ import { db } from '../db/schema.js';
 import { collectionKey } from '../db/dataAccess.js';
 import { getOracleCardsByIds, getPrintingsByIds, joinCollectionEntries } from '../db/queries.js';
 import { useCardMaps } from '../db/useCardMaps.js';
-import { useCardSearch } from '../cardDb/useCardSearch.js';
+import type { SearchFilters } from '../cardDb/search.js';
 import { CardSheet } from '../components/CardSheet.js';
+import { CardSearchView } from '../components/CardSearchView.js';
 import { formatPrice } from '../components/CardSorting.js';
 import { CardItems, CardList, type CardItem } from '../components/CardViews.js';
 import { CodeJoinForm } from '../components/CodeJoinForm.js';
@@ -60,16 +61,6 @@ function ownIndicator(own: Owned | undefined): { icon: string; label: string; cl
   if (!own) return { icon: '❓', label: 'Not in your collection', cls: 'own-unknown' };
   if (own.forTrade > 0) return { icon: '⇄', label: `In your tradelist (${own.forTrade} for trade)`, cls: 'own-trade' };
   return { icon: '✓', label: `In your collection (×${own.qty}), but not marked for trade`, cls: 'own-yes' };
-}
-
-function OwnBadge({ own }: { own: Owned | undefined }) {
-  const ind = ownIndicator(own);
-  const text = !own ? 'not in collection' : own.forTrade > 0 ? `tradelist ×${own.forTrade}` : `owned ×${own.qty}`;
-  return (
-    <span className={`badge ${ind.cls}`} title={ind.label}>
-      {ind.icon} {text}
-    </span>
-  );
 }
 
 /** What the card-info sheet should show when a trade line is tapped. */
@@ -393,17 +384,17 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
       </div>
 
       {sheet === 'give' && editable && (
-        <TradeSheet title="Add cards you give" onClose={() => setSheet(null)}>
+        <TradePickerOverlay title="Add cards you give" onClose={() => setSheet(null)}>
           <AddCardsPanel
             ownership={ownership}
             theirWanted={theirWanted}
             onAdd={(line, max) => addLine('give', line, max)}
             onInfo={openInfo}
           />
-        </TradeSheet>
+        </TradePickerOverlay>
       )}
       {sheet === 'get' && editable && (
-        <TradeSheet title="Add cards you get" onClose={() => setSheet(null)}>
+        <TradePickerOverlay title="Add cards you get" onClose={() => setSheet(null)}>
           <AddTheirCardsPanel
             lines={trade.peerTradelist}
             loading={trade.peerTradelistLoading}
@@ -412,7 +403,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             onInfo={openInfo}
             onRefresh={requestTradelist}
           />
-        </TradeSheet>
+        </TradePickerOverlay>
       )}
       {sheet === 'balance' && (
         <TradeSheet title="Balance the trade" onClose={() => setSheet(null)}>
@@ -564,6 +555,30 @@ function TradeSheet({ title, onClose, children }: { title: string; onClose: () =
           </button>
         </div>
         {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Full-screen picker for adding cards to an offer. Unlike the bottom sheet, it
+ * gives the reused card-search view (filters, list/grid toggle, paging) the
+ * whole screen — searching for cards in a trade looks exactly like searching
+ * anywhere else in the app, instead of a cramped little list.
+ */
+function TradePickerOverlay({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useEscapeToClose(onClose);
+  return createPortal(
+    <div className="picker-overlay" role="dialog" aria-label={title}>
+      <header className="picker-overlay-head">
+        <strong>{title}</strong>
+        <button className="header-close" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
+      </header>
+      <div className="picker-overlay-scroll">
+        <div className="search-overlay-inner">{children}</div>
       </div>
     </div>,
     document.body,
@@ -804,7 +819,7 @@ function AddCardsPanel({
   onInfo: OpenInfo;
 }) {
   const [q, setQ] = useState('');
-  const { results } = useCardSearch(q, { limit: 20 });
+  const [filters, setFilters] = useState<SearchFilters>({});
 
   const tradelist = useLiveQuery(async () => {
     const entries = (await db.collection.toArray()).filter((e) => e.quantityForTrade > 0);
@@ -826,87 +841,72 @@ function AddCardsPanel({
     .map((t) => ({ ...t, wanted: theirWanted(t.entry.oracleId, t.entry.scryfallId) }))
     .sort((a, b) => b.wanted - a.wanted);
 
-  return (
-    <div className="picker-panel">
-      <input
-        className="search-input"
-        placeholder="Search any card…"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        aria-label="Search cards to add"
+  // With no query, quick-picks from your own tradelist (partner-wishlist
+  // matches starred and sorted first).
+  const emptyState = !tradelist ? (
+    <p className="fine-print">Loading tradelist…</p>
+  ) : tradelist.length === 0 ? (
+    <p className="fine-print">Your tradelist is empty. Search above to add any card.</p>
+  ) : (
+    <>
+      <p className="fine-print">From your tradelist (or search above for any card):</p>
+      <CardList
+        items={sortedTradelist.map(({ entry: e, oracle, printing, wanted }): CardItem => {
+          const name = oracle?.name ?? '(unknown card)';
+          return {
+            key: e.id,
+            name,
+            image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+            foil: e.finish !== 'nonfoil',
+            badge: wanted > 0 ? '⭐' : undefined,
+            badgeClass: 'badge-wish',
+            badgeTitle: wanted > 0 ? `They want ×${wanted}` : undefined,
+            sub: (
+              <>
+                {e.condition} · {e.finish} · {e.quantityForTrade} for trade
+                {wanted > 0 ? ` · they want ×${wanted}` : ''}
+              </>
+            ),
+            price: formatPrice(printing),
+            onClick: oracle ? () => onInfo(oracle, e.scryfallId) : undefined,
+            actions: (
+              <button
+                title="Add to offer"
+                onClick={() =>
+                  onAdd(
+                    { oracleId: e.oracleId, scryfallId: e.scryfallId, name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang },
+                    e.quantityForTrade,
+                  )
+                }
+              >
+                ＋
+              </button>
+            ),
+          };
+        })}
       />
-      {q.trim() ? (
-        results.length === 0 ? (
-          <p className="fine-print">No cards match.</p>
-        ) : (
-          <CardList
-            className="picker-scroll"
-            items={results.map(
-              (c): CardItem => ({
-                key: c.oracleId,
-                name: c.name,
-                image: c.imageSmall ?? null,
-                sub: (
-                  <>
-                    {c.typeLine} <OwnBadge own={ownership?.get(c.oracleId)} />
-                  </>
-                ),
-                onClick: () => onInfo(c),
-                actions: (
-                  <button title="Add to offer" onClick={() => addFromSearch(c)}>
-                    ＋
-                  </button>
-                ),
-              }),
-            )}
-          />
-        )
-      ) : !tradelist ? (
-        <p className="fine-print">Loading tradelist…</p>
-      ) : tradelist.length === 0 ? (
-        <p className="fine-print">Your tradelist is empty. Search above to add any card.</p>
-      ) : (
-        <>
-          <p className="fine-print">From your tradelist (or search above for any card):</p>
-          <CardList
-            className="picker-scroll"
-            items={sortedTradelist.map(({ entry: e, oracle, printing, wanted }): CardItem => {
-              const name = oracle?.name ?? '(unknown card)';
-              return {
-                key: e.id,
-                name,
-                image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-                foil: e.finish !== 'nonfoil',
-                badge: wanted > 0 ? '⭐' : undefined,
-                badgeClass: 'badge-wish',
-                badgeTitle: wanted > 0 ? `They want ×${wanted}` : undefined,
-                sub: (
-                  <>
-                    {e.condition} · {e.finish} · {e.quantityForTrade} for trade
-                    {wanted > 0 ? ` · they want ×${wanted}` : ''}
-                  </>
-                ),
-                price: formatPrice(printing),
-                onClick: oracle ? () => onInfo(oracle, e.scryfallId) : undefined,
-                actions: (
-                  <button
-                    title="Add to offer"
-                    onClick={() =>
-                      onAdd(
-                        { oracleId: e.oracleId, scryfallId: e.scryfallId, name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang },
-                        e.quantityForTrade,
-                      )
-                    }
-                  >
-                    ＋
-                  </button>
-                ),
-              };
-            })}
-          />
-        </>
+    </>
+  );
+
+  return (
+    <CardSearchView
+      query={q}
+      onQueryChange={setQ}
+      inputPlaceholder="Search any card to add…"
+      filters={filters}
+      setFilters={setFilters}
+      emptyState={emptyState}
+      badgeFor={(card) => {
+        const ind = ownIndicator(ownership?.get(card.oracleId));
+        return { icon: ind.icon, cls: ind.cls, title: ind.label };
+      }}
+      actionsFor={(card) => (
+        <button title="Add to offer" onClick={() => addFromSearch(card)}>
+          ＋
+        </button>
       )}
-    </div>
+      onCardClick={(card) => onInfo(card)}
+    />
   );
 }
 
@@ -931,7 +931,7 @@ function AddTheirCardsPanel({
   onRefresh: () => void;
 }) {
   const [q, setQ] = useState('');
-  const { results } = useCardSearch(q, { limit: 20 });
+  const [filters, setFilters] = useState<SearchFilters>({});
   // Their lines reference cards by id; the local card DB has the display data.
   const { printMap, oracleMap } = useCardMaps(lines ?? []);
 
@@ -939,89 +939,74 @@ function AddTheirCardsPanel({
     .map((l) => ({ l, wanted: myWanted(l.oracleId, l.scryfallId) }))
     .sort((a, b) => b.wanted - a.wanted);
 
-  return (
-    <div className="picker-panel">
-      <input
-        className="search-input"
-        placeholder="Search any card…"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        aria-label="Search cards to add"
+  // With no query, quick-picks from their tradelist (your wishlist matches
+  // starred and sorted first).
+  const emptyState = !lines ? (
+    <p className="fine-print">{loading ? 'Waiting for their tradelist…' : 'No tradelist received yet.'}</p>
+  ) : lines.length === 0 ? (
+    <p className="fine-print">Their tradelist is empty. Search above to add any card they hand you.</p>
+  ) : (
+    <>
+      <div className="meta-row">
+        <span className="fine-print">From their tradelist (or search above for any card):</span>
+        <button className="chip" onClick={onRefresh} disabled={loading}>
+          {loading ? 'Loading…' : '↻ Refresh'}
+        </button>
+      </div>
+      <CardList
+        items={sorted.map(({ l, wanted }): CardItem => {
+          const printing = printMap?.get(l.scryfallId);
+          const oracle = oracleMap?.get(l.oracleId);
+          return {
+            key: lineKey(l),
+            name: l.name,
+            image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+            foil: l.finish !== 'nonfoil',
+            badge: wanted > 0 ? '⭐' : undefined,
+            badgeClass: 'badge-wish',
+            badgeTitle: wanted > 0 ? `On your wishlist (×${wanted})` : undefined,
+            sub: (
+              <>
+                {l.condition} · {l.finish}
+                {l.lang !== 'en' ? ` · ${l.lang}` : ''} · {l.quantity} for trade
+                {wanted > 0 ? ` · you want ×${wanted}` : ''}
+              </>
+            ),
+            price: formatPrice(printing),
+            onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
+            actions: (
+              <button title="Add to what you get" onClick={() => onAdd({ ...l, quantity: 1 }, l.quantity)}>
+                ＋
+              </button>
+            ),
+          };
+        })}
       />
-      {q.trim() ? (
-        results.length === 0 ? (
-          <p className="fine-print">No cards match.</p>
-        ) : (
-          <CardList
-            className="picker-scroll"
-            items={results.map(
-              (c): CardItem => ({
-                key: c.oracleId,
-                name: c.name,
-                image: c.imageSmall ?? null,
-                sub: c.typeLine,
-                onClick: () => onInfo(c),
-                actions: (
-                  <button
-                    title="Add to what you get"
-                    onClick={() =>
-                      onAdd(
-                        { oracleId: c.oracleId, scryfallId: c.defaultScryfallId, name: c.name, quantity: 1, condition: 'NM', finish: 'nonfoil', lang: 'en' },
-                        999,
-                      )
-                    }
-                  >
-                    ＋
-                  </button>
-                ),
-              }),
-            )}
-          />
-        )
-      ) : !lines ? (
-        <p className="fine-print">{loading ? 'Waiting for their tradelist…' : 'No tradelist received yet.'}</p>
-      ) : lines.length === 0 ? (
-        <p className="fine-print">Their tradelist is empty. Search above to add any card they hand you.</p>
-      ) : (
-        <>
-          <div className="meta-row">
-            <span className="fine-print">From their tradelist (or search above for any card):</span>
-            <button className="chip" onClick={onRefresh} disabled={loading}>
-              {loading ? 'Loading…' : '↻ Refresh'}
-            </button>
-          </div>
-          <CardList
-            className="picker-scroll"
-            items={sorted.map(({ l, wanted }): CardItem => {
-              const printing = printMap?.get(l.scryfallId);
-              const oracle = oracleMap?.get(l.oracleId);
-              return {
-                key: lineKey(l),
-                name: l.name,
-                image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-                foil: l.finish !== 'nonfoil',
-                badge: wanted > 0 ? '⭐' : undefined,
-                badgeClass: 'badge-wish',
-                badgeTitle: wanted > 0 ? `On your wishlist (×${wanted})` : undefined,
-                sub: (
-                  <>
-                    {l.condition} · {l.finish}
-                    {l.lang !== 'en' ? ` · ${l.lang}` : ''} · {l.quantity} for trade
-                    {wanted > 0 ? ` · you want ×${wanted}` : ''}
-                  </>
-                ),
-                price: formatPrice(printing),
-                onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
-                actions: (
-                  <button title="Add to what you get" onClick={() => onAdd({ ...l, quantity: 1 }, l.quantity)}>
-                    ＋
-                  </button>
-                ),
-              };
-            })}
-          />
-        </>
+    </>
+  );
+
+  return (
+    <CardSearchView
+      query={q}
+      onQueryChange={setQ}
+      inputPlaceholder="Search any card they hand you…"
+      filters={filters}
+      setFilters={setFilters}
+      emptyState={emptyState}
+      actionsFor={(card) => (
+        <button
+          title="Add to what you get"
+          onClick={() =>
+            onAdd(
+              { oracleId: card.oracleId, scryfallId: card.defaultScryfallId, name: card.name, quantity: 1, condition: 'NM', finish: 'nonfoil', lang: 'en' },
+              999,
+            )
+          }
+        >
+          ＋
+        </button>
       )}
-    </div>
+      onCardClick={(card) => onInfo(card)}
+    />
   );
 }

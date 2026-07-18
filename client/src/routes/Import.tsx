@@ -24,7 +24,7 @@ export function Import() {
   }
 
   async function confirmImport(lines: ResolvedLine[]) {
-    const res = await applyImport(lines);
+    const res = await applyImport(lines, { source: 'import' });
     toast(`Imported ${res.cards} cards (${res.entries} entries)`);
     navigate('/collection');
   }

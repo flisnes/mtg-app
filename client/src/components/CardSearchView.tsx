@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import type { OracleCard, Priced, Rarity } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
+import { usePagedLimit } from './usePagedLimit.js';
 import { formatPrice } from './CardSorting.js';
 
 // The reusable body of the card-search experience: an optional search input,
@@ -59,16 +60,14 @@ export function CardSearchView({
   actionsFor: (card: Priced<OracleCard>) => ReactNode;
   onCardClick: (card: Priced<OracleCard>) => void;
 }) {
-  const [limit, setLimit] = useState(PAGE_SIZE);
   const [view, setView] = useViewMode();
   const eff = effectiveFilters ?? filters;
   const hasCriteria = query.trim().length > 0 || !!filters.color || !!filters.rarity || !!filters.type;
 
-  // New criteria start back at the first page. The debounce in useCardSearch
-  // swallows the extra effect run this triggers, so only one search fires.
-  useEffect(() => {
-    setLimit(PAGE_SIZE);
-  }, [query, eff]);
+  // New criteria start back at the first page — keyed on a serialized signature
+  // so opening/closing a card sheet over the results doesn't reset the count.
+  // The debounce in useCardSearch swallows the extra run so only one search fires.
+  const { limit, showMore } = usePagedLimit(`${query}|${JSON.stringify(eff)}`, PAGE_SIZE);
 
   const { results, total, searching } = useCardSearch(query, { filters: eff, limit, enabled: hasCriteria });
 
@@ -157,7 +156,7 @@ export function CardSearchView({
           />
 
           {total > results.length && (
-            <button className="show-more" onClick={() => setLimit((l) => l + PAGE_SIZE)} disabled={searching}>
+            <button className="show-more" onClick={showMore} disabled={searching}>
               {searching ? 'Loading…' : `Show ${Math.min(PAGE_SIZE, total - results.length)} more`}
             </button>
           )}

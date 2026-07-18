@@ -19,6 +19,10 @@ export type IconName =
   | 'more'
   | 'balance'
   | 'plus'
+  | 'minus'
+  | 'edit'
+  | 'import'
+  | 'sealed'
   | 'account'
   | 'community'
   | 'bell'
@@ -105,6 +109,26 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <path d="M12 5v14" />
       <path d="M5 12h14" />
+    </>
+  ),
+  // Minus — copies removed.
+  minus: <path d="M5 12h14" />,
+  // Pencil — edit mode.
+  edit: <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />,
+  // Down-into-tray — a bulk import.
+  import: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </>
+  ),
+  // Box — a sealed product.
+  sealed: (
+    <>
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+      <line x1="12" y1="22.08" x2="12" y2="12" />
     </>
   ),
   // Horizontal ellipsis — the "More" overflow.

@@ -152,6 +152,16 @@ export const USER_EVENT_KINDS: readonly UserEventKind[] = [
   'wish.remove',
 ];
 
+/**
+ * How a change was made. Distinguishes an ordinary edit from a bulk import, a
+ * sealed-product add, a trade, or a scan — the edit-history view uses it to
+ * pick the row's icon and to group the lines of one operation into a single
+ * entry. Absent on pre-feature events (they render as 'manual').
+ */
+export type EventSource = 'manual' | 'import' | 'sealed' | 'trade' | 'scan';
+
+export const EVENT_SOURCES: readonly EventSource[] = ['manual', 'import', 'sealed', 'trade', 'scan'];
+
 export interface UserEvent {
   id: string;
   /** When it happened (ms epoch). */
@@ -179,8 +189,14 @@ export interface UserEvent {
   /** Denormalized so history still renders after the deck is deleted. */
   deckName?: string;
   board?: DeckBoard;
-  /** Trade session id for trade-driven changes. */
+  /** Trade session id for trade-driven changes (also the grouping key). */
   tradeId?: string;
+  /** How the change was made; drives the edit-history icon + grouping. */
+  source?: EventSource;
+  /** Groups the events of one bulk operation (an import or sealed add). */
+  batchId?: string;
+  /** Human label for a batch (e.g. the sealed product's name). */
+  batchLabel?: string;
 }
 
 /**

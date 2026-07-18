@@ -5,18 +5,13 @@ import { REMOVAL_REASONS } from '@mtg/shared';
 import { editUserEvent } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
 import { centsAround } from '../price/history.js';
+import { describeEvent, qtyBadge, REASON_LABELS } from '../history/eventRegistry.js';
 
 // History tab of the card sheet (sync plan, 2026-07-16): the card's event
 // timeline — acquisitions with the market price at the time, removals with a
 // reason, deck ins/outs, and the wishlist journey. Acquisition/exit prices and
-// removal reasons are user-editable (removals default to 'sold').
-
-const REASON_LABELS: Record<RemovalReason, string> = {
-  sold: 'Sold',
-  traded: 'Traded away',
-  lost: 'Lost',
-  other: 'Removed',
-};
+// removal reasons are user-editable (removals default to 'sold'). Labels/icons
+// come from the shared event registry (history/eventRegistry).
 
 function fmtDate(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, { dateStyle: 'medium' });
@@ -26,45 +21,21 @@ function fmtCents(cents: number): string {
   return `€${(cents / 100).toFixed(2)}`;
 }
 
-function boardSuffix(e: UserEvent): string {
-  return e.board === 'side' ? ' (sideboard)' : e.board === 'commander' ? ' (commander)' : '';
-}
-
-function labelOf(e: UserEvent): string {
-  switch (e.kind) {
-    case 'collection.add':
-      return e.tradeId ? 'Received in trade' : 'Added to collection';
-    case 'collection.remove':
-      return REASON_LABELS[e.reason ?? 'sold'];
-    case 'deck.add':
-      return `Added to ${e.deckName ?? 'a deck'}${boardSuffix(e)}`;
-    case 'deck.remove':
-      return `Removed from ${e.deckName ?? 'a deck'}`;
-    case 'wish.add':
-      return 'Added to wishlist';
-    case 'wish.fulfilled':
-      return 'Wish fulfilled';
-    case 'wish.remove':
-      return 'Removed from wishlist';
-  }
-}
-
-function qtyBadge(e: UserEvent): string | null {
-  if (!e.qty) return null;
-  if (e.kind === 'collection.add') return `+${e.qty}`;
-  if (e.kind === 'collection.remove') return `−${e.qty}`;
-  return `${e.qty}×`;
-}
-
 export function CardHistory({
   oracleCard,
   printings,
   priceHistory,
+  editMode = false,
+  onEventClick,
 }: {
   oracleCard: Priced<OracleCard>;
   printings: Priced<Printing>[];
   /** Recorded daily prices of the sheet's shown printing (server-merged when signed in). */
   priceHistory?: PriceHistory | null;
+  /** When true, editable rows expand into the inline price/reason editor. */
+  editMode?: boolean;
+  /** When set (and not editing), clicking a row opens that event's info modal. */
+  onEventClick?: (e: UserEvent) => void;
 }) {
   const events = useLiveQuery(
     () => db.events.where('oracleId').equals(oracleCard.oracleId).toArray(),
@@ -139,7 +110,14 @@ export function CardHistory({
       )}
       <ul className="history-list">
         {sorted.map((e) => (
-          <HistoryRow key={e.id} event={e} centsNow={centsNow} centsThen={centsThen} />
+          <HistoryRow
+            key={e.id}
+            event={e}
+            centsNow={centsNow}
+            centsThen={centsThen}
+            editMode={editMode}
+            onEventClick={onEventClick}
+          />
         ))}
       </ul>
     </div>
@@ -150,23 +128,38 @@ function HistoryRow({
   event: e,
   centsNow,
   centsThen,
+  editMode,
+  onEventClick,
 }: {
   event: UserEvent;
   centsNow: (scryfallId: string | null | undefined) => number | null;
   centsThen: (e: UserEvent) => number | null;
+  editMode: boolean;
+  onEventClick?: (e: UserEvent) => void;
 }) {
-  const editable = e.kind === 'collection.add' || e.kind === 'collection.remove';
+  // Only collection add/remove carry an editable price/reason. In edit mode a
+  // click on one of those expands the inline editor; otherwise a click opens
+  // the event's info modal (when a handler is provided).
+  const hasInlineEdit = e.kind === 'collection.add' || e.kind === 'collection.remove';
+  const inlineEditing = editMode && hasInlineEdit;
   const [editing, setEditing] = useState(false);
   const [priceText, setPriceText] = useState(e.priceEurCents != null ? (e.priceEurCents / 100).toFixed(2) : '');
   const [reason, setReason] = useState<RemovalReason>(e.reason ?? 'sold');
 
   const badge = qtyBadge(e);
-  const now = editable ? centsNow(e.scryfallId) : null;
+  const now = hasInlineEdit ? centsNow(e.scryfallId) : null;
   const then = e.priceEurCents ?? null;
   const perCopyDelta = then != null && now != null ? now - then : null;
   // Recorded market price around the event's day — a hint where the user never
   // set one, not a substitute (it doesn't feed the summary delta above).
-  const hint = editable && then == null ? centsThen(e) : null;
+  const hint = hasInlineEdit && then == null ? centsThen(e) : null;
+
+  const clickable = inlineEditing || !!onEventClick;
+  const onRowClick = inlineEditing
+    ? () => setEditing((v) => !v)
+    : onEventClick
+      ? () => onEventClick(e)
+      : undefined;
 
   async function save() {
     const trimmed = priceText.trim().replace(',', '.');
@@ -181,12 +174,12 @@ function HistoryRow({
   return (
     <li className="history-item">
       <button
-        className={`history-row${editable ? ' history-row-editable' : ''}`}
-        onClick={editable ? () => setEditing((v) => !v) : undefined}
-        disabled={!editable}
+        className={`history-row${clickable ? ' history-row-editable' : ''}`}
+        onClick={onRowClick}
+        disabled={!clickable}
       >
         {badge && <span className={`history-qty history-qty-${e.kind === 'collection.remove' ? 'out' : 'in'}`}>{badge}</span>}
-        <span className="history-label">{labelOf(e)}</span>
+        <span className="history-label">{describeEvent(e).verb}</span>
         <span className="history-when">{fmtDate(e.ts)}</span>
         {then != null && (
           <span className="history-price">
@@ -200,12 +193,12 @@ function HistoryRow({
             )}
           </span>
         )}
-        {editable && then == null && (
+        {hasInlineEdit && then == null && (
           <span className="history-price fine-print">{hint != null ? `≈ ${fmtCents(hint)}/ea then` : 'price unknown'}</span>
         )}
       </button>
 
-      {editing && (
+      {editing && inlineEditing && (
         <div className="history-edit">
           <label className="field">
             <span>{e.kind === 'collection.add' ? 'Price when acquired (€/ea)' : 'Price when removed (€/ea)'}</span>

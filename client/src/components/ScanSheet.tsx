@@ -203,11 +203,11 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     };
     switch (target.kind) {
       case 'collection':
-        await addToCollection({ ...scanned, condition: 'NM', quantity: 1 });
+        await addToCollection({ ...scanned, condition: 'NM', quantity: 1, source: 'scan' });
         break;
       case 'tradelist':
         // Same collection entry, but at least one copy starts marked for trade.
-        await addToCollection({ ...scanned, condition: 'NM', quantity: 1, quantityForTrade: 1 });
+        await addToCollection({ ...scanned, condition: 'NM', quantity: 1, quantityForTrade: 1, source: 'scan' });
         break;
       case 'deck':
         // Deck slots key on oracle + board; keep the scanned printing as the

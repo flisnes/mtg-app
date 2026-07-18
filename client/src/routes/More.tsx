@@ -7,6 +7,7 @@ const LINKS: { to: string; label: string; icon: IconName }[] = [
   { to: '/tradelist', label: 'Tradelist', icon: 'tradelist' },
   { to: '/movers', label: 'Price movers', icon: 'prices' },
   { to: '/community', label: 'Community', icon: 'community' },
+  { to: '/edit-history', label: 'Edit history', icon: 'edit' },
   { to: '/history', label: 'Trade history', icon: 'history' },
   { to: '/account', label: 'Account & sync', icon: 'account' },
   { to: '/about', label: 'About & settings', icon: 'about' },

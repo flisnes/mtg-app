@@ -121,7 +121,7 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
         quantity: r.qty * copies,
         quantityForTrade: 0,
       }));
-      const { cards } = await applyImport(lines);
+      const { cards } = await applyImport(lines, { source: 'sealed', label: selected.name });
       toast(`Added ${cards} card${cards === 1 ? '' : 's'} from ${selected.name}`);
       onClose();
     } catch (e) {

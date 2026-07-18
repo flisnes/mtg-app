@@ -86,6 +86,9 @@ export interface CardItem {
   dim?: boolean;
   /** Iridescent foil sheen over the image (foil / etched finishes). */
   foil?: boolean;
+  /** Custom thumbnail (list view only), replacing the default image — e.g. the
+   *  stacked-cards glyph an edit-history batch entry shows. */
+  thumb?: ReactNode;
   /** Open card info / edit. Rows and tiles are inert without it. */
   onClick?: () => void;
   /** Subtitle line, list view only (set, condition, …). */
@@ -108,7 +111,9 @@ export function CardList({ items, className }: { items: CardItem[]; className?: 
       {items.map((it) => {
         const body = (
           <>
-            {it.image ? (
+            {it.thumb ? (
+              it.thumb
+            ) : it.image ? (
               <span className="result-thumb-wrap">
                 <img className="result-thumb" src={it.image} alt="" loading="lazy" width={46} height={64} />
                 {it.foil && <span className="foil-sheen" aria-hidden />}
@@ -146,6 +151,27 @@ export function CardList({ items, className }: { items: CardItem[]; className?: 
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * Overlapping card thumbnails for a grouped list entry (import / sealed /
+ * trade in the edit history). Shows up to three images fanned out; falls back
+ * to blank card shapes when images are missing.
+ */
+export function StackedThumb({ images }: { images: (string | null)[] }) {
+  const shown = images.slice(0, 3);
+  if (shown.length === 0) shown.push(null);
+  return (
+    <span className="stack-thumb" aria-hidden>
+      {shown.map((src, i) =>
+        src ? (
+          <img key={i} className="stack-thumb-card" src={src} alt="" loading="lazy" style={{ zIndex: i }} />
+        ) : (
+          <span key={i} className="stack-thumb-card stack-thumb-ph" style={{ zIndex: i }} />
+        ),
+      )}
+    </span>
   );
 }
 

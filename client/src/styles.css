@@ -946,6 +946,31 @@ button.danger-outline {
 .result-thumb-wrap .result-thumb {
   border-radius: 0;
 }
+/* Fanned-out thumbnails for a grouped edit-history entry (import/sealed/trade). */
+.stack-thumb {
+  position: relative;
+  width: 46px;
+  height: 64px;
+  flex-shrink: 0;
+}
+.stack-thumb-card {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 40px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transform-origin: bottom center;
+}
+.stack-thumb-card:nth-child(1) { transform: translateX(-50%) rotate(-8deg); }
+.stack-thumb-card:nth-child(2) { transform: translateX(-50%) rotate(0deg); }
+.stack-thumb-card:nth-child(3) { transform: translateX(-50%) rotate(8deg); }
+.stack-thumb-ph {
+  display: block;
+}
 .result-main {
   flex: 1;
   min-width: 0;
@@ -1198,6 +1223,27 @@ button.primary {
 }
 .sheet-actions button:first-child {
   margin-right: auto;
+}
+
+/* ---- Event (edit-history) modal ---- */
+.event-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.event-sheet-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--accent);
+}
+.event-sheet-titles {
+  min-width: 0;
 }
 
 /* ---- Price history (card sheet) ---- */

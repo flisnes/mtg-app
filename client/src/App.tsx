@@ -19,6 +19,7 @@ import { About } from './routes/About.js';
 import { Account } from './routes/Account.js';
 import { Community } from './routes/Community.js';
 import { More } from './routes/More.js';
+import { EditHistory } from './routes/EditHistory.js';
 import { Import } from './routes/Import.js';
 import { Export } from './routes/Export.js';
 import { ScanTest } from './routes/ScanTest.js';
@@ -170,6 +171,7 @@ function AppShell() {
           <Route path="/community" element={<Community />} />
           <Route path="/community/:username" element={<Community />} />
           <Route path="/more" element={<More />} />
+          <Route path="/edit-history" element={<EditHistory />} />
           {/* Dev harness for card scanning (S2) — deliberately not in the nav. */}
           <Route path="/scan-test" element={<ScanTest />} />
           <Route path="*" element={<Collection />} />

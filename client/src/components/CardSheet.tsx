@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { CollectionEntry, Condition, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Condition, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS } from '@mtg/shared';
 import {
   addDeckCard,
@@ -18,6 +18,9 @@ import { getPriceHistory } from '../price/tracking.js';
 import { getMergedPriceHistory } from '../price/serverHistory.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
 import { CardHistory } from './CardHistory.js';
+import { EventSheet } from './EventSheet.js';
+import { Icon } from './icons.js';
+import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
@@ -60,6 +63,7 @@ export function CardSheet({
   wishEntry,
   deckCard,
   initialScryfallId,
+  initialTab,
   addTarget,
   readOnly = false,
   onClose,
@@ -72,6 +76,8 @@ export function CardSheet({
   deckCard?: { id: string; quantity: number; scryfallId?: string };
   /** Preselect a specific printing (e.g. the one named in a trade line). */
   initialScryfallId?: string;
+  /** Open on a specific tab (e.g. deep-link to History from the edit history). */
+  initialTab?: 'details' | 'history';
   /** Add mode only: where the add goes (defaults to the collection). */
   addTarget?: AddTarget;
   /** Info-only: show the card and its printings, no collection editing. */
@@ -80,6 +86,11 @@ export function CardSheet({
 }) {
   const mode = wishEntry ? 'wish' : deckCard ? 'deck' : entry ? 'edit' : readOnly ? 'info' : 'add';
   const editing = mode === 'edit';
+  // An owned collection entry opens read-only with an Edit toggle; add/wish/deck
+  // are always a form; info is never editable.
+  const [editMode, setEditMode] = useState(false);
+  const canToggleEdit = mode === 'edit';
+  const formEditable = mode === 'add' || mode === 'wish' || mode === 'deck' || (mode === 'edit' && editMode);
   const addTo: AddTarget = (mode === 'add' && addTarget) || { kind: 'collection' };
   // Wishlist adds default to "any printing"; deck slots don't store an edition
   // at all, so those variants drop the collection-specific fields below.
@@ -101,7 +112,11 @@ export function CardSheet({
   const [busy, setBusy] = useState(false);
   const [trend, setTrend] = useState<HistoryChange | null>(null);
   const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(null);
-  const [tab, setTab] = useState<'details' | 'history'>('details');
+  const [tab, setTab] = useState<'details' | 'history'>(initialTab ?? 'details');
+  // Event info modal opened from the History tab (out of edit mode), plus a
+  // nested card sheet when the user drills from that event into another card.
+  const [eventEntry, setEventEntry] = useState<HistoryEntry | null>(null);
+  const [nestedCard, setNestedCard] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
   useEscapeToClose(busy ? null : onClose);
 
   useEffect(() => {
@@ -250,8 +265,17 @@ export function CardSheet({
 
         {tab === 'history' ? (
           <>
-            <CardHistory oracleCard={oracleCard} printings={printings} priceHistory={priceHistory} />
+            <CardHistory
+              oracleCard={oracleCard}
+              printings={printings}
+              priceHistory={priceHistory}
+              editMode={editMode}
+              onEventClick={(e: UserEvent) => setEventEntry({ kind: 'single', id: e.id, ts: e.ts, event: e })}
+            />
             <div className="sheet-actions">
+              {canToggleEdit && (
+                <button onClick={() => setEditMode((v) => !v)}>{editMode ? 'Done' : 'Edit'}</button>
+              )}
               <button className="primary" onClick={onClose}>
                 Close
               </button>
@@ -267,7 +291,7 @@ export function CardSheet({
           <span>Edition</span>
           <div className={`edition-select${printing ? ' with-symbol' : ''}`}>
             {printing && <SetSymbol set={printing.set} className="edition-symbol" title={printing.setName} />}
-            <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)} disabled={mode === 'info'}>
+            <select value={scryfallId} onChange={(e) => setScryfallId(e.target.value)} disabled={!formEditable}>
               {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
               {printings.map((p) => (
                 <option key={p.scryfallId} value={p.scryfallId}>
@@ -282,7 +306,7 @@ export function CardSheet({
         <div className="field-grid">
           <label className="field">
             <span>Condition</span>
-            <select value={condition} onChange={(e) => setCondition(e.target.value as Condition)}>
+            <select value={condition} onChange={(e) => setCondition(e.target.value as Condition)} disabled={!formEditable}>
               {CONDITIONS.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -292,7 +316,7 @@ export function CardSheet({
           </label>
           <label className="field">
             <span>Finish</span>
-            <select value={finish} onChange={(e) => setFinish(e.target.value as Finish)}>
+            <select value={finish} onChange={(e) => setFinish(e.target.value as Finish)} disabled={!formEditable}>
               {availableFinishes.map((f) => (
                 <option key={f} value={f}>
                   {FINISH_LABELS[f]}
@@ -302,7 +326,7 @@ export function CardSheet({
           </label>
           <label className="field">
             <span>Language</span>
-            <select value={lang} onChange={(e) => setLang(e.target.value)}>
+            <select value={lang} onChange={(e) => setLang(e.target.value)} disabled={!formEditable}>
               {LANGS.map((l) => (
                 <option key={l} value={l}>
                   {l}
@@ -323,6 +347,7 @@ export function CardSheet({
               value={quantity}
               onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
               onKeyDown={saveOnEnter}
+              disabled={!formEditable}
             />
           </label>
           {collectionFields && (
@@ -335,6 +360,7 @@ export function CardSheet({
                 value={clampedForTrade}
                 onChange={(e) => setForTrade(Math.max(0, Number(e.target.value) || 0))}
                 onKeyDown={saveOnEnter}
+                disabled={!formEditable}
               />
             </label>
           )}
@@ -346,6 +372,13 @@ export function CardSheet({
             <button className="primary" onClick={onClose}>
               Close
             </button>
+          </div>
+        ) : canToggleEdit && !editMode ? (
+          <div className="sheet-actions">
+            <button className="primary" onClick={() => setEditMode(true)}>
+              <Icon name="edit" size={16} /> Edit
+            </button>
+            <button onClick={onClose}>Close</button>
           </div>
         ) : (
           <div className="sheet-actions">
@@ -375,6 +408,29 @@ export function CardSheet({
         </>
         )}
       </div>
+
+      {eventEntry && (
+        <EventSheet
+          entry={eventEntry}
+          onOpenCard={(oracle, scryfallId) => {
+            setEventEntry(null);
+            // Same card: just switch this sheet to its history. Different card
+            // (a batch line): open a nested sheet on its history tab.
+            if (oracle.oracleId === oracleCard.oracleId) setTab('history');
+            else setNestedCard({ oracle, scryfallId });
+          }}
+          onClose={() => setEventEntry(null)}
+        />
+      )}
+      {nestedCard && (
+        <CardSheet
+          oracleCard={nestedCard.oracle}
+          initialScryfallId={nestedCard.scryfallId}
+          initialTab="history"
+          readOnly
+          onClose={() => setNestedCard(null)}
+        />
+      )}
     </div>,
     document.body,
   );

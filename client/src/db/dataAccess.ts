@@ -5,6 +5,7 @@ import type {
   DeckBoard,
   DeckCard,
   DeckFormat,
+  EventSource,
   Finish,
   RemovalReason,
   Trade,
@@ -77,7 +78,7 @@ async function emitWishFulfilled(
   scryfallId: string,
   qty: number,
   ts: number,
-  tradeId?: string,
+  extra: Partial<Pick<UserEvent, 'source' | 'batchId' | 'tradeId'>> = {},
 ): Promise<void> {
   const wishes = await db.wishlist.where('oracleId').equals(oracleId).toArray();
   const match = wishes.find((w) => w.scryfallId === null || w.scryfallId === scryfallId);
@@ -88,7 +89,7 @@ async function emitWishFulfilled(
     oracleId,
     scryfallId,
     qty: Math.min(qty, match.quantity),
-    ...(tradeId ? { tradeId } : {}),
+    ...extra,
   });
 }
 
@@ -121,6 +122,8 @@ export interface AddToCollectionInput {
   quantity?: number;
   /** If set, ensures at least this many are marked for trade after the add. */
   quantityForTrade?: number;
+  /** How the add was made (edit-history provenance). Defaults to 'manual'. */
+  source?: EventSource;
 }
 
 /**
@@ -167,6 +170,7 @@ export async function addToCollection(input: AddToCollectionInput): Promise<stri
     }
     await db.collection.put(entry);
     await stagePut('collection', entry);
+    const source = input.source ?? 'manual';
     await emit({
       ts: now,
       kind: 'collection.add',
@@ -177,8 +181,9 @@ export async function addToCollection(input: AddToCollectionInput): Promise<stri
       finish: input.finish,
       lang,
       priceEurCents: await priceCents(input.scryfallId),
+      source,
     });
-    await emitWishFulfilled(input.oracleId, input.scryfallId, qty, now);
+    await emitWishFulfilled(input.oracleId, input.scryfallId, qty, now, { source });
     return entry.id;
   });
 }
@@ -218,9 +223,10 @@ export async function updateCollectionEntry(
         finish: next.finish,
         lang: next.lang,
         priceEurCents: await priceCents(next.scryfallId),
+        source: 'manual',
         ...(delta < 0 ? { reason: 'sold' as RemovalReason } : {}),
       });
-      if (delta > 0) await emitWishFulfilled(next.oracleId, next.scryfallId, delta, now);
+      if (delta > 0) await emitWishFulfilled(next.oracleId, next.scryfallId, delta, now, { source: 'manual' });
     }
   });
 }
@@ -260,6 +266,7 @@ export async function removeFromCollection(
       finish: entry.finish,
       lang: entry.lang,
       priceEurCents: await priceCents(entry.scryfallId),
+      source: 'manual',
       reason,
     });
   });
@@ -300,7 +307,7 @@ export async function addToWishlist(input: AddToWishlistInput): Promise<string> 
     }
     await db.wishlist.put(entry);
     await stagePut('wishlist', entry);
-    await emit({ ts: now, kind: 'wish.add', oracleId: input.oracleId, scryfallId, qty });
+    await emit({ ts: now, kind: 'wish.add', oracleId: input.oracleId, scryfallId, qty, source: 'manual' });
     return entry.id;
   });
 }
@@ -351,7 +358,7 @@ export async function removeFromWishlist(id: string, quantity = Infinity): Promi
       await db.wishlist.put(next);
       await stagePut('wishlist', next);
     }
-    await emit({ ts: now, kind: 'wish.remove', oracleId: entry.oracleId, scryfallId: entry.scryfallId, qty: removed });
+    await emit({ ts: now, kind: 'wish.remove', oracleId: entry.oracleId, scryfallId: entry.scryfallId, qty: removed, source: 'manual' });
   });
 }
 
@@ -370,8 +377,16 @@ export interface ImportLine {
  * entries on (scryfallId, condition, finish, lang). Same invariants as
  * addToCollection, but bulk (fast enough for a 1000+ card import).
  */
-export async function applyImport(lines: ImportLine[]): Promise<{ entries: number; cards: number }> {
+export async function applyImport(
+  lines: ImportLine[],
+  meta: { source?: 'import' | 'sealed'; label?: string } = {},
+): Promise<{ entries: number; cards: number }> {
   let cards = 0;
+  // Every line of one import/sealed add shares a batchId, so the edit-history
+  // view can collapse the whole operation into a single entry.
+  const source = meta.source ?? 'import';
+  const batchId = newId();
+  const batchExtra = { source, batchId, ...(meta.label ? { batchLabel: meta.label } : {}) };
   // One bulk price lookup for the acquisition price on every line's event.
   const prices = await getPricesByIds(lines.map((l) => l.scryfallId));
   await db.transaction('rw', COLLECTION_TABLES, async () => {
@@ -416,8 +431,9 @@ export async function applyImport(lines: ImportLine[]): Promise<{ entries: numbe
         finish: l.finish,
         lang,
         priceEurCents: toCents(prices.get(l.scryfallId)?.eur ?? null),
+        ...batchExtra,
       });
-      await emitWishFulfilled(l.oracleId, l.scryfallId, l.quantity, now);
+      await emitWishFulfilled(l.oracleId, l.scryfallId, l.quantity, now, { source, batchId });
     }
     await db.collection.bulkPut(writes);
     for (const w of writes) await stagePut('collection', w);
@@ -763,6 +779,7 @@ export async function applyCompletedTrade(
         lang: line.lang,
         priceEurCents: centsOf(line.scryfallId),
         reason: 'traded',
+        source: 'trade',
         tradeId: sessionId,
       });
     }
@@ -803,6 +820,7 @@ export async function applyCompletedTrade(
         finish: line.finish,
         lang,
         priceEurCents: centsOf(line.scryfallId),
+        source: 'trade',
         tradeId: sessionId,
       });
     }
@@ -829,6 +847,7 @@ export async function applyCompletedTrade(
           oracleId: line.oracleId,
           scryfallId: line.scryfallId,
           qty: dec,
+          source: 'trade',
           tradeId: sessionId,
         });
       }
@@ -838,6 +857,237 @@ export async function applyCompletedTrade(
     await db.trades.add(trade);
     await stagePut('trades', trade);
     return { applied: true };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Undo the most recent edit-history entry (edit-history feature). Reverses the
+// recorded mutation and deletes the event(s) WITHOUT emitting new events — the
+// log returns to its prior state, exactly like a sync-applied change. The UI
+// only offers this on the single newest entry, so reversing the last change is
+// safe and needs no cascade handling ("no domino effect").
+// ---------------------------------------------------------------------------
+
+export type UndoRef =
+  | { type: 'single'; id: string }
+  | { type: 'batch'; batchId: string }
+  | { type: 'trade'; tradeId: string };
+
+const UNDO_TABLES = [db.collection, db.wishlist, db.decks, db.deckCards, db.trades, db.events, db.outbox];
+
+/** Add e.qty copies back to the collection (reverse of a removal). */
+async function addCopiesRaw(e: UserEvent, now: number): Promise<void> {
+  if (!e.scryfallId || !e.qty) return;
+  const condition = e.condition ?? 'NM';
+  const finish = e.finish ?? 'nonfoil';
+  const lang = e.lang ?? 'en';
+  const existing = await db.collection
+    .where('[scryfallId+condition+finish+lang]')
+    .equals([e.scryfallId, condition, finish, lang])
+    .first();
+  if (existing) {
+    const next: CollectionEntry = { ...existing, quantity: existing.quantity + e.qty, updatedAt: now };
+    await db.collection.put(next);
+    await stagePut('collection', next);
+  } else {
+    const entry: CollectionEntry = {
+      id: newId(),
+      oracleId: e.oracleId,
+      scryfallId: e.scryfallId,
+      condition,
+      finish,
+      lang,
+      quantity: e.qty,
+      quantityForTrade: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.collection.add(entry);
+    await stagePut('collection', entry);
+  }
+}
+
+/** Remove e.qty copies from the collection (reverse of an add). */
+async function removeCopiesRaw(e: UserEvent, now: number): Promise<void> {
+  if (!e.scryfallId || !e.qty) return;
+  const existing = await db.collection
+    .where('[scryfallId+condition+finish+lang]')
+    .equals([e.scryfallId, e.condition ?? 'NM', e.finish ?? 'nonfoil', e.lang ?? 'en'])
+    .first();
+  if (!existing) return;
+  const remaining = existing.quantity - e.qty;
+  if (remaining <= 0) {
+    await db.collection.delete(existing.id);
+    await stageDelete('collection', existing.id);
+  } else {
+    const next: CollectionEntry = {
+      ...existing,
+      quantity: remaining,
+      quantityForTrade: clamp(existing.quantityForTrade, 0, remaining),
+      updatedAt: now,
+    };
+    await db.collection.put(next);
+    await stagePut('collection', next);
+  }
+}
+
+/** Change a wishlist line by delta (negative removes, positive re-adds). */
+async function wishlistAdjustRaw(e: UserEvent, delta: number, now: number): Promise<void> {
+  if (!delta) return;
+  const list = await db.wishlist.where('oracleId').equals(e.oracleId).toArray();
+  const match =
+    list.find((w) => w.scryfallId === (e.scryfallId ?? null)) ?? list.find((w) => w.scryfallId === null) ?? list[0];
+  if (delta < 0) {
+    if (!match) return;
+    const remaining = match.quantity + delta;
+    if (remaining <= 0) {
+      await db.wishlist.delete(match.id);
+      await stageDelete('wishlist', match.id);
+    } else {
+      const next: WishlistEntry = { ...match, quantity: remaining, updatedAt: now };
+      await db.wishlist.put(next);
+      await stagePut('wishlist', next);
+    }
+  } else if (match) {
+    const next: WishlistEntry = { ...match, quantity: match.quantity + delta, updatedAt: now };
+    await db.wishlist.put(next);
+    await stagePut('wishlist', next);
+  } else {
+    const entry: WishlistEntry = {
+      id: newId(),
+      oracleId: e.oracleId,
+      scryfallId: e.scryfallId ?? null,
+      quantity: delta,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.wishlist.put(entry);
+    await stagePut('wishlist', entry);
+  }
+}
+
+/** Change a deck slot by delta (negative removes, positive re-adds). No-op if the deck is gone. */
+async function deckAdjustRaw(e: UserEvent, delta: number, now: number): Promise<void> {
+  if (!e.deckId || !delta) return;
+  const deck = await db.decks.get(e.deckId);
+  if (!deck) return;
+  const board = e.board ?? 'main';
+  const cards = await db.deckCards.where('[deckId+board]').equals([e.deckId, board]).toArray();
+  const dc = cards.find((c) => c.oracleId === e.oracleId);
+  if (delta < 0) {
+    if (!dc) return;
+    const remaining = dc.quantity + delta;
+    if (remaining <= 0) {
+      await db.deckCards.delete(dc.id);
+      await stageDelete('deckCards', dc.id);
+    } else {
+      const next: DeckCard = { ...dc, quantity: remaining, updatedAt: now };
+      await db.deckCards.put(next);
+      await stagePut('deckCards', next);
+    }
+  } else if (dc) {
+    const next: DeckCard = { ...dc, quantity: dc.quantity + delta, updatedAt: now };
+    await db.deckCards.put(next);
+    await stagePut('deckCards', next);
+  } else {
+    const slot: DeckCard = {
+      id: newId(),
+      deckId: e.deckId,
+      oracleId: e.oracleId,
+      ...(e.scryfallId ? { scryfallId: e.scryfallId } : {}),
+      quantity: delta,
+      board,
+      updatedAt: now,
+    };
+    await db.deckCards.put(slot);
+    await stagePut('deckCards', slot);
+  }
+  const touched: Deck = { ...deck, updatedAt: now };
+  await db.decks.put(touched);
+  await stagePut('decks', touched);
+}
+
+/** Reverse the effect of a single event (used only by undoEntry). */
+async function reverseEvent(e: UserEvent, now: number): Promise<void> {
+  const fromTrade = e.source === 'trade' || e.tradeId != null;
+  switch (e.kind) {
+    case 'collection.add':
+      await removeCopiesRaw(e, now);
+      break;
+    case 'collection.remove':
+      await addCopiesRaw(e, now);
+      break;
+    case 'wish.add':
+      await wishlistAdjustRaw(e, -(e.qty ?? 1), now);
+      break;
+    case 'wish.remove':
+      await wishlistAdjustRaw(e, e.qty ?? 1, now);
+      break;
+    case 'wish.fulfilled':
+      // A trade prunes the wishlist; restore it. A manual add's wish.fulfilled
+      // never touched the wishlist, so there's nothing to reverse.
+      if (fromTrade) await wishlistAdjustRaw(e, e.qty ?? 1, now);
+      break;
+    case 'deck.add':
+      await deckAdjustRaw(e, -(e.qty ?? 1), now);
+      break;
+    case 'deck.remove':
+      await deckAdjustRaw(e, e.qty ?? 1, now);
+      break;
+  }
+}
+
+/**
+ * Undo the given (newest) history entry: reverse every event it groups and
+ * delete them. No-op with a reason if the entry is gone or is no longer the
+ * newest (a concurrent change slipped in), so the caller can tell the user.
+ */
+export async function undoEntry(ref: UndoRef): Promise<{ undone: boolean; reason?: 'gone' | 'not-latest' }> {
+  return db.transaction('rw', UNDO_TABLES, async () => {
+    // Gather every event the entry comprises (batch/trade lines aren't indexed,
+    // but undo is rare, so a filtered scan inside the txn is fine).
+    let events: UserEvent[];
+    if (ref.type === 'batch') {
+      events = await db.events.filter((e) => e.batchId === ref.batchId).toArray();
+    } else if (ref.type === 'trade') {
+      events = await db.events.filter((e) => e.tradeId === ref.tradeId).toArray();
+    } else {
+      const one = await db.events.get(ref.id);
+      if (!one) return { undone: false, reason: 'gone' as const };
+      // A manual add can also have emitted a paired wish.fulfilled at the same
+      // instant; fold it in so it's cleaned up too.
+      const paired = await db.events
+        .filter(
+          (e) =>
+            e.kind === 'wish.fulfilled' &&
+            e.ts === one.ts &&
+            e.oracleId === one.oracleId &&
+            (e.scryfallId ?? null) === (one.scryfallId ?? null) &&
+            e.batchId == null &&
+            e.tradeId == null,
+        )
+        .toArray();
+      events = [one, ...paired];
+    }
+    if (events.length === 0) return { undone: false, reason: 'gone' as const };
+
+    // Guard: only the newest entry may be undone.
+    const newest = await db.events.orderBy('ts').last();
+    if (newest && !events.some((e) => e.id === newest.id)) {
+      return { undone: false, reason: 'not-latest' as const };
+    }
+
+    const now = Date.now();
+    for (const e of events) await reverseEvent(e, now);
+    for (const e of events) {
+      await db.events.delete(e.id);
+      await stageDelete('events', e.id);
+    }
+    if (ref.type === 'trade') {
+      await db.trades.delete(ref.tradeId);
+      await stageDelete('trades', ref.tradeId);
+    }
+    return { undone: true };
   });
 }
 

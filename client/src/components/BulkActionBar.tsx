@@ -34,7 +34,9 @@ export function BulkActionBar({
         <button className="bulk-cancel" onClick={onCancel} aria-label="Cancel selection">
           <Icon name="close" size={18} />
         </button>
-        <span className="bulk-count">{count} selected</span>
+        <span className="bulk-count">
+          <strong>{count}</strong> selected
+        </span>
         <button className="linklike bulk-selectall" onClick={onToggleAll}>
           {allSelected ? 'Clear' : 'Select all'}
         </button>

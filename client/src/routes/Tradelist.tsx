@@ -24,8 +24,8 @@ export function Tradelist() {
         <OptionsMenu
           label="Tradelist options"
           actions={[
-            { label: 'Scan cards', icon: '📷', onClick: () => setScanning(true) },
-            { label: 'Remove all from tradelist', icon: '✕', danger: true, onClick: onClearAll },
+            { label: 'Scan cards', icon: 'camera', onClick: () => setScanning(true) },
+            { label: 'Remove all from tradelist', icon: 'trash', danger: true, onClick: onClearAll },
           ]}
         />
       }

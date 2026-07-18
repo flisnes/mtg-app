@@ -334,9 +334,9 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
         <OptionsMenu
           label="Trade options"
           actions={[
-            ...(editable ? [{ label: 'Balance the trade', icon: '⚖', onClick: () => setSheet('balance') }] : []),
-            { label: 'Refresh partner lists', icon: '↻', onClick: () => { requestWishlist(); requestTradelist(); } },
-            { label: 'Cancel trade', icon: '✕', danger: true, onClick: trade.cancel },
+            ...(editable ? [{ label: 'Balance the trade', icon: 'balance' as const, onClick: () => setSheet('balance') }] : []),
+            { label: 'Refresh partner lists', icon: 'refresh', onClick: () => { requestWishlist(); requestTradelist(); } },
+            { label: 'Cancel trade', icon: 'close', danger: true, onClick: trade.cancel },
           ]}
         />
       }
@@ -590,7 +590,7 @@ function OfferPanel({
             <Icon name="plus" size={15} /> Add
           </button>
           <button className="trade-add" onClick={onScan}>
-            📷 Scan
+            <Icon name="camera" size={15} /> Scan
           </button>
         </div>
       )}

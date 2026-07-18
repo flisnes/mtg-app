@@ -1521,8 +1521,14 @@ button.primary {
   color: var(--danger);
 }
 .options-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 1.2rem;
-  text-align: center;
+  color: var(--text-dim);
+}
+.options-item-danger .options-icon {
+  color: inherit;
 }
 
 /* ---- Deck detail ---- */

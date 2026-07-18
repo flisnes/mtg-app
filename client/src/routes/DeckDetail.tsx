@@ -154,12 +154,12 @@ export function DeckDetail() {
         <OptionsMenu
           label="Deck options"
           actions={[
-            { label: 'Scan cards', icon: '📷', onClick: () => setScanning(true) },
-            { label: 'Import list', icon: '⬆', onClick: () => setShowImport((v) => !v) },
-            { label: 'Export', icon: '⬇', onClick: exportDeck },
+            { label: 'Scan cards', icon: 'camera', onClick: () => setScanning(true) },
+            { label: 'Import list', icon: 'import', onClick: () => setShowImport((v) => !v) },
+            { label: 'Export', icon: 'export', onClick: exportDeck },
             {
               label: 'Delete deck',
-              icon: '🗑',
+              icon: 'trash',
               danger: true,
               onClick: async () => {
                 if (!window.confirm(`Delete “${deck.name}”? This can’t be undone.`)) return;

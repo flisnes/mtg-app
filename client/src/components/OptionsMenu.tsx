@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icon, type IconName } from './icons.js';
 
 // The per-page "⋯" options menu: rarely-used actions (import/export/delete)
 // live here so toolbars stay clear for the primary flow (search → add).
 
 export interface MenuAction {
   label: string;
-  icon?: string;
+  icon?: IconName;
   danger?: boolean;
   onClick: () => void;
 }
@@ -55,7 +56,7 @@ export function OptionsMenu({ actions, label = 'Options' }: { actions: MenuActio
             >
               {a.icon && (
                 <span className="options-icon" aria-hidden>
-                  {a.icon}
+                  <Icon name={a.icon} size={18} />
                 </span>
               )}
               {a.label}

@@ -18,10 +18,10 @@ export function Collection() {
         <OptionsMenu
           label="Collection options"
           actions={[
-            { label: 'Scan cards', icon: '📷', onClick: () => setScanning(true) },
-            { label: 'Add sealed product', icon: '📦', onClick: () => setAddingSealed(true) },
-            { label: 'Import', icon: '⬆', onClick: () => navigate('/import') },
-            { label: 'Export', icon: '⬇', onClick: () => navigate('/export') },
+            { label: 'Scan cards', icon: 'camera', onClick: () => setScanning(true) },
+            { label: 'Add sealed product', icon: 'sealed', onClick: () => setAddingSealed(true) },
+            { label: 'Import', icon: 'import', onClick: () => navigate('/import') },
+            { label: 'Export', icon: 'export', onClick: () => navigate('/export') },
           ]}
         />
       }

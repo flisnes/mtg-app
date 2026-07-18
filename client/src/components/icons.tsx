@@ -22,7 +22,12 @@ export type IconName =
   | 'minus'
   | 'edit'
   | 'import'
+  | 'export'
   | 'sealed'
+  | 'camera'
+  | 'trash'
+  | 'refresh'
+  | 'close'
   | 'account'
   | 'community'
   | 'bell'
@@ -123,12 +128,51 @@ const PATHS: Record<IconName, ReactElement> = {
       <line x1="12" y1="15" x2="12" y2="3" />
     </>
   ),
+  // Up-out-of-tray — a bulk export (the 'import' glyph reversed).
+  export: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </>
+  ),
   // Box — a sealed product.
   sealed: (
     <>
       <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
       <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
       <line x1="12" y1="22.08" x2="12" y2="12" />
+    </>
+  ),
+  // Camera — scanning cards with the device camera.
+  camera: (
+    <>
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </>
+  ),
+  // Trash can — delete / clear.
+  trash: (
+    <>
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </>
+  ),
+  // Circular arrows — refresh / reload.
+  refresh: (
+    <>
+      <polyline points="23 4 23 10 17 10" />
+      <polyline points="1 20 1 14 7 14" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+    </>
+  ),
+  // X — cancel / close.
+  close: (
+    <>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
     </>
   ),
   // Horizontal ellipsis — the "More" overflow.

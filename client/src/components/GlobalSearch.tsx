@@ -17,9 +17,11 @@ import { formatLabel } from '../deck/legality.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
 import { useToast } from './Toast.js';
+import { Avatar } from './Avatar.js';
 import { Icon } from './icons.js';
 import { NotificationBell } from './NotificationBell.js';
 import { useAccount } from '../account/useAccount.js';
+import { useOwnAvatar } from '../account/ownProfile.js';
 
 // Card search is the front door to the hobby, so it lives in a persistent
 // header instead of a tab: the input is reachable from every screen, and
@@ -75,6 +77,7 @@ export function GlobalSearchBar() {
   const navigate = useNavigate();
   const { enabled: accountsEnabled, session, syncReady, pendingChanges, sync } = useAccount();
   const signedIn = !!session;
+  const ownAvatar = useOwnAvatar(session);
 
   // Subtle sync indicator on the account button: green = synced, amber =
   // syncing or changes waiting (or the join-account decision pending), red =
@@ -150,12 +153,16 @@ export function GlobalSearchBar() {
             <>
               {signedIn && <NotificationBell />}
               <button
-                className="header-account"
+                className={signedIn && ownAvatar ? 'header-account header-account-avatar' : 'header-account'}
                 onClick={() => navigate('/account')}
                 aria-label={signedIn ? `Account: signed in as ${session!.username} (${syncLabel})` : 'Account & sync'}
                 title={signedIn ? `Signed in as ${session!.username} (${syncLabel})` : 'Account & sync'}
               >
-                <Icon name="account" size={22} />
+                {signedIn && ownAvatar ? (
+                  <Avatar avatar={ownAvatar} username={session!.username} size={28} />
+                ) : (
+                  <Icon name="account" size={22} />
+                )}
                 {signedIn && <span className={`header-account-dot header-account-dot-${syncTone}`} aria-hidden />}
               </button>
             </>

@@ -122,6 +122,10 @@ button.danger-outline {
   color: var(--text-dim);
   background: var(--surface-2);
 }
+/* When the button wears the user's avatar, trade padding for picture. */
+.header-account-avatar {
+  padding: 0.25rem;
+}
 .header-account-dot {
   position: absolute;
   top: 2px;

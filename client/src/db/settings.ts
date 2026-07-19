@@ -10,6 +10,7 @@ import { db } from './schema.js';
 //   activeTrade     — persisted in-flight trade session (resume prompt)
 //   accountSession  — signed-in account {token, username} (account/session.ts)
 //   goblinMode      — unlocks the collection pile view (useGoblinMode.ts)
+//   ownProfileAvatar — cached own profile picture for the header (account/ownProfile.ts)
 //   accountLastBackup / accountSyncConflict / accountAutoBackup /
 //   accountLastAutoBackupAt — backup bookkeeping (account/session.ts)
 

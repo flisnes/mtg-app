@@ -15,6 +15,7 @@ import {
   type UserProfile,
 } from '@mtg/shared';
 import { ApiError, getUserProfile, putProfile } from '../account/api.js';
+import { rememberOwnAvatar } from '../account/ownProfile.js';
 import { useAccount } from '../account/useAccount.js';
 import { searchCards } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
@@ -74,8 +75,11 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
     let cancelled = false;
     getUserProfile(token, username)
       .then((res) => {
+        if (cancelled) return;
         // Another user's profile is untrusted input, same as trade shares.
-        if (!cancelled) setProfile(sanitizeProfile(res.profile));
+        const clean = sanitizeProfile(res.profile);
+        setProfile(clean);
+        if (isMe) void rememberOwnAvatar(clean.avatar);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -97,6 +101,7 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
     if (!profile) return;
     const next = update(profile);
     setProfile(next);
+    void rememberOwnAvatar(next.avatar); // keep the header's cached copy current
     putProfile(token, next)
       .then(() => toast('Profile saved'))
       .catch((err) => toast(err instanceof ApiError ? err.friendlyMessage : 'Could not save your profile.'));

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.37.1
+
+- Your profile picture now shows on the account button in the top-right corner (sync dot included), instead of the generic silhouette. It also follows you across devices.
+
 ## 0.37.0
 
 - **User profiles.** Every account now has a profile page showing a profile picture and up to three favorite cards and three favorite decks. Deck favorites share only a summary (name, format, colors, card count) — your decklists stay private. Find yours via Account & sync, or tap any profile picture in the Community list to visit someone else's; their profile links back to their trade and wishlists.

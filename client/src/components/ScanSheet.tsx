@@ -8,17 +8,21 @@ import { CameraScan, type LiveScanState } from '../scan/camera.js';
 import type { ScanPipelineResult } from '../scan/pipeline.js';
 import { resolveWithOcr } from '../scan/ocr.js';
 import { checkScanDataUpdate, downloadScanData, getInstalledScanData, type ScanDataManifest } from '../scan/store.js';
+import { Icon } from './icons.js';
 import { useToast } from './Toast.js';
 
-// Camera scanning flow (handover §S5). A live camera locks onto a card (S3
-// consensus), OCR pins down edition + language (S4), one tap commits it — then
-// the camera resumes for the next card (binder-entry speed is the goal).
+// Camera scanning flow (handover §S5), built for one-handed binder entry: the
+// camera fills the top of the screen and never pauses; each lock (S3 consensus
+// + S4 OCR) fills a horizontal candidate tray along the bottom. Tapping a
+// candidate's top half adds +1 to a session list, the bottom half takes one
+// back — no scrolling, no per-card confirm step. A list button reviews and
+// edits the session; completing it writes everything to the target at once.
 //
-// The same sheet feeds several destinations (a `ScanTarget`): the collection,
+// The same screen feeds several destinations (a `ScanTarget`): the collection,
 // the tradelist, the wishlist, a deck, or a live trade offer. Everything up to
-// the commit is identical; only the final write differs, so it dispatches in
-// `add()` through the normal data-access paths (or a callback for the in-memory
-// trade offer).
+// the commit is identical; only the final write differs, so `complete()`
+// dispatches through the normal data-access paths (or a callback for the
+// in-memory trade offer).
 
 /** A locked-in scan, ready to be written wherever the target sends it. */
 export interface ScannedCard {
@@ -29,6 +33,7 @@ export interface ScannedCard {
   finish: Finish;
   /** From OCR, defaulting to English. */
   lang: string;
+  quantity: number;
 }
 
 /** Where a scan is committed (mirrors CardSheet's context-sensitive AddTarget). */
@@ -51,8 +56,52 @@ type OcrState = 'pending' | 'confirmed' | 'weak' | 'none' | 'unavailable';
 type Stage =
   | { kind: 'setup'; message: string; download?: ScanDataManifest }
   | { kind: 'downloading'; progress: string }
-  | { kind: 'scanning' }
-  | { kind: 'confirm'; candidates: Candidate[]; selected: string; ocr: OcrState; lang: string };
+  | { kind: 'scanning' };
+
+/** The current lock's candidates, shown in the bottom tray until the next lock. */
+interface Tray {
+  /** Top candidate of the lock that produced this tray — dedups re-locks of the same card. */
+  topId: string;
+  candidates: Candidate[];
+  ocr: OcrState;
+  /** The candidate OCR confirmed (or weakly matched), if any. */
+  ocrHit: string | null;
+  lang: string;
+}
+
+/** One line of the scan session — what "complete" will write. */
+interface SessionEntry {
+  scryfallId: string;
+  oracleId: string;
+  name: string;
+  set: string;
+  collectorNumber: string;
+  image?: string;
+  finish: Finish;
+  lang: string;
+  board: DeckBoard;
+  qty: number;
+}
+
+/** +1/−1 tap feedback on a tray tile; seq remounts the animation per tap. */
+interface TapFx {
+  id: string;
+  delta: 1 | -1;
+  seq: number;
+}
+
+const entryKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'board'>) => `${e.scryfallId}|${e.finish}|${e.board}`;
+
+/** Collapse duplicate (printing, finish, board) lines after a row edit. */
+function mergeSession(entries: SessionEntry[]): SessionEntry[] {
+  const map = new Map<string, SessionEntry>();
+  for (const e of entries) {
+    const prev = map.get(entryKey(e));
+    if (prev) prev.qty += e.qty;
+    else map.set(entryKey(e), { ...e });
+  }
+  return [...map.values()];
+}
 
 /** Whether the card's finish matters for this target (deck slots and wishlist ignore it). */
 function finishMatters(target: ScanTarget): boolean {
@@ -85,34 +134,29 @@ function targetLabel(target: ScanTarget): string {
   }
 }
 
-function addLabel(target: ScanTarget, board: DeckBoard): string {
-  switch (target.kind) {
-    case 'collection':
-      return 'Add to collection';
-    case 'tradelist':
-      return 'Add to tradelist';
-    case 'wishlist':
-      return 'Add to wishlist';
-    case 'deck':
-      return `Add to ${BOARD_LABELS[board]}`;
-    case 'trade':
-      return 'Add to trade';
-  }
-}
-
 export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target?: ScanTarget; onClose: () => void }) {
   const [stage, setStage] = useState<Stage>({ kind: 'setup', message: 'Checking scan data…' });
   const [live, setLive] = useState<LiveScanState | null>(null);
-  const [added, setAdded] = useState(0);
+  const [tray, setTray] = useState<Tray | null>(null);
+  const [session, setSession] = useState<SessionEntry[]>([]);
+  const [listOpen, setListOpen] = useState(false);
+  const [fx, setFx] = useState<TapFx | null>(null);
   const [foil, setFoil] = useState(false);
   const [board, setBoard] = useState<DeckBoard>('main');
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraScan | null>(null);
-  const indexRef = useRef<ScanIndex | null>(null);
+  const trayRef = useRef<Tray | null>(null);
+  const fxSeq = useRef(0);
   const toast = useToast();
 
+  const total = session.reduce((n, e) => n + e.qty, 0);
+
+  const updateTray = (t: Tray | null) => {
+    trayRef.current = t;
+    setTray(t);
+  };
+
   const startScanning = (index: ScanIndex) => {
-    indexRef.current = index;
     setStage({ kind: 'scanning' });
     const cam = new CameraScan(videoRef.current!, index, (s) => {
       setLive(s);
@@ -158,6 +202,15 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   };
 
   const onLocked = async (result: ScanPipelineResult) => {
+    // The camera never stops between cards, so it keeps re-locking whatever is
+    // in frame — only a *different* top candidate replaces the tray (and
+    // re-runs the DB join + OCR).
+    const topId = result.match.candidates[0]?.scryfallId;
+    if (!topId || topId === trayRef.current?.topId) {
+      cameraRef.current?.resume();
+      return;
+    }
+
     // Join candidates with the card DB; collapse per-face duplicates.
     const ids = [...new Set(result.match.candidates.map((c) => c.scryfallId))];
     const printings = await getPrintingsByIds(ids);
@@ -168,9 +221,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       return { scryfallId: id, distance: best.distance, printing, oracle: printing && oracles.get(printing.oracleId) };
     });
 
-    setStage({ kind: 'confirm', candidates, selected: ids[0]!, ocr: 'pending', lang: 'en' });
+    updateTray({ topId, candidates, ocr: 'pending', ocrHit: null, lang: 'en' });
+    cameraRef.current?.resume();
 
-    // S4: OCR the info strip to pin down printing + language.
+    // S4: OCR the info strip to pin down printing + language. By the time it
+    // resolves the user may already be on the next card — only touch the tray
+    // if it still shows this lock.
     try {
       const resolution = await resolveWithOcr(
         result,
@@ -178,224 +234,341 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           .filter((c) => c.printing)
           .map((c) => ({ scryfallId: c.scryfallId, set: c.printing!.set, collectorNumber: c.printing!.collectorNumber })),
       );
-      setStage((s) => {
-        if (s.kind !== 'confirm') return s;
-        const hit = resolution.confirmed ?? resolution.weak;
-        return {
-          ...s,
-          ocr: resolution.confirmed ? 'confirmed' : resolution.weak ? 'weak' : 'none',
-          selected: hit?.scryfallId ?? s.selected,
-          lang: resolution.parsed?.lang ?? s.lang,
-        };
+      const current = trayRef.current;
+      if (current?.topId !== topId) return;
+      const hit = resolution.confirmed ?? resolution.weak;
+      // Bring the confirmed edition to the front of the tray.
+      let ordered = current.candidates;
+      const idx = hit ? ordered.findIndex((c) => c.scryfallId === hit.scryfallId) : -1;
+      if (idx > 0) ordered = [ordered[idx]!, ...ordered.filter((_, j) => j !== idx)];
+      updateTray({
+        ...current,
+        candidates: ordered,
+        ocr: resolution.confirmed ? 'confirmed' : resolution.weak ? 'weak' : 'none',
+        ocrHit: hit?.scryfallId ?? null,
+        lang: resolution.parsed?.lang ?? current.lang,
       });
     } catch {
-      setStage((s) => (s.kind === 'confirm' ? { ...s, ocr: 'unavailable' } : s));
+      const current = trayRef.current;
+      if (current?.topId === topId) updateTray({ ...current, ocr: 'unavailable' });
     }
   };
 
-  const resume = () => {
-    setStage({ kind: 'scanning' });
+  /** +1/−1 from a tray tile, into the session list. */
+  const bump = (c: Candidate, delta: 1 | -1, lang: string) => {
+    if (!c.printing) return;
+    const finish: Finish = finishMatters(target) && foil ? 'foil' : 'nonfoil';
+    const b: DeckBoard = target.kind === 'deck' ? board : 'main';
+    const key = entryKey({ scryfallId: c.scryfallId, finish, board: b });
+    let i = session.findIndex((e) => entryKey(e) === key);
+    if (delta > 0) {
+      if (i >= 0) {
+        setSession(session.map((e, j) => (j === i ? { ...e, qty: e.qty + 1 } : e)));
+      } else {
+        setSession([
+          ...session,
+          {
+            scryfallId: c.scryfallId,
+            oracleId: c.printing.oracleId,
+            name: c.oracle?.name ?? 'Unknown card',
+            set: c.printing.set,
+            collectorNumber: c.printing.collectorNumber,
+            image: c.printing.imageNormal ?? undefined,
+            finish,
+            lang,
+            board: b,
+            qty: 1,
+          },
+        ]);
+      }
+    } else {
+      // Fall back to any entry of this printing (e.g. the foil toggle moved since the +1).
+      if (i < 0) {
+        for (let j = session.length - 1; j >= 0; j--) {
+          if (session[j]!.scryfallId === c.scryfallId) {
+            i = j;
+            break;
+          }
+        }
+      }
+      if (i < 0) return; // nothing to take back — no feedback either
+      const e = session[i]!;
+      setSession(e.qty <= 1 ? session.filter((_, j) => j !== i) : session.map((x, j) => (j === i ? { ...x, qty: x.qty - 1 } : x)));
+    }
+    setFx({ id: c.scryfallId, delta, seq: ++fxSeq.current });
+  };
+
+  const openList = () => {
+    cameraRef.current?.pause();
+    setListOpen(true);
+  };
+
+  const closeList = () => {
+    setListOpen(false);
     cameraRef.current?.resume();
   };
 
-  const add = async (c: Candidate, lang: string) => {
-    if (!c.printing) return;
-    const scanned: ScannedCard = {
-      oracleId: c.printing.oracleId,
-      scryfallId: c.scryfallId,
-      name: c.oracle?.name ?? 'card',
-      finish: foil ? 'foil' : 'nonfoil',
-      lang,
-    };
-    switch (target.kind) {
-      case 'collection':
-        await addToCollection({ ...scanned, condition: 'NM', quantity: 1, source: 'scan' });
-        break;
-      case 'tradelist':
-        // Same collection entry, but at least one copy starts marked for trade.
-        await addToCollection({ ...scanned, condition: 'NM', quantity: 1, quantityForTrade: 1, source: 'scan' });
-        break;
-      case 'wishlist':
-        // A scanned card is a specific printing, so the wish is for that edition.
-        await addToWishlist({ oracleId: scanned.oracleId, scryfallId: scanned.scryfallId, quantity: 1, source: 'scan' });
-        break;
-      case 'deck':
-        // Deck slots key on oracle + board; keep the scanned printing as the
-        // slot's preferred edition (like a hand-picked printing).
-        await addDeckCard({ deckId: target.deckId, oracleId: scanned.oracleId, scryfallId: scanned.scryfallId, board, quantity: 1 });
-        break;
-      case 'trade':
-        target.onAdd(scanned);
-        break;
+  /** Write the whole session to the target and leave the scanner. */
+  const complete = async () => {
+    for (const e of session) {
+      switch (target.kind) {
+        case 'collection':
+          await addToCollection({ oracleId: e.oracleId, scryfallId: e.scryfallId, condition: 'NM', finish: e.finish, lang: e.lang, quantity: e.qty, source: 'scan' });
+          break;
+        case 'tradelist':
+          // Same collection entry, but the copies start marked for trade.
+          await addToCollection({ oracleId: e.oracleId, scryfallId: e.scryfallId, condition: 'NM', finish: e.finish, lang: e.lang, quantity: e.qty, quantityForTrade: e.qty, source: 'scan' });
+          break;
+        case 'wishlist':
+          // A scanned card is a specific printing, so the wish is for that edition.
+          await addToWishlist({ oracleId: e.oracleId, scryfallId: e.scryfallId, quantity: e.qty, source: 'scan' });
+          break;
+        case 'deck':
+          // Deck slots key on oracle + board; keep the scanned printing as the
+          // slot's preferred edition (like a hand-picked printing).
+          await addDeckCard({ deckId: target.deckId, oracleId: e.oracleId, scryfallId: e.scryfallId, board: e.board, quantity: e.qty });
+          break;
+        case 'trade':
+          target.onAdd({ oracleId: e.oracleId, scryfallId: e.scryfallId, name: e.name, finish: e.finish, lang: e.lang, quantity: e.qty });
+          break;
+      }
     }
-    setAdded((n) => n + 1);
-    toast(`Added ${scanned.name}`);
-    resume();
-  };
-
-  const close = () => {
+    toast(`Added ${total} card${total === 1 ? '' : 's'} to ${targetLabel(target)}`);
     cameraRef.current?.stop();
     onClose();
   };
 
+  const close = () => {
+    if (total > 0 && !window.confirm(`Discard ${total} scanned card${total === 1 ? '' : 's'}?`)) return;
+    cameraRef.current?.stop();
+    onClose();
+  };
+
+  /** Session copies of a printing across finishes/boards — the tile's badge. */
+  const countOf = (scryfallId: string) => session.reduce((n, e) => (e.scryfallId === scryfallId ? n + e.qty : n), 0);
+
   return createPortal(
-    <div className="sheet-backdrop" onClick={close}>
-      <div className="sheet scan-sheet" role="dialog" aria-label="Scan cards" onClick={(e) => e.stopPropagation()}>
-        <div className="scan-sheet-head">
-          <h2>Scan cards</h2>
-          <span className="scan-target">→ {targetLabel(target)}</span>
-          {added > 0 && <span className="scan-added">+{added} added</span>}
-          <button className="scan-close" onClick={close} aria-label="Close">
-            ✕
+    <div className="scan-screen" role="dialog" aria-label="Scan cards">
+      <div className="scan-camera">
+        <video ref={videoRef} className="scan-camera-video" playsInline autoPlay muted />
+
+        <div className="scan-cam-top">
+          <button className="scan-cam-btn" onClick={close} aria-label="Close scanner">
+            <Icon name="close" />
           </button>
+          <span className="scan-cam-target">→ {targetLabel(target)}</span>
         </div>
 
-        <video ref={videoRef} className="scan-sheet-video" playsInline autoPlay muted hidden={stage.kind === 'setup' || stage.kind === 'downloading'} />
+        <div className="scan-cam-side">
+          <button className="scan-cam-btn" onClick={openList} aria-label={`Review ${total} scanned cards`}>
+            <Icon name="list" />
+            {total > 0 && <span className="scan-cam-badge">{total}</span>}
+          </button>
+          {finishMatters(target) && (
+            <button
+              className={foil ? 'scan-cam-chip scan-cam-chip-on' : 'scan-cam-chip'}
+              onClick={() => setFoil(!foil)}
+              aria-pressed={foil}
+            >
+              Foil
+            </button>
+          )}
+        </div>
 
-        {stage.kind === 'setup' && (
-          <>
-            <p>{stage.message}</p>
-            {stage.download && (
+        {target.kind === 'deck' && stage.kind === 'scanning' && (
+          <div className="seg-row scan-cam-board" role="radiogroup" aria-label="Add to board">
+            {deckBoards(target.format).map((b) => (
+              <button key={b} role="radio" aria-checked={board === b} className={board === b ? 'seg seg-active' : 'seg'} onClick={() => setBoard(b)}>
+                {b === 'main' ? 'Main' : b === 'side' ? 'Side' : 'Commander'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {stage.kind === 'scanning' && live && (
+          <p className="scan-cam-status">
+            {live.status === 'starting' && 'Starting camera…'}
+            {live.status === 'error' && `Camera failed: ${live.message}`}
+            {live.status === 'scanning' && (live.cardSeen ? 'Hold steady…' : 'Point the camera at a card')}
+            {live.status === 'locked' && 'Card found'}
+          </p>
+        )}
+
+        {(stage.kind === 'setup' || stage.kind === 'downloading') && (
+          <div className="scan-cam-panel">
+            <p>{stage.kind === 'setup' ? stage.message : stage.progress}</p>
+            {stage.kind === 'setup' && stage.download && (
               <button className="primary" onClick={() => void download(stage.download!)}>
                 Download scan data (~{(stage.download.bytes / 1e6).toFixed(0)} MB)
               </button>
             )}
-          </>
-        )}
-        {stage.kind === 'downloading' && <p>{stage.progress}</p>}
-
-        {stage.kind === 'scanning' && (
-          <p className="scan-status">
-            {live?.status === 'starting' && 'Starting camera…'}
-            {live?.status === 'error' && `Camera failed: ${live.message}`}
-            {live?.status === 'scanning' && (live.cardSeen ? 'Hold steady…' : 'Point the camera at a card')}
-            {live?.status === 'locked' && 'Card found'}
-          </p>
-        )}
-
-        {stage.kind === 'confirm' && (
-          <ConfirmPanel
-            stage={stage}
-            target={target}
-            foil={foil}
-            setFoil={setFoil}
-            board={board}
-            setBoard={setBoard}
-            onSelect={(id) => setStage((s) => (s.kind === 'confirm' ? { ...s, selected: id } : s))}
-            onAdd={(c) => void add(c, stage.lang)}
-            onSkip={resume}
-          />
+          </div>
         )}
       </div>
+
+      <div className="scan-tray">
+        {tray ? (
+          tray.candidates.map((c) => (
+            <TrayTile
+              key={c.scryfallId}
+              candidate={c}
+              count={countOf(c.scryfallId)}
+              confirmed={tray.ocrHit === c.scryfallId && (tray.ocr === 'confirmed' || tray.ocr === 'weak')}
+              fx={fx?.id === c.scryfallId ? fx : null}
+              onBump={(delta) => bump(c, delta, tray.lang)}
+            />
+          ))
+        ) : (
+          <p className="scan-tray-hint">Matches land here — tap the top of a card for +1, the bottom for −1.</p>
+        )}
+      </div>
+
+      {listOpen && (
+        <SessionSheet
+          entries={session}
+          target={target}
+          total={total}
+          onChange={setSession}
+          onComplete={() => void complete()}
+          onClose={closeList}
+        />
+      )}
     </div>,
     document.body,
   );
 }
 
-function ConfirmPanel({
-  stage,
-  target,
-  foil,
-  setFoil,
-  board,
-  setBoard,
-  onSelect,
-  onAdd,
-  onSkip,
+function TrayTile({
+  candidate: c,
+  count,
+  confirmed,
+  fx,
+  onBump,
 }: {
-  stage: Extract<Stage, { kind: 'confirm' }>;
-  target: ScanTarget;
-  foil: boolean;
-  setFoil: (v: boolean) => void;
-  board: DeckBoard;
-  setBoard: (b: DeckBoard) => void;
-  onSelect: (id: string) => void;
-  onAdd: (c: Candidate) => void;
-  onSkip: () => void;
+  candidate: Candidate;
+  count: number;
+  confirmed: boolean;
+  fx: TapFx | null;
+  onBump: (delta: 1 | -1) => void;
 }) {
-  const selected = stage.candidates.find((c) => c.scryfallId === stage.selected) ?? stage.candidates[0];
-  if (!selected) {
-    return (
-      <>
-        <p>No match found — try again with better light.</p>
-        <div className="scan-confirm-actions">
-          <button onClick={onSkip}>Keep scanning</button>
-        </div>
-      </>
-    );
-  }
+  const name = c.oracle?.name ?? 'Unknown card';
+  return (
+    <div className="scan-tile">
+      <div className="scan-tile-card">
+        {c.printing?.imageNormal ? <img src={c.printing.imageNormal} alt={name} /> : <div className="scan-tile-ph">{name}</div>}
+        <button className="scan-tile-half scan-tile-add" onClick={() => onBump(1)} aria-label={`Add ${name}`}>
+          <Icon name="plus" size={16} />
+        </button>
+        <button className="scan-tile-half scan-tile-sub" onClick={() => onBump(-1)} aria-label={`Remove ${name}`}>
+          <Icon name="minus" size={16} />
+        </button>
+        {count > 0 && <span className="scan-tile-count">{count}</span>}
+        {confirmed && (
+          <span className="scan-tile-ocr" title="Edition confirmed">
+            <Icon name="check" size={12} />
+          </span>
+        )}
+        {fx && (
+          <span key={fx.seq} className="scan-fx" aria-hidden>
+            {fx.delta > 0 ? '+1' : '−1'}
+          </span>
+        )}
+      </div>
+      <span className="scan-tile-caption">{c.printing ? `${c.printing.set.toUpperCase()} #${c.printing.collectorNumber}` : '—'}</span>
+    </div>
+  );
+}
 
-  const ocrLabel: Record<OcrState, string> = {
-    pending: 'checking edition…',
-    confirmed: 'edition confirmed',
-    weak: 'set matches',
-    none: 'edition unverified — check below',
-    unavailable: 'edition check unavailable',
+function SessionSheet({
+  entries,
+  target,
+  total,
+  onChange,
+  onComplete,
+  onClose,
+}: {
+  entries: SessionEntry[];
+  target: ScanTarget;
+  total: number;
+  onChange: (next: SessionEntry[]) => void;
+  onComplete: () => void;
+  onClose: () => void;
+}) {
+  const adjust = (i: number, delta: number) => {
+    const e = entries[i]!;
+    onChange(e.qty + delta <= 0 ? entries.filter((_, j) => j !== i) : entries.map((x, j) => (j === i ? { ...x, qty: x.qty + delta } : x)));
+  };
+
+  const toggleFoil = (i: number) =>
+    onChange(mergeSession(entries.map((e, j) => (j === i ? { ...e, finish: e.finish === 'foil' ? 'nonfoil' : 'foil' } : e))));
+
+  const cycleBoard = (i: number) => {
+    if (target.kind !== 'deck') return;
+    const boards = deckBoards(target.format);
+    onChange(
+      mergeSession(
+        entries.map((e, j) => (j === i ? { ...e, board: boards[(boards.indexOf(e.board) + 1) % boards.length]! } : e)),
+      ),
+    );
   };
 
   return (
-    <>
-      <div className="scan-confirm">
-        {selected.printing?.imageNormal && <img className="scan-confirm-img" src={selected.printing.imageNormal} alt="" />}
-        <div className="scan-confirm-text">
-          <strong>{selected.oracle?.name ?? 'Unknown card'}</strong>
-          {selected.printing && (
-            <span className="scan-printing">
-              {selected.printing.setName} ({selected.printing.set.toUpperCase()}) #{selected.printing.collectorNumber} ·{' '}
-              {stage.lang}
-            </span>
-          )}
-          <span className="scan-hint">{ocrLabel[stage.ocr]}</span>
-          {finishMatters(target) && (
-            <label className="scan-foil">
-              <input type="checkbox" checked={foil} onChange={(e) => setFoil(e.target.checked)} /> Foil
-            </label>
-          )}
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet scan-list-sheet" role="dialog" aria-label="Scanned cards" onClick={(e) => e.stopPropagation()}>
+        <div className="scan-sheet-head">
+          <h2>Scanned cards</h2>
+          <span className="scan-target">→ {targetLabel(target)}</span>
+          <button className="scan-close" onClick={onClose} aria-label="Close list">
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+
+        {entries.length === 0 ? (
+          <p className="scan-list-empty">Nothing scanned yet — tap the top half of a match to add it.</p>
+        ) : (
+          <ul className="scan-list">
+            {entries.map((e, i) => (
+              <li key={entryKey(e)} className="scan-list-row">
+                {e.image ? <img className="scan-list-thumb" src={e.image} alt="" /> : <span className="scan-list-thumb" />}
+                <div className="scan-list-info">
+                  <strong>{e.name}</strong>
+                  <span className="scan-printing">
+                    {e.set.toUpperCase()} #{e.collectorNumber} · {e.lang}
+                  </span>
+                  <span className="scan-list-chips">
+                    {finishMatters(target) && (
+                      <button className={e.finish === 'foil' ? 'scan-chip scan-chip-on' : 'scan-chip'} onClick={() => toggleFoil(i)}>
+                        Foil
+                      </button>
+                    )}
+                    {target.kind === 'deck' && (
+                      <button className="scan-chip" onClick={() => cycleBoard(i)}>
+                        {BOARD_LABELS[e.board]}
+                      </button>
+                    )}
+                  </span>
+                </div>
+                <div className="scan-list-qty">
+                  <button onClick={() => adjust(i, -1)} aria-label={`One less ${e.name}`}>
+                    <Icon name="minus" size={16} />
+                  </button>
+                  <span>{e.qty}</span>
+                  <button onClick={() => adjust(i, 1)} aria-label={`One more ${e.name}`}>
+                    <Icon name="plus" size={16} />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="scan-confirm-actions">
+          <button className="primary" disabled={total === 0} onClick={onComplete}>
+            Add {total} card{total === 1 ? '' : 's'} to {targetLabel(target)}
+          </button>
+          <button onClick={onClose}>Keep scanning</button>
         </div>
       </div>
-
-      {target.kind === 'deck' && (
-        <div className="seg-row scan-board" role="radiogroup" aria-label="Add to board">
-          {deckBoards(target.format).map((b) => (
-            <button
-              key={b}
-              role="radio"
-              aria-checked={board === b}
-              className={board === b ? 'seg seg-active' : 'seg'}
-              onClick={() => setBoard(b)}
-            >
-              {b === 'main' ? 'Main' : b === 'side' ? 'Side' : 'Commander'}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {stage.candidates.length > 1 && (
-        <div className="scan-alternatives">
-          {stage.candidates.map((c) => (
-            <label key={c.scryfallId} className="scan-alternative">
-              <input
-                type="radio"
-                name="scan-candidate"
-                checked={c.scryfallId === stage.selected}
-                onChange={() => onSelect(c.scryfallId)}
-              />
-              <span>
-                {c.oracle?.name ?? c.scryfallId}
-                {c.printing && ` — ${c.printing.set.toUpperCase()} #${c.printing.collectorNumber}`}
-                <span className="scan-distance"> d{c.distance}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
-
-      <div className="scan-confirm-actions">
-        <button className="primary" disabled={!selected.printing} onClick={() => onAdd(selected)}>
-          {addLabel(target, board)}
-        </button>
-        <button onClick={onSkip}>Skip</button>
-      </div>
-    </>
+    </div>
   );
 }

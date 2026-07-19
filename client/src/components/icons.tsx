@@ -32,7 +32,8 @@ export type IconName =
   | 'account'
   | 'community'
   | 'bell'
-  | 'qr';
+  | 'qr'
+  | 'list';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -224,6 +225,17 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M16 12h1" />
       <path d="M21 12v.01" />
       <path d="M12 21v-1" />
+    </>
+  ),
+  // Bulleted list — the scan-session review.
+  list: (
+    <>
+      <path d="M8 6h13" />
+      <path d="M8 12h13" />
+      <path d="M8 18h13" />
+      <path d="M3 6h.01" />
+      <path d="M3 12h.01" />
+      <path d="M3 18h.01" />
     </>
   ),
 };

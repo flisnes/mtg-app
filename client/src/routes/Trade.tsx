@@ -581,7 +581,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             onAdd: (c) =>
               addLine(
                 scanFor,
-                { oracleId: c.oracleId, scryfallId: c.scryfallId, name: c.name, quantity: 1, condition: 'NM', finish: c.finish, lang: c.lang },
+                { oracleId: c.oracleId, scryfallId: c.scryfallId, name: c.name, quantity: c.quantity, condition: 'NM', finish: c.finish, lang: c.lang },
                 999,
               ),
           }}

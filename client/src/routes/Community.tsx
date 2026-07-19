@@ -314,7 +314,7 @@ function UserLists({
           badgeTitle: match
             ? 'In your tradelist'
             : own
-              ? 'You own this but haven’t listed it for trade — add it to your tradelist to offer it.'
+              ? 'You own this but haven’t listed it for trade. Add it to your tradelist to offer it.'
               : undefined,
           onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId ?? undefined }) : undefined,
         };

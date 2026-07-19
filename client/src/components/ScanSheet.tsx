@@ -430,7 +430,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             />
           ))
         ) : (
-          <p className="scan-tray-hint">Matches land here — tap the top of a card for +1, the bottom for −1.</p>
+          <p className="scan-tray-hint">Matches land here. Tap the top of a card for +1, the bottom for −1.</p>
         )}
       </div>
 
@@ -563,7 +563,7 @@ function SessionSheet({
         </div>
 
         {entries.length === 0 ? (
-          <p className="scan-list-empty">Nothing scanned yet — tap the top half of a match to add it.</p>
+          <p className="scan-list-empty">Nothing scanned yet. Tap the top half of a match to add it.</p>
         ) : (
           <ul className="scan-list">
             {entries.map((e, i) => (

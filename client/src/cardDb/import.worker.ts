@@ -91,7 +91,7 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
       const url = new URL(task.url, req.baseUrl).href;
       const text = await downloadDecompressed(url, task.bytes, downloadProgress('Downloading card data'));
       if ((await sha256Hex(text)) !== task.sha256) {
-        throw new Error(`${task.artifact} chunk ${task.key} checksum mismatch — download corrupt`);
+        throw new Error(`${task.artifact} chunk ${task.key} checksum mismatch: download corrupt`);
       }
       const label = `Installing ${task.artifact === 'oracle' ? 'cards' : 'editions'}…`;
       const importProgress = (rowFraction: number) =>
@@ -117,7 +117,7 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
     if (req.prices) {
       const url = new URL(req.prices.url, req.baseUrl).href;
       const text = await downloadDecompressed(url, req.prices.bytes, downloadProgress('Downloading prices'));
-      if ((await sha256Hex(text)) !== req.prices.sha256) throw new Error('prices checksum mismatch — download corrupt');
+      if ((await sha256Hex(text)) !== req.prices.sha256) throw new Error('prices checksum mismatch: download corrupt');
       post({ type: 'progress', fraction: totalBytes ? (doneBytes + req.prices.bytes * DOWNLOAD_SHARE) / totalBytes : 0, label: 'Updating prices…' });
       await db.priceShards.bulkPut(buildPriceShards(JSON.parse(text) as PriceMap));
       await setSetting('pricesSha256', req.prices.sha256);

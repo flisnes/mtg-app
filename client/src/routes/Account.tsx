@@ -98,8 +98,8 @@ function SignedOut() {
       } else {
         const action = await signIn(username.trim(), password);
         if (action === 'seeded') toast('Signed in. This device’s data now lives on your account.');
-        else if (action === 'pulled') toast('Signed in — downloading your data…');
-        else if (action === 'resumed') toast(`Signed in as ${username.trim()} — syncing.`);
+        else if (action === 'pulled') toast('Signed in. Downloading your data…');
+        else if (action === 'resumed') toast(`Signed in as ${username.trim()}, syncing.`);
         // 'confirm_replace' → the signed-in view shows the decision panel.
       }
     } catch (err) {
@@ -232,7 +232,7 @@ function SignedIn() {
         {!syncReady ? (
           <div className="conflict-panel" role="alert">
             <p className="fine-print">
-              This account already has synced data — probably from another device. Joining the account{' '}
+              This account already has synced data, probably from another device. Joining the account{' '}
               <strong>replaces everything on this device</strong> with the account’s data. If this device has the
               better copy, sign out here and sign in from the other device first.
             </p>
@@ -255,7 +255,7 @@ function SignedIn() {
                   : pendingChanges > 0
                     ? navigator.onLine
                       ? `${pendingChanges} local ${pendingChanges === 1 ? 'change' : 'changes'} waiting to sync.`
-                      : `Offline — ${pendingChanges} ${pendingChanges === 1 ? 'change' : 'changes'} will sync when you’re back online.`
+                      : `Offline: ${pendingChanges} ${pendingChanges === 1 ? 'change' : 'changes'} will sync when you’re back online.`
                     : sync.lastSyncAt
                       ? `Everything is synced. Last synced ${fmtWhen(sync.lastSyncAt)}.`
                       : 'Everything is synced.'}
@@ -266,7 +266,7 @@ function SignedIn() {
               </button>
             </div>
             <p className="fine-print">
-              Changes you make on any signed-in device sync automatically — including while offline; they catch up
+              Changes you make on any signed-in device sync automatically, even while offline; they catch up
               when you reconnect.
             </p>
           </>

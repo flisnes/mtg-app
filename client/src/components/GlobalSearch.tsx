@@ -153,7 +153,7 @@ export function GlobalSearchBar() {
                 className="header-account"
                 onClick={() => navigate('/account')}
                 aria-label={signedIn ? `Account: signed in as ${session!.username} (${syncLabel})` : 'Account & sync'}
-                title={signedIn ? `Signed in as ${session!.username} — ${syncLabel}` : 'Account & sync'}
+                title={signedIn ? `Signed in as ${session!.username} (${syncLabel})` : 'Account & sync'}
               >
                 <Icon name="account" size={22} />
                 {signedIn && <span className={`header-account-dot header-account-dot-${syncTone}`} aria-hidden />}
@@ -305,7 +305,7 @@ function SearchOverlay({
       </p>
       <p className="search-meta search-syntax-hint">
         Scryfall syntax works too: <code>o:"whenever ~ enters"</code> <code>t:legendary</code> <code>c:ug</code>{' '}
-        <code>id&lt;=bg</code> <code>mv&lt;=2</code> <code>r:mythic</code> <code>f:modern</code> — prefix{' '}
+        <code>id&lt;=bg</code> <code>mv&lt;=2</code> <code>r:mythic</code> <code>f:modern</code>. Prefix{' '}
         <code>-</code> to negate.
       </p>
     </>

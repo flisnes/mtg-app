@@ -81,7 +81,7 @@ export function NotificationBell() {
           <div className="notif-head">Trade matches</div>
           {items.length === 0 ? (
             <p className="notif-empty">
-              No matches yet. When another user wants a card you have — or has one you want — it shows up here.
+              No matches yet. When another user wants a card you have, or has one you want, it shows up here.
             </p>
           ) : (
             <ul className="notif-list">

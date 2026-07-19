@@ -202,7 +202,7 @@ export function Trade() {
           <button onClick={trade.cancel}>Cancel</button>
         </div>
         <p className="fine-print">
-          Start ahead to add cards while you wait — they can join whenever they’re ready.
+          Start ahead to add cards while you wait; they can join whenever they’re ready.
         </p>
       </Page>
     );
@@ -388,10 +388,10 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
       ? iConfirmed
         ? 'Waiting for their confirmation…'
         : peerConfirmed
-          ? 'They confirmed — inspect the cards, then confirm.'
+          ? 'They confirmed. Inspect the cards, then confirm.'
           : 'Deal! Swap the cards, then both confirm.'
       : iAccepted
-        ? 'Accepted — waiting for them. Any edit resets acceptance.'
+        ? 'Accepted, waiting for them. Any edit resets acceptance.'
         : peerAccepted
           ? 'They accepted. Review the deal and accept.'
           : trade.peerPresent
@@ -482,7 +482,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           <button
             className={`trade-diff ${Math.abs(diff) < BALANCE_EPSILON ? 'diff-even' : 'diff-off'}`}
             title="Balance the trade"
-            aria-label="Value difference — tap to balance the trade"
+            aria-label="Value difference. Tap to balance the trade"
             onClick={() => setSheet('balance')}
             disabled={!editable}
           >
@@ -577,7 +577,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
         <ScanSheet
           target={{
             kind: 'trade',
-            label: scanFor === 'give' ? 'Trade — you give' : 'Trade — you get',
+            label: scanFor === 'give' ? 'Trade: you give' : 'Trade: you get',
             onAdd: (c) =>
               addLine(
                 scanFor,

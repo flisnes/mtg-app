@@ -42,7 +42,7 @@ export function Import() {
     const replaceOracleIds = [...choices].filter(([, c]) => c === 'replace').map(([id]) => id);
     const skipped = lines.length - kept.length;
     if (kept.length === 0) {
-      toast('Nothing imported — every card was skipped');
+      toast('Nothing imported: every card was skipped');
       navigate('/collection');
       return;
     }

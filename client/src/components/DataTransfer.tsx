@@ -43,7 +43,7 @@ export function DataTransfer() {
         <button onClick={t.startSend}>Send to another device</button>
         {session ? (
           <p className="fine-print">
-            Receiving is disabled while signed in — your account already syncs between devices. Sign out first if you
+            Receiving is disabled while signed in: your account already syncs between devices. Sign out first if you
             really want to overwrite this device from another one.
           </p>
         ) : (

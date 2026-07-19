@@ -122,7 +122,7 @@ export function EditHistory() {
   async function doUndo(entry: HistoryEntry) {
     const res = await undoEntry(undoRefOf(entry));
     if (res.undone) toast('Change undone');
-    else toast(res.reason === 'not-latest' ? "Can't undo — there are newer changes" : "Couldn't undo that change");
+    else toast(res.reason === 'not-latest' ? "Can't undo: there are newer changes" : "Couldn't undo that change");
     setOpenEntry(null);
   }
 

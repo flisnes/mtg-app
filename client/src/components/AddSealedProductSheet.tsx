@@ -252,11 +252,11 @@ function DetailView({
       </p>
 
       {product.omittedRandom ? (
-        <p className="sealed-note">⚠ Also contains {product.omittedRandom} random pack{product.omittedRandom === 1 ? '' : 's'} — not added (contents unknown).</p>
+        <p className="sealed-note">⚠ Also contains {product.omittedRandom} random pack{product.omittedRandom === 1 ? '' : 's'}, not added (contents unknown).</p>
       ) : null}
       {product.unresolved ? <p className="sealed-note">{product.unresolved} card(s) in this product couldn’t be identified and were skipped.</p> : null}
       {detail.missingLocally > 0 ? (
-        <p className="sealed-note">{detail.missingLocally} card(s) aren’t in your installed card data — update your card database to include them.</p>
+        <p className="sealed-note">{detail.missingLocally} card(s) aren’t in your installed card data. Update your card database to include them.</p>
       ) : null}
 
       {perCopy === 0 ? (

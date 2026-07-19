@@ -227,8 +227,8 @@ export function ScanTest() {
     showOutcome(out, !!manualQuad, 'photo');
     setStatus(
       out.quad
-        ? `Card ${manualQuad ? '(manual corners)' : 'detected'} — ${out.match.verdict}.`
-        : `No card quad found — matched against the full frame (${out.match.verdict}). Tap 4 corners (TL→TR→BR→BL) to fix.`,
+        ? `Card ${manualQuad ? '(manual corners)' : 'detected'}: ${out.match.verdict}.`
+        : `No card quad found; matched against the full frame (${out.match.verdict}). Tap 4 corners (TL→TR→BR→BL) to fix.`,
     );
   };
 
@@ -263,7 +263,7 @@ export function ScanTest() {
       setLive(s);
       if (s.status === 'locked') {
         showOutcome(s.result, false, 'camera');
-        setStatus(`Camera locked — ${s.result.match.verdict}.`);
+        setStatus(`Camera locked: ${s.result.match.verdict}.`);
       }
     });
     cameraRef.current = cam;
@@ -287,7 +287,7 @@ export function ScanTest() {
     if (pts.length < 4) {
       setCorners(pts);
       drawPreview(result?.quad ?? null, pts);
-      setStatus(`Corner ${pts.length}/4 set — tap ${['TL', 'TR', 'BR', 'BL'][pts.length]} next.`);
+      setStatus(`Corner ${pts.length}/4 set. Tap ${['TL', 'TR', 'BR', 'BL'][pts.length]} next.`);
     } else {
       runPipeline(orientQuadPortrait(pts as unknown as Quad));
     }
@@ -296,7 +296,7 @@ export function ScanTest() {
   const ms = (n: number) => `${n.toFixed(0)} ms`;
 
   return (
-    <Page title="Scan test" subtitle="Dev harness — upload a card photo, match it against the art-hash blob">
+    <Page title="Scan test" subtitle="Dev harness: upload a card photo, match it against the art-hash blob">
       <section className="scan-section">
         <h2>Scan data</h2>
         {installed ? (
@@ -370,7 +370,7 @@ export function ScanTest() {
         {live?.status === 'error' && <p className="scan-status">Camera failed: {live.message}</p>}
         {live?.status === 'scanning' && (
           <p className="scan-status">
-            {live.cardSeen ? `Card in view — best distance ${live.lastDistance ?? '–'}` : 'Looking for a card…'}
+            {live.cardSeen ? `Card in view, best distance ${live.lastDistance ?? '–'}` : 'Looking for a card…'}
             {` · ${live.frameMs.toFixed(0)} ms/frame`}
           </p>
         )}

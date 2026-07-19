@@ -89,7 +89,7 @@ export function CardHistory({
 
   if (!events) return null;
   if (!sorted.length) {
-    return <p className="fine-print">Nothing recorded yet — history starts when you add, trade or wish for this card.</p>;
+    return <p className="fine-print">Nothing recorded yet. History starts when you add, trade or wish for this card.</p>;
   }
 
   return (

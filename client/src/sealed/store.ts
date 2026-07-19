@@ -39,7 +39,7 @@ async function downloadDecompressed(url: string): Promise<string> {
 
 async function download(meta: CardDbArtifactMeta): Promise<SealedStoreRow> {
   const text = await downloadDecompressed(new URL(meta.url, CARD_DB_BASE!).href);
-  if ((await sha256Hex(text)) !== meta.sha256) throw new Error('sealed checksum mismatch — download corrupt');
+  if ((await sha256Hex(text)) !== meta.sha256) throw new Error('sealed checksum mismatch: download corrupt');
   const products = JSON.parse(text) as SealedProduct[];
   const row: SealedStoreRow = { key: 'current', sha256: meta.sha256, count: products.length, products };
   await db.sealed.put(row);

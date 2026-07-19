@@ -81,7 +81,7 @@ export function About() {
           <p role="status">All local data deleted.</p>
         ) : session ? (
           <p className="fine-print">
-            “Delete all my data” is disabled while signed in — this device syncs with your account, so a local wipe
+            “Delete all my data” is disabled while signed in: this device syncs with your account, so a local wipe
             would quietly fall out of sync. Sign out first (More → Account &amp; sync), or delete the whole account
             there instead.
           </p>
@@ -102,7 +102,7 @@ export function About() {
       <section className="about-section">
         <h2>Having trouble?</h2>
         <p className="fine-print">
-          If something breaks, copy the diagnostic log and send it along — it includes recent errors and your app/device
+          If something breaks, copy the diagnostic log and send it along. It includes recent errors and your app/device
           version, but no card data.
         </p>
         <button
@@ -119,7 +119,7 @@ export function About() {
         <p className="fine-print">
           Card data and images are provided by <a href="https://scryfall.com">Scryfall</a>. Prices are sourced from
           Scryfall bulk data and may be up to 24 hours stale. Your collection’s price history is recorded
-          automatically each time you open the app — tap any card to see its trend.
+          automatically each time you open the app. Tap any card to see its trend.
         </p>
         <p className="fine-print">
           Portions of the materials are property of Wizards of the Coast. This is unofficial Fan Content permitted under

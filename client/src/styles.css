@@ -2539,12 +2539,6 @@ button.ghost {
   color: #fff;
 }
 .scan-tray {
-  /* Tile geometry from the tray's own height (25dvh = the screen's 3:1 split)
-     rather than the card image's intrinsic size — an auto-width flex tile
-     would balloon to the image's natural 488px (aspect-ratio can't transfer
-     from a flex-derived height during intrinsic sizing). */
-  --scan-tile-h: calc(25dvh - 1rem - var(--safe-bottom));
-  --scan-card-h: calc(var(--scan-tile-h) - 0.9rem - 2px);
   flex: 1 1 0;
   min-height: 0;
   background: var(--surface);
@@ -2554,6 +2548,12 @@ button.ghost {
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0.5rem 0.6rem calc(0.5rem + var(--safe-bottom));
+  /* Tiles size themselves from the tray's MEASURED height (cqh below) — an
+     auto-width flex tile would balloon to the card image's natural 488px
+     (aspect-ratio can't transfer a flex-derived height during intrinsic
+     sizing), and computing the height from 25dvh proved wrong on Android
+     (browser-UI viewport games), cropping the card sides. */
+  container-type: size;
 }
 .scan-tray-hint {
   margin: auto;
@@ -2566,7 +2566,10 @@ button.ghost {
   flex-direction: column;
   gap: 2px;
   height: 100%;
-  width: calc(var(--scan-card-h) * 0.718); /* card aspect 488/680 */
+  /* Card aspect 488/680 = 0.718; card box height = tile − caption − gap.
+     dvh fallback first, then the container-measured truth where supported. */
+  width: calc((25dvh - 1.9rem - 2px - var(--safe-bottom)) * 0.718);
+  width: calc((100cqh - 0.9rem - 2px) * 0.718);
   flex-shrink: 0;
 }
 .scan-tile-card {

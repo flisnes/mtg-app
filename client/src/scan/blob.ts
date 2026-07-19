@@ -46,6 +46,47 @@ export function scryfallIdAt(index: ScanIndex, i: number): string {
   return s;
 }
 
+/**
+ * Drop records for excluded printings (e.g. playtest cards, see
+ * scan/exclusions.ts) so they can neither drive a consensus lock nor appear
+ * as candidates. One-time cost at index load, not on the search hot path.
+ */
+export function filterScanIndex(index: ScanIndex, excluded: ReadonlySet<string>): ScanIndex {
+  if (!excluded.size) return index;
+  const algo2 = index.algo === 2;
+  const hHi = new Uint32Array(index.count);
+  const hLo = new Uint32Array(index.count);
+  const vHi = new Uint32Array(algo2 ? index.count : 0);
+  const vLo = new Uint32Array(algo2 ? index.count : 0);
+  const ids = new Uint8Array(index.count * 16);
+  const faces = new Uint8Array(index.count);
+
+  let n = 0;
+  for (let i = 0; i < index.count; i++) {
+    if (excluded.has(scryfallIdAt(index, i))) continue;
+    hHi[n] = index.hHi[i]!;
+    hLo[n] = index.hLo[i]!;
+    if (algo2) {
+      vHi[n] = index.vHi[i]!;
+      vLo[n] = index.vLo[i]!;
+    }
+    ids.set(index.ids.subarray(i * 16, i * 16 + 16), n * 16);
+    faces[n] = index.faces[i]!;
+    n++;
+  }
+
+  return {
+    algo: index.algo,
+    count: n,
+    hHi: hHi.subarray(0, n),
+    hLo: hLo.subarray(0, n),
+    vHi: vHi.subarray(0, algo2 ? n : 0),
+    vLo: vLo.subarray(0, algo2 ? n : 0),
+    ids: ids.subarray(0, n * 16),
+    faces: faces.subarray(0, n),
+  };
+}
+
 export function parseHashBlob(buf: ArrayBuffer): ScanIndex {
   const view = new DataView(buf);
   if (buf.byteLength < 16) throw new Error('scan blob truncated');

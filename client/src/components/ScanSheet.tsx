@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import type { DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
-import { parseHashBlob, type ScanIndex } from '../scan/blob.js';
+import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
+import { getScanExcludedIds } from '../scan/exclusions.js';
 import { CameraScan, type LiveScanState } from '../scan/camera.js';
 import type { ScanPipelineResult } from '../scan/pipeline.js';
 import { resolveWithOcr } from '../scan/ocr.js';
@@ -156,6 +157,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     setTray(t);
   };
 
+  /** Parse the blob and drop printings the camera must never suggest. */
+  const buildIndex = async (blob: ArrayBuffer): Promise<ScanIndex> => filterScanIndex(parseHashBlob(blob), await getScanExcludedIds());
+
   const startScanning = (index: ScanIndex) => {
     setStage({ kind: 'scanning' });
     const cam = new CameraScan(videoRef.current!, index, (s) => {
@@ -173,7 +177,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       const installed = await getInstalledScanData();
       if (cancelled) return;
       if (installed) {
-        startScanning(parseHashBlob(installed.blob));
+        const index = await buildIndex(installed.blob);
+        if (!cancelled) startScanning(index);
         return;
       }
       const update = await checkScanDataUpdate();
@@ -195,7 +200,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     setStage({ kind: 'downloading', progress: `Downloading ${(manifest.bytes / 1e6).toFixed(1)} MB…` });
     try {
       const row = await downloadScanData(manifest);
-      startScanning(parseHashBlob(row.blob));
+      startScanning(await buildIndex(row.blob));
     } catch (e) {
       setStage({ kind: 'setup', message: `Download failed: ${(e as Error).message}` });
     }

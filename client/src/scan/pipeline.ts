@@ -27,6 +27,15 @@ import { classifyMatch, searchHashes, type MatchResult } from './match.js';
 const QUAD_VARIANTS = [0, +0.075, -0.045];
 const MAX_QUAD_CANDIDATES = 4;
 
+/**
+ * Art crops with less structure than this never reach the index — their hash
+ * bits are noise, and a flat surface would otherwise "match" the blank-art
+ * records at distance ~0 (playtest Whiteout et al.). Calibration: blank arts
+ * measure ≤ ~1.1, a strong lighting gradient on a plain surface ~4.3, the
+ * flattest real card art in a 400-sample ~3.8, median ~18.
+ */
+export const MIN_ART_DETAIL = 2.5;
+
 export interface ScanPipelineInput {
   /** Full working image (cap ~1600px — hashes fine, warps fast). */
   full: ImageData;
@@ -109,7 +118,9 @@ export function runScanPipeline(input: ScanPipelineInput, index: ScanIndex): Sca
       const upright = flipped ? rotateImageData180(warped) : warped;
       const art = cropImageData(upright, CROP_BOXES.art);
       const hash = dhash(grayscale(art));
-      const candidates = searchHashes(index, hash, 8);
+      // Featureless crop (bare table, wall) — hash bits are noise; don't
+      // search, or every blank-ish record looks like a near-perfect match.
+      const candidates = hash.detail >= MIN_ART_DETAIL ? searchHashes(index, hash, 8) : [];
       const distance = candidates[0]?.distance ?? Infinity;
       if (best && distance >= (best.match.candidates[0]?.distance ?? Infinity)) continue;
       best = {

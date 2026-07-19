@@ -6,6 +6,19 @@
 // Hashes are split into u32 pairs (hi = top 32 bits) so the Hamming search
 // never touches BigInt on the hot path.
 
+import { popcount32 } from './hash.js';
+
+/**
+ * Records whose combined H+V popcount is below this are dropped at parse
+ * time. A near-zero hash means the source art is blank (Mystery Booster
+ * playtest cards like Whiteout, empty card frames), and every flat surface
+ * the camera sees — a table, a wall — hashes to the same degenerate value,
+ * so these records match everything featureless at distance ~0. Measured on
+ * the 110k blob: 8 records sit at popcount ≤ 9 (all blank art), then a clean
+ * gap until 16.
+ */
+export const MIN_RECORD_POPCOUNT = 10;
+
 export interface ScanIndex {
   algo: 1 | 2;
   count: number;
@@ -54,19 +67,40 @@ export function parseHashBlob(buf: ArrayBuffer): ScanIndex {
   const faces = new Uint8Array(count);
   const bytes = new Uint8Array(buf);
 
+  let n = 0;
   for (let i = 0; i < count; i++) {
     let off = 16 + i * stride;
-    hLo[i] = view.getUint32(off, true);
-    hHi[i] = view.getUint32(off + 4, true);
+    const rhLo = view.getUint32(off, true);
+    const rhHi = view.getUint32(off + 4, true);
     off += 8;
+    let rvLo = 0;
+    let rvHi = 0;
     if (algo === 2) {
-      vLo[i] = view.getUint32(off, true);
-      vHi[i] = view.getUint32(off + 4, true);
+      rvLo = view.getUint32(off, true);
+      rvHi = view.getUint32(off + 4, true);
       off += 8;
     }
-    ids.set(bytes.subarray(off, off + 16), i * 16);
-    faces[i] = bytes[off + 16]!;
+    const pop = popcount32(rhLo) + popcount32(rhHi) + popcount32(rvLo) + popcount32(rvHi);
+    if (pop < MIN_RECORD_POPCOUNT) continue;
+    hLo[n] = rhLo;
+    hHi[n] = rhHi;
+    if (algo === 2) {
+      vLo[n] = rvLo;
+      vHi[n] = rvHi;
+    }
+    ids.set(bytes.subarray(off, off + 16), n * 16);
+    faces[n] = bytes[off + 16]!;
+    n++;
   }
 
-  return { algo, count, hHi, hLo, vHi, vLo, ids, faces };
+  return {
+    algo,
+    count: n,
+    hHi: hHi.subarray(0, n),
+    hLo: hLo.subarray(0, n),
+    vHi: vHi.subarray(0, algo === 2 ? n : 0),
+    vLo: vLo.subarray(0, algo === 2 ? n : 0),
+    ids: ids.subarray(0, n * 16),
+    faces: faces.subarray(0, n),
+  };
 }

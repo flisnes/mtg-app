@@ -23,6 +23,13 @@ export interface DHash {
   h: Hash64;
   /** Vertical variant (blob algo 2). */
   v: Hash64;
+  /**
+   * Mean absolute neighbour difference over the hash grids — how much
+   * structure the crop actually has. A blank surface (table, wall, textless
+   * card face) lands near 0; real card art measures ~4 and up. dHash bits of
+   * a flat crop are pure noise, so matching is meaningless below that.
+   */
+  detail: number;
 }
 
 /** Pillow convert("L"): L = (19595 R + 38470 G + 7471 B + 0x8000) >> 16. */
@@ -120,7 +127,22 @@ export function dhash(gray: GrayImage): DHash {
     const x = pos & 7;
     return v9.data[y * 8 + x]! > v9.data[(y + 1) * 8 + x]! ? 1 : 0;
   });
-  return { h, v };
+  let diffSum = 0;
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      diffSum += Math.abs(h9.data[y * 9 + x]! - h9.data[y * 9 + x + 1]!);
+      diffSum += Math.abs(v9.data[y * 8 + x]! - v9.data[(y + 1) * 8 + x]!);
+    }
+  }
+  return { h, v, detail: diffSum / 128 };
+}
+
+/** Branch-free 32-bit popcount. */
+export function popcount32(x: number): number {
+  x -= (x >> 1) & 0x55555555;
+  x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+  x = (x + (x >> 4)) & 0x0f0f0f0f;
+  return (x * 0x01010101) >> 24;
 }
 
 export function dhashFromImageData(img: ImageData): DHash {

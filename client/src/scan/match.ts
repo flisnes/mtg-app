@@ -1,6 +1,6 @@
 import type { ScanIndex } from './blob.js';
 import { scryfallIdAt } from './blob.js';
-import type { DHash } from './hash.js';
+import { popcount32, type DHash } from './hash.js';
 
 // Hamming search over the hash index (handover §S2): linear scan with u32
 // popcounts — no BigInt on the hot path. 100k records × 4 popcounts is well
@@ -30,13 +30,6 @@ export const CONFIDENT_MAX_DISTANCE = { 1: 10, 2: 20 } as const;
 export const CONFIDENT_MARGIN = { 1: 4, 2: 8 } as const;
 /** Anything worse than this is noise, not a candidate. */
 export const CANDIDATE_MAX_DISTANCE = { 1: 18, 2: 36 } as const;
-
-function popcount32(x: number): number {
-  x -= (x >> 1) & 0x55555555;
-  x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
-  x = (x + (x >> 4)) & 0x0f0f0f0f;
-  return (x * 0x01010101) >> 24;
-}
 
 /** Top-N nearest records by combined Hamming distance, best first. */
 export function searchHashes(index: ScanIndex, query: DHash, topN = 8): ScanCandidate[] {

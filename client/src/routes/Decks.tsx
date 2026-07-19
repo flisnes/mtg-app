@@ -85,9 +85,10 @@ export function Decks() {
                   <span className="deck-name">{deck.name}</span>
                   <span className="deck-meta">
                     <span className="deck-format">{formatLabel(deck.format ?? 'casual')}</span>
-                    {colors.length > 0 && (
-                      <ManaCost cost={colors.map((c) => `{${c}}`).join('')} className="deck-colors" />
-                    )}
+                    <ManaCost
+                      cost={colors.length > 0 ? colors.map((c) => `{${c}}`).join('') : '{C}'}
+                      className="deck-colors"
+                    />
                     <span className="badge" title={`${main} mainboard · ${side} sideboard`}>
                       {main} / {side}
                     </span>

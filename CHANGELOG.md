@@ -5,6 +5,7 @@ Testers: the app shows an "Update now" banner when a new version is published.
 ## 0.35.0
 
 - **Dips and spikes on the Price movers page.** A new section lists cards whose price swings up and down within a range and is currently sitting near the bottom or top of it, with the range and a sparkline on each row. What you do with that is your call.
+- **Colorless decks now wear the Colorless pip.** A deck with no coloured identity shows the {C} symbol in the deck list instead of nothing.
 
 ## 0.34.0
 

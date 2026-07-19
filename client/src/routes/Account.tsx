@@ -284,6 +284,11 @@ function SignedIn() {
           Your tradelist and wishlist are shared with other users whenever they change.{' '}
           <Link to="/community">Browse everyone’s lists</Link> to find matches.
         </p>
+        <p className="fine-print">
+          <Link to={`/profile/${encodeURIComponent(session?.username ?? '')}`}>Your profile</Link> is what others see
+          when they tap your picture: pick a card art as your profile picture and show off three favorite cards and
+          decks.
+        </p>
       </section>
 
       <section className="about-section">

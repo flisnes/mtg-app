@@ -18,6 +18,7 @@ import { PriceMovers } from './routes/PriceMovers.js';
 import { About } from './routes/About.js';
 import { Account } from './routes/Account.js';
 import { Community } from './routes/Community.js';
+import { Profile } from './routes/Profile.js';
 import { More } from './routes/More.js';
 import { EditHistory } from './routes/EditHistory.js';
 import { Import } from './routes/Import.js';
@@ -179,6 +180,7 @@ function AppShell() {
           <Route path="/account" element={<Account />} />
           <Route path="/community" element={<Community />} />
           <Route path="/community/:username" element={<Community />} />
+          <Route path="/profile/:username" element={<Profile />} />
           <Route path="/more" element={<More />} />
           <Route path="/edit-history" element={<EditHistory />} />
           {/* Dev harness for card scanning (S2) — deliberately not in the nav. */}

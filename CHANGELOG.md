@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.37.0
+
+- **User profiles.** Every account now has a profile page showing a profile picture and up to three favorite cards and three favorite decks. Deck favorites share only a summary (name, format, colors, card count) — your decklists stay private. Find yours via Account & sync, or tap any profile picture in the Community list to visit someone else's; their profile links back to their trade and wishlists.
+- **Card art profile pictures.** Pick any card, pick your favorite printing of it, then drag and pinch (or scroll) to frame the artwork inside the circle — Serra Angel's halo or just the business end of a Swiftspear, your call.
+
 ## 0.36.0
 
 - **Import and export your tradelist.** The Tradelist page's options menu now has Import and Export, just like the wishlist. Import a pasted list or a file (plain text, Moxfield, Archidekt CSV) and every card lands in your collection marked for trade, with the same skip/add/replace prompt if you already own copies. Export writes the trade-marked cards to a CSV that reads straight back in.

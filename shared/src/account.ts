@@ -9,6 +9,7 @@
 // same TradeLine/WishLine shapes exchanged during a trade), so browsing them
 // needs no snapshot parsing on the server and no card-DB lookups to render.
 
+import type { ProfileAvatar } from './profile.js';
 import type { TradeLine, WishLine } from './user.js';
 
 /** Usernames are case-insensitively unique; shown as typed. */
@@ -97,6 +98,8 @@ export interface PublicUser {
   updatedAt: number;
   tradelistCount: number;
   wishlistCount: number;
+  /** Their profile picture, when they've set one (see profile.ts). */
+  avatar?: ProfileAvatar | null;
 }
 
 export interface UsersResponse {

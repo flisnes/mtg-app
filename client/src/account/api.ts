@@ -4,12 +4,16 @@ import type {
   MatchesResponse,
   MeResponse,
   PricesResponse,
+  ProfilePutRequest,
+  ProfilePutResponse,
+  ProfileResponse,
   SnapshotGetResponse,
   SnapshotPutRequest,
   SnapshotPutResponse,
   SyncRequest,
   SyncResponse,
   UserListsResponse,
+  UserProfile,
   UsersResponse,
 } from '@mtg/shared';
 import { API_URL } from './config.js';
@@ -102,6 +106,14 @@ export function listUsers(token: string): Promise<UsersResponse> {
 
 export function getUserLists(token: string, username: string): Promise<UserListsResponse> {
   return request(`/users/${encodeURIComponent(username)}/lists`, { token });
+}
+
+export function getUserProfile(token: string, username: string): Promise<ProfileResponse> {
+  return request(`/users/${encodeURIComponent(username)}/profile`, { token });
+}
+
+export function putProfile(token: string, profile: UserProfile): Promise<ProfilePutResponse> {
+  return request('/profile', { method: 'PUT', token, body: { profile } satisfies ProfilePutRequest });
 }
 
 export function getMatches(token: string): Promise<MatchesResponse> {

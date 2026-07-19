@@ -5,6 +5,8 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   SYNC_MAX_PULL,
   SYNC_MAX_ROWS_PER_USER,
+  sanitizeAvatar,
+  type ProfileAvatar,
   type PublicUser,
   type SnapshotCounts,
   type SnapshotMeta,
@@ -80,6 +82,11 @@ export class AccountStore {
         wishlist TEXT NOT NULL,
         tradelist_count INTEGER NOT NULL,
         wishlist_count INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS profiles (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        data TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS sync_rows (
@@ -345,17 +352,56 @@ export class AccountStore {
   listUsers(): PublicUser[] {
     const rows = this.db
       .prepare(
-        `SELECT u.username, p.updated_at, p.tradelist_count, p.wishlist_count
+        `SELECT u.username, p.updated_at, p.tradelist_count, p.wishlist_count, pr.data AS profile
          FROM public_lists p JOIN users u ON u.id = p.user_id
+         LEFT JOIN profiles pr ON pr.user_id = p.user_id
          ORDER BY p.updated_at DESC`,
       )
-      .all() as { username: string; updated_at: number; tradelist_count: number; wishlist_count: number }[];
+      .all() as {
+      username: string;
+      updated_at: number;
+      tradelist_count: number;
+      wishlist_count: number;
+      profile: string | null;
+    }[];
     return rows.map((r) => ({
       username: r.username,
       updatedAt: r.updated_at,
       tradelistCount: r.tradelist_count,
       wishlistCount: r.wishlist_count,
+      avatar: avatarFromProfileJson(r.profile),
     }));
+  }
+
+  // --- Public profiles (favorites + profile picture) --------------------------
+
+  /** Store the user's profile (pre-sanitized JSON); returns the write time. */
+  putProfile(userId: number, dataJson: string): number {
+    const now = Date.now();
+    this.db
+      .prepare(
+        `INSERT INTO profiles (user_id, data, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+      )
+      .run(userId, dataJson, now);
+    return now;
+  }
+
+  /** Canonical username lookup (usernames are case-insensitively unique). */
+  getUserByUsername(username: string): AccountUser | null {
+    const row = this.db.prepare('SELECT id, username FROM users WHERE username = ?').get(username) as
+      | { id: number; username: string }
+      | undefined;
+    return row ?? null;
+  }
+
+  /** Raw profile JSON for one user; null = never saved one. */
+  getProfile(userId: number): { data: string; updatedAt: number } | null {
+    const row = this.db.prepare('SELECT data, updated_at FROM profiles WHERE user_id = ?').get(userId) as
+      | { data: string; updated_at: number }
+      | undefined;
+    if (!row) return null;
+    return { data: row.data, updatedAt: row.updated_at };
   }
 
   /** Raw published lists for every user, for on-demand match computation. */
@@ -392,6 +438,16 @@ export class AccountStore {
 
   close(): void {
     this.db.close();
+  }
+}
+
+/** Pull just the avatar out of a stored profile blob (for the community list). */
+function avatarFromProfileJson(raw: string | null): ProfileAvatar | null {
+  if (!raw) return null;
+  try {
+    return sanitizeAvatar((JSON.parse(raw) as { avatar?: unknown }).avatar);
+  } catch {
+    return null;
   }
 }
 

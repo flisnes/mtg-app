@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  EMPTY_PROFILE,
   MAX_PASSWORD_CHARS,
+  MAX_PROFILE_JSON_CHARS,
   MAX_PUBLIC_LINES,
   MAX_SNAPSHOT_CHARS,
   MIN_PASSWORD_CHARS,
@@ -9,12 +11,15 @@ import {
   SYNC_MAX_ROW_CHARS,
   SYNC_TABLES,
   USERNAME_RE,
+  sanitizeProfile,
   type ApiErrorBody,
   type AuthResponse,
   type MatchCard,
   type MatchEntry,
   type MatchesResponse,
   type MeResponse,
+  type ProfilePutResponse,
+  type ProfileResponse,
   type SnapshotCounts,
   type SnapshotGetResponse,
   type SnapshotPutResponse,
@@ -362,6 +367,37 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     return res;
   });
 
+  // --- Public profiles: favorites + profile picture ----------------------------
+
+  app.put('/api/profile', async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const profile = sanitizeProfile(b.profile);
+    const json = JSON.stringify(profile);
+    if (json.length > MAX_PROFILE_JSON_CHARS) {
+      return fail(reply, 413, { error: 'too_large', message: 'Profile is too large.' });
+    }
+    const res: ProfilePutResponse = { updatedAt: store.putProfile(user.id, json) };
+    return res;
+  });
+
+  app.get('/api/users/:username/profile', async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const { username } = req.params as { username: string };
+    const target = store.getUserByUsername(username);
+    if (!target) return fail(reply, 404, { error: 'not_found', message: 'No such user.' });
+    const row = store.getProfile(target.id);
+    // No profile yet is a normal state, not an error — hand back an empty one.
+    const res: ProfileResponse = {
+      username: target.username,
+      updatedAt: row?.updatedAt ?? 0,
+      profile: row ? sanitizeProfile(safeParse(row.data)) : EMPTY_PROFILE,
+    };
+    return res;
+  });
+
   app.get('/api/users/:username/lists', async (req, reply) => {
     const user = requireUser(req, reply);
     if (!user) return;
@@ -429,6 +465,14 @@ function matchSignature(theyWant: MatchCard[], iWant: MatchCard[]): string {
     ...iWant.map((c) => `h:${c.oracleId}`),
   ].sort();
   return createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16);
+}
+
+function safeParse(json: string): unknown {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
 }
 
 function safeLines(json: string): unknown[] {

@@ -6,6 +6,7 @@ import { ApiError, getUserLists, listUsers } from '../account/api.js';
 import { useAccount } from '../account/useAccount.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { Avatar } from '../components/Avatar.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
 import { SetSymbol } from '../components/SetSymbol.js';
@@ -134,7 +135,15 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
       ) : (
         <ul className="menu-list">
           {users.map((u) => (
-            <li key={u.username}>
+            <li key={u.username} className="community-row">
+              <button
+                className="avatar-btn"
+                onClick={() => navigate(`/profile/${encodeURIComponent(u.username)}`)}
+                title={`${u.username}’s profile`}
+                aria-label={`${u.username}’s profile`}
+              >
+                <Avatar avatar={u.avatar} username={u.username} size={40} />
+              </button>
               <button
                 className="menu-item menu-item-btn"
                 onClick={() => navigate(`/community/${encodeURIComponent(u.username)}`)}
@@ -179,6 +188,7 @@ function UserLists({
   highlight?: Set<string>;
   onBack: () => void;
 }) {
+  const navigate = useNavigate();
   const [lists, setLists] = useState<{ updatedAt: number; tradelist: TradeLine[]; wishlist: WishLine[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useViewMode();
@@ -327,9 +337,14 @@ function UserLists({
       title={username}
       subtitle={lists ? `Lists updated ${fmtDate(lists.updatedAt)}.` : undefined}
       menu={
-        <button className="ghost" onClick={onBack}>
-          ‹ All users
-        </button>
+        <>
+          <button className="ghost" onClick={onBack}>
+            ‹ All users
+          </button>
+          <button className="ghost" onClick={() => navigate(`/profile/${encodeURIComponent(username)}`)}>
+            Profile
+          </button>
+        </>
       }
     >
       {error ? (

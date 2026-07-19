@@ -26,12 +26,12 @@ import { useAccount } from '../account/useAccount.js';
 // focusing it opens a full results overlay (filters, quick-adds, card sheet).
 // Esc, ✕, or navigating to another tab closes the overlay.
 
-// What the quick-action buttons on each result do depends on where the user
-// searched from: the deck editor adds to that deck, the collection adds to the
-// collection, and so on. Everywhere else offers the generic trio.
-type SearchTarget = AddTarget | { kind: 'default' };
-
-function useSearchTarget(): SearchTarget {
+// What adding a result does depends on where the user searched from: the deck
+// editor adds to that deck, the collection adds to the collection, and so on.
+// Everywhere else ('default') offers the generic trio. Grid tiles stay clean —
+// tapping one opens the card sheet, which carries the add buttons; list rows
+// keep a quick-add.
+function useSearchTarget(): AddTarget {
   const { pathname } = useLocation();
   const deckId = matchPath('/decks/:id', pathname)?.params.id;
   if (deckId) return { kind: 'deck', deckId };
@@ -282,10 +282,10 @@ function SearchOverlay({
   }
 
   const targetHint = {
-    deck: 'Results add straight into this deck (main or sideboard).',
-    collection: 'Results add straight into your collection.',
-    wishlist: 'Results add straight onto your wishlist.',
-    tradelist: 'Results add to your collection, marked for trade.',
+    deck: 'Adding a result puts it in this deck (main or sideboard).',
+    collection: 'Adding a result puts it in your collection.',
+    wishlist: 'Adding a result puts it on your wishlist.',
+    tradelist: 'Adding a result puts it in your collection, marked for trade.',
     default: null,
   }[target.kind];
 
@@ -322,19 +322,14 @@ function SearchOverlay({
           filterExtras={filterExtras}
           emptyState={emptyState}
           actionsFor={actionsFor}
+          listOnlyActions
           onCardClick={setSheetCard}
         />
 
         {sheetCard && (
           <CardSheet
             oracleCard={sheetCard}
-            addTarget={
-              target.kind === 'default'
-                ? undefined
-                : target.kind === 'deck'
-                  ? { ...target, format: deckCtx?.format }
-                  : target
-            }
+            addTarget={target.kind === 'deck' ? { ...target, format: deckCtx?.format } : target}
             onClose={() => setSheetCard(null)}
           />
         )}

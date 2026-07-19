@@ -37,18 +37,22 @@ import { useEscapeToClose } from './useEscapeToClose.js';
 //  - deck (deckCard): edit a deck slot's quantity
 //  - info (readOnly): app-wide card info — image, printings, price + history
 
-/** Where add mode sends the card (mirrors the context-sensitive search). */
+/** Where add mode sends the card (mirrors the context-sensitive search).
+ *  'default' is search from a context-free page: the collection form, with
+ *  wishlist/tradelist offered as alternative buttons. */
 export type AddTarget =
   | { kind: 'collection' }
   | { kind: 'wishlist' }
   | { kind: 'tradelist' }
-  | { kind: 'deck'; deckId: string; format?: DeckFormat };
+  | { kind: 'deck'; deckId: string; format?: DeckFormat }
+  | { kind: 'default' };
 
 const ADD_LABEL: Record<AddTarget['kind'], string> = {
   collection: 'Add to collection',
   wishlist: 'Add to wishlist',
   tradelist: 'Add to tradelist',
   deck: 'Add to mainboard',
+  default: 'Add to collection',
 };
 
 /** Sentinel for the "any printing" edition option in wish mode. */
@@ -120,7 +124,9 @@ export function CardSheet({
   // at all, so those variants drop the collection-specific fields below.
   const wishAdd = mode === 'add' && addTo.kind === 'wishlist';
   const deckAdd = mode === 'add' && addTo.kind === 'deck';
-  const collectionFields = mode === 'edit' || (mode === 'add' && (addTo.kind === 'collection' || addTo.kind === 'tradelist'));
+  const collectionFields =
+    mode === 'edit' ||
+    (mode === 'add' && (addTo.kind === 'collection' || addTo.kind === 'tradelist' || addTo.kind === 'default'));
   const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
   // In wish mode the empty string means "any printing" (no specific edition).
   const [scryfallId, setScryfallId] = useState(
@@ -191,7 +197,8 @@ export function CardSheet({
 
   const clampedForTrade = Math.min(forTrade, quantity);
 
-  async function save(board: DeckBoard = 'main') {
+  /** `dest` picks where a context-free ('default') add goes; other targets ignore it. */
+  async function save(board: DeckBoard = 'main', dest: 'collection' | 'wishlist' | 'tradelist' = 'collection') {
     setBusy(true);
     if (wishEntry) {
       await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, quantity });
@@ -206,7 +213,7 @@ export function CardSheet({
         quantity,
         quantityForTrade: clampedForTrade,
       });
-    } else if (addTo.kind === 'wishlist') {
+    } else if (addTo.kind === 'wishlist' || dest === 'wishlist') {
       await addToWishlist({ oracleId: oracleCard.oracleId, scryfallId: scryfallId || null, quantity });
     } else if (addTo.kind === 'deck') {
       await addDeckCard({ deckId: addTo.deckId, oracleId: oracleCard.oracleId, scryfallId, board, quantity });
@@ -220,7 +227,7 @@ export function CardSheet({
         finish,
         lang,
         quantity,
-        quantityForTrade: clampedForTrade,
+        quantityForTrade: dest === 'tradelist' ? clampedForTrade || 1 : clampedForTrade,
       });
     }
     onClose();
@@ -438,6 +445,16 @@ export function CardSheet({
               <button onClick={() => save('side')} disabled={busy}>
                 Add to sideboard
               </button>
+            )}
+            {mode === 'add' && addTo.kind === 'default' && (
+              <>
+                <button onClick={() => save('main', 'wishlist')} disabled={busy}>
+                  Add to wishlist
+                </button>
+                <button onClick={() => save('main', 'tradelist')} disabled={busy}>
+                  Add to tradelist
+                </button>
+              </>
             )}
             <button className="primary" onClick={() => save()} disabled={busy}>
               {mode === 'add' ? ADD_LABEL[addTo.kind] : 'Save'}

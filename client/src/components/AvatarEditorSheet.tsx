@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AVATAR_MAX_ZOOM, type OracleCard, type Priced, type Printing, type ProfileAvatar } from '@mtg/shared';
 import { searchCards } from '../cardDb/search.js';
@@ -37,7 +37,17 @@ export function AvatarEditorSheet({
   );
 }
 
-function CardSearch({ onPick, onCancel }: { onPick: (card: Priced<OracleCard>) => void; onCancel: () => void }) {
+/** Search-any-card list with art thumbnails; also reused by the favorite-card picker. */
+export function CardSearch({
+  onPick,
+  onCancel,
+  actions,
+}: {
+  onPick: (card: Priced<OracleCard>) => void;
+  onCancel: () => void;
+  /** Extra buttons rendered before Cancel (e.g. the favorite picker's "Clear slot"). */
+  actions?: ReactNode;
+}) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Priced<OracleCard>[]>([]);
 
@@ -85,6 +95,7 @@ function CardSearch({ onPick, onCancel }: { onPick: (card: Priced<OracleCard>) =
         </ul>
       )}
       <div className="sheet-actions">
+        {actions}
         <button onClick={onCancel}>Cancel</button>
       </div>
     </>

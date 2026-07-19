@@ -11,19 +11,19 @@ import {
   type FavoriteDeck,
   type OracleCard,
   type Priced,
+  type Printing,
   type ProfileAvatar,
   type UserProfile,
 } from '@mtg/shared';
 import { ApiError, getUserProfile, putProfile } from '../account/api.js';
 import { rememberOwnAvatar } from '../account/ownProfile.js';
 import { useAccount } from '../account/useAccount.js';
-import { searchCards } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
-import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { getOracleCardsByIds, getPrintingsByIds, getPrintingsForOracle } from '../db/queries.js';
 import { formatLabel } from '../deck/legality.js';
-import { Avatar, artCropUrl } from '../components/Avatar.js';
-import { AvatarEditorSheet } from '../components/AvatarEditorSheet.js';
-import { CardSheet } from '../components/CardSheet.js';
+import { Avatar } from '../components/Avatar.js';
+import { AvatarEditorSheet, CardSearch } from '../components/AvatarEditorSheet.js';
+import { CardSheet, EditionPicker } from '../components/CardSheet.js';
 import { Icon } from '../components/icons.js';
 import { ManaCost } from '../components/ManaCost.js';
 import { useToast } from '../components/Toast.js';
@@ -235,6 +235,18 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
                         <button className="menu-item menu-item-btn" onClick={() => setDeckSlot(i)}>
                           {inner}
                         </button>
+                      ) : fav?.deckId ? (
+                        <button
+                          className="menu-item menu-item-btn"
+                          onClick={() =>
+                            navigate(`/profile/${encodeURIComponent(username)}/deck/${encodeURIComponent(fav.deckId!)}`)
+                          }
+                        >
+                          {inner}
+                          <span className="menu-chevron" aria-hidden>
+                            ›
+                          </span>
+                        </button>
                       ) : (
                         <span className="menu-item">{inner}</span>
                       )}
@@ -245,7 +257,8 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
             )}
             {isMe && (
               <p className="fine-print">
-                Favorites show a summary only — your decklists stay private.
+                Favoriting a deck shares its decklist — anyone signed in can browse it here. Your other decks stay
+                private.
               </p>
             )}
           </section>
@@ -315,66 +328,45 @@ function FavoriteCardPickerSheet({
   onClose: () => void;
 }) {
   useEscapeToClose(onClose);
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Priced<OracleCard>[]>([]);
+  // Two steps, like the profile-picture editor: search a card, then pick the
+  // printing from the same edition grid the card sheet uses.
+  const [pending, setPending] = useState<{ card: Priced<OracleCard>; printings: Priced<Printing>[] } | null>(null);
 
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) {
-      setResults([]);
+  async function choose(card: Priced<OracleCard>) {
+    const printings = await getPrintingsForOracle(card.oracleId);
+    if (printings.length <= 1) {
+      onPick({ oracleId: card.oracleId, scryfallId: printings[0]?.scryfallId ?? card.defaultScryfallId, name: card.name });
       return;
     }
-    let cancelled = false;
-    void searchCards(q, {}, 24).then((res) => {
-      if (!cancelled) setResults(res.cards);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [query]);
+    setPending({ card, printings });
+  }
 
   return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Pick a favorite card">
         <div className="sheet-name">Pick a favorite card</div>
-        <input
-          className="search-input"
-          placeholder="Search any card…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          autoFocus
+        <CardSearch
+          onPick={(c) => void choose(c)}
+          onCancel={onClose}
+          actions={
+            hasCurrent && (
+              <button className="danger-outline" onClick={onClear}>
+                Clear slot
+              </button>
+            )
+          }
         />
-        {results.length > 0 && (
-          <ul className="menu-list avatar-results">
-            {results.map((c) => (
-              <li key={c.oracleId}>
-                <button
-                  className="menu-item menu-item-btn"
-                  onClick={() => onPick({ oracleId: c.oracleId, scryfallId: c.defaultScryfallId, name: c.name })}
-                >
-                  {artCropUrl(c.imageNormal) ? (
-                    <img className="avatar-result-thumb" src={artCropUrl(c.imageNormal)!} alt="" loading="lazy" />
-                  ) : (
-                    <span className="avatar-result-thumb" />
-                  )}
-                  <span className="deck-line">
-                    <span className="deck-name">{c.name}</span>
-                    <span className="deck-meta">{c.typeLine}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="sheet-actions">
-          {hasCurrent && (
-            <button className="danger-outline" onClick={onClear}>
-              Clear slot
-            </button>
-          )}
-          <button onClick={onClose}>Cancel</button>
-        </div>
       </div>
+      {pending && (
+        <EditionPicker
+          printings={pending.printings}
+          selected={pending.card.defaultScryfallId}
+          onSelect={(scryfallId) =>
+            onPick({ oracleId: pending.card.oracleId, scryfallId, name: pending.card.name })
+          }
+          onClose={() => setPending(null)}
+        />
+      )}
     </div>,
     document.body,
   );
@@ -426,7 +418,7 @@ function FavoriteDeckPickerSheet({
                 <button
                   className="menu-item menu-item-btn"
                   onClick={() =>
-                    onPick({ name: deck.name, format: deck.format ?? 'casual', colors, cards: main })
+                    onPick({ deckId: deck.id, name: deck.name, format: deck.format ?? 'casual', colors, cards: main })
                   }
                 >
                   <span className="menu-icon" aria-hidden>
@@ -448,6 +440,7 @@ function FavoriteDeckPickerSheet({
             ))}
           </ul>
         )}
+        <p className="fine-print">Favoriting a deck lets other signed-in users browse its decklist.</p>
         <div className="sheet-actions">
           {hasCurrent && (
             <button className="danger-outline" onClick={onClear}>

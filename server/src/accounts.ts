@@ -11,6 +11,7 @@ import {
   SYNC_MAX_ROW_CHARS,
   SYNC_TABLES,
   USERNAME_RE,
+  sanitizeDeckLines,
   sanitizeProfile,
   type ApiErrorBody,
   type AuthResponse,
@@ -27,7 +28,9 @@ import {
   type SyncResponse,
   type SyncTable,
   type TradeLine,
+  type UserDeckResponse,
   type UserListsResponse,
+  type UserProfile,
   type UsersResponse,
   type WishLine,
 } from '@mtg/shared';
@@ -390,10 +393,42 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     if (!target) return fail(reply, 404, { error: 'not_found', message: 'No such user.' });
     const row = store.getProfile(target.id);
     // No profile yet is a normal state, not an error — hand back an empty one.
+    const profile = row ? sanitizeProfile(safeParse(row.data)) : EMPTY_PROFILE;
+    refreshFavoriteDecks(store, target.id, profile);
     const res: ProfileResponse = {
       username: target.username,
       updatedAt: row?.updatedAt ?? 0,
-      profile: row ? sanitizeProfile(safeParse(row.data)) : EMPTY_PROFILE,
+      profile,
+    };
+    return res;
+  });
+
+  // A favorited deck is browsable: serve its current list straight from the
+  // owner's synced rows (see shared/profile.ts for the trust-model note).
+  app.get('/api/users/:username/decks/:deckId', async (req, reply) => {
+    const user = requireUser(req, reply);
+    if (!user) return;
+    const { username, deckId } = req.params as { username: string; deckId: string };
+    const target = store.getUserByUsername(username);
+    if (!target) return fail(reply, 404, { error: 'not_found', message: 'No such user.' });
+    const profRow = store.getProfile(target.id);
+    const profile = profRow ? sanitizeProfile(safeParse(profRow.data)) : EMPTY_PROFILE;
+    if (!profile.favoriteDecks.some((f) => f.deckId === deckId)) {
+      return fail(reply, 404, { error: 'not_found', message: 'That deck isn’t shared.' });
+    }
+    const deckRow = store.getSyncRow(target.id, 'decks', deckId);
+    if (!deckRow || !deckRow.row || typeof deckRow.row !== 'object') {
+      return fail(reply, 404, { error: 'not_found', message: 'That deck isn’t synced to the server.' });
+    }
+    const d = deckRow.row as Record<string, unknown>;
+    const description = str(d.description, 1_000);
+    const res: UserDeckResponse = {
+      username: target.username,
+      name: str(d.name, 80) ?? '(unnamed deck)',
+      format: str(d.format, 20) ?? 'casual',
+      ...(description ? { description } : {}),
+      updatedAt: deckRow.updatedAt,
+      lines: sanitizeDeckLines(deckCardRows(store, target.id, deckId)),
     };
     return res;
   });
@@ -449,6 +484,45 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     matches.sort((a, b) => b.updatedAt - a.updatedAt);
     return { matches } satisfies MatchesResponse;
   });
+}
+
+/** The owner's synced deckCards rows for one deck (raw, pre-sanitize). */
+function deckCardRows(store: AccountStore, userId: number, deckId: string): unknown[] {
+  return store
+    .listSyncRows(userId, 'deckCards')
+    .filter((row) => !!row && typeof row === 'object' && (row as Record<string, unknown>).deckId === deckId);
+}
+
+/**
+ * Overwrite favorite-deck summaries with the live synced deck where possible,
+ * so a rename (or growing list) shows up on the profile without re-favoriting.
+ * Colors stay as favorited — computing them needs a card DB the server lacks.
+ */
+function refreshFavoriteDecks(store: AccountStore, userId: number, profile: UserProfile): void {
+  let counts: Map<string, number> | null = null;
+  for (const fav of profile.favoriteDecks) {
+    if (!fav.deckId) continue;
+    const deckRow = store.getSyncRow(userId, 'decks', fav.deckId);
+    if (!deckRow || !deckRow.row || typeof deckRow.row !== 'object') continue;
+    const d = deckRow.row as Record<string, unknown>;
+    fav.name = str(d.name, 80) ?? fav.name;
+    fav.format = str(d.format, 20) ?? fav.format;
+    if (!counts) counts = deckMainCounts(store, userId);
+    fav.cards = counts.get(fav.deckId) ?? fav.cards;
+  }
+}
+
+/** deckId → mainboard count (commander included, like the deck picker computes it). */
+function deckMainCounts(store: AccountStore, userId: number): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const row of store.listSyncRows(userId, 'deckCards')) {
+    if (!row || typeof row !== 'object') continue;
+    const c = row as Record<string, unknown>;
+    if (typeof c.deckId !== 'string' || c.board === 'side') continue;
+    const q = Math.floor(Number(c.quantity));
+    if (Number.isFinite(q) && q > 0) map.set(c.deckId, (map.get(c.deckId) ?? 0) + q);
+  }
+  return map;
 }
 
 /** oracleId → display name, deduped (first name wins), for a published list. */

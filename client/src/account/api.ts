@@ -12,6 +12,7 @@ import type {
   SnapshotPutResponse,
   SyncRequest,
   SyncResponse,
+  UserDeckResponse,
   UserListsResponse,
   UserProfile,
   UsersResponse,
@@ -110,6 +111,11 @@ export function getUserLists(token: string, username: string): Promise<UserLists
 
 export function getUserProfile(token: string, username: string): Promise<ProfileResponse> {
   return request(`/users/${encodeURIComponent(username)}/profile`, { token });
+}
+
+/** A user's favorited (= browsable) deck, read live from their synced rows. */
+export function getUserDeck(token: string, username: string, deckId: string): Promise<UserDeckResponse> {
+  return request(`/users/${encodeURIComponent(username)}/decks/${encodeURIComponent(deckId)}`, { token });
 }
 
 export function putProfile(token: string, profile: UserProfile): Promise<ProfilePutResponse> {

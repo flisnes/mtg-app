@@ -34,8 +34,15 @@ export interface FavoriteCard {
   name: string;
 }
 
-/** A denormalized deck summary — decks themselves stay private, only this brag line is shared. */
+/**
+ * A denormalized deck summary. When `deckId` is present the deck is browsable:
+ * the server reads the owner's synced deck rows live (GET /api/users/:u/decks/:id)
+ * and refreshes name/format/count on profile reads, so renames never go stale.
+ * Favorites saved before deckId existed keep showing their snapshot only.
+ */
 export interface FavoriteDeck {
+  /** The owner's synced deck row id; absent on pre-v0.38 favorites (summary only). */
+  deckId?: string;
   name: string;
   /** DeckFormat as a plain string ('casual' | a Format). */
   format: string;
@@ -120,7 +127,9 @@ export function sanitizeProfile(v: unknown): UserProfile {
       const colors = Array.isArray(d.colors)
         ? COLOR_ORDER.filter((c) => (d.colors as unknown[]).includes(c))
         : [];
+      const deckId = cleanStr(d.deckId, 64);
       favoriteDecks.push({
+        ...(deckId ? { deckId } : {}),
         name,
         format: cleanStr(d.format, 20) ?? 'casual',
         colors,
@@ -130,4 +139,59 @@ export function sanitizeProfile(v: unknown): UserProfile {
   }
 
   return { avatar: sanitizeAvatar(r.avatar), favoriteCards, favoriteDecks };
+}
+
+// ---------------------------------------------------------------------------
+// Browsable favorite decks (GET /api/users/:username/decks/:deckId)
+// ---------------------------------------------------------------------------
+//
+// Favoriting a deck makes its list public: the server reads the owner's synced
+// deck/deckCards rows on demand (the one deliberate exception to "sync rows are
+// opaque"), so viewers always see the current list — nothing extra to publish
+// and nothing to go stale. Lines carry no names; viewers resolve cards from
+// their own local card DB by id, like every other shared list.
+
+/** Per-deck line cap (a Commander deck is ~100; this is just a sanity bound). */
+export const MAX_DECK_LINES = 1_000;
+
+const DECK_BOARDS = new Set(['main', 'side', 'commander']);
+
+export interface PublicDeckLine {
+  oracleId: string;
+  /** Preferred printing for display; absent = the card's default printing. */
+  scryfallId?: string;
+  quantity: number;
+  /** DeckBoard as a plain string ('main' | 'side' | 'commander'). */
+  board: string;
+}
+
+export interface UserDeckResponse {
+  username: string;
+  name: string;
+  format: string;
+  description?: string;
+  /** When the deck row last changed. */
+  updatedAt: number;
+  lines: PublicDeckLine[];
+}
+
+/** Shared by the server (reading raw sync rows) and clients (untrusted input on display). */
+export function sanitizeDeckLines(v: unknown): PublicDeckLine[] {
+  if (!Array.isArray(v)) return [];
+  const lines: PublicDeckLine[] = [];
+  for (const raw of v.slice(0, MAX_DECK_LINES)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as Record<string, unknown>;
+    const oracleId = cleanStr(r.oracleId, 64);
+    const quantity = Math.floor(clamp(r.quantity, 0, 9_999) ?? 0);
+    if (!oracleId || quantity < 1) continue;
+    const scryfallId = cleanStr(r.scryfallId, 64);
+    lines.push({
+      oracleId,
+      ...(scryfallId ? { scryfallId } : {}),
+      quantity,
+      board: DECK_BOARDS.has(r.board as string) ? (r.board as string) : 'main',
+    });
+  }
+  return lines;
 }

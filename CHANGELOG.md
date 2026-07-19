@@ -2,7 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
-## 0.37.1
+## 0.38.0
+
+- **Favorite decks are now browsable.** Tapping a favorite deck on someone's profile opens the full decklist — commander, mainboard and sideboard, in the usual list or grid view. The list is read live from the owner's synced decks, so it's always their current build, and renaming a deck now shows up on the profile right away (the old stale-name bug is gone). Only decks you favorite are shared; everything else stays private. Favorites picked before this update share just the summary — re-pick them to make them browsable.
+- **Pick the printing of your favorite cards.** Choosing a favorite card on your profile now opens the same edition grid as the card sheet, so your profile can show the right Yawgmoth's Will, not just the newest one.
 
 - Your profile picture now shows on the account button in the top-right corner (sync dot included), instead of the generic silhouette. It also follows you across devices.
 

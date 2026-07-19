@@ -349,6 +349,40 @@ export class AccountStore {
     }
   }
 
+  /**
+   * One live synced row, parsed. Sync-row content is normally opaque to the
+   * server; browsable favorite decks are the one deliberate exception (see
+   * shared/profile.ts) — parsed rows are still untrusted client JSON.
+   */
+  getSyncRow(userId: number, tbl: SyncTable, rowId: string): { updatedAt: number; row: unknown } | null {
+    const rec = this.db
+      .prepare('SELECT updated_at, deleted, row FROM sync_rows WHERE user_id = ? AND tbl = ? AND row_id = ?')
+      .get(userId, tbl, rowId) as { updated_at: number; deleted: number; row: string | null } | undefined;
+    if (!rec || rec.deleted || rec.row === null) return null;
+    try {
+      return { updatedAt: rec.updated_at, row: JSON.parse(rec.row) };
+    } catch {
+      return null;
+    }
+  }
+
+  /** All live synced rows of one table, parsed (same exception as getSyncRow). */
+  listSyncRows(userId: number, tbl: SyncTable): unknown[] {
+    const recs = this.db
+      .prepare('SELECT row FROM sync_rows WHERE user_id = ? AND tbl = ? AND deleted = 0')
+      .all(userId, tbl) as { row: string | null }[];
+    const out: unknown[] = [];
+    for (const rec of recs) {
+      if (rec.row === null) continue;
+      try {
+        out.push(JSON.parse(rec.row));
+      } catch {
+        // skip unparseable rows (unreachable for rows this server wrote)
+      }
+    }
+    return out;
+  }
+
   listUsers(): PublicUser[] {
     const rows = this.db
       .prepare(

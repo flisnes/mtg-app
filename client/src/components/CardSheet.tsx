@@ -601,7 +601,7 @@ function QtyStepper({
 }
 
 /** Every printing as an image tile — pick an edition by looking at it. */
-function EditionPicker({
+export function EditionPicker({
   printings,
   selected,
   anyOption,

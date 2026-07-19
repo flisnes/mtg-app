@@ -1986,6 +1986,12 @@ button.trade-diff {
 button.chip {
   cursor: pointer;
 }
+/* Selected state for choice chips (import conflict resolution). */
+button.chip[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
 .chip-wish {
   border-color: rgba(234, 197, 79, 0.45);
   background: rgba(234, 197, 79, 0.08);

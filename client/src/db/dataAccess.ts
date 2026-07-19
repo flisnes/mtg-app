@@ -430,10 +430,14 @@ export interface ImportLine {
  * Apply a resolved import in a single transaction, merging into existing
  * entries on (scryfallId, condition, finish, lang). Same invariants as
  * addToCollection, but bulk (fast enough for a 1000+ card import).
+ *
+ * `replaceOracleIds` lists cards whose import conflict was resolved as
+ * "replace": every owned entry of those cards (any printing) is removed
+ * before the lines are added, in the same batch, so one undo restores them.
  */
 export async function applyImport(
   lines: ImportLine[],
-  meta: { source?: 'import' | 'sealed'; label?: string } = {},
+  meta: { source?: 'import' | 'sealed'; label?: string; replaceOracleIds?: string[] } = {},
 ): Promise<{ entries: number; cards: number }> {
   let cards = 0;
   // Every line of one import/sealed add shares a batchId, so the edit-history
@@ -443,11 +447,35 @@ export async function applyImport(
   const batchExtra = { source, batchId, ...(meta.label ? { batchLabel: meta.label } : {}) };
   // One bulk price lookup for the acquisition price on every line's event.
   const prices = await getPricesByIds(lines.map((l) => l.scryfallId));
+  const replace = new Set(meta.replaceOracleIds ?? []);
   await db.transaction('rw', COLLECTION_TABLES, async () => {
     const existing = await db.collection.toArray();
     const map = new Map(existing.map((e) => [collectionKey(e), e]));
     const now = Date.now();
     const writes: CollectionEntry[] = [];
+
+    if (replace.size > 0) {
+      const doomed = existing.filter((e) => replace.has(e.oracleId));
+      const exitPrices = await getPricesByIds(doomed.map((e) => e.scryfallId));
+      for (const e of doomed) {
+        map.delete(collectionKey(e));
+        await db.collection.delete(e.id);
+        await stageDelete('collection', e.id);
+        await emit({
+          ts: now,
+          kind: 'collection.remove',
+          oracleId: e.oracleId,
+          scryfallId: e.scryfallId,
+          qty: e.quantity,
+          condition: e.condition,
+          finish: e.finish,
+          lang: e.lang,
+          priceEurCents: toCents(exitPrices.get(e.scryfallId)?.eur ?? null),
+          reason: 'other',
+          ...batchExtra,
+        });
+      }
+    }
 
     for (const l of lines) {
       const lang = l.lang || 'en';

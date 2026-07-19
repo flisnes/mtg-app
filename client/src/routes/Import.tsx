@@ -6,12 +6,17 @@ import { applyImport } from '../db/dataAccess.js';
 import { useToast } from '../components/Toast.js';
 import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
+import { ImportConflicts } from '../import/ImportConflicts.js';
+import { findImportConflicts, type ConflictChoice, type ImportConflict } from '../import/conflicts.js';
 import type { ResolvedLine, TradelistMode, UnmatchedLine } from '../import/types.js';
 
 export function Import() {
   const [text, setText] = useState('');
   const [tradelistMode, setTradelistMode] = useState<TradelistMode>('none');
   const { status, analyze, reset } = useImportAnalysis();
+  // Set when review found cards already in the collection: the conflict-
+  // resolution step replaces the review until resolved or backed out of.
+  const [conflictStep, setConflictStep] = useState<{ lines: ResolvedLine[]; conflicts: ImportConflict[] } | null>(null);
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -24,8 +29,25 @@ export function Import() {
   }
 
   async function confirmImport(lines: ResolvedLine[]) {
-    const res = await applyImport(lines, { source: 'import' });
-    toast(`Imported ${res.cards} cards (${res.entries} entries)`);
+    const conflicts = await findImportConflicts(lines);
+    if (conflicts.length > 0) {
+      setConflictStep({ lines, conflicts });
+      return;
+    }
+    await commit(lines, new Map());
+  }
+
+  async function commit(lines: ResolvedLine[], choices: Map<string, ConflictChoice>) {
+    const kept = lines.filter((l) => choices.get(l.oracleId) !== 'skip');
+    const replaceOracleIds = [...choices].filter(([, c]) => c === 'replace').map(([id]) => id);
+    const skipped = lines.length - kept.length;
+    if (kept.length === 0) {
+      toast('Nothing imported — every card was skipped');
+      navigate('/collection');
+      return;
+    }
+    const res = await applyImport(kept, { source: 'import', replaceOracleIds });
+    toast(`Imported ${res.cards} cards (${res.entries} entries${skipped > 0 ? `, ${skipped} skipped` : ''})`);
     navigate('/collection');
   }
 
@@ -74,6 +96,15 @@ export function Import() {
             <div className="progress-bar" style={{ width: `${Math.round(status.fraction * 100)}%` }} />
           </div>
         </>
+      ) : conflictStep ? (
+        <ImportConflicts
+          conflicts={conflictStep.conflicts}
+          otherCount={
+            conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0)
+          }
+          onConfirm={(choices) => commit(conflictStep.lines, choices)}
+          onBack={() => setConflictStep(null)}
+        />
       ) : (
         <ImportReview
           result={status.result}

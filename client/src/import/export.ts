@@ -22,8 +22,9 @@ function csvField(v: string): string {
   return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
-export async function buildCollectionCsv(): Promise<string> {
-  const entries = await db.collection.toArray();
+export async function buildCollectionCsv(opts: { tradeOnly?: boolean } = {}): Promise<string> {
+  const all = await db.collection.toArray();
+  const entries = opts.tradeOnly ? all.filter((e) => e.quantityForTrade > 0) : all;
   const [oracleMap, printMap] = await Promise.all([
     getOracleCardsByIds(entries.map((e) => e.oracleId)),
     getPrintingsByIds(entries.map((e) => e.scryfallId)),
@@ -52,6 +53,15 @@ export async function buildCollectionCsv(): Promise<string> {
     );
   }
   return rows.join('\n') + '\n';
+}
+
+/**
+ * Tradelist export: the trade-marked subset of the collection, in the same
+ * lossless CSV as the full collection (carries both Count and Tradelist Count),
+ * so it round-trips through our importer with "use tradelist counts from file".
+ */
+export function buildTradelistCsv(): Promise<string> {
+  return buildCollectionCsv({ tradeOnly: true });
 }
 
 /**

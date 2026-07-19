@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.36.0
+
+- **Import and export your tradelist.** The Tradelist page's options menu now has Import and Export, just like the wishlist. Import a pasted list or a file (plain text, Moxfield, Archidekt CSV) and every card lands in your collection marked for trade, with the same skip/add/replace prompt if you already own copies. Export writes the trade-marked cards to a CSV that reads straight back in.
+
 ## 0.35.0
 
 - **Dips and spikes on the Price movers page.** A new section lists cards whose price swings up and down within a range and is currently sitting near the bottom or top of it, with the range and a sparkline on each row. What you do with that is your call.

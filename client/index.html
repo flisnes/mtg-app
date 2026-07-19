@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- interactive-widget: on Android the soft keyboard shrinks the layout
+         viewport instead of covering it, so bottom sheets (and their focused
+         inputs) stay visible above the keyboard. Ignored where unsupported. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#1a1a1e" />
     <meta name="description" content="Track your Magic: The Gathering collection and trade in person." />
     <meta name="apple-mobile-web-app-capable" content="yes" />

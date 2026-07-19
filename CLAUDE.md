@@ -44,6 +44,8 @@ Only then does the app proper render (readiness signal = `.search-input` is visi
 
 ## Conventions
 
+- Do not use em-dashes, florid language or other AI-generated text typicalities. Be concise instead! MtG references and humor, however, is welcome!
 - Icons: add to the `IconName` union + `PATHS` in `client/src/components/icons.tsx` (24×24 Feather-style, `currentColor`). Avoid new inline emoji for affordances.
 - Each user-facing release bumps `client/package.json` `version` and tags it in the commit subject, e.g. `... (v0.24.0)`.
+- Each version bump also adds an entry to `CHANGELOG.md` (repo root), newest-first, in the existing user/tester-facing voice (what changed for the user, not the implementation).
 - Commit/push only when asked; branch off `main` first if asked to commit while on it.

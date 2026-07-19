@@ -33,7 +33,8 @@ export type IconName =
   | 'community'
   | 'bell'
   | 'qr'
-  | 'list';
+  | 'list'
+  | 'grid';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -236,6 +237,15 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M3 6h.01" />
       <path d="M3 12h.01" />
       <path d="M3 18h.01" />
+    </>
+  ),
+  // Four tiles — a visual grid (e.g. "view all editions").
+  grid: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
     </>
   ),
 };

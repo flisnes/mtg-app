@@ -27,7 +27,7 @@ import { SetSymbol } from './SetSymbol.js';
 import { Sparkline } from './Sparkline.js';
 import { useEscapeToClose } from './useEscapeToClose.js';
 
-// Bottom-sheet for a card's details, in five modes:
+// Bottom-sheet for a card's details, in six modes:
 //  - add (default): add the card somewhere new — where depends on addTarget
 //    (collection with edition/condition/qty/…, wishlist, tradelist, or a deck)
 //  - edit (entry): edit an existing collection entry — covers the tradelist
@@ -35,6 +35,8 @@ import { useEscapeToClose } from './useEscapeToClose.js';
 //  - wish (wishEntry): edit a wishlist line — edition (incl. "any printing")
 //    and quantity
 //  - deck (deckCard): edit a deck slot's quantity
+//  - session (sessionCard): edit a scan-session line in memory — Apply reports
+//    the values through onApply instead of writing to Dexie
 //  - info (readOnly): app-wide card info — image, printings, price + history
 
 /** Where add mode sends the card (mirrors the context-sensitive search).
@@ -54,6 +56,19 @@ const ADD_LABEL: Record<AddTarget['kind'], string> = {
   deck: 'Add to mainboard',
   default: 'Add to collection',
 };
+
+/**
+ * A scan-session line as the sheet edits it. Fields the scan target doesn't
+ * track (e.g. condition for a deck) are left undefined and stay hidden;
+ * quantity 0 means "remove the line".
+ */
+export interface SessionCardValues {
+  scryfallId: string;
+  quantity: number;
+  lang?: string;
+  finish?: Finish;
+  condition?: Condition;
+}
 
 /** Sentinel for the "any printing" edition option in wish mode. */
 const ANY_PRINTING = '';
@@ -76,6 +91,8 @@ export function CardSheet({
   entry,
   wishEntry,
   deckCard,
+  sessionCard,
+  onApply,
   initialScryfallId,
   initialTab,
   addTarget,
@@ -90,6 +107,10 @@ export function CardSheet({
   wishEntry?: WishlistEntry;
   /** Edit this deck slot's quantity + printing instead of the collection. */
   deckCard?: { id: string; quantity: number; scryfallId?: string };
+  /** Edit this scan-session line in memory; Apply reports through onApply. */
+  sessionCard?: SessionCardValues;
+  /** Session mode: called with the edited values instead of writing to Dexie. */
+  onApply?: (values: SessionCardValues) => void;
   /** Preselect a specific printing (e.g. the one named in a trade line). */
   initialScryfallId?: string;
   /** Open on a specific tab (e.g. deep-link to History from the edit history). */
@@ -112,13 +133,13 @@ export function CardSheet({
   highlightPrintings?: { label: string; notes: Map<string, string> };
   onClose: () => void;
 }) {
-  const mode = wishEntry ? 'wish' : deckCard ? 'deck' : entry ? 'edit' : readOnly ? 'info' : 'add';
+  const mode = wishEntry ? 'wish' : deckCard ? 'deck' : entry ? 'edit' : sessionCard ? 'session' : readOnly ? 'info' : 'add';
   const editing = mode === 'edit';
-  // An owned collection entry opens read-only with an Edit toggle; add/wish/deck
-  // are always a form; info is never editable.
+  // An owned collection entry opens read-only with an Edit toggle; add/wish/
+  // deck/session are always a form; info is never editable.
   const [editMode, setEditMode] = useState(false);
   const canToggleEdit = mode === 'edit';
-  const formEditable = mode === 'add' || mode === 'wish' || mode === 'deck' || (mode === 'edit' && editMode);
+  const formEditable = mode === 'add' || mode === 'wish' || mode === 'deck' || mode === 'session' || (mode === 'edit' && editMode);
   const addTo: AddTarget = (mode === 'add' && addTarget) || { kind: 'collection' };
   // Wishlist adds default to "any printing"; deck slots don't store an edition
   // at all, so those variants drop the collection-specific fields below.
@@ -127,22 +148,28 @@ export function CardSheet({
   const collectionFields =
     mode === 'edit' ||
     (mode === 'add' && (addTo.kind === 'collection' || addTo.kind === 'tradelist' || addTo.kind === 'default'));
+  // Session lines only edit the fields their scan target tracks.
+  const showCondition = mode === 'session' ? sessionCard!.condition !== undefined : collectionFields;
+  const showFinish = mode === 'session' ? sessionCard!.finish !== undefined : collectionFields;
+  const showLang = mode === 'session' ? sessionCard!.lang !== undefined : collectionFields;
   const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
   // In wish mode the empty string means "any printing" (no specific edition).
   const [scryfallId, setScryfallId] = useState(
     wishEntry !== undefined || wishAdd
       ? wishEntry?.scryfallId ?? ANY_PRINTING
-      : entry?.scryfallId ?? deckCard?.scryfallId ?? initialScryfallId ?? oracleCard.defaultScryfallId,
+      : entry?.scryfallId ?? deckCard?.scryfallId ?? sessionCard?.scryfallId ?? initialScryfallId ?? oracleCard.defaultScryfallId,
   );
-  const [condition, setCondition] = useState<Condition>(entry?.condition ?? 'NM');
-  const [finish, setFinish] = useState<Finish>(entry?.finish ?? 'nonfoil');
-  const [lang, setLang] = useState(entry?.lang ?? 'en');
-  const [quantity, setQuantity] = useState(entry?.quantity ?? wishEntry?.quantity ?? deckCard?.quantity ?? 1);
+  const [condition, setCondition] = useState<Condition>(entry?.condition ?? sessionCard?.condition ?? 'NM');
+  const [finish, setFinish] = useState<Finish>(entry?.finish ?? sessionCard?.finish ?? 'nonfoil');
+  const [lang, setLang] = useState(entry?.lang ?? sessionCard?.lang ?? 'en');
+  const [quantity, setQuantity] = useState(entry?.quantity ?? wishEntry?.quantity ?? deckCard?.quantity ?? sessionCard?.quantity ?? 1);
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
   const [busy, setBusy] = useState(false);
   const [trend, setTrend] = useState<HistoryChange | null>(null);
   const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(null);
   const [tab, setTab] = useState<'details' | 'history'>(initialTab ?? 'details');
+  // Visual "view all editions" grid, layered over the sheet.
+  const [allEditions, setAllEditions] = useState(false);
   // Event info modal opened from the History tab (out of edit mode), plus a
   // nested card sheet when the user drills from that event into another card.
   const [eventEntry, setEventEntry] = useState<HistoryEntry | null>(null);
@@ -197,10 +224,23 @@ export function CardSheet({
 
   const clampedForTrade = Math.min(forTrade, quantity);
 
+  /** Session mode: the edited line as reported back, mirroring the hidden fields. */
+  function sessionValues(qty: number): SessionCardValues {
+    return {
+      scryfallId,
+      quantity: qty,
+      lang: sessionCard?.lang !== undefined ? lang : undefined,
+      finish: sessionCard?.finish !== undefined ? finish : undefined,
+      condition: sessionCard?.condition !== undefined ? condition : undefined,
+    };
+  }
+
   /** `dest` picks where a context-free ('default') add goes; other targets ignore it. */
   async function save(board: DeckBoard = 'main', dest: 'collection' | 'wishlist' | 'tradelist' = 'collection') {
     setBusy(true);
-    if (wishEntry) {
+    if (sessionCard) {
+      onApply?.(sessionValues(quantity));
+    } else if (wishEntry) {
       await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, quantity });
     } else if (deckCard) {
       await updateDeckCard(deckCard.id, { quantity, scryfallId });
@@ -240,7 +280,10 @@ export function CardSheet({
 
   async function del() {
     setBusy(true);
-    if (wishEntry) await removeFromWishlist(wishEntry.id);
+    // A session line isn't stored anywhere yet — quantity 0 tells the scan
+    // list to drop it.
+    if (sessionCard) onApply?.(sessionValues(0));
+    else if (wishEntry) await removeFromWishlist(wishEntry.id);
     else if (deckCard) await removeDeckCard(deckCard.id);
     else if (entry) await removeFromCollection(entry.id);
     onClose();
@@ -323,33 +366,47 @@ export function CardSheet({
 
         <label className="field">
           <span>Edition</span>
-          <div className={`edition-select${printing ? ' with-symbol' : ''}`}>
-            {printing && <SetSymbol set={printing.set} className="edition-symbol" title={printing.setName} />}
-            <select
-              value={scryfallId}
-              onChange={(e) => {
-                setScryfallId(e.target.value);
-                onEditionChange?.(e.target.value);
-              }}
-              disabled={!formEditable && !onEditionChange}
-            >
-              {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
-              {highlighted.length > 0 ? (
-                <>
-                  <optgroup label={highlightPrintings!.label}>
-                    {highlighted.map((p) => printingOption(p, highlightPrintings!.notes.get(p.scryfallId)))}
-                  </optgroup>
-                  <optgroup label="Other printings">{otherPrintings.map((p) => printingOption(p))}</optgroup>
-                </>
-              ) : (
-                printings.map((p) => printingOption(p))
-              )}
-            </select>
+          <div className="edition-row">
+            <div className={`edition-select${printing ? ' with-symbol' : ''}`}>
+              {printing && <SetSymbol set={printing.set} className="edition-symbol" title={printing.setName} />}
+              <select
+                value={scryfallId}
+                onChange={(e) => {
+                  setScryfallId(e.target.value);
+                  onEditionChange?.(e.target.value);
+                }}
+                disabled={!formEditable && !onEditionChange}
+              >
+                {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
+                {highlighted.length > 0 ? (
+                  <>
+                    <optgroup label={highlightPrintings!.label}>
+                      {highlighted.map((p) => printingOption(p, highlightPrintings!.notes.get(p.scryfallId)))}
+                    </optgroup>
+                    <optgroup label="Other printings">{otherPrintings.map((p) => printingOption(p))}</optgroup>
+                  </>
+                ) : (
+                  printings.map((p) => printingOption(p))
+                )}
+              </select>
+            </div>
+            {(formEditable || !!onEditionChange) && printings.length > 0 && (
+              <button
+                type="button"
+                className="edition-grid-btn"
+                onClick={() => setAllEditions(true)}
+                aria-label="View all editions"
+                title="View all editions"
+              >
+                <Icon name="grid" size={18} />
+              </button>
+            )}
           </div>
         </label>
 
-        {collectionFields && (
+        {(showCondition || showFinish || showLang) && (
         <div className="field-grid">
+          {showCondition && (
           <label className="field">
             <span>Condition</span>
             <select value={condition} onChange={(e) => setCondition(e.target.value as Condition)} disabled={!formEditable}>
@@ -360,6 +417,8 @@ export function CardSheet({
               ))}
             </select>
           </label>
+          )}
+          {showFinish && (
           <label className="field">
             <span>Finish</span>
             <select value={finish} onChange={(e) => setFinish(e.target.value as Finish)} disabled={!formEditable}>
@@ -370,6 +429,8 @@ export function CardSheet({
               ))}
             </select>
           </label>
+          )}
+          {showLang && (
           <label className="field">
             <span>Language</span>
             <select value={lang} onChange={(e) => setLang(e.target.value)} disabled={!formEditable}>
@@ -380,6 +441,7 @@ export function CardSheet({
               ))}
             </select>
           </label>
+          )}
         </div>
         )}
 
@@ -387,27 +449,12 @@ export function CardSheet({
         <div className="field-grid">
           <label className="field">
             <span>Quantity</span>
-            <input
-              type="number"
-              min={1}
-              value={quantity}
-              onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
-              onKeyDown={saveOnEnter}
-              disabled={!formEditable}
-            />
+            <QtyStepper value={quantity} min={1} disabled={!formEditable} onChange={setQuantity} onEnter={saveOnEnter} />
           </label>
           {collectionFields && (
             <label className="field">
               <span>For trade</span>
-              <input
-                type="number"
-                min={0}
-                max={quantity}
-                value={clampedForTrade}
-                onChange={(e) => setForTrade(Math.max(0, Number(e.target.value) || 0))}
-                onKeyDown={saveOnEnter}
-                disabled={!formEditable}
-              />
+              <QtyStepper value={clampedForTrade} min={0} max={quantity} disabled={!formEditable} onChange={setForTrade} onEnter={saveOnEnter} />
             </label>
           )}
         </div>
@@ -457,7 +504,7 @@ export function CardSheet({
               </>
             )}
             <button className="primary" onClick={() => save()} disabled={busy}>
-              {mode === 'add' ? ADD_LABEL[addTo.kind] : 'Save'}
+              {mode === 'add' ? ADD_LABEL[addTo.kind] : mode === 'session' ? 'Apply' : 'Save'}
             </button>
           </div>
         )}
@@ -465,6 +512,20 @@ export function CardSheet({
         )}
       </div>
 
+      {allEditions && (
+        <EditionPicker
+          printings={highlighted.length > 0 ? [...highlighted, ...otherPrintings] : printings}
+          selected={scryfallId}
+          anyOption={mode === 'wish' || wishAdd}
+          notes={highlightPrintings?.notes}
+          onSelect={(id) => {
+            setScryfallId(id);
+            onEditionChange?.(id);
+            setAllEditions(false);
+          }}
+          onClose={() => setAllEditions(false)}
+        />
+      )}
       {eventEntry && (
         <EventSheet
           entry={eventEntry}
@@ -489,6 +550,118 @@ export function CardSheet({
       )}
     </div>,
     document.body,
+  );
+}
+
+/** Quantity field as a −/+ stepper: taps cover the common case, so the soft
+ *  keyboard (which covers most of the sheet on phones) only appears when the
+ *  user really wants to type — and then it's the numeric one. */
+function QtyStepper({
+  value,
+  min,
+  max,
+  disabled,
+  onChange,
+  onEnter,
+}: {
+  value: number;
+  min: number;
+  max?: number;
+  disabled?: boolean;
+  onChange: (v: number) => void;
+  onEnter?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}) {
+  const clamp = (v: number) => Math.max(min, max !== undefined ? Math.min(max, v) : v);
+  return (
+    <div className="qty-stepper">
+      <button type="button" onClick={() => onChange(clamp(value - 1))} disabled={disabled || value <= min} aria-label="One less">
+        <Icon name="minus" size={16} />
+      </button>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(clamp(Number(e.target.value) || min))}
+        onFocus={(e) => e.currentTarget.select()}
+        onKeyDown={onEnter}
+        disabled={disabled}
+      />
+      <button
+        type="button"
+        onClick={() => onChange(clamp(value + 1))}
+        disabled={disabled || (max !== undefined && value >= max)}
+        aria-label="One more"
+      >
+        <Icon name="plus" size={16} />
+      </button>
+    </div>
+  );
+}
+
+/** Every printing as an image tile — pick an edition by looking at it. */
+function EditionPicker({
+  printings,
+  selected,
+  anyOption,
+  notes,
+  onSelect,
+  onClose,
+}: {
+  printings: Priced<Printing>[];
+  selected: string;
+  /** Lead with the wishlist's "any printing" tile. */
+  anyOption?: boolean;
+  /** Short annotations per printing (e.g. the trade board's "×2, 1 for trade"). */
+  notes?: Map<string, string>;
+  onSelect: (scryfallId: string) => void;
+  onClose: () => void;
+}) {
+  useEscapeToClose(onClose);
+  // stopPropagation on the backdrop: this overlay nests inside the card
+  // sheet's backdrop, whose click handler would otherwise also close the sheet.
+  return (
+    <div
+      className="sheet-backdrop"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      <div className="sheet edition-picker-sheet" role="dialog" aria-label="All editions" onClick={(e) => e.stopPropagation()}>
+        <div className="edition-picker-head">
+          <h2>All editions</h2>
+          <button onClick={onClose} aria-label="Close">
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+        <div className="edition-grid">
+          {anyOption && (
+            <button className={selected === ANY_PRINTING ? 'edition-tile edition-tile-selected' : 'edition-tile'} onClick={() => onSelect(ANY_PRINTING)}>
+              <span className="edition-tile-ph">Any printing</span>
+              <span className="edition-tile-caption">No specific edition</span>
+            </button>
+          )}
+          {printings.map((p) => {
+            const img = p.imageSmall ?? p.imageNormal;
+            return (
+              <button
+                key={p.scryfallId}
+                className={p.scryfallId === selected ? 'edition-tile edition-tile-selected' : 'edition-tile'}
+                onClick={() => onSelect(p.scryfallId)}
+              >
+                {img ? <img src={img} alt={p.setName} loading="lazy" /> : <span className="edition-tile-ph">{p.setName}</span>}
+                <span className="edition-tile-caption">
+                  <SetSymbol set={p.set} title={p.setName} /> {p.set.toUpperCase()} #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
+                </span>
+                <span className="edition-tile-sub">{notes?.get(p.scryfallId) ?? formatPrice(p) ?? ''}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 

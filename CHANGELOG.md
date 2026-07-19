@@ -2,6 +2,87 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.34.0
+
+- **Tap a scanned card to edit it fully.** In the scanner's session list, tapping a card now opens its card sheet, where you can change the edition, condition, finish, language and quantity — Apply updates the line in the list, Remove drops it. Conditions now carry through when the session is committed, so a played copy no longer lands in your collection as NM. (The foil chip on the rows is gone; foil is edited in the sheet and shown on the printing line instead.)
+- **View all editions, visually.** Next to the Edition dropdown there's a new grid button that lays out every printing as card images with set, number, year and price — tap one to pick it. Works everywhere the edition is editable, including wishlist lines ("Any printing" is a tile too) and trade offers.
+- **Card sheet plays nicer with phone keyboards.** Quantity and "For trade" are now −/+ steppers, so most edits never summon the keyboard; tapping the number still lets you type, now with the numeric keypad. And on Android the app now shrinks above the keyboard instead of being covered by it.
+
+## 0.33.2
+
+- Scanner tray tiles now show the full card instead of a cropped slice, and blank-art playtest cards are no longer suggested as matches.
+
+## 0.33.1
+
+- Fixed the card scanner's candidate tray on phones: the card thumbnails no longer balloon to full size — they're sized to fit the tray's quarter-screen strip along the bottom.
+
+## 0.33.0
+
+- **The card scanner is now a continuous, full-screen session.** The camera fills the top three-quarters of the screen and never pauses between cards — as it recognizes each one it drops into a scrollable tray along the bottom. Tap the top half of a tray tile to add another copy, the bottom half to take one back. A list button opens the session for review and editing (quantities, foil, and which deck board a card belongs to), and completing the session writes everything to its destination — collection, deck, trade or tradelist — in one go. No more confirming a single card at a time.
+
+## 0.32.0
+
+- **Quick-add buttons moved into the card sheet.** In the header search, grid tiles no longer carry their own add buttons — tapping a tile opens the card sheet, which now holds the add actions that fit where you are. List view keeps its per-row quick-adds, and the in-trade card pickers are unchanged.
+- Searching from a screen with no obvious destination (the Decks tab, Trade tab, or More) now offers all three targets at once: add to collection, wishlist, or tradelist.
+
+## 0.31.1
+
+- Fixed the scanner occasionally matching a blank surface — a bare table or wall — to a real card. A featureless camera frame used to lock onto a blank-art playtest card; the scanner now recognizes when a frame has no artwork to read and ignores those cards entirely.
+
+## 0.31.0
+
+- **Imports now handle cards you already own.** When an import includes cards already in your collection (any printing counts), a new step appears between review and commit: each overlapping card is listed with your owned copies next to the incoming ones, and a per-card choice to **skip**, **add** (keep both), or **replace**. Skip-all / add-all / replace-all handle the whole list at once. A replace and its new copies land in a single history entry, so one undo puts everything back the way it was.
+
+## 0.30.1
+
+- Fixed the "Update now" banner sometimes needing several taps to take. Tapping it now runs the full update handshake — and shows a disabled "Updating…" while it works — instead of a plain reload that could leave the banner stuck reappearing.
+
+## 0.30.0
+
+- **Import, export and scan come to the wishlist**, matching the collection's tools. A new options menu on the Wishlist (available even when it's empty) adds:
+  - **Scan** — point your camera at a card to add it as a wish for that specific printing.
+  - **Import** — paste or upload a list; everything comes in as "any printing", and the whole import is a single undoable entry.
+  - **Export** — download your wishlist as a plain-text list that imports straight back.
+
+## 0.29.2
+
+- Polished the multi-select look from 0.29.0: selected grid tiles shrink into an accent ring (no longer overlapping the info badge), selected list rows get an accent-tinted background and a clear checkbox, and the bulk-action bar is now a floating rounded card with equal-width buttons that slides up into view. The last rows stay reachable while it's open, and the animations respect a reduced-motion preference.
+
+## 0.29.1
+
+- Fixed the card-database download gate reappearing on every refresh for some users, which forced a full ~16 MB re-download each time. (Scryfall had shipped one printing twice; the app now counts what's actually stored on your device, so a count mismatch can never wedge the gate again.)
+
+## 0.29.0
+
+- **Select many cards at once.** Collection, tradelist and wishlist gain a **Select** button that turns on multi-select with a bulk-action bar. In the collection you can add or remove tradelist marking, add to a deck, or delete; the tradelist can remove-from-trade or delete; the wishlist can remove — all across as many cards as you pick, in one action. Bulk edits are recorded in your history just like single edits.
+
+## 0.28.0
+
+- **Decks show more at a glance.** The deck list now displays each deck's format, its colour identity as mana pips, and a mainboard / sideboard split (e.g. 60 / 15) in place of a single card count. For a Commander deck the commander counts toward the 100-card mainboard, and the colours collapse to the commander's identity.
+
+## 0.27.0
+
+- **Trade adds now pick the edition people actually have.** Searching for a card during a trade used to always add the newest printing. Now:
+  - Adding to **"You get"** uses the printing from your partner's tradelist — matching finish, condition and language — when they have it listed.
+  - Adding to **"You give"** uses your best owned copy: for-trade printings first, then whichever printing you have the most of.
+  - The Edition dropdown groups the relevant person's printings first ("In your collection" / "On their tradelist") with quantities, and opens on the best guess. You can still change any offered line's edition in place.
+
+## 0.26.0
+
+- **Full search syntax in your own lists.** The collection, tradelist and wishlist filters used to do a plain name match; they now understand the same Scryfall-style syntax as the main search — `t:`, `cmc:`, `o:`, `c:`, `id:`, `r:`, `f:` and negation all work when filtering the cards you own. The set / colour / rarity dropdowns and the tradelist-only toggle are still there.
+
+## 0.25.0
+
+- **Edit history.** A new **Edit history** page (under More) lists every change you've made to your collection, newest first, with name search plus type and date filters. Imports, sealed-product adds and trades collapse into a single entry (with stacked thumbnails), so a big import reads as one line instead of hundreds. Tap an entry to view it, drill into any card's own History tab, or undo the most recent change.
+
+## 0.24.0
+
+- **QR-code trade invites.** Starting a trade now opens a full-screen invite showing a scannable QR code next to the 6-character join code — your partner just points their phone camera at it to open the app and join, no code to read aloud. A "Start ahead" option lets you build your offer before they arrive, and a QR button on the trade board reopens the invite while the session is still open. (The code encodes a normal https link, so it also works from a plain browser tab or an installed app.)
+
+## 0.23.0
+
+- **A proper card search inside trades.** The "Add cards" pickers in a trade used to have their own cramped, list-only search squeezed into a small sheet. They now use the same full search as the rest of the app — filter row, list/grid toggle, result count and paging — in a full-screen overlay. Ownership indicators (on their tradelist ⇄, owned ✓, or not owned ❓) show as a corner badge in both grid and list.
+
 ## 0.22.0
 
 - **Price history from the server.** The server now records every card's market price once a day, for every printing that exists — not just cards you own. When you're signed in, a card's price chart and trend use this shared history, so a fresh device (or a card you just discovered) shows the full recorded window immediately instead of starting from scratch. Histories fetched while online stay available offline.

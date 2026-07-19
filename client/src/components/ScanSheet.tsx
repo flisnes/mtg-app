@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
+import type { Condition, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
-import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { getOracleCard, getOracleCardsByIds, getPrinting, getPrintingsByIds } from '../db/queries.js';
+import { CardSheet, type SessionCardValues } from './CardSheet.js';
 import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
 import { getScanExcludedIds } from '../scan/exclusions.js';
 import { CameraScan, type LiveScanState } from '../scan/camera.js';
@@ -80,6 +81,8 @@ interface SessionEntry {
   image?: string;
   finish: Finish;
   lang: string;
+  /** 'NM' until edited in the session list's card sheet. */
+  condition: Condition;
   board: DeckBoard;
   qty: number;
 }
@@ -91,9 +94,10 @@ interface TapFx {
   seq: number;
 }
 
-const entryKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'board'>) => `${e.scryfallId}|${e.finish}|${e.board}`;
+const entryKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'condition' | 'board'>) =>
+  `${e.scryfallId}|${e.finish}|${e.condition}|${e.board}`;
 
-/** Collapse duplicate (printing, finish, board) lines after a row edit. */
+/** Collapse duplicate (printing, finish, condition, board) lines after a row edit. */
 function mergeSession(entries: SessionEntry[]): SessionEntry[] {
   const map = new Map<string, SessionEntry>();
   for (const e of entries) {
@@ -264,7 +268,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     if (!c.printing) return;
     const finish: Finish = finishMatters(target) && foil ? 'foil' : 'nonfoil';
     const b: DeckBoard = target.kind === 'deck' ? board : 'main';
-    const key = entryKey({ scryfallId: c.scryfallId, finish, board: b });
+    // Fresh scans are always NM; conditions are set afterwards in the list.
+    const key = entryKey({ scryfallId: c.scryfallId, finish, condition: 'NM', board: b });
     let i = session.findIndex((e) => entryKey(e) === key);
     if (delta > 0) {
       if (i >= 0) {
@@ -281,6 +286,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             image: c.printing.imageNormal ?? undefined,
             finish,
             lang,
+            condition: 'NM',
             board: b,
             qty: 1,
           },
@@ -318,11 +324,11 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     for (const e of session) {
       switch (target.kind) {
         case 'collection':
-          await addToCollection({ oracleId: e.oracleId, scryfallId: e.scryfallId, condition: 'NM', finish: e.finish, lang: e.lang, quantity: e.qty, source: 'scan' });
+          await addToCollection({ oracleId: e.oracleId, scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang, quantity: e.qty, source: 'scan' });
           break;
         case 'tradelist':
           // Same collection entry, but the copies start marked for trade.
-          await addToCollection({ oracleId: e.oracleId, scryfallId: e.scryfallId, condition: 'NM', finish: e.finish, lang: e.lang, quantity: e.qty, quantityForTrade: e.qty, source: 'scan' });
+          await addToCollection({ oracleId: e.oracleId, scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang, quantity: e.qty, quantityForTrade: e.qty, source: 'scan' });
           break;
         case 'wishlist':
           // A scanned card is a specific printing, so the wish is for that edition.
@@ -499,13 +505,15 @@ function SessionSheet({
   onComplete: () => void;
   onClose: () => void;
 }) {
+  // Row tap opens the card sheet on that line for full editing (edition,
+  // condition, finish, language, quantity); Apply rewrites the line in place.
+  const [editing, setEditing] = useState<{ index: number; oracle: Priced<OracleCard> } | null>(null);
+  const trackCondition = target.kind === 'collection' || target.kind === 'tradelist';
+
   const adjust = (i: number, delta: number) => {
     const e = entries[i]!;
     onChange(e.qty + delta <= 0 ? entries.filter((_, j) => j !== i) : entries.map((x, j) => (j === i ? { ...x, qty: x.qty + delta } : x)));
   };
-
-  const toggleFoil = (i: number) =>
-    onChange(mergeSession(entries.map((e, j) => (j === i ? { ...e, finish: e.finish === 'foil' ? 'nonfoil' : 'foil' } : e))));
 
   const cycleBoard = (i: number) => {
     if (target.kind !== 'deck') return;
@@ -515,6 +523,32 @@ function SessionSheet({
         entries.map((e, j) => (j === i ? { ...e, board: boards[(boards.indexOf(e.board) + 1) % boards.length]! } : e)),
       ),
     );
+  };
+
+  const openEntry = async (i: number) => {
+    const oracle = await getOracleCard(entries[i]!.oracleId);
+    if (oracle) setEditing({ index: i, oracle });
+  };
+
+  /** Card-sheet Apply/Remove for one line (quantity 0 removes it). */
+  const applyEdit = async (i: number, v: SessionCardValues) => {
+    if (v.quantity <= 0) {
+      onChange(entries.filter((_, j) => j !== i));
+      return;
+    }
+    const e = entries[i]!;
+    let next: SessionEntry = {
+      ...e,
+      qty: v.quantity,
+      lang: v.lang ?? e.lang,
+      finish: v.finish ?? e.finish,
+      condition: v.condition ?? e.condition,
+    };
+    if (v.scryfallId !== e.scryfallId) {
+      const p = await getPrinting(v.scryfallId);
+      if (p) next = { ...next, scryfallId: p.scryfallId, set: p.set, collectorNumber: p.collectorNumber, image: p.imageNormal ?? undefined };
+    }
+    onChange(mergeSession(entries.map((x, j) => (j === i ? next : x))));
   };
 
   return (
@@ -534,25 +568,22 @@ function SessionSheet({
           <ul className="scan-list">
             {entries.map((e, i) => (
               <li key={entryKey(e)} className="scan-list-row">
-                {e.image ? <img className="scan-list-thumb" src={e.image} alt="" /> : <span className="scan-list-thumb" />}
-                <div className="scan-list-info">
-                  <strong>{e.name}</strong>
-                  <span className="scan-printing">
-                    {e.set.toUpperCase()} #{e.collectorNumber} · {e.lang}
+                <button className="scan-list-main" onClick={() => void openEntry(i)} aria-label={`Edit ${e.name}`}>
+                  {e.image ? <img className="scan-list-thumb" src={e.image} alt="" /> : <span className="scan-list-thumb" />}
+                  <span className="scan-list-info">
+                    <strong>{e.name}</strong>
+                    <span className="scan-printing">
+                      {e.set.toUpperCase()} #{e.collectorNumber} · {e.lang}
+                      {finishMatters(target) && e.finish === 'foil' ? ' · Foil' : ''}
+                      {trackCondition && e.condition !== 'NM' ? ` · ${e.condition}` : ''}
+                    </span>
                   </span>
-                  <span className="scan-list-chips">
-                    {finishMatters(target) && (
-                      <button className={e.finish === 'foil' ? 'scan-chip scan-chip-on' : 'scan-chip'} onClick={() => toggleFoil(i)}>
-                        Foil
-                      </button>
-                    )}
-                    {target.kind === 'deck' && (
-                      <button className="scan-chip" onClick={() => cycleBoard(i)}>
-                        {BOARD_LABELS[e.board]}
-                      </button>
-                    )}
-                  </span>
-                </div>
+                </button>
+                {target.kind === 'deck' && (
+                  <button className="scan-chip" onClick={() => cycleBoard(i)}>
+                    {BOARD_LABELS[e.board]}
+                  </button>
+                )}
                 <div className="scan-list-qty">
                   <button onClick={() => adjust(i, -1)} aria-label={`One less ${e.name}`}>
                     <Icon name="minus" size={16} />
@@ -573,6 +604,21 @@ function SessionSheet({
           </button>
           <button onClick={onClose}>Keep scanning</button>
         </div>
+
+        {editing && entries[editing.index] && (
+          <CardSheet
+            oracleCard={editing.oracle}
+            sessionCard={{
+              scryfallId: entries[editing.index]!.scryfallId,
+              quantity: entries[editing.index]!.qty,
+              lang: finishMatters(target) ? entries[editing.index]!.lang : undefined,
+              finish: finishMatters(target) ? entries[editing.index]!.finish : undefined,
+              condition: trackCondition ? entries[editing.index]!.condition : undefined,
+            }}
+            onApply={(v) => void applyEdit(editing.index, v)}
+            onClose={() => setEditing(null)}
+          />
+        )}
       </div>
     </div>
   );

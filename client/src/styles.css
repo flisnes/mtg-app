@@ -2539,6 +2539,12 @@ button.ghost {
   color: #fff;
 }
 .scan-tray {
+  /* Tile geometry from the tray's own height (25dvh = the screen's 3:1 split)
+     rather than the card image's intrinsic size — an auto-width flex tile
+     would balloon to the image's natural 488px (aspect-ratio can't transfer
+     from a flex-derived height during intrinsic sizing). */
+  --scan-tile-h: calc(25dvh - 1rem - var(--safe-bottom));
+  --scan-card-h: calc(var(--scan-tile-h) - 0.9rem - 2px);
   flex: 1 1 0;
   min-height: 0;
   background: var(--surface);
@@ -2560,18 +2566,20 @@ button.ghost {
   flex-direction: column;
   gap: 2px;
   height: 100%;
+  width: calc(var(--scan-card-h) * 0.718); /* card aspect 488/680 */
   flex-shrink: 0;
 }
 .scan-tile-card {
   position: relative;
   flex: 1;
   min-height: 0;
-  aspect-ratio: 488 / 680;
   border-radius: 8px;
   overflow: hidden;
   background: var(--surface-2);
 }
 .scan-tile-card img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -2656,9 +2664,12 @@ button.ghost {
 }
 .scan-tile-caption {
   font-size: 0.65rem;
+  line-height: 0.9rem; /* reserved in --scan-card-h */
   color: var(--text-dim);
   text-align: center;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* +1/−1 flash on tap. */
 .scan-fx {

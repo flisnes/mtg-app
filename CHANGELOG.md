@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.35.0
+
+- **Dips and spikes on the Price movers page.** A new section lists cards whose price swings up and down within a range and is currently sitting near the bottom or top of it, with the range and a sparkline on each row. What you do with that is your call.
+
 ## 0.34.0
 
 - **Tap a scanned card to edit it fully.** In the scanner's session list, tapping a card now opens its card sheet, where you can change the edition, condition, finish, language and quantity — Apply updates the line in the list, Remove drops it. Conditions now carry through when the session is committed, so a played copy no longer lands in your collection as NM. (The foil chip on the rows is gone; foil is edited in the sheet and shown on the printing line instead.)

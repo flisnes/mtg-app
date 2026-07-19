@@ -51,6 +51,86 @@ export interface MoverStats {
   trendR: number | null;
 }
 
+/**
+ * A card "swings" when its full recorded history oscillates inside a range —
+ * it must cross the range midline at least twice, so a one-way drift (which
+ * crosses exactly once) never counts — and the range height passes the same
+ * substantiality trade-off as window moves. It sits at a dip/spike when the
+ * latest reading lands in the bottom/top band of that range.
+ */
+const SWING_MIN_POINTS = 7;
+const SWING_MIN_SPAN_DAYS = 10;
+const SWING_MIN_CROSSINGS = 2;
+const SWING_EDGE_BAND = 0.2; // within 20% of the range's height from an edge
+
+export interface SwingStats {
+  cur: 'eur' | 'usd';
+  /** Latest recorded price, currency units. */
+  current: number;
+  /** Lowest / highest readings over the whole history. */
+  low: number;
+  high: number;
+  kind: 'dip' | 'spike';
+  /** Days between the first and latest readings. */
+  spanDays: number;
+  /** All non-null readings, chronological (sparkline input). */
+  series: number[];
+  /** Range height run through the substantiality formula — ranking score. */
+  score: number;
+}
+
+/**
+ * Dip/spike detection over the full recorded history. Null when the history
+ * is too short, doesn't oscillate, the range is trivial, or the current price
+ * sits in the middle of it.
+ */
+export function swingStats(h: PriceHistory): SwingStats | null {
+  const cur = pickCurrency(h);
+  if (!cur) return null;
+  const pts = points(h, cur);
+  if (pts.length < SWING_MIN_POINTS) return null;
+  const [firstDay] = pts[0]!;
+  const [curDay, current] = pts[pts.length - 1]!;
+  if (curDay - firstDay < SWING_MIN_SPAN_DAYS) return null;
+
+  let low = Infinity;
+  let high = -Infinity;
+  for (const [, v] of pts) {
+    if (v < low) low = v;
+    if (v > high) high = v;
+  }
+  const range = high - low;
+  const rangePct = low > 0 ? (range / low) * 100 : null;
+  const score = range / ABS_REF + (rangePct != null ? rangePct / PCT_REF : 0);
+  if (range < NOISE_FLOOR || score < 1) return null;
+
+  const mid = (low + high) / 2;
+  let side = 0; // -1 below the midline, 1 above
+  let crossings = 0;
+  for (const [, v] of pts) {
+    const s = v > mid ? 1 : v < mid ? -1 : side;
+    if (s !== 0 && side !== 0 && s !== side) crossings++;
+    if (s !== 0) side = s;
+  }
+  if (crossings < SWING_MIN_CROSSINGS) return null;
+
+  const band = range * SWING_EDGE_BAND;
+  const kind: SwingStats['kind'] | null =
+    current <= low + band ? 'dip' : current >= high - band ? 'spike' : null;
+  if (!kind) return null;
+
+  return {
+    cur,
+    current,
+    low,
+    high,
+    kind,
+    spanDays: curDay - firstDay,
+    series: pts.map(([, v]) => v),
+    score,
+  };
+}
+
 /** Window used for the mover badges shown in card lists. */
 export const BADGE_WINDOW_DAYS = 7;
 

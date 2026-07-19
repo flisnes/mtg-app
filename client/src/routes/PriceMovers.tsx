@@ -4,7 +4,7 @@ import type { OracleCard, Priced, Printing } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
-import { moverStats, type MoverStats } from '../price/movers.js';
+import { moverStats, swingStats, type MoverStats, type SwingStats } from '../price/movers.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { Sparkline } from '../components/Sparkline.js';
@@ -12,7 +12,8 @@ import { SetSymbol } from '../components/SetSymbol.js';
 import { Icon } from '../components/icons.js';
 
 // Price movers: which collection cards recently moved substantially (combined
-// absolute + percentage test, see price/movers.ts) and which drift steadily.
+// absolute + percentage test, see price/movers.ts), which drift steadily, and
+// which sit at a dip or spike of a price range they swing within.
 
 const WINDOWS: [number, string][] = [
   [7, 'Last 7 days'],
@@ -22,7 +23,8 @@ const WINDOWS: [number, string][] = [
 
 interface Mover {
   scryfallId: string;
-  stats: MoverStats;
+  stats: MoverStats | null;
+  swing: SwingStats | null;
   printing?: Priced<Printing>;
   oracle?: Priced<OracleCard>;
   onTradelist: boolean;
@@ -39,10 +41,11 @@ export function PriceMovers() {
       db.collection.toArray(),
       db.wishlist.toArray(),
     ]);
-    const movers: { scryfallId: string; stats: MoverStats }[] = [];
+    const movers: { scryfallId: string; stats: MoverStats | null; swing: SwingStats | null }[] = [];
     for (const h of histories) {
       const stats = moverStats(h, windowDays);
-      if (stats) movers.push({ scryfallId: h.scryfallId, stats });
+      const swing = swingStats(h);
+      if (stats || swing) movers.push({ scryfallId: h.scryfallId, stats, swing });
     }
     const printMap = await getPrintingsByIds(movers.map((m) => m.scryfallId));
     const oracleMap = await getOracleCardsByIds([...printMap.values()].map((p) => p.oracleId));
@@ -65,14 +68,16 @@ export function PriceMovers() {
     };
   }, [windowDays]);
 
-  const { risers, fallers, steady } = useMemo(() => {
-    const big = (data?.movers ?? []).filter((m) => m.stats.substantial).sort((a, b) => b.stats.score - a.stats.score);
+  const { risers, fallers, steady, swings } = useMemo(() => {
+    const all = data?.movers ?? [];
+    const big = all
+      .filter((m) => m.stats?.substantial)
+      .sort((a, b) => (b.stats?.score ?? 0) - (a.stats?.score ?? 0));
     return {
-      risers: big.filter((m) => m.stats.delta > 0),
-      fallers: big.filter((m) => m.stats.delta < 0),
-      steady: (data?.movers ?? [])
-        .filter((m) => m.stats.trend)
-        .sort((a, b) => (b.stats.trendR ?? 0) - (a.stats.trendR ?? 0)),
+      risers: big.filter((m) => (m.stats?.delta ?? 0) > 0),
+      fallers: big.filter((m) => (m.stats?.delta ?? 0) < 0),
+      steady: all.filter((m) => m.stats?.trend).sort((a, b) => (b.stats?.trendR ?? 0) - (a.stats?.trendR ?? 0)),
+      swings: all.filter((m) => m.swing).sort((a, b) => (b.swing?.score ?? 0) - (a.swing?.score ?? 0)),
     };
   }, [data]);
 
@@ -109,6 +114,14 @@ export function PriceMovers() {
             onOpen={setInfo}
             empty="No consistent trends yet. These need at least five readings."
           />
+          <MoverSection
+            title="Dips and spikes"
+            subtitle="Cards whose price swings within a range and currently sits near the low or high end of it."
+            movers={swings}
+            onOpen={setInfo}
+            empty="No cards at a dip or spike right now. These need a week or more of readings."
+            swing
+          />
         </>
       )}
 
@@ -125,12 +138,15 @@ function MoverSection({
   movers,
   onOpen,
   empty,
+  swing,
 }: {
   title: string;
   subtitle?: string;
   movers: Mover[];
   onOpen: (m: Mover) => void;
   empty: string;
+  /** Render the dip/spike sub-line instead of the window-change one. */
+  swing?: boolean;
 }) {
   return (
     <section className="mover-section">
@@ -160,8 +176,10 @@ function MoverSection({
                     )}
                   </>
                 ) : undefined,
-              sub: <MoverSub m={m} />,
-              price: formatMoney(m.stats.cur, m.stats.current),
+              sub: swing ? <SwingSub m={m} /> : <MoverSub m={m} />,
+              price: swing
+                ? formatMoney(m.swing!.cur, m.swing!.current)
+                : formatMoney(m.stats!.cur, m.stats!.current),
               onClick: m.oracle ? () => onOpen(m) : undefined,
             }),
           )}
@@ -172,7 +190,7 @@ function MoverSection({
 }
 
 function MoverSub({ m }: { m: Mover }) {
-  const s = m.stats;
+  const s = m.stats!;
   const dir = s.delta > 0 ? 'up' : s.delta < 0 ? 'down' : 'flat';
   return (
     <span className="mover-sub">
@@ -188,6 +206,25 @@ function MoverSub({ m }: { m: Mover }) {
       </span>{' '}
       in {s.spanDays} day{s.spanDays === 1 ? '' : 's'}
       {s.trend && <span className="badge">{s.trend === 'rising' ? '↗ steady' : '↘ steady'}</span>}
+      <Sparkline values={s.series} width={64} height={18} />
+    </span>
+  );
+}
+
+function SwingSub({ m }: { m: Mover }) {
+  const s = m.swing!;
+  return (
+    <span className="mover-sub">
+      {m.printing && (
+        <>
+          <SetSymbol set={m.printing.set} className="sub-set-symbol" title={m.printing.setName} />
+          {`${m.printing.setName} · `}
+        </>
+      )}
+      <span className={s.kind === 'dip' ? 'price-down' : 'price-up'}>
+        {s.kind === 'dip' ? '▼ At a dip' : '▲ At a spike'}
+      </span>{' '}
+      · swings {formatMoney(s.cur, s.low)}–{formatMoney(s.cur, s.high)} over {s.spanDays} days
       <Sparkline values={s.series} width={64} height={18} />
     </span>
   );

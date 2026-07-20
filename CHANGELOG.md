@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.40.0
+
+- **Trade home redesigned into three sections.** The trade landing screen now shows start/join controls at the top, a new "Recent trades" section in the middle listing your last few sessions, and two tiles at the bottom linking to your tradelist and the community trades list — everything you need to get trading in one place.
+
 ## 0.39.0
 
 - **Trades survive a dropped connection.** Reconnecting mid-trade no longer leaves you stuck on "Connecting…", cancels a trade that's actually still live, or double-applies the other side's offer. If the relay really can't be reached it now tells you instead of spinning forever.

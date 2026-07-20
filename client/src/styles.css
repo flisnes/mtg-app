@@ -378,6 +378,109 @@ button.danger-outline {
   flex: 1;
 }
 
+/* ---- Trade landing (idle) ---- */
+.trade-home {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  /* Fill the empty view so the three slabs read as rough thirds. */
+  min-height: calc(100dvh - 15rem);
+}
+.trade-home > * {
+  flex: 1;
+  min-height: 0;
+}
+.trade-home-start {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+}
+.trade-home-recent {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 0.9rem 1rem;
+}
+.trade-home-recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.trade-home-recent-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.recent-trade-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.recent-trade {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.4rem;
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+}
+.recent-trade:hover {
+  background: var(--surface-2, rgba(127, 127, 127, 0.12));
+}
+.recent-trade-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.recent-trade-partner {
+  font-weight: 500;
+}
+.recent-trade .badge {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.trade-home-links {
+  display: flex;
+  gap: 1rem;
+}
+.trade-home-tile {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  text-align: center;
+  padding: 1.25rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+.trade-home-tile:hover {
+  border-color: var(--accent, var(--text-dim));
+}
+.trade-home-tile-icon {
+  display: inline-flex;
+  color: var(--accent, var(--text));
+}
+.trade-home-tile strong {
+  font-size: 0.98rem;
+}
+.trade-home-tile .fine-print {
+  margin: 0;
+}
+
 /* ---- Menu list (More) ---- */
 .menu-list {
   list-style: none;

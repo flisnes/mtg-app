@@ -159,24 +159,47 @@ export function Trade() {
   if (trade.status === 'idle' || trade.status === 'error') {
     return (
       <Page title="Trade" subtitle="Trade in person: share a code, build offers, confirm after inspecting.">
-        {trade.error && <p className="gate-error">{trade.error}</p>}
-        {resumable && (
-          <div className="empty-state">
-            <p>You have an unfinished trade ({resumable.code}).</p>
-            <div className="confirm-row" style={{ justifyContent: 'center' }}>
-              <button className="primary" onClick={() => trade.resume(resumable)}>
-                Resume
+        <div className="trade-home">
+          <section className="trade-home-start">
+            {trade.error && <p className="gate-error">{trade.error}</p>}
+            {resumable && (
+              <div className="empty-state">
+                <p>You have an unfinished trade ({resumable.code}).</p>
+                <div className="confirm-row" style={{ justifyContent: 'center' }}>
+                  <button className="primary" onClick={() => trade.resume(resumable)}>
+                    Resume
+                  </button>
+                  <button onClick={() => { void clearPersistedTrade(); setResumable(null); }}>Discard</button>
+                </div>
+              </div>
+            )}
+            <div className="trade-actions">
+              <button className="primary" onClick={trade.create}>
+                Start a trade
               </button>
-              <button onClick={() => { void clearPersistedTrade(); setResumable(null); }}>Discard</button>
             </div>
+            <CodeJoinForm label="Join code" submitLabel="Join" onSubmit={trade.join} />
+          </section>
+
+          <RecentTrades />
+
+          <div className="trade-home-links">
+            <Link className="trade-home-tile" to="/tradelist">
+              <span className="trade-home-tile-icon" aria-hidden>
+                <Icon name="tradelist" size={22} />
+              </span>
+              <strong>Your tradelist</strong>
+              <span className="fine-print">Cards you’ve marked for trade</span>
+            </Link>
+            <Link className="trade-home-tile" to="/community">
+              <span className="trade-home-tile-icon" aria-hidden>
+                <Icon name="community" size={22} />
+              </span>
+              <strong>Community trades</strong>
+              <span className="fine-print">Browse other collectors</span>
+            </Link>
           </div>
-        )}
-        <div className="trade-actions">
-          <button className="primary" onClick={trade.create}>
-            Start a trade
-          </button>
         </div>
-        <CodeJoinForm label="Join code" submitLabel="Join" onSubmit={trade.join} />
       </Page>
     );
   }
@@ -209,6 +232,53 @@ export function Trade() {
   }
 
   return <TradeBoard trade={trade} seat={trade.seat} />;
+}
+
+/** Total card count across a set of offer/history lines. */
+function countLines(lines: { quantity: number }[]): number {
+  return lines.reduce((s, l) => s + l.quantity, 0);
+}
+
+/**
+ * The middle slab of the trade landing: the last few completed trades (device-
+ * local, same store as the history view) with a shortcut to the full history.
+ */
+function RecentTrades() {
+  const trades = useLiveQuery(() => db.trades.orderBy('completedAt').reverse().limit(3).toArray(), []);
+  return (
+    <section className="trade-home-recent">
+      <div className="trade-home-recent-head">
+        <h3>Recent trades</h3>
+        <Link className="chip" to="/history">
+          Trade history ›
+        </Link>
+      </div>
+      {trades === undefined ? (
+        <p className="fine-print">Loading…</p>
+      ) : trades.length === 0 ? (
+        <p className="fine-print">No trades yet. Completed trades will show up here.</p>
+      ) : (
+        <ul className="recent-trade-list">
+          {trades.map((t) => (
+            <li key={t.id}>
+              <Link className="recent-trade" to="/history">
+                <span className="menu-icon" aria-hidden>
+                  <Icon name="trade" />
+                </span>
+                <span className="recent-trade-text">
+                  <span className="recent-trade-partner">Trade with {t.partner ?? 'Other User'}</span>
+                  <span className="result-sub">{new Date(t.completedAt).toLocaleDateString()}</span>
+                </span>
+                <span className="badge">
+                  −{countLines(t.given)} / +{countLines(t.received)}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }
 
 /** Which column an add/scan/balance action targets: 'give' = my offer, 'get' = theirs. */

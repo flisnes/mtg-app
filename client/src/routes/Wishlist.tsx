@@ -5,7 +5,7 @@ import { Page } from './Page.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
-import { addToWishlist, addToWishlistBulk, removeFromWishlist } from '../db/dataAccess.js';
+import { addToWishlistBulk, removeFromWishlist } from '../db/dataAccess.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
 import { BulkActionBar } from '../components/BulkActionBar.js';
@@ -171,18 +171,6 @@ export function Wishlist() {
                 // "Any printing" wishes are tracked via the oracle's default printing.
                 trend: moverFlags?.get(r.entry.scryfallId ?? r.oracle?.defaultScryfallId ?? ''),
                 onClick: r.oracle ? () => setEditing(r) : undefined,
-                actions: (
-                  <>
-                    <button title="Remove one" onClick={() => removeFromWishlist(r.entry.id, 1)}>−</button>
-                    <button
-                      title="Add one"
-                      onClick={() => addToWishlist({ oracleId: r.entry.oracleId, scryfallId: r.entry.scryfallId, quantity: 1 })}
-                    >
-                      ＋
-                    </button>
-                    <button title="Remove" onClick={() => removeFromWishlist(r.entry.id)}>✕</button>
-                  </>
-                ),
               }),
             )}
           />

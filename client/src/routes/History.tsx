@@ -7,7 +7,7 @@ import { useCardMaps } from '../db/useCardMaps.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
 import { Icon } from '../components/icons.js';
-import { useEscapeToClose } from '../components/useEscapeToClose.js';
+import { Sheet } from '../components/Sheet.js';
 
 function summarize(lines: { quantity: number }[]): number {
   return lines.reduce((s, l) => s + l.quantity, 0);
@@ -17,7 +17,6 @@ export function History() {
   const trades = useLiveQuery(() => db.trades.orderBy('completedAt').reverse().toArray(), []);
   const [open, setOpen] = useState<Trade | null>(null);
   const [info, setInfo] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
-  useEscapeToClose(open ? () => setOpen(null) : null);
 
   return (
     <Page title="Trade history" subtitle="Completed trades, stored only on this device.">
@@ -50,21 +49,19 @@ export function History() {
       )}
 
       {open && (
-        <div className="sheet-backdrop" onClick={() => setOpen(null)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Trade detail">
-            <h2 style={{ margin: 0 }}>Trade with {open.partner ?? 'Other User'}</h2>
-            <p className="fine-print">{new Date(open.completedAt).toLocaleString()}</p>
-            <h3>You gave</h3>
-            <TradeLines lines={open.given} onInfo={(oracle, scryfallId) => setInfo({ oracle, scryfallId })} />
-            <h3>You received</h3>
-            <TradeLines lines={open.received} onInfo={(oracle, scryfallId) => setInfo({ oracle, scryfallId })} />
-            <div className="sheet-actions">
-              <button className="primary" onClick={() => setOpen(null)}>
-                Close
-              </button>
-            </div>
+        <Sheet onClose={() => setOpen(null)} label="Trade detail">
+          <h2 style={{ margin: 0 }}>Trade with {open.partner ?? 'Other User'}</h2>
+          <p className="fine-print">{new Date(open.completedAt).toLocaleString()}</p>
+          <h3>You gave</h3>
+          <TradeLines lines={open.given} onInfo={(oracle, scryfallId) => setInfo({ oracle, scryfallId })} />
+          <h3>You received</h3>
+          <TradeLines lines={open.received} onInfo={(oracle, scryfallId) => setInfo({ oracle, scryfallId })} />
+          <div className="sheet-actions">
+            <button className="primary" onClick={() => setOpen(null)}>
+              Close
+            </button>
           </div>
-        </div>
+        </Sheet>
       )}
 
       {info && (

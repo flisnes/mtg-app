@@ -4,9 +4,10 @@ import type { Color, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
 import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
-import { addDeckCard, removeFromCollection, setQuantityForTrade } from '../db/dataAccess.js';
+import { addDeckCardsBulk, removeCollectionEntriesBulk, setQuantityForTradeBulk } from '../db/dataAccess.js';
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
+import { usePagedLimit } from './usePagedLimit.js';
 import { BulkActionBar, type BulkAction } from './BulkActionBar.js';
 import { DeckPickerSheet } from './DeckPickerSheet.js';
 import { useMultiSelect } from './useMultiSelect.js';
@@ -106,33 +107,45 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
 
   const totalQty = filtered.reduce((s, r) => s + r.entry.quantity, 0);
 
+  // Page the rendered list — the collection is the one list guaranteed to reach
+  // thousands of entries, so rendering all of them (each a tile with images and
+  // badges) janks on phones. Reset to page one when the filter/sort changes.
+  const filterSig = JSON.stringify({ name, set, color, rarity, tradeOnly, onlyTrade, sort });
+  const { limit, showMore } = usePagedLimit(filterSig, 60);
+  const visible = filtered.slice(0, limit);
+
   // Selected keys (= entry ids) resolved back to their rows for bulk actions.
   const selectedRows = filtered.filter((r) => sel.selected.has(r.entry.id));
   const allKeys = filtered.map((r) => r.entry.id);
   const plural = (n: number) => (n === 1 ? '' : 's');
 
   async function bulkAddTradelist() {
-    for (const r of selectedRows) await setQuantityForTrade(r.entry.id, r.entry.quantity);
-    toast(`Added ${selectedRows.length} card${plural(selectedRows.length)} to tradelist`);
+    const n = selectedRows.length;
+    await setQuantityForTradeBulk(selectedRows.map((r) => ({ id: r.entry.id, quantityForTrade: r.entry.quantity })));
+    toast(`Added ${n} card${plural(n)} to tradelist`);
     sel.exit();
   }
   async function bulkRemoveTradelist() {
     const n = selectedRows.filter((r) => r.entry.quantityForTrade > 0).length;
-    for (const r of selectedRows) await setQuantityForTrade(r.entry.id, 0);
+    await setQuantityForTradeBulk(selectedRows.map((r) => ({ id: r.entry.id, quantityForTrade: 0 })));
     toast(n === 0 ? 'None were on the tradelist' : `Removed ${n} card${plural(n)} from tradelist`);
     sel.exit();
   }
   async function bulkDelete() {
     const n = selectedRows.length;
     if (!window.confirm(`Delete ${n} ${n === 1 ? 'entry' : 'entries'} from your collection?`)) return;
-    for (const r of selectedRows) await removeFromCollection(r.entry.id);
+    await removeCollectionEntriesBulk(selectedRows.map((r) => r.entry.id));
     toast(`Deleted ${n} ${n === 1 ? 'entry' : 'entries'}`);
     sel.exit();
   }
   async function bulkAddDeck(deckId: string) {
     setPickingDeck(false);
-    for (const r of selectedRows) await addDeckCard({ deckId, oracleId: r.entry.oracleId, scryfallId: r.entry.scryfallId, board: 'main' });
-    toast(`Added ${selectedRows.length} card${plural(selectedRows.length)} to deck`);
+    const n = selectedRows.length;
+    await addDeckCardsBulk(
+      deckId,
+      selectedRows.map((r) => ({ oracleId: r.entry.oracleId, quantity: 1, board: 'main' as const, scryfallId: r.entry.scryfallId })),
+    );
+    toast(`Added ${n} card${plural(n)} to deck`);
     sel.exit();
   }
 
@@ -261,7 +274,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           selectable={sel.active}
           selectedKeys={sel.selected}
           onToggleSelect={sel.toggle}
-          items={filtered.map(
+          items={visible.map(
             (r): CardItem => ({
               key: r.entry.id,
               name: r.oracle?.name ?? '(unknown card)',
@@ -285,6 +298,11 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
             }),
           )}
         />
+      )}
+      {!pileMode && filtered.length > visible.length && (
+        <button className="show-more" onClick={showMore}>
+          Show {Math.min(60, filtered.length - visible.length)} more
+        </button>
       )}
 
       {sel.active && (

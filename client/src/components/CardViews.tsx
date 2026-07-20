@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Icon } from './icons.js';
 
 // The one way cards are displayed anywhere in the app: a list of CardItems
@@ -11,21 +11,35 @@ import { Icon } from './icons.js';
 export type ViewMode = 'list' | 'grid' | 'pile';
 const KEY = 'cardViewMode';
 
+// Shared across every mounted instance: toggling the view in one place (e.g. the
+// search overlay) must update the list behind it, not just until remount.
+function readMode(): ViewMode {
+  try {
+    return (localStorage.getItem(KEY) as ViewMode) || 'grid';
+  } catch {
+    return 'grid';
+  }
+}
+let currentMode: ViewMode = readMode();
+const viewModeListeners = new Set<(m: ViewMode) => void>();
+
 export function useViewMode(allowPile = false): [ViewMode, (m: ViewMode) => void] {
-  const [mode, setMode] = useState<ViewMode>(() => {
-    try {
-      return (localStorage.getItem(KEY) as ViewMode) || 'grid';
-    } catch {
-      return 'grid';
-    }
-  });
+  const [mode, setMode] = useState<ViewMode>(currentMode);
+  useEffect(() => {
+    viewModeListeners.add(setMode);
+    setMode(currentMode); // catch a change between first render and subscribe
+    return () => {
+      viewModeListeners.delete(setMode);
+    };
+  }, []);
   const set = (m: ViewMode) => {
-    setMode(m);
+    currentMode = m;
     try {
       localStorage.setItem(KEY, m);
     } catch {
       /* ignore */
     }
+    viewModeListeners.forEach((cb) => cb(m));
   };
   return [mode === 'pile' && !allowPile ? 'grid' : mode, set];
 }

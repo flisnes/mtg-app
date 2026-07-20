@@ -11,6 +11,7 @@ import { Icon } from '../components/icons.js';
 import { useToast } from '../components/Toast.js';
 import { describeBatch, describeEvent, qtyBadge, FILTER_CATEGORIES } from '../history/eventRegistry.js';
 import { entryEvents, useHistoryEntries, type HistoryEntry } from '../history/useHistoryEntries.js';
+import { fmtDate } from '../util/format.js';
 
 const PAGE_SIZE = 100;
 
@@ -48,9 +49,6 @@ function presetWindow(preset: DatePreset, customFrom: string, customTo: string):
   }
 }
 
-function fmtDate(ts: number): string {
-  return new Date(ts).toLocaleDateString(undefined, { dateStyle: 'medium' });
-}
 
 function undoRefOf(entry: HistoryEntry): UndoRef {
   if (entry.kind === 'single') return { type: 'single', id: entry.event.id };

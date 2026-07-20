@@ -11,6 +11,8 @@ import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { sanitizeOffer, sanitizeWishlist } from '../trade/validate.js';
+import { usePagedLimit } from '../components/usePagedLimit.js';
+import { fmtDate } from '../util/format.js';
 import { EmptyState, Page } from './Page.js';
 
 // Community: browse other users' published trade/wishlists (uploaded with
@@ -18,9 +20,6 @@ import { EmptyState, Page } from './Page.js';
 // rule as in-person trades: an "any printing" wish matches every printing of
 // that card, a specific-printing wish matches only itself.
 
-function fmtDate(ts: number): string {
-  return new Date(ts).toLocaleDateString(undefined, { dateStyle: 'medium' });
-}
 
 function lineDetail(l: TradeLine): string {
   const bits: string[] = [l.condition];
@@ -265,6 +264,11 @@ function UserLists({
   const wishMatches = wish.filter((w) => w.match).length;
   const wishOwned = wish.filter((w) => w.own).length;
 
+  // Page both lists — another user's tradelist/wishlist can run to thousands of
+  // lines, and this renders card tiles with images for each.
+  const tradePaged = usePagedLimit(`${username}|trade|${trade.length}`, 60);
+  const wishPaged = usePagedLimit(`${username}|wish|${wish.length}`, 60);
+
   const tradeItems = useMemo(
     (): CardItem[] =>
       trade.map(({ line, match, hi }, i) => {
@@ -373,7 +377,14 @@ function UserLists({
             {trade.length === 0 ? (
               <p className="fine-print">Nothing marked for trade.</p>
             ) : (
-              <CardItems view={view} items={tradeItems} />
+              <>
+                <CardItems view={view} items={tradeItems.slice(0, tradePaged.limit)} />
+                {tradeItems.length > tradePaged.limit && (
+                  <button className="show-more" onClick={tradePaged.showMore}>
+                    Show {Math.min(60, tradeItems.length - tradePaged.limit)} more
+                  </button>
+                )}
+              </>
             )}
           </section>
 
@@ -382,7 +393,14 @@ function UserLists({
             {wish.length === 0 ? (
               <p className="fine-print">Empty wishlist.</p>
             ) : (
-              <CardItems view={view} items={wishItems} />
+              <>
+                <CardItems view={view} items={wishItems.slice(0, wishPaged.limit)} />
+                {wishItems.length > wishPaged.limit && (
+                  <button className="show-more" onClick={wishPaged.showMore}>
+                    Show {Math.min(60, wishItems.length - wishPaged.limit)} more
+                  </button>
+                )}
+              </>
             )}
           </section>
         </>

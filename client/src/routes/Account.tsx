@@ -13,14 +13,12 @@ import { useAccount } from '../account/useAccount.js';
 import { syncNow } from '../sync/engine.js';
 import { useToast } from '../components/Toast.js';
 import { EmptyState, Page } from './Page.js';
+import { fmtDateTime as fmtWhen } from '../util/format.js';
 
 // Account & sync (opt-in). One combined agreement covers everything the
 // feature does: your data syncs through the server between your devices, and
 // your tradelist + wishlist are visible to other signed-in users.
 
-function fmtWhen(ts: number): string {
-  return new Date(ts).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
 
 function errText(err: unknown): string {
   if (err instanceof ApiError) return err.friendlyMessage;

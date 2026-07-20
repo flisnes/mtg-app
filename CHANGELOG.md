@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.39.0
+
+- **Trades survive a dropped connection.** Reconnecting mid-trade no longer leaves you stuck on "Connecting…", cancels a trade that's actually still live, or double-applies the other side's offer. If the relay really can't be reached it now tells you instead of spinning forever.
+- **Editing a card's condition or finish no longer hides a duplicate.** If the edit matches another entry you already own, the two now merge into one, the same way the wishlist already did — no more phantom second row that made counts and the tradelist inconsistent.
+- **Big collections and lists load faster.** Your collection and other users' trade/wishlists now page in (with a "Show more" button) instead of rendering thousands of cards at once, and "select all → add to tradelist / delete" runs in one go instead of one card at a time.
+- **Scanner tidies up after itself.** Closing the scanner now reliably releases the camera even if you close it mid-startup, and it quietly picks up newer card-art data instead of running on the first download forever.
+- **Reliability and speed under the hood.** Server-side fixes to connection limits and match lookups so the app keeps working as more people use it, faster sign-in, and search no longer flickers back to stale results while you type.
+
 ## 0.38.0
 
 - **Favorite decks are now browsable.** Tapping a favorite deck on someone's profile opens the full decklist — commander, mainboard and sideboard, in the usual list or grid view. The list is read live from the owner's synced decks, so it's always their current build, and renaming a deck now shows up on the profile right away (the old stale-name bug is gone). Only decks you favorite are shared; everything else stays private. Favorites picked before this update share just the summary — re-pick them to make them browsable.

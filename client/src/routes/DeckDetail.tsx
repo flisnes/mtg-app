@@ -40,7 +40,7 @@ import {
 } from '../components/CardSorting.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
-import { useEscapeToClose } from '../components/useEscapeToClose.js';
+import { Sheet } from '../components/Sheet.js';
 
 interface Row {
   id: string;
@@ -64,8 +64,6 @@ export function DeckDetail() {
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('deck', { group: 'type' });
   const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: { id: string; quantity: number; scryfallId?: string } } | null>(null);
-  // Escape on the exit sheet = "skip" (same as clicking the backdrop).
-  useEscapeToClose(exit ? () => navigate('/decks') : null);
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -245,32 +243,30 @@ export function DeckDetail() {
       )}
 
       {exit && (
-        <div className="sheet-backdrop" onClick={() => navigate('/decks')}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Add missing cards to wishlist">
-            <h2 style={{ margin: 0 }}>Add missing cards to wishlist?</h2>
-            <p className="fine-print">
-              This deck needs {exit.reduce((s, c) => s + c.addQty, 0)} card{exit.length === 1 ? '' : 's'} you don’t own and
-              haven’t wishlisted:
-            </p>
-            <ul className="result-list" style={{ maxHeight: '40dvh', overflowY: 'auto' }}>
-              {exit.map((c) => (
-                <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
-                  <div className="result-main">
-                    <div className="result-name">
-                      {c.name} {c.addQty !== 1 && <span className="badge">×{c.addQty}</span>}
-                    </div>
+        <Sheet onClose={() => navigate('/decks')} label="Add missing cards to wishlist">
+          <h2 style={{ margin: 0 }}>Add missing cards to wishlist?</h2>
+          <p className="fine-print">
+            This deck needs {exit.reduce((s, c) => s + c.addQty, 0)} card{exit.length === 1 ? '' : 's'} you don’t own and
+            haven’t wishlisted:
+          </p>
+          <ul className="result-list" style={{ maxHeight: '40dvh', overflowY: 'auto' }}>
+            {exit.map((c) => (
+              <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
+                <div className="result-main">
+                  <div className="result-name">
+                    {c.name} {c.addQty !== 1 && <span className="badge">×{c.addQty}</span>}
                   </div>
-                </li>
-              ))}
-            </ul>
-            <div className="sheet-actions">
-              <button onClick={() => navigate('/decks')}>Skip</button>
-              <button className="primary" onClick={() => addMissingToWishlist(exit)}>
-                Add {exit.length} to wishlist
-              </button>
-            </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="sheet-actions">
+            <button onClick={() => navigate('/decks')}>Skip</button>
+            <button className="primary" onClick={() => addMissingToWishlist(exit)}>
+              Add {exit.length} to wishlist
+            </button>
           </div>
-        </div>
+        </Sheet>
       )}
     </section>
   );

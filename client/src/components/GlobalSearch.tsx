@@ -101,6 +101,10 @@ export function GlobalSearchBar() {
   useEffect(() => {
     if (prevPath.current !== path) {
       prevPath.current = path;
+      // Clear the query/filters too (same as close()), so reopening search
+      // after navigating away doesn't resurrect the old query and filters.
+      setQuery('');
+      setFilters({});
       setOpen(false);
       inputRef.current?.blur();
     }

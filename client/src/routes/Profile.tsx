@@ -99,12 +99,19 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
   /** Apply an edit locally and push the whole profile to the server. */
   function save(update: (p: UserProfile) => UserProfile) {
     if (!profile) return;
+    const prev = profile;
     const next = update(profile);
     setProfile(next);
     void rememberOwnAvatar(next.avatar); // keep the header's cached copy current
     putProfile(token, next)
       .then(() => toast('Profile saved'))
-      .catch((err) => toast(err instanceof ApiError ? err.friendlyMessage : 'Could not save your profile.'));
+      .catch((err) => {
+        // Roll back the optimistic change (and the header cache) so the UI
+        // doesn't keep showing an edit the server rejected.
+        setProfile(prev);
+        void rememberOwnAvatar(prev.avatar);
+        toast(err instanceof ApiError ? err.friendlyMessage : 'Could not save your profile.');
+      });
   }
 
   // Resolve favorite-card art from the viewer's own card DB (ids travel, pixels don't).

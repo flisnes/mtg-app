@@ -6,18 +6,11 @@ import { useCardMaps } from '../db/useCardMaps.js';
 import { useEscapeToClose } from './useEscapeToClose.js';
 import { describeBatch, describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { entryEvents, type HistoryEntry } from '../history/useHistoryEntries.js';
+import { fmtCents, fmtDateTime } from '../util/format.js';
 
 // Info modal for one edit-history entry: the action, when it happened, and the
 // card(s) involved. Clicking a card opens its card sheet on the History tab.
 // The Undo button appears only when the caller says this is the newest entry.
-
-function fmtDateTime(ts: number): string {
-  return new Date(ts).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
-
-function fmtCents(cents: number): string {
-  return `€${(cents / 100).toFixed(2)}`;
-}
 
 export function EventSheet({
   entry,

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AVATAR_MAX_ZOOM, type OracleCard, type Priced, type Printing, type ProfileAvatar } from '@mtg/shared';
-import { searchCards } from '../cardDb/search.js';
+import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { getPrintingsForOracle } from '../db/queries.js';
 import { artCropUrl, clampCropCenter, cropLayout } from './Avatar.js';
 import { useEscapeToClose } from './useEscapeToClose.js';
@@ -49,22 +49,8 @@ export function CardSearch({
   actions?: ReactNode;
 }) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Priced<OracleCard>[]>([]);
-
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) {
-      setResults([]);
-      return;
-    }
-    let cancelled = false;
-    void searchCards(q, {}, 24).then((res) => {
-      if (!cancelled) setResults(res.cards);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [query]);
+  // Shared debounced search (was an undebounced per-keystroke full-DB query).
+  const { results } = useCardSearch(query, { limit: 24, enabled: query.trim().length >= 2 });
 
   return (
     <>

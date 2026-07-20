@@ -6,6 +6,7 @@ import { editUserEvent } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
 import { centsAround } from '../price/history.js';
 import { describeEvent, qtyBadge, REASON_LABELS } from '../history/eventRegistry.js';
+import { fmtCents, fmtDate } from '../util/format.js';
 
 // History tab of the card sheet (sync plan, 2026-07-16): the card's event
 // timeline — acquisitions with the market price at the time, removals with a
@@ -13,13 +14,6 @@ import { describeEvent, qtyBadge, REASON_LABELS } from '../history/eventRegistry
 // removal reasons are user-editable (removals default to 'sold'). Labels/icons
 // come from the shared event registry (history/eventRegistry).
 
-function fmtDate(ts: number): string {
-  return new Date(ts).toLocaleDateString(undefined, { dateStyle: 'medium' });
-}
-
-function fmtCents(cents: number): string {
-  return `€${(cents / 100).toFixed(2)}`;
-}
 
 export function CardHistory({
   oracleCard,

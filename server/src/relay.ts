@@ -51,6 +51,11 @@ interface SocketCtx {
   last: number;
 }
 
+/** Join codes are case-insensitive and whitespace-trimmed (clients display them uppercased). */
+function normalizeCode(code: unknown): string {
+  return String(code ?? '').trim().toUpperCase();
+}
+
 function send(socket: WebSocket, msg: ServerMessage | TransferServerMessage): void {
   if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(msg));
 }
@@ -165,7 +170,13 @@ export function registerTradeRelay(app: FastifyInstance, accounts: AccountStore,
       if (!ctx.code || !ctx.seat) return;
       const session = store.get(ctx.code);
       const bySeat = sockets.get(ctx.code);
-      if (bySeat && bySeat[ctx.seat] === socket) delete bySeat[ctx.seat];
+      // Only act if THIS socket is still the one attached to the seat. A blip +
+      // resume swaps in a fresh socket for the seat; when the old half-dead
+      // socket's close finally fires (up to a heartbeat later), it must not
+      // mark the now-present seat absent and arm a grace timer that would
+      // cancel the live trade.
+      if (!bySeat || bySeat[ctx.seat] !== socket) return;
+      delete bySeat[ctx.seat];
       if (session) {
         session.present[ctx.seat] = false;
         notifyPeer(session, ctx.seat, 'peer_disconnected');
@@ -197,7 +208,7 @@ function handleTransfer(socket: WebSocket, ctx: SocketCtx, msg: TransferClientMe
     }
 
     case 'transfer_join': {
-      const t = transfers.join(String(msg.transferCode).trim().toUpperCase(), socket);
+      const t = transfers.join(normalizeCode(msg.transferCode), socket);
       ctx.transferCode = t.code;
       ctx.transferRole = 'receiver';
       send(socket, { v: PROTOCOL_VERSION, type: 'transfer_joined', transferCode: t.code });
@@ -309,7 +320,7 @@ function handle(
     }
 
     case 'join_session': {
-      const { session, token } = store.join(msg.sessionCode);
+      const { session, token } = store.join(normalizeCode(msg.sessionCode));
       ctx.code = session.code;
       ctx.seat = 'b';
       attach(session.code, 'b', socket);
@@ -326,7 +337,7 @@ function handle(
     }
 
     case 'resume': {
-      const { session, seat } = store.resume(msg.sessionCode, msg.resumeToken);
+      const { session, seat } = store.resume(normalizeCode(msg.sessionCode), msg.resumeToken);
       ctx.code = session.code;
       ctx.seat = seat;
       attach(session.code, seat, socket);

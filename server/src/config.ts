@@ -35,6 +35,8 @@ export const config = {
   /** Failed/total auth attempts allowed per IP per window (register+login). */
   authAttemptsPerWindow: num('AUTH_ATTEMPTS_PER_WINDOW', 20),
   authWindowMs: num('AUTH_WINDOW_MS', 15 * 60 * 1000),
+  /** Bearer tokens unused for this long are pruned and rejected (sliding on last use). */
+  tokenTtlMs: num('TOKEN_TTL_MS', 180 * 24 * 60 * 60 * 1000),
   /**
    * Published card DB the price archiver reads its daily shard from (no
    * trailing slash). Set CARD_DB_URL='' to disable archiving entirely.

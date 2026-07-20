@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Seat, SessionSnapshot, TradeLine, TradeState } from '@mtg/shared';
+import { sanitizeTradeLines, type Seat, type SessionSnapshot, type TradeLine, type TradeState } from '@mtg/shared';
 import { CodeStore, TransitionError, type CodeEntry } from './codeStore.js';
 import { config } from './config.js';
 
@@ -96,10 +96,13 @@ export class SessionStore extends CodeStore<Session> {
   }
 
   /** `side` is the offer being edited — either participant may edit either side. */
-  offerUpdate(session: Session, side: Seat, lines: TradeLine[]): void {
+  offerUpdate(session: Session, side: Seat, lines: unknown): void {
     this.assertState(session, ['paired', 'building', 'one_accepted', 'agreed']);
+    if (!Array.isArray(lines)) throw new TransitionError('malformed', 'offer must be a list of lines');
     if (lines.length > config.maxOfferLines) throw new TransitionError('offer_too_large');
-    session.offers[side] = lines;
+    // The peer is unauthenticated: store sanitized lines so a malformed offer
+    // can't be persisted or rebroadcast (the receiving client re-sanitizes too).
+    session.offers[side] = sanitizeTradeLines(lines, { maxQty: 999, maxLines: config.maxOfferLines });
     // Any edit clears both sides' agreements (beta plan §7).
     session.accepted = { a: false, b: false };
     session.confirmed = { a: false, b: false };
@@ -161,6 +164,15 @@ export class SessionStore extends CodeStore<Session> {
     const session = this.get(code);
     if (session) {
       for (const seat of ['a', 'b'] as Seat[]) this.clearGrace(session, seat);
+      // A still-live trade being removed means the absolute TTL lapsed (normal
+      // completion/cancellation already set a terminal state before scheduling
+      // removal). Transition to cancelled and tell whoever is still connected,
+      // so clients don't sit on a session that only errors on the next action.
+      if (PRE_COMPLETE.includes(session.state)) {
+        session.state = 'cancelled';
+        this.counters.sessionsCancelled++;
+        this.onGraceExpired?.(session);
+      }
     }
     super.remove(code);
   }

@@ -10,6 +10,8 @@ import { PROTOCOL_VERSION } from '@mtg/shared';
 export class SyncHub {
   /** userId → socket → clientId (to skip echoing at the pushing device). */
   private subs = new Map<number, Map<WebSocket, string>>();
+  /** socket → the userIds it subscribed under, so close() is O(1) per socket, not O(all users). */
+  private bySocket = new Map<WebSocket, Set<number>>();
 
   subscribe(userId: number, clientId: string, socket: WebSocket): void {
     let sockets = this.subs.get(userId);
@@ -18,13 +20,23 @@ export class SyncHub {
       this.subs.set(userId, sockets);
     }
     sockets.set(socket, clientId);
+    let users = this.bySocket.get(socket);
+    if (!users) {
+      users = new Set();
+      this.bySocket.set(socket, users);
+    }
+    users.add(userId);
   }
 
   /** Idempotent; call on every socket close. */
   unsubscribe(socket: WebSocket): void {
-    for (const [userId, sockets] of this.subs) {
-      if (sockets.delete(socket) && sockets.size === 0) this.subs.delete(userId);
+    const users = this.bySocket.get(socket);
+    if (!users) return;
+    for (const userId of users) {
+      const sockets = this.subs.get(userId);
+      if (sockets && sockets.delete(socket) && sockets.size === 0) this.subs.delete(userId);
     }
+    this.bySocket.delete(socket);
   }
 
   notify(userId: number, seq: number, originClientId?: string): void {

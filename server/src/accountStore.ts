@@ -1,7 +1,8 @@
-import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
+import { randomBytes, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { promisify } from 'node:util';
 import {
   SYNC_MAX_PULL,
   SYNC_MAX_ROWS_PER_USER,
@@ -13,6 +14,7 @@ import {
   type SyncChange,
   type SyncTable,
 } from '@mtg/shared';
+import { config } from './config.js';
 
 // Account persistence: one SQLite file (node:sqlite, no native deps) holding
 // users, bearer tokens, opaque snapshot blobs, and the published trade/wish
@@ -30,18 +32,22 @@ export interface AccountUser {
 
 const SCRYPT_KEYLEN = 64;
 
-function hashPassword(password: string): string {
+// Async scrypt so a burst of logins/registrations can't pin the single-threaded
+// event loop (each hash is ~50–100 ms of CPU) and stall every open websocket.
+const scryptAsync = promisify(scrypt) as (password: string, salt: Buffer, keylen: number) => Promise<Buffer>;
+
+async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
-  const hash = scryptSync(password, salt, SCRYPT_KEYLEN);
+  const hash = await scryptAsync(password, salt, SCRYPT_KEYLEN);
   return `${salt.toString('hex')}:${hash.toString('hex')}`;
 }
 
-function verifyPassword(password: string, stored: string): boolean {
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [saltHex, hashHex] = stored.split(':');
   if (!saltHex || !hashHex) return false;
   const expected = Buffer.from(hashHex, 'hex');
-  const actual = scryptSync(password, Buffer.from(saltHex, 'hex'), expected.length);
-  return timingSafeEqual(actual, expected);
+  const actual = await scryptAsync(password, Buffer.from(saltHex, 'hex'), expected.length);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
 function tokenHash(token: string): string {
@@ -50,6 +56,9 @@ function tokenHash(token: string): string {
 
 export class AccountStore {
   private db: DatabaseSync;
+  /** Bumped on every public-list write; the parsed-lists cache keys off it. */
+  private publicListsVersion = 0;
+  private parsedCache: { version: number; lists: ParsedPublicList[] } | null = null;
 
   constructor(dataDir: string) {
     mkdirSync(dataDir, { recursive: true });
@@ -100,19 +109,32 @@ export class AccountStore {
         PRIMARY KEY (user_id, tbl, row_id)
       );
       CREATE INDEX IF NOT EXISTS idx_sync_rows_seq ON sync_rows(user_id, seq);
+      CREATE INDEX IF NOT EXISTS idx_tokens_user ON tokens(user_id);
       CREATE TABLE IF NOT EXISTS sync_seq (
         user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         max_seq INTEGER NOT NULL
       );
     `);
+    // Drop tokens idle past the TTL at boot, then hourly, so the table can't
+    // grow without bound (a token is deleted on logout, but otherwise never).
+    this.pruneStaleTokens();
+    this.pruneTimer = setInterval(() => this.pruneStaleTokens(), 60 * 60 * 1000);
+    this.pruneTimer.unref?.();
+  }
+
+  private pruneTimer: ReturnType<typeof setInterval>;
+
+  private pruneStaleTokens(): void {
+    this.db.prepare('DELETE FROM tokens WHERE last_used_at < ?').run(Date.now() - config.tokenTtlMs);
   }
 
   /** Returns the new user, or null if the username is taken. */
-  createUser(username: string, password: string): AccountUser | null {
+  async createUser(username: string, password: string): Promise<AccountUser | null> {
+    const passHash = await hashPassword(password);
     try {
       const res = this.db
         .prepare('INSERT INTO users (username, pass_hash, created_at) VALUES (?, ?, ?)')
-        .run(username, hashPassword(password), Date.now());
+        .run(username, passHash, Date.now());
       return { id: Number(res.lastInsertRowid), username };
     } catch (err) {
       if (err instanceof Error && err.message.includes('UNIQUE')) return null;
@@ -120,11 +142,11 @@ export class AccountStore {
     }
   }
 
-  authenticate(username: string, password: string): AccountUser | null {
+  async authenticate(username: string, password: string): Promise<AccountUser | null> {
     const row = this.db
       .prepare('SELECT id, username, pass_hash FROM users WHERE username = ?')
       .get(username) as { id: number; username: string; pass_hash: string } | undefined;
-    if (!row || !verifyPassword(password, row.pass_hash)) return null;
+    if (!row || !(await verifyPassword(password, row.pass_hash))) return null;
     return { id: row.id, username: row.username };
   }
 
@@ -142,11 +164,18 @@ export class AccountStore {
     const hash = tokenHash(token);
     const row = this.db
       .prepare(
-        'SELECT u.id, u.username FROM tokens t JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?',
+        'SELECT u.id, u.username, t.last_used_at FROM tokens t JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?',
       )
-      .get(hash) as { id: number; username: string } | undefined;
+      .get(hash) as { id: number; username: string; last_used_at: number } | undefined;
     if (!row) return null;
-    this.db.prepare('UPDATE tokens SET last_used_at = ? WHERE token_hash = ?').run(Date.now(), hash);
+    const now = Date.now();
+    // Reject (and drop) a token idle past the TTL, in case the hourly prune
+    // hasn't run yet — a stale token must never authenticate.
+    if (row.last_used_at < now - config.tokenTtlMs) {
+      this.db.prepare('DELETE FROM tokens WHERE token_hash = ?').run(hash);
+      return null;
+    }
+    this.db.prepare('UPDATE tokens SET last_used_at = ? WHERE token_hash = ?').run(now, hash);
     return { id: row.id, username: row.username };
   }
 
@@ -239,6 +268,8 @@ export class AccountStore {
            updated_at = excluded.updated_at`,
       )
       .run(userId, tradelistJson, wishlistJson, tradelistCount, wishlistCount, now);
+    // Invalidate the parsed-lists cache used by /api/matches.
+    this.publicListsVersion += 1;
   }
 
   /** Store the published lists on their own (the sync path — no snapshot involved). */
@@ -302,9 +333,10 @@ export class AccountStore {
           `INSERT OR REPLACE INTO sync_rows (user_id, tbl, row_id, updated_at, deleted, row, seq)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
         );
-        let totalRows = (
-          this.db.prepare('SELECT COUNT(*) AS n FROM sync_rows WHERE user_id = ?').get(userId) as { n: number }
-        ).n;
+        // The row-cap count is a full index scan of the user's rows; most pushes
+        // are edits/deletes of existing rows, so defer it until we actually need
+        // to insert a brand-new row (and then only count once).
+        let totalRows: number | null = null;
 
         for (const c of changes) {
           const existing = getStmt.get(userId, c.tbl, c.rowId) as SyncRowRecord | undefined;
@@ -315,6 +347,11 @@ export class AccountStore {
             continue;
           }
           if (!existing) {
+            if (totalRows === null) {
+              totalRows = (
+                this.db.prepare('SELECT COUNT(*) AS n FROM sync_rows WHERE user_id = ?').get(userId) as { n: number }
+              ).n;
+            }
             totalRows += 1;
             if (totalRows > SYNC_MAX_ROWS_PER_USER) throw new SyncCapError();
           }
@@ -455,6 +492,26 @@ export class AccountStore {
     }));
   }
 
+  /**
+   * Parsed published lists for match computation, cached until the next publish.
+   * Without this, /api/matches re-parsed every user's (up to 2 MB) lists on
+   * every poll — O(N) JSON work per request; now it's O(N) only per change.
+   */
+  parsedPublicLists(): ParsedPublicList[] {
+    if (this.parsedCache && this.parsedCache.version === this.publicListsVersion) {
+      return this.parsedCache.lists;
+    }
+    const lists = this.allPublicLists().map((r) => ({
+      userId: r.userId,
+      username: r.username,
+      updatedAt: r.updatedAt,
+      haves: oracleNameMap(r.tradelist),
+      wants: oracleIdSet(r.wishlist),
+    }));
+    this.parsedCache = { version: this.publicListsVersion, lists };
+    return lists;
+  }
+
   /** Raw published-list JSON for one user (relayed verbatim to the browser). */
   getUserLists(username: string): { username: string; updatedAt: number; tradelist: string; wishlist: string } | null {
     const row = this.db
@@ -471,8 +528,44 @@ export class AccountStore {
   }
 
   close(): void {
+    clearInterval(this.pruneTimer);
     this.db.close();
   }
+}
+
+export interface ParsedPublicList {
+  userId: number;
+  username: string;
+  updatedAt: number;
+  /** oracleId → display name, from the tradelist (deduped, first name wins). */
+  haves: Map<string, string>;
+  /** oracleIds on the wishlist. */
+  wants: Set<string>;
+}
+
+function parseLines(json: string): { oracleId?: unknown; name?: unknown }[] {
+  try {
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+function oracleNameMap(json: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const l of parseLines(json)) {
+    if (typeof l.oracleId === 'string' && !out.has(l.oracleId)) {
+      out.set(l.oracleId, typeof l.name === 'string' ? l.name : '(unknown card)');
+    }
+  }
+  return out;
+}
+
+function oracleIdSet(json: string): Set<string> {
+  const out = new Set<string>();
+  for (const l of parseLines(json)) if (typeof l.oracleId === 'string') out.add(l.oracleId);
+  return out;
 }
 
 /** Pull just the avatar out of a stored profile blob (for the community list). */

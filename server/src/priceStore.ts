@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { PriceMap, PricesResponse } from '@mtg/shared';
+import { dayOffset, type PriceMap, type PricesResponse } from '@mtg/shared';
 
 // Server price archive (sync plan Phase E): one row per printing holding its
 // whole daily price history as two parallel blobs of little-endian Uint32
@@ -20,12 +20,6 @@ const RETENTION_DAYS = 3 * 366;
 const PURGE_AFTER_DAYS = RETENTION_DAYS;
 
 const DAY_MS = 86_400_000;
-
-/** Whole days from `startDay` to `day` (both YYYY-MM-DD UTC); NaN-safe → -1. */
-export function dayOffset(startDay: string, day: string): number {
-  const d = (Date.parse(day) - Date.parse(startDay)) / DAY_MS;
-  return Number.isFinite(d) ? Math.round(d) : -1;
-}
 
 function addDays(day: string, n: number): string {
   return new Date(Date.parse(day) + n * DAY_MS).toISOString().slice(0, 10);

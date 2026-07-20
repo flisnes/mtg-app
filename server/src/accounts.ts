@@ -13,6 +13,8 @@ import {
   USERNAME_RE,
   sanitizeDeckLines,
   sanitizeProfile,
+  sanitizeTradeLines,
+  sanitizeWishLines,
   type ApiErrorBody,
   type AuthResponse,
   type MatchCard,
@@ -48,8 +50,8 @@ const MAX_LIST_JSON_CHARS = 2_000_000;
 /** Request-body cap for snapshot uploads: payload cap + lists + slack. */
 const SNAPSHOT_BODY_LIMIT = 36 * 1024 * 1024;
 
-const CONDS = new Set(['NM', 'LP', 'MP', 'HP', 'DMG']);
-const FINS = new Set(['nonfoil', 'foil', 'etched']);
+/** Bounds for a whole published list (larger than a single live trade offer). */
+const PUBLIC_LINE_LIMITS = { maxQty: 9999, maxLines: MAX_PUBLIC_LINES };
 
 export function fail(reply: FastifyReply, status: number, body: ApiErrorBody): void {
   void reply.status(status).send(body);
@@ -76,47 +78,14 @@ function posInt(v: unknown, max: number): number {
   return Number.isFinite(n) ? Math.min(max, Math.max(0, n)) : 0;
 }
 
-/** Light server-side normalization of published lines (clients re-sanitize on display). */
+// Server-side normalization of published lines (clients re-sanitize on
+// display); shares the field/enum rules with the trade path via @mtg/shared.
 function normalizeTradeLines(v: unknown): TradeLine[] {
-  if (!Array.isArray(v)) return [];
-  const out: TradeLine[] = [];
-  for (const raw of v.slice(0, MAX_PUBLIC_LINES)) {
-    if (!raw || typeof raw !== 'object') continue;
-    const r = raw as Record<string, unknown>;
-    const oracleId = str(r.oracleId, 64);
-    const scryfallId = str(r.scryfallId, 64);
-    const quantity = posInt(r.quantity, 9999);
-    if (!oracleId || !scryfallId || quantity < 1) continue;
-    out.push({
-      oracleId,
-      scryfallId,
-      name: str(r.name, 200) ?? '(unknown card)',
-      quantity,
-      condition: (CONDS.has(r.condition as string) ? r.condition : 'NM') as TradeLine['condition'],
-      finish: (FINS.has(r.finish as string) ? r.finish : 'nonfoil') as TradeLine['finish'],
-      lang: str(r.lang, 10) ?? 'en',
-    });
-  }
-  return out;
+  return sanitizeTradeLines(v, PUBLIC_LINE_LIMITS);
 }
 
 function normalizeWishLines(v: unknown): WishLine[] {
-  if (!Array.isArray(v)) return [];
-  const out: WishLine[] = [];
-  for (const raw of v.slice(0, MAX_PUBLIC_LINES)) {
-    if (!raw || typeof raw !== 'object') continue;
-    const r = raw as Record<string, unknown>;
-    const oracleId = str(r.oracleId, 64);
-    const quantity = posInt(r.quantity, 9999);
-    if (!oracleId || quantity < 1) continue;
-    out.push({
-      oracleId,
-      scryfallId: str(r.scryfallId, 64),
-      name: str(r.name, 200) ?? '(unknown card)',
-      quantity,
-    });
-  }
-  return out;
+  return sanitizeWishLines(v, PUBLIC_LINE_LIMITS);
 }
 
 function normalizeCounts(v: unknown): SnapshotCounts {
@@ -140,7 +109,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     void reply.header('Access-Control-Allow-Origin', origin);
     void reply.header('Vary', 'Origin');
   });
-  app.options('/api/*', async (req, reply) => {
+  app.options('/api/*', async (_req, reply) => {
     void reply
       .header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
       .header('Access-Control-Allow-Headers', 'content-type,authorization')
@@ -191,7 +160,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     if (invite !== config.inviteCode) {
       return fail(reply, 403, { error: 'invalid_invite', message: 'That invite code is not valid.' });
     }
-    const user = store.createUser(username, password);
+    const user = await store.createUser(username, password);
     if (!user) return fail(reply, 409, { error: 'username_taken', message: 'That username is already taken.' });
     app.log.info({ username }, 'account created');
     const res: AuthResponse = { token: store.issueToken(user.id), username: user.username };
@@ -203,7 +172,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     const b = (req.body ?? {}) as Record<string, unknown>;
     const username = typeof b.username === 'string' ? b.username.trim() : '';
     const password = typeof b.password === 'string' ? b.password : '';
-    const user = username && password ? store.authenticate(username, password) : null;
+    const user = username && password ? await store.authenticate(username, password) : null;
     if (!user) return fail(reply, 401, { error: 'invalid_credentials', message: 'Wrong username or password.' });
     const res: AuthResponse = { token: store.issueToken(user.id), username: user.username };
     return res;
@@ -330,7 +299,11 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
       changes.push({ tbl, rowId, updatedAt, row: r.row });
     }
 
-    // Piggybacked public lists (the sync-era replacement for the snapshot upload).
+    // Piggybacked public lists (the sync-era replacement for the snapshot
+    // upload). Validate + prepare now, but write only after the push applies —
+    // a rejected or capped push must not overwrite the published lists.
+    let publish: { tradelistJson: string; tradelistCount: number; wishlistJson: string; wishlistCount: number } | null =
+      null;
     if (b.publish && typeof b.publish === 'object') {
       const p = b.publish as Record<string, unknown>;
       const tradelist = normalizeTradeLines(p.tradelist);
@@ -340,7 +313,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
       if (tradelistJson.length > MAX_LIST_JSON_CHARS || wishlistJson.length > MAX_LIST_JSON_CHARS) {
         return fail(reply, 413, { error: 'too_large', message: 'Published lists are too large.' });
       }
-      store.putPublicLists(user.id, tradelistJson, tradelist.length, wishlistJson, wishlist.length);
+      publish = { tradelistJson, tradelistCount: tradelist.length, wishlistJson, wishlistCount: wishlist.length };
     }
 
     let result;
@@ -351,6 +324,11 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
         return fail(reply, 413, { error: 'too_large', message: 'This account has hit its sync storage limit.' });
       }
       throw err;
+    }
+    // Publish only once the client is caught up (a capped pull re-sends), so the
+    // published lists always reflect a fully-applied push.
+    if (publish && !result.hasMore) {
+      store.putPublicLists(user.id, publish.tradelistJson, publish.tradelistCount, publish.wishlistJson, publish.wishlistCount);
     }
     if (result.applied > 0) hub.notify(user.id, result.cursor, clientId);
     const res: SyncResponse = {
@@ -452,25 +430,19 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
   app.get('/api/matches', async (req, reply) => {
     const user = requireUser(req, reply);
     if (!user) return;
-    const rows = store.allPublicLists();
-    const mine = rows.find((r) => r.userId === user.id);
+    const lists = store.parsedPublicLists();
+    const mine = lists.find((r) => r.userId === user.id);
     if (!mine) return { matches: [] } satisfies MatchesResponse; // nothing published yet
 
-    // My haves (oracleId → a display name) and my wants (oracleId set).
-    const myHaves = oracleNames(safeLines(mine.tradelist) as TradeLine[]);
-    const myWants = new Set((safeLines(mine.wishlist) as WishLine[]).map((l) => l.oracleId));
-
     const matches: MatchEntry[] = [];
-    for (const other of rows) {
+    for (const other of lists) {
       if (other.userId === user.id) continue;
-      const theirHaves = oracleNames(safeLines(other.tradelist) as TradeLine[]);
-      const theirWants = new Set((safeLines(other.wishlist) as WishLine[]).map((l) => l.oracleId));
 
       // They want a card I have for trade / I want a card they have for trade.
       const theyWant: MatchCard[] = [];
-      for (const [oracleId, name] of myHaves) if (theirWants.has(oracleId)) theyWant.push({ oracleId, name });
+      for (const [oracleId, name] of mine.haves) if (other.wants.has(oracleId)) theyWant.push({ oracleId, name });
       const iWant: MatchCard[] = [];
-      for (const [oracleId, name] of theirHaves) if (myWants.has(oracleId)) iWant.push({ oracleId, name });
+      for (const [oracleId, name] of other.haves) if (mine.wants.has(oracleId)) iWant.push({ oracleId, name });
 
       if (theyWant.length === 0 && iWant.length === 0) continue;
       matches.push({
@@ -523,13 +495,6 @@ function deckMainCounts(store: AccountStore, userId: number): Map<string, number
     if (Number.isFinite(q) && q > 0) map.set(c.deckId, (map.get(c.deckId) ?? 0) + q);
   }
   return map;
-}
-
-/** oracleId → display name, deduped (first name wins), for a published list. */
-function oracleNames(lines: { oracleId: string; name: string }[]): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const l of lines) if (!out.has(l.oracleId)) out.set(l.oracleId, l.name);
-  return out;
 }
 
 /** Order-independent hash of a match's oracleIds, so the client can spot changes. */

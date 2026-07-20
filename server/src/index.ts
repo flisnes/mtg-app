@@ -14,6 +14,11 @@ async function main() {
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',
     },
+    // Behind Caddy on the same VM, so every connection arrives from loopback.
+    // Trust only loopback when reading X-Forwarded-For: this makes req.ip the
+    // real client IP (so per-IP limits work) without letting a client spoof it
+    // — Caddy appends the true peer address after any header the client sent.
+    trustProxy: 'loopback',
   });
 
   await app.register(websocket, {

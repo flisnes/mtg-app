@@ -1,20 +1,14 @@
-import type { PriceHistory } from '@mtg/shared';
+import { dayOffset, type PriceHistory } from '@mtg/shared';
 
 // Pure helpers for the compact PriceHistory format (see shared/src/user.ts).
 // No db imports — also used by the Dexie v4 upgrade in db/schema.ts and by
 // transfer-payload sanitization, both of which must not depend on tracking.ts.
 
-const DAY_MS = 86_400_000;
+export { dayOffset };
 
 /** Currency units → integer cents (the storage format). */
 export function toCents(v: number | null | undefined): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 100) : null;
-}
-
-/** Whole days from `startDay` to `day` (both YYYY-MM-DD, parsed as UTC). -1 if unparseable. */
-export function dayOffset(startDay: string, day: string): number {
-  const d = (Date.parse(day) - Date.parse(startDay)) / DAY_MS;
-  return Number.isFinite(d) ? Math.round(d) : -1;
 }
 
 /**

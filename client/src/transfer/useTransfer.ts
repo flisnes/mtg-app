@@ -292,7 +292,7 @@ export function useTransfer(): TransferSession {
     setStat('applying');
     replaceAllUserData(payload)
       .then(() => setStat('done'))
-      .catch(() => fail('Could not apply the transferred data.'));
+      .catch((e) => fail(e instanceof Error ? e.message : 'Could not apply the transferred data.'));
   }, [setStat, fail]);
 
   const reset = useCallback(() => {

@@ -26,6 +26,9 @@ export class CameraScan {
   private stream: MediaStream | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
+  /** Set by stop(); checked after every await in start() so a teardown during
+   *  the getUserMedia/play() gap releases the camera instead of leaking it. */
+  private stopped = false;
   private streak: { id: string; distance: number; result: ScanPipelineResult }[] = [];
   private readonly fullCanvas = document.createElement('canvas');
   private readonly detectCanvas = document.createElement('canvas');
@@ -38,9 +41,11 @@ export class CameraScan {
 
   /** Request the camera and begin scanning. Call from a user gesture. */
   async start(): Promise<void> {
+    this.stopped = false;
     this.onState({ status: 'starting' });
+    let stream: MediaStream;
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: 'environment' },
           width: { ideal: 1920 },
@@ -52,18 +57,29 @@ export class CameraScan {
       this.onState({ status: 'error', message: e instanceof Error ? e.message : 'camera unavailable' });
       return;
     }
+    // stop() may have run while getUserMedia was pending — don't leave the
+    // just-granted camera on with no UI attached.
+    if (this.stopped) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    this.stream = stream;
     this.video.srcObject = this.stream;
     try {
       await this.video.play();
     } catch {
       // Autoplay quirks — the attribute set + user gesture normally suffice.
     }
+    if (this.stopped) {
+      this.stop();
+      return;
+    }
     this.resume();
   }
 
   /** Continue scanning (also used after a locked result is confirmed/rejected). */
   resume(): void {
-    if (!this.stream) return;
+    if (this.stopped || !this.stream) return;
     this.streak = [];
     this.running = true;
     this.schedule();
@@ -78,6 +94,7 @@ export class CameraScan {
 
   /** Release the camera entirely. */
   stop(): void {
+    this.stopped = true;
     this.pause();
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;

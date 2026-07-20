@@ -1,6 +1,7 @@
 import { db } from '../db/schema.js';
+import { sha256Hex } from '../util/sha256.js';
 import { SCAN_DATA_BASE } from './config.js';
-import { parseHashBlob, type ScanIndex } from './blob.js';
+import { parseHashBlob } from './blob.js';
 
 // Scan-data lifecycle (handover §S2): the VM's scanjob publishes
 // cardhashes.bin + manifest.json (its own version beacon — the card-DB
@@ -30,11 +31,6 @@ export interface ScanDataRow {
 
 export async function getInstalledScanData(): Promise<ScanDataRow | undefined> {
   return db.scanData.get('current');
-}
-
-async function sha256Hex(buf: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', buf);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export async function fetchScanManifest(): Promise<ScanDataManifest> {
@@ -87,10 +83,4 @@ export async function checkScanDataUpdate(): Promise<
   } catch {
     return { kind: 'none' };
   }
-}
-
-/** Parse the installed blob for a scan session. Null when nothing installed. */
-export async function loadScanIndex(): Promise<ScanIndex | null> {
-  const row = await getInstalledScanData();
-  return row ? parseHashBlob(row.blob) : null;
 }

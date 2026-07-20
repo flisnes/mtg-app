@@ -100,12 +100,3 @@ export async function computeDeckWishlistCandidates(deckId: string): Promise<Mis
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 }
-
-/** Distinct set codes present in the collection, for the set filter. */
-export async function getCollectionSets(): Promise<string[]> {
-  const scryfallIds = await db.collection.toArray().then((es) => es.map((e) => e.scryfallId));
-  const printings = await getPrintingsByIds(scryfallIds);
-  const sets = new Map<string, string>();
-  printings.forEach((p) => sets.set(p.set, p.setName));
-  return [...sets.keys()].sort();
-}

@@ -14,9 +14,10 @@ import type {
   WishlistEntry,
 } from '@mtg/shared';
 import { db, USER_DATA_TABLES } from './schema.js';
+import { getSetting } from './settings.js';
 import { getPricesByIds } from '../cardDb/prices.js';
 import { toCents } from '../price/history.js';
-import { stagePut, stageDelete } from '../sync/outbox.js';
+import { stagePut, stagePutMany, stageDelete } from '../sync/outbox.js';
 import type { TransferPayload } from '../transfer/payload.js';
 
 // The single mutation path for user data (beta plan §4). All invariants live
@@ -56,6 +57,42 @@ async function emit(e: Omit<UserEvent, 'id' | 'updatedAt'>): Promise<void> {
   const ev: UserEvent = { id: newId(), updatedAt: e.ts, ...e };
   await db.events.add(ev);
   await stagePut('events', ev);
+}
+
+/** Emit many events in two bulk writes instead of two per event (bulk imports). */
+async function emitMany(events: Omit<UserEvent, 'id' | 'updatedAt'>[]): Promise<void> {
+  if (events.length === 0) return;
+  const full: UserEvent[] = events.map((e) => ({ id: newId(), updatedAt: e.ts, ...e }));
+  await db.events.bulkAdd(full);
+  await stagePutMany('events', full);
+}
+
+function groupByOracle(wishes: WishlistEntry[]): Map<string, WishlistEntry[]> {
+  const m = new Map<string, WishlistEntry[]>();
+  for (const w of wishes) {
+    const arr = m.get(w.oracleId);
+    if (arr) arr.push(w);
+    else m.set(w.oracleId, [w]);
+  }
+  return m;
+}
+
+/**
+ * Bulk equivalent of emitWishFulfilled: given a preloaded wishlist grouped by
+ * oracleId, return the wish.fulfilled event for one add (or null). Keeps bulk
+ * imports off the per-line wishlist query that emitWishFulfilled does.
+ */
+function wishFulfilledEvent(
+  wishesByOracle: Map<string, WishlistEntry[]>,
+  oracleId: string,
+  scryfallId: string,
+  qty: number,
+  ts: number,
+  extra: Partial<Pick<UserEvent, 'source' | 'batchId' | 'tradeId'>>,
+): Omit<UserEvent, 'id' | 'updatedAt'> | null {
+  const match = wishesByOracle.get(oracleId)?.find((w) => w.scryfallId === null || w.scryfallId === scryfallId);
+  if (!match) return null;
+  return { ts, kind: 'wish.fulfilled', oracleId, scryfallId, qty: Math.min(qty, match.quantity), ...extra };
 }
 
 /**
@@ -206,8 +243,36 @@ export async function updateCollectionEntry(
       quantityForTrade: clamp(rawForTrade, 0, quantity),
       updatedAt: now,
     };
-    await db.collection.put(next);
-    await stagePut('collection', next);
+
+    // Editing condition/finish/lang/printing can re-key the entry onto another
+    // existing one. The (scryfallId, condition, finish, lang) index is NOT
+    // unique in Dexie, so a naive put would leave two rows sharing a key and
+    // every later .first() lookup would pick one at random. Merge instead, the
+    // same way updateWishlistEntry does on a printing collision.
+    let dup: CollectionEntry | undefined;
+    if (collectionKey(next) !== collectionKey(entry)) {
+      dup = await db.collection
+        .where('[scryfallId+condition+finish+lang]')
+        .equals([next.scryfallId, next.condition, next.finish, next.lang])
+        .first();
+      if (dup?.id === id) dup = undefined;
+    }
+    if (dup) {
+      const mergedQty = dup.quantity + quantity;
+      const merged: CollectionEntry = {
+        ...dup,
+        quantity: mergedQty,
+        quantityForTrade: clamp(dup.quantityForTrade + next.quantityForTrade, 0, mergedQty),
+        updatedAt: now,
+      };
+      await db.collection.put(merged);
+      await db.collection.delete(id);
+      await stagePut('collection', merged);
+      await stageDelete('collection', id);
+    } else {
+      await db.collection.put(next);
+      await stagePut('collection', next);
+    }
 
     // A quantity edit is a real add/remove for history purposes. Removals
     // default to 'sold' (interview decision); the History tab can re-label.
@@ -277,10 +342,53 @@ export async function setQuantityForTrade(id: string, quantityForTrade: number):
   await updateCollectionEntry(id, { quantityForTrade });
 }
 
-/** Total copies owned of a functional card, across all printings/conditions. */
-export async function getOwnedCount(oracleId: string): Promise<number> {
-  const entries = await db.collection.where('oracleId').equals(oracleId).toArray();
-  return entries.reduce((sum, e) => sum + e.quantity, 0);
+/**
+ * Bulk-set quantityForTrade on many entries in ONE transaction — the bulk
+ * tradelist actions used to call setQuantityForTrade per row, i.e. one IDB
+ * transaction (and one live-query refire) per selected card. Changing the
+ * tradelist flag is not a card-history event, so nothing is emitted.
+ */
+export async function setQuantityForTradeBulk(updates: { id: string; quantityForTrade: number }[]): Promise<void> {
+  if (updates.length === 0) return;
+  await db.transaction('rw', [db.collection, db.outbox], async () => {
+    const now = Date.now();
+    const entries = await db.collection.bulkGet(updates.map((u) => u.id));
+    const writes: CollectionEntry[] = [];
+    for (let i = 0; i < updates.length; i++) {
+      const entry = entries[i];
+      if (!entry) continue;
+      writes.push({ ...entry, quantityForTrade: clamp(updates[i]!.quantityForTrade, 0, entry.quantity), updatedAt: now });
+    }
+    await db.collection.bulkPut(writes);
+    await stagePutMany('collection', writes);
+  });
+}
+
+/** Delete many collection entries outright in one transaction (bulk delete). */
+export async function removeCollectionEntriesBulk(ids: string[], reason: RemovalReason = 'sold'): Promise<void> {
+  if (ids.length === 0) return;
+  const now = Date.now();
+  await db.transaction('rw', COLLECTION_TABLES, async () => {
+    const entries = (await db.collection.bulkGet(ids)).filter((e): e is CollectionEntry => !!e);
+    const prices = await getPricesByIds(entries.map((e) => e.scryfallId));
+    await db.collection.bulkDelete(entries.map((e) => e.id));
+    for (const id of entries.map((e) => e.id)) await stageDelete('collection', id);
+    await emitMany(
+      entries.map((e) => ({
+        ts: now,
+        kind: 'collection.remove' as const,
+        oracleId: e.oracleId,
+        scryfallId: e.scryfallId,
+        qty: e.quantity,
+        condition: e.condition,
+        finish: e.finish,
+        lang: e.lang,
+        priceEurCents: toCents(prices.get(e.scryfallId)?.eur ?? null),
+        source: 'manual' as const,
+        reason,
+      })),
+    );
+  });
 }
 
 export interface AddToWishlistInput {
@@ -338,14 +446,15 @@ export async function addToWishlistBulk(
     const existing = await db.wishlist.toArray();
     const keyOf = (l: { oracleId: string; scryfallId: string | null }) => `${l.oracleId}|${l.scryfallId ?? ''}`;
     const map = new Map(existing.map((e) => [keyOf(e), e]));
-    const writes: WishlistEntry[] = [];
+    const touched = new Set<WishlistEntry>();
+    const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
     for (const l of lines) {
       cards += l.quantity;
       const ex = map.get(keyOf(l));
       if (ex) {
         ex.quantity += l.quantity;
         ex.updatedAt = now;
-        if (!writes.includes(ex)) writes.push(ex);
+        touched.add(ex);
       } else {
         const entry: WishlistEntry = {
           id: newId(),
@@ -356,12 +465,14 @@ export async function addToWishlistBulk(
           updatedAt: now,
         };
         map.set(keyOf(l), entry);
-        writes.push(entry);
+        touched.add(entry);
       }
-      await emit({ ts: now, kind: 'wish.add', oracleId: l.oracleId, scryfallId: l.scryfallId, qty: l.quantity, ...batchExtra });
+      events.push({ ts: now, kind: 'wish.add', oracleId: l.oracleId, scryfallId: l.scryfallId, qty: l.quantity, ...batchExtra });
     }
+    const writes = [...touched];
     await db.wishlist.bulkPut(writes);
-    for (const w of writes) await stagePut('wishlist', w);
+    await stagePutMany('wishlist', writes);
+    await emitMany(events);
   });
   return { entries: lines.length, cards };
 }
@@ -452,7 +563,11 @@ export async function applyImport(
     const existing = await db.collection.toArray();
     const map = new Map(existing.map((e) => [collectionKey(e), e]));
     const now = Date.now();
-    const writes: CollectionEntry[] = [];
+    // A Set (not `writes.includes`) so re-touching an entry is O(1), not O(n);
+    // events are accumulated and flushed once instead of two IDB ops per line.
+    const touched = new Set<CollectionEntry>();
+    const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
+    const wishesByOracle = groupByOracle(await db.wishlist.toArray());
 
     if (replace.size > 0) {
       const doomed = existing.filter((e) => replace.has(e.oracleId));
@@ -461,7 +576,7 @@ export async function applyImport(
         map.delete(collectionKey(e));
         await db.collection.delete(e.id);
         await stageDelete('collection', e.id);
-        await emit({
+        events.push({
           ts: now,
           kind: 'collection.remove',
           oracleId: e.oracleId,
@@ -486,7 +601,7 @@ export async function applyImport(
         ex.quantity += l.quantity;
         ex.quantityForTrade = clamp(Math.max(ex.quantityForTrade, l.quantityForTrade), 0, ex.quantity);
         ex.updatedAt = now;
-        if (!writes.includes(ex)) writes.push(ex);
+        touched.add(ex);
       } else {
         const entry: CollectionEntry = {
           id: newId(),
@@ -501,9 +616,9 @@ export async function applyImport(
           updatedAt: now,
         };
         map.set(k, entry);
-        writes.push(entry);
+        touched.add(entry);
       }
-      await emit({
+      events.push({
         ts: now,
         kind: 'collection.add',
         oracleId: l.oracleId,
@@ -515,10 +630,13 @@ export async function applyImport(
         priceEurCents: toCents(prices.get(l.scryfallId)?.eur ?? null),
         ...batchExtra,
       });
-      await emitWishFulfilled(l.oracleId, l.scryfallId, l.quantity, now, { source, batchId });
+      const wf = wishFulfilledEvent(wishesByOracle, l.oracleId, l.scryfallId, l.quantity, now, { source, batchId });
+      if (wf) events.push(wf);
     }
+    const writes = [...touched];
     await db.collection.bulkPut(writes);
-    for (const w of writes) await stagePut('collection', w);
+    await stagePutMany('collection', writes);
+    await emitMany(events);
   });
   return { entries: lines.length, cards };
 }
@@ -669,7 +787,8 @@ export async function addDeckCardsBulk(
     const existing = await db.deckCards.where('deckId').equals(deckId).toArray();
     const keyOf = (c: { oracleId: string; board: DeckBoard }) => `${c.oracleId}|${c.board}`;
     const map = new Map(existing.map((c) => [keyOf(c), c]));
-    const writes: DeckCard[] = [];
+    const touched = new Set<DeckCard>();
+    const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
     const deck = await touchDeck(deckId, now);
     for (const c of cards) {
       const ex = map.get(keyOf(c));
@@ -678,7 +797,7 @@ export async function addDeckCardsBulk(
         // Adopt the imported printing if the slot didn't already have one.
         if (!ex.scryfallId && c.scryfallId) ex.scryfallId = c.scryfallId;
         ex.updatedAt = now;
-        if (!writes.includes(ex)) writes.push(ex);
+        touched.add(ex);
       } else {
         const dc: DeckCard = {
           id: newId(),
@@ -690,9 +809,9 @@ export async function addDeckCardsBulk(
           updatedAt: now,
         };
         map.set(keyOf(c), dc);
-        writes.push(dc);
+        touched.add(dc);
       }
-      await emit({
+      events.push({
         ts: now,
         kind: 'deck.add',
         oracleId: c.oracleId,
@@ -703,8 +822,10 @@ export async function addDeckCardsBulk(
         board: c.board,
       });
     }
+    const writes = [...touched];
     await db.deckCards.bulkPut(writes);
-    for (const w of writes) await stagePut('deckCards', w);
+    await stagePutMany('deckCards', writes);
+    await emitMany(events);
   });
 }
 
@@ -1126,13 +1247,13 @@ async function reverseEvent(e: UserEvent, now: number): Promise<void> {
  */
 export async function undoEntry(ref: UndoRef): Promise<{ undone: boolean; reason?: 'gone' | 'not-latest' }> {
   return db.transaction('rw', UNDO_TABLES, async () => {
-    // Gather every event the entry comprises (batch/trade lines aren't indexed,
-    // but undo is rare, so a filtered scan inside the txn is fine).
+    // Gather every event the entry comprises (batchId/tradeId are indexed as of
+    // schema v10, so this doesn't scan the whole events table).
     let events: UserEvent[];
     if (ref.type === 'batch') {
-      events = await db.events.filter((e) => e.batchId === ref.batchId).toArray();
+      events = await db.events.where('batchId').equals(ref.batchId).toArray();
     } else if (ref.type === 'trade') {
-      events = await db.events.filter((e) => e.tradeId === ref.tradeId).toArray();
+      events = await db.events.where('tradeId').equals(ref.tradeId).toArray();
     } else {
       const one = await db.events.get(ref.id);
       if (!one) return { undone: false, reason: 'gone' as const };
@@ -1153,9 +1274,11 @@ export async function undoEntry(ref: UndoRef): Promise<{ undone: boolean; reason
     }
     if (events.length === 0) return { undone: false, reason: 'gone' as const };
 
-    // Guard: only the newest entry may be undone.
+    // Guard: only the newest entry may be undone. Comparing by max ts (not by
+    // the single id .last() happens to return) means two events sharing the
+    // same millisecond don't make the guard reject the genuinely-newest entry.
     const newest = await db.events.orderBy('ts').last();
-    if (newest && !events.some((e) => e.id === newest.id)) {
+    if (newest && !events.some((e) => e.ts === newest.ts)) {
       return { undone: false, reason: 'not-latest' as const };
     }
 
@@ -1184,6 +1307,14 @@ async function clearUserDataTables(): Promise<void> {
  * sync outbox is cleared: the replaced rows no longer exist to push.
  */
 export async function replaceAllUserData(data: Omit<TransferPayload, 'version'>): Promise<void> {
+  // Wipe-and-replace stages no tombstones, so doing it while signed in would
+  // silently diverge from the synced account. The UI hides the receive option
+  // when signed in; guard here too, in case a user signs in while a received
+  // payload is waiting at the review step. (Key read directly, like the sync
+  // engine, to avoid an import cycle with account/session.ts.)
+  if (await getSetting('accountSession')) {
+    throw new Error('Sign out before replacing this device’s data from another device.');
+  }
   await db.transaction('rw', [...USER_DATA_TABLES, db.outbox], async () => {
     await clearUserDataTables();
     await Promise.all([

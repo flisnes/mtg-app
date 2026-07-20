@@ -37,18 +37,6 @@ export function logError(kind: string, message: string, stack?: string): void {
   write(entries);
 }
 
-export function getErrorLog(): LogEntry[] {
-  return read();
-}
-
-export function clearErrorLog(): void {
-  try {
-    localStorage.removeItem(KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
 /** A copy-paste friendly diagnostic bundle. */
 export function formatDiagnostics(): string {
   const header = [`MTG app v${APP_VERSION}`, `UA: ${navigator.userAgent}`, `When: ${new Date().toISOString()}`].join('\n');

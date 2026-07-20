@@ -61,6 +61,11 @@ export interface TradeSession {
 /** The relay caps shared lists at 500 lines (server maxOfferLines). */
 const SHARE_LINE_CAP = 500;
 
+/** Auto-resume backoff after a mid-trade drop: 1.2s, 2.4s, … capped, then give up. */
+const RECONNECT_BASE_MS = 1200;
+const RECONNECT_MAX_MS = 30_000;
+const MAX_RECONNECT_ATTEMPTS = 6;
+
 export function otherSeat(seat: Seat): Seat {
   return seat === 'a' ? 'b' : 'a';
 }
@@ -89,6 +94,10 @@ export function useTradeSession(): TradeSession {
   const active = useRef<Partial<ActiveTrade>>({});
   const appliedRef = useRef(false);
   const intentionalClose = useRef(false);
+  // Pending auto-resume timer (stored so reset/unmount/reconnect can cancel it —
+  // a fire-and-forget timer would revive a torn-down session) + attempt counter.
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttempts = useRef(0);
   // Identity exchange: the partner's username (if they shared one) ends up on
   // the completed Trade record; anonymous sessions leave it null.
   const peerUsername = useRef<string | null>(null);
@@ -112,11 +121,14 @@ export function useTradeSession(): TradeSession {
   /** Share our account username with the partner (no-op when signed out). */
   const sendIdentity = useCallback(() => {
     if (sentIdentity.current) return;
-    sentIdentity.current = true;
     void getAccountSession().then((session) => {
       const c = active.current.code;
       const s = ws.current;
+      // Latch only after a successful send — if the socket closed (or no code
+      // yet) while we awaited the session, a premature latch would mean our
+      // identity is never shared for the rest of the trade.
       if (session && c && s && s.readyState === WebSocket.OPEN) {
+        sentIdentity.current = true;
         s.send(JSON.stringify({ v: PROTOCOL_VERSION, type: 'identity_share', sessionCode: c, username: session.username }));
       }
     });
@@ -237,26 +249,61 @@ export function useTradeSession(): TradeSession {
 
   const connect = useCallback(
     (initial: ClientMessage) => {
+      // Cancel any pending auto-resume and fully detach the previous socket
+      // before opening a new one — otherwise a delayed reconnect racing a fresh
+      // create()/join() would leave two live sockets driving the same state.
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
+      const prev = ws.current;
+      if (prev) {
+        prev.onopen = prev.onmessage = prev.onerror = prev.onclose = null;
+        prev.close();
+      }
+
       intentionalClose.current = false;
       setStatus('connecting');
       setError(null);
       const socket = new WebSocket(TRADE_WS_URL);
       ws.current = socket;
-      socket.onopen = () => socket.send(JSON.stringify(initial));
+      socket.onopen = () => {
+        reconnectAttempts.current = 0;
+        socket.send(JSON.stringify(initial));
+      };
       socket.onmessage = (e) => onMessage(typeof e.data === 'string' ? e.data : '');
       socket.onerror = () => setError('connection error');
       socket.onclose = () => {
+        if (ws.current !== socket) return; // superseded by a newer socket
+        ws.current = null;
         if (intentionalClose.current) return;
-        // Auto-resume if we dropped mid-trade and the session may still be alive.
         const a = active.current;
         const state = stateRef.current;
-        if (a.code && a.resumeToken && state && state !== 'completed' && state !== 'cancelled') {
-          setStatus('connecting');
-          setTimeout(() => {
-            if (a.code && a.resumeToken)
-              connect({ v: PROTOCOL_VERSION, type: 'resume', sessionCode: a.code, resumeToken: a.resumeToken });
-          }, 1200);
+        const resumable = !!(a.code && a.resumeToken && state && state !== 'completed' && state !== 'cancelled');
+        if (!resumable) {
+          // No live session to resume. If we never even established one (a.code
+          // unset), the initial connect failed — surface it instead of spinning
+          // on "Connecting…" forever.
+          if (!a.code) {
+            setStatus('error');
+            setError('Could not reach the trade server.');
+          }
+          return;
         }
+        if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
+          setStatus('error');
+          setError('Lost connection to the trade server. Try resuming from the trade screen.');
+          return;
+        }
+        const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** reconnectAttempts.current);
+        reconnectAttempts.current += 1;
+        setStatus('connecting');
+        reconnectTimer.current = setTimeout(() => {
+          reconnectTimer.current = null;
+          if (a.code && a.resumeToken) {
+            connect({ v: PROTOCOL_VERSION, type: 'resume', sessionCode: a.code, resumeToken: a.resumeToken });
+          }
+        }, delay);
       };
     },
     [onMessage],
@@ -264,7 +311,13 @@ export function useTradeSession(): TradeSession {
 
   const send = useCallback((msg: ClientMessage) => {
     const s = ws.current;
-    if (s && s.readyState === WebSocket.OPEN) s.send(JSON.stringify(msg));
+    if (s && s.readyState === WebSocket.OPEN) {
+      s.send(JSON.stringify(msg));
+    } else {
+      // Dropped while reconnecting — tell the user rather than losing it silently
+      // (the next state_sync would otherwise just revert their UI with no reason).
+      setError('Still connecting — that didn’t go through. Try again in a moment.');
+    }
   }, []);
 
   const code = () => active.current.code;
@@ -305,6 +358,11 @@ export function useTradeSession(): TradeSession {
 
   const reset = useCallback(() => {
     intentionalClose.current = true;
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
+    }
+    reconnectAttempts.current = 0;
     ws.current?.close();
     ws.current = null;
     active.current = {};
@@ -323,10 +381,15 @@ export function useTradeSession(): TradeSession {
     void clearPersisted();
   }, [clearPersisted]);
 
-  // Close the socket if the component using the hook unmounts.
+  // Close the socket (and cancel any pending auto-resume) if the component
+  // using the hook unmounts — a stray reconnect would re-occupy the trade seat.
   useEffect(() => {
     return () => {
       intentionalClose.current = true;
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
       ws.current?.close();
     };
   }, []);

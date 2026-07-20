@@ -292,19 +292,21 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
   }
   const collection = [...byKey.values()];
 
-  // Wishlist: unique on id and (oracleId, scryfallId).
-  const wishlist: WishlistEntry[] = [];
+  // Wishlist: unique on id and (oracleId, scryfallId); key collisions merge
+  // quantities, same policy as the collection above (previously they were
+  // silently dropped, losing copies).
   const wishIds = new Set<string>();
-  const wishKeys = new Set<string>();
+  const wishByKey = new Map<string, WishlistEntry>();
   for (const r of rows(p.wishlist, CAPS.wishlist)) {
     const entry = sanitizeWishlistRow(r);
     if (!entry || wishIds.has(entry.id)) continue;
-    const key = `${entry.oracleId}|${entry.scryfallId ?? ''}`;
-    if (wishKeys.has(key)) continue;
     wishIds.add(entry.id);
-    wishKeys.add(key);
-    wishlist.push(entry);
+    const key = `${entry.oracleId}|${entry.scryfallId ?? ''}`;
+    const ex = wishByKey.get(key);
+    if (ex) ex.quantity = Math.min(MAX_QTY, ex.quantity + entry.quantity);
+    else wishByKey.set(key, entry);
   }
+  const wishlist = [...wishByKey.values()];
 
   // Decks, then deck cards restricted to surviving decks.
   const decks: Deck[] = [];

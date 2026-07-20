@@ -3,7 +3,8 @@ import type { Priced, Printing, OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { SCAN_DATA_BASE } from '../scan/config.js';
-import { parseHashBlob, type ScanIndex } from '../scan/blob.js';
+import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
+import { getScanExcludedIds } from '../scan/exclusions.js';
 import { formatHash64, type DHash } from '../scan/hash.js';
 import type { MatchResult, ScanCandidate } from '../scan/match.js';
 import { orientQuadPortrait, type Quad } from '../scan/geometry.js';
@@ -62,18 +63,24 @@ export function ScanTest() {
   const cameraRef = useRef<CameraScan | null>(null);
   const [live, setLive] = useState<LiveScanState | null>(null);
 
+  // Match production: exclude the printings the camera must never suggest
+  // (playtest cards, etc.), so this harness is a faithful regression tool.
+  const buildIndex = async (blob: ArrayBuffer): Promise<ScanIndex> =>
+    filterScanIndex(parseHashBlob(blob), await getScanExcludedIds());
+
   useEffect(() => {
-    void getInstalledScanData().then((row) => {
+    void getInstalledScanData().then(async (row) => {
       if (!row) return;
       setInstalled(row);
-      setIndex(parseHashBlob(row.blob));
+      setIndex(await buildIndex(row.blob));
     });
     return () => cameraRef.current?.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setData = (row: ScanDataRow) => {
+  const setData = async (row: ScanDataRow) => {
     setInstalled(row);
-    setIndex(parseHashBlob(row.blob));
+    setIndex(await buildIndex(row.blob));
   };
 
   const checkServer = async () => {
@@ -85,7 +92,7 @@ export function ScanTest() {
         setStatus(installed ? 'Scan data is up to date.' : 'No update available (endpoint unreachable or nothing installed).');
       } else {
         setStatus(`Downloading v${update.manifest.version} (${(update.manifest.bytes / 1e6).toFixed(1)} MB)…`);
-        setData(await downloadScanData(update.manifest));
+        await setData(await downloadScanData(update.manifest));
         setStatus(`Installed scan data v${update.manifest.version}.`);
       }
     } catch (e) {
@@ -98,7 +105,7 @@ export function ScanTest() {
   const loadBlobFile = async (file: File) => {
     setBusy(true);
     try {
-      setData(await installScanBlob(await file.arrayBuffer(), 0));
+      await setData(await installScanBlob(await file.arrayBuffer(), 0));
       setStatus(`Loaded ${file.name} from file (installed as v0).`);
     } catch (e) {
       setStatus(`Blob rejected: ${(e as Error).message}`);

@@ -1,12 +1,14 @@
 import type {
   ApiErrorBody,
   AuthResponse,
+  LoginRequest,
   MatchesResponse,
   MeResponse,
   PricesResponse,
   ProfilePutRequest,
   ProfilePutResponse,
   ProfileResponse,
+  RegisterRequest,
   SnapshotGetResponse,
   SnapshotPutRequest,
   SnapshotPutResponse,
@@ -70,11 +72,13 @@ async function request<T>(
 }
 
 export function register(username: string, password: string, inviteCode: string): Promise<AuthResponse> {
-  return request('/register', { method: 'POST', body: { username, password, inviteCode } });
+  const body: RegisterRequest = { username, password, inviteCode };
+  return request('/register', { method: 'POST', body });
 }
 
 export function login(username: string, password: string): Promise<AuthResponse> {
-  return request('/login', { method: 'POST', body: { username, password } });
+  const body: LoginRequest = { username, password };
+  return request('/login', { method: 'POST', body });
 }
 
 export function logout(token: string): Promise<{ ok: boolean }> {

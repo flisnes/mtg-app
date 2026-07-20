@@ -145,10 +145,6 @@ export function popcount32(x: number): number {
   return (x * 0x01010101) >> 24;
 }
 
-export function dhashFromImageData(img: ImageData): DHash {
-  return dhash(grayscale(img));
-}
-
 export function formatHash64(h: Hash64): string {
   return h.hi.toString(16).padStart(8, '0') + h.lo.toString(16).padStart(8, '0');
 }

@@ -22,7 +22,7 @@ import {
   sanitizeTradeRow,
   sanitizeWishlistRow,
 } from '../transfer/payload.js';
-import { stagePut } from './outbox.js';
+import { stagePutMany } from './outbox.js';
 
 // The sync engine (sync plan, 2026-07-16). Drains the outbox to POST /api/sync
 // and applies what comes back, last-write-wins per row. Runs whenever anything
@@ -129,17 +129,25 @@ async function applyServerChanges(changes: SyncChange[]): Promise<void> {
       // server too — skip the incoming row. Anything older is superseded.
       const pending = await db.outbox.get([c.tbl, c.rowId]);
       if (pending && pending.updatedAt > c.updatedAt) continue;
-      if (pending) await db.outbox.delete([c.tbl, c.rowId]);
+
+      // Belt-and-braces LWW, applied to BOTH puts and deletes: a newer local
+      // row (even one already acked, so with no pending outbox entry) must not
+      // be clobbered by an older incoming change — including an older tombstone.
+      const local = (await table.get(c.rowId)) as Record<string, unknown> | undefined;
+      if (local && stampOf(local) > c.updatedAt) continue;
 
       if (c.deleted) {
         await table.delete(c.rowId);
-        continue;
+      } else {
+        // Sanitize BEFORE dropping the pending entry: a corrupt/mismatched row
+        // is skipped without discarding the valid local change it would lose to.
+        const row = SANITIZERS[c.tbl](c.row);
+        if (!row || row.id !== c.rowId) continue;
+        await (table as (typeof TABLES)['collection']).put(row as never);
       }
-      const row = SANITIZERS[c.tbl](c.row);
-      if (!row || row.id !== c.rowId) continue; // corrupt/mismatched row — drop
-      const local = (await table.get(c.rowId)) as Record<string, unknown> | undefined;
-      if (local && stampOf(local) > c.updatedAt) continue; // belt-and-braces LWW
-      await (table as (typeof TABLES)['collection']).put(row as never);
+      // The incoming change was applied, so the pending local change (if any) is
+      // now superseded and can be dropped.
+      if (pending) await db.outbox.delete([c.tbl, c.rowId]);
     }
   });
 }
@@ -184,7 +192,7 @@ async function withSyncLock<T>(fn: () => Promise<T>): Promise<T | undefined> {
 }
 
 /** Debounced entry point for mutation-driven syncs. */
-export function requestSync(delayMs = 2000): void {
+function requestSync(delayMs = 2000): void {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => void syncNow(), delayMs);
 }
@@ -203,10 +211,18 @@ export async function syncNow(): Promise<void> {
   if (!navigator.onLine) return; // the 'online' listener will retry
 
   await withSyncLock(async () => {
+    // Re-read the session/state INSIDE the lock: a sign-out (or sign-in to
+    // another account) may have landed between the checks above and acquiring
+    // the lock, and clearSyncState() deleting the row must not be undone by a
+    // stale in-flight write below.
+    const locked = await getSetting<StoredSession>(KEY_SESSION);
+    const lockedState = await getSyncState();
+    if (!locked || !lockedState || lockedState.account !== locked.username) return;
+
     if (retryTimer) clearTimeout(retryTimer);
     setStatus({ ...status, phase: 'syncing' });
     try {
-      let cursor = state.cursor;
+      let cursor = lockedState.cursor;
       let publishedAnything = false;
       // Bounded loop: each pass pushes ≤SYNC_MAX_PUSH and pulls ≤SYNC_MAX_PULL.
       for (let pass = 0; pass < 100; pass++) {
@@ -215,15 +231,18 @@ export async function syncNow(): Promise<void> {
         const publish = touchesLists
           ? { tradelist: await readOwnTradelist(MAX_PUBLIC_LINES), wishlist: await readOwnWishlist(MAX_PUBLIC_LINES) }
           : undefined;
-        const req: SyncRequest = { clientId: state.clientId, cursor, changes: batch, ...(publish ? { publish } : {}) };
-        const res = await api.sync(session.token, req);
+        const req: SyncRequest = { clientId: lockedState.clientId, cursor, changes: batch, ...(publish ? { publish } : {}) };
+        const res = await api.sync(locked.token, req);
         publishedAnything ||= !!publish;
 
         await applyServerChanges(res.changes);
         // When the pull was capped the server did NOT apply the push.
         if (!res.hasMore) await ackOutbox(batch);
         cursor = res.cursor;
-        await setSetting(KEY_SYNC_STATE, { ...state, cursor } satisfies SyncState);
+        // A sign-out during the request deletes the sync state; don't recreate it.
+        const current = await getSyncState();
+        if (!current || current.account !== locked.username) return;
+        await setSetting(KEY_SYNC_STATE, { ...current, cursor } satisfies SyncState);
 
         if (!res.hasMore && (await db.outbox.count()) === 0) break;
       }
@@ -235,6 +254,12 @@ export async function syncNow(): Promise<void> {
         void import('../account/notifications.js').then((m) => m.fetchMatchesNow());
       }
     } catch (err) {
+      // A revoked/expired token (401) will fail forever; stop retrying and wait
+      // for a real sign-in to restart sync (mirrors the WS socketAuthFailed latch).
+      if (err instanceof api.ApiError && err.status === 401) {
+        setStatus({ phase: 'error', lastSyncAt: status.lastSyncAt, message: 'Signed out — sign in again to sync.' });
+        return;
+      }
       failures += 1;
       const message =
         err instanceof api.ApiError ? err.friendlyMessage : err instanceof Error ? err.message : 'Sync failed.';
@@ -264,7 +289,9 @@ export async function initSeedSync(username: string): Promise<void> {
     await db.outbox.clear();
     for (const [tbl, table] of Object.entries(TABLES) as [SyncTable, (typeof TABLES)['collection']][]) {
       const rows = await table.toArray();
-      for (const row of rows) await stagePut(tbl, row as Parameters<typeof stagePut>[1]);
+      // One bulk stage per table instead of a put per row — first sign-in on a
+      // large collection stages tens of thousands of rows and blocked on this.
+      await stagePutMany(tbl, rows as Parameters<typeof stagePutMany>[1]);
     }
   });
   await setSetting(KEY_SYNC_STATE, await baseState(username));

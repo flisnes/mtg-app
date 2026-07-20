@@ -31,13 +31,21 @@ export function useCardSearch(
       return;
     }
     setSearching(true);
+    // Guard against out-of-order completion: a slow earlier query (e.g. the one
+    // that paid the one-time index build) could otherwise resolve after a newer
+    // one and overwrite the results with stale data.
+    let cancelled = false;
     const handle = setTimeout(async () => {
       const res = await searchCards(query, filters, limit);
+      if (cancelled) return;
       setResults(res.cards);
       setTotal(res.total);
       setSearching(false);
     }, 120);
-    return () => clearTimeout(handle);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
   }, [query, filters, limit, enabled]);
 
   return { results, total, searching };

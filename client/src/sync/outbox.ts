@@ -28,6 +28,12 @@ export async function stagePut(tbl: SyncTable, row: StampedRow): Promise<void> {
   await db.outbox.put({ tbl, rowId: row.id, updatedAt: stampOf(row), row });
 }
 
+/** Stage many upserts in one write (bulk imports/seeds). */
+export async function stagePutMany(tbl: SyncTable, rows: StampedRow[]): Promise<void> {
+  if (rows.length === 0) return;
+  await db.outbox.bulkPut(rows.map((row) => ({ tbl, rowId: row.id, updatedAt: stampOf(row), row })));
+}
+
 /** Stage a delete (tombstone). */
 export async function stageDelete(tbl: SyncTable, rowId: string): Promise<void> {
   await db.outbox.put({ tbl, rowId, updatedAt: Date.now(), deleted: true });

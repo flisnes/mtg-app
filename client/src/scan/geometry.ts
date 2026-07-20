@@ -381,11 +381,6 @@ export function detectCardQuads(img: ImageData, maxCandidates = 4): Quad[] {
   return found.slice(0, maxCandidates).map((f) => f.quad);
 }
 
-/** Best single quad guess (largest candidate), or null. */
-export function detectCardQuad(img: ImageData): Quad | null {
-  return detectCardQuads(img, 1)[0] ?? null;
-}
-
 // --- warp ---------------------------------------------------------------------
 
 /**

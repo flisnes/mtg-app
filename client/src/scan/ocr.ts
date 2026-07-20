@@ -59,7 +59,7 @@ let workerPromise: Promise<Worker> | null = null;
 
 /** Lazy singleton worker, kept warm for the scan session (init is ~seconds). */
 export function initOcr(): Promise<Worker> {
-  workerPromise ??= (async () => {
+  const p = (workerPromise ??= (async () => {
     const { createWorker } = await import('tesseract.js');
     const assets = SCAN_DATA_BASE
       ? {
@@ -77,15 +77,13 @@ export function initOcr(): Promise<Worker> {
       user_defined_dpi: '200',
     });
     return worker;
-  })();
-  workerPromise.catch(() => (workerPromise = null)); // allow retry after failure
-  return workerPromise;
-}
-
-export async function terminateOcr(): Promise<void> {
-  const p = workerPromise;
-  workerPromise = null;
-  if (p) await (await p).terminate();
+  })());
+  // Allow a retry after a failed init, but only clear THIS promise — never a
+  // fresh one a later initOcr() may already have installed.
+  p.catch(() => {
+    if (workerPromise === p) workerPromise = null;
+  });
+  return p;
 }
 
 /**

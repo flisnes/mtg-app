@@ -150,6 +150,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const [board, setBoard] = useState<DeckBoard>('main');
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraScan | null>(null);
+  const closedRef = useRef(false);
   const trayRef = useRef<Tray | null>(null);
   const fxSeq = useRef(0);
   const toast = useToast();
@@ -165,8 +166,11 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const buildIndex = async (blob: ArrayBuffer): Promise<ScanIndex> => filterScanIndex(parseHashBlob(blob), await getScanExcludedIds());
 
   const startScanning = (index: ScanIndex) => {
+    // The sheet may have closed while a download/index-build was in flight; don't
+    // build a camera on a torn-down video element (it would acquire and leak it).
+    if (closedRef.current || !videoRef.current) return;
     setStage({ kind: 'scanning' });
-    const cam = new CameraScan(videoRef.current!, index, (s) => {
+    const cam = new CameraScan(videoRef.current, index, (s) => {
       setLive(s);
       if (s.status === 'locked') void onLocked(s.result);
     });
@@ -182,7 +186,15 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       if (cancelled) return;
       if (installed) {
         const index = await buildIndex(installed.blob);
-        if (!cancelled) startScanning(index);
+        if (cancelled) return;
+        startScanning(index);
+        // Scan immediately on the installed index, but check the beacon in the
+        // background: the scanjob keeps publishing newer versions, and without
+        // this a device runs on its first download forever. The fresh blob is
+        // installed for the next scan session (no disruptive mid-scan swap).
+        void checkScanDataUpdate()
+          .then((u) => (u.kind === 'update' ? downloadScanData(u.manifest) : undefined))
+          .catch(() => {});
         return;
       }
       const update = await checkScanDataUpdate();
@@ -195,6 +207,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     })();
     return () => {
       cancelled = true;
+      closedRef.current = true;
       cameraRef.current?.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

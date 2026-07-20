@@ -176,6 +176,15 @@ export class MtgDatabase extends Dexie {
     // v9 (sealed products): the lazily-downloaded sealed-product catalog, one
     // row keyed 'current' (replaced when the manifest's sealed hash moves).
     this.version(9).stores({ sealed: 'key' });
+
+    // v10: index events by batchId/tradeId. undo and grouped-history lookups
+    // matched these with a full-table filter(); as the append-only events table
+    // grows (one row per mutation, forever) that scan gets linearly slower.
+    // Both fields are optional, so the indexes are sparse (rows without them are
+    // simply absent from the index) — no upgrade callback needed.
+    this.version(10).stores({
+      events: 'id, ts, oracleId, kind, batchId, tradeId',
+    });
   }
 }
 

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.40.1
+
+- **Collection list auto-loads when you scroll down.** The "Show 60 more" button is gone; just scroll and the next batch appears, so you never stop scrolling to tap.
+
 ## 0.40.0
 
 - **Trade home redesigned into three sections.** The trade landing screen now shows start/join controls at the top, a new "Recent trades" section in the middle listing your last few sessions, and two tiles at the bottom linking to your tradelist and the community trades list — everything you need to get trading in one place.

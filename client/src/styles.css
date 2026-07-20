@@ -1335,6 +1335,10 @@ body:has(.bulk-bar) .app-main {
   align-self: center;
   padding: 0.6rem 1.75rem;
 }
+/* Infinite-scroll trigger: invisible, just tall enough to observe reliably. */
+.load-more-sentinel {
+  height: 1px;
+}
 
 /* ---- Search result row: tappable body + quick actions ---- */
 .result-row {

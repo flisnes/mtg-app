@@ -8,6 +8,7 @@ import { addDeckCardsBulk, removeCollectionEntriesBulk, setQuantityForTradeBulk 
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
+import { LoadMoreSentinel } from './LoadMoreSentinel.js';
 import { BulkActionBar, type BulkAction } from './BulkActionBar.js';
 import { DeckPickerSheet } from './DeckPickerSheet.js';
 import { useMultiSelect } from './useMultiSelect.js';
@@ -299,10 +300,12 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           )}
         />
       )}
-      {!pileMode && filtered.length > visible.length && (
-        <button className="show-more" onClick={showMore}>
-          Show {Math.min(60, filtered.length - visible.length)} more
-        </button>
+      {!pileMode && (
+        <LoadMoreSentinel
+          hasMore={filtered.length > visible.length}
+          onLoadMore={showMore}
+          rearmKey={visible.length}
+        />
       )}
 
       {sel.active && (

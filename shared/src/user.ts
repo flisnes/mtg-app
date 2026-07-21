@@ -140,7 +140,9 @@ export type UserEventKind =
   | 'deck.remove'
   | 'wish.add'
   | 'wish.fulfilled'
-  | 'wish.remove';
+  | 'wish.remove'
+  /** Copies already owned were marked for trade (e.g. a tradelist scan). */
+  | 'tradelist.mark';
 
 export const USER_EVENT_KINDS: readonly UserEventKind[] = [
   'collection.add',
@@ -150,6 +152,7 @@ export const USER_EVENT_KINDS: readonly UserEventKind[] = [
   'wish.add',
   'wish.fulfilled',
   'wish.remove',
+  'tradelist.mark',
 ];
 
 /**

@@ -377,14 +377,19 @@ export interface MarkForTradeRequest {
  * Flag already-owned copies for trade without adding new ones — the tradelist
  * scan of cards you already have. For each request, up to `quantity` copies of
  * that card are marked for trade, preferring the scanned printing/finish/
- * condition, then looser matches (any printing of the same card). Returns how
- * many copies were newly flagged. Like the other tradelist toggles, this emits
- * no history event.
+ * condition, then looser matches (any printing of the same card). Every copy
+ * flagged in one call shares a batchId, so the whole operation shows up as a
+ * single "Marked for trade" entry in the edit history (and undoes as one).
+ * Returns how many copies were newly flagged.
  */
-export async function markOwnedForTrade(requests: MarkForTradeRequest[]): Promise<number> {
+export async function markOwnedForTrade(
+  requests: MarkForTradeRequest[],
+  meta: { source?: EventSource } = {},
+): Promise<number> {
   if (requests.length === 0) return 0;
   let flagged = 0;
-  await db.transaction('rw', [db.collection, db.outbox], async () => {
+  const batchId = newId();
+  await db.transaction('rw', [db.collection, db.events, db.outbox], async () => {
     const now = Date.now();
     const oracleIds = [...new Set(requests.map((r) => r.oracleId))];
     const owned = await db.collection.where('oracleId').anyOf(oracleIds).toArray();
@@ -394,7 +399,9 @@ export async function markOwnedForTrade(requests: MarkForTradeRequest[]): Promis
       if (arr) arr.push(e);
       else byOracle.set(e.oracleId, [e]);
     }
-    const touched = new Set<CollectionEntry>();
+    // How many copies each entry gained (accumulated across requests so a
+    // second request touching the same entry adds one event line, not two).
+    const gained = new Map<CollectionEntry, number>();
     for (const req of requests) {
       const entries = byOracle.get(req.oracleId);
       if (!entries) continue;
@@ -412,13 +419,27 @@ export async function markOwnedForTrade(requests: MarkForTradeRequest[]): Promis
         e.updatedAt = now;
         remaining -= take;
         flagged += take;
-        touched.add(e);
+        gained.set(e, (gained.get(e) ?? 0) + take);
       }
     }
-    const writes = [...touched];
+    const writes = [...gained.keys()];
     if (writes.length > 0) {
       await db.collection.bulkPut(writes);
       await stagePutMany('collection', writes);
+      await emitMany(
+        writes.map((e) => ({
+          ts: now,
+          kind: 'tradelist.mark' as const,
+          oracleId: e.oracleId,
+          scryfallId: e.scryfallId,
+          qty: gained.get(e)!,
+          condition: e.condition,
+          finish: e.finish,
+          lang: e.lang,
+          source: meta.source ?? 'manual',
+          batchId,
+        })),
+      );
     }
   });
   return flagged;
@@ -1208,6 +1229,23 @@ async function removeCopiesRaw(e: UserEvent, now: number): Promise<void> {
   }
 }
 
+/** Change an entry's quantityForTrade by delta (reverse of a tradelist mark). */
+async function tradeMarkAdjustRaw(e: UserEvent, delta: number, now: number): Promise<void> {
+  if (!e.scryfallId || !delta) return;
+  const existing = await db.collection
+    .where('[scryfallId+condition+finish+lang]')
+    .equals([e.scryfallId, e.condition ?? 'NM', e.finish ?? 'nonfoil', e.lang ?? 'en'])
+    .first();
+  if (!existing) return;
+  const next: CollectionEntry = {
+    ...existing,
+    quantityForTrade: clamp(existing.quantityForTrade + delta, 0, existing.quantity),
+    updatedAt: now,
+  };
+  await db.collection.put(next);
+  await stagePut('collection', next);
+}
+
 /** Change a wishlist line by delta (negative removes, positive re-adds). */
 async function wishlistAdjustRaw(e: UserEvent, delta: number, now: number): Promise<void> {
   if (!delta) return;
@@ -1310,6 +1348,9 @@ async function reverseEvent(e: UserEvent, now: number): Promise<void> {
       break;
     case 'deck.remove':
       await deckAdjustRaw(e, e.qty ?? 1, now);
+      break;
+    case 'tradelist.mark':
+      await tradeMarkAdjustRaw(e, -(e.qty ?? 1), now);
       break;
   }
 }

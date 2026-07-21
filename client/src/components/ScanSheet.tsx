@@ -377,6 +377,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     const flagged = tradeReqs.length
       ? await markOwnedForTrade(
           tradeReqs.map((l) => ({ oracleId: l.oracleId, scryfallId: l.scryfallId, condition: l.condition, finish: l.finish, lang: l.lang, quantity: l.quantity })),
+          { source: 'scan' },
         )
       : 0;
     const added = importLines.length ? (await applyImport(importLines, { source: 'scan', replaceOracleIds })).cards : 0;

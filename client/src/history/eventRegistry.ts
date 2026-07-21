@@ -56,6 +56,8 @@ export function describeEvent(e: UserEvent): EventDisplay {
       return { verb: 'Wish fulfilled', icon: 'wishlist', direction: 'neutral' };
     case 'wish.remove':
       return { verb: 'Removed from wishlist', icon: 'wishlist', direction: 'neutral' };
+    case 'tradelist.mark':
+      return { verb: 'Marked for trade', icon: 'tradelist', direction: 'neutral' };
   }
 }
 
@@ -68,6 +70,7 @@ export function describeEvent(e: UserEvent): EventDisplay {
 export function describeBatch(source: EventSource, label?: string, kind?: UserEventKind): EventDisplay {
   if (kind === 'deck.add') return { verb: `Added to ${label ?? 'a deck'}`, icon: 'decks', direction: 'in' };
   if (kind === 'wish.add') return { verb: 'Added to wishlist', icon: 'wishlist', direction: 'neutral' };
+  if (kind === 'tradelist.mark') return { verb: 'Marked for trade', icon: 'tradelist', direction: 'neutral' };
   if (source === 'scan') return { verb: 'Scanned', icon: 'camera', direction: 'in' };
   if (source === 'sealed') return { verb: label ?? 'Sealed product', icon: 'sealed', direction: 'in' };
   if (source === 'trade') return { verb: 'Trade', icon: 'trade', direction: 'neutral' };
@@ -111,6 +114,7 @@ export const FILTER_CATEGORIES: readonly FilterCategory[] = [
   { value: 'trade', label: 'Trades', match: isTrade },
   { value: 'wishlist', label: 'Wishlist', match: (e) => e.kind.startsWith('wish.') },
   { value: 'deck', label: 'Decks', match: (e) => e.kind.startsWith('deck.') },
+  { value: 'tradelist', label: 'Tradelist', match: (e) => e.kind === 'tradelist.mark' },
 ];
 
 /** Whether an event shows in the edit-history view at all (all do, for now). */

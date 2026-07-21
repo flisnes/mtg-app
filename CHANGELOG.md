@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.41.2
+
+- **Marking a batch of owned cards for trade now shows up in your edit history.** When a tradelist scan flags copies you already own, the whole batch lands as a single "Marked for trade" entry (stacked thumbnail and all) that you can open and undo, instead of silently changing your tradelist with no record.
+
 ## 0.41.1
 
 - **Scanning owned cards into your tradelist no longer forces you to choose "add copies" or nothing.** When a scanned card is already in your collection, the tradelist screen now offers **Trade** (mark the copies you already own for trade, adds nothing), **Add** (you got more, add and mark them), or **Skip**. Trade is the default, so scanning your binder just flags what you have instead of doubling your counts or leaving cards off the list.

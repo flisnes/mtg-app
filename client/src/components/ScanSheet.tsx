@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Condition, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
-import { addDeckCardsBulk, addToWishlistBulk, applyImport } from '../db/dataAccess.js';
+import { addDeckCardsBulk, addToWishlistBulk, applyImport, markOwnedForTrade } from '../db/dataAccess.js';
 import { getOracleCard, getOracleCardsByIds, getPrinting, getPrintingsByIds } from '../db/queries.js';
 import { ImportConflicts } from '../import/ImportConflicts.js';
 import { findImportConflicts, type ConflictChoice, type ImportConflict } from '../import/conflicts.js';
@@ -361,19 +361,28 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   };
 
   /**
-   * Commit the collection/tradelist lines through the shared import path (one
-   * batched history entry), honoring the conflict screen's per-card choices.
+   * Commit the collection/tradelist lines, honoring the conflict screen's
+   * per-card choices. 'trade' (tradelist only) flags copies already owned for
+   * trade without adding any; everything else goes through the batched import
+   * path (one history entry). 'skip' drops the line entirely.
    */
   const commitLines = async (lines: ResolvedLine[], choices: Map<string, ConflictChoice>) => {
-    const kept = lines.filter((l) => choices.get(l.oracleId) !== 'skip');
+    const tradeReqs = lines.filter((l) => choices.get(l.oracleId) === 'trade');
+    const importLines = lines.filter((l) => {
+      const c = choices.get(l.oracleId);
+      return c !== 'skip' && c !== 'trade';
+    });
     const replaceOracleIds = [...choices].filter(([, c]) => c === 'replace').map(([id]) => id);
-    if (kept.length === 0) {
-      toast('Nothing added: every card was skipped');
-      finishScan();
-      return;
-    }
-    const res = await applyImport(kept, { source: 'scan', replaceOracleIds });
-    toast(`Added ${res.cards} card${res.cards === 1 ? '' : 's'} to ${targetLabel(target)}`);
+
+    const flagged = tradeReqs.length
+      ? await markOwnedForTrade(
+          tradeReqs.map((l) => ({ oracleId: l.oracleId, scryfallId: l.scryfallId, condition: l.condition, finish: l.finish, lang: l.lang, quantity: l.quantity })),
+        )
+      : 0;
+    const added = importLines.length ? (await applyImport(importLines, { source: 'scan', replaceOracleIds })).cards : 0;
+
+    const n = added + flagged;
+    toast(n === 0 ? 'Nothing added: every card was skipped' : `Added ${n} card${n === 1 ? '' : 's'} to ${targetLabel(target)}`);
     finishScan();
   };
 
@@ -522,18 +531,51 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         />
       )}
 
-      {conflictStep && (
-        <div className="sheet-backdrop" onClick={() => setConflictStep(null)}>
-          <div className="sheet" role="dialog" aria-label="Resolve duplicates" onClick={(e) => e.stopPropagation()}>
-            <ImportConflicts
-              conflicts={conflictStep.conflicts}
-              otherCount={conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0)}
-              onConfirm={(choices) => commitLines(conflictStep.lines, choices)}
-              onBack={() => setConflictStep(null)}
-            />
-          </div>
-        </div>
-      )}
+      {conflictStep &&
+        (() => {
+          const nConflicts = conflictStep.conflicts.length;
+          const otherCount = conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0);
+          const toTradelist = target.kind === 'tradelist';
+          return (
+            <div className="sheet-backdrop" onClick={() => setConflictStep(null)}>
+              <div className="sheet" role="dialog" aria-label="Resolve duplicates" onClick={(e) => e.stopPropagation()}>
+                <ImportConflicts
+                  conflicts={conflictStep.conflicts}
+                  otherCount={otherCount}
+                  options={
+                    toTradelist
+                      ? [
+                          { value: 'trade', label: 'Trade' },
+                          { value: 'add', label: 'Add' },
+                          { value: 'skip', label: 'Skip' },
+                        ]
+                      : undefined
+                  }
+                  defaultChoice={toTradelist ? 'trade' : undefined}
+                  intro={
+                    toTradelist ? (
+                      <>
+                        {nConflicts} scanned card{nConflicts === 1 ? '' : 's'} {nConflicts === 1 ? 'is' : 'are'} already in your
+                        collection. Per card: <strong>Trade</strong> marks the copies you already own for trade (adds nothing),{' '}
+                        <strong>Add</strong> adds new copies and marks them, <strong>Skip</strong> leaves it off your tradelist.
+                        {otherCount > 0 && (
+                          <>
+                            {' '}
+                            The other {otherCount} card{otherCount === 1 ? '' : 's'} you don&rsquo;t own yet {otherCount === 1 ? 'is' : 'are'}{' '}
+                            added to your collection and marked for trade.
+                          </>
+                        )}
+                      </>
+                    ) : undefined
+                  }
+                  confirmLabel={(n) => (n === 0 ? 'Nothing to add' : `Add ${n} card${n === 1 ? '' : 's'} to ${targetLabel(target)}`)}
+                  onConfirm={(choices) => commitLines(conflictStep.lines, choices)}
+                  onBack={() => setConflictStep(null)}
+                />
+              </div>
+            </div>
+          );
+        })()}
     </div>,
     document.body,
   );

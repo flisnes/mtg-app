@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.41.1
+
+- **Scanning owned cards into your tradelist no longer forces you to choose "add copies" or nothing.** When a scanned card is already in your collection, the tradelist screen now offers **Trade** (mark the copies you already own for trade, adds nothing), **Add** (you got more, add and mark them), or **Skip**. Trade is the default, so scanning your binder just flags what you have instead of doubling your counts or leaving cards off the list.
+
 ## 0.41.0
 
 - **Imports and scans land as one entry in your history.** A scanned batch or an imported list (including into a deck) now shows up as a single stacked "N cards" entry instead of flooding the edit history with one row per card.

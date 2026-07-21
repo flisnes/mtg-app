@@ -7,7 +7,9 @@ import type { ResolvedLine } from './types.js';
 // can decide per card whether to skip the import line, add on top, or replace
 // what they own. Resolution itself happens in applyImport (dataAccess).
 
-export type ConflictChoice = 'skip' | 'add' | 'replace';
+// 'skip'/'add'/'replace' are the collection-import choices; 'trade' is the
+// tradelist-scan choice (flag copies you already own for trade, add nothing).
+export type ConflictChoice = 'skip' | 'add' | 'replace' | 'trade';
 
 export interface ImportConflict {
   oracleId: string;

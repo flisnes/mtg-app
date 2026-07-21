@@ -364,6 +364,66 @@ export async function setQuantityForTradeBulk(updates: { id: string; quantityFor
   });
 }
 
+export interface MarkForTradeRequest {
+  oracleId: string;
+  scryfallId: string;
+  condition: Condition;
+  finish: Finish;
+  lang: string;
+  quantity: number;
+}
+
+/**
+ * Flag already-owned copies for trade without adding new ones — the tradelist
+ * scan of cards you already have. For each request, up to `quantity` copies of
+ * that card are marked for trade, preferring the scanned printing/finish/
+ * condition, then looser matches (any printing of the same card). Returns how
+ * many copies were newly flagged. Like the other tradelist toggles, this emits
+ * no history event.
+ */
+export async function markOwnedForTrade(requests: MarkForTradeRequest[]): Promise<number> {
+  if (requests.length === 0) return 0;
+  let flagged = 0;
+  await db.transaction('rw', [db.collection, db.outbox], async () => {
+    const now = Date.now();
+    const oracleIds = [...new Set(requests.map((r) => r.oracleId))];
+    const owned = await db.collection.where('oracleId').anyOf(oracleIds).toArray();
+    const byOracle = new Map<string, CollectionEntry[]>();
+    for (const e of owned) {
+      const arr = byOracle.get(e.oracleId);
+      if (arr) arr.push(e);
+      else byOracle.set(e.oracleId, [e]);
+    }
+    const touched = new Set<CollectionEntry>();
+    for (const req of requests) {
+      const entries = byOracle.get(req.oracleId);
+      if (!entries) continue;
+      // Best match first: exact printing, then finish, then condition.
+      const score = (e: CollectionEntry) =>
+        (e.scryfallId === req.scryfallId ? 4 : 0) + (e.finish === req.finish ? 2 : 0) + (e.condition === req.condition ? 1 : 0);
+      const ranked = [...entries].sort((a, b) => score(b) - score(a));
+      let remaining = req.quantity;
+      for (const e of ranked) {
+        if (remaining <= 0) break;
+        const room = e.quantity - e.quantityForTrade;
+        if (room <= 0) continue;
+        const take = Math.min(room, remaining);
+        e.quantityForTrade += take;
+        e.updatedAt = now;
+        remaining -= take;
+        flagged += take;
+        touched.add(e);
+      }
+    }
+    const writes = [...touched];
+    if (writes.length > 0) {
+      await db.collection.bulkPut(writes);
+      await stagePutMany('collection', writes);
+    }
+  });
+  return flagged;
+}
+
 /** Delete many collection entries outright in one transaction (bulk delete). */
 export async function removeCollectionEntriesBulk(ids: string[], reason: RemovalReason = 'sold'): Promise<void> {
   if (ids.length === 0) return;

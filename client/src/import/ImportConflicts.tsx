@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Condition, Finish, Printing } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import type { ConflictChoice, ImportConflict } from './conflicts.js';
 
-// Step between the import review and the actual commit: every card that's
-// already in the collection (any printing) is listed with what's owned vs what
-// the import brings, and the user picks skip / add / replace per card — or for
-// all at once. Non-conflicting lines always import.
+// Step between a review and the actual commit: every card that's already in the
+// collection (any printing) is listed with what's owned vs what's incoming, and
+// the user picks a per-card choice — or one for all at once. Non-conflicting
+// lines always go through. The choices, default, intro copy, and confirm label
+// are configurable so the same screen serves collection import (skip/add/
+// replace) and the tradelist scan (trade/add/skip).
 
 const CHOICES: { value: ConflictChoice; label: string }[] = [
   { value: 'skip', label: 'Skip' },
@@ -19,16 +21,27 @@ export function ImportConflicts({
   otherCount,
   onConfirm,
   onBack,
+  options = CHOICES,
+  defaultChoice = 'add',
+  intro,
+  confirmLabel,
 }: {
   conflicts: ImportConflict[];
-  /** Import lines with no conflict — they import regardless. */
+  /** Lines with no conflict — they go through regardless. */
   otherCount: number;
   onConfirm: (choices: Map<string, ConflictChoice>) => void | Promise<void>;
   onBack: () => void;
+  /** Choice buttons offered per card (and as "… all" presets). */
+  options?: { value: ConflictChoice; label: string }[];
+  /** Which choice each card starts on. */
+  defaultChoice?: ConflictChoice;
+  /** Explanatory paragraph; falls back to the import wording. */
+  intro?: ReactNode;
+  /** Confirm-button text for the count of affected cards. */
+  confirmLabel?: (count: number) => string;
 }) {
-  // Per-card decision, defaulting to 'add' (the old, always-merge behavior).
   const [choices, setChoices] = useState<Map<string, ConflictChoice>>(
-    () => new Map(conflicts.map((c) => [c.oracleId, 'add' as ConflictChoice])),
+    () => new Map(conflicts.map((c) => [c.oracleId, defaultChoice])),
   );
   const [busy, setBusy] = useState(false);
 
@@ -61,26 +74,32 @@ export function ImportConflicts({
     [conflicts, otherCount, choices],
   );
 
+  const defaultIntro = (
+    <>
+      {conflicts.length} card{conflicts.length === 1 ? '' : 's'} in this import {conflicts.length === 1 ? 'is' : 'are'}{' '}
+      already in your collection (any printing counts). Per card: <strong>Skip</strong> leaves your collection as is,{' '}
+      <strong>Add</strong> adds the import on top, <strong>Replace</strong> swaps what you own for the import&rsquo;s copies.
+      {otherCount > 0 && <> The other {otherCount} line{otherCount === 1 ? '' : 's'} import{otherCount === 1 ? 's' : ''} either way.</>}
+    </>
+  );
+
   return (
     <>
       <div className="about-section">
         <h2>Already in your collection</h2>
-        <p className="fine-print">
-          {conflicts.length} card{conflicts.length === 1 ? '' : 's'} in this import {conflicts.length === 1 ? 'is' : 'are'}{' '}
-          already in your collection (any printing counts). Per card: <strong>Skip</strong> leaves your collection as is,{' '}
-          <strong>Add</strong> adds the import on top, <strong>Replace</strong> swaps what you own for the import&rsquo;s copies.
-          {otherCount > 0 && <> The other {otherCount} line{otherCount === 1 ? '' : 's'} import{otherCount === 1 ? 's' : ''} either way.</>}
-        </p>
-        <div className="chips" role="group" aria-label="Resolve all conflicts">
-          <button className="chip" onClick={() => setAll('skip')}>Skip all</button>
-          <button className="chip" onClick={() => setAll('add')}>Add all</button>
-          <button className="chip" onClick={() => setAll('replace')}>Replace all</button>
+        <p className="fine-print">{intro ?? defaultIntro}</p>
+        <div className="chips" role="group" aria-label="Resolve all cards">
+          {options.map((o) => (
+            <button key={o.value} className="chip" onClick={() => setAll(o.value)}>
+              {o.label} all
+            </button>
+          ))}
         </div>
       </div>
 
       <ul className="result-list">
         {conflicts.map((c) => {
-          const choice = choices.get(c.oracleId) ?? 'add';
+          const choice = choices.get(c.oracleId) ?? defaultChoice;
           return (
             <li key={c.oracleId} className="result-row" style={{ flexDirection: 'column', alignItems: 'stretch', padding: '0.6rem', gap: '0.4rem' }}>
               <div className="result-main">
@@ -93,7 +112,7 @@ export function ImportConflicts({
                 </div>
               </div>
               <div className="chips" role="group" aria-label={`Resolve ${c.name}`}>
-                {CHOICES.map((o) => (
+                {options.map((o) => (
                   <button
                     key={o.value}
                     className="chip"
@@ -123,7 +142,15 @@ export function ImportConflicts({
           }}
           disabled={busy}
         >
-          {busy ? 'Importing…' : importCount === 0 ? 'Skip everything' : `Import ${importCount} entries`}
+          {busy
+            ? confirmLabel
+              ? 'Working…'
+              : 'Importing…'
+            : confirmLabel
+              ? confirmLabel(importCount)
+              : importCount === 0
+                ? 'Skip everything'
+                : `Import ${importCount} entries`}
         </button>
       </div>
     </>

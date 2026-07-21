@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.42.0
+
+- **Pick which missing cards go to your wishlist when leaving a deck.** The "Add missing cards to wishlist?" prompt now gives every card a tick box (all ticked to start) plus a select/unselect all toggle, so you can drop the ones you don't want before adding. The whole add lands as a single batch entry in your edit history that you can open and undo in one go, instead of one row per card.
+
 ## 0.41.2
 
 - **Marking a batch of owned cards for trade now shows up in your edit history.** When a tradelist scan flags copies you already own, the whole batch lands as a single "Marked for trade" entry (stacked thumbnail and all) that you can open and undo, instead of silently changing your tradelist with no record.

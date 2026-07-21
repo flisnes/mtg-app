@@ -19,7 +19,7 @@ import {
   setDeckCardQuantity,
   setDeckFormat,
 } from '../db/dataAccess.js';
-import { addToWishlist } from '../db/dataAccess.js';
+import { addToWishlistBulk } from '../db/dataAccess.js';
 import { canBeCommander, checkDeckLegality, formatLabel, type LegalityReport } from '../deck/legality.js';
 import { buildDeckText } from '../deck/deckText.js';
 import { downloadText } from '../import/export.js';
@@ -60,6 +60,7 @@ export function DeckDetail() {
   const [showImport, setShowImport] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [exit, setExit] = useState<MissingCard[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('deck', { group: 'type' });
@@ -123,13 +124,22 @@ export function DeckDetail() {
 
   async function goBack() {
     const candidates = await computeDeckWishlistCandidates(id);
-    if (candidates.length) setExit(candidates);
-    else navigate('/decks');
+    if (candidates.length) {
+      setExit(candidates);
+      setPicked(new Set(candidates.map((c) => c.oracleId))); // all ticked by default
+    } else navigate('/decks');
   }
 
   async function addMissingToWishlist(candidates: MissingCard[]) {
-    for (const c of candidates) await addToWishlist({ oracleId: c.oracleId, scryfallId: null, quantity: c.addQty });
-    toast(`Added ${candidates.length} card${candidates.length === 1 ? '' : 's'} to wishlist`);
+    const chosen = candidates.filter((c) => picked.has(c.oracleId));
+    if (chosen.length) {
+      // One batch so the whole add is a single (undoable) edit-history entry.
+      await addToWishlistBulk(
+        chosen.map((c) => ({ oracleId: c.oracleId, scryfallId: null, quantity: c.addQty })),
+        { source: 'manual', label: deck.name },
+      );
+      toast(`Added ${chosen.length} card${chosen.length === 1 ? '' : 's'} to wishlist`);
+    }
     navigate('/decks');
   }
 
@@ -242,32 +252,58 @@ export function DeckDetail() {
         />
       )}
 
-      {exit && (
-        <Sheet onClose={() => navigate('/decks')} label="Add missing cards to wishlist">
-          <h2 style={{ margin: 0 }}>Add missing cards to wishlist?</h2>
-          <p className="fine-print">
-            This deck needs {exit.reduce((s, c) => s + c.addQty, 0)} card{exit.length === 1 ? '' : 's'} you don’t own and
-            haven’t wishlisted:
-          </p>
-          <ul className="result-list" style={{ maxHeight: '40dvh', overflowY: 'auto' }}>
-            {exit.map((c) => (
-              <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
-                <div className="result-main">
-                  <div className="result-name">
-                    {c.name} {c.addQty !== 1 && <span className="badge">×{c.addQty}</span>}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <div className="sheet-actions">
-            <button onClick={() => navigate('/decks')}>Skip</button>
-            <button className="primary" onClick={() => addMissingToWishlist(exit)}>
-              Add {exit.length} to wishlist
-            </button>
-          </div>
-        </Sheet>
-      )}
+      {exit &&
+        (() => {
+          const allPicked = exit.every((c) => picked.has(c.oracleId));
+          const chosen = exit.filter((c) => picked.has(c.oracleId));
+          const toggle = (oracleId: string) =>
+            setPicked((prev) => {
+              const next = new Set(prev);
+              if (next.has(oracleId)) next.delete(oracleId);
+              else next.add(oracleId);
+              return next;
+            });
+          const toggleAll = () => setPicked(allPicked ? new Set() : new Set(exit.map((c) => c.oracleId)));
+          return (
+            <Sheet onClose={() => navigate('/decks')} label="Add missing cards to wishlist">
+              <h2 style={{ margin: 0 }}>Add missing cards to wishlist?</h2>
+              <p className="fine-print">
+                This deck needs {exit.reduce((s, c) => s + c.addQty, 0)} card{exit.length === 1 ? '' : 's'} you don’t own
+                and haven’t wishlisted. Pick which to add:
+              </p>
+              <div className="list-toolbar">
+                <label className="chip" style={{ alignSelf: 'flex-start' }}>
+                  <input type="checkbox" checked={allPicked} onChange={toggleAll} />{' '}
+                  {allPicked ? 'Unselect all' : 'Select all'}
+                </label>
+                <span className="search-meta grow">
+                  {chosen.length} of {exit.length} selected
+                </span>
+              </div>
+              <ul className="result-list" style={{ maxHeight: '40dvh', overflowY: 'auto' }}>
+                {exit.map((c) => (
+                  <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
+                    <label
+                      className="result-main"
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+                    >
+                      <input type="checkbox" checked={picked.has(c.oracleId)} onChange={() => toggle(c.oracleId)} />
+                      <span className="result-name">
+                        {c.name} {c.addQty !== 1 && <span className="badge">×{c.addQty}</span>}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="sheet-actions">
+                <button onClick={() => navigate('/decks')}>Skip</button>
+                <button className="primary" disabled={chosen.length === 0} onClick={() => addMissingToWishlist(exit)}>
+                  Add {chosen.length} to wishlist
+                </button>
+              </div>
+            </Sheet>
+          );
+        })()}
     </section>
   );
 }

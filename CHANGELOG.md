@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.41.0
+
+- **Imports and scans land as one entry in your history.** A scanned batch or an imported list (including into a deck) now shows up as a single stacked "N cards" entry instead of flooding the edit history with one row per card.
+- **Scanning cards you already own asks before piling on copies.** Adding a scan to your collection or tradelist now surfaces the same Skip / Add / Replace screen as importing when a card is already in your collection, so scanning your trade binder no longer silently doubles your counts.
+- **No more accidental double-adds.** Finishing a scan now confirms with a toast and closes the scanner, and the "Add to…" button locks while it saves, so an impatient second tap can't add everything twice.
+
 ## 0.40.1
 
 - **Collection list auto-loads when you scroll down.** The "Show 60 more" button is gone; just scroll and the next batch appears, so you never stop scrolling to tap.

@@ -436,11 +436,11 @@ export interface WishlistBulkLine {
  */
 export async function addToWishlistBulk(
   lines: WishlistBulkLine[],
-  meta: { label?: string } = {},
+  meta: { label?: string; source?: EventSource } = {},
 ): Promise<{ entries: number; cards: number }> {
   let cards = 0;
   const batchId = newId();
-  const batchExtra = { source: 'import' as const, batchId, ...(meta.label ? { batchLabel: meta.label } : {}) };
+  const batchExtra = { source: meta.source ?? 'import', batchId, ...(meta.label ? { batchLabel: meta.label } : {}) };
   await db.transaction('rw', WISHLIST_TABLES, async () => {
     const now = Date.now();
     const existing = await db.wishlist.toArray();
@@ -548,7 +548,7 @@ export interface ImportLine {
  */
 export async function applyImport(
   lines: ImportLine[],
-  meta: { source?: 'import' | 'sealed'; label?: string; replaceOracleIds?: string[] } = {},
+  meta: { source?: 'import' | 'sealed' | 'scan'; label?: string; replaceOracleIds?: string[] } = {},
 ): Promise<{ entries: number; cards: number }> {
   let cards = 0;
   // Every line of one import/sealed add shares a batchId, so the edit-history
@@ -777,11 +777,17 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
   });
 }
 
-/** Bulk-add (deck import), merging by (oracleId, board). */
+/**
+ * Bulk-add (deck import / scan / multi-select), merging by (oracleId, board).
+ * Every line shares a batchId so the edit-history view collapses the whole
+ * operation into one entry (labelled with the deck name).
+ */
 export async function addDeckCardsBulk(
   deckId: string,
   cards: Array<{ oracleId: string; quantity: number; board: DeckBoard; scryfallId?: string }>,
+  meta: { source?: EventSource } = {},
 ): Promise<void> {
+  const batchId = newId();
   await db.transaction('rw', DECK_TABLES, async () => {
     const now = Date.now();
     const existing = await db.deckCards.where('deckId').equals(deckId).toArray();
@@ -790,6 +796,13 @@ export async function addDeckCardsBulk(
     const touched = new Set<DeckCard>();
     const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
     const deck = await touchDeck(deckId, now);
+    // Default 'manual' (not 'import') so deck adds don't land in the collection
+    // "Imports" filter; the batchId still collapses them into one history entry.
+    const batchExtra = {
+      source: meta.source ?? 'manual',
+      batchId,
+      ...(deck ? { batchLabel: deck.name } : {}),
+    };
     for (const c of cards) {
       const ex = map.get(keyOf(c));
       if (ex) {
@@ -820,6 +833,7 @@ export async function addDeckCardsBulk(
         deckId,
         ...(deck ? { deckName: deck.name } : {}),
         board: c.board,
+        ...batchExtra,
       });
     }
     const writes = [...touched];

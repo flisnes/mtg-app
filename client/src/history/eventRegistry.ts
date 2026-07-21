@@ -1,4 +1,4 @@
-import type { EventSource, RemovalReason, UserEvent } from '@mtg/shared';
+import type { EventSource, RemovalReason, UserEvent, UserEventKind } from '@mtg/shared';
 import type { IconName } from '../components/icons.js';
 
 // Single source of truth for how a recorded UserEvent is presented — its label,
@@ -59,8 +59,16 @@ export function describeEvent(e: UserEvent): EventDisplay {
   }
 }
 
-/** How to render a grouped batch entry (import / sealed / trade). */
-export function describeBatch(source: EventSource, label?: string): EventDisplay {
+/**
+ * How to render a grouped batch entry (import / sealed / scan / trade). `kind`
+ * is a representative event of the batch: deck and wishlist batches are named
+ * for their destination (a scan into a deck still reads "Added to <deck>"),
+ * everything else by how the batch was made.
+ */
+export function describeBatch(source: EventSource, label?: string, kind?: UserEventKind): EventDisplay {
+  if (kind === 'deck.add') return { verb: `Added to ${label ?? 'a deck'}`, icon: 'decks', direction: 'in' };
+  if (kind === 'wish.add') return { verb: 'Added to wishlist', icon: 'wishlist', direction: 'neutral' };
+  if (source === 'scan') return { verb: 'Scanned', icon: 'camera', direction: 'in' };
   if (source === 'sealed') return { verb: label ?? 'Sealed product', icon: 'sealed', direction: 'in' };
   if (source === 'trade') return { verb: 'Trade', icon: 'trade', direction: 'neutral' };
   return { verb: 'Imported', icon: 'import', direction: 'in' };

@@ -84,7 +84,7 @@ export function EditHistory() {
 
   function itemFor(entry: HistoryEntry): CardItem {
     if (entry.kind === 'batch') {
-      const display = describeBatch(entry.source, entry.label);
+      const display = describeBatch(entry.source, entry.label, entry.events[0]?.kind);
       const count = entry.events.reduce((s, e) => s + (e.qty ?? 0), 0);
       const imgs: string[] = [];
       for (const e of entry.events) {

@@ -29,7 +29,7 @@ export function EventSheet({
   const { printMap, oracleMap } = useCardMaps(events.map((e) => ({ scryfallId: e.scryfallId ?? '', oracleId: e.oracleId })));
   useEscapeToClose(onClose);
 
-  const display = entry.kind === 'batch' ? describeBatch(entry.source, entry.label) : describeEvent(entry.event);
+  const display = entry.kind === 'batch' ? describeBatch(entry.source, entry.label, entry.events[0]?.kind) : describeEvent(entry.event);
   const totalCards = events.reduce((s, e) => s + (e.qty ?? 0), 0);
   const single = entry.kind === 'single' ? entry.event : null;
 

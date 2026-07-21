@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Condition, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
-import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
+import { addDeckCardsBulk, addToWishlistBulk, applyImport } from '../db/dataAccess.js';
 import { getOracleCard, getOracleCardsByIds, getPrinting, getPrintingsByIds } from '../db/queries.js';
+import { ImportConflicts } from '../import/ImportConflicts.js';
+import { findImportConflicts, type ConflictChoice, type ImportConflict } from '../import/conflicts.js';
+import type { ResolvedLine } from '../import/types.js';
 import { CardSheet, type SessionCardValues } from './CardSheet.js';
 import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
 import { getScanExcludedIds } from '../scan/exclusions.js';
@@ -148,6 +151,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const [fx, setFx] = useState<TapFx | null>(null);
   const [foil, setFoil] = useState(false);
   const [board, setBoard] = useState<DeckBoard>('main');
+  // True while the session is being written — guards against the double-tap
+  // that used to commit the whole scan twice (adding two copies of everything).
+  const [committing, setCommitting] = useState(false);
+  // Set when a collection/tradelist commit finds cards already owned: the
+  // skip/add/replace resolution screen (reused from import) shows until resolved.
+  const [conflictStep, setConflictStep] = useState<{ lines: ResolvedLine[]; conflicts: ImportConflict[] } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraScan | null>(null);
   const closedRef = useRef(false);
@@ -332,34 +341,88 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     cameraRef.current?.resume();
   };
 
+  /** The session as import lines (collection/tradelist go through applyImport). */
+  const sessionLines = (): ResolvedLine[] =>
+    session.map((e) => ({
+      oracleId: e.oracleId,
+      scryfallId: e.scryfallId,
+      name: e.name,
+      quantity: e.qty,
+      // Marked for trade only when the destination is the tradelist.
+      quantityForTrade: target.kind === 'tradelist' ? e.qty : 0,
+      condition: e.condition,
+      finish: e.finish,
+      lang: e.lang,
+    }));
+
+  const finishScan = () => {
+    cameraRef.current?.stop();
+    onClose();
+  };
+
+  /**
+   * Commit the collection/tradelist lines through the shared import path (one
+   * batched history entry), honoring the conflict screen's per-card choices.
+   */
+  const commitLines = async (lines: ResolvedLine[], choices: Map<string, ConflictChoice>) => {
+    const kept = lines.filter((l) => choices.get(l.oracleId) !== 'skip');
+    const replaceOracleIds = [...choices].filter(([, c]) => c === 'replace').map(([id]) => id);
+    if (kept.length === 0) {
+      toast('Nothing added: every card was skipped');
+      finishScan();
+      return;
+    }
+    const res = await applyImport(kept, { source: 'scan', replaceOracleIds });
+    toast(`Added ${res.cards} card${res.cards === 1 ? '' : 's'} to ${targetLabel(target)}`);
+    finishScan();
+  };
+
   /** Write the whole session to the target and leave the scanner. */
   const complete = async () => {
-    for (const e of session) {
+    if (committing || session.length === 0) return;
+    setCommitting(true);
+    try {
+      // Collection & tradelist route through the import pipeline: the batch scan
+      // becomes one history entry, and any card already owned surfaces the
+      // skip/add/replace screen instead of silently stacking extra copies.
+      if (target.kind === 'collection' || target.kind === 'tradelist') {
+        const lines = sessionLines();
+        const conflicts = await findImportConflicts(lines);
+        if (conflicts.length > 0) {
+          setConflictStep({ lines, conflicts });
+          return;
+        }
+        await commitLines(lines, new Map());
+        return;
+      }
       switch (target.kind) {
-        case 'collection':
-          await addToCollection({ oracleId: e.oracleId, scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang, quantity: e.qty, source: 'scan' });
-          break;
-        case 'tradelist':
-          // Same collection entry, but the copies start marked for trade.
-          await addToCollection({ oracleId: e.oracleId, scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang, quantity: e.qty, quantityForTrade: e.qty, source: 'scan' });
-          break;
         case 'wishlist':
           // A scanned card is a specific printing, so the wish is for that edition.
-          await addToWishlist({ oracleId: e.oracleId, scryfallId: e.scryfallId, quantity: e.qty, source: 'scan' });
+          await addToWishlistBulk(
+            session.map((e) => ({ oracleId: e.oracleId, scryfallId: e.scryfallId, quantity: e.qty })),
+            { source: 'scan' },
+          );
           break;
         case 'deck':
           // Deck slots key on oracle + board; keep the scanned printing as the
           // slot's preferred edition (like a hand-picked printing).
-          await addDeckCard({ deckId: target.deckId, oracleId: e.oracleId, scryfallId: e.scryfallId, board: e.board, quantity: e.qty });
+          await addDeckCardsBulk(
+            target.deckId,
+            session.map((e) => ({ oracleId: e.oracleId, scryfallId: e.scryfallId, board: e.board, quantity: e.qty })),
+            { source: 'scan' },
+          );
           break;
         case 'trade':
-          target.onAdd({ oracleId: e.oracleId, scryfallId: e.scryfallId, name: e.name, finish: e.finish, lang: e.lang, quantity: e.qty });
+          for (const e of session) {
+            target.onAdd({ oracleId: e.oracleId, scryfallId: e.scryfallId, name: e.name, finish: e.finish, lang: e.lang, quantity: e.qty });
+          }
           break;
       }
+      toast(`Added ${total} card${total === 1 ? '' : 's'} to ${targetLabel(target)}`);
+      finishScan();
+    } finally {
+      setCommitting(false);
     }
-    toast(`Added ${total} card${total === 1 ? '' : 's'} to ${targetLabel(target)}`);
-    cameraRef.current?.stop();
-    onClose();
   };
 
   const close = () => {
@@ -452,10 +515,24 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           entries={session}
           target={target}
           total={total}
+          busy={committing}
           onChange={setSession}
           onComplete={() => void complete()}
           onClose={closeList}
         />
+      )}
+
+      {conflictStep && (
+        <div className="sheet-backdrop" onClick={() => setConflictStep(null)}>
+          <div className="sheet" role="dialog" aria-label="Resolve duplicates" onClick={(e) => e.stopPropagation()}>
+            <ImportConflicts
+              conflicts={conflictStep.conflicts}
+              otherCount={conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0)}
+              onConfirm={(choices) => commitLines(conflictStep.lines, choices)}
+              onBack={() => setConflictStep(null)}
+            />
+          </div>
+        </div>
       )}
     </div>,
     document.body,
@@ -507,6 +584,7 @@ function SessionSheet({
   entries,
   target,
   total,
+  busy,
   onChange,
   onComplete,
   onClose,
@@ -514,6 +592,7 @@ function SessionSheet({
   entries: SessionEntry[];
   target: ScanTarget;
   total: number;
+  busy: boolean;
   onChange: (next: SessionEntry[]) => void;
   onComplete: () => void;
   onClose: () => void;
@@ -612,10 +691,10 @@ function SessionSheet({
         )}
 
         <div className="scan-confirm-actions">
-          <button className="primary" disabled={total === 0} onClick={onComplete}>
-            Add {total} card{total === 1 ? '' : 's'} to {targetLabel(target)}
+          <button className="primary" disabled={total === 0 || busy} onClick={onComplete}>
+            {busy ? 'Adding…' : `Add ${total} card${total === 1 ? '' : 's'} to ${targetLabel(target)}`}
           </button>
-          <button onClick={onClose}>Keep scanning</button>
+          <button onClick={onClose} disabled={busy}>Keep scanning</button>
         </div>
 
         {editing && entries[editing.index] && (

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Icon } from './icons.js';
+import { ManaCost } from './ManaCost.js';
 
 // The one way cards are displayed anywhere in the app: a list of CardItems
 // rendered as rows (CardList) or a tile grid (CardGrid), switched by the
@@ -107,6 +108,8 @@ export interface CardItem {
   onClick?: () => void;
   /** Subtitle line, list view only (set, condition, …). */
   sub?: ReactNode;
+  /** Mana cost (Scryfall braced string), rendered as pips in list rows. */
+  mana?: string | null;
   /** Right-aligned price, list view only. */
   price?: string;
   /** Recent price movement marker: chart glyph by the price / tile corner. */
@@ -179,6 +182,7 @@ export function CardList({
               </div>
               {it.sub && <div className="result-sub">{it.sub}</div>}
             </div>
+            {it.mana && <ManaCost cost={it.mana} className="result-mana" />}
             {it.trend && <TrendMark dir={it.trend} />}
             {it.price && <div className="result-price">{it.price}</div>}
             {it.count != null && it.count !== 1 && <div className="qty-pill">×{it.count}</div>}

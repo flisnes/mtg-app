@@ -143,6 +143,7 @@ export function CardSearchView({
                 key: card.oracleId,
                 name: card.name,
                 image: card.imageSmall ?? null,
+                mana: card.manaCost,
                 badge: b?.icon,
                 badgeClass: b?.cls,
                 badgeTitle: b?.title,

@@ -1312,6 +1312,11 @@ body:has(.bulk-bar) .app-main {
   font-size: 0.9rem;
   white-space: nowrap;
 }
+/* Mana pips in a list row: fixed to the right of the name, before the price. */
+.result-mana {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+}
 .rarity-dot {
   display: inline-block;
   width: 8px;

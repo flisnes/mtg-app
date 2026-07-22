@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.43.6
+
+- **Mana pips in list view.** List rows now show each card's mana cost as mana symbols, next to the price.
+
 ## 0.43.5
 
 - **Flip double-faced cards in the card sheet.** Werewolves, modal DFCs, and other two-faced cards now show a flip button on their art in the card sheet. Tap it to turn the card over and read the back.

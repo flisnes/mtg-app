@@ -280,6 +280,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
               key: r.entry.id,
               name: r.oracle?.name ?? '(unknown card)',
               image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
+              mana: r.oracle?.manaCost,
               foil: r.entry.finish !== 'nonfoil',
               count: r.entry.quantity,
               badge: r.entry.quantityForTrade > 0 ? `${r.entry.quantityForTrade} FT` : undefined,

@@ -29,6 +29,7 @@ export type IconName =
   | 'refresh'
   | 'close'
   | 'check'
+  | 'checkDouble'
   | 'account'
   | 'community'
   | 'bell'
@@ -180,6 +181,13 @@ const PATHS: Record<IconName, ReactElement> = {
   ),
   // Checkmark — selection / confirm.
   check: <polyline points="20 6 9 17 4 12" />,
+  // Two overlapping checkmarks — "own this exact printing".
+  checkDouble: (
+    <>
+      <path d="M18 6 7 17l-5-5" />
+      <path d="m22 10-7.5 7.5L13 16" />
+    </>
+  ),
   // Horizontal ellipsis — the "More" overflow.
   more: (
     <>

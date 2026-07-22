@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.43.1
+
+- **Double check = you've got that exact printing.** The "In your collection" badge on the card sheet now shows a double checkmark when the edition you're looking at is one you actually own, and the familiar single checkmark when you own the card but in a different printing.
+
 ## 0.43.0
 
 - **The card sheet now tells you if you already own a card.** Open any card (searching to add to a deck, wishlist, or tradelist, or tapping a card in someone else's tradelist) and a badge under the name shows "In your collection (×N)" if you own any printing, or flags how many you have marked for trade. No more guessing whether that hot pickup is already sitting in a box at home.

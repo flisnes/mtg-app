@@ -219,6 +219,8 @@ export function CardSheet({
   );
   const ownedQty = ownedEntries?.reduce((s, e) => s + e.quantity, 0) ?? 0;
   const ownedForTrade = ownedEntries?.reduce((s, e) => s + e.quantityForTrade, 0) ?? 0;
+  // Do we own the exact printing currently shown? (Not just some other edition.)
+  const ownsExact = !!scryfallId && (ownedEntries?.some((e) => e.scryfallId === scryfallId) ?? false);
   // Editions the caller flagged (owned / on a tradelist) group first in the dropdown.
   const highlighted = highlightPrintings ? printings.filter((p) => highlightPrintings.notes.has(p.scryfallId)) : [];
   const otherPrintings = highlighted.length > 0 ? printings.filter((p) => !highlightPrintings!.notes.has(p.scryfallId)) : printings;
@@ -325,12 +327,13 @@ export function CardSheet({
               <div
                 className={`badge sheet-owned ${ownedForTrade > 0 ? 'own-trade' : 'own-yes'}`}
                 title={
-                  ownedForTrade > 0
+                  (ownedForTrade > 0
                     ? `You own ${ownedQty} (${ownedForTrade} for trade)`
-                    : `You own ${ownedQty}`
+                    : `You own ${ownedQty}`) +
+                  (ownsExact ? ' · including this exact printing' : ' · other printing(s)')
                 }
               >
-                <Icon name={ownedForTrade > 0 ? 'tradelist' : 'check'} size={13} />
+                <Icon name={ownedForTrade > 0 ? 'tradelist' : ownsExact ? 'checkDouble' : 'check'} size={13} />
                 In your collection (×{ownedQty}
                 {ownedForTrade > 0 ? `, ${ownedForTrade} for trade` : ''})
               </div>

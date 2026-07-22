@@ -35,7 +35,8 @@ export type IconName =
   | 'bell'
   | 'qr'
   | 'list'
-  | 'grid';
+  | 'grid'
+  | 'flip';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -254,6 +255,15 @@ const PATHS: Record<IconName, ReactElement> = {
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="14" y="14" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
+    </>
+  ),
+  // Two curved arrows turning around — flip a double-faced card over.
+  flip: (
+    <>
+      <path d="M21 9a9 9 0 0 0-15-3.4L3 8" />
+      <polyline points="3 3 3 8 8 8" />
+      <path d="M3 15a9 9 0 0 0 15 3.4l3-2.4" />
+      <polyline points="21 21 21 16 16 16" />
     </>
   ),
 };

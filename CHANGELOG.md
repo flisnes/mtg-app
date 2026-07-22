@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.43.5
+
+- **Flip double-faced cards in the card sheet.** Werewolves, modal DFCs, and other two-faced cards now show a flip button on their art in the card sheet. Tap it to turn the card over and read the back.
+
 ## 0.43.4
 
 - **Ownership shows in the "view all editions" grid.** Open the grid of every printing and the ones you already own are marked with a double check in the corner, so you can see at a glance which exact editions are in your collection.

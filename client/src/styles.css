@@ -1437,6 +1437,26 @@ body:has(.bulk-bar) .app-main {
   max-width: none;
   border-radius: 0;
 }
+/* Flip control on a double-faced card's art — bottom-right, over the image. */
+.sheet-flip {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+.sheet-flip:hover {
+  background: rgba(0, 0, 0, 0.78);
+}
 .sheet-card-ph {
   display: flex;
   align-items: center;

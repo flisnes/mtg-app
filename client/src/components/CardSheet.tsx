@@ -244,7 +244,15 @@ export function CardSheet({
 
   // Full-size image + price for the currently-selected printing (falls back to the oracle default).
   const cardImage = printing?.imageNormal ?? oracleCard.imageNormal ?? printing?.imageSmall ?? oracleCard.imageSmall ?? null;
+  // Back face for double-faced cards (transform / modal DFC / …); absent for single-faced ones.
+  const cardBackImage =
+    printing?.imageBackNormal ?? oracleCard.imageBackNormal ?? printing?.imageBackSmall ?? oracleCard.imageBackSmall ?? null;
   const cardPrice = formatPrice(printing, oracleCard) ?? '—';
+  // Flip state for the shown card art; reset when switching editions (a
+  // different printing may not be double-faced at all).
+  const [flipped, setFlipped] = useState(false);
+  useEffect(() => setFlipped(false), [scryfallId]);
+  const shownImage = flipped && cardBackImage ? cardBackImage : cardImage;
 
   // Keep finish valid for the chosen printing.
   useEffect(() => {
@@ -331,8 +339,19 @@ export function CardSheet({
         <div className="sheet-head">
           {cardImage ? (
             <div className="sheet-card-wrap">
-              <img className="sheet-card" src={cardImage} alt={oracleCard.name} />
+              <img className="sheet-card" src={shownImage ?? cardImage} alt={oracleCard.name} />
               {finish !== 'nonfoil' && <span className="foil-sheen" aria-hidden />}
+              {cardBackImage && (
+                <button
+                  type="button"
+                  className="sheet-flip"
+                  onClick={() => setFlipped((f) => !f)}
+                  aria-label="Flip card"
+                  title="Flip card"
+                >
+                  <Icon name="flip" size={16} />
+                </button>
+              )}
             </div>
           ) : (
             <div className="sheet-card sheet-card-ph">{oracleCard.name}</div>

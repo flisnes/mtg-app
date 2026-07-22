@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useLiveQuery } from 'dexie-react-hooks';
 import type { CollectionEntry, Condition, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS } from '@mtg/shared';
 import {
@@ -14,6 +15,7 @@ import {
   updateWishlistEntry,
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
+import { db } from '../db/schema.js';
 import { getPriceHistory } from '../price/tracking.js';
 import { getMergedPriceHistory } from '../price/serverHistory.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
@@ -208,6 +210,15 @@ export function CardSheet({
     () => printings.find((p) => p.scryfallId === scryfallId),
     [printings, scryfallId],
   );
+  // "Do I own this card (any printing)?" — live so it reflects edits made from
+  // this very sheet. Shown everywhere except plain edit mode, where the entry
+  // being edited already proves ownership.
+  const ownedEntries = useLiveQuery(
+    () => db.collection.where('oracleId').equals(oracleCard.oracleId).toArray(),
+    [oracleCard.oracleId],
+  );
+  const ownedQty = ownedEntries?.reduce((s, e) => s + e.quantity, 0) ?? 0;
+  const ownedForTrade = ownedEntries?.reduce((s, e) => s + e.quantityForTrade, 0) ?? 0;
   // Editions the caller flagged (owned / on a tradelist) group first in the dropdown.
   const highlighted = highlightPrintings ? printings.filter((p) => highlightPrintings.notes.has(p.scryfallId)) : [];
   const otherPrintings = highlighted.length > 0 ? printings.filter((p) => !highlightPrintings!.notes.has(p.scryfallId)) : printings;
@@ -310,6 +321,20 @@ export function CardSheet({
           )}
           <div className="sheet-info">
             <div className="sheet-name">{oracleCard.name}</div>
+            {mode !== 'edit' && ownedQty > 0 && (
+              <div
+                className={`badge sheet-owned ${ownedForTrade > 0 ? 'own-trade' : 'own-yes'}`}
+                title={
+                  ownedForTrade > 0
+                    ? `You own ${ownedQty} (${ownedForTrade} for trade)`
+                    : `You own ${ownedQty}`
+                }
+              >
+                <Icon name={ownedForTrade > 0 ? 'tradelist' : 'check'} size={13} />
+                In your collection (×{ownedQty}
+                {ownedForTrade > 0 ? `, ${ownedForTrade} for trade` : ''})
+              </div>
+            )}
             {oracleCard.manaCost && (
               <div className="result-sub">
                 <ManaCost cost={oracleCard.manaCost} />

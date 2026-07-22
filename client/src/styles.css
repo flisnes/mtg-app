@@ -2324,6 +2324,14 @@ button.chip[aria-pressed='true'] {
 .badge.own-yes {
   background: rgba(78, 201, 123, 0.15);
 }
+/* Ownership badge under the card name in the card sheet. */
+.sheet-owned {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
 .badge.badge-wish {
   background: rgba(234, 197, 79, 0.15);
   color: #eac54f;

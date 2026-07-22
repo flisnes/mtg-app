@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.43.0
+
+- **The card sheet now tells you if you already own a card.** Open any card (searching to add to a deck, wishlist, or tradelist, or tapping a card in someone else's tradelist) and a badge under the name shows "In your collection (×N)" if you own any printing, or flags how many you have marked for trade. No more guessing whether that hot pickup is already sitting in a box at home.
+
 ## 0.42.3
 
 - **Tokens and art cards can't sneak into a deck.** If a token, emblem, or art card ends up in your mainboard, command zone, or sideboard, the deck is now flagged illegal, since those aren't real deck cards. As always, Casual decks skip legality entirely, so anything goes there.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { forceUpdate, initPwa } from './pwa.js';
 import { isUpdateAvailable } from './appUpdate.js';
 import { useCardDbUpdate } from './cardDb/useCardDbUpdate.js';
@@ -16,7 +16,7 @@ import { Trade } from './routes/Trade.js';
 import { History } from './routes/History.js';
 import { PriceMovers } from './routes/PriceMovers.js';
 import { About } from './routes/About.js';
-import { Account } from './routes/Account.js';
+import { Settings } from './routes/Settings.js';
 import { Community } from './routes/Community.js';
 import { Profile } from './routes/Profile.js';
 import { ProfileDeck } from './routes/ProfileDeck.js';
@@ -178,7 +178,9 @@ function AppShell() {
           <Route path="/history" element={<History />} />
           <Route path="/movers" element={<PriceMovers />} />
           <Route path="/about" element={<About />} />
-          <Route path="/account" element={<Account />} />
+          <Route path="/settings" element={<Settings />} />
+          {/* /account was the old combined page; Settings absorbed it. */}
+          <Route path="/account" element={<Navigate to="/settings" replace />} />
           <Route path="/community" element={<Community />} />
           <Route path="/community/:username" element={<Community />} />
           <Route path="/profile/:username" element={<Profile />} />

@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.44.0
+
+- **Tap your picture for a proper menu.** The avatar in the top-right corner now opens a little dropdown: **Profile**, **Settings**, and **About**. Your profile used to be buried (Community → your trades → Profile); now it's one tap away.
+- **Settings, gathered in one place.** The old "Account & sync" and "About & settings" pages have been reorganized. **Settings** now holds your account, sync, data transfer/backup, and Goblin mode. **About** is just the app version, card database info, and attribution. Old links still work.
+
 ## 0.43.6
 
 - **Mana pips in list view.** List rows now show each card's mana cost as mana symbols, next to the price.

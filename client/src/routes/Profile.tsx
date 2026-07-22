@@ -44,7 +44,7 @@ export function Profile() {
   if (!account.enabled || account.session === null) {
     return (
       <Page title="Profile">
-        <EmptyState hint={<Link to="/account">Go to Account &amp; sync</Link>}>
+        <EmptyState hint={<Link to="/settings">Go to Settings</Link>}>
           {account.enabled ? 'Sign in to view profiles.' : 'Accounts aren’t configured for this build yet.'}
         </EmptyState>
       </Page>

@@ -64,7 +64,7 @@ export function DataTransfer() {
           Your transfer code is <strong className="trade-code">{t.code}</strong>
         </p>
         <p className="fine-print">
-          On the other device, open About &amp; settings → Your data → “Receive from another device” and enter this
+          On the other device, open Settings → Your data → “Receive from another device” and enter this
           code. Nothing is sent until it connects.
         </p>
         <button onClick={t.reset}>Cancel</button>

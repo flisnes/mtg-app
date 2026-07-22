@@ -1998,6 +1998,38 @@ button.primary {
   color: inherit;
 }
 
+/* ---- Header account dropdown ---- */
+.account-menu {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+}
+.account-menu-pop {
+  min-width: 220px;
+}
+.account-menu-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.4rem 0.7rem 0.5rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.account-menu-name {
+  font-weight: 600;
+  color: var(--text);
+}
+.account-menu-sync {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.account-menu-sync-busy {
+  color: #e6a23c;
+}
+.account-menu-sync-err {
+  color: var(--danger);
+}
+
 /* ---- Deck detail ---- */
 .deck-head {
   display: flex;

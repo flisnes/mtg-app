@@ -12,13 +12,16 @@ import {
 import { useAccount } from '../account/useAccount.js';
 import { syncNow } from '../sync/engine.js';
 import { useToast } from '../components/Toast.js';
-import { EmptyState, Page } from './Page.js';
+import { DataTransfer } from '../components/DataTransfer.js';
+import { deleteAllUserData } from '../db/dataAccess.js';
+import { setGoblinMode, useGoblinMode } from '../components/useGoblinMode.js';
+import { formatDiagnostics } from '../errorLog.js';
+import { Page } from './Page.js';
 import { fmtDateTime as fmtWhen } from '../util/format.js';
 
-// Account & sync (opt-in). One combined agreement covers everything the
-// feature does: your data syncs through the server between your devices, and
-// your tradelist + wishlist are visible to other signed-in users.
-
+// One home for everything management-y: your account (auth + sync), your data
+// (transfer/backup), and preferences. Purely informational bits (version,
+// attribution) live on the About page instead.
 
 function errText(err: unknown): string {
   if (err instanceof ApiError) return err.friendlyMessage;
@@ -47,26 +50,47 @@ const DISCLAIMER = (
   </div>
 );
 
-export function Account() {
+export function Settings() {
+  const account = useAccount();
+
+  return (
+    <Page title="Settings">
+      <AccountSection />
+      <PreferencesSection />
+      <DataSection signedIn={!!account.session} />
+      <TroubleSection />
+    </Page>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Account: auth when signed out; sync + management when signed in
+// ---------------------------------------------------------------------------
+
+function AccountSection() {
   const account = useAccount();
 
   if (!account.enabled) {
     return (
-      <Page title="Account & sync">
-        <EmptyState hint="Coming in a later update.">
-          Accounts need a secure connection to the server, which isn’t configured for this build yet.
-        </EmptyState>
-      </Page>
+      <section className="about-section">
+        <h2>Account &amp; sync</h2>
+        <p className="fine-print">
+          Accounts (to sync across devices and share trade lists) need a secure connection to the server, which isn’t
+          configured for this build yet. Coming in a later update.
+        </p>
+      </section>
     );
   }
-  if (account.session === undefined) return <Page title="Account & sync">{null}</Page>;
-
+  if (account.session === undefined) {
+    return (
+      <section className="about-section">
+        <h2>Account &amp; sync</h2>
+        {null}
+      </section>
+    );
+  }
   return account.session ? <SignedIn /> : <SignedOut />;
 }
-
-// ---------------------------------------------------------------------------
-// Signed out: disclaimer + create/sign-in forms
-// ---------------------------------------------------------------------------
 
 function SignedOut() {
   const [mode, setMode] = useState<'create' | 'signin'>('create');
@@ -108,10 +132,12 @@ function SignedOut() {
   }
 
   return (
-    <Page
-      title="Account & sync"
-      subtitle="Optional: keep your collection in sync across your devices and share your trade and wishlists with other users."
-    >
+    <section className="about-section">
+      <h2>Account &amp; sync</h2>
+      <p className="fine-print">
+        Optional: keep your collection in sync across your devices and share your trade and wishlists with other users.
+      </p>
+
       <div className="seg-row" role="tablist" aria-label="Account mode">
         <button
           role="tab"
@@ -183,13 +209,9 @@ function SignedOut() {
           {busy ? 'Working…' : creating ? 'Create account' : 'Sign in'}
         </button>
       </form>
-    </Page>
+    </section>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Signed in: sync status, sign out, delete
-// ---------------------------------------------------------------------------
 
 function SignedIn() {
   const { session, syncReady, pendingChanges, sync } = useAccount();
@@ -224,9 +246,10 @@ function SignedIn() {
   }
 
   return (
-    <Page title="Account & sync" subtitle={`Signed in as ${session?.username ?? ''}.`}>
+    <>
       <section className="about-section">
         <h2>Sync</h2>
+        <p className="fine-print">Signed in as {session?.username ?? ''}.</p>
         {!syncReady ? (
           <div className="conflict-panel" role="alert">
             <p className="fine-print">
@@ -280,12 +303,8 @@ function SignedIn() {
         <h2>Community</h2>
         <p className="fine-print">
           Your tradelist and wishlist are shared with other users whenever they change.{' '}
-          <Link to="/community">Browse everyone’s lists</Link> to find matches.
-        </p>
-        <p className="fine-print">
-          <Link to={`/profile/${encodeURIComponent(session?.username ?? '')}`}>Your profile</Link> is what others see
-          when they tap your picture: pick a card art as your profile picture and show off three favorite cards and
-          decks.
+          <Link to="/community">Browse everyone’s lists</Link> to find matches. Tap your picture (top right) any time
+          to open your profile.
         </p>
       </section>
 
@@ -310,6 +329,102 @@ function SignedIn() {
         )}
         <p className="fine-print">Deleting removes your synced data and shared lists from the server. Data on this device stays.</p>
       </section>
-    </Page>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Preferences
+// ---------------------------------------------------------------------------
+
+function PreferencesSection() {
+  const goblinMode = useGoblinMode();
+  return (
+    <section className="about-section">
+      <h2>Goblin mode</h2>
+      <p className="fine-print">
+        Adds a third way to view your collection: one big, unsorted pile. Shove cards around with your finger to dig
+        through it, double-tap a card to flip it over, and press and hold one for its details. Sorting and filtering
+        are for humans.
+      </p>
+      <label className="agree-row">
+        <input type="checkbox" checked={goblinMode} onChange={(e) => void setGoblinMode(e.target.checked)} />
+        <span>Enable goblin mode</span>
+      </label>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Your data: transfer + local wipe
+// ---------------------------------------------------------------------------
+
+function DataSection({ signedIn }: { signedIn: boolean }) {
+  const [confirming, setConfirming] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function handleDelete() {
+    await deleteAllUserData();
+    setConfirming(false);
+    setDone(true);
+  }
+
+  return (
+    <section className="about-section">
+      <h2>Your data</h2>
+      <p className="fine-print">
+        Everything is stored on this device. The server only keeps a copy if you create an account and back up (the
+        Account &amp; sync section above). Trades themselves always live on your device. Clearing your browser data
+        will erase your collection, so export regularly or keep a backup.
+      </p>
+      <p className="fine-print">
+        Moving to a new phone or browser? Transfer your collection, lists and decks with a one-time code. The data
+        goes straight to the other device and is never stored on the server.
+      </p>
+      <DataTransfer />
+      {done ? (
+        <p role="status">All local data deleted.</p>
+      ) : signedIn ? (
+        <p className="fine-print">
+          “Delete all my data” is disabled while signed in: this device syncs with your account, so a local wipe
+          would quietly fall out of sync. Sign out first (Account &amp; sync above), or delete the whole account
+          there instead.
+        </p>
+      ) : confirming ? (
+        <div className="confirm-row">
+          <button className="danger" onClick={handleDelete}>
+            Yes, delete everything
+          </button>
+          <button onClick={() => setConfirming(false)}>Cancel</button>
+        </div>
+      ) : (
+        <button className="danger-outline" onClick={() => setConfirming(true)}>
+          Delete all my data
+        </button>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Troubleshooting
+// ---------------------------------------------------------------------------
+
+function TroubleSection() {
+  return (
+    <section className="about-section">
+      <h2>Having trouble?</h2>
+      <p className="fine-print">
+        If something breaks, copy the diagnostic log and send it along. It includes recent errors and your app/device
+        version, but no card data.
+      </p>
+      <button
+        onClick={() => {
+          void navigator.clipboard?.writeText(formatDiagnostics());
+        }}
+      >
+        Copy diagnostic log
+      </button>
+    </section>
   );
 }

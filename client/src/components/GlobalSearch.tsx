@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { matchPath, useLocation, useNavigate } from 'react-router-dom';
+import { matchPath, useLocation } from 'react-router-dom';
 import type { Color, DeckBoard, DeckFormat, OracleCard, Priced } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
@@ -17,8 +17,8 @@ import { formatLabel } from '../deck/legality.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
 import { useToast } from './Toast.js';
-import { Avatar } from './Avatar.js';
 import { Icon } from './icons.js';
+import { AccountMenu } from './AccountMenu.js';
 import { NotificationBell } from './NotificationBell.js';
 import { useAccount } from '../account/useAccount.js';
 import { useOwnAvatar } from '../account/ownProfile.js';
@@ -74,7 +74,6 @@ export function GlobalSearchBar() {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({});
   const location = useLocation();
-  const navigate = useNavigate();
   const { enabled: accountsEnabled, session, syncReady, pendingChanges, sync } = useAccount();
   const signedIn = !!session;
   const ownAvatar = useOwnAvatar(session);
@@ -156,19 +155,13 @@ export function GlobalSearchBar() {
           accountsEnabled && (
             <>
               {signedIn && <NotificationBell />}
-              <button
-                className={signedIn && ownAvatar ? 'header-account header-account-avatar' : 'header-account'}
-                onClick={() => navigate('/account')}
-                aria-label={signedIn ? `Account: signed in as ${session!.username} (${syncLabel})` : 'Account & sync'}
-                title={signedIn ? `Signed in as ${session!.username} (${syncLabel})` : 'Account & sync'}
-              >
-                {signedIn && ownAvatar ? (
-                  <Avatar avatar={ownAvatar} username={session!.username} size={28} />
-                ) : (
-                  <Icon name="account" size={22} />
-                )}
-                {signedIn && <span className={`header-account-dot header-account-dot-${syncTone}`} aria-hidden />}
-              </button>
+              <AccountMenu
+                signedIn={signedIn}
+                username={session?.username}
+                ownAvatar={ownAvatar}
+                syncTone={syncTone}
+                syncLabel={syncLabel}
+              />
             </>
           )
         )}

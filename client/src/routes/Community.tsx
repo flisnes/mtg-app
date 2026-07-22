@@ -72,7 +72,7 @@ export function Community() {
   if (!account.enabled || account.session === null) {
     return (
       <Page title="Community" subtitle="Browse other users’ trade and wishlists.">
-        <EmptyState hint={<Link to="/account">Go to Account &amp; sync</Link>}>
+        <EmptyState hint={<Link to="/settings">Go to Settings</Link>}>
           {account.enabled
             ? 'Sign in to browse other users’ lists. Your own trade and wishlist are shared when you back up.'
             : 'Accounts aren’t configured for this build yet.'}

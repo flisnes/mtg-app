@@ -9,8 +9,8 @@ const LINKS: { to: string; label: string; icon: IconName }[] = [
   { to: '/community', label: 'Community', icon: 'community' },
   { to: '/edit-history', label: 'Edit history', icon: 'edit' },
   { to: '/history', label: 'Trade history', icon: 'history' },
-  { to: '/account', label: 'Account & sync', icon: 'account' },
-  { to: '/about', label: 'About & settings', icon: 'about' },
+  { to: '/settings', label: 'Settings', icon: 'settings' },
+  { to: '/about', label: 'About', icon: 'about' },
 ];
 
 export function More() {

@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Page } from './Page.js';
 import { APP_VERSION } from '../version.js';
-import { useAccount } from '../account/useAccount.js';
-import { DataTransfer } from '../components/DataTransfer.js';
-import { deleteAllUserData } from '../db/dataAccess.js';
 import { getSetting } from '../db/settings.js';
-import { setGoblinMode, useGoblinMode } from '../components/useGoblinMode.js';
-import { formatDiagnostics } from '../errorLog.js';
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return '—';
@@ -15,10 +10,6 @@ function formatDate(iso: string | undefined): string {
 }
 
 export function About() {
-  const goblinMode = useGoblinMode();
-  const { session } = useAccount();
-  const [confirming, setConfirming] = useState(false);
-  const [done, setDone] = useState(false);
   const [cardDbVersion, setCardDbVersion] = useState<string>();
   const [pricesUpdatedAt, setPricesUpdatedAt] = useState<string>();
   const [counts, setCounts] = useState<{ oracle: number; printings: number }>();
@@ -33,14 +24,8 @@ export function About() {
     })();
   }, []);
 
-  async function handleDelete() {
-    await deleteAllUserData();
-    setConfirming(false);
-    setDone(true);
-  }
-
   return (
-    <Page title="About & settings">
+    <Page title="About">
       <dl className="kv">
         <dt>App version</dt>
         <dd>{APP_VERSION}</dd>
@@ -51,68 +36,6 @@ export function About() {
         <dt>Prices updated</dt>
         <dd>{formatDate(pricesUpdatedAt)}</dd>
       </dl>
-
-      <section className="about-section">
-        <h2>Goblin mode</h2>
-        <p className="fine-print">
-          Adds a third way to view your collection: one big, unsorted pile. Shove cards around with your finger to dig
-          through it, double-tap a card to flip it over, and press and hold one for its details. Sorting and filtering
-          are for humans.
-        </p>
-        <label className="agree-row">
-          <input type="checkbox" checked={goblinMode} onChange={(e) => void setGoblinMode(e.target.checked)} />
-          <span>Enable goblin mode</span>
-        </label>
-      </section>
-
-      <section className="about-section">
-        <h2>Your data</h2>
-        <p className="fine-print">
-          Everything is stored on this device. The server only keeps a copy if you create an account and back up
-          (More → Account &amp; sync). Trades themselves always live on your device. Clearing your browser data will
-          erase your collection, so export regularly or keep a backup.
-        </p>
-        <p className="fine-print">
-          Moving to a new phone or browser? Transfer your collection, lists and decks with a one-time code. The data
-          goes straight to the other device and is never stored on the server.
-        </p>
-        <DataTransfer />
-        {done ? (
-          <p role="status">All local data deleted.</p>
-        ) : session ? (
-          <p className="fine-print">
-            “Delete all my data” is disabled while signed in: this device syncs with your account, so a local wipe
-            would quietly fall out of sync. Sign out first (More → Account &amp; sync), or delete the whole account
-            there instead.
-          </p>
-        ) : confirming ? (
-          <div className="confirm-row">
-            <button className="danger" onClick={handleDelete}>
-              Yes, delete everything
-            </button>
-            <button onClick={() => setConfirming(false)}>Cancel</button>
-          </div>
-        ) : (
-          <button className="danger-outline" onClick={() => setConfirming(true)}>
-            Delete all my data
-          </button>
-        )}
-      </section>
-
-      <section className="about-section">
-        <h2>Having trouble?</h2>
-        <p className="fine-print">
-          If something breaks, copy the diagnostic log and send it along. It includes recent errors and your app/device
-          version, but no card data.
-        </p>
-        <button
-          onClick={() => {
-            void navigator.clipboard?.writeText(formatDiagnostics());
-          }}
-        >
-          Copy diagnostic log
-        </button>
-      </section>
 
       <section className="about-section">
         <h2>Attribution</h2>

@@ -332,22 +332,36 @@ export function checkDeckLegality(format: DeckFormat | undefined, cards: Legalit
   // Companions: a sideboard card with a Companion ability is validated as the
   // deck's chosen companion — color identity (Commander) plus its deckbuilding
   // restriction over the starting deck it would accompany.
+  //
+  // Only Commander allows a single companion in the sideboard, so the
+  // deckbuilding-restriction check runs there alone. In constructed formats
+  // (Modern, Pioneer, …) the active companion is chosen at game start and the
+  // sideboard may hold several companion-keyword cards whose requirements aren't
+  // met — they can be sided into the deck between games — so an unmet
+  // requirement must not mark the deck illegal.
   const startingDeck: StartingDeck = {
     cards: cards.filter((c) => c.board !== 'side' && c.oracle).map((c) => ({ qty: c.quantity, oracle: c.oracle! })),
     mainCount,
     rule,
   };
+  let companionCount = 0;
   for (const c of cards) {
     if (c.board !== 'side' || !c.oracle || !COMPANION_RE.test(text(c.oracle))) continue;
+    companionCount += c.quantity;
     if (commanderIdentity && c.oracle.colorIdentity.some((col) => !commanderIdentity!.has(col))) {
       problems.push(`${c.oracle.name} (companion) is outside the commander's ${describeIdentity(commanderIdentity)} identity.`);
       issues.set(c.oracleId, 'outside identity');
     }
+    if (!rule.commander) continue;
     const detail = COMPANION_CHECKS[c.oracle.name]?.(startingDeck);
     if (detail) {
       problems.push(`${c.oracle.name}'s companion requirement isn't met: ${detail}.`);
       if (!issues.has(c.oracleId)) issues.set(c.oracleId, 'companion unmet');
     }
+  }
+  // Commander's sideboard holds at most the single chosen companion.
+  if (rule.commander && companionCount > 1) {
+    problems.push(`${companionCount} companions in the sideboard; Commander allows only one.`);
   }
 
   // The sideboard is scratch space in Commander; only main + command zone count.

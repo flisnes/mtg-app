@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.42.2
+
+- **Companion legality got the rules right.** In constructed formats (Modern, Pioneer, …) a companion in your sideboard whose deckbuilding requirement isn't met no longer marks the deck illegal, since you pick the active companion at game start and can side the others in between games. Commander is the one format that allows exactly one companion, so more than one companion in a Commander sideboard is now flagged.
+
 ## 0.42.1
 
 - **Importing no longer turns a card into its token.** Lots of cards share a name with a token or art card they spawn (Bloomburrow Offspring copies, eternalize tokens, etc.), and the importer would sometimes grab the token instead, e.g. your Warren Warleader (BLB) landing as the Offspring token. Imports now use the set code to tell them apart, so `Warren Warleader (BLB)` stays the card while a real token line like `Angel (TWAR)` still comes in as the token.

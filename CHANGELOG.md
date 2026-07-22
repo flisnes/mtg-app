@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.44.1
+
+- **Mana pips in deck list view too.** The mana symbols added to list rows now also show when you switch a deck to list view, not just your collection.
+
 ## 0.44.0
 
 - **Tap your picture for a proper menu.** The avatar in the top-right corner now opens a little dropdown: **Profile**, **Settings**, and **About**. Your profile used to be buried (Community → your trades → Profile); now it's one tap away.

@@ -363,6 +363,7 @@ function Board({
       key: r.id,
       name: r.oracle?.name ?? '(unknown card)',
       image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
+      mana: r.oracle?.manaCost,
       count: r.quantity,
       badge: issue ? '⚠' : owned ? '✓' : undefined,
       badgeClass: issue ? 'badge-illegal' : 'badge-owned',

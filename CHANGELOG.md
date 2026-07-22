@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.43.4
+
+- **Ownership shows in the "view all editions" grid.** Open the grid of every printing and the ones you already own are marked with a double check in the corner, so you can see at a glance which exact editions are in your collection.
+
 ## 0.43.3
 
 - **"Add as commander" only shows up when it's legal.** When adding a card to a Commander deck, the button now appears only for cards that could actually be your commander (legendary creatures, cards that say "can be your commander", and the like). No more offering to crown a Lightning Bolt.

@@ -1572,6 +1572,7 @@ body:has(.bulk-bar) .app-main {
   flex: 1;
 }
 .edition-tile {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
@@ -1588,6 +1589,13 @@ body:has(.bulk-bar) .app-main {
 .edition-tile-selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+/* Ownership badge sits on the tile's image, inside its padding. */
+.edition-tile .tile-badge {
+  left: 0.6rem;
+  top: 0.6rem;
+  display: inline-flex;
+  padding: 0.1rem 0.25rem;
 }
 .edition-tile-ph {
   display: grid;

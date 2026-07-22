@@ -224,6 +224,8 @@ export function CardSheet({
   const ownedForTrade = ownedEntries?.reduce((s, e) => s + e.quantityForTrade, 0) ?? 0;
   // Do we own the exact printing currently shown? (Not just some other edition.)
   const ownsExact = !!scryfallId && (ownedEntries?.some((e) => e.scryfallId === scryfallId) ?? false);
+  // The exact printings we own — the "view all editions" grid double-checks these.
+  const ownedIds = useMemo(() => new Set((ownedEntries ?? []).map((e) => e.scryfallId)), [ownedEntries]);
   // Editions the caller flagged (owned / on a tradelist) group first in the dropdown.
   const highlighted = highlightPrintings ? printings.filter((p) => highlightPrintings.notes.has(p.scryfallId)) : [];
   const otherPrintings = highlighted.length > 0 ? printings.filter((p) => !highlightPrintings!.notes.has(p.scryfallId)) : printings;
@@ -574,6 +576,7 @@ export function CardSheet({
           selected={scryfallId}
           anyOption={mode === 'wish' || wishAdd}
           notes={highlightPrintings?.notes}
+          ownedIds={ownedIds}
           onSelect={(id) => {
             setScryfallId(id);
             onEditionChange?.(id);
@@ -662,6 +665,7 @@ export function EditionPicker({
   selected,
   anyOption,
   notes,
+  ownedIds,
   onSelect,
   onClose,
 }: {
@@ -671,6 +675,8 @@ export function EditionPicker({
   anyOption?: boolean;
   /** Short annotations per printing (e.g. the trade board's "×2, 1 for trade"). */
   notes?: Map<string, string>;
+  /** Exact printings the user owns — these tiles get a double-check ownership badge. */
+  ownedIds?: Set<string>;
   onSelect: (scryfallId: string) => void;
   onClose: () => void;
 }) {
@@ -707,6 +713,11 @@ export function EditionPicker({
                 className={p.scryfallId === selected ? 'edition-tile edition-tile-selected' : 'edition-tile'}
                 onClick={() => onSelect(p.scryfallId)}
               >
+                {ownedIds?.has(p.scryfallId) && (
+                  <span className="tile-badge own-yes" title="You own this exact printing">
+                    <Icon name="checkDouble" size={13} />
+                  </span>
+                )}
                 {img ? <img src={img} alt={p.setName} loading="lazy" /> : <span className="edition-tile-ph">{p.setName}</span>}
                 <span className="edition-tile-caption">
                   <SetSymbol set={p.set} title={p.setName} /> {p.set.toUpperCase()} #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}

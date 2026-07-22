@@ -15,6 +15,7 @@ import {
   updateWishlistEntry,
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
+import { canBeCommander } from '../deck/legality.js';
 import { db } from '../db/schema.js';
 import { getPriceHistory } from '../price/tracking.js';
 import { getMergedPriceHistory } from '../price/serverHistory.js';
@@ -538,7 +539,7 @@ export function CardSheet({
             <button onClick={onClose} disabled={busy}>
               Cancel
             </button>
-            {deckAdd && addTo.kind === 'deck' && addTo.format === 'commander' && (
+            {deckAdd && addTo.kind === 'deck' && addTo.format === 'commander' && canBeCommander(oracleCard) && (
               <button onClick={() => save('commander')} disabled={busy}>
                 Add as commander
               </button>

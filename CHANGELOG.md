@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.43.3
+
+- **"Add as commander" only shows up when it's legal.** When adding a card to a Commander deck, the button now appears only for cards that could actually be your commander (legendary creatures, cards that say "can be your commander", and the like). No more offering to crown a Lightning Bolt.
+
 ## 0.43.2
 
 - **Search the Edition dropdown.** For cards with lots of printings, a filter box now sits above the edition picker. Type a set name or its code ("Modern Horizons 2" or "MH2") to narrow the list instead of scrolling forever.

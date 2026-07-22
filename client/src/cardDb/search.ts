@@ -42,24 +42,58 @@ async function getIndex(): Promise<Indexed[]> {
 }
 
 /**
- * Build a normalized-name → oracle-card lookup (also used by the import
- * worker): exact full names win, DFC/split front faces fall back.
+ * Rank for name collisions: real cards (0) beat tokens/emblems/art-series
+ * "cards" (1). Many tokens share a name with the real card that makes them
+ * (Bloomburrow Offspring, eternalize, etc.), and art-series cards share the
+ * card's name too — without a set code to disambiguate, the real card wins.
  */
-export function buildNameIndex(cards: OracleCard[]): Map<string, OracleCard> {
-  const map = new Map<string, OracleCard>();
-  // Pass 1: exact full names win.
+export function cardPriority(c: OracleCard): number {
+  const t = c.typeLine.toLowerCase();
+  if (t.startsWith('token') || t.includes('emblem') || t === 'card') return 1;
+  return 0;
+}
+
+/**
+ * Build a normalized-name → all-oracle-cards lookup. Full names come first
+ * (ranked so real cards precede tokens/art); DFC/split front faces are appended
+ * only for names no full card claimed. The import worker uses the full
+ * candidate list to disambiguate by set code.
+ */
+export function buildNameMultiIndex(cards: OracleCard[]): Map<string, OracleCard[]> {
+  const map = new Map<string, OracleCard[]>();
+  const add = (key: string, c: OracleCard) => {
+    const arr = map.get(key);
+    if (arr) arr.push(c);
+    else map.set(key, [c]);
+  };
+  // Pass 1: exact full names.
+  const fullNameKeys = new Set<string>();
   for (const c of cards) {
     const n = normalize(c.name);
-    if (!map.has(n)) map.set(n, c);
+    fullNameKeys.add(n);
+    add(n, c);
   }
-  // Pass 2: DFC/split front faces only as a fallback.
+  // Pass 2: DFC/split front faces only for names not claimed by a full card.
   for (const c of cards) {
     const slash = c.name.indexOf(' // ');
     if (slash !== -1) {
       const front = normalize(c.name.slice(0, slash));
-      if (!map.has(front)) map.set(front, c);
+      if (!fullNameKeys.has(front)) add(front, c);
     }
   }
+  // Real cards ahead of tokens/art so the first candidate is the sensible default.
+  for (const arr of map.values()) arr.sort((a, b) => cardPriority(a) - cardPriority(b));
+  return map;
+}
+
+/**
+ * Build a normalized-name → oracle-card lookup (also used by the import
+ * worker): exact full names win over DFC/split front faces, and real cards win
+ * over tokens/art when a name is shared.
+ */
+export function buildNameIndex(cards: OracleCard[]): Map<string, OracleCard> {
+  const map = new Map<string, OracleCard>();
+  for (const [key, arr] of buildNameMultiIndex(cards)) map.set(key, arr[0]!);
   return map;
 }
 

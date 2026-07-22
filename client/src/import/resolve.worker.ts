@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import type { Finish, OracleCard, Printing } from '@mtg/shared';
 import { normalize as normalizeText } from '../cardDb/querySyntax.js';
-import { buildNameIndex } from '../cardDb/search.js';
+import { buildNameMultiIndex, cardPriority } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
 import { parseImport } from './parse.js';
 import type { ParsedLine, ResolveRequest, ResolveResponse, ResolvedLine, UnmatchedLine } from './types.js';
@@ -38,6 +38,30 @@ function pickFinish(line: ParsedLine, printing: Printing): Finish {
   return printing.finishes[0] ?? 'nonfoil';
 }
 
+const setMatches = (p: Printing, set: string) => p.set.toLowerCase() === set || normalize(p.setName) === set;
+
+/**
+ * Pick which oracle a line refers to when several cards share its name (real
+ * card vs. its token/art-series printing). The set code is ground truth: prefer
+ * the candidate that actually has a printing in that set — so "Warren Warleader
+ * (BLB)" resolves to the card and "Angel (TWAR)" to the token. With no set code
+ * (or an unrecognized one) fall back to the real card over token/art.
+ */
+function pickOracle(line: ParsedLine, candidates: OracleCard[], byOracle: Map<string, Printing[]>): OracleCard {
+  if (candidates.length === 1) return candidates[0]!;
+  if (line.scryfallId) {
+    const owner = candidates.find((c) => (byOracle.get(c.oracleId) ?? []).some((p) => p.scryfallId === line.scryfallId));
+    if (owner) return owner;
+  }
+  if (line.setCode) {
+    const set = line.setCode.toLowerCase();
+    const inSet = candidates.find((c) => (byOracle.get(c.oracleId) ?? []).some((p) => setMatches(p, set)));
+    if (inSet) return inSet;
+  }
+  // candidates are pre-sorted real-first; the first is the sensible default.
+  return candidates[0]!;
+}
+
 /** Choose the concrete printing for a matched line. */
 function resolvePrinting(line: ParsedLine, oracle: OracleCard, printings: Printing[]): Printing | undefined {
   if (line.scryfallId) {
@@ -46,7 +70,7 @@ function resolvePrinting(line: ParsedLine, oracle: OracleCard, printings: Printi
   }
   if (line.setCode) {
     const set = line.setCode.toLowerCase();
-    const inSet = printings.filter((p) => p.set.toLowerCase() === set || normalize(p.setName) === set);
+    const inSet = printings.filter((p) => setMatches(p, set));
     if (inSet.length) {
       if (line.collectorNumber) {
         const exact = inSet.find((p) => p.collectorNumber.toLowerCase() === line.collectorNumber!.toLowerCase());
@@ -67,18 +91,33 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
 
     post({ type: 'progress', label: 'Indexing card names…', fraction: 0.15 });
     const cards = await db.oracleCards.toArray();
-    const nameMap = buildNameIndex(cards);
+    const nameMap = buildNameMultiIndex(cards);
     // Loose fallback: names reduced to alphanumerics, for punctuation mismatches.
-    const looseMap = new Map<string, OracleCard>();
-    for (const c of cards) looseMap.set(alnum(c.name), c);
+    const looseMap = new Map<string, OracleCard[]>();
+    for (const c of cards) {
+      const key = alnum(c.name);
+      const arr = looseMap.get(key);
+      if (arr) arr.push(c);
+      else looseMap.set(key, [c]);
+    }
+    for (const arr of looseMap.values()) arr.sort((a, b) => cardPriority(a) - cardPriority(b));
 
-    // First pass: match lines to oracle cards.
-    const matched: Array<{ line: ParsedLine; oracle: OracleCard }> = [];
+    // First pass: match lines to their candidate oracle cards (a name may be
+    // shared by a real card and its token/art printing — disambiguated below
+    // once printings are loaded).
+    const candidateMatches: Array<{ line: ParsedLine; candidates: OracleCard[] }> = [];
     const unmatched: UnmatchedLine[] = [];
     for (const line of lines) {
-      const key = normalize(line.name);
-      const oracle = nameMap.get(key) ?? looseMap.get(alnum(line.name));
-      if (oracle) matched.push({ line, oracle });
+      // Art cards (dropped from the DB — no oracle_id) export as a doubled
+      // "Name / Name"; also handle plain "Front // Back". Fall back to the front
+      // face so the line resolves to the real card, not nothing.
+      const front = line.name.split(/\s*\/\/?\s*/)[0]!;
+      const candidates =
+        nameMap.get(normalize(line.name)) ??
+        looseMap.get(alnum(line.name)) ??
+        nameMap.get(normalize(front)) ??
+        looseMap.get(alnum(front));
+      if (candidates?.length) candidateMatches.push({ line, candidates });
       else unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, finish: line.finish, board: line.board, suggestions: [] });
     }
 
@@ -104,9 +143,10 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
       }
     }
 
-    // Bulk-fetch printings for all matched oracles, then resolve editions.
+    // Bulk-fetch printings for every candidate oracle (both the real card and
+    // any token/art namesake), then pick the intended oracle per line by set.
     post({ type: 'progress', label: 'Resolving editions…', fraction: 0.7 });
-    const oracleIds = [...new Set(matched.map((m) => m.oracle.oracleId))];
+    const oracleIds = [...new Set(candidateMatches.flatMap((m) => m.candidates.map((c) => c.oracleId)))];
     const allPrintings = await db.printings.where('oracleId').anyOf(oracleIds).toArray();
     const byOracle = new Map<string, Printing[]>();
     for (const p of allPrintings) {
@@ -116,7 +156,8 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
     }
 
     const resolved: ResolvedLine[] = [];
-    for (const { line, oracle } of matched) {
+    for (const { line, candidates } of candidateMatches) {
+      const oracle = pickOracle(line, candidates, byOracle);
       const printings = byOracle.get(oracle.oracleId) ?? [];
       const printing = resolvePrinting(line, oracle, printings);
       if (!printing) {

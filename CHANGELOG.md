@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.43.2
+
+- **Search the Edition dropdown.** For cards with lots of printings, a filter box now sits above the edition picker. Type a set name or its code ("Modern Horizons 2" or "MH2") to narrow the list instead of scrolling forever.
+
 ## 0.43.1
 
 - **Double check = you've got that exact printing.** The "In your collection" badge on the card sheet now shows a double checkmark when the edition you're looking at is one you actually own, and the familiar single checkmark when you own the card but in a different printing.

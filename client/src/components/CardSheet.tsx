@@ -172,6 +172,8 @@ export function CardSheet({
   const [tab, setTab] = useState<'details' | 'history'>(initialTab ?? 'details');
   // Visual "view all editions" grid, layered over the sheet.
   const [allEditions, setAllEditions] = useState(false);
+  // Filter the (often very long) Edition dropdown by set name or set code.
+  const [editionQuery, setEditionQuery] = useState('');
   // Event info modal opened from the History tab (out of edit mode), plus a
   // nested card sheet when the user drills from that event into another card.
   const [eventEntry, setEventEntry] = useState<HistoryEntry | null>(null);
@@ -224,6 +226,17 @@ export function CardSheet({
   // Editions the caller flagged (owned / on a tradelist) group first in the dropdown.
   const highlighted = highlightPrintings ? printings.filter((p) => highlightPrintings.notes.has(p.scryfallId)) : [];
   const otherPrintings = highlighted.length > 0 ? printings.filter((p) => !highlightPrintings!.notes.has(p.scryfallId)) : printings;
+  // Dropdown filter: match set name or set code. Always keep the current
+  // selection visible so the native <select> displays the right value.
+  const editionQ = editionQuery.trim().toLowerCase();
+  const matchesQuery = (p: Priced<Printing>) =>
+    p.scryfallId === scryfallId ||
+    !editionQ ||
+    p.setName.toLowerCase().includes(editionQ) ||
+    p.set.toLowerCase().includes(editionQ);
+  const visibleHighlighted = highlighted.filter(matchesQuery);
+  const visibleOther = otherPrintings.filter(matchesQuery);
+  const showEditionSearch = (formEditable || !!onEditionChange) && printings.length > 6;
   const availableFinishes = printing?.finishes ?? (['nonfoil'] as Finish[]);
 
   // Full-size image + price for the currently-selected printing (falls back to the oracle default).
@@ -394,6 +407,16 @@ export function CardSheet({
 
         <label className="field">
           <span>Edition</span>
+          {showEditionSearch && (
+            <input
+              type="text"
+              className="edition-search"
+              value={editionQuery}
+              onChange={(e) => setEditionQuery(e.target.value)}
+              placeholder="Filter by set name or code (e.g. MH2)"
+              aria-label="Filter editions by set name or code"
+            />
+          )}
           <div className="edition-row">
             <div className={`edition-select${printing ? ' with-symbol' : ''}`}>
               {printing && <SetSymbol set={printing.set} className="edition-symbol" title={printing.setName} />}
@@ -408,13 +431,17 @@ export function CardSheet({
                 {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
                 {highlighted.length > 0 ? (
                   <>
-                    <optgroup label={highlightPrintings!.label}>
-                      {highlighted.map((p) => printingOption(p, highlightPrintings!.notes.get(p.scryfallId)))}
-                    </optgroup>
-                    <optgroup label="Other printings">{otherPrintings.map((p) => printingOption(p))}</optgroup>
+                    {visibleHighlighted.length > 0 && (
+                      <optgroup label={highlightPrintings!.label}>
+                        {visibleHighlighted.map((p) => printingOption(p, highlightPrintings!.notes.get(p.scryfallId)))}
+                      </optgroup>
+                    )}
+                    {visibleOther.length > 0 && (
+                      <optgroup label="Other printings">{visibleOther.map((p) => printingOption(p))}</optgroup>
+                    )}
                   </>
                 ) : (
-                  printings.map((p) => printingOption(p))
+                  printings.filter(matchesQuery).map((p) => printingOption(p))
                 )}
               </select>
             </div>

@@ -1500,6 +1500,11 @@ body:has(.bulk-bar) .app-main {
   color: var(--text);
   pointer-events: none;
 }
+/* Filter box above the Edition dropdown (set name / set code). */
+.edition-search {
+  width: 100%;
+  margin-bottom: 0.4rem;
+}
 /* The select plus the "view all editions" grid button beside it. */
 .edition-row {
   display: flex;

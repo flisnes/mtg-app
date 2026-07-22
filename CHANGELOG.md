@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.42.3
+
+- **Tokens and art cards can't sneak into a deck.** If a token, emblem, or art card ends up in your mainboard, command zone, or sideboard, the deck is now flagged illegal, since those aren't real deck cards. As always, Casual decks skip legality entirely, so anything goes there.
+
 ## 0.42.2
 
 - **Companion legality got the rules right.** In constructed formats (Modern, Pioneer, …) a companion in your sideboard whose deckbuilding requirement isn't met no longer marks the deck illegal, since you pick the active companion at game start and can side the others in between games. Commander is the one format that allows exactly one companion, so more than one companion in a Commander sideboard is now flagged.

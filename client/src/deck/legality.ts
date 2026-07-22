@@ -126,6 +126,16 @@ function deckCopyOverride(o: OracleCard): number | null {
   return null;
 }
 
+/**
+ * Tokens, emblems, and art-series "cards" are not real deck cards — they never
+ * belong in the mainboard, command zone, or sideboard. Mirrors the collision
+ * ranking in cardDb/search.ts (real cards beat these namesakes).
+ */
+const isNonDeckCard = (o: OracleCard) => {
+  const t = o.typeLine.toLowerCase();
+  return t.startsWith('token') || t.includes('emblem') || t === 'card';
+};
+
 const isLandCard = (o: OracleCard) => /\bLand\b/.test(o.typeLine);
 const isPermanentCard = (o: OracleCard) => /\b(Creature|Artifact|Enchantment|Land|Planeswalker|Battle)\b/.test(o.typeLine);
 
@@ -260,6 +270,12 @@ export function checkDeckLegality(format: DeckFormat | undefined, cards: Legalit
     const name = oracle.name;
     const isBasic = /\bBasic\b/.test(oracle.typeLine);
     const status = oracle.legalities?.[key];
+
+    if (isNonDeckCard(oracle)) {
+      problems.push(`${name} isn't a real card (token, emblem, or art card) and can't go in a deck.`);
+      issues.set(oracleId, 'not a deck card');
+      continue;
+    }
 
     if (!status) {
       missingData = true;

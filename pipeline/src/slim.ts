@@ -16,8 +16,12 @@ import { buildSealedProducts } from './sealed.js';
 
 // Nightly card-DB pipeline (beta plan §3). Downloads Scryfall `default_cards`,
 // slims each card to ~18 fields, and emits:
-//   - 16 chunks per artifact (rows grouped by first hex char of their id), each
-//     content-hash-named, so clients re-download only chunks that changed;
+//   - 256 chunks per artifact (rows grouped by the first TWO hex chars of their
+//     id), each content-hash-named, so clients re-download only chunks that
+//     changed. Finer buckets mean a day's handful of card changes drags a few
+//     tiny chunks instead of revving all 16 coarse ones (ids are UUIDs, so any
+//     change scatters across buckets); the delta stays roughly proportional to
+//     what actually moved. See client/src/cardDb/sync.ts.
 //   - prices.<hash>.json.gz — all prices, separate because they churn daily
 //     while the card data itself changes rarely;
 //   - legacy whole-file artifacts (prices embedded) for pre-chunking clients;
@@ -34,7 +38,11 @@ const OUT_DIR = process.env.OUT_DIR ?? join(__dirname, '..', 'out');
 const BULK_TYPE = process.env.BULK_TYPE ?? 'default_cards';
 const MAX_CARDS = process.env.MAX_CARDS ? Number(process.env.MAX_CARDS) : Infinity;
 
-const CHUNK_KEYS = [...'0123456789abcdef'];
+const HEX = [...'0123456789abcdef'];
+// 256 two-hex-char prefixes ('00'..'ff'). Chunk keys must be id prefixes: the
+// client deletes a chunk's id-range with an indexed startsWith(key) before
+// re-inserting it (see import.worker.ts).
+const CHUNK_KEYS = HEX.flatMap((a) => HEX.map((b) => a + b));
 
 function clientVersion(): string {
   try {
@@ -105,12 +113,12 @@ function emitHashed(prefix: string, data: unknown, count: number): Artifact {
   return { filename, bytes: gz.length, sha256, count };
 }
 
-/** Split rows into the 16 fixed chunks by first hex char of their id, sorted for stable hashes. */
+/** Split rows into the 256 fixed chunks by first two hex chars of their id, sorted for stable hashes. */
 function emitChunks<T>(name: string, rows: T[], idOf: (row: T) => string): CardDbChunkMeta[] {
   const byKey = new Map<string, T[]>(CHUNK_KEYS.map((k) => [k, []]));
   for (const row of rows) {
-    const key = idOf(row)[0] ?? '0';
-    (byKey.get(key) ?? byKey.get('0'))!.push(row);
+    const key = idOf(row).slice(0, 2);
+    (byKey.get(key) ?? byKey.get('00'))!.push(row);
   }
   return CHUNK_KEYS.map((key) => {
     const chunk = byKey.get(key)!;
@@ -237,9 +245,10 @@ async function main(): Promise<void> {
   writeFileSync(join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
   const mb = (n: number) => (n / 1e6).toFixed(1);
+  const chunkCount = oracleChunks.length + printingsChunks.length;
   const chunkTotal = [...oracleChunks, ...printingsChunks].reduce((s, c) => s + c.bytes, 0);
   console.log(`[pipeline] wrote artifacts to ${OUT_DIR}`);
-  console.log(`[pipeline]   card data (32 chunks)  ${mb(chunkTotal)}MB  dataVersion=${dataVersion.slice(0, 8)}`);
+  console.log(`[pipeline]   card data (${chunkCount} chunks)  ${mb(chunkTotal)}MB  dataVersion=${dataVersion.slice(0, 8)}`);
   console.log(`[pipeline]   ${pricesArtifact.filename}  ${mb(pricesArtifact.bytes)}MB  (${pricesArtifact.count} priced printings)`);
   console.log(`[pipeline]   legacy oracle-slim.json.gz   ${mb(oracleArtifact.bytes)}MB  (${oracleArtifact.count} cards)`);
   console.log(`[pipeline]   legacy printings-slim.json.gz ${mb(printingsArtifact.bytes)}MB  (${printingsArtifact.count} printings)`);

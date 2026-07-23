@@ -8,11 +8,12 @@ import { invalidateSearchIndex } from './search.js';
 import { invalidatePriceCache } from './prices.js';
 
 // Orchestrates card-DB freshness (beta plan §3). The manifest describes the
-// card data as 16 hash-named chunks per artifact plus a separate prices file;
+// card data as 256 hash-named chunks per artifact plus a separate prices file;
 // we download only the pieces whose hash differs from what's installed. Card
 // data changes rarely, prices churn daily — so the typical daily update is the
-// small prices file, not the full ~14 MB. Offline with a local DB is fine —
-// the app just runs on what it has.
+// small prices file, not the full ~14 MB. Fine buckets keep even a card-data
+// update proportional to what actually changed, rather than revving everything.
+// Offline with a local DB is fine — the app just runs on what it has.
 
 export type SyncState =
   | { status: 'checking' }

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.45.0
+
+- **Way less card-database downloading.** Two fixes to the thing that kept nagging you to re-download 7-14 MB several times a day. App updates (new versions, bug fixes) no longer trigger a card-database re-download at all, only genuinely new card data does. And when card data does change, the app now grabs just the small slices that actually changed instead of most of the database. Prices already updated quietly in the background and still do. One-time catch: the first update after this ships re-downloads the card data once so it can switch to the finer-grained scheme.
+
 ## 0.44.1
 
 - **Mana pips in deck list view too.** The mana symbols added to list rows now also show when you switch a deck to list view, not just your collection.

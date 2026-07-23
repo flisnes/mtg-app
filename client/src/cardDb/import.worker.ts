@@ -12,6 +12,12 @@ import type { ChunkTask, ImportRequest, WorkerResponse } from './messages.js';
 // Content-Encoding), and replaces just that chunk's id-range in IndexedDB.
 // Bookkeeping (chunk hashes, counts) is persisted after every chunk, so an
 // interrupted update resumes where it left off instead of starting over.
+//
+// Downloads run a few at a time (chunks are small and numerous — 256 per
+// artifact — so a fresh install would otherwise pay hundreds of serial round
+// trips). Imports and bookkeeping stay strictly sequential and in order: chunk
+// id-ranges are disjoint so order doesn't affect correctness, and serializing
+// the writes keeps the resume bookkeeping race-free.
 
 type InstalledChunks = Record<'oracle' | 'printings', Record<string, { sha256: string; count: number }>>;
 
@@ -19,20 +25,22 @@ function post(msg: WorkerResponse): void {
   (self as DedicatedWorkerGlobalScope).postMessage(msg);
 }
 
-/** Download a .gz artifact, reporting byte progress, and return decompressed text. */
+/** Download a .gz artifact, reporting byte deltas, and return decompressed text. */
 async function downloadDecompressed(
   url: string,
   compressedBytes: number,
-  onBytes: (loaded: number) => void,
+  onDelta: (bytes: number) => void,
 ): Promise<string> {
   const res = await fetch(url);
   if (!res.ok || !res.body) throw new Error(`download ${url.split('/').pop()}: HTTP ${res.status}`);
 
+  // Report deltas (not cumulative) so concurrent downloads can share one counter.
   let loaded = 0;
   const counting = new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
-      loaded += chunk.byteLength;
-      onBytes(Math.min(loaded, compressedBytes));
+      const capped = Math.min(loaded + chunk.byteLength, compressedBytes);
+      onDelta(capped - loaded);
+      loaded = capped;
       controller.enqueue(chunk);
     },
   });
@@ -48,6 +56,12 @@ async function downloadDecompressed(
 // IndexedDB import, which on typical hardware takes about as long again.
 const DOWNLOAD_SHARE = 0.6;
 const IMPORT_BATCH = 2000;
+// How many chunk downloads may run ahead of the (sequential) importer. Bounds
+// both the in-flight fetches and the decompressed text held in memory.
+const DOWNLOAD_CONCURRENCY = 6;
+// Persist resume bookkeeping every this-many chunks rather than after each one
+// (there are ~512 on a fresh install; per-chunk writes would be O(n²)).
+const PERSIST_EVERY = 16;
 
 /**
  * Atomically replace one chunk's id-range: delete rows with the key prefix,
@@ -76,49 +90,96 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
   const req = e.data;
   try {
     const totalBytes = req.chunks.reduce((s, c) => s + c.bytes, 0) + (req.prices?.bytes ?? 0);
-    let doneBytes = 0;
+    const cardBytes = req.chunks.reduce((s, c) => s + c.bytes, 0);
     const mb = (n: number) => (n / 1e6).toFixed(1);
-    const downloadProgress = (label: string) => (loaded: number) =>
+
+    // Blended progress: downloaded bytes carry DOWNLOAD_SHARE of each chunk's
+    // weight, imported bytes the rest. Both accumulate across the run, so
+    // concurrent downloads and the sequential importer each push it forward.
+    let downloadedBytes = 0;
+    let importedBytes = 0;
+    const emit = (label: string) =>
       post({
         type: 'progress',
-        fraction: totalBytes ? (doneBytes + loaded * DOWNLOAD_SHARE) / totalBytes : 0,
-        label: `${label} (${mb(doneBytes + loaded)}/${mb(totalBytes)} MB)`,
+        fraction: totalBytes ? (downloadedBytes * DOWNLOAD_SHARE + importedBytes * (1 - DOWNLOAD_SHARE)) / totalBytes : 0,
+        label,
       });
+    // Card-chunk downloads share one counter and a live MB label.
+    const onCardDelta = (bytes: number) => {
+      downloadedBytes += bytes;
+      emit(`Downloading card data (${mb(Math.min(downloadedBytes, cardBytes))}/${mb(cardBytes)} MB)`);
+    };
 
     const chunkState = await readChunkState();
 
-    for (const task of req.chunks) {
-      const url = new URL(task.url, req.baseUrl).href;
-      const text = await downloadDecompressed(url, task.bytes, downloadProgress('Downloading card data'));
-      if ((await sha256Hex(text)) !== task.sha256) {
-        throw new Error(`${task.artifact} chunk ${task.key} checksum mismatch: download corrupt`);
+    // Download a bounded window of chunks ahead of the importer; import them in
+    // order. Each slot settles to {text} or {err} so a prefetch that fails while
+    // the importer is still on an earlier chunk never trips an unhandled
+    // rejection — the error is re-thrown when the loop reaches that index.
+    const tasks = req.chunks;
+    type Fetched = { text: string } | { err: unknown };
+    const pending: Array<Promise<Fetched> | undefined> = new Array(tasks.length);
+    let started = 0;
+    const startUpTo = (limit: number) => {
+      while (started < tasks.length && started < limit) {
+        const idx = started++;
+        const task = tasks[idx]!;
+        const url = new URL(task.url, req.baseUrl).href;
+        pending[idx] = (async (): Promise<Fetched> => {
+          const text = await downloadDecompressed(url, task.bytes, onCardDelta);
+          if ((await sha256Hex(text)) !== task.sha256) {
+            throw new Error(`${task.artifact} chunk ${task.key} checksum mismatch: download corrupt`);
+          }
+          return { text };
+        })().then(
+          (v) => v,
+          (err) => ({ err }),
+        );
       }
+    };
+    startUpTo(DOWNLOAD_CONCURRENCY);
+
+    for (let i = 0; i < tasks.length; i++) {
+      const task = tasks[i]!;
+      const fetched = await pending[i]!;
+      pending[i] = undefined; // release the decompressed text
+      if ('err' in fetched) throw fetched.err;
+      const { text } = fetched;
+
       const label = `Installing ${task.artifact === 'oracle' ? 'cards' : 'editions'}…`;
-      const importProgress = (rowFraction: number) =>
-        post({
-          type: 'progress',
-          fraction: totalBytes ? (doneBytes + task.bytes * (DOWNLOAD_SHARE + (1 - DOWNLOAD_SHARE) * rowFraction)) / totalBytes : 0,
-          label,
-        });
-      importProgress(0);
+      const base = importedBytes;
+      const importProgress = (rowFraction: number) => {
+        importedBytes = base + task.bytes * rowFraction;
+        emit(label);
+      };
       await importChunk(task, JSON.parse(text) as unknown[], importProgress);
+      importedBytes = base + task.bytes;
 
-      // Persist bookkeeping after every chunk so an interrupted update resumes.
-      // Counts come from the tables themselves, not the manifest: a duplicate
-      // id in a chunk collapses on insert, and a manifest-derived count would
-      // then mismatch forever, re-gating the app on every launch.
+      // Persist bookkeeping periodically (not every chunk — there are hundreds)
+      // so an interrupted update resumes near where it left off. Re-importing a
+      // chunk is idempotent (delete range + insert), so the worst a crash costs
+      // is redoing this batch. Counts come from the tables themselves, not the
+      // manifest: a duplicate id in a chunk collapses on insert, and a
+      // manifest-derived count would then mismatch forever, re-gating the app.
       chunkState[task.artifact][task.key] = { sha256: task.sha256, count: task.count };
-      await setSetting('cardDbChunks', chunkState);
-      await setSetting('cardDbCounts', { oracle: await db.oracleCards.count(), printings: await db.printings.count() });
+      if ((i + 1) % PERSIST_EVERY === 0 || i === tasks.length - 1) {
+        await setSetting('cardDbChunks', chunkState);
+        await setSetting('cardDbCounts', { oracle: await db.oracleCards.count(), printings: await db.printings.count() });
+      }
 
-      doneBytes += task.bytes;
+      // Top up the download window now that a slot has freed.
+      startUpTo(i + 1 + DOWNLOAD_CONCURRENCY);
     }
 
     if (req.prices) {
       const url = new URL(req.prices.url, req.baseUrl).href;
-      const text = await downloadDecompressed(url, req.prices.bytes, downloadProgress('Downloading prices'));
+      const text = await downloadDecompressed(url, req.prices.bytes, (bytes) => {
+        downloadedBytes += bytes;
+        emit('Downloading prices…');
+      });
       if ((await sha256Hex(text)) !== req.prices.sha256) throw new Error('prices checksum mismatch: download corrupt');
-      post({ type: 'progress', fraction: totalBytes ? (doneBytes + req.prices.bytes * DOWNLOAD_SHARE) / totalBytes : 0, label: 'Updating prices…' });
+      importedBytes += req.prices.bytes;
+      emit('Updating prices…');
       await db.priceShards.bulkPut(buildPriceShards(JSON.parse(text) as PriceMap));
       await setSetting('pricesSha256', req.prices.sha256);
       await setSetting('pricesUpdatedAt', req.pricesUpdatedAt);

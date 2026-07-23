@@ -33,16 +33,51 @@ jobs:
 
       - run: npm ci
 
+      # Reuse the last-built card DB on code-only pushes. Rebuilding on every
+      # push re-pulls Scryfall and re-hashes the chunks, which would prompt every
+      # client to re-download ~14 MB for a change that isn't card data at all.
+      # The chunk URLs are content-addressed, so restoring identical files yields
+      # an identical manifest and clients download nothing.
+      - name: Restore card DB cache
+        id: carddb-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: pipeline/out
+          key: carddb-${{ github.run_id }}
+          restore-keys: |
+            carddb-
+
+      # Build fresh on the nightly schedule and manual dispatch (that's the point
+      # of them), and on the very first run when no cache exists yet. A plain
+      # push with a cache hit reuses it.
+      - name: Decide whether to rebuild the card DB
+        id: carddb-decide
+        run: |
+          if [ "${{ github.event_name }}" != "push" ] || [ -z "${{ steps.carddb-cache.outputs.cache-matched-key }}" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Build the slimmed card DB and serve it same-origin from Pages, so the
       # app needs no external (HTTPS/TLS) host for card data in the beta.
       # (Phase 5 moves this to the VM's nightly cron once it has a domain.)
       - name: Build card database
+        if: steps.carddb-decide.outputs.build == 'true'
         run: npm run pipeline
         # The sealed-product pass streams MTGJSON AllPrintings (~650 MB
         # uncompressed) on top of the Scryfall pass; raise the heap so the
         # nightly build doesn't OOM. (ubuntu-latest has 16 GB.)
         env:
           NODE_OPTIONS: --max-old-space-size=6144
+
+      # Persist the freshly built card DB so later code-only pushes reuse it.
+      - name: Save card DB cache
+        if: steps.carddb-decide.outputs.build == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: pipeline/out
+          key: carddb-${{ github.run_id }}
 
       - name: Build client
         run: npm run build --workspace client
@@ -55,6 +90,22 @@ jobs:
         run: |
           mkdir -p client/dist/carddb
           cp pipeline/out/manifest.json pipeline/out/*.json.gz client/dist/carddb/
+
+      # Keep the app-version beacon current even when the card DB came from
+      # cache. latestAppVersion is a plain manifest field that doesn't feed the
+      # chunk hashes, so rewriting it triggers no card-data re-download, but it
+      # lets already-installed clients learn a new app version shipped even before
+      # their service worker notices (see client/src/appUpdate.ts).
+      - name: Refresh app-version beacon in manifest
+        run: |
+          node -e '
+            const fs = require("fs");
+            const p = "client/dist/carddb/manifest.json";
+            const m = JSON.parse(fs.readFileSync(p, "utf8"));
+            m.latestAppVersion = JSON.parse(fs.readFileSync("client/package.json", "utf8")).version;
+            fs.writeFileSync(p, JSON.stringify(m, null, 2));
+            console.log("manifest latestAppVersion =", m.latestAppVersion);
+          '
 
       - uses: actions/configure-pages@v5
         with:

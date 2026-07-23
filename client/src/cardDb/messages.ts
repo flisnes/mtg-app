@@ -7,7 +7,7 @@ import type { CardDbArtifactMeta } from '@mtg/shared';
 
 export interface ChunkTask {
   artifact: 'oracle' | 'printings';
-  /** First hex char of the ids this chunk covers. */
+  /** Id prefix this chunk covers (first two hex chars); also its delete range. */
   key: string;
   url: string;
   bytes: number;

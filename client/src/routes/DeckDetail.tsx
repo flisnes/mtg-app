@@ -30,6 +30,8 @@ import { useToast } from '../components/Toast.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import {
+  addToTotal,
+  formatTotal,
   SortControls,
   groupCards,
   priceValue,
@@ -37,6 +39,7 @@ import {
   useCardSort,
   type CardSortPrefs,
   type GroupKey,
+  type PriceTotal,
 } from '../components/CardSorting.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
@@ -103,6 +106,14 @@ export function DeckDetail() {
       have += Math.min(v.owned, v.need);
     });
     return { need, have };
+  }, [data]);
+
+  const value = useMemo(() => {
+    const rows = data?.rows ?? [];
+    if (rows.length === 0) return undefined;
+    const total: PriceTotal = { eur: 0, usd: 0 };
+    for (const r of rows) addToTotal(total, r.quantity, r.printing, r.oracle);
+    return formatTotal(total);
   }, [data]);
 
   const legality = useMemo<LegalityReport>(
@@ -207,6 +218,7 @@ export function DeckDetail() {
         </label>
         <p className="search-meta">
           You own <strong>{summary.have}</strong> of <strong>{summary.need}</strong> cards
+          {value && <> · worth <strong>{value}</strong></>}
         </p>
       </div>
 

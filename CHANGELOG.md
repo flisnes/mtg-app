@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.46.0
+
+- **Total value at a glance.** Your Collection, Wishlist, Tradelist, and Decks pages now show the total value up in the header, tucked beside the title so it takes no extra room. Each deck's detail page also tells you what that deck is worth. Prices follow the same currency as the per-card prices (EUR where available, otherwise USD).
+
 ## 0.45.0
 
 - **Way less card-database downloading.** Two fixes to the thing that kept nagging you to re-download 7-14 MB several times a day. App updates (new versions, bug fixes) no longer trigger a card-database re-download at all, only genuinely new card data does. And when card data does change, the app now grabs just the small slices that actually changed instead of most of the database. Prices already updated quietly in the background and still do. One-time catch: the first update after this ships re-downloads the card data once so it can switch to the finer-grained scheme.

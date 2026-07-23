@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
 import { CollectionListView } from '../components/CollectionListView.js';
+import { HeaderValue, headerValue, useCollectionValue } from '../components/ValueSummary.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { applyImport, clearTradelist } from '../db/dataAccess.js';
@@ -17,6 +18,7 @@ export function Tradelist() {
   const toast = useToast();
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState(false);
+  const value = useCollectionValue(true);
 
   async function onClearAll() {
     if (!window.confirm('Take every card off the tradelist? Your collection is not affected.')) return;
@@ -40,6 +42,7 @@ export function Tradelist() {
     <Page
       title="Tradelist"
       subtitle="Copies you’ve marked for trade (these also live in your collection)."
+      aside={<HeaderValue value={headerValue(value)} />}
       menu={
         <OptionsMenu
           label="Tradelist options"

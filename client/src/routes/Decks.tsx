@@ -9,6 +9,7 @@ import { getOracleCardsByIds } from '../db/queries.js';
 import { formatLabel } from '../deck/legality.js';
 import { Icon } from '../components/icons.js';
 import { ManaCost } from '../components/ManaCost.js';
+import { HeaderValue, headerValue, useDecksValue } from '../components/ValueSummary.js';
 
 // Canonical WUBRG order for pip display.
 const COLOR_ORDER: Color[] = ['W', 'U', 'B', 'R', 'G'];
@@ -37,6 +38,8 @@ export function Decks() {
     );
   }, []);
 
+  const value = useDecksValue();
+
   async function create() {
     const id = await createDeck(name || 'Untitled deck', format);
     setName('');
@@ -44,7 +47,11 @@ export function Decks() {
   }
 
   return (
-    <Page title="Decks" subtitle="Brew decks; owned cards get a green check.">
+    <Page
+      title="Decks"
+      subtitle="Brew decks; owned cards get a green check."
+      aside={<HeaderValue value={headerValue(value)} />}
+    >
       <div className="list-toolbar">
         <input
           className="search-input grow"

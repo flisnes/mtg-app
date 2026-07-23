@@ -66,6 +66,37 @@ export function formatPrice(...sources: ({ priceEur: number | null; priceUsd: nu
   return undefined;
 }
 
+// ---- Value totals ----
+// A running sum kept per currency: each card contributes to whichever currency
+// its displayed price uses (EUR preferred, matching priceValue/formatPrice), so
+// the total lines up with the per-card prices shown in the list.
+export interface PriceTotal {
+  eur: number;
+  usd: number;
+}
+
+type PricedSource = { priceEur: number | null; priceUsd: number | null } | undefined;
+
+/** Add qty × per-card value into the matching currency bucket (EUR preferred). */
+export function addToTotal(total: PriceTotal, qty: number, ...sources: PricedSource[]): void {
+  for (const s of sources) if (s?.priceEur != null) { total.eur += s.priceEur * qty; return; }
+  for (const s of sources) if (s?.priceUsd != null) { total.usd += s.priceUsd * qty; return; }
+}
+
+function fmtAmount(n: number, symbol: string): string {
+  // Cents matter for small piles; big collections just want a clean round figure.
+  const digits = n >= 1000 ? 0 : 2;
+  return symbol + n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+/** Format a value total; combines currencies with "+" only when both are present. */
+export function formatTotal({ eur, usd }: PriceTotal): string {
+  const parts: string[] = [];
+  if (eur > 0) parts.push(fmtAmount(eur, '€'));
+  if (usd > 0) parts.push(fmtAmount(usd, '$'));
+  return parts.length ? parts.join(' + ') : '—';
+}
+
 export function sortCards<T>(items: T[], get: (t: T) => SortFields, prefs: Pick<CardSortPrefs, 'key' | 'dir'>): T[] {
   const mul = prefs.dir === 'desc' ? -1 : 1;
   return [...items].sort((a, b) => {

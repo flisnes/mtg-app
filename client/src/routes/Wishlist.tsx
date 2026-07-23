@@ -11,7 +11,8 @@ import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components
 import { BulkActionBar } from '../components/BulkActionBar.js';
 import { useMultiSelect } from '../components/useMultiSelect.js';
 import { SetSymbol } from '../components/SetSymbol.js';
-import { SortControls, priceValue, sortCards, useCardSort } from '../components/CardSorting.js';
+import { addToTotal, formatTotal, priceValue, SortControls, sortCards, useCardSort, type PriceTotal } from '../components/CardSorting.js';
+import { HeaderValue } from '../components/ValueSummary.js';
 import { useOpenSearch } from '../components/GlobalSearch.js';
 import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
@@ -75,6 +76,14 @@ export function Wishlist() {
     );
   }, [rows, searchIndex, name, sort]);
 
+  // Value covers the whole wishlist, not just the filtered view.
+  const value = useMemo(() => {
+    if (!rows) return undefined;
+    const total: PriceTotal = { eur: 0, usd: 0 };
+    for (const r of rows) addToTotal(total, r.entry.quantity, r.printing, r.oracle);
+    return formatTotal(total);
+  }, [rows]);
+
   const selectedRows = filtered.filter((r) => sel.selected.has(r.entry.id));
   const allKeys = filtered.map((r) => r.entry.id);
 
@@ -101,6 +110,7 @@ export function Wishlist() {
     <Page
       title="Wishlist"
       subtitle="Cards you’re after, shown to trade partners during a session."
+      aside={<HeaderValue value={value} />}
       menu={
         <OptionsMenu
           label="Wishlist options"

@@ -6,12 +6,15 @@ export function Page({
   title,
   subtitle,
   menu,
+  aside,
   children,
 }: {
   title: string;
   subtitle?: string;
   /** Page-specific options, top-right of the header (usually an OptionsMenu). */
   menu?: ReactNode;
+  /** Extra header content shown left of the menu (e.g. a total-value readout). */
+  aside?: ReactNode;
   children?: ReactNode;
 }) {
   return (
@@ -21,7 +24,12 @@ export function Page({
           <h1>{title}</h1>
           {subtitle && <p className="page-subtitle">{subtitle}</p>}
         </div>
-        {menu}
+        {(aside || menu) && (
+          <div className="page-header-aside">
+            {aside}
+            {menu}
+          </div>
+        )}
       </header>
       <div className="page-body">{children}</div>
     </section>

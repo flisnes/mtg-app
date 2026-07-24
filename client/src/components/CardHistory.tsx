@@ -17,12 +17,16 @@ import { fmtCents, fmtDate } from '../util/format.js';
 
 export function CardHistory({
   oracleCard,
+  scryfallId,
   printings,
   priceHistory,
   editMode = false,
   onEventClick,
 }: {
   oracleCard: Priced<OracleCard>;
+  /** The shown printing. The timeline scopes to it, plus the oracle's
+   * printing-agnostic events (any-printing wishes / deck cards). */
+  scryfallId: string;
   printings: Priced<Printing>[];
   /** Recorded daily prices of the sheet's shown printing (server-merged when signed in). */
   priceHistory?: PriceHistory | null;
@@ -35,9 +39,14 @@ export function CardHistory({
     () => db.events.where('oracleId').equals(oracleCard.oracleId).toArray(),
     [oracleCard.oracleId],
   );
+  // Scope to the shown printing; printing-agnostic events (any-printing wishes
+  // / deck cards) have no edition, so they show on every edition's timeline.
   const sorted = useMemo(
-    () => (events ?? []).slice().sort((a, b) => b.ts - a.ts || (a.id < b.id ? 1 : -1)),
-    [events],
+    () =>
+      (events ?? [])
+        .filter((e) => !e.scryfallId || e.scryfallId === scryfallId)
+        .sort((a, b) => b.ts - a.ts || (a.id < b.id ? 1 : -1)),
+    [events, scryfallId],
   );
 
   /**

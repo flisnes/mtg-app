@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.49.0
+
+- **History is now per printing.** A card's History tab shows the timeline for the exact edition you're looking at, not all editions lumped together. Switch editions in the dropdown and the timeline (and "owned since") follows. Edition-agnostic events, like an "any printing" wish or deck slot, still show on every edition so nothing goes missing. The "Last edited" sort follows the same rule, so it lines up with what you see. Heads up: if you change a card's edition, its earlier history stays with the old edition, since that's a different printing.
+
 ## 0.48.0
 
 - **Date-added and last-edited sorting, now on the Wishlist too, and truer to the History tab.** The Wishlist sort menu gains the "Date added" and "Last edited" options that Collection and Tradelist got. And "Last edited" now sorts by the most recent entry in each card's History (the same date you see at the top of the History tab) instead of an internal timestamp that could drift, so the order matches what you actually did to the card.

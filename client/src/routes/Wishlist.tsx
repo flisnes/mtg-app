@@ -19,6 +19,7 @@ import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { useToast } from '../components/Toast.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
+import { loadLastEdited, lastEditedFor } from '../history/lastEdited.js';
 import { buildWishlistText, downloadText } from '../import/export.js';
 import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
@@ -54,18 +55,11 @@ export function Wishlist() {
     }));
   }, []);
 
-  // oracleId → latest event timestamp (the top of the card's History tab).
-  // "Last edited" sorts by this, not entry.updatedAt — see CollectionListView.
+  // Per-printing "last edited" (the top of that printing's History tab), not
+  // entry.updatedAt — see CollectionListView. "Any printing" wishes span the
+  // whole oracle; lastEditedFor handles the null scryfallId.
   const needEdited = sort.key === 'updated';
-  const lastEdited = useLiveQuery(async () => {
-    if (!needEdited) return undefined;
-    const m = new Map<string, number>();
-    await db.events.each((e) => {
-      const cur = m.get(e.oracleId);
-      if (cur === undefined || e.ts > cur) m.set(e.oracleId, e.ts);
-    });
-    return m;
-  }, [needEdited]);
+  const lastEdited = useLiveQuery(async () => (needEdited ? loadLastEdited() : undefined), [needEdited]);
 
   // Pre-normalise each card's search fields once per data change; the
   // Scryfall-syntax filter (t:/cmc:/o:/…) then runs cheaply per keystroke.
@@ -89,7 +83,7 @@ export function Wishlist() {
         cmc: r.oracle?.cmc,
         price: priceValue(r.printing, r.oracle),
         added: r.entry.createdAt,
-        updated: lastEdited?.get(r.entry.oracleId) ?? r.entry.updatedAt,
+        updated: (lastEdited && lastEditedFor(lastEdited, r.entry.oracleId, r.entry.scryfallId)) ?? r.entry.updatedAt,
       }),
       sort,
     );

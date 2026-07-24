@@ -16,6 +16,7 @@ import { SetSymbol } from './SetSymbol.js';
 import { PileView, CardBackSheet, type PileEntry } from './PileView.js';
 import { SortControls, formatPrice, priceValue, sortCards, useCardSort } from './CardSorting.js';
 import { historyChange } from '../price/history.js';
+import { loadLastEdited, lastEditedFor } from '../history/lastEdited.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { useGoblinMode } from './useGoblinMode.js';
 import { useOpenSearch } from './GlobalSearch.js';
@@ -65,21 +66,13 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     return m;
   }, [needChanges]);
 
-  // oracleId → latest event timestamp, matching the top row of the card's
-  // History tab. This is what "last edited" sorts by, NOT collection.updatedAt:
-  // updatedAt can move for reasons that leave no history entry, so the event
-  // log is the source of truth the user actually sees. Loaded only while the
-  // sort is active (events is an append-only table that grows without bound).
+  // Per-printing "last edited", matching the top row of that printing's History
+  // tab. This is what the sort keys off, NOT collection.updatedAt: updatedAt can
+  // move for reasons that leave no history entry, so the event log is the source
+  // of truth the user actually sees. Loaded only while the sort is active
+  // (events is an append-only table that grows without bound).
   const needEdited = sort.key === 'updated';
-  const lastEdited = useLiveQuery(async () => {
-    if (!needEdited) return undefined;
-    const m = new Map<string, number>();
-    await db.events.each((e) => {
-      const cur = m.get(e.oracleId);
-      if (cur === undefined || e.ts > cur) m.set(e.oracleId, e.ts);
-    });
-    return m;
-  }, [needEdited]);
+  const lastEdited = useLiveQuery(async () => (needEdited ? loadLastEdited() : undefined), [needEdited]);
 
   const sets = useMemo(() => {
     const m = new Map<string, string>();
@@ -118,7 +111,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         change: changes?.get(r.entry.scryfallId)?.delta ?? null,
         changePct: changes?.get(r.entry.scryfallId)?.pct ?? null,
         added: r.entry.createdAt,
-        updated: lastEdited?.get(r.entry.oracleId) ?? r.entry.updatedAt,
+        updated: (lastEdited && lastEditedFor(lastEdited, r.entry.oracleId, r.entry.scryfallId)) ?? r.entry.updatedAt,
       }),
       sort,
     );

@@ -407,6 +407,7 @@ export function CardSheet({
           <>
             <CardHistory
               oracleCard={oracleCard}
+              scryfallId={shownId}
               printings={printings}
               priceHistory={priceHistory}
               editMode={editMode}

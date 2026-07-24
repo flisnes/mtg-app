@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.51.0
+
+- **Add any variant to a trade, not just the default.** When you add a card to a trade that isn't in your collection (or, for their side, isn't on their tradelist), the card sheet now opens so you can pick the edition, condition, finish, language, and quantity before it lands in the offer. Foils and other variants finally come through correctly instead of always defaulting to a near-mint nonfoil.
+
 ## 0.50.0
 
 - **Own-it checkmarks everywhere.** Cards now carry the same ownership badge wherever they show up: search, the scan tray, your wishlist, deck lists, and the trade "you give" side. A green double-check means you own that exact printing, a single check means you own a different printing of the card, and a purple tag means you've got copies marked for trade. So you can tell at a glance, while browsing search or someone's list, whether a card's already in your binder.

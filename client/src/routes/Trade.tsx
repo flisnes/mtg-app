@@ -303,6 +303,9 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   }, [snap.state]);
   const [scanFor, setScanFor] = useState<Side | null>(null);
   const [info, setInfo] = useState<InfoTarget | null>(null);
+  // A card being added from outside a binder: the sheet picks its edition/
+  // condition/finish/language/quantity before it lands in the offer.
+  const [composing, setComposing] = useState<{ side: Side; oracle: Priced<OracleCard> } | null>(null);
   const ownership = useOwnership();
 
   const seatOf = (side: Side): Seat => (side === 'give' ? seat : peer);
@@ -581,6 +584,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             ownership={ownership}
             theirWanted={theirWanted}
             onAdd={(line, max) => addLine('give', line, max)}
+            onCompose={(oracle) => setComposing({ side: 'give', oracle })}
             onInfo={(oracle, scryfallId) =>
               openInfo(oracle, scryfallId ?? ownership?.get(oracle.oracleId)?.entry.scryfallId, { side: 'give' })
             }
@@ -594,6 +598,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             loading={trade.peerTradelistLoading}
             myWanted={myWanted}
             onAdd={(line, max) => addLine('get', line, max)}
+            onCompose={(oracle) => setComposing({ side: 'get', oracle })}
             onInfo={(oracle, scryfallId) =>
               openInfo(oracle, scryfallId ?? bestPeerLine(trade.peerTradelist, oracle.oracleId)?.scryfallId, { side: 'get' })
             }
@@ -641,6 +646,40 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
               : undefined
           }
           onClose={() => setInfo(null)}
+        />
+      )}
+
+      {composing && editable && (
+        <CardSheet
+          oracleCard={composing.oracle}
+          sessionCard={{
+            scryfallId: composing.oracle.defaultScryfallId,
+            quantity: 1,
+            lang: 'en',
+            finish: 'nonfoil',
+            condition: 'NM',
+          }}
+          highlightPrintings={infoHighlights({ oracle: composing.oracle, ctx: { side: composing.side } })}
+          onApply={(v) => {
+            // quantity 0 = the sheet's Remove/Cancel; nothing to add.
+            if (v.quantity > 0)
+              addMany(composing.side, [
+                {
+                  line: {
+                    oracleId: composing.oracle.oracleId,
+                    scryfallId: v.scryfallId,
+                    name: composing.oracle.name,
+                    quantity: v.quantity,
+                    condition: v.condition!,
+                    finish: v.finish!,
+                    lang: v.lang!,
+                  },
+                  count: v.quantity,
+                  max: 999,
+                },
+              ]);
+          }}
+          onClose={() => setComposing(null)}
         />
       )}
 
@@ -1027,11 +1066,13 @@ function AddCardsPanel({
   ownership,
   theirWanted,
   onAdd,
+  onCompose,
   onInfo,
 }: {
   ownership: Map<string, Owned> | undefined;
   theirWanted: WantFn;
   onAdd: (line: TradeLine, max: number) => void;
+  onCompose: (card: Priced<OracleCard>) => void;
   onInfo: OpenInfo;
 }) {
   const [q, setQ] = useState('');
@@ -1042,15 +1083,17 @@ function AddCardsPanel({
     return joinCollectionEntries(entries);
   }, []);
 
-  const addFromSearch = (card: OracleCard) => {
-    const own = ownership?.get(card.oracleId);
-    const e = own?.entry;
-    onAdd(
-      e
-        ? { oracleId: e.oracleId, scryfallId: e.scryfallId, name: card.name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang }
-        : { oracleId: card.oracleId, scryfallId: card.defaultScryfallId, name: card.name, quantity: 1, condition: 'NM', finish: 'nonfoil', lang: 'en' },
-      999,
-    );
+  // Owned cards add straight away with their known printing/condition/finish;
+  // anything you don't own opens the card sheet so you can pick edition,
+  // condition, finish, language and quantity before it joins the offer.
+  const addFromSearch = (card: Priced<OracleCard>) => {
+    const e = ownership?.get(card.oracleId)?.entry;
+    if (e)
+      onAdd(
+        { oracleId: e.oracleId, scryfallId: e.scryfallId, name: card.name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang },
+        999,
+      );
+    else onCompose(card);
   };
 
   const sortedTradelist = (tradelist ?? [])
@@ -1133,6 +1176,7 @@ function AddTheirCardsPanel({
   loading,
   myWanted,
   onAdd,
+  onCompose,
   onInfo,
   onRefresh,
 }: {
@@ -1140,6 +1184,7 @@ function AddTheirCardsPanel({
   loading: boolean;
   myWanted: WantFn;
   onAdd: (line: TradeLine, max: number) => void;
+  onCompose: (card: Priced<OracleCard>) => void;
   onInfo: OpenInfo;
   onRefresh: () => void;
 }) {
@@ -1149,15 +1194,13 @@ function AddTheirCardsPanel({
   const { printMap, oracleMap } = useCardMaps(lines ?? []);
 
   // Their tradelist knows the exact printing they registered — prefer it over
-  // the card-DB default (the newest edition, usually the wrong guess).
-  const addFromSearch = (card: OracleCard) => {
+  // the card-DB default (the newest edition, usually the wrong guess). Anything
+  // not on their list opens the card sheet so you can pick edition, condition,
+  // finish, language and quantity for whatever they hand you.
+  const addFromSearch = (card: Priced<OracleCard>) => {
     const listed = bestPeerLine(lines, card.oracleId);
     if (listed) onAdd({ ...listed, quantity: 1 }, listed.quantity);
-    else
-      onAdd(
-        { oracleId: card.oracleId, scryfallId: card.defaultScryfallId, name: card.name, quantity: 1, condition: 'NM', finish: 'nonfoil', lang: 'en' },
-        999,
-      );
+    else onCompose(card);
   };
 
   const sorted = [...(lines ?? [])]

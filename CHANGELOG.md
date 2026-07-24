@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.50.0
+
+- **Own-it checkmarks everywhere.** Cards now carry the same ownership badge wherever they show up: search, the scan tray, your wishlist, deck lists, and the trade "you give" side. A green double-check means you own that exact printing, a single check means you own a different printing of the card, and a purple tag means you've got copies marked for trade. So you can tell at a glance, while browsing search or someone's list, whether a card's already in your binder.
+
 ## 0.49.0
 
 - **History is now per printing.** A card's History tab shows the timeline for the exact edition you're looking at, not all editions lumped together. Switch editions in the dropdown and the timeline (and "owned since") follows. Edition-agnostic events, like an "any printing" wish or deck slot, still show on every edition so nothing goes missing. The "Last edited" sort follows the same rule, so it lines up with what you see. Heads up: if you change a card's edition, its earlier history stays with the old edition, since that's a different printing.

@@ -2975,6 +2975,11 @@ button.ghost {
   padding: 0 5px;
   pointer-events: none;
 }
+/* Ownership check goes top-right on scan tiles — the session-count badge owns the top-left. */
+.scan-tile-card .tile-badge {
+  left: auto;
+  right: 4px;
+}
 .scan-tile-ocr {
   position: absolute;
   bottom: 4px;

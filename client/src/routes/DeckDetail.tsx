@@ -29,6 +29,8 @@ import type { ResolvedLine, UnmatchedLine } from '../import/types.js';
 import { useToast } from '../components/Toast.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
+import { ownedBadge } from '../components/OwnedBadge.js';
+import { useOwnershipIndex } from '../db/useOwnership.js';
 import {
   addToTotal,
   formatTotal,
@@ -366,21 +368,25 @@ function Board({
   hasCommander?: boolean;
   emptyHint?: string;
 }) {
+  const ownership = useOwnershipIndex();
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
   const toItem = (r: Row): CardItem => {
-    const owned = r.owned >= r.quantity;
+    const enough = r.owned >= r.quantity;
     const issue = issues.get(r.oracleId);
+    // Ownership checkmark (own this exact printing / another / for trade), same
+    // as everywhere else. A legality problem still wins the badge slot (⚠).
+    const own = ownedBadge(ownership?.lookup(r.oracleId, r.scryfallId ?? r.oracle?.defaultScryfallId));
     return {
       key: r.id,
       name: r.oracle?.name ?? '(unknown card)',
       image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
       mana: r.oracle?.manaCost,
       count: r.quantity,
-      badge: issue ? '⚠' : owned ? '✓' : undefined,
-      badgeClass: issue ? 'badge-illegal' : 'badge-owned',
-      badgeTitle: issue,
-      dim: !owned,
+      badge: issue ? '⚠' : own?.icon,
+      badgeClass: issue ? 'badge-illegal' : own?.cls,
+      badgeTitle: issue ?? own?.title,
+      dim: !enough,
       sub: (
         <>
           owned {r.owned}

@@ -11,6 +11,8 @@ import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components
 import { BulkActionBar } from '../components/BulkActionBar.js';
 import { useMultiSelect } from '../components/useMultiSelect.js';
 import { SetSymbol } from '../components/SetSymbol.js';
+import { ownedBadge } from '../components/OwnedBadge.js';
+import { useOwnershipIndex } from '../db/useOwnership.js';
 import { addToTotal, formatTotal, priceValue, SortControls, sortCards, useCardSort, type PriceTotal } from '../components/CardSorting.js';
 import { HeaderValue } from '../components/ValueSummary.js';
 import { useOpenSearch } from '../components/GlobalSearch.js';
@@ -40,6 +42,7 @@ export function Wishlist() {
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState(false);
   const moverFlags = useMoverFlags();
+  const ownership = useOwnershipIndex();
   const toast = useToast();
   const sel = useMultiSelect();
   const rows = useLiveQuery(async (): Promise<WishRow[]> => {
@@ -173,12 +176,19 @@ export function Wishlist() {
             selectable={sel.active}
             selectedKeys={sel.selected}
             onToggleSelect={sel.toggle}
-            items={filtered.map(
-              (r): CardItem => ({
+            items={filtered.map((r): CardItem => {
+              // A wish shows a specific printing, or the oracle's default for "any printing".
+              const ownBadge = ownedBadge(
+                ownership?.lookup(r.entry.oracleId, r.entry.scryfallId ?? r.oracle?.defaultScryfallId),
+              );
+              return {
                 key: r.entry.id,
                 name: r.oracle?.name ?? '(unknown card)',
                 image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
                 count: r.entry.quantity,
+                badge: ownBadge?.icon,
+                badgeClass: ownBadge?.cls,
+                badgeTitle: ownBadge?.title,
                 sub: r.entry.scryfallId ? (
                   r.printing ? (
                     <>
@@ -194,8 +204,8 @@ export function Wishlist() {
                 // "Any printing" wishes are tracked via the oracle's default printing.
                 trend: moverFlags?.get(r.entry.scryfallId ?? r.oracle?.defaultScryfallId ?? ''),
                 onClick: r.oracle ? () => setEditing(r) : undefined,
-              }),
-            )}
+              };
+            })}
           />
         </>
       )}

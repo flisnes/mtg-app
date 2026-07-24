@@ -15,6 +15,8 @@ import { resolveWithOcr } from '../scan/ocr.js';
 import { checkScanDataUpdate, downloadScanData, getInstalledScanData, type ScanDataManifest } from '../scan/store.js';
 import { Icon } from './icons.js';
 import { useToast } from './Toast.js';
+import { ownedBadge, type OwnedBadgeSpec } from './OwnedBadge.js';
+import { useOwnershipIndex } from '../db/useOwnership.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
 // camera fills the top of the screen and never pauses; each lock (S3 consensus
@@ -444,6 +446,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   /** Session copies of a printing across finishes/boards — the tile's badge. */
   const countOf = (scryfallId: string) => session.reduce((n, e) => (e.scryfallId === scryfallId ? n + e.qty : n), 0);
 
+  const ownership = useOwnershipIndex();
+
   return createPortal(
     <div className="scan-screen" role="dialog" aria-label="Scan cards">
       <div className="scan-camera">
@@ -511,6 +515,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
               candidate={c}
               count={countOf(c.scryfallId)}
               confirmed={tray.ocrHit === c.scryfallId && (tray.ocr === 'confirmed' || tray.ocr === 'weak')}
+              owned={ownedBadge(ownership?.lookup(c.oracle?.oracleId ?? '', c.scryfallId))}
               fx={fx?.id === c.scryfallId ? fx : null}
               onBump={(delta) => bump(c, delta, tray.lang)}
             />
@@ -586,12 +591,14 @@ function TrayTile({
   candidate: c,
   count,
   confirmed,
+  owned,
   fx,
   onBump,
 }: {
   candidate: Candidate;
   count: number;
   confirmed: boolean;
+  owned: OwnedBadgeSpec | null;
   fx: TapFx | null;
   onBump: (delta: 1 | -1) => void;
 }) {
@@ -600,6 +607,11 @@ function TrayTile({
     <div className="scan-tile">
       <div className="scan-tile-card">
         {c.printing?.imageNormal ? <img src={c.printing.imageNormal} alt={name} /> : <div className="scan-tile-ph">{name}</div>}
+        {owned && (
+          <span className={`tile-badge ${owned.cls}`} title={owned.title}>
+            {owned.icon}
+          </span>
+        )}
         <button className="scan-tile-half scan-tile-add" onClick={() => onBump(1)} aria-label={`Add ${name}`}>
           <Icon name="plus" size={16} />
         </button>

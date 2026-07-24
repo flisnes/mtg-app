@@ -16,6 +16,8 @@ import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js
 import { formatLabel } from '../deck/legality.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
+import { ownedBadge } from './OwnedBadge.js';
+import { useOwnershipIndex } from '../db/useOwnership.js';
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
 import { AccountMenu } from './AccountMenu.js';
@@ -184,6 +186,7 @@ function SearchOverlay({
   const [deckLegalOnly, setDeckLegalOnly] = useState(true);
   const toast = useToast();
   const target = useSearchTarget();
+  const ownership = useOwnershipIndex();
 
   // Searching from a deck filters to cards you could actually play there: legal
   // in the deck's format and, for Commander, within the commander's identity.
@@ -325,6 +328,7 @@ function SearchOverlay({
           effectiveFilters={effectiveFilters}
           filterExtras={filterExtras}
           emptyState={emptyState}
+          badgeFor={(card) => ownedBadge(ownership?.lookup(card.oracleId, card.defaultScryfallId))}
           actionsFor={actionsFor}
           listOnlyActions
           onCardClick={setSheetCard}

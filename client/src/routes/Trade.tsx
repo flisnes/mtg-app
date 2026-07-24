@@ -15,6 +15,7 @@ import { formatPrice } from '../components/CardSorting.js';
 import { CardItems, CardList, type CardItem } from '../components/CardViews.js';
 import { CodeJoinForm } from '../components/CodeJoinForm.js';
 import { Icon } from '../components/icons.js';
+import { ownedBadge, type OwnedBadgeSpec } from '../components/OwnedBadge.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { TradeQr } from '../components/TradeQr.js';
@@ -76,11 +77,11 @@ function bestPeerLine(lines: TradeLine[] | null, oracleId: string): TradeLine | 
   return best;
 }
 
-/** ⇄ in tradelist / ✓ owned / ❓ not in collection. */
-function ownIndicator(own: Owned | undefined): { icon: string; label: string; cls: string } {
-  if (!own) return { icon: '❓', label: 'Not in your collection', cls: 'own-unknown' };
-  if (own.forTrade > 0) return { icon: '⇄', label: `In your tradelist (${own.forTrade} for trade)`, cls: 'own-trade' };
-  return { icon: '✓', label: `In your collection (×${own.qty}), but not marked for trade`, cls: 'own-yes' };
+/** The shared ownership checkmark for a card I might give (own exact/other, or for trade). */
+function ownIndicator(own: Owned | undefined, scryfallId?: string): OwnedBadgeSpec | null {
+  if (!own) return null;
+  const ownsExact = !!scryfallId && own.entries.some((e) => e.scryfallId === scryfallId);
+  return ownedBadge({ qty: own.qty, forTrade: own.forTrade, ownsExact });
 }
 
 /**
@@ -522,7 +523,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           onQty={setQty}
           onAdd={() => setSheet('give')}
           onScan={() => setScanFor('give')}
-          badge={(l) => (ownership ? ownIndicator(ownership.get(l.oracleId)) : null)}
+          badge={(l) => (ownership ? ownIndicator(ownership.get(l.oracleId), l.scryfallId) : null)}
           printings={printMap}
           oracles={oracleMap}
           onInfo={openInfo}
@@ -539,7 +540,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           onScan={() => setScanFor('get')}
           badge={(l) => {
             const w = myWanted(l.oracleId, l.scryfallId);
-            return w > 0 ? { icon: '⭐', label: `On your wishlist (×${w})`, cls: 'badge-wish' } : null;
+            return w > 0 ? { icon: '⭐', title: `On your wishlist (×${w})`, cls: 'badge-wish' } : null;
           }}
           printings={printMap}
           oracles={oracleMap}
@@ -692,7 +693,7 @@ function OfferPanel({
   onAdd: () => void;
   onScan: () => void;
   /** Per-line indicator: ownership for "You give", wishlist match for "You get". */
-  badge: (l: TradeLine) => { icon: string; label: string; cls: string } | null;
+  badge: (l: TradeLine) => { icon: ReactNode; cls?: string; title?: string } | null;
   printings: Map<string, Priced<Printing>> | undefined;
   oracles: Map<string, Priced<OracleCard>> | undefined;
   onInfo: OpenInfo;
@@ -722,7 +723,7 @@ function OfferPanel({
               count: l.quantity,
               badge: ind?.icon,
               badgeClass: ind?.cls,
-              badgeTitle: ind?.label,
+              badgeTitle: ind?.title,
               onClick: oracle ? () => onInfo(oracle, l.scryfallId, { side, line: editable ? l : undefined }) : undefined,
               actions: (
                 <>
@@ -1111,10 +1112,7 @@ function AddCardsPanel({
       filters={filters}
       setFilters={setFilters}
       emptyState={emptyState}
-      badgeFor={(card) => {
-        const ind = ownIndicator(ownership?.get(card.oracleId));
-        return { icon: ind.icon, cls: ind.cls, title: ind.label };
-      }}
+      badgeFor={(card) => ownIndicator(ownership?.get(card.oracleId), card.defaultScryfallId)}
       actionsFor={(card) => (
         <button title="Add to offer" onClick={() => addFromSearch(card)}>
           ＋

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.47.0
+
+- **Sort by date added and last edited.** Your Collection and Tradelist sort menus have two new options: sort by when a card was added, and by when you last touched it (changed quantity, condition, tradelist status, and so on). Use the ↑/↓ toggle to flip between newest-first and oldest-first.
+
 ## 0.46.0
 
 - **Total value at a glance.** Your Collection, Wishlist, Tradelist, and Decks pages now show the total value up in the header, tucked beside the title so it takes no extra room. Each deck's detail page also tells you what that deck is worth. Prices follow the same currency as the per-card prices (EUR where available, otherwise USD).

@@ -7,7 +7,7 @@ import type { Color, OracleCard } from '@mtg/shared';
 // own preference under `cardSort:<key>` (localStorage, synchronous — same
 // pattern as useViewMode).
 
-export type SortKey = 'name' | 'cmc' | 'price' | 'change' | 'changePct';
+export type SortKey = 'name' | 'cmc' | 'price' | 'change' | 'changePct' | 'added' | 'updated';
 export type SortDir = 'asc' | 'desc';
 export type GroupKey = 'none' | 'type' | 'color';
 
@@ -50,6 +50,9 @@ export interface SortFields {
   /** Recorded price change (absolute / percent) — collection views only. */
   change?: number | null;
   changePct?: number | null;
+  /** Epoch ms the card was added / last edited — collection views only. */
+  added?: number | null;
+  updated?: number | null;
 }
 
 /** Numeric price for sorting: EUR from any source, else USD (matches formatPrice). */
@@ -107,6 +110,8 @@ export function sortCards<T>(items: T[], get: (t: T) => SortFields, prefs: Pick<
     else if (prefs.key === 'price') cmp = compareNullable(fa.price, fb.price, mul);
     else if (prefs.key === 'change') cmp = compareNullable(fa.change, fb.change, mul);
     else if (prefs.key === 'changePct') cmp = compareNullable(fa.changePct, fb.changePct, mul);
+    else if (prefs.key === 'added') cmp = compareNullable(fa.added, fb.added, mul);
+    else if (prefs.key === 'updated') cmp = compareNullable(fa.updated, fb.updated, mul);
     if (cmp === 0) {
       cmp = (fa.name ?? '').localeCompare(fb.name ?? '');
       if (prefs.key === 'name') cmp *= mul;
@@ -179,6 +184,11 @@ const CHANGE_OPTIONS: [SortKey, string][] = [
   ['change', 'Sort: Price change'],
   ['changePct', 'Sort: Price change %'],
 ];
+// Only where entries carry createdAt/updatedAt (collection/tradelist).
+const DATE_OPTIONS: [SortKey, string][] = [
+  ['added', 'Sort: Date added'],
+  ['updated', 'Sort: Last edited'],
+];
 const GROUP_OPTIONS: [GroupKey, string][] = [
   ['none', 'Group: None'],
   ['type', 'Group: Card type'],
@@ -190,6 +200,7 @@ export function SortControls({
   onChange,
   groups = false,
   withChange = false,
+  withDates = false,
 }: {
   prefs: CardSortPrefs;
   onChange: (p: CardSortPrefs) => void;
@@ -197,9 +208,11 @@ export function SortControls({
   groups?: boolean;
   /** Offer price-change sorts (views that supply SortFields.change). */
   withChange?: boolean;
+  /** Offer date-added / last-edited sorts (views that supply SortFields.added/updated). */
+  withDates?: boolean;
 }) {
   const asc = prefs.dir === 'asc';
-  const sortOptions = withChange ? [...SORT_OPTIONS, ...CHANGE_OPTIONS] : SORT_OPTIONS;
+  const sortOptions = [...SORT_OPTIONS, ...(withChange ? CHANGE_OPTIONS : []), ...(withDates ? DATE_OPTIONS : [])];
   return (
     <div className="sort-controls" role="group" aria-label="Sort and group">
       {groups && (

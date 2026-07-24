@@ -101,6 +101,8 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         price: priceValue(r.printing, r.oracle),
         change: changes?.get(r.entry.scryfallId)?.delta ?? null,
         changePct: changes?.get(r.entry.scryfallId)?.pct ?? null,
+        added: r.entry.createdAt,
+        updated: r.entry.updatedAt,
       }),
       sort,
     );
@@ -238,7 +240,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
               <Icon name="check" size={15} /> Select
             </button>
           )}
-          {!pileMode && <SortControls prefs={sort} onChange={setSort} withChange />}
+          {!pileMode && <SortControls prefs={sort} onChange={setSort} withChange withDates />}
           <ViewToggle mode={view} onChange={setView} showPile={allowPile} />
         </div>
       </div>

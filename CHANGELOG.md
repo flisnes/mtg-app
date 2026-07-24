@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.48.0
+
+- **Date-added and last-edited sorting, now on the Wishlist too, and truer to the History tab.** The Wishlist sort menu gains the "Date added" and "Last edited" options that Collection and Tradelist got. And "Last edited" now sorts by the most recent entry in each card's History (the same date you see at the top of the History tab) instead of an internal timestamp that could drift, so the order matches what you actually did to the card.
+
 ## 0.47.0
 
 - **Sort by date added and last edited.** Your Collection and Tradelist sort menus have two new options: sort by when a card was added, and by when you last touched it (changed quantity, condition, tradelist status, and so on). Use the ↑/↓ toggle to flip between newest-first and oldest-first.

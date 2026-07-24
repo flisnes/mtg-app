@@ -54,6 +54,19 @@ export function Wishlist() {
     }));
   }, []);
 
+  // oracleId → latest event timestamp (the top of the card's History tab).
+  // "Last edited" sorts by this, not entry.updatedAt — see CollectionListView.
+  const needEdited = sort.key === 'updated';
+  const lastEdited = useLiveQuery(async () => {
+    if (!needEdited) return undefined;
+    const m = new Map<string, number>();
+    await db.events.each((e) => {
+      const cur = m.get(e.oracleId);
+      if (cur === undefined || e.ts > cur) m.set(e.oracleId, e.ts);
+    });
+    return m;
+  }, [needEdited]);
+
   // Pre-normalise each card's search fields once per data change; the
   // Scryfall-syntax filter (t:/cmc:/o:/…) then runs cheaply per keystroke.
   const searchIndex = useMemo(() => {
@@ -71,10 +84,16 @@ export function Wishlist() {
         const se = searchIndex.get(r.entry.id);
         return !!se && query.matches(se);
       }),
-      (r) => ({ name: r.oracle?.name, cmc: r.oracle?.cmc, price: priceValue(r.printing, r.oracle) }),
+      (r) => ({
+        name: r.oracle?.name,
+        cmc: r.oracle?.cmc,
+        price: priceValue(r.printing, r.oracle),
+        added: r.entry.createdAt,
+        updated: lastEdited?.get(r.entry.oracleId) ?? r.entry.updatedAt,
+      }),
       sort,
     );
-  }, [rows, searchIndex, name, sort]);
+  }, [rows, searchIndex, name, sort, lastEdited]);
 
   // Value covers the whole wishlist, not just the filtered view.
   const value = useMemo(() => {
@@ -151,7 +170,7 @@ export function Wishlist() {
                   <Icon name="check" size={15} /> Select
                 </button>
               )}
-              <SortControls prefs={sort} onChange={setSort} />
+              <SortControls prefs={sort} onChange={setSort} withDates />
               <ViewToggle mode={view} onChange={setView} />
             </div>
           </div>

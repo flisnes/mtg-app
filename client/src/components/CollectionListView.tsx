@@ -65,6 +65,22 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     return m;
   }, [needChanges]);
 
+  // oracleId → latest event timestamp, matching the top row of the card's
+  // History tab. This is what "last edited" sorts by, NOT collection.updatedAt:
+  // updatedAt can move for reasons that leave no history entry, so the event
+  // log is the source of truth the user actually sees. Loaded only while the
+  // sort is active (events is an append-only table that grows without bound).
+  const needEdited = sort.key === 'updated';
+  const lastEdited = useLiveQuery(async () => {
+    if (!needEdited) return undefined;
+    const m = new Map<string, number>();
+    await db.events.each((e) => {
+      const cur = m.get(e.oracleId);
+      if (cur === undefined || e.ts > cur) m.set(e.oracleId, e.ts);
+    });
+    return m;
+  }, [needEdited]);
+
   const sets = useMemo(() => {
     const m = new Map<string, string>();
     rows?.forEach((r) => r.printing && m.set(r.printing.set, r.printing.setName));
@@ -102,11 +118,11 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         change: changes?.get(r.entry.scryfallId)?.delta ?? null,
         changePct: changes?.get(r.entry.scryfallId)?.pct ?? null,
         added: r.entry.createdAt,
-        updated: r.entry.updatedAt,
+        updated: lastEdited?.get(r.entry.oracleId) ?? r.entry.updatedAt,
       }),
       sort,
     );
-  }, [rows, searchIndex, name, set, color, rarity, tradeOnly, onlyTrade, sort, changes]);
+  }, [rows, searchIndex, name, set, color, rarity, tradeOnly, onlyTrade, sort, changes, lastEdited]);
 
   const totalQty = filtered.reduce((s, r) => s + r.entry.quantity, 0);
 

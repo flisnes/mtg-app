@@ -178,7 +178,11 @@ export function Trade() {
               <button className="primary" onClick={trade.create}>
                 Start a trade
               </button>
+              <button onClick={trade.startSolo}>Trade solo</button>
             </div>
+            <p className="fine-print">
+              Trading with someone who isn’t on the app? “Trade solo” lets you fill in both sides and record it yourself.
+            </p>
             <CodeJoinForm label="Join code" submitLabel="Join" onSubmit={trade.join} />
           </section>
 
@@ -288,6 +292,7 @@ type SheetKind = Side | 'balance';
 
 function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>; seat: Seat }) {
   const snap = trade.snapshot!;
+  const solo = trade.solo;
   const peer = otherSeat(seat);
   // Server-authoritative offers, mirrored locally so edits render instantly.
   // Either participant may edit either side (you usually hold each other's
@@ -457,8 +462,11 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
     );
   }
 
-  const barStatus =
-    snap.state === 'agreed'
+  const barStatus = solo
+    ? snap.state === 'agreed'
+      ? 'Swap the cards, then confirm to record the trade.'
+      : 'Add the cards on both sides, then accept.'
+    : snap.state === 'agreed'
       ? iConfirmed
         ? 'Waiting for their confirmation…'
         : peerConfirmed
@@ -480,24 +488,30 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           label="Trade options"
           actions={[
             ...(editable ? [{ label: 'Balance the trade', icon: 'balance' as const, onClick: () => setSheet('balance') }] : []),
-            { label: 'Refresh partner lists', icon: 'refresh', onClick: () => { requestWishlist(); requestTradelist(); } },
+            ...(solo ? [] : [{ label: 'Refresh partner lists', icon: 'refresh' as const, onClick: () => { requestWishlist(); requestTradelist(); } }]),
             { label: 'Cancel trade', icon: 'close', danger: true, onClick: trade.cancel },
           ]}
         />
       }
     >
       <div className="trade-status">
-        <div className="trade-status-code">
-          Code <strong className="trade-code">{snap.code}</strong>
-          {snap.state === 'open' && (
-            <button className="qr-btn" onClick={() => setShowQr(true)} aria-label="Show invite QR code" title="Show invite QR code">
-              <Icon name="qr" size={18} />
-            </button>
-          )}
-        </div>
-        <div className={trade.peerPresent ? 'presence-on' : 'presence-off'}>
-          {snap.present[peer] ? 'Other User connected' : 'Waiting for other user…'}
-        </div>
+        {solo ? (
+          <div className="trade-status-code">Solo trade</div>
+        ) : (
+          <div className="trade-status-code">
+            Code <strong className="trade-code">{snap.code}</strong>
+            {snap.state === 'open' && (
+              <button className="qr-btn" onClick={() => setShowQr(true)} aria-label="Show invite QR code" title="Show invite QR code">
+                <Icon name="qr" size={18} />
+              </button>
+            )}
+          </div>
+        )}
+        {!solo && (
+          <div className={trade.peerPresent ? 'presence-on' : 'presence-off'}>
+            {snap.present[peer] ? 'Other User connected' : 'Waiting for other user…'}
+          </div>
+        )}
       </div>
 
       {(theyWantCount > 0 || iWantCount > 0) && (

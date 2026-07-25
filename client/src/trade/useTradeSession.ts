@@ -37,6 +37,8 @@ export interface TradeSession {
   seat: Seat | null;
   snapshot: SessionSnapshot | null;
   peerPresent: boolean;
+  /** No partner, no relay: we sit in seat 'a' and record both sides ourselves. */
+  solo: boolean;
   error: string | null;
   /** Partner's tradelist, if they've answered a request. null = never asked/answered. */
   peerTradelist: TradeLine[] | null;
@@ -45,6 +47,8 @@ export interface TradeSession {
   /** Partner's wishlist (for match highlighting). null = never asked/answered. */
   peerWishlist: WishLine[] | null;
   create: () => void;
+  /** Start a partnerless trade: build both sides locally, complete without a peer. */
+  startSolo: () => void;
   join: (code: string) => void;
   resume: (t: ActiveTrade) => void;
   /** Replace one side's offer — either participant may edit either side. */
@@ -89,8 +93,13 @@ export function useTradeSession(): TradeSession {
   const [peerTradelist, setPeerTradelist] = useState<TradeLine[] | null>(null);
   const [peerTradelistLoading, setPeerTradelistLoading] = useState(false);
   const [peerWishlist, setPeerWishlist] = useState<WishLine[] | null>(null);
+  const [solo, setSolo] = useState(false);
 
   const ws = useRef<WebSocket | null>(null);
+  // Solo mode: a purely local snapshot with no socket. soloRef gates the sender
+  // functions; soloSnap holds the current snapshot to mutate on each action.
+  const soloRef = useRef(false);
+  const soloSnap = useRef<SessionSnapshot | null>(null);
   const active = useRef<Partial<ActiveTrade>>({});
   const appliedRef = useRef(false);
   const intentionalClose = useRef(false);
@@ -322,6 +331,53 @@ export function useTradeSession(): TradeSession {
 
   const code = () => active.current.code;
 
+  // Push a new solo snapshot into the mirror and, on completion, run the same
+  // local mutation a networked trade would (given = my offer, received = theirs).
+  const applySolo = useCallback((next: SessionSnapshot) => {
+    soloSnap.current = next;
+    setSnapshot(next);
+    if (next.state === 'completed' && !appliedRef.current) {
+      appliedRef.current = true;
+      void applyCompletedTrade(next.sessionId, next.offers.a, next.offers.b, null);
+    }
+  }, []);
+
+  const startSolo = useCallback(() => {
+    // Tear down any live socket — a solo trade owns the UI outright.
+    intentionalClose.current = true;
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
+    }
+    ws.current?.close();
+    ws.current = null;
+    active.current = {};
+    appliedRef.current = false;
+    peerUsername.current = null;
+    const snap: SessionSnapshot = {
+      code: '',
+      sessionId: crypto.randomUUID(),
+      state: 'building',
+      offers: { a: [], b: [] },
+      accepted: { a: false, b: false },
+      confirmed: { a: false, b: false },
+      // The partner "seat" is implicit — present so the board never shows a
+      // "waiting for the other user" state it can't leave.
+      present: { a: true, b: true },
+    };
+    soloRef.current = true;
+    soloSnap.current = snap;
+    setSolo(true);
+    setSeat('a');
+    setStatus('active');
+    setError(null);
+    setPeerPresent(false);
+    // Treat the absent partner as having shared empty lists, not "not arrived yet".
+    setPeerTradelist([]);
+    setPeerWishlist([]);
+    setSnapshot(snap);
+  }, [applySolo]);
+
   const create = useCallback(() => connect({ v: PROTOCOL_VERSION, type: 'create_session' }), [connect]);
   const join = useCallback(
     (c: string) => connect({ v: PROTOCOL_VERSION, type: 'join_session', sessionCode: c.trim().toUpperCase() }),
@@ -337,9 +393,15 @@ export function useTradeSession(): TradeSession {
   );
 
   const sendOffer = useCallback((side: Seat, lines: TradeLine[]) => {
+    if (soloRef.current) {
+      const s = soloSnap.current;
+      // Any edit clears acceptance and drops back to building — same as the server.
+      if (s) applySolo({ ...s, offers: { ...s.offers, [side]: lines }, accepted: { a: false, b: false }, confirmed: { a: false, b: false }, state: 'building' });
+      return;
+    }
     const c = code();
     if (c) send({ v: PROTOCOL_VERSION, type: 'offer_update', sessionCode: c, side, lines });
-  }, [send]);
+  }, [send, applySolo]);
   const requestTradelist = useCallback(() => {
     const c = code();
     if (c) {
@@ -351,10 +413,24 @@ export function useTradeSession(): TradeSession {
     const c = code();
     if (c) send({ v: PROTOCOL_VERSION, type: 'wishlist_request', sessionCode: c });
   }, [send]);
-  const accept = useCallback(() => { const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'accept', sessionCode: c }); }, [send]);
-  const unaccept = useCallback(() => { const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'unaccept', sessionCode: c }); }, [send]);
-  const confirmComplete = useCallback(() => { const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'confirm_complete', sessionCode: c }); }, [send]);
-  const cancel = useCallback(() => { const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'cancel', sessionCode: c }); }, [send]);
+  // Solo has no second party, so accept/confirm mirror the absent seat: one tap
+  // agrees for both, one tap confirms for both. The two-step flow is unchanged.
+  const accept = useCallback(() => {
+    if (soloRef.current) { const s = soloSnap.current; if (s) applySolo({ ...s, accepted: { a: true, b: true }, state: 'agreed' }); return; }
+    const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'accept', sessionCode: c });
+  }, [send, applySolo]);
+  const unaccept = useCallback(() => {
+    if (soloRef.current) { const s = soloSnap.current; if (s) applySolo({ ...s, accepted: { a: false, b: false }, confirmed: { a: false, b: false }, state: 'building' }); return; }
+    const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'unaccept', sessionCode: c });
+  }, [send, applySolo]);
+  const confirmComplete = useCallback(() => {
+    if (soloRef.current) { const s = soloSnap.current; if (s) applySolo({ ...s, confirmed: { a: true, b: true }, state: 'completed' }); return; }
+    const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'confirm_complete', sessionCode: c });
+  }, [send, applySolo]);
+  const cancel = useCallback(() => {
+    if (soloRef.current) { const s = soloSnap.current; if (s) applySolo({ ...s, state: 'cancelled' }); return; }
+    const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'cancel', sessionCode: c });
+  }, [send, applySolo]);
 
   const reset = useCallback(() => {
     intentionalClose.current = true;
@@ -370,6 +446,9 @@ export function useTradeSession(): TradeSession {
     stateRef.current = null;
     peerUsername.current = null;
     sentIdentity.current = false;
+    soloRef.current = false;
+    soloSnap.current = null;
+    setSolo(false);
     setStatus('idle');
     setSeat(null);
     setSnapshot(null);
@@ -394,5 +473,5 @@ export function useTradeSession(): TradeSession {
     };
   }, []);
 
-  return { status, seat, snapshot, peerPresent, error, peerTradelist, peerTradelistLoading, peerWishlist, create, join, resume, sendOffer, requestTradelist, requestWishlist, accept, unaccept, confirmComplete, cancel, reset };
+  return { status, seat, snapshot, peerPresent, solo, error, peerTradelist, peerTradelistLoading, peerWishlist, create, startSolo, join, resume, sendOffer, requestTradelist, requestWishlist, accept, unaccept, confirmComplete, cancel, reset };
 }

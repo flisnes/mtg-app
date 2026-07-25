@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.52.0
+
+- **Trade solo, for when the other player isn’t on the app.** The trade screen has a new “Trade solo” option: you fill in both sides yourself (the cards you give and the cards you get), accept, and confirm, just like a normal trade but without waiting for a partner to join. It records to your collection, trade history, and each card’s edit history exactly the same way, so a trade with a friend who doesn’t use the app still shows up correctly.
+
 ## 0.51.0
 
 - **Add any variant to a trade, not just the default.** When you add a card to a trade that isn't in your collection (or, for their side, isn't on their tradelist), the card sheet now opens so you can pick the edition, condition, finish, language, and quantity before it lands in the offer. Foils and other variants finally come through correctly instead of always defaulting to a near-mint nonfoil.

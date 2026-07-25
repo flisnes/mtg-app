@@ -15,6 +15,7 @@ import type { ScanPipelineResult } from '../scan/pipeline.js';
 import { resolveWithOcr } from '../scan/ocr.js';
 import { checkScanDataUpdate, downloadScanData, getInstalledScanData, type ScanDataManifest } from '../scan/store.js';
 import { Icon } from './icons.js';
+import { SetSymbol } from './SetSymbol.js';
 import { useToast } from './Toast.js';
 import { ownedBadge, type OwnedBadgeSpec } from './OwnedBadge.js';
 import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
@@ -1011,7 +1012,16 @@ function TrayTile({
           </span>
         )}
       </div>
-      <span className="scan-tile-caption">{c.printing ? `${c.printing.set.toUpperCase()} #${c.printing.collectorNumber}` : '—'}</span>
+      <span className="scan-tile-caption">
+        {c.printing ? (
+          <>
+            <SetSymbol set={c.printing.set} className="scan-tile-set" title={c.printing.setName} />
+            {c.printing.set.toUpperCase()} #{c.printing.collectorNumber}
+          </>
+        ) : (
+          '—'
+        )}
+      </span>
     </div>
   );
 }

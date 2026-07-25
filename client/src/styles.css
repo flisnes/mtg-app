@@ -2891,8 +2891,8 @@ button.ghost {
   height: 100%;
   /* Card aspect 488/680 = 0.718; card box height = tile − caption − gap.
      dvh fallback first, then the container-measured truth where supported. */
-  width: calc((25dvh - 1.9rem - 2px - var(--safe-bottom)) * 0.718);
-  width: calc((100cqh - 0.9rem - 2px) * 0.718);
+  width: calc((25dvh - 2.3rem - 2px - var(--safe-bottom)) * 0.718);
+  width: calc((100cqh - 1.3rem - 2px) * 0.718);
   flex-shrink: 0;
 }
 .scan-tile-card {
@@ -2998,12 +2998,23 @@ button.ghost {
 }
 .scan-tile-caption {
   font-size: 0.65rem;
-  line-height: 0.9rem; /* reserved in --scan-card-h */
+  line-height: 1.3rem; /* reserved in the tile height calc below */
   color: var(--text-dim);
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Bigger than the symbol printed on the card art above, so the set is legible
+   at a glance — most players recognise the symbol faster than the code. */
+.scan-tile-set {
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--text);
+  flex-shrink: 0;
 }
 /* +1/−1 flash on tap. */
 .scan-fx {

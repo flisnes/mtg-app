@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.57.0
+
+- **Scan matches now show the set symbol.** Under each match tile, next to the set code and collector number, there's now the actual set symbol, drawn nice and big so it's easy to read. Handy when you recognise a set by its icon faster than by its three-letter code.
+
 ## 0.56.0
 
 - **The +/− on scan matches got out of the way.** The little plus and minus hints on each match tile were sitting right on top of the ownership check, making it hard to tell a single check from a double. They're now centered along the top and bottom edges, so the corner badges read cleanly.

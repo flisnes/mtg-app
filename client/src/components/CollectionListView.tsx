@@ -14,7 +14,7 @@ import { DeckPickerSheet } from './DeckPickerSheet.js';
 import { useMultiSelect } from './useMultiSelect.js';
 import { SetSymbol } from './SetSymbol.js';
 import { PileView, CardBackSheet, type PileEntry } from './PileView.js';
-import { SortControls, formatPrice, priceValue, sortCards, useCardSort } from './CardSorting.js';
+import { SortControls, formatPrice, priceValue, pricedForFinish, sortCards, useCardSort } from './CardSorting.js';
 import { historyChange } from '../price/history.js';
 import { loadLastEdited, lastEditedFor } from '../history/lastEdited.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
@@ -107,7 +107,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       (r) => ({
         name: r.oracle?.name,
         cmc: r.oracle?.cmc,
-        price: priceValue(r.printing, r.oracle),
+        price: priceValue(pricedForFinish(r.printing, r.entry.finish), r.oracle),
         change: changes?.get(r.entry.scryfallId)?.delta ?? null,
         changePct: changes?.get(r.entry.scryfallId)?.pct ?? null,
         added: r.entry.createdAt,
@@ -305,7 +305,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
                   {r.entry.lang !== 'en' ? ` · ${r.entry.lang}` : ''}
                 </>
               ),
-              price: formatPrice(r.printing, r.oracle) ?? '—',
+              price: formatPrice(pricedForFinish(r.printing, r.entry.finish), r.oracle) ?? '—',
               trend: moverFlags?.get(r.entry.scryfallId),
               onClick: () => setEditing(r),
             }),

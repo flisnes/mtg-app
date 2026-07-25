@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.53.0
+
+- **Foils are priced as foils.** Until now every finish of a card showed the same price, so a foil and its nonfoil twin looked identical in value. Prices now track the foil (and etched) market price separately everywhere it matters: per-card in your collection and lists, the collection and tradelist value totals, and both sides of a trade. Etched cards use their own price where the market has one. Prices refresh with the nightly card-DB update, so foil values fill in within a day of updating.
+
 ## 0.52.0
 
 - **Trade solo, for when the other player isn’t on the app.** The trade screen has a new “Trade solo” option: you fill in both sides yourself (the cards you give and the cards you get), accept, and confirm, just like a normal trade but without waiting for a partner to join. It records to your collection, trade history, and each card’s edit history exactly the same way, so a trade with a friend who doesn’t use the app still shows up correctly.

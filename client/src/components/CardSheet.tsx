@@ -24,7 +24,7 @@ import { CardHistory } from './CardHistory.js';
 import { EventSheet } from './EventSheet.js';
 import { Icon } from './icons.js';
 import type { HistoryEntry } from '../history/useHistoryEntries.js';
-import { formatPrice } from './CardSorting.js';
+import { formatPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
 import { Sparkline } from './Sparkline.js';
@@ -252,7 +252,7 @@ export function CardSheet({
   // Back face for double-faced cards (transform / modal DFC / …); absent for single-faced ones.
   const cardBackImage =
     printing?.imageBackNormal ?? oracleCard.imageBackNormal ?? printing?.imageBackSmall ?? oracleCard.imageBackSmall ?? null;
-  const cardPrice = formatPrice(printing, oracleCard) ?? '—';
+  const cardPrice = formatPrice(pricedForFinish(printing, finish), oracleCard) ?? '—';
   // Flip state for the shown card art; reset when switching editions (a
   // different printing may not be double-faced at all).
   const [flipped, setFlipped] = useState(false);

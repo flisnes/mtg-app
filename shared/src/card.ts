@@ -69,11 +69,37 @@ export interface Printing {
 // daily (which used to force a full 14 MB re-download + re-import), while the
 // card data itself only changes when Scryfall's underlying data does.
 
-/** A card row enriched with its current prices (joined at read time on the client). */
-export type Priced<T> = T & { priceEur: number | null; priceUsd: number | null };
+/**
+ * A card row enriched with its current prices (joined at read time on the
+ * client). `priceEur`/`priceUsd` are the nonfoil prices; the foil/etched
+ * variants are present when the price artifact carries them (`priceHasFoil`),
+ * and consumers pick the right one for an entry's finish via `pricedForFinish`.
+ */
+export type Priced<T> = T & {
+  priceEur: number | null;
+  priceUsd: number | null;
+  priceEurFoil?: number | null;
+  priceUsdFoil?: number | null;
+  priceUsdEtched?: number | null;
+  /** True when the price artifact this row was joined against carried foil slots. */
+  priceHasFoil?: boolean;
+};
 
-/** scryfallId → [eur, usd]. Entries with both prices null are omitted. */
-export type PriceMap = Record<string, [number | null, number | null]>;
+/**
+ * scryfallId → price tuple `[eur, usd, eurFoil, usdFoil, usdEtched]`. Trailing
+ * nulls are trimmed, so a nonfoil-only card is just `[eur, usd]`; a tuple
+ * longer than 2 means foil/etched prices are authoritative (a null slot then
+ * means "no such price", not "unknown"). Scryfall has no EUR etched price, so
+ * etched EUR reuses the foil EUR. Entries with every price null are omitted.
+ */
+export type PriceMap = Record<string, PriceTuple>;
+
+/** `[eur, usd, eurFoil?, usdFoil?, usdEtched?]` — see PriceMap. */
+export type PriceTuple =
+  | [number | null, number | null]
+  | [number | null, number | null, number | null]
+  | [number | null, number | null, number | null, number | null]
+  | [number | null, number | null, number | null, number | null, number | null];
 
 /** One stored shard of the price map (sharded by first hex char of scryfallId). */
 export interface PriceShard {

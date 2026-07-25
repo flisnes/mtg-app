@@ -15,7 +15,7 @@ import type {
 } from '@mtg/shared';
 import { db, USER_DATA_TABLES } from './schema.js';
 import { getSetting } from './settings.js';
-import { getPricesByIds } from '../cardDb/prices.js';
+import { getPricesByIds, priceForFinish } from '../cardDb/prices.js';
 import { toCents } from '../price/history.js';
 import { stagePut, stagePutMany, stageDelete } from '../sync/outbox.js';
 import type { TransferPayload } from '../transfer/payload.js';
@@ -100,9 +100,9 @@ function wishFulfilledEvent(
  * price shards, so db.priceShards must be in the transaction scope when this
  * is called inside one.
  */
-async function priceCents(scryfallId: string): Promise<number | null> {
+async function priceCents(scryfallId: string, finish: Finish): Promise<number | null> {
   const prices = await getPricesByIds([scryfallId]);
-  return toCents(prices.get(scryfallId)?.eur ?? null);
+  return toCents(priceForFinish(prices.get(scryfallId), finish).eur);
 }
 
 /**
@@ -217,7 +217,7 @@ export async function addToCollection(input: AddToCollectionInput): Promise<stri
       condition: input.condition,
       finish: input.finish,
       lang,
-      priceEurCents: await priceCents(input.scryfallId),
+      priceEurCents: await priceCents(input.scryfallId, input.finish),
       source,
     });
     await emitWishFulfilled(input.oracleId, input.scryfallId, qty, now, { source });
@@ -287,7 +287,7 @@ export async function updateCollectionEntry(
         condition: next.condition,
         finish: next.finish,
         lang: next.lang,
-        priceEurCents: await priceCents(next.scryfallId),
+        priceEurCents: await priceCents(next.scryfallId, next.finish),
         source: 'manual',
         ...(delta < 0 ? { reason: 'sold' as RemovalReason } : {}),
       });
@@ -330,7 +330,7 @@ export async function removeFromCollection(
       condition: entry.condition,
       finish: entry.finish,
       lang: entry.lang,
-      priceEurCents: await priceCents(entry.scryfallId),
+      priceEurCents: await priceCents(entry.scryfallId, entry.finish),
       source: 'manual',
       reason,
     });
@@ -464,7 +464,7 @@ export async function removeCollectionEntriesBulk(ids: string[], reason: Removal
         condition: e.condition,
         finish: e.finish,
         lang: e.lang,
-        priceEurCents: toCents(prices.get(e.scryfallId)?.eur ?? null),
+        priceEurCents: toCents(priceForFinish(prices.get(e.scryfallId), e.finish).eur),
         source: 'manual' as const,
         reason,
       })),
@@ -666,7 +666,7 @@ export async function applyImport(
           condition: e.condition,
           finish: e.finish,
           lang: e.lang,
-          priceEurCents: toCents(exitPrices.get(e.scryfallId)?.eur ?? null),
+          priceEurCents: toCents(priceForFinish(exitPrices.get(e.scryfallId), e.finish).eur),
           reason: 'other',
           ...batchExtra,
         });
@@ -708,7 +708,7 @@ export async function applyImport(
         condition: l.condition,
         finish: l.finish,
         lang,
-        priceEurCents: toCents(prices.get(l.scryfallId)?.eur ?? null),
+        priceEurCents: toCents(priceForFinish(prices.get(l.scryfallId), l.finish).eur),
         ...batchExtra,
       });
       const wf = wishFulfilledEvent(wishesByOracle, l.oracleId, l.scryfallId, l.quantity, now, { source, batchId });
@@ -1037,7 +1037,7 @@ export async function applyCompletedTrade(
 
   // Exit/acquisition prices for the trade's history events, one bulk lookup.
   const prices = await getPricesByIds([...given, ...received].map((l) => l.scryfallId));
-  const centsOf = (scryfallId: string) => toCents(prices.get(scryfallId)?.eur ?? null);
+  const centsOf = (scryfallId: string, finish: Finish) => toCents(priceForFinish(prices.get(scryfallId), finish).eur);
 
   return db.transaction('rw', [db.collection, db.wishlist, db.trades, db.events, db.outbox], async () => {
     if (await db.trades.get(sessionId)) return { applied: false }; // already applied
@@ -1075,7 +1075,7 @@ export async function applyCompletedTrade(
         condition: line.condition,
         finish: line.finish,
         lang: line.lang,
-        priceEurCents: centsOf(line.scryfallId),
+        priceEurCents: centsOf(line.scryfallId, line.finish),
         reason: 'traded',
         source: 'trade',
         tradeId: sessionId,
@@ -1117,7 +1117,7 @@ export async function applyCompletedTrade(
         condition: line.condition,
         finish: line.finish,
         lang,
-        priceEurCents: centsOf(line.scryfallId),
+        priceEurCents: centsOf(line.scryfallId, line.finish),
         source: 'trade',
         tradeId: sessionId,
       });

@@ -1,4 +1,4 @@
-import type { PriceMap, PriceShard, Priced } from '@mtg/shared';
+import type { Finish, PriceMap, PriceShard, Priced } from '@mtg/shared';
 import { db } from '../db/schema.js';
 
 // Price lookup layer. Prices are stored as 16 shard blobs (by first hex char
@@ -41,6 +41,26 @@ async function getShard(key: string): Promise<PriceMap> {
 export interface CardPrice {
   eur: number | null;
   usd: number | null;
+  eurFoil: number | null;
+  usdFoil: number | null;
+  usdEtched: number | null;
+  /** The price tuple carried foil slots (length > 2). When false, foil/etched
+   * lookups fall back to nonfoil so a pre-foil price artifact still shows a price. */
+  hasFoil: boolean;
+}
+
+/**
+ * Pick the eur/usd prices for a card's finish. Foil and etched read their own
+ * slots; etched EUR reuses the foil EUR (Scryfall has no eur_etched) and etched
+ * USD falls back to the foil USD. If the artifact predates foil pricing
+ * (`hasFoil` false), every finish resolves to nonfoil so nothing shows blank
+ * during the window before the nightly price rebuild ships foil data.
+ */
+export function priceForFinish(p: CardPrice | undefined, finish: Finish): { eur: number | null; usd: number | null } {
+  if (!p) return { eur: null, usd: null };
+  if (finish === 'nonfoil' || !p.hasFoil) return { eur: p.eur, usd: p.usd };
+  if (finish === 'etched') return { eur: p.eurFoil, usd: p.usdEtched ?? p.usdFoil };
+  return { eur: p.eurFoil, usd: p.usdFoil };
 }
 
 export async function getPricesByIds(ids: Iterable<string>): Promise<Map<string, CardPrice>> {
@@ -51,7 +71,16 @@ export async function getPricesByIds(ids: Iterable<string>): Promise<Map<string,
   const out = new Map<string, CardPrice>();
   for (const id of unique) {
     const tuple = loaded[shards.get(priceShardKey(id))!]?.[id];
-    if (tuple) out.set(id, { eur: tuple[0], usd: tuple[1] });
+    if (tuple) {
+      out.set(id, {
+        eur: tuple[0],
+        usd: tuple[1],
+        eurFoil: tuple[2] ?? null,
+        usdFoil: tuple[3] ?? null,
+        usdEtched: tuple[4] ?? null,
+        hasFoil: tuple.length > 2,
+      });
+    }
   }
   return out;
 }
@@ -61,6 +90,14 @@ export async function withPrices<T>(rows: T[], idOf: (row: T) => string): Promis
   const prices = await getPricesByIds(rows.map(idOf));
   return rows.map((row) => {
     const p = prices.get(idOf(row));
-    return { ...row, priceEur: p?.eur ?? null, priceUsd: p?.usd ?? null };
+    return {
+      ...row,
+      priceEur: p?.eur ?? null,
+      priceUsd: p?.usd ?? null,
+      priceEurFoil: p?.eurFoil ?? null,
+      priceUsdFoil: p?.usdFoil ?? null,
+      priceUsdEtched: p?.usdEtched ?? null,
+      priceHasFoil: p?.hasFoil ?? false,
+    };
   });
 }

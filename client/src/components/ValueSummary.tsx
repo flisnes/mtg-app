@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
-import { addToTotal, formatTotal, type PriceTotal } from './CardSorting.js';
+import { addToTotal, formatTotal, pricedForFinish, type PriceTotal } from './CardSorting.js';
 
 // Compact "total value" readout for page headers. It sits in the empty space
 // beside a page's options menu, so it costs no extra vertical room.
@@ -27,7 +27,7 @@ export function useCollectionValue(onlyTrade = false): PriceTotal | undefined {
     const total: PriceTotal = { eur: 0, usd: 0 };
     for (const e of relevant) {
       const qty = onlyTrade ? e.quantityForTrade : e.quantity;
-      addToTotal(total, qty, printMap.get(e.scryfallId), oracleMap.get(e.oracleId));
+      addToTotal(total, qty, pricedForFinish(printMap.get(e.scryfallId), e.finish), oracleMap.get(e.oracleId));
     }
     return total;
   }, [onlyTrade]);

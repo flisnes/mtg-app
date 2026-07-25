@@ -9,7 +9,7 @@ import streamJson from 'stream-json';
 import streamArrayMod from 'stream-json/streamers/StreamArray.js';
 const { parser } = streamJson;
 const { streamArray } = streamArrayMod;
-import type { CardDbChunkMeta, CardDbManifest, OracleCard, PriceMap, Priced, Printing } from '@mtg/shared';
+import type { CardDbChunkMeta, CardDbManifest, OracleCard, PriceMap, PriceTuple, Priced, Printing } from '@mtg/shared';
 import { getBulkEntry, openBulkStream } from './scryfall.js';
 import { slimCard, type RawCard, type SlimResult } from './slimCard.js';
 import { buildSealedProducts } from './sealed.js';
@@ -43,6 +43,26 @@ const HEX = [...'0123456789abcdef'];
 // client deletes a chunk's id-range with an indexed startsWith(key) before
 // re-inserting it (see import.worker.ts).
 const CHUNK_KEYS = HEX.flatMap((a) => HEX.map((b) => a + b));
+
+/**
+ * Pack a printing's prices into the shard tuple `[eur, usd, eurFoil, usdFoil,
+ * usdEtched]`, trimming trailing nulls (min length 2 so nonfoil readers always
+ * find [0]/[1]). Returns null when every price is null (entry omitted). A tuple
+ * longer than 2 signals to the client that foil slots are authoritative.
+ */
+function priceTuple(p: {
+  eur: number | null;
+  usd: number | null;
+  eurFoil: number | null;
+  usdFoil: number | null;
+  usdEtched: number | null;
+}): PriceTuple | null {
+  if (p.eur == null && p.usd == null && p.eurFoil == null && p.usdFoil == null && p.usdEtched == null) return null;
+  const full = [p.eur, p.usd, p.eurFoil, p.usdFoil, p.usdEtched];
+  let end = full.length;
+  while (end > 2 && full[end - 1] == null) end--;
+  return full.slice(0, end) as PriceTuple;
+}
 
 function clientVersion(): string {
   try {
@@ -161,9 +181,8 @@ async function main(): Promise<void> {
         kept++;
         seenIds.add(slim.printing.scryfallId);
         printings.push(slim.printing);
-        if (slim.prices.eur != null || slim.prices.usd != null) {
-          prices[slim.printing.scryfallId] = [slim.prices.eur, slim.prices.usd];
-        }
+        const tuple = priceTuple(slim.prices);
+        if (tuple) prices[slim.printing.scryfallId] = tuple;
         const existing = reps.get(slim.printing.oracleId);
         reps.set(slim.printing.oracleId, existing ? betterRepresentative(existing, slim) : slim);
       }

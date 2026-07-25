@@ -11,7 +11,7 @@ import { useCardMaps } from '../db/useCardMaps.js';
 import type { SearchFilters } from '../cardDb/search.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardSearchView } from '../components/CardSearchView.js';
-import { formatPrice } from '../components/CardSorting.js';
+import { formatPrice, pricedForFinish } from '../components/CardSorting.js';
 import { CardItems, CardList, type CardItem } from '../components/CardViews.js';
 import { CodeJoinForm } from '../components/CodeJoinForm.js';
 import { Icon } from '../components/icons.js';
@@ -367,7 +367,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   // Printings (images + prices) and oracle cards for both offers.
   const { printMap, oracleMap } = useCardMaps([...myOffer, ...theirOffer]);
   const totalOf = (lines: TradeLine[]) =>
-    lines.reduce((sum, l) => sum + (printMap?.get(l.scryfallId)?.priceEur ?? 0) * l.quantity, 0);
+    lines.reduce((sum, l) => sum + (pricedForFinish(printMap?.get(l.scryfallId), l.finish)?.priceEur ?? 0) * l.quantity, 0);
   const openInfo: OpenInfo = (oracle, scryfallId, ctx) => setInfo({ oracle, scryfallId, ctx });
 
   // Editions "the relevant person" has, for the info sheet's edition dropdown:
@@ -785,7 +785,7 @@ function OfferPanel({
                       −
                     </button>
                   )}
-                  <span className="tile-price">{formatPrice(printing) ?? '—'}</span>
+                  <span className="tile-price">{formatPrice(pricedForFinish(printing, l.finish)) ?? '—'}</span>
                   {editable && (
                     <button onClick={() => onQty(side, lineKey(l), l.quantity + 1)} aria-label="One more">
                       ＋
@@ -959,7 +959,7 @@ function BalancePanel({
             line,
             max: l.quantity,
             name: l.name,
-            price: printing?.priceEur ?? 0,
+            price: pricedForFinish(printing, l.finish)?.priceEur ?? 0,
             qty: l.quantity - (offered.get(lineKey(l)) ?? 0),
             wanted: myWanted(l.oracleId, l.scryfallId),
             oracle: data.oracles.get(l.oracleId),
@@ -983,7 +983,7 @@ function BalancePanel({
             line,
             max: e.quantityForTrade,
             name: line.name,
-            price: printing?.priceEur ?? 0,
+            price: pricedForFinish(printing, e.finish)?.priceEur ?? 0,
             qty: e.quantityForTrade - (offered.get(lineKey(line)) ?? 0),
             wanted: theirWanted(e.oracleId, e.scryfallId),
             oracle,
@@ -1140,7 +1140,7 @@ function AddCardsPanel({
                 {wanted > 0 ? ` · they want ×${wanted}` : ''}
               </>
             ),
-            price: formatPrice(printing),
+            price: formatPrice(pricedForFinish(printing, e.finish)),
             onClick: oracle ? () => onInfo(oracle, e.scryfallId) : undefined,
             actions: (
               <button
@@ -1254,7 +1254,7 @@ function AddTheirCardsPanel({
                 {wanted > 0 ? ` · you want ×${wanted}` : ''}
               </>
             ),
-            price: formatPrice(printing),
+            price: formatPrice(pricedForFinish(printing, l.finish)),
             onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
             actions: (
               <button title="Add to what you get" onClick={() => onAdd({ ...l, quantity: 1 }, l.quantity)}>

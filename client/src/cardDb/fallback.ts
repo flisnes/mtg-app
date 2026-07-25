@@ -1,4 +1,4 @@
-import type { Color, Finish, OracleCard, PriceMap, Printing, Rarity } from '@mtg/shared';
+import type { Color, Finish, OracleCard, PriceMap, PriceTuple, Printing, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { deleteSetting, setSetting } from '../db/settings.js';
 import { SCRYFALL_BULK_INDEX } from './config.js';
@@ -35,7 +35,13 @@ interface RawCard {
   games?: string[];
   image_uris?: { small?: string; normal?: string };
   card_faces?: Array<{ mana_cost?: string; type_line?: string; oracle_text?: string; image_uris?: { small?: string; normal?: string } }>;
-  prices?: { eur?: string | null; usd?: string | null };
+  prices?: {
+    eur?: string | null;
+    usd?: string | null;
+    eur_foil?: string | null;
+    usd_foil?: string | null;
+    usd_etched?: string | null;
+  };
 }
 
 const asColors = (v?: string[]): Color[] => (v ?? []).filter((c): c is Color => COLORS.has(c));
@@ -44,6 +50,19 @@ const asFinishes = (v?: string[]): Finish[] => {
   return f.length ? f : ['nonfoil'];
 };
 const asRarity = (v: string): Rarity => (RARITIES.has(v) ? v : 'common') as Rarity;
+/** Nonfoil + foil/etched tuple, trailing nulls trimmed (min length 2). Mirrors the pipeline. */
+const priceTuple = (card: RawCard): PriceTuple => {
+  const full = [
+    asPrice(card.prices?.eur),
+    asPrice(card.prices?.usd),
+    asPrice(card.prices?.eur_foil),
+    asPrice(card.prices?.usd_foil),
+    asPrice(card.prices?.usd_etched),
+  ];
+  let end = full.length;
+  while (end > 2 && full[end - 1] == null) end--;
+  return full.slice(0, end) as PriceTuple;
+};
 const asPrice = (v?: string | null): number | null => {
   if (v == null) return null;
   const n = Number(v);
@@ -55,7 +74,7 @@ function image(card: RawCard): { small: string | null; normal: string | null } {
   return { small: u?.small ?? null, normal: u?.normal ?? null };
 }
 
-function slim(card: RawCard): { oracle: OracleCard; printing: Printing; prices: [number | null, number | null] } | null {
+function slim(card: RawCard): { oracle: OracleCard; printing: Printing; prices: PriceTuple } | null {
   if (!card.oracle_id || !card.name || card.digital) return null;
   if (card.games && !card.games.includes('paper')) return null;
   const faces = card.card_faces ?? [];
@@ -86,7 +105,7 @@ function slim(card: RawCard): { oracle: OracleCard; printing: Printing; prices: 
     imageNormal: img.normal,
     defaultScryfallId: card.id,
   };
-  return { oracle, printing, prices: [asPrice(card.prices?.eur), asPrice(card.prices?.usd)] };
+  return { oracle, printing, prices: priceTuple(card) };
 }
 
 export async function runScryfallFallback(onProgress: (fraction: number, label: string) => void): Promise<void> {
@@ -112,7 +131,7 @@ export async function runScryfallFallback(onProgress: (fraction: number, label: 
     if (s) {
       oracle.push(s.oracle);
       printings.push(s.printing);
-      if (s.prices[0] != null || s.prices[1] != null) prices[s.printing.scryfallId] = s.prices;
+      if (s.prices.some((v) => v != null)) prices[s.printing.scryfallId] = s.prices;
     }
   }
 

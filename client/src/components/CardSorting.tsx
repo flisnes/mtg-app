@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { Color, OracleCard } from '@mtg/shared';
+import type { Color, Finish, OracleCard } from '@mtg/shared';
+import { priceForFinish } from '../cardDb/prices.js';
 
 // Shared sort/group machinery for every card list in the app (decks,
 // collection, tradelist, wishlist). Views adapt their row shape via a small
@@ -53,6 +54,41 @@ export interface SortFields {
   /** Epoch ms the card was added / last edited — collection views only. */
   added?: number | null;
   updated?: number | null;
+}
+
+/** The variant price fields carried on a joined (Priced) card row. */
+interface FinishPriced {
+  priceEur: number | null;
+  priceUsd: number | null;
+  priceEurFoil?: number | null;
+  priceUsdFoil?: number | null;
+  priceUsdEtched?: number | null;
+  priceHasFoil?: boolean;
+}
+
+/**
+ * Narrow a joined card row to the {priceEur, priceUsd} pair for a given finish,
+ * so the sort/format/total helpers below show a foil entry its foil price
+ * rather than the nonfoil one. Returns undefined for a missing row (the helpers
+ * skip undefined sources). Nonfoil entries pass through unchanged.
+ */
+export function pricedForFinish<T extends FinishPriced>(
+  row: T | undefined,
+  finish: Finish,
+): { priceEur: number | null; priceUsd: number | null } | undefined {
+  if (!row) return undefined;
+  const { eur, usd } = priceForFinish(
+    {
+      eur: row.priceEur,
+      usd: row.priceUsd,
+      eurFoil: row.priceEurFoil ?? null,
+      usdFoil: row.priceUsdFoil ?? null,
+      usdEtched: row.priceUsdEtched ?? null,
+      hasFoil: row.priceHasFoil ?? false,
+    },
+    finish,
+  );
+  return { priceEur: eur, priceUsd: usd };
 }
 
 /** Numeric price for sorting: EUR from any source, else USD (matches formatPrice). */

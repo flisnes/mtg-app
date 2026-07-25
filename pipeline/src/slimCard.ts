@@ -33,7 +33,13 @@ export interface RawCard {
     colors?: string[];
     image_uris?: { small?: string; normal?: string };
   }>;
-  prices?: { eur?: string | null; usd?: string | null };
+  prices?: {
+    eur?: string | null;
+    usd?: string | null;
+    eur_foil?: string | null;
+    usd_foil?: string | null;
+    usd_etched?: string | null;
+  };
   legalities?: Record<string, string>;
 }
 
@@ -119,8 +125,18 @@ function oracleFields(card: RawCard): {
 
 export interface SlimResult {
   printing: Printing;
-  /** Current prices, kept out of the printing so card data and prices version independently. */
-  prices: { eur: number | null; usd: number | null };
+  /**
+   * Current prices, kept out of the printing so card data and prices version
+   * independently. Nonfoil (eur/usd) plus foil/etched variants (Scryfall has no
+   * eur_etched, so etched EUR is left to the consumer's foil-EUR fallback).
+   */
+  prices: {
+    eur: number | null;
+    usd: number | null;
+    eurFoil: number | null;
+    usdFoil: number | null;
+    usdEtched: number | null;
+  };
   /** Fields for building the representative OracleCard (rarity is the rep printing's). */
   oracle: {
     name: string;
@@ -163,7 +179,13 @@ export function slimCard(card: RawCard): SlimResult | null {
 
   return {
     printing,
-    prices: { eur: price(card.prices?.eur), usd: price(card.prices?.usd) },
+    prices: {
+      eur: price(card.prices?.eur),
+      usd: price(card.prices?.usd),
+      eurFoil: price(card.prices?.eur_foil),
+      usdFoil: price(card.prices?.usd_foil),
+      usdEtched: price(card.prices?.usd_etched),
+    },
     oracle: {
       name: card.name,
       manaCost: of.manaCost,

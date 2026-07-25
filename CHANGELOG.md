@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.54.0
+
+- **Re-scan a whole deck to bring it up to date.** A deck's options menu has a new "Re-scan deck": point the camera at your pile and scan the whole deck again, tagging main/side/commander as you go, just like the normal deck scan. When you finish, you get a change list showing only what's different, cards you added, cards no longer in the deck (removed), and any copy-count changes, so cards that were already there don't clutter the review. The deck is then set to exactly what you scanned. Anything you scanned that isn't in your collection is offered up afterward, so you can add those to your collection in the same pass or skip them.
+
 ## 0.53.0
 
 - **Foils are priced as foils.** Until now every finish of a card showed the same price, so a foil and its nonfoil twin looked identical in value. Prices now track the foil (and etched) market price separately everywhere it matters: per-card in your collection and lists, the collection and tradelist value totals, and both sides of a trade. Etched cards use their own price where the market has one. Prices refresh with the nightly card-DB update, so foil values fill in within a day of updating.

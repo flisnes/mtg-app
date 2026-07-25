@@ -3111,6 +3111,26 @@ button.ghost {
   border-color: var(--accent);
   color: #fff;
 }
+/* Re-scan diff: the +/-/qty tag on each changed deck row (read-only list). */
+.scan-list-static {
+  cursor: default;
+}
+.rescan-tag {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rescan-add {
+  color: var(--ok);
+  border: 1px solid var(--ok);
+}
+.rescan-remove {
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
 .scan-list-qty {
   display: flex;
   align-items: center;

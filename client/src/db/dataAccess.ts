@@ -924,6 +924,123 @@ export async function addDeckCardsBulk(
   });
 }
 
+/**
+ * Reconcile a deck to *exactly* the given slots (deck re-scan): matching slots
+ * have their quantity set to the target, brand-new (oracleId, board) slots are
+ * added, and any current slot missing from `target` is removed. Everything
+ * shares one batchId — the whole re-scan collapses to a single undoable history
+ * entry, labelled with the deck name. A slot whose quantity is unchanged emits
+ * no event (a bare preferred-printing adoption stages silently, like
+ * patchDeckCard). The user's hand-picked printing is kept; a scanned printing is
+ * only adopted when the slot had none. Returns the change counts.
+ */
+export async function reconcileDeck(
+  deckId: string,
+  target: Array<{ oracleId: string; board: DeckBoard; quantity: number; scryfallId?: string }>,
+  meta: { source?: EventSource } = {},
+): Promise<{ added: number; removed: number; changed: number }> {
+  const batchId = newId();
+  let added = 0;
+  let removed = 0;
+  let changed = 0;
+  await db.transaction('rw', DECK_TABLES, async () => {
+    const now = Date.now();
+    const existing = await db.deckCards.where('deckId').equals(deckId).toArray();
+    const keyOf = (c: { oracleId: string; board: DeckBoard }) => `${c.oracleId}|${c.board}`;
+    const curMap = new Map(existing.map((c) => [keyOf(c), c]));
+    const seen = new Set<string>();
+    const puts: DeckCard[] = [];
+    const deletes: string[] = [];
+    const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
+    const deck = await touchDeck(deckId, now);
+    const batchExtra = {
+      source: meta.source ?? 'manual',
+      batchId,
+      ...(deck ? { batchLabel: deck.name } : {}),
+    };
+    const nameExtra = deck ? { deckName: deck.name } : {};
+
+    for (const t of target) {
+      if (t.quantity <= 0) continue;
+      const key = keyOf(t);
+      seen.add(key);
+      const cur = curMap.get(key);
+      if (!cur) {
+        puts.push({
+          id: newId(),
+          deckId,
+          oracleId: t.oracleId,
+          ...(t.scryfallId ? { scryfallId: t.scryfallId } : {}),
+          quantity: t.quantity,
+          board: t.board,
+          updatedAt: now,
+        });
+        added++;
+        events.push({
+          ts: now,
+          kind: 'deck.add',
+          oracleId: t.oracleId,
+          ...(t.scryfallId ? { scryfallId: t.scryfallId } : {}),
+          qty: t.quantity,
+          deckId,
+          ...nameExtra,
+          board: t.board,
+          ...batchExtra,
+        });
+        continue;
+      }
+      const delta = t.quantity - cur.quantity;
+      const scryfallId = cur.scryfallId ?? t.scryfallId;
+      // Write when the quantity moved OR we're adopting a printing the slot lacked.
+      if (delta !== 0 || scryfallId !== cur.scryfallId) {
+        puts.push({ ...cur, quantity: t.quantity, ...(scryfallId ? { scryfallId } : {}), updatedAt: now });
+      }
+      if (delta !== 0) {
+        changed++;
+        events.push({
+          ts: now,
+          kind: delta > 0 ? 'deck.add' : 'deck.remove',
+          oracleId: cur.oracleId,
+          ...(cur.scryfallId ? { scryfallId: cur.scryfallId } : {}),
+          qty: Math.abs(delta),
+          deckId,
+          ...nameExtra,
+          board: cur.board,
+          ...batchExtra,
+        });
+      }
+    }
+
+    for (const [key, cur] of curMap) {
+      if (seen.has(key)) continue;
+      deletes.push(cur.id);
+      removed++;
+      events.push({
+        ts: now,
+        kind: 'deck.remove',
+        oracleId: cur.oracleId,
+        ...(cur.scryfallId ? { scryfallId: cur.scryfallId } : {}),
+        qty: cur.quantity,
+        deckId,
+        ...nameExtra,
+        board: cur.board,
+        ...batchExtra,
+      });
+    }
+
+    if (puts.length) {
+      await db.deckCards.bulkPut(puts);
+      await stagePutMany('deckCards', puts);
+    }
+    if (deletes.length) {
+      await db.deckCards.bulkDelete(deletes);
+      for (const id of deletes) await stageDelete('deckCards', id);
+    }
+    await emitMany(events);
+  });
+  return { added, removed, changed };
+}
+
 /** Move a slot to another board, merging into an existing slot for the same card there. */
 export async function moveDeckCard(id: string, board: DeckBoard): Promise<void> {
   await db.transaction('rw', DECK_TABLES, async () => {

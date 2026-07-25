@@ -63,7 +63,7 @@ export function DeckDetail() {
   const navigate = useNavigate();
   const toast = useToast();
   const [showImport, setShowImport] = useState(false);
-  const [scanning, setScanning] = useState(false);
+  const [scanning, setScanning] = useState<'add' | 'rescan' | null>(null);
   const [exit, setExit] = useState<MissingCard[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [nameDraft, setNameDraft] = useState<string | null>(null);
@@ -175,7 +175,8 @@ export function DeckDetail() {
         <OptionsMenu
           label="Deck options"
           actions={[
-            { label: 'Scan cards', icon: 'camera', onClick: () => setScanning(true) },
+            { label: 'Scan cards', icon: 'camera', onClick: () => setScanning('add') },
+            { label: 'Re-scan deck', icon: 'refresh', onClick: () => setScanning('rescan') },
             { label: 'Import list', icon: 'import', onClick: () => setShowImport((v) => !v) },
             { label: 'Export', icon: 'export', onClick: exportDeck },
             {
@@ -261,8 +262,8 @@ export function DeckDetail() {
 
       {scanning && (
         <ScanSheet
-          target={{ kind: 'deck', deckId: id, deckName: deck.name, format: deck.format }}
-          onClose={() => setScanning(false)}
+          target={{ kind: 'deck', deckId: id, deckName: deck.name, format: deck.format, rescan: scanning === 'rescan' }}
+          onClose={() => setScanning(null)}
         />
       )}
 

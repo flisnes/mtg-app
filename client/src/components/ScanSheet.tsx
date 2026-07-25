@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Condition, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
-import { addDeckCardsBulk, addToWishlistBulk, applyImport, markOwnedForTrade } from '../db/dataAccess.js';
+import { addDeckCardsBulk, addToWishlistBulk, applyImport, markOwnedForTrade, reconcileDeck } from '../db/dataAccess.js';
+import { db } from '../db/schema.js';
 import { getOracleCard, getOracleCardsByIds, getPrinting, getPrintingsByIds } from '../db/queries.js';
 import { ImportConflicts } from '../import/ImportConflicts.js';
 import { findImportConflicts, type ConflictChoice, type ImportConflict } from '../import/conflicts.js';
@@ -48,7 +49,9 @@ export type ScanTarget =
   | { kind: 'collection' }
   | { kind: 'tradelist' }
   | { kind: 'wishlist' }
-  | { kind: 'deck'; deckId: string; deckName?: string; format?: DeckFormat }
+  // `rescan` reconciles the deck to exactly what was scanned (add/remove/change
+  // quantities) instead of only adding — see complete()'s deck branch.
+  | { kind: 'deck'; deckId: string; deckName?: string; format?: DeckFormat; rescan?: boolean }
   | { kind: 'trade'; label?: string; onAdd: (card: ScannedCard) => void };
 
 interface Candidate {
@@ -97,6 +100,32 @@ interface TapFx {
   id: string;
   delta: 1 | -1;
   seq: number;
+}
+
+/** A deck re-scan target slot (session collapsed to what a deck stores: oracle + board). */
+interface RescanSlot {
+  oracleId: string;
+  board: DeckBoard;
+  quantity: number;
+  scryfallId?: string;
+  name: string;
+  image?: string;
+}
+
+/** One line of the re-scan diff shown before the deck is reconciled. */
+type DeckChange =
+  | { kind: 'add'; oracleId: string; board: DeckBoard; name: string; image?: string; quantity: number }
+  | { kind: 'remove'; oracleId: string; board: DeckBoard; name: string; image?: string; quantity: number }
+  | { kind: 'change'; oracleId: string; board: DeckBoard; name: string; image?: string; from: number; to: number };
+
+/** Everything a deck re-scan needs to review before committing. */
+interface RescanReview {
+  /** The deck's desired final slots (what reconcileDeck receives). */
+  slots: RescanSlot[];
+  /** Human-readable diff vs the deck's current contents (unchanged slots omitted). */
+  changes: DeckChange[];
+  /** Scanned printings not currently in the collection — offered as a follow-up add. */
+  unowned: SessionEntry[];
 }
 
 const entryKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'condition' | 'board'>) =>
@@ -159,6 +188,11 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // Set when a collection/tradelist commit finds cards already owned: the
   // skip/add/replace resolution screen (reused from import) shows until resolved.
   const [conflictStep, setConflictStep] = useState<{ lines: ResolvedLine[]; conflicts: ImportConflict[] } | null>(null);
+  // Deck re-scan review: the computed diff + which of the two review phases
+  // ('changes' → 'collection') is showing, plus the ticked unowned cards.
+  const [rescanStep, setRescanStep] = useState<RescanReview | null>(null);
+  const [rescanPhase, setRescanPhase] = useState<'changes' | 'collection'>('changes');
+  const [rescanPicked, setRescanPicked] = useState<Set<string>>(new Set());
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraScan | null>(null);
   const closedRef = useRef(false);
@@ -389,9 +423,87 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     finishScan();
   };
 
+  /**
+   * Deck re-scan: collapse the session to deck slots (oracle + board, since
+   * decks store no finish/condition/lang), diff it against the deck's current
+   * contents, and list any scanned printing not in the collection.
+   */
+  const buildRescanReview = async (deckId: string): Promise<RescanReview> => {
+    const slotMap = new Map<string, RescanSlot>();
+    for (const e of session) {
+      const key = `${e.oracleId}|${e.board}`;
+      const cur = slotMap.get(key);
+      if (cur) cur.quantity += e.qty;
+      else slotMap.set(key, { oracleId: e.oracleId, board: e.board, quantity: e.qty, scryfallId: e.scryfallId, name: e.name, image: e.image });
+    }
+    const current = await db.deckCards.where('deckId').equals(deckId).toArray();
+    const oracleMap = await getOracleCardsByIds(current.map((c) => c.oracleId));
+    const curMap = new Map(current.map((c) => [`${c.oracleId}|${c.board}`, c]));
+
+    const changes: DeckChange[] = [];
+    for (const [key, s] of slotMap) {
+      const cur = curMap.get(key);
+      if (!cur) changes.push({ kind: 'add', oracleId: s.oracleId, board: s.board, name: s.name, image: s.image, quantity: s.quantity });
+      else if (cur.quantity !== s.quantity)
+        changes.push({ kind: 'change', oracleId: s.oracleId, board: s.board, name: s.name, image: s.image, from: cur.quantity, to: s.quantity });
+    }
+    for (const [key, cur] of curMap) {
+      if (slotMap.has(key)) continue;
+      changes.push({ kind: 'remove', oracleId: cur.oracleId, board: cur.board, name: oracleMap.get(cur.oracleId)?.name ?? 'Unknown card', quantity: cur.quantity });
+    }
+
+    // "Not in your collection" = you don't own that exact printing at all.
+    const scryfallIds = [...new Set(session.map((e) => e.scryfallId))];
+    const owned = await db.collection.where('scryfallId').anyOf(scryfallIds).toArray();
+    const ownedSet = new Set(owned.filter((e) => e.quantity > 0).map((e) => e.scryfallId));
+    const unowned = session.filter((e) => !ownedSet.has(e.scryfallId));
+
+    return { slots: [...slotMap.values()], changes, unowned };
+  };
+
+  /** Apply the reviewed re-scan: reconcile the deck, then add the ticked unowned cards to the collection. */
+  const applyRescan = async () => {
+    if (!rescanStep || committing || target.kind !== 'deck') return;
+    setCommitting(true);
+    try {
+      const r = rescanStep;
+      await reconcileDeck(
+        target.deckId,
+        r.slots.map((s) => ({ oracleId: s.oracleId, board: s.board, quantity: s.quantity, scryfallId: s.scryfallId })),
+        { source: 'scan' },
+      );
+      const toAdd = r.unowned.filter((e) => rescanPicked.has(entryKey(e)));
+      if (toAdd.length) {
+        await applyImport(
+          toAdd.map((e) => ({ oracleId: e.oracleId, scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang, quantity: e.qty, quantityForTrade: 0 })),
+          { source: 'scan' },
+        );
+      }
+      const addedToColl = toAdd.reduce((n, e) => n + e.qty, 0);
+      toast(`Updated ${targetLabel(target)}${addedToColl ? ` · ${addedToColl} added to collection` : ''}`);
+      finishScan();
+    } finally {
+      setCommitting(false);
+    }
+  };
+
   /** Write the whole session to the target and leave the scanner. */
   const complete = async () => {
     if (committing || session.length === 0) return;
+    // Deck re-scan reconciles instead of adding: build the diff and route into
+    // the two-step review (deck changes, then unowned-card collection prompt).
+    if (target.kind === 'deck' && target.rescan) {
+      const review = await buildRescanReview(target.deckId);
+      if (review.changes.length === 0 && review.unowned.length === 0) {
+        toast('No changes — this deck already matches your scan');
+        finishScan();
+        return;
+      }
+      setRescanPicked(new Set(review.unowned.map((e) => entryKey(e))));
+      setRescanPhase(review.changes.length === 0 ? 'collection' : 'changes');
+      setRescanStep(review);
+      return;
+    }
     setCommitting(true);
     try {
       // Collection & tradelist route through the import pipeline: the batch scan
@@ -457,7 +569,15 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           <button className="scan-cam-btn" onClick={close} aria-label="Close scanner">
             <Icon name="close" />
           </button>
-          <span className="scan-cam-target">→ {targetLabel(target)}</span>
+          <span className="scan-cam-target">
+            {target.kind === 'deck' && target.rescan ? (
+              <>
+                <Icon name="refresh" size={13} /> {targetLabel(target)}
+              </>
+            ) : (
+              <>→ {targetLabel(target)}</>
+            )}
+          </span>
         </div>
 
         <div className="scan-cam-side">
@@ -582,8 +702,186 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             </div>
           );
         })()}
+
+      {rescanStep && target.kind === 'deck' && rescanPhase === 'changes' && (
+        <RescanChangesSheet
+          changes={rescanStep.changes}
+          deckName={targetLabel(target)}
+          busy={committing}
+          nextLabel={rescanStep.unowned.length > 0 ? 'Next' : `Apply ${rescanStep.changes.length} change${rescanStep.changes.length === 1 ? '' : 's'}`}
+          onNext={() => (rescanStep.unowned.length > 0 ? setRescanPhase('collection') : void applyRescan())}
+          onBack={() => setRescanStep(null)}
+        />
+      )}
+
+      {rescanStep && target.kind === 'deck' && rescanPhase === 'collection' && (
+        <RescanCollectionSheet
+          entries={rescanStep.unowned}
+          picked={rescanPicked}
+          busy={committing}
+          hasChanges={rescanStep.changes.length > 0}
+          onToggle={(key) =>
+            setRescanPicked((prev) => {
+              const next = new Set(prev);
+              if (next.has(key)) next.delete(key);
+              else next.add(key);
+              return next;
+            })
+          }
+          onToggleAll={() =>
+            setRescanPicked((prev) =>
+              prev.size === rescanStep.unowned.length ? new Set() : new Set(rescanStep.unowned.map((e) => entryKey(e))),
+            )
+          }
+          onBack={() => (rescanStep.changes.length > 0 ? setRescanPhase('changes') : setRescanStep(null))}
+          onConfirm={() => void applyRescan()}
+        />
+      )}
     </div>,
     document.body,
+  );
+}
+
+/** Deck re-scan step 1: the add/remove/quantity diff, before anything is written. */
+function RescanChangesSheet({
+  changes,
+  deckName,
+  busy,
+  nextLabel,
+  onNext,
+  onBack,
+}: {
+  changes: DeckChange[];
+  deckName: string;
+  busy: boolean;
+  nextLabel: string;
+  onNext: () => void;
+  onBack: () => void;
+}) {
+  const added = changes.filter((c) => c.kind === 'add');
+  const changed = changes.filter((c) => c.kind === 'change');
+  const removed = changes.filter((c) => c.kind === 'remove');
+  const rows = [...added, ...changed, ...removed];
+  return (
+    <div className="sheet-backdrop" onClick={onBack}>
+      <div className="sheet scan-list-sheet" role="dialog" aria-label="Re-scan changes" onClick={(e) => e.stopPropagation()}>
+        <div className="scan-sheet-head">
+          <h2>Re-scan changes</h2>
+          <span className="scan-target">→ {deckName}</span>
+          <button className="scan-close" onClick={onBack} aria-label="Back">
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+        <p className="fine-print">Sets “{deckName}” to exactly what you scanned. Cards left unchanged aren’t listed.</p>
+        {rows.length === 0 ? (
+          <p className="scan-list-empty">No card changes — only the collection add below.</p>
+        ) : (
+          <ul className="scan-list">
+            {rows.map((c) => (
+              <li key={`${c.kind}|${c.oracleId}|${c.board}`} className="scan-list-row">
+                <span className="scan-list-main scan-list-static">
+                  {c.image ? <img className="scan-list-thumb" src={c.image} alt="" /> : <span className="scan-list-thumb" />}
+                  <span className="scan-list-info">
+                    <strong>{c.name}</strong>
+                    <span className="scan-printing">{BOARD_LABELS[c.board]}</span>
+                  </span>
+                </span>
+                {c.kind === 'add' && <span className="rescan-tag rescan-add">Added ×{c.quantity}</span>}
+                {c.kind === 'remove' && <span className="rescan-tag rescan-remove">Removed ×{c.quantity}</span>}
+                {c.kind === 'change' && (
+                  <span className={`rescan-tag ${c.to > c.from ? 'rescan-add' : 'rescan-remove'}`}>
+                    {c.from} → {c.to}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="scan-confirm-actions">
+          <button className="primary" disabled={busy} onClick={onNext}>
+            {busy ? 'Applying…' : nextLabel}
+          </button>
+          <button onClick={onBack} disabled={busy}>
+            Keep scanning
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Deck re-scan step 2: offer to also add scanned cards you don't own to the collection. */
+function RescanCollectionSheet({
+  entries,
+  picked,
+  busy,
+  hasChanges,
+  onToggle,
+  onToggleAll,
+  onBack,
+  onConfirm,
+}: {
+  entries: SessionEntry[];
+  picked: Set<string>;
+  busy: boolean;
+  hasChanges: boolean;
+  onToggle: (key: string) => void;
+  onToggleAll: () => void;
+  onBack: () => void;
+  onConfirm: () => void;
+}) {
+  const allPicked = picked.size === entries.length;
+  const chosen = entries.filter((e) => picked.has(entryKey(e)));
+  const chosenQty = chosen.reduce((n, e) => n + e.qty, 0);
+  return (
+    <div className="sheet-backdrop" onClick={onBack}>
+      <div className="sheet scan-list-sheet" role="dialog" aria-label="Add scanned cards to collection" onClick={(e) => e.stopPropagation()}>
+        <div className="scan-sheet-head">
+          <h2>Add to collection?</h2>
+          <button className="scan-close" onClick={onBack} aria-label={hasChanges ? 'Back' : 'Close'}>
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+        <p className="fine-print">
+          You scanned {entries.length} card{entries.length === 1 ? '' : 's'} you don’t own yet. Pick which to also add to your
+          collection:
+        </p>
+        <div className="list-toolbar">
+          <label className="chip" style={{ alignSelf: 'flex-start' }}>
+            <input type="checkbox" checked={allPicked} onChange={onToggleAll} /> {allPicked ? 'Unselect all' : 'Select all'}
+          </label>
+          <span className="search-meta grow">
+            {chosen.length} of {entries.length} selected
+          </span>
+        </div>
+        <ul className="scan-list">
+          {entries.map((e) => (
+            <li key={entryKey(e)} className="scan-list-row">
+              <label className="scan-list-main" style={{ cursor: 'pointer' }}>
+                <input type="checkbox" checked={picked.has(entryKey(e))} onChange={() => onToggle(entryKey(e))} />
+                {e.image ? <img className="scan-list-thumb" src={e.image} alt="" /> : <span className="scan-list-thumb" />}
+                <span className="scan-list-info">
+                  <strong>{e.name}</strong>
+                  <span className="scan-printing">
+                    {e.set.toUpperCase()} #{e.collectorNumber} · {e.lang}
+                    {e.finish === 'foil' ? ' · Foil' : ''}
+                    {e.qty > 1 ? ` · ×${e.qty}` : ''}
+                  </span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        <div className="scan-confirm-actions">
+          <button className="primary" disabled={busy} onClick={onConfirm}>
+            {busy ? 'Applying…' : chosenQty > 0 ? `Apply · add ${chosenQty} to collection` : 'Apply without adding'}
+          </button>
+          <button onClick={onBack} disabled={busy}>
+            {hasChanges ? 'Back' : 'Cancel'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -747,7 +1045,11 @@ function SessionSheet({
 
         <div className="scan-confirm-actions">
           <button className="primary" disabled={total === 0 || busy} onClick={onComplete}>
-            {busy ? 'Adding…' : `Add ${total} card${total === 1 ? '' : 's'} to ${targetLabel(target)}`}
+            {busy
+              ? 'Adding…'
+              : target.kind === 'deck' && target.rescan
+                ? `Review changes to ${targetLabel(target)}`
+                : `Add ${total} card${total === 1 ? '' : 's'} to ${targetLabel(target)}`}
           </button>
           <button onClick={onClose} disabled={busy}>Keep scanning</button>
         </div>

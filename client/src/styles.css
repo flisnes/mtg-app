@@ -2785,6 +2785,9 @@ button.ghost {
   position: relative;
   flex-shrink: 0;
 }
+.scan-cam-btn-on {
+  background: var(--accent);
+}
 .scan-cam-target {
   color: #fff;
   font-size: 0.85rem;
@@ -2794,6 +2797,55 @@ button.ghost {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Settings popover dropped from the gear in the top bar. */
+.scan-settings {
+  position: absolute;
+  top: calc(var(--safe-top) + 3.6rem);
+  right: 0.6rem;
+  z-index: 6;
+  width: min(19rem, 78vw);
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  backdrop-filter: blur(4px);
+}
+.scan-setting {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+}
+.scan-setting:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+.scan-setting > span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.scan-setting strong {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.scan-setting small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.72rem;
+  line-height: 1rem;
+}
+.scan-setting input {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+  accent-color: var(--accent);
 }
 .scan-cam-side {
   position: absolute;

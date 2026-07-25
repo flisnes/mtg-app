@@ -233,6 +233,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const [fx, setFx] = useState<TapFx | null>(null);
   const [foil, setFoil] = useState(false);
   const [board, setBoard] = useState<DeckBoard>('main');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // When on, pinpointing an edition (OCR confirms the printing, the green check)
+  // adds +1 of it on its own. Persisted so the preference sticks between scans.
+  const [autoAdd, setAutoAdd] = useState(() => localStorage.getItem('scan-autoadd') === '1');
   // True while the session is being written — guards against the double-tap
   // that used to commit the whole scan twice (adding two copies of everything).
   const [committing, setCommitting] = useState(false);
@@ -249,6 +253,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const closedRef = useRef(false);
   const trayRef = useRef<Tray | null>(null);
   const fxSeq = useRef(0);
+  // The last lock we auto-added for, so a confirmed edition adds itself once.
+  const autoAddedRef = useRef<string | null>(null);
   const toast = useToast();
 
   const total = session.reduce((n, e) => n + e.qty, 0);
@@ -321,6 +327,14 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       /* quota exceeded — skip persisting this session */
     }
   }, [session, storageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('scan-autoadd', autoAdd ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }, [autoAdd]);
 
   // Tell the user once if a previous scan was restored after a reload.
   const restoredRef = useRef(false);
@@ -451,6 +465,18 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     }
     setFx({ id: c.scryfallId, delta, seq: ++fxSeq.current });
   };
+
+  // Auto-add: once OCR pinpoints the edition for a lock (the green check on the
+  // tile), drop +1 of it into the session — one add per lock, guarded by the ref.
+  useEffect(() => {
+    if (!autoAdd || !tray || !tray.ocrHit) return;
+    if (tray.ocr !== 'confirmed' && tray.ocr !== 'weak') return;
+    if (autoAddedRef.current === tray.topId) return;
+    autoAddedRef.current = tray.topId;
+    const hit = tray.candidates.find((c) => c.scryfallId === tray.ocrHit);
+    if (hit) bump(hit, 1, tray.lang);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tray, autoAdd]);
 
   const openList = () => {
     cameraRef.current?.pause();
@@ -665,7 +691,30 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
               <>→ {targetLabel(target)}</>
             )}
           </span>
+          {stage.kind === 'scanning' && (
+            <button
+              className={settingsOpen ? 'scan-cam-btn scan-cam-btn-on' : 'scan-cam-btn'}
+              style={{ marginLeft: 'auto' }}
+              onClick={() => setSettingsOpen((o) => !o)}
+              aria-label="Scan settings"
+              aria-pressed={settingsOpen}
+            >
+              <Icon name="settings" />
+            </button>
+          )}
         </div>
+
+        {settingsOpen && stage.kind === 'scanning' && (
+          <div className="scan-settings" role="group" aria-label="Scan settings">
+            <label className="scan-setting">
+              <span>
+                <strong>Auto-add pinpointed edition</strong>
+                <small>When the edition is confirmed (green check), add +1 on its own</small>
+              </span>
+              <input type="checkbox" checked={autoAdd} onChange={(e) => setAutoAdd(e.target.checked)} />
+            </label>
+          </div>
+        )}
 
         <div className="scan-cam-side">
           <button className="scan-cam-btn" onClick={openList} aria-label={`Review ${total} scanned cards`}>

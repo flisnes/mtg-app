@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.59.0
+
+- **Let the scanner add editions for you.** New gear menu in the scanner (top-right) with an "Auto-add pinpointed edition" switch. Turn it on and, the moment the scanner nails down the exact printing (the green check on the tile), it drops +1 of that card into your pile automatically, so scanning a big stack can be almost hands-off. Off by default, and your choice is remembered.
+
 ## 0.58.0
 
 - **Scanning goes "pop".** Adding a card to your scanned pile now plays a little pop, so you get audible confirmation without looking away from the cards. Pile up copies of the same card and the pop climbs a note higher each time (up to ten), so a playset sounds like a satisfying little run.

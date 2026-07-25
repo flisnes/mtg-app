@@ -2941,9 +2941,12 @@ button.ghost {
   bottom: 0;
   height: 50%;
 }
+/* Centered top/bottom so they never sit on the corner badges (session count,
+   ownership check, edition-confirmed check). */
 .scan-tile-half svg {
   position: absolute;
-  right: 4px;
+  left: 50%;
+  transform: translateX(-50%);
   opacity: 0.85;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9));
 }

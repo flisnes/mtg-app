@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.56.0
+
+- **The +/− on scan matches got out of the way.** The little plus and minus hints on each match tile were sitting right on top of the ownership check, making it hard to tell a single check from a double. They're now centered along the top and bottom edges, so the corner badges read cleanly.
+
 ## 0.55.0
 
 - **Your scan survives a stray refresh.** If you're partway through scanning cards into a deck, your collection, tradelist, or wishlist and the page reloads, the cards you'd already scanned are still there when you reopen the scanner. The list only clears when you actually add the cards or discard them yourself, so a fat-fingered refresh no longer means starting the pile over.

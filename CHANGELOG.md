@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.58.0
+
+- **Scanning goes "pop".** Adding a card to your scanned pile now plays a little pop, so you get audible confirmation without looking away from the cards. Pile up copies of the same card and the pop climbs a note higher each time (up to ten), so a playset sounds like a satisfying little run.
+
 ## 0.57.0
 
 - **Scan matches now show the set symbol.** Under each match tile, next to the set code and collector number, there's now the actual set symbol, drawn nice and big so it's easy to read. Handy when you recognise a set by its icon faster than by its three-letter code.

@@ -13,6 +13,7 @@ import { getScanExcludedIds } from '../scan/exclusions.js';
 import { CameraScan, type LiveScanState } from '../scan/camera.js';
 import type { ScanPipelineResult } from '../scan/pipeline.js';
 import { resolveWithOcr } from '../scan/ocr.js';
+import { playPop } from '../scan/pop.js';
 import { checkScanDataUpdate, downloadScanData, getInstalledScanData, type ScanDataManifest } from '../scan/store.js';
 import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
@@ -412,6 +413,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     const key = entryKey({ scryfallId: c.scryfallId, finish, condition: 'NM', board: b });
     let i = session.findIndex((e) => entryKey(e) === key);
     if (delta > 0) {
+      // Rising pop: pitch climbs a semitone per copy already piled up.
+      playPop(countOf(c.scryfallId));
       if (i >= 0) {
         setSession(session.map((e, j) => (j === i ? { ...e, qty: e.qty + 1 } : e)));
       } else {

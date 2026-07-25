@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.60.0
+
+- **Foil pile mode.** Scanning a stack of foils? The scanner's gear menu now has a "Foil pile" switch: flip it on and every card you add is marked as foil, no per-card fiddling. A "Foil pile" badge stays on screen while it's active so you don't forget it's on. (Only shows where finish matters, so it's absent for deck and wishlist scans.)
+
 ## 0.59.0
 
 - **Let the scanner add editions for you.** New gear menu in the scanner (top-right) with an "Auto-add pinpointed edition" switch. Turn it on and, the moment the scanner nails down the exact printing (the green check on the tile), it drops +1 of that card into your pile automatically, so scanning a big stack can be almost hands-off. Off by default, and your choice is remembered.

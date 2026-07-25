@@ -713,6 +713,15 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
               </span>
               <input type="checkbox" checked={autoAdd} onChange={(e) => setAutoAdd(e.target.checked)} />
             </label>
+            {finishMatters(target) && (
+              <label className="scan-setting">
+                <span>
+                  <strong>Foil pile</strong>
+                  <small>Scanning a stack of foils? Every card you add is marked as foil</small>
+                </span>
+                <input type="checkbox" checked={foil} onChange={(e) => setFoil(e.target.checked)} />
+              </label>
+            )}
           </div>
         )}
 
@@ -721,14 +730,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             <Icon name="list" />
             {total > 0 && <span className="scan-cam-badge">{total}</span>}
           </button>
-          {finishMatters(target) && (
-            <button
-              className={foil ? 'scan-cam-chip scan-cam-chip-on' : 'scan-cam-chip'}
-              onClick={() => setFoil(!foil)}
-              aria-pressed={foil}
-            >
-              Foil
-            </button>
+          {finishMatters(target) && foil && (
+            <span className="scan-cam-chip scan-cam-chip-on" aria-hidden>
+              Foil pile
+            </span>
           )}
         </div>
 

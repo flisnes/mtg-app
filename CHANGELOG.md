@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.61.0
+
+- **Adding cards to a trade now asks before it commits.** Tapping a card while building an offer (from search or your/their tradelist) opens the card sheet, where you pick the edition, condition, finish, language and quantity, then hit "Add to trade". No more mystery "+" button quietly adding a version you didn't choose.
+- **Edit a card already in the trade.** Tapping a card in either trade column now opens the full sheet, so you can change its edition, condition, finish, language and quantity, or remove it, all in one place, not just nudge the count.
+
 ## 0.60.0
 
 - **Foil pile mode.** Scanning a stack of foils? The scanner's gear menu now has a "Foil pile" switch: flip it on and every card you add is marked as foil, no per-card fiddling. A "Foil pile" badge stays on screen while it's active so you don't forget it's on. (Only shows where finish matters, so it's absent for deck and wishlist scans.)

@@ -96,6 +96,8 @@ export function CardSheet({
   deckCard,
   sessionCard,
   onApply,
+  applyLabel,
+  hideRemove = false,
   initialScryfallId,
   initialTab,
   addTarget,
@@ -114,6 +116,10 @@ export function CardSheet({
   sessionCard?: SessionCardValues;
   /** Session mode: called with the edited values instead of writing to Dexie. */
   onApply?: (values: SessionCardValues) => void;
+  /** Session mode: label for the primary commit button (defaults to "Apply"). */
+  applyLabel?: string;
+  /** Session mode: hide the Remove button (e.g. when composing a brand-new line). */
+  hideRemove?: boolean;
   /** Preselect a specific printing (e.g. the one named in a trade line). */
   initialScryfallId?: string;
   /** Open on a specific tab (e.g. deep-link to History from the edit history). */
@@ -563,7 +569,7 @@ export function CardSheet({
           </div>
         ) : (
           <div className="sheet-actions">
-            {mode !== 'add' && (
+            {mode !== 'add' && !hideRemove && (
               <button className="danger-outline" onClick={del} disabled={busy}>
                 Remove
               </button>
@@ -592,7 +598,7 @@ export function CardSheet({
               </>
             )}
             <button className="primary" onClick={() => save()} disabled={busy}>
-              {mode === 'add' ? ADD_LABEL[addTo.kind] : mode === 'session' ? 'Apply' : 'Save'}
+              {mode === 'add' ? ADD_LABEL[addTo.kind] : mode === 'session' ? applyLabel ?? 'Apply' : 'Save'}
             </button>
           </div>
         )}

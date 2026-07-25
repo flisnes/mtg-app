@@ -58,7 +58,9 @@ export function CardSearchView({
   /** Shown in place of results when there's nothing to search for yet. */
   emptyState: ReactNode;
   badgeFor?: (card: Priced<OracleCard>) => ResultBadge | null;
-  actionsFor: (card: Priced<OracleCard>) => ReactNode;
+  /** Per-result quick action (e.g. a ＋). Omit entirely to keep results clean
+   *  and let the card sheet (opened by tapping a tile) carry the add action. */
+  actionsFor?: (card: Priced<OracleCard>) => ReactNode;
   /** Show quick actions only in list view; grid tiles stay clean and the card
    *  sheet (opened by tapping a tile) carries the add actions instead. */
   listOnlyActions?: boolean;
@@ -155,7 +157,7 @@ export function CardSearchView({
                 ),
                 price: formatPrice(card) ?? '—',
                 onClick: () => onCardClick(card),
-                actions: listOnlyActions && view === 'grid' ? undefined : actionsFor(card),
+                actions: !actionsFor || (listOnlyActions && view === 'grid') ? undefined : actionsFor(card),
               };
             })}
           />

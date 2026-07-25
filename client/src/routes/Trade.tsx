@@ -9,7 +9,7 @@ import { collectionKey } from '../db/dataAccess.js';
 import { getOracleCardsByIds, getPrintingsByIds, joinCollectionEntries } from '../db/queries.js';
 import { useCardMaps } from '../db/useCardMaps.js';
 import type { SearchFilters } from '../cardDb/search.js';
-import { CardSheet } from '../components/CardSheet.js';
+import { CardSheet, type SessionCardValues } from '../components/CardSheet.js';
 import { CardSearchView } from '../components/CardSearchView.js';
 import { formatPrice, pricedForFinish } from '../components/CardSorting.js';
 import { CardItems, CardList, type CardItem } from '../components/CardViews.js';
@@ -87,10 +87,9 @@ function ownIndicator(own: Owned | undefined, scryfallId?: string): OwnedBadgeSp
 /**
  * What the card-info sheet should show when a card is tapped. `side` says whose
  * printings to highlight in the edition dropdown ('give' = my collection,
- * 'get' = their tradelist); `line` is set when tapping an editable offer line,
- * which makes the edition dropdown re-print that line in place.
+ * 'get' = their tradelist).
  */
-type InfoCtx = { side: Side; line?: TradeLine };
+type InfoCtx = { side: Side };
 type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string; ctx?: InfoCtx };
 type OpenInfo = (oracle: Priced<OracleCard>, scryfallId?: string, ctx?: InfoCtx) => void;
 /** How many copies a wishlist wants of a given printing (0 = no match). */
@@ -308,9 +307,17 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   }, [snap.state]);
   const [scanFor, setScanFor] = useState<Side | null>(null);
   const [info, setInfo] = useState<InfoTarget | null>(null);
-  // A card being added from outside a binder: the sheet picks its edition/
-  // condition/finish/language/quantity before it lands in the offer.
-  const [composing, setComposing] = useState<{ side: Side; oracle: Priced<OracleCard> } | null>(null);
+  // A card being added by search/quick-pick: the sheet picks its edition/
+  // condition/finish/language/quantity before it lands in the offer. `prefill`
+  // seeds those from the best guess (an owned copy, or their tradelist line).
+  const [composing, setComposing] = useState<{
+    side: Side;
+    oracle: Priced<OracleCard>;
+    prefill?: Partial<SessionCardValues>;
+  } | null>(null);
+  // An offer line being edited in place: the same sheet, seeded from the line,
+  // writing edition/condition/finish/language/quantity back through onApply.
+  const [editingLine, setEditingLine] = useState<{ side: Side; line: TradeLine; oracle: Priced<OracleCard> } | null>(null);
   const ownership = useOwnership();
 
   const seatOf = (side: Side): Seat => (side === 'give' ? seat : peer);
@@ -396,24 +403,36 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
     return { label: 'On their tradelist', notes: new Map([...per].map(([id, q]) => [id, `×${q}`])) };
   }
 
-  // Re-print an offer line as a different edition. The line key includes the
-  // scryfallId, so this rebuilds the line; if the target edition is already in
-  // the offer the two lines merge. Returns the resulting line so the info sheet
-  // can keep editing the same (now re-keyed) card.
-  function changeEdition(side: Side, line: TradeLine, newScryfallId: string): TradeLine {
-    const updated: TradeLine = { ...line, scryfallId: newScryfallId };
-    const oldKey = lineKey(line);
-    const newKey = lineKey(updated);
-    if (oldKey === newKey) return line;
+  // Apply the card sheet's edits to an existing offer line. Edition/condition/
+  // finish/language all feed the line key, so any of them re-keys the line;
+  // quantity 0 removes it, and a re-key that collides with another line merges.
+  function updateLine(side: Side, oldLine: TradeLine, v: SessionCardValues) {
     const cur = offers[seatOf(side)];
+    const oldKey = lineKey(oldLine);
+    if (v.quantity <= 0) {
+      commit(side, cur.filter((l) => lineKey(l) !== oldKey));
+      return;
+    }
+    const updated: TradeLine = {
+      ...oldLine,
+      scryfallId: v.scryfallId,
+      quantity: v.quantity,
+      condition: v.condition ?? oldLine.condition,
+      finish: v.finish ?? oldLine.finish,
+      lang: v.lang ?? oldLine.lang,
+    };
+    const newKey = lineKey(updated);
+    if (oldKey === newKey) {
+      commit(side, cur.map((l) => (lineKey(l) === oldKey ? updated : l)));
+      return;
+    }
     const existing = cur.find((l) => lineKey(l) === newKey);
     if (existing) {
-      const merged = { ...existing, quantity: existing.quantity + line.quantity };
+      const merged = { ...existing, quantity: existing.quantity + updated.quantity };
       commit(side, cur.filter((l) => lineKey(l) !== oldKey).map((l) => (lineKey(l) === newKey ? merged : l)));
-      return merged;
+    } else {
+      commit(side, cur.map((l) => (lineKey(l) === oldKey ? updated : l)));
     }
-    commit(side, cur.map((l) => (lineKey(l) === oldKey ? updated : l)));
-    return updated;
   }
 
   // Wishlist⇄tradelist matchers, both directions (for ⭐ badges and balance).
@@ -544,6 +563,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           printings={printMap}
           oracles={oracleMap}
           onInfo={openInfo}
+          onEdit={(side, line, oracle) => setEditingLine({ side, line, oracle })}
         />
         <OfferPanel
           side="get"
@@ -562,6 +582,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           printings={printMap}
           oracles={oracleMap}
           onInfo={openInfo}
+          onEdit={(side, line, oracle) => setEditingLine({ side, line, oracle })}
         />
       </div>
 
@@ -597,11 +618,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           <AddCardsPanel
             ownership={ownership}
             theirWanted={theirWanted}
-            onAdd={(line, max) => addLine('give', line, max)}
-            onCompose={(oracle) => setComposing({ side: 'give', oracle })}
-            onInfo={(oracle, scryfallId) =>
-              openInfo(oracle, scryfallId ?? ownership?.get(oracle.oracleId)?.entry.scryfallId, { side: 'give' })
-            }
+            onCompose={(oracle, prefill) => setComposing({ side: 'give', oracle, prefill })}
           />
         </TradePickerOverlay>
       )}
@@ -611,11 +628,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             lines={trade.peerTradelist}
             loading={trade.peerTradelistLoading}
             myWanted={myWanted}
-            onAdd={(line, max) => addLine('get', line, max)}
-            onCompose={(oracle) => setComposing({ side: 'get', oracle })}
-            onInfo={(oracle, scryfallId) =>
-              openInfo(oracle, scryfallId ?? bestPeerLine(trade.peerTradelist, oracle.oracleId)?.scryfallId, { side: 'get' })
-            }
+            onCompose={(oracle, prefill) => setComposing({ side: 'get', oracle, prefill })}
             onRefresh={requestTradelist}
           />
         </TradePickerOverlay>
@@ -651,14 +664,6 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           initialScryfallId={info.scryfallId}
           readOnly
           highlightPrintings={infoHighlights(info)}
-          onEditionChange={
-            info.ctx?.line
-              ? (id) => {
-                  const line = changeEdition(info.ctx!.side, info.ctx!.line!, id);
-                  setInfo((cur) => (cur && cur.ctx?.line ? { ...cur, scryfallId: id, ctx: { ...cur.ctx, line } } : cur));
-                }
-              : undefined
-          }
           onClose={() => setInfo(null)}
         />
       )}
@@ -667,15 +672,17 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
         <CardSheet
           oracleCard={composing.oracle}
           sessionCard={{
-            scryfallId: composing.oracle.defaultScryfallId,
-            quantity: 1,
-            lang: 'en',
-            finish: 'nonfoil',
-            condition: 'NM',
+            scryfallId: composing.prefill?.scryfallId ?? composing.oracle.defaultScryfallId,
+            quantity: composing.prefill?.quantity ?? 1,
+            lang: composing.prefill?.lang ?? 'en',
+            finish: composing.prefill?.finish ?? 'nonfoil',
+            condition: composing.prefill?.condition ?? 'NM',
           }}
           highlightPrintings={infoHighlights({ oracle: composing.oracle, ctx: { side: composing.side } })}
+          applyLabel="Add to trade"
+          hideRemove
           onApply={(v) => {
-            // quantity 0 = the sheet's Remove/Cancel; nothing to add.
+            // quantity 0 = the sheet's Cancel; nothing to add.
             if (v.quantity > 0)
               addMany(composing.side, [
                 {
@@ -694,6 +701,23 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
               ]);
           }}
           onClose={() => setComposing(null)}
+        />
+      )}
+
+      {editingLine && editable && (
+        <CardSheet
+          oracleCard={editingLine.oracle}
+          sessionCard={{
+            scryfallId: editingLine.line.scryfallId,
+            quantity: editingLine.line.quantity,
+            lang: editingLine.line.lang,
+            finish: editingLine.line.finish,
+            condition: editingLine.line.condition,
+          }}
+          highlightPrintings={infoHighlights({ oracle: editingLine.oracle, ctx: { side: editingLine.side } })}
+          applyLabel="Save"
+          onApply={(v) => updateLine(editingLine.side, editingLine.line, v)}
+          onClose={() => setEditingLine(null)}
         />
       )}
 
@@ -735,6 +759,7 @@ function OfferPanel({
   printings,
   oracles,
   onInfo,
+  onEdit,
 }: {
   side: Side;
   title: string;
@@ -749,7 +774,10 @@ function OfferPanel({
   badge: (l: TradeLine) => { icon: ReactNode; cls?: string; title?: string } | null;
   printings: Map<string, Priced<Printing>> | undefined;
   oracles: Map<string, Priced<OracleCard>> | undefined;
+  /** Read-only card info (locked trades). */
   onInfo: OpenInfo;
+  /** Tap a line in an editable trade: open the full edit sheet for it. */
+  onEdit: (side: Side, line: TradeLine, oracle: Priced<OracleCard>) => void;
 }) {
   return (
     <section className="trade-col" aria-label={`Cards ${title.toLowerCase()}`}>
@@ -777,7 +805,9 @@ function OfferPanel({
               badge: ind?.icon,
               badgeClass: ind?.cls,
               badgeTitle: ind?.title,
-              onClick: oracle ? () => onInfo(oracle, l.scryfallId, { side, line: editable ? l : undefined }) : undefined,
+              onClick: oracle
+                ? () => (editable ? onEdit(side, l, oracle) : onInfo(oracle, l.scryfallId, { side }))
+                : undefined,
               actions: (
                 <>
                   {editable && (
@@ -1073,21 +1103,18 @@ function BalancePanel({
 /**
  * Add cards to the offer: with no query, quick-picks from your tradelist
  * (partner-wishlist matches starred and sorted first); typing searches the
- * whole card database (you can offer cards you haven't registered — they get
- * a ❓ indicator).
+ * whole card database (you can offer cards you haven't registered). Every card
+ * — tradelist pick or search result — opens the card sheet so you confirm the
+ * edition, condition, finish, language and quantity before it joins the offer.
  */
 function AddCardsPanel({
   ownership,
   theirWanted,
-  onAdd,
   onCompose,
-  onInfo,
 }: {
   ownership: Map<string, Owned> | undefined;
   theirWanted: WantFn;
-  onAdd: (line: TradeLine, max: number) => void;
-  onCompose: (card: Priced<OracleCard>) => void;
-  onInfo: OpenInfo;
+  onCompose: (card: Priced<OracleCard>, prefill?: Partial<SessionCardValues>) => void;
 }) {
   const [q, setQ] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({});
@@ -1097,17 +1124,11 @@ function AddCardsPanel({
     return joinCollectionEntries(entries);
   }, []);
 
-  // Owned cards add straight away with their known printing/condition/finish;
-  // anything you don't own opens the card sheet so you can pick edition,
-  // condition, finish, language and quantity before it joins the offer.
-  const addFromSearch = (card: Priced<OracleCard>) => {
+  // Owned cards seed the sheet with the copy you have (edition/condition/
+  // finish/language); anything you don't own starts from the card's defaults.
+  const compose = (card: Priced<OracleCard>) => {
     const e = ownership?.get(card.oracleId)?.entry;
-    if (e)
-      onAdd(
-        { oracleId: e.oracleId, scryfallId: e.scryfallId, name: card.name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang },
-        999,
-      );
-    else onCompose(card);
+    onCompose(card, e ? { scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang } : undefined);
   };
 
   const sortedTradelist = (tradelist ?? [])
@@ -1141,20 +1162,9 @@ function AddCardsPanel({
               </>
             ),
             price: formatPrice(pricedForFinish(printing, e.finish)),
-            onClick: oracle ? () => onInfo(oracle, e.scryfallId) : undefined,
-            actions: (
-              <button
-                title="Add to offer"
-                onClick={() =>
-                  onAdd(
-                    { oracleId: e.oracleId, scryfallId: e.scryfallId, name, quantity: 1, condition: e.condition, finish: e.finish, lang: e.lang },
-                    e.quantityForTrade,
-                  )
-                }
-              >
-                ＋
-              </button>
-            ),
+            onClick: oracle
+              ? () => onCompose(oracle, { scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang })
+              : undefined,
           };
         })}
       />
@@ -1170,12 +1180,7 @@ function AddCardsPanel({
       setFilters={setFilters}
       emptyState={emptyState}
       badgeFor={(card) => ownIndicator(ownership?.get(card.oracleId), card.defaultScryfallId)}
-      actionsFor={(card) => (
-        <button title="Add to offer" onClick={() => addFromSearch(card)}>
-          ＋
-        </button>
-      )}
-      onCardClick={(card) => onInfo(card)}
+      onCardClick={compose}
     />
   );
 }
@@ -1184,22 +1189,20 @@ function AddCardsPanel({
  * Add cards to what you get: with no query, quick-picks from the partner's
  * tradelist (your wishlist matches starred and sorted first); typing searches
  * the whole card database, for cards they hand you that aren't on their list.
+ * Every card opens the card sheet so you confirm edition, condition, finish,
+ * language and quantity before it joins the offer.
  */
 function AddTheirCardsPanel({
   lines,
   loading,
   myWanted,
-  onAdd,
   onCompose,
-  onInfo,
   onRefresh,
 }: {
   lines: TradeLine[] | null;
   loading: boolean;
   myWanted: WantFn;
-  onAdd: (line: TradeLine, max: number) => void;
-  onCompose: (card: Priced<OracleCard>) => void;
-  onInfo: OpenInfo;
+  onCompose: (card: Priced<OracleCard>, prefill?: Partial<SessionCardValues>) => void;
   onRefresh: () => void;
 }) {
   const [q, setQ] = useState('');
@@ -1207,14 +1210,15 @@ function AddTheirCardsPanel({
   // Their lines reference cards by id; the local card DB has the display data.
   const { printMap, oracleMap } = useCardMaps(lines ?? []);
 
-  // Their tradelist knows the exact printing they registered — prefer it over
-  // the card-DB default (the newest edition, usually the wrong guess). Anything
-  // not on their list opens the card sheet so you can pick edition, condition,
-  // finish, language and quantity for whatever they hand you.
-  const addFromSearch = (card: Priced<OracleCard>) => {
+  // Their tradelist knows the exact printing they registered — seed the sheet
+  // with it (the card-DB default is the newest edition, usually the wrong
+  // guess). Anything not on their list starts from the card's defaults.
+  const compose = (card: Priced<OracleCard>) => {
     const listed = bestPeerLine(lines, card.oracleId);
-    if (listed) onAdd({ ...listed, quantity: 1 }, listed.quantity);
-    else onCompose(card);
+    onCompose(
+      card,
+      listed ? { scryfallId: listed.scryfallId, condition: listed.condition, finish: listed.finish, lang: listed.lang } : undefined,
+    );
   };
 
   const sorted = [...(lines ?? [])]
@@ -1255,12 +1259,9 @@ function AddTheirCardsPanel({
               </>
             ),
             price: formatPrice(pricedForFinish(printing, l.finish)),
-            onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
-            actions: (
-              <button title="Add to what you get" onClick={() => onAdd({ ...l, quantity: 1 }, l.quantity)}>
-                ＋
-              </button>
-            ),
+            onClick: oracle
+              ? () => onCompose(oracle, { scryfallId: l.scryfallId, condition: l.condition, finish: l.finish, lang: l.lang })
+              : undefined,
           };
         })}
       />
@@ -1275,12 +1276,7 @@ function AddTheirCardsPanel({
       filters={filters}
       setFilters={setFilters}
       emptyState={emptyState}
-      actionsFor={(card) => (
-        <button title="Add to what you get" onClick={() => addFromSearch(card)}>
-          ＋
-        </button>
-      )}
-      onCardClick={(card) => onInfo(card)}
+      onCardClick={compose}
     />
   );
 }

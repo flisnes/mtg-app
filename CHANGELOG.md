@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.55.0
+
+- **Your scan survives a stray refresh.** If you're partway through scanning cards into a deck, your collection, tradelist, or wishlist and the page reloads, the cards you'd already scanned are still there when you reopen the scanner. The list only clears when you actually add the cards or discard them yourself, so a fat-fingered refresh no longer means starting the pile over.
+- **The editions you own come first.** When scanning, the printings you already have in your collection now lead the match tray, with the green double-check on the exact printing you own, so the right edition is the first one you reach for. The Edition dropdown and the "view all editions" grid on any card do the same: owned printings sort to the top.
+
 ## 0.54.0
 
 - **Re-scan a whole deck to bring it up to date.** A deck's options menu has a new "Re-scan deck": point the camera at your pile and scan the whole deck again, tagging main/side/commander as you go, just like the normal deck scan. When you finish, you get a change list showing only what's different, cards you added, cards no longer in the deck (removed), and any copy-count changes, so cards that were already there don't clutter the review. The deck is then set to exactly what you scanned. Anything you scanned that isn't in your collection is offered up afterward, so you can add those to your collection in the same pass or skip them.

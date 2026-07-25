@@ -231,9 +231,14 @@ export function CardSheet({
     () => new Set((ownedEntries ?? []).filter((e) => e.quantityForTrade > 0).map((e) => e.scryfallId)),
     [ownedEntries],
   );
-  // Editions the caller flagged (owned / on a tradelist) group first in the dropdown.
+  // Editions the caller flagged (owned / on a tradelist) group first in the
+  // dropdown; within the rest, editions the user owns lead so their printing is
+  // the easy pick (and its double-check badge is the first thing they see).
   const highlighted = highlightPrintings ? printings.filter((p) => highlightPrintings.notes.has(p.scryfallId)) : [];
-  const otherPrintings = highlighted.length > 0 ? printings.filter((p) => !highlightPrintings!.notes.has(p.scryfallId)) : printings;
+  const otherPrintings = orderByOwned(
+    highlighted.length > 0 ? printings.filter((p) => !highlightPrintings!.notes.has(p.scryfallId)) : printings,
+    ownedIds,
+  );
   // Dropdown filter: match set name or set code. Always keep the current
   // selection visible so the native <select> displays the right value.
   const editionQ = editionQuery.trim().toLowerCase();
@@ -469,7 +474,7 @@ export function CardSheet({
                     )}
                   </>
                 ) : (
-                  printings.filter(matchesQuery).map((p) => printingOption(p))
+                  visibleOther.map((p) => printingOption(p))
                 )}
               </select>
             </div>
@@ -597,7 +602,7 @@ export function CardSheet({
 
       {allEditions && (
         <EditionPicker
-          printings={highlighted.length > 0 ? [...highlighted, ...otherPrintings] : printings}
+          printings={highlighted.length > 0 ? [...highlighted, ...otherPrintings] : otherPrintings}
           selected={scryfallId}
           anyOption={mode === 'wish' || wishAdd}
           notes={highlightPrintings?.notes}
@@ -683,6 +688,19 @@ function QtyStepper({
       </button>
     </div>
   );
+}
+
+/**
+ * Move editions the user owns to the front, keeping the original (newest-first)
+ * order within the owned and unowned groups. Returns the input untouched when
+ * nothing is owned, so the common case allocates nothing.
+ */
+function orderByOwned(printings: Priced<Printing>[], ownedIds?: Set<string>): Priced<Printing>[] {
+  if (!ownedIds || ownedIds.size === 0) return printings;
+  const owned: Priced<Printing>[] = [];
+  const rest: Priced<Printing>[] = [];
+  for (const p of printings) (ownedIds.has(p.scryfallId) ? owned : rest).push(p);
+  return owned.length === 0 ? printings : [...owned, ...rest];
 }
 
 /** Every printing as an image tile — pick an edition by looking at it. */

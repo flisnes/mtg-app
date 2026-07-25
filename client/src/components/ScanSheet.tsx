@@ -17,7 +17,7 @@ import { checkScanDataUpdate, downloadScanData, getInstalledScanData, type ScanD
 import { Icon } from './icons.js';
 import { useToast } from './Toast.js';
 import { ownedBadge, type OwnedBadgeSpec } from './OwnedBadge.js';
-import { useOwnershipIndex } from '../db/useOwnership.js';
+import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
 // camera fills the top of the screen and never pauses; each lock (S3 consensus
@@ -173,11 +173,60 @@ function targetLabel(target: ScanTarget): string {
   }
 }
 
+// A scan session survives an accidental reload: it's mirrored to localStorage
+// keyed by its destination and only cleared when the user commits or discards
+// it. Trade offers are in-memory (the offer itself is gone after a reload), so
+// there's nothing to restore — those aren't persisted.
+function sessionStorageKey(target: ScanTarget): string | null {
+  switch (target.kind) {
+    case 'collection':
+      return 'scan-session:collection';
+    case 'tradelist':
+      return 'scan-session:tradelist';
+    case 'wishlist':
+      return 'scan-session:wishlist';
+    case 'deck':
+      return `scan-session:deck:${target.deckId}`;
+    case 'trade':
+      return null;
+  }
+}
+
+function loadStoredSession(key: string | null): SessionEntry[] {
+  if (!key) return [];
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (e): e is SessionEntry =>
+        !!e && typeof e.scryfallId === 'string' && typeof e.oracleId === 'string' && typeof e.qty === 'number',
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Tray order: the OCR-confirmed printing stays first, then editions the user
+ * already owns bubble up (so their double-check badge is the first thing in
+ * view), then the scanner's own distance order. Array.sort is stable, so equal
+ * items keep that distance order.
+ */
+function orderTrayCandidates(tray: Tray, ownership?: OwnershipIndex): Candidate[] {
+  const isHit = (c: Candidate) => (tray.ocrHit === c.scryfallId ? 0 : 1);
+  const ownsExact = (c: Candidate) => (ownership?.lookup(c.oracle?.oracleId ?? '', c.scryfallId).ownsExact ? 0 : 1);
+  return [...tray.candidates].sort((a, b) => isHit(a) - isHit(b) || ownsExact(a) - ownsExact(b));
+}
+
 export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target?: ScanTarget; onClose: () => void }) {
+  const storageKey = sessionStorageKey(target);
   const [stage, setStage] = useState<Stage>({ kind: 'setup', message: 'Checking scan data…' });
   const [live, setLive] = useState<LiveScanState | null>(null);
   const [tray, setTray] = useState<Tray | null>(null);
-  const [session, setSession] = useState<SessionEntry[]>([]);
+  // Restore a previous scan for this destination that a reload interrupted.
+  const [session, setSession] = useState<SessionEntry[]>(() => loadStoredSession(storageKey));
   const [listOpen, setListOpen] = useState(false);
   const [fx, setFx] = useState<TapFx | null>(null);
   const [foil, setFoil] = useState(false);
@@ -257,6 +306,38 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Mirror the session to storage so an accidental reload doesn't lose it, and
+  // clear the mirror when it empties. Best-effort: a full data-URI fixture card
+  // can blow the quota, which is fine — this is a convenience, not a guarantee.
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      if (session.length === 0) localStorage.removeItem(storageKey);
+      else localStorage.setItem(storageKey, JSON.stringify(session));
+    } catch {
+      /* quota exceeded — skip persisting this session */
+    }
+  }, [session, storageKey]);
+
+  // Tell the user once if a previous scan was restored after a reload.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    const restored = session.reduce((n, e) => n + e.qty, 0);
+    if (restored > 0) toast(`Restored ${restored} card${restored === 1 ? '' : 's'} from your last scan`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const clearStored = () => {
+    if (!storageKey) return;
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const download = async (manifest: ScanDataManifest) => {
     setStage({ kind: 'downloading', progress: `Downloading ${(manifest.bytes / 1e6).toFixed(1)} MB…` });
@@ -392,6 +473,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     }));
 
   const finishScan = () => {
+    clearStored();
     cameraRef.current?.stop();
     onClose();
   };
@@ -551,6 +633,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
 
   const close = () => {
     if (total > 0 && !window.confirm(`Discard ${total} scanned card${total === 1 ? '' : 's'}?`)) return;
+    clearStored();
     cameraRef.current?.stop();
     onClose();
   };
@@ -629,7 +712,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
 
       <div className="scan-tray">
         {tray ? (
-          tray.candidates.map((c) => (
+          orderTrayCandidates(tray, ownership).map((c) => (
             <TrayTile
               key={c.scryfallId}
               candidate={c}

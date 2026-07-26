@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.63.0
+
+- **File a card into any list from its sheet.** Open a card from search and the sheet now carries all three destinations, not just the one you searched from. The list you came from is the big button (e.g. "+Wishlist"); the other two sit beside it as compact +Collection / +Tradelist icon buttons. Found a card while browsing your wishlist but actually want it in your collection? One tap, no reopening search on the right scope.
+- **Wish for a specific finish, condition or language.** The wishlist card sheet now has the full Condition / Finish / Language pickers, each defaulting to "Any" so nothing changes unless you want it to. Want *that foil* specifically? Set Finish to Foil. A foil wish and a nonfoil wish for the same card stay as separate lines, and the wishlist row shows what you pinned down.
+
 ## 0.62.0
 
 - **One search bar, not two.** The per-page filter (and its set/color/rarity dropdowns and "On tradelist only" toggle) is gone from Collection, Tradelist and Wishlist. Finding a card you own now happens in the same search bar you use for everything else.

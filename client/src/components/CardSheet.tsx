@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { CollectionEntry, Condition, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishlistEntry } from '@mtg/shared';
-import { CONDITIONS } from '@mtg/shared';
+import { CONDITIONS, FINISHES } from '@mtg/shared';
 import {
   addDeckCard,
   addToCollection,
@@ -22,7 +22,7 @@ import { getMergedPriceHistory } from '../price/serverHistory.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
 import { CardHistory } from './CardHistory.js';
 import { EventSheet } from './EventSheet.js';
-import { Icon } from './icons.js';
+import { Icon, type IconName } from './icons.js';
 import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
@@ -59,6 +59,17 @@ const ADD_LABEL: Record<AddTarget['kind'], string> = {
   deck: 'Add to mainboard',
   default: 'Add to collection',
 };
+
+/** The three personal lists a card can be filed into, in button order:
+ *  the sheet leads with the list it was opened from and offers the other two
+ *  as compact +icon quick-adds. */
+type ListKind = 'collection' | 'tradelist' | 'wishlist';
+const LIST_META: Record<ListKind, { label: string; icon: IconName; title: string }> = {
+  collection: { label: 'Collection', icon: 'collection', title: 'Add to collection' },
+  tradelist: { label: 'Tradelist', icon: 'tradelist', title: 'Add to tradelist' },
+  wishlist: { label: 'Wishlist', icon: 'wishlist', title: 'Add to wishlist' },
+};
+const LIST_ORDER: ListKind[] = ['collection', 'tradelist', 'wishlist'];
 
 /**
  * A scan-session line as the sheet edits it. Fields the scan target doesn't
@@ -154,23 +165,47 @@ export function CardSheet({
   // at all, so those variants drop the collection-specific fields below.
   const wishAdd = mode === 'add' && addTo.kind === 'wishlist';
   const deckAdd = mode === 'add' && addTo.kind === 'deck';
+  // Editing or adding a wish: condition/finish/lang are all optional and lead
+  // with an "Any" choice (a wish isn't for one specific copy).
+  const wishMode = mode === 'wish' || wishAdd;
+  // Add mode into a personal list: which list leads (the primary button). The
+  // other two ride along as compact +icon quick-adds, so a card found while
+  // searching one list can still be filed anywhere. A context-free ('default')
+  // search leads with the collection.
+  const listAddKind: ListKind | null =
+    mode !== 'add'
+      ? null
+      : addTo.kind === 'default'
+        ? 'collection'
+        : addTo.kind === 'collection' || addTo.kind === 'tradelist' || addTo.kind === 'wishlist'
+          ? addTo.kind
+          : null;
   const collectionFields =
     mode === 'edit' ||
     (mode === 'add' && (addTo.kind === 'collection' || addTo.kind === 'tradelist' || addTo.kind === 'default'));
+  // The condition/finish/lang selects show for collection entries and for wishes
+  // (as "Any"-able preferences); "For trade" stays gated on collectionFields alone.
+  const showCfl = collectionFields || wishMode;
   // Session lines only edit the fields their scan target tracks.
-  const showCondition = mode === 'session' ? sessionCard!.condition !== undefined : collectionFields;
-  const showFinish = mode === 'session' ? sessionCard!.finish !== undefined : collectionFields;
-  const showLang = mode === 'session' ? sessionCard!.lang !== undefined : collectionFields;
+  const showCondition = mode === 'session' ? sessionCard!.condition !== undefined : showCfl;
+  const showFinish = mode === 'session' ? sessionCard!.finish !== undefined : showCfl;
+  const showLang = mode === 'session' ? sessionCard!.lang !== undefined : showCfl;
   const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
   // In wish mode the empty string means "any printing" (no specific edition).
   const [scryfallId, setScryfallId] = useState(
-    wishEntry !== undefined || wishAdd
+    wishMode
       ? wishEntry?.scryfallId ?? ANY_PRINTING
       : entry?.scryfallId ?? deckCard?.scryfallId ?? sessionCard?.scryfallId ?? initialScryfallId ?? oracleCard.defaultScryfallId,
   );
-  const [condition, setCondition] = useState<Condition>(entry?.condition ?? sessionCard?.condition ?? 'NM');
-  const [finish, setFinish] = useState<Finish>(entry?.finish ?? sessionCard?.finish ?? 'nonfoil');
-  const [lang, setLang] = useState(entry?.lang ?? sessionCard?.lang ?? 'en');
+  // Empty string is the "Any" sentinel, used only in wish mode (mirrors
+  // ANY_PRINTING for the edition). Collection/edit/session modes stay concrete.
+  const [condition, setCondition] = useState<Condition | ''>(
+    entry?.condition ?? sessionCard?.condition ?? (wishMode ? wishEntry?.condition ?? '' : 'NM'),
+  );
+  const [finish, setFinish] = useState<Finish | ''>(
+    entry?.finish ?? sessionCard?.finish ?? (wishMode ? wishEntry?.finish ?? '' : 'nonfoil'),
+  );
+  const [lang, setLang] = useState<string>(entry?.lang ?? sessionCard?.lang ?? (wishMode ? wishEntry?.lang ?? '' : 'en'));
   const [quantity, setQuantity] = useState(entry?.quantity ?? wishEntry?.quantity ?? deckCard?.quantity ?? sessionCard?.quantity ?? 1);
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
   const [busy, setBusy] = useState(false);
@@ -256,72 +291,88 @@ export function CardSheet({
   const visibleHighlighted = highlighted.filter(matchesQuery);
   const visibleOther = otherPrintings.filter(matchesQuery);
   const showEditionSearch = (formEditable || !!onEditionChange) && printings.length > 6;
-  const availableFinishes = printing?.finishes ?? (['nonfoil'] as Finish[]);
+  // A wish can want any finish (esp. an "any printing" wish, where no single
+  // printing constrains the choice); a collection entry is limited to what the
+  // selected printing actually comes in.
+  const availableFinishes = wishMode ? FINISHES : printing?.finishes ?? (['nonfoil'] as Finish[]);
 
   // Full-size image + price for the currently-selected printing (falls back to the oracle default).
   const cardImage = printing?.imageNormal ?? oracleCard.imageNormal ?? printing?.imageSmall ?? oracleCard.imageSmall ?? null;
   // Back face for double-faced cards (transform / modal DFC / …); absent for single-faced ones.
   const cardBackImage =
     printing?.imageBackNormal ?? oracleCard.imageBackNormal ?? printing?.imageBackSmall ?? oracleCard.imageBackSmall ?? null;
-  const cardPrice = formatPrice(pricedForFinish(printing, finish), oracleCard) ?? '—';
+  const cardPrice = formatPrice(pricedForFinish(printing, finish || 'nonfoil'), oracleCard) ?? '—';
   // Flip state for the shown card art; reset when switching editions (a
   // different printing may not be double-faced at all).
   const [flipped, setFlipped] = useState(false);
   useEffect(() => setFlipped(false), [scryfallId]);
   const shownImage = flipped && cardBackImage ? cardBackImage : cardImage;
 
-  // Keep finish valid for the chosen printing.
+  // Keep a concrete finish valid for the chosen printing (skip the "Any"
+  // sentinel and wish mode, where the finish is a preference, not a real copy).
   useEffect(() => {
-    if (printing && !printing.finishes.includes(finish)) setFinish(printing.finishes[0] ?? 'nonfoil');
-  }, [printing, finish]);
+    if (!wishMode && printing && finish && !printing.finishes.includes(finish)) {
+      setFinish(printing.finishes[0] ?? 'nonfoil');
+    }
+  }, [printing, finish, wishMode]);
 
   const clampedForTrade = Math.min(forTrade, quantity);
 
-  /** Session mode: the edited line as reported back, mirroring the hidden fields. */
+  /** Session mode: the edited line as reported back, mirroring the hidden fields.
+   *  Session mode is never wish mode, so these are always concrete values. */
   function sessionValues(qty: number): SessionCardValues {
     return {
       scryfallId,
       quantity: qty,
       lang: sessionCard?.lang !== undefined ? lang : undefined,
-      finish: sessionCard?.finish !== undefined ? finish : undefined,
-      condition: sessionCard?.condition !== undefined ? condition : undefined,
+      finish: sessionCard?.finish !== undefined ? (finish as Finish) : undefined,
+      condition: sessionCard?.condition !== undefined ? (condition as Condition) : undefined,
     };
   }
 
-  /** `dest` picks where a context-free ('default') add goes; other targets ignore it. */
-  async function save(board: DeckBoard = 'main', dest: 'collection' | 'wishlist' | 'tradelist' = 'collection') {
+  // A wish stores its preferences as-is ('' → undefined = "any"); a collection
+  // entry needs a concrete condition/finish/lang, so fall back to the defaults.
+  const wishPrefs = { condition: condition || undefined, finish: finish || undefined, lang: lang || undefined };
+  const concrete = { condition: condition || 'NM', finish: finish || 'nonfoil', lang: lang || 'en' };
+
+  /** In add mode `dest` names the list a button chose; when omitted the add
+   *  follows the sheet's own scope (collection for a context-free search). */
+  async function save(board: DeckBoard = 'main', dest?: ListKind) {
     setBusy(true);
     if (sessionCard) {
       onApply?.(sessionValues(quantity));
     } else if (wishEntry) {
-      await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, quantity });
+      await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, ...wishPrefs, quantity });
     } else if (deckCard) {
       await updateDeckCard(deckCard.id, { quantity, scryfallId });
     } else if (editing && entry) {
       await updateCollectionEntry(entry.id, {
         scryfallId,
-        condition,
-        finish,
-        lang,
+        ...concrete,
         quantity,
         quantityForTrade: clampedForTrade,
       });
-    } else if (addTo.kind === 'wishlist' || dest === 'wishlist') {
-      await addToWishlist({ oracleId: oracleCard.oracleId, scryfallId: scryfallId || null, quantity });
     } else if (addTo.kind === 'deck') {
       await addDeckCard({ deckId: addTo.deckId, oracleId: oracleCard.oracleId, scryfallId, board, quantity });
     } else {
-      // 'collection' and 'tradelist' both add a collection entry; the latter
-      // just starts with copies marked for trade.
-      await addToCollection({
-        oracleId: oracleCard.oracleId,
-        scryfallId,
-        condition,
-        finish,
-        lang,
-        quantity,
-        quantityForTrade: dest === 'tradelist' ? clampedForTrade || 1 : clampedForTrade,
-      });
+      // Add mode into one of the three personal lists. An explicit button
+      // (dest) wins; otherwise the sheet's own scope decides, and a
+      // context-free ('default') search files to the collection.
+      const where: ListKind = dest ?? (addTo.kind === 'wishlist' || addTo.kind === 'tradelist' ? addTo.kind : 'collection');
+      if (where === 'wishlist') {
+        await addToWishlist({ oracleId: oracleCard.oracleId, scryfallId: scryfallId || null, ...wishPrefs, quantity });
+      } else {
+        // Collection and tradelist both write a collection entry (the latter
+        // starts with copies marked for trade). A wishlist-origin sheet can
+        // sit on "any printing", so fall back to a concrete edition here.
+        await addToCollection({
+          oracleId: oracleCard.oracleId,
+          scryfallId: scryfallId || oracleCard.defaultScryfallId,
+          ...concrete,
+          quantity,
+          quantityForTrade: where === 'tradelist' ? clampedForTrade || 1 : clampedForTrade,
+        });
+      }
     }
     onClose();
   }
@@ -356,7 +407,7 @@ export function CardSheet({
           {cardImage ? (
             <div className="sheet-card-wrap">
               <img className="sheet-card" src={shownImage ?? cardImage} alt={oracleCard.name} />
-              {finish !== 'nonfoil' && <span className="foil-sheen" aria-hidden />}
+              {finish && finish !== 'nonfoil' && <span className="foil-sheen" aria-hidden />}
               {cardBackImage && (
                 <button
                   type="button"
@@ -467,7 +518,7 @@ export function CardSheet({
                 }}
                 disabled={!formEditable && !onEditionChange}
               >
-                {(mode === 'wish' || wishAdd) && <option value={ANY_PRINTING}>Any printing</option>}
+                {wishMode && <option value={ANY_PRINTING}>Any printing</option>}
                 {highlighted.length > 0 ? (
                   <>
                     {visibleHighlighted.length > 0 && (
@@ -503,7 +554,8 @@ export function CardSheet({
           {showCondition && (
           <label className="field">
             <span>Condition</span>
-            <select value={condition} onChange={(e) => setCondition(e.target.value as Condition)} disabled={!formEditable}>
+            <select value={condition} onChange={(e) => setCondition(e.target.value as Condition | '')} disabled={!formEditable}>
+              {wishMode && <option value="">Any</option>}
               {CONDITIONS.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -515,7 +567,8 @@ export function CardSheet({
           {showFinish && (
           <label className="field">
             <span>Finish</span>
-            <select value={finish} onChange={(e) => setFinish(e.target.value as Finish)} disabled={!formEditable}>
+            <select value={finish} onChange={(e) => setFinish(e.target.value as Finish | '')} disabled={!formEditable}>
+              {wishMode && <option value="">Any</option>}
               {availableFinishes.map((f) => (
                 <option key={f} value={f}>
                   {FINISH_LABELS[f]}
@@ -528,6 +581,7 @@ export function CardSheet({
           <label className="field">
             <span>Language</span>
             <select value={lang} onChange={(e) => setLang(e.target.value)} disabled={!formEditable}>
+              {wishMode && <option value="">Any</option>}
               {LANGS.map((l) => (
                 <option key={l} value={l}>
                   {l}
@@ -587,19 +641,28 @@ export function CardSheet({
                 Add to sideboard
               </button>
             )}
-            {mode === 'add' && addTo.kind === 'default' && (
+            {listAddKind ? (
               <>
-                <button onClick={() => save('main', 'wishlist')} disabled={busy}>
-                  Add to wishlist
-                </button>
-                <button onClick={() => save('main', 'tradelist')} disabled={busy}>
-                  Add to tradelist
+                {LIST_ORDER.filter((k) => k !== listAddKind).map((k) => (
+                  <button
+                    key={k}
+                    className="add-alt"
+                    title={LIST_META[k].title}
+                    onClick={() => save('main', k)}
+                    disabled={busy}
+                  >
+                    +<Icon name={LIST_META[k].icon} size={16} />
+                  </button>
+                ))}
+                <button className="primary add-primary" onClick={() => save('main', listAddKind)} disabled={busy}>
+                  +{LIST_META[listAddKind].label} <Icon name={LIST_META[listAddKind].icon} size={16} />
                 </button>
               </>
+            ) : (
+              <button className="primary" onClick={() => save()} disabled={busy}>
+                {mode === 'add' ? ADD_LABEL[addTo.kind] : mode === 'session' ? applyLabel ?? 'Apply' : 'Save'}
+              </button>
             )}
-            <button className="primary" onClick={() => save()} disabled={busy}>
-              {mode === 'add' ? ADD_LABEL[addTo.kind] : mode === 'session' ? applyLabel ?? 'Apply' : 'Save'}
-            </button>
           </div>
         )}
         </>
@@ -610,7 +673,7 @@ export function CardSheet({
         <EditionPicker
           printings={highlighted.length > 0 ? [...highlighted, ...otherPrintings] : otherPrintings}
           selected={scryfallId}
-          anyOption={mode === 'wish' || wishAdd}
+          anyOption={wishMode}
           notes={highlightPrintings?.notes}
           ownedIds={ownedIds}
           ownedForTradeIds={ownedForTradeIds}

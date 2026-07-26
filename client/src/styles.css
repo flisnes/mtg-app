@@ -1732,6 +1732,19 @@ button.primary {
 .sheet-actions button:first-child {
   margin-right: auto;
 }
+/* Compact +icon quick-adds for the non-origin lists sit beside the primary
+   labeled "+List" button; keep the plus and glyph centered and tight. */
+.sheet-actions .add-alt {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding-inline: 0.7rem;
+}
+.sheet-actions .add-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
 /* ---- Event (edit-history) modal ---- */
 .event-sheet-head {

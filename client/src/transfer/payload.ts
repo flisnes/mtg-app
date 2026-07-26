@@ -179,6 +179,12 @@ export function sanitizeWishlistRow(raw: unknown): WishlistEntry | null {
     id: entryId,
     oracleId,
     scryfallId,
+    // Desired condition/finish/lang are optional — anything not a known enum
+    // value stays undefined, i.e. "any". (Unlike a collection row, which must
+    // pick a concrete default.)
+    condition: CONDS.has(r.condition as string) ? (r.condition as Condition) : undefined,
+    finish: FINS.has(r.finish as string) ? (r.finish as Finish) : undefined,
+    lang: typeof r.lang === 'string' && r.lang ? r.lang.slice(0, 10) : undefined,
     quantity: qty(r.quantity),
     createdAt,
     // Pre-v0.11 senders have no updatedAt; their createdAt is the best LWW stamp.

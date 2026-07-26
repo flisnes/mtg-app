@@ -35,6 +35,12 @@ export interface WishlistEntry {
   oracleId: string;
   /** null = "any printing". */
   scryfallId: string | null;
+  /** Desired condition; undefined = "any". */
+  condition?: Condition;
+  /** Desired finish; undefined = "any". */
+  finish?: Finish;
+  /** Desired language; undefined = "any". */
+  lang?: string;
   quantity: number;
   createdAt: number;
   updatedAt: number;

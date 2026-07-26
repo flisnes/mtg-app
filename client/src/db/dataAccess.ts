@@ -476,29 +476,42 @@ export interface AddToWishlistInput {
   oracleId: string;
   /** null = "any printing". */
   scryfallId?: string | null;
+  /** Desired condition/finish/lang; undefined = "any". */
+  condition?: Condition;
+  finish?: Finish;
+  lang?: string;
   quantity?: number;
   /** How the add was made (edit-history provenance). Defaults to 'manual'. */
   source?: EventSource;
 }
 
-/** Add to the wishlist, merging by (oracleId, scryfallId). */
+/** Identity of a wish line: printing + desired condition/finish/lang (undefined
+ *  = "any"). Two wishes that differ on any of these are distinct lines, exactly
+ *  as collection entries are unique on (scryfallId, condition, finish, lang). */
+function wishKey(w: { scryfallId: string | null; condition?: Condition; finish?: Finish; lang?: string }): string {
+  return `${w.scryfallId ?? ''}|${w.condition ?? ''}|${w.finish ?? ''}|${w.lang ?? ''}`;
+}
+
+/** Add to the wishlist, merging by (oracleId, scryfallId, condition, finish, lang). */
 export async function addToWishlist(input: AddToWishlistInput): Promise<string> {
   const qty = input.quantity ?? 1;
   const scryfallId = input.scryfallId ?? null;
+  const { condition, finish, lang } = input;
 
   return db.transaction('rw', WISHLIST_TABLES, async () => {
     const now = Date.now();
+    const key = wishKey({ scryfallId, condition, finish, lang });
     const candidates = await db.wishlist.where('oracleId').equals(input.oracleId).toArray();
-    const existing = candidates.find((w) => w.scryfallId === scryfallId);
+    const existing = candidates.find((w) => wishKey(w) === key);
     let entry: WishlistEntry;
     if (existing) {
       entry = { ...existing, quantity: existing.quantity + qty, updatedAt: now };
     } else {
-      entry = { id: newId(), oracleId: input.oracleId, scryfallId, quantity: qty, createdAt: now, updatedAt: now };
+      entry = { id: newId(), oracleId: input.oracleId, scryfallId, condition, finish, lang, quantity: qty, createdAt: now, updatedAt: now };
     }
     await db.wishlist.put(entry);
     await stagePut('wishlist', entry);
-    await emit({ ts: now, kind: 'wish.add', oracleId: input.oracleId, scryfallId, qty, source: input.source ?? 'manual' });
+    await emit({ ts: now, kind: 'wish.add', oracleId: input.oracleId, scryfallId, condition, finish, lang, qty, source: input.source ?? 'manual' });
     return entry.id;
   });
 }
@@ -525,7 +538,8 @@ export async function addToWishlistBulk(
   await db.transaction('rw', WISHLIST_TABLES, async () => {
     const now = Date.now();
     const existing = await db.wishlist.toArray();
-    const keyOf = (l: { oracleId: string; scryfallId: string | null }) => `${l.oracleId}|${l.scryfallId ?? ''}`;
+    const keyOf = (l: { oracleId: string; scryfallId: string | null; condition?: Condition; finish?: Finish; lang?: string }) =>
+      `${l.oracleId}|${wishKey(l)}`;
     const map = new Map(existing.map((e) => [keyOf(e), e]));
     const touched = new Set<WishlistEntry>();
     const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
@@ -564,16 +578,22 @@ export async function addToWishlistBulk(
  */
 export async function updateWishlistEntry(
   id: string,
-  patch: { scryfallId?: string | null; quantity?: number },
+  patch: { scryfallId?: string | null; condition?: Condition; finish?: Finish; lang?: string; quantity?: number },
 ): Promise<void> {
   await db.transaction('rw', WISHLIST_TABLES, async () => {
     const entry = await db.wishlist.get(id);
     if (!entry) return;
     const now = Date.now();
-    const scryfallId = patch.scryfallId !== undefined ? patch.scryfallId : entry.scryfallId;
+    // The card sheet is a full editor: an omitted key means "leave as is", but a
+    // key present with undefined means "any" (and must overwrite the old value).
+    const scryfallId = 'scryfallId' in patch ? patch.scryfallId ?? null : entry.scryfallId;
+    const condition = 'condition' in patch ? patch.condition : entry.condition;
+    const finish = 'finish' in patch ? patch.finish : entry.finish;
+    const lang = 'lang' in patch ? patch.lang : entry.lang;
     const quantity = Math.max(1, patch.quantity ?? entry.quantity);
+    const key = wishKey({ scryfallId, condition, finish, lang });
     const candidates = await db.wishlist.where('oracleId').equals(entry.oracleId).toArray();
-    const dup = candidates.find((w) => w.id !== id && w.scryfallId === scryfallId);
+    const dup = candidates.find((w) => w.id !== id && wishKey(w) === key);
     if (dup) {
       const merged: WishlistEntry = { ...dup, quantity: dup.quantity + quantity, updatedAt: now };
       await db.wishlist.put(merged);
@@ -581,7 +601,7 @@ export async function updateWishlistEntry(
       await stagePut('wishlist', merged);
       await stageDelete('wishlist', id);
     } else {
-      const next: WishlistEntry = { ...entry, scryfallId, quantity, updatedAt: now };
+      const next: WishlistEntry = { ...entry, scryfallId, condition, finish, lang, quantity, updatedAt: now };
       await db.wishlist.put(next);
       await stagePut('wishlist', next);
     }
@@ -604,7 +624,17 @@ export async function removeFromWishlist(id: string, quantity = Infinity): Promi
       await db.wishlist.put(next);
       await stagePut('wishlist', next);
     }
-    await emit({ ts: now, kind: 'wish.remove', oracleId: entry.oracleId, scryfallId: entry.scryfallId, qty: removed, source: 'manual' });
+    await emit({
+      ts: now,
+      kind: 'wish.remove',
+      oracleId: entry.oracleId,
+      scryfallId: entry.scryfallId,
+      condition: entry.condition,
+      finish: entry.finish,
+      lang: entry.lang,
+      qty: removed,
+      source: 'manual',
+    });
   });
 }
 
@@ -1367,8 +1397,9 @@ async function tradeMarkAdjustRaw(e: UserEvent, delta: number, now: number): Pro
 async function wishlistAdjustRaw(e: UserEvent, delta: number, now: number): Promise<void> {
   if (!delta) return;
   const list = await db.wishlist.where('oracleId').equals(e.oracleId).toArray();
+  const key = wishKey({ scryfallId: e.scryfallId ?? null, condition: e.condition, finish: e.finish, lang: e.lang });
   const match =
-    list.find((w) => w.scryfallId === (e.scryfallId ?? null)) ?? list.find((w) => w.scryfallId === null) ?? list[0];
+    list.find((w) => wishKey(w) === key) ?? list.find((w) => w.scryfallId === (e.scryfallId ?? null)) ?? list[0];
   if (delta < 0) {
     if (!match) return;
     const remaining = match.quantity + delta;
@@ -1389,6 +1420,9 @@ async function wishlistAdjustRaw(e: UserEvent, delta: number, now: number): Prom
       id: newId(),
       oracleId: e.oracleId,
       scryfallId: e.scryfallId ?? null,
+      condition: e.condition,
+      finish: e.finish,
+      lang: e.lang,
       quantity: delta,
       createdAt: now,
       updatedAt: now,

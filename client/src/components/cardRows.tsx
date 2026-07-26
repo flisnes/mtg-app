@@ -52,25 +52,38 @@ export function wishCardItem(
   const ownBadge = ownedBadge(
     opts.ownership?.lookup(r.entry.oracleId, r.entry.scryfallId ?? r.oracle?.defaultScryfallId),
   );
+  // Any finish/condition/lang the wish pins down (undefined = "any", shown as
+  // nothing); English is the norm, so it's only surfaced when non-default.
+  const prefs = [r.entry.finish, r.entry.condition, r.entry.lang && r.entry.lang !== 'en' ? r.entry.lang : undefined]
+    .filter(Boolean)
+    .join(' · ');
+  const printingSub = r.entry.scryfallId ? (
+    r.printing ? (
+      <>
+        <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />
+        {`${r.printing.setName} · #${r.printing.collectorNumber}`}
+      </>
+    ) : (
+      'specific printing'
+    )
+  ) : (
+    'any printing'
+  );
   return {
     key: r.entry.id,
     name: r.oracle?.name ?? '(unknown card)',
     image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
+    foil: !!r.entry.finish && r.entry.finish !== 'nonfoil',
     count: r.entry.quantity,
     badge: ownBadge?.icon,
     badgeClass: ownBadge?.cls,
     badgeTitle: ownBadge?.title,
-    sub: r.entry.scryfallId ? (
-      r.printing ? (
-        <>
-          <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />
-          {`${r.printing.setName} · #${r.printing.collectorNumber}`}
-        </>
-      ) : (
-        'specific printing'
-      )
+    sub: prefs ? (
+      <>
+        {printingSub} · {prefs}
+      </>
     ) : (
-      'any printing'
+      printingSub
     ),
     // "Any printing" wishes are tracked via the oracle's default printing.
     trend: opts.moverFlags?.get(r.entry.scryfallId ?? r.oracle?.defaultScryfallId ?? ''),

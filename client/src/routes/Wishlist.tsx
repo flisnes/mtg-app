@@ -1,17 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { OracleCard, Priced, Printing, WishlistEntry } from '@mtg/shared';
+import type { OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
 import { db } from '../db/schema.js';
-import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
-import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
+import { joinWishlistEntries, type JoinedWish } from '../db/queries.js';
 import { addToWishlistBulk, removeFromWishlist } from '../db/dataAccess.js';
 import { CardSheet } from '../components/CardSheet.js';
-import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
+import { CardItems, ViewToggle, useViewMode } from '../components/CardViews.js';
+import { wishCardItem } from '../components/cardRows.js';
 import { BulkActionBar } from '../components/BulkActionBar.js';
 import { useMultiSelect } from '../components/useMultiSelect.js';
-import { SetSymbol } from '../components/SetSymbol.js';
-import { ownedBadge } from '../components/OwnedBadge.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { addToTotal, formatTotal, priceValue, SortControls, sortCards, useCardSort, type PriceTotal } from '../components/CardSorting.js';
 import { HeaderValue } from '../components/ValueSummary.js';
@@ -27,36 +25,18 @@ import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
 import type { ResolvedLine, UnmatchedLine } from '../import/types.js';
 
-interface WishRow {
-  entry: WishlistEntry;
-  oracle?: Priced<OracleCard>;
-  printing?: Priced<Printing>;
-}
-
 export function Wishlist() {
-  const [name, setName] = useState('');
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('wishlist');
   const openSearch = useOpenSearch();
-  const [editing, setEditing] = useState<WishRow | null>(null);
+  const [editing, setEditing] = useState<JoinedWish | null>(null);
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState(false);
   const moverFlags = useMoverFlags();
   const ownership = useOwnershipIndex();
   const toast = useToast();
   const sel = useMultiSelect();
-  const rows = useLiveQuery(async (): Promise<WishRow[]> => {
-    const entries = await db.wishlist.toArray();
-    const [oracleMap, printMap] = await Promise.all([
-      getOracleCardsByIds(entries.map((e) => e.oracleId)),
-      getPrintingsByIds(entries.map((e) => e.scryfallId).filter((id): id is string => id !== null)),
-    ]);
-    return entries.map((entry) => ({
-      entry,
-      oracle: oracleMap.get(entry.oracleId),
-      printing: entry.scryfallId ? printMap.get(entry.scryfallId) : undefined,
-    }));
-  }, []);
+  const rows = useLiveQuery(async () => joinWishlistEntries(await db.wishlist.toArray()), []);
 
   // Per-printing "last edited" (the top of that printing's History tab), not
   // entry.updatedAt — see CollectionListView. "Any printing" wishes span the
@@ -64,23 +44,10 @@ export function Wishlist() {
   const needEdited = sort.key === 'updated';
   const lastEdited = useLiveQuery(async () => (needEdited ? loadLastEdited() : undefined), [needEdited]);
 
-  // Pre-normalise each card's search fields once per data change; the
-  // Scryfall-syntax filter (t:/cmc:/o:/…) then runs cheaply per keystroke.
-  const searchIndex = useMemo(() => {
-    const m = new Map<string, ReturnType<typeof toSearchableEntry>>();
-    rows?.forEach((r) => r.oracle && m.set(r.entry.id, toSearchableEntry(r.oracle)));
-    return m;
-  }, [rows]);
-
   const filtered = useMemo(() => {
     if (!rows) return [];
-    const query = compileCardQuery(name);
     return sortCards(
-      rows.filter((r) => {
-        if (query.isEmpty) return true;
-        const se = searchIndex.get(r.entry.id);
-        return !!se && query.matches(se);
-      }),
+      rows,
       (r) => ({
         name: r.oracle?.name,
         cmc: r.oracle?.cmc,
@@ -90,7 +57,7 @@ export function Wishlist() {
       }),
       sort,
     );
-  }, [rows, searchIndex, name, sort, lastEdited]);
+  }, [rows, sort, lastEdited]);
 
   // Value covers the whole wishlist, not just the filtered view.
   const value = useMemo(() => {
@@ -151,14 +118,6 @@ export function Wishlist() {
         </div>
       ) : (
         <>
-          <input
-            className="search-input"
-            type="search"
-            placeholder="Filter… (bolt, t:creature, cmc>=3)"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            aria-label="Filter cards"
-          />
           <div className="meta-row">
             <p className="search-meta">{filtered.length} card{filtered.length === 1 ? '' : 's'}</p>
             <div className="meta-actions">
@@ -176,36 +135,9 @@ export function Wishlist() {
             selectable={sel.active}
             selectedKeys={sel.selected}
             onToggleSelect={sel.toggle}
-            items={filtered.map((r): CardItem => {
-              // A wish shows a specific printing, or the oracle's default for "any printing".
-              const ownBadge = ownedBadge(
-                ownership?.lookup(r.entry.oracleId, r.entry.scryfallId ?? r.oracle?.defaultScryfallId),
-              );
-              return {
-                key: r.entry.id,
-                name: r.oracle?.name ?? '(unknown card)',
-                image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
-                count: r.entry.quantity,
-                badge: ownBadge?.icon,
-                badgeClass: ownBadge?.cls,
-                badgeTitle: ownBadge?.title,
-                sub: r.entry.scryfallId ? (
-                  r.printing ? (
-                    <>
-                      <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />
-                      {`${r.printing.setName} · #${r.printing.collectorNumber}`}
-                    </>
-                  ) : (
-                    'specific printing'
-                  )
-                ) : (
-                  'any printing'
-                ),
-                // "Any printing" wishes are tracked via the oracle's default printing.
-                trend: moverFlags?.get(r.entry.scryfallId ?? r.oracle?.defaultScryfallId ?? ''),
-                onClick: r.oracle ? () => setEditing(r) : undefined,
-              };
-            })}
+            items={filtered.map((r) =>
+              wishCardItem(r, { ownership, moverFlags, onClick: r.oracle ? () => setEditing(r) : undefined }),
+            )}
           />
         </>
       )}

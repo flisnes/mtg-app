@@ -1,4 +1,4 @@
-import type { CollectionEntry, OracleCard, Priced, Printing } from '@mtg/shared';
+import type { CollectionEntry, OracleCard, Priced, Printing, WishlistEntry } from '@mtg/shared';
 import { db } from './schema.js';
 import { withPrices } from '../cardDb/prices.js';
 
@@ -55,6 +55,26 @@ export async function joinCollectionEntries(entries: CollectionEntry[]): Promise
     entry,
     oracle: oracleMap.get(entry.oracleId),
     printing: printMap.get(entry.scryfallId),
+  }));
+}
+
+export interface JoinedWish {
+  entry: WishlistEntry;
+  oracle?: Priced<OracleCard>;
+  printing?: Priced<Printing>;
+}
+
+/** Join wishlist entries with their oracle + printing display data. A wish may
+ *  target a specific printing (scryfallId) or "any printing" (null). */
+export async function joinWishlistEntries(entries: WishlistEntry[]): Promise<JoinedWish[]> {
+  const [oracleMap, printMap] = await Promise.all([
+    getOracleCardsByIds(entries.map((e) => e.oracleId)),
+    getPrintingsByIds(entries.map((e) => e.scryfallId).filter((id): id is string => id !== null)),
+  ]);
+  return entries.map((entry) => ({
+    entry,
+    oracle: oracleMap.get(entry.oracleId),
+    printing: entry.scryfallId ? printMap.get(entry.scryfallId) : undefined,
   }));
 }
 

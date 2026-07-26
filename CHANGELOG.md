@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.62.0
+
+- **One search bar, not two.** The per-page filter (and its set/color/rarity dropdowns and "On tradelist only" toggle) is gone from Collection, Tradelist and Wishlist. Finding a card you own now happens in the same search bar you use for everything else.
+- **Search scopes.** Open search and you'll see Collection / Tradelist / Wishlist chips. Whichever list you searched from is picked for you, so searching from your collection filters your collection right away. Tap a chip off to search the whole card database again, or turn on several at once to search across them together. Your typed search sticks around while you flip between them.
+- Scoped results show your actual copies (edition, condition, "for trade" count) and tap straight through to edit them, exactly like the list pages did.
+
 ## 0.61.0
 
 - **Adding cards to a trade now asks before it commits.** Tapping a card while building an offer (from search or your/their tradelist) opens the card sheet, where you pick the edition, condition, finish, language and quantity, then hit "Add to trade". No more mystery "+" button quietly adding a version you didn't choose.

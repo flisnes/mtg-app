@@ -30,6 +30,8 @@ There is **no unit-test suite** — the user-facing surface is the PWA, driven i
 
 Only then does the app proper render (readiness signal = `.search-input` is visible). Any Playwright/puppeteer script that jumps straight to looking for app selectors will hang on these. Click both first. Prefer in-app hash navigation (`window.location.hash = '#/…'`) over `page.goto` for subsequent steps so you don't re-trigger onboarding.
 
+**Clean up after yourself:** always terminate the dev/static/relay servers and any Playwright processes you started once verification is done (and definitely after pushing) — don't leave them holding ports (5173 Vite, 8787 fixture static, the trade relay, etc.). Shell job control (`kill %1`) does NOT stop these background tool processes; kill the actual PID tree, e.g. `netstat -ano | grep -E ':5173|:8787'` then `taskkill //PID <pid> //T //F`, and confirm the ports are clear.
+
 ## Deploy
 
 - **Client → GitHub Pages, automatic on every push to `main`** (`.github/workflows/deploy-pages.yml`, also a nightly card-DB rebuild). The workflow sets the build env vars, including `VITE_TRADE_WS_URL` — so trade is live in production; the "not configured" empty state only shows in local dev when that var is unset. Live at https://flisnes.github.io/mtg-app/. As this is still early in development, we keep pushing to main for now as deployment is our main way of testing the application.

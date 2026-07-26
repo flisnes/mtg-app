@@ -1,20 +1,18 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { Color, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
-import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
 import { addDeckCardsBulk, removeCollectionEntriesBulk, setQuantityForTradeBulk } from '../db/dataAccess.js';
 import { CardSheet } from './CardSheet.js';
-import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
+import { CardItems, ViewToggle, useViewMode } from './CardViews.js';
+import { collectionCardItem } from './cardRows.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { LoadMoreSentinel } from './LoadMoreSentinel.js';
 import { BulkActionBar, type BulkAction } from './BulkActionBar.js';
 import { DeckPickerSheet } from './DeckPickerSheet.js';
 import { useMultiSelect } from './useMultiSelect.js';
-import { SetSymbol } from './SetSymbol.js';
 import { PileView, CardBackSheet, type PileEntry } from './PileView.js';
-import { SortControls, formatPrice, priceValue, pricedForFinish, sortCards, useCardSort } from './CardSorting.js';
+import { SortControls, priceValue, pricedForFinish, sortCards, useCardSort } from './CardSorting.js';
 import { historyChange } from '../price/history.js';
 import { loadLastEdited, lastEditedFor } from '../history/lastEdited.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
@@ -23,9 +21,6 @@ import { useOpenSearch } from './GlobalSearch.js';
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
 
-const COLORS: Color[] = ['W', 'U', 'B', 'R', 'G'];
-const RARITIES: Rarity[] = ['common', 'uncommon', 'rare', 'mythic'];
-
 /** Join collection entries with their card + printing display data. */
 function useJoinedCollection(): JoinedEntry[] | undefined {
   return useLiveQuery(async () => joinCollectionEntries(await db.collection.toArray()), []);
@@ -33,11 +28,6 @@ function useJoinedCollection(): JoinedEntry[] | undefined {
 
 export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean }) {
   const rows = useJoinedCollection();
-  const [name, setName] = useState('');
-  const [set, setSet] = useState('');
-  const [color, setColor] = useState('');
-  const [rarity, setRarity] = useState('');
-  const [tradeOnly, setTradeOnly] = useState(onlyTrade);
   const [editing, setEditing] = useState<JoinedEntry | null>(null);
   // Pile view is goblin-mode only and never offered on the tradelist screen.
   const goblin = useGoblinMode();
@@ -74,34 +64,9 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const needEdited = sort.key === 'updated';
   const lastEdited = useLiveQuery(async () => (needEdited ? loadLastEdited() : undefined), [needEdited]);
 
-  const sets = useMemo(() => {
-    const m = new Map<string, string>();
-    rows?.forEach((r) => r.printing && m.set(r.printing.set, r.printing.setName));
-    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [rows]);
-
-  // Pre-normalise each owned card's search fields once per data change so the
-  // Scryfall-syntax filter (t:/cmc:/o:/…) runs cheaply on every keystroke.
-  const searchIndex = useMemo(() => {
-    const m = new Map<string, ReturnType<typeof toSearchableEntry>>();
-    rows?.forEach((r) => r.oracle && m.set(r.entry.id, toSearchableEntry(r.oracle)));
-    return m;
-  }, [rows]);
-
   const filtered = useMemo(() => {
     if (!rows) return [];
-    const query = compileCardQuery(name);
-    const matching = rows.filter((r) => {
-      if ((onlyTrade || tradeOnly) && r.entry.quantityForTrade <= 0) return false;
-      if (!query.isEmpty) {
-        const se = searchIndex.get(r.entry.id);
-        if (!se || !query.matches(se)) return false;
-      }
-      if (set && r.printing?.set !== set) return false;
-      if (color && !(r.oracle?.colorIdentity.includes(color as Color) ?? false)) return false;
-      if (rarity && r.oracle?.rarity !== rarity) return false;
-      return true;
-    });
+    const matching = onlyTrade ? rows.filter((r) => r.entry.quantityForTrade > 0) : rows;
     return sortCards(
       matching,
       (r) => ({
@@ -115,14 +80,14 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       }),
       sort,
     );
-  }, [rows, searchIndex, name, set, color, rarity, tradeOnly, onlyTrade, sort, changes, lastEdited]);
+  }, [rows, onlyTrade, sort, changes, lastEdited]);
 
   const totalQty = filtered.reduce((s, r) => s + r.entry.quantity, 0);
 
   // Page the rendered list — the collection is the one list guaranteed to reach
   // thousands of entries, so rendering all of them (each a tile with images and
-  // badges) janks on phones. Reset to page one when the filter/sort changes.
-  const filterSig = JSON.stringify({ name, set, color, rarity, tradeOnly, onlyTrade, sort });
+  // badges) janks on phones. Reset to page one when the sort changes.
+  const filterSig = JSON.stringify({ onlyTrade, sort });
   const { limit, showMore } = usePagedLimit(filterSig, 60);
   const visible = filtered.slice(0, limit);
 
@@ -189,54 +154,6 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
 
   return (
     <>
-      {!pileMode && (
-        <>
-          <div className="list-toolbar">
-            <input
-              className="search-input grow"
-              type="search"
-              placeholder="Filter… (bolt, t:creature, cmc>=3)"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              aria-label="Filter cards"
-            />
-          </div>
-          <div className="filter-row">
-            <select value={set} onChange={(e) => setSet(e.target.value)} aria-label="Set">
-              <option value="">Any set</option>
-              {sets.map(([code, label]) => (
-                <option key={code} value={code}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <select value={color} onChange={(e) => setColor(e.target.value)} aria-label="Color">
-              <option value="">Any color</option>
-              {COLORS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <select value={rarity} onChange={(e) => setRarity(e.target.value)} aria-label="Rarity">
-              <option value="">Any rarity</option>
-              {RARITIES.map((r) => (
-                <option key={r} value={r}>
-                  {r[0]!.toUpperCase() + r.slice(1)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {!onlyTrade && (
-            <label className="chip" style={{ alignSelf: 'flex-start' }}>
-              <input type="checkbox" checked={tradeOnly} onChange={(e) => setTradeOnly(e.target.checked)} /> On tradelist
-              only
-            </label>
-          )}
-        </>
-      )}
-
       <div className="meta-row">
         <p className="search-meta">
           {pileMode ? rows.length : filtered.length} entr{(pileMode ? rows.length : filtered.length) === 1 ? 'y' : 'ies'} ·{' '}
@@ -286,30 +203,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           selectable={sel.active}
           selectedKeys={sel.selected}
           onToggleSelect={sel.toggle}
-          items={visible.map(
-            (r): CardItem => ({
-              key: r.entry.id,
-              name: r.oracle?.name ?? '(unknown card)',
-              image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
-              mana: r.oracle?.manaCost,
-              foil: r.entry.finish !== 'nonfoil',
-              count: r.entry.quantity,
-              badge: r.entry.quantityForTrade > 0 ? `${r.entry.quantityForTrade} FT` : undefined,
-              badgeClass: 'badge-trade',
-              badgeTitle: r.entry.quantityForTrade > 0 ? `${r.entry.quantityForTrade} for trade` : undefined,
-              sub: (
-                <>
-                  {r.printing && <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />}
-                  {r.printing ? `${r.printing.setName} · #${r.printing.collectorNumber} · ` : ''}
-                  {r.entry.condition} · {r.entry.finish}
-                  {r.entry.lang !== 'en' ? ` · ${r.entry.lang}` : ''}
-                </>
-              ),
-              price: formatPrice(pricedForFinish(r.printing, r.entry.finish), r.oracle) ?? '—',
-              trend: moverFlags?.get(r.entry.scryfallId),
-              onClick: () => setEditing(r),
-            }),
-          )}
+          items={visible.map((r) => collectionCardItem(r, { moverFlags, onClick: () => setEditing(r) }))}
         />
       )}
       {!pileMode && (

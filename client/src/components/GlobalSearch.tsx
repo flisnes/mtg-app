@@ -16,6 +16,8 @@ import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js
 import { formatLabel } from '../deck/legality.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
+import { ScopedResults, type Scope } from './ScopedResults.js';
+import type { IconName } from './icons.js';
 import { ownedBadge } from './OwnedBadge.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { useToast } from './Toast.js';
@@ -43,6 +45,18 @@ function useSearchTarget(): AddTarget {
   if (pathname === '/wishlist') return { kind: 'wishlist' };
   if (pathname === '/tradelist') return { kind: 'tradelist' };
   return { kind: 'default' };
+}
+
+// Scope chips let the search look inside what you already own instead of the
+// whole database. They start pre-picked for the list you opened search from, so
+// searching from the collection filters the collection by default.
+const SCOPES: { key: Scope; label: string; icon: IconName }[] = [
+  { key: 'collection', label: 'Collection', icon: 'collection' },
+  { key: 'tradelist', label: 'Tradelist', icon: 'tradelist' },
+  { key: 'wishlist', label: 'Wishlist', icon: 'wishlist' },
+];
+function seedScopes(kind: AddTarget['kind']): Set<Scope> {
+  return kind === 'collection' || kind === 'wishlist' || kind === 'tradelist' ? new Set([kind]) : new Set();
 }
 
 interface SearchCtx {
@@ -186,6 +200,14 @@ function SearchOverlay({
   const [deckLegalOnly, setDeckLegalOnly] = useState(true);
   const toast = useToast();
   const target = useSearchTarget();
+  const [scopes, setScopes] = useState<Set<Scope>>(() => seedScopes(target.kind));
+  const toggleScope = (key: Scope) =>
+    setScopes((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  const scoped = scopes.size > 0;
   const ownership = useOwnershipIndex();
 
   // Searching from a deck filters to cards you could actually play there: legal
@@ -305,34 +327,45 @@ function SearchOverlay({
   );
 
   const emptyState = (
-    <>
-      <p className="search-meta">
-        Type a card name, or pick a filter, to search the whole card database.
-        {targetHint && ` ${targetHint}`}
-      </p>
-      <p className="search-meta search-syntax-hint">
-        Scryfall syntax works too: <code>o:"whenever ~ enters"</code> <code>t:legendary</code> <code>c:ug</code>{' '}
-        <code>id&lt;=bg</code> <code>mv&lt;=2</code> <code>r:mythic</code> <code>f:modern</code>. Prefix{' '}
-        <code>-</code> to negate.
-      </p>
-    </>
+    <p className="search-meta">
+      Type a card name to search the whole card database.{targetHint && ` ${targetHint}`}
+    </p>
   );
 
   return (
     <div className="search-overlay">
       <div className="search-overlay-inner">
-        <CardSearchView
-          query={query}
-          filters={filters}
-          setFilters={setFilters}
-          effectiveFilters={effectiveFilters}
-          filterExtras={filterExtras}
-          emptyState={emptyState}
-          badgeFor={(card) => ownedBadge(ownership?.lookup(card.oracleId, card.defaultScryfallId))}
-          actionsFor={actionsFor}
-          listOnlyActions
-          onCardClick={setSheetCard}
-        />
+        <div className="scope-chips" role="group" aria-label="Search within">
+          {SCOPES.map((s) => (
+            <button
+              key={s.key}
+              className="chip"
+              aria-pressed={scopes.has(s.key)}
+              onClick={() => toggleScope(s.key)}
+              title={`Search your ${s.label.toLowerCase()}`}
+            >
+              <Icon name={s.icon} size={14} /> {s.label}
+            </button>
+          ))}
+        </div>
+
+        {scoped ? (
+          <ScopedResults scopes={scopes} query={query} />
+        ) : (
+          <CardSearchView
+            query={query}
+            filters={filters}
+            setFilters={setFilters}
+            effectiveFilters={effectiveFilters}
+            filterExtras={filterExtras}
+            showFilters={false}
+            emptyState={emptyState}
+            badgeFor={(card) => ownedBadge(ownership?.lookup(card.oracleId, card.defaultScryfallId))}
+            actionsFor={actionsFor}
+            listOnlyActions
+            onCardClick={setSheetCard}
+          />
+        )}
 
         {sheetCard && (
           <CardSheet

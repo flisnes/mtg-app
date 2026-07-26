@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.65.0
+
+- **Group and sort someone else's deck too.** Viewing a favorite deck on another player's profile now has the same Group-by and Sort controls as your own decks. The mainboard defaults to grouping by card type instead of dumping everything into one big list, and you can regroup by color or sort by name, mana value or price, all without touching their build.
+
 ## 0.64.0
 
 - **Wishlist preferences now affect matches.** Your finish, condition, and language picks on a wish now filter what counts as a match in community sharing and in-person trades. A card only satisfies a wish when its finish and language match your preference and its condition is at least as good as your "Minimum condition" pick. The wishlist card sheet's Condition field is now labelled "Minimum condition" to make this clearer.

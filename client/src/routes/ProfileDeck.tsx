@@ -6,6 +6,7 @@ import {
   type DeckFormat,
   type OracleCard,
   type Priced,
+  type Printing,
   type PublicDeckLine,
 } from '@mtg/shared';
 import { ApiError, getUserDeck } from '../account/api.js';
@@ -14,6 +15,7 @@ import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { formatLabel } from '../deck/legality.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
+import { SortControls, groupCards, priceValue, sortCards, useCardSort } from '../components/CardSorting.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { EmptyState, Page } from './Page.js';
 
@@ -34,6 +36,15 @@ const BOARD_ORDER = [
   { board: 'main', title: 'Mainboard' },
   { board: 'side', title: 'Sideboard' },
 ] as const;
+
+// A resolved deck line: the view item plus the joined card records that
+// grouping (type/color) and sorting (name/cmc/price) read from.
+interface DeckEntry {
+  item: CardItem;
+  oracle?: Priced<OracleCard>;
+  printing?: Priced<Printing>;
+  quantity: number;
+}
 
 export function ProfileDeck() {
   const { username = '', deckId = '' } = useParams<{ username: string; deckId: string }>();
@@ -58,6 +69,7 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
   const [deck, setDeck] = useState<LoadedDeck | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useViewMode();
+  const [sort, setSort] = useCardSort('profileDeck', { group: 'type' });
   const [info, setInfo] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
 
   useEffect(() => {
@@ -103,30 +115,34 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
     if (!deck) return [];
     return BOARD_ORDER.map(({ board, title }) => {
       const lines = deck.lines.filter((l) => l.board === board);
-      const items: CardItem[] = lines
-        .map((line, i) => {
-          const oracle = cards?.oracles.get(line.oracleId);
-          const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
-          return {
-            key: `${line.oracleId}-${line.scryfallId ?? ''}-${i}`,
-            name: oracle?.name ?? '(unknown card)',
-            image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-            count: line.quantity,
-            sub: printing ? (
-              <>
-                <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />
-                {`${printing.setName} · #${printing.collectorNumber}`}
-              </>
-            ) : (
-              oracle?.typeLine ?? ''
-            ),
-            onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId }) : undefined,
-          };
-        })
-        .sort((a, b) => a.name.localeCompare(b.name));
-      return { board, title, items, count: lines.reduce((s, l) => s + l.quantity, 0) };
-    }).filter((b) => b.items.length > 0);
-  }, [deck, cards]);
+      const entries: DeckEntry[] = lines.map((line, i) => {
+        const oracle = cards?.oracles.get(line.oracleId);
+        const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
+        const item: CardItem = {
+          key: `${line.oracleId}-${line.scryfallId ?? ''}-${i}`,
+          name: oracle?.name ?? '(unknown card)',
+          image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+          count: line.quantity,
+          sub: printing ? (
+            <>
+              <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />
+              {`${printing.setName} · #${printing.collectorNumber}`}
+            </>
+          ) : (
+            oracle?.typeLine ?? ''
+          ),
+          onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId }) : undefined,
+        };
+        return { item, oracle, printing, quantity: line.quantity };
+      });
+      const sorted = sortCards(
+        entries,
+        (e) => ({ name: e.oracle?.name, cmc: e.oracle?.cmc, price: priceValue(e.printing, e.oracle) }),
+        sort,
+      );
+      return { board, title, entries: sorted, count: lines.reduce((s, l) => s + l.quantity, 0) };
+    }).filter((b) => b.entries.length > 0);
+  }, [deck, cards, sort]);
 
   const total = deck ? deck.lines.filter((l) => l.board !== 'side').reduce((s, l) => s + l.quantity, 0) : 0;
 
@@ -147,23 +163,38 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
       ) : (
         <>
           {deck.description && <p className="fine-print">{deck.description}</p>}
-          <div className="meta-row">
-            <span />
-            <div className="meta-actions">
-              <ViewToggle mode={view} onChange={setView} />
-            </div>
+          <div className="list-toolbar">
+            <span className="grow" />
+            <SortControls prefs={sort} onChange={setSort} groups />
+            <ViewToggle mode={view} onChange={setView} />
           </div>
           {boards.length === 0 ? (
             <EmptyState>This deck is empty.</EmptyState>
           ) : (
-            boards.map(({ board, title, items, count }) => (
-              <section key={board} className="about-section">
-                <h2>
-                  {title} ({count})
-                </h2>
-                <CardItems view={view} items={items} />
-              </section>
-            ))
+            boards.map(({ board, title, entries, count }) => {
+              // Match the own-deck view: never group the command zone.
+              const groups =
+                board === 'commander' || sort.group === 'none' ? null : groupCards(entries, (e) => e.oracle, sort.group);
+              return (
+                <section key={board} className="about-section">
+                  <h2>
+                    {title} ({count})
+                  </h2>
+                  {groups ? (
+                    groups.map((g) => (
+                      <div key={g.label} className="card-group">
+                        <h3 className="card-group-title">
+                          {g.label} <span className="badge">{g.items.reduce((s, e) => s + e.quantity, 0)}</span>
+                        </h3>
+                        <CardItems view={view} items={g.items.map((e) => e.item)} />
+                      </div>
+                    ))
+                  ) : (
+                    <CardItems view={view} items={entries.map((e) => e.item)} />
+                  )}
+                </section>
+              );
+            })
           )}
         </>
       )}

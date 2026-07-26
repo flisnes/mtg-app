@@ -109,8 +109,10 @@ export interface TradeLine {
 }
 
 /**
- * A single wishlist line shared during a trade (for wishlist⇄tradelist match
- * highlighting). Self-contained (carries name) like TradeLine.
+ * A single wishlist line shared during a trade or published to the community
+ * (for wishlist⇄tradelist match highlighting). Self-contained (carries name)
+ * like TradeLine. The condition/finish/lang preferences are optional: undefined
+ * means "any", and condition is a *minimum* (a card at least that good matches).
  */
 export interface WishLine {
   oracleId: string;
@@ -118,6 +120,12 @@ export interface WishLine {
   scryfallId: string | null;
   name: string;
   quantity: number;
+  /** Minimum acceptable condition; undefined = any. */
+  condition?: Condition;
+  /** Desired finish; undefined = any. */
+  finish?: Finish;
+  /** Desired language; undefined = any. */
+  lang?: string;
 }
 
 export interface Setting {

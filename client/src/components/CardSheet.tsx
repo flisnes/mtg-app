@@ -553,7 +553,7 @@ export function CardSheet({
         <div className="field-grid">
           {showCondition && (
           <label className="field">
-            <span>Condition</span>
+            <span>{wishMode ? 'Minimum condition' : 'Condition'}</span>
             <select value={condition} onChange={(e) => setCondition(e.target.value as Condition | '')} disabled={!formEditable}>
               {wishMode && <option value="">Any</option>}
               {CONDITIONS.map((c) => (

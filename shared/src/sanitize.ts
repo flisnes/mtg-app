@@ -58,12 +58,18 @@ export function sanitizeWishLine(raw: unknown, maxQty: number): WishLine | null 
   const oracleId = clampStr(l.oracleId, MAX_ID_CHARS);
   if (!oracleId) return null;
 
+  // Preferences are optional: an unrecognized/absent value means "any", so it's
+  // dropped rather than defaulted (unlike a TradeLine, which is always concrete).
+  const lang = clampStr(l.lang, MAX_LANG_CHARS);
   return {
     oracleId,
     // Empty string would match no printing at all; treat it as "any printing".
     scryfallId: clampStr(l.scryfallId, MAX_ID_CHARS) || null,
     name: clampStr(l.name, MAX_NAME_CHARS) || UNKNOWN_NAME,
     quantity: clampQty(l.quantity, maxQty),
+    ...(CONDS.has(l.condition as string) ? { condition: l.condition as Condition } : {}),
+    ...(FINS.has(l.finish as string) ? { finish: l.finish as Finish } : {}),
+    ...(lang ? { lang } : {}),
   };
 }
 

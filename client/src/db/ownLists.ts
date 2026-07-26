@@ -34,5 +34,10 @@ export async function readOwnWishlist(cap: number): Promise<WishLine[]> {
     scryfallId: e.scryfallId,
     name: names.get(e.oracleId)?.name ?? '(unknown card)',
     quantity: e.quantity,
+    // Optional preferences (undefined = "any") ride along so partners see, and
+    // matching respects, a wish for a specific finish/condition/language.
+    condition: e.condition,
+    finish: e.finish,
+    lang: e.lang,
   }));
 }

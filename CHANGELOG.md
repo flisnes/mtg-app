@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.64.0
+
+- **Wishlist preferences now affect matches.** Your finish, condition, and language picks on a wish now filter what counts as a match in community sharing and in-person trades. A card only satisfies a wish when its finish and language match your preference and its condition is at least as good as your "Minimum condition" pick. The wishlist card sheet's Condition field is now labelled "Minimum condition" to make this clearer.
+
 ## 0.63.0
 
 - **File a card into any list from its sheet.** Open a card from search and the sheet now carries all three destinations, not just the one you searched from. The list you came from is the big button (e.g. "+Wishlist"); the other two sit beside it as compact +Collection / +Tradelist icon buttons. Found a card while browsing your wishlist but actually want it in your collection? One tap, no reopening search on the right scope.

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { OracleCard, Priced, Printing, PublicUser, TradeLine, WishLine } from '@mtg/shared';
+import { wishPrefsMet, type OracleCard, type Priced, type Printing, type PublicUser, type TradeLine, type WishLine } from '@mtg/shared';
 import { ApiError, getUserLists, listUsers } from '../account/api.js';
 import { useAccount } from '../account/useAccount.js';
 import { db } from '../db/schema.js';
@@ -28,39 +28,57 @@ function lineDetail(l: TradeLine): string {
   return bits.join(' · ');
 }
 
-/** My wishlist as a matcher over their tradelist lines. */
-function useMyWants(): (oracleId: string, scryfallId: string) => boolean {
+/** A wish's preferences, spelled out for a trade partner (empty = no prefs). */
+function wishDetail(l: WishLine): string {
+  const bits: string[] = [];
+  if (l.finish && l.finish !== 'nonfoil') bits.push(l.finish);
+  if (l.condition) bits.push(`min ${l.condition}`);
+  if (l.lang && l.lang !== 'en') bits.push(l.lang);
+  return bits.join(' · ');
+}
+
+/** My wishlist as a matcher over their tradelist lines (respects my prefs). */
+function useMyWants(): (line: TradeLine) => boolean {
   const wishes = useLiveQuery(() => db.wishlist.toArray(), [], []);
   return useMemo(() => {
-    const byOracle = new Map<string, (string | null)[]>();
+    const byOracle = new Map<string, typeof wishes>();
     for (const w of wishes) {
       const list = byOracle.get(w.oracleId) ?? [];
-      list.push(w.scryfallId);
+      list.push(w);
       byOracle.set(w.oracleId, list);
     }
-    return (oracleId, scryfallId) =>
-      (byOracle.get(oracleId) ?? []).some((s) => s === null || s === scryfallId);
+    return (line) =>
+      (byOracle.get(line.oracleId) ?? []).some(
+        (w) => (w.scryfallId === null || w.scryfallId === line.scryfallId) && wishPrefsMet(w, line),
+      );
   }, [wishes]);
 }
 
 /** Matcher over their wishlist lines (null = any printing of the card). */
-type HaveFn = (oracleId: string, scryfallId: string | null) => boolean;
+type HaveFn = (wish: WishLine) => boolean;
 
 /**
  * My collection as two matchers over their wishlist lines:
  *  - `have`: I already have it marked for trade (I'm offering it), and
  *  - `own`: I own a copy at all (whether or not it's on my tradelist).
- * Same printing rule as trades: a specific-printing wish matches only that
- * printing, an "any printing" wish matches every printing of the card.
+ * Same printing rule as trades (a specific-printing wish matches only that
+ * printing, an "any printing" wish matches every printing), and the copy must
+ * also meet the wish's finish/condition/language preferences.
  */
 function useMyCollection(): { have: HaveFn; own: HaveFn } {
   const entries = useLiveQuery(() => db.collection.toArray(), [], []);
   return useMemo(() => {
     const matcher = (rows: typeof entries): HaveFn => {
-      const oracles = new Set(rows.map((e) => e.oracleId));
-      const printings = new Set(rows.map((e) => e.scryfallId));
-      return (oracleId, scryfallId) =>
-        scryfallId === null ? oracles.has(oracleId) : printings.has(scryfallId);
+      const byOracle = new Map<string, typeof rows>();
+      for (const e of rows) {
+        const list = byOracle.get(e.oracleId) ?? [];
+        list.push(e);
+        byOracle.set(e.oracleId, list);
+      }
+      return (wish) =>
+        (byOracle.get(wish.oracleId) ?? []).some(
+          (e) => (wish.scryfallId === null || wish.scryfallId === e.scryfallId) && wishPrefsMet(wish, e),
+        );
     };
     return { have: matcher(entries.filter((e) => e.quantityForTrade > 0)), own: matcher(entries) };
   }, [entries]);
@@ -242,7 +260,7 @@ function UserLists({
   const trade = useMemo(() => {
     if (!lists) return [];
     return lists.tradelist
-      .map((l) => ({ line: l, match: iWant(l.oracleId, l.scryfallId), own: false, hi: highlight?.has(l.oracleId) ?? false }))
+      .map((l) => ({ line: l, match: iWant(l), own: false, hi: highlight?.has(l.oracleId) ?? false }))
       .sort(hiSort);
   }, [lists, iWant, highlight]);
 
@@ -250,11 +268,11 @@ function UserLists({
     if (!lists) return [];
     return lists.wishlist
       .map((l) => {
-        const match = iHave(l.oracleId, l.scryfallId);
+        const match = iHave(l);
         // "own" is the new highlight: a card of theirs sitting in my
         // collection that I haven't put on my tradelist yet. If it's already
         // for trade, the ⇄ match badge already says so — don't double-flag.
-        const own = !match && iOwn(l.oracleId, l.scryfallId);
+        const own = !match && iOwn(l);
         return { line: l, match, own, hi: highlight?.has(l.oracleId) ?? false };
       })
       .sort(hiSort);
@@ -300,22 +318,31 @@ function UserLists({
       wish.map(({ line, match, own, hi }, i) => {
         const oracle = cards?.oracles.get(line.oracleId);
         const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
+        const detail = wishDetail(line);
+        const printingSub = line.scryfallId ? (
+          printing ? (
+            <>
+              <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />
+              {`${printing.setName} · #${printing.collectorNumber}`}
+            </>
+          ) : (
+            'specific printing'
+          )
+        ) : (
+          'any printing'
+        );
         return {
           key: `${line.oracleId}-${i}`,
           name: oracle?.name ?? line.name,
           image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+          foil: !!line.finish && line.finish !== 'nonfoil',
           count: line.quantity,
-          sub: line.scryfallId ? (
-            printing ? (
-              <>
-                <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />
-                {`${printing.setName} · #${printing.collectorNumber}`}
-              </>
-            ) : (
-              'specific printing'
-            )
+          sub: detail ? (
+            <>
+              {printingSub} · {detail}
+            </>
           ) : (
-            'any printing'
+            printingSub
           ),
           badge: hi
             ? '🔔 you have this'

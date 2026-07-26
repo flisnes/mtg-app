@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CODE_LENGTH, type CollectionEntry, type OracleCard, type Priced, type Printing, type Seat, type TradeLine } from '@mtg/shared';
+import { CODE_LENGTH, wishPrefsMet, type CollectionEntry, type Condition, type Finish, type OracleCard, type Priced, type Printing, type Seat, type TradeLine } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { collectionKey } from '../db/dataAccess.js';
@@ -92,25 +92,29 @@ function ownIndicator(own: Owned | undefined, scryfallId?: string): OwnedBadgeSp
 type InfoCtx = { side: Side };
 type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string; ctx?: InfoCtx };
 type OpenInfo = (oracle: Priced<OracleCard>, scryfallId?: string, ctx?: InfoCtx) => void;
-/** How many copies a wishlist wants of a given printing (0 = no match). */
-type WantFn = (oracleId: string, scryfallId: string) => number;
+/** A concrete card (offer line / collection entry) tested against a wishlist. */
+type HaveCard = { oracleId: string; scryfallId: string; condition: Condition; finish: Finish; lang: string };
+/** How many copies a wishlist wants of a given card (0 = no match). */
+type WantFn = (have: HaveCard) => number;
 
 /**
  * Wishlist⇄tradelist match rule: a wish with scryfallId null ("any printing")
  * matches every printing of that card; a wish for a specific printing matches
- * only that printing. Returns how many copies the wishlist wants of a given
- * (oracleId, scryfallId) — 0 means no match.
+ * only that printing. The card must also meet the wish's finish/condition/
+ * language preferences (condition is a minimum). Returns how many copies the
+ * wishlist wants of a given card — 0 means no match.
  */
-function wishMatcher(lines: Array<{ oracleId: string; scryfallId: string | null; quantity: number }>): WantFn {
-  const byOracle = new Map<string, Array<{ scryfallId: string | null; quantity: number }>>();
+type WishPrefs = { oracleId: string; scryfallId: string | null; quantity: number; condition?: Condition; finish?: Finish; lang?: string };
+function wishMatcher(lines: WishPrefs[]): WantFn {
+  const byOracle = new Map<string, WishPrefs[]>();
   for (const w of lines) {
     const list = byOracle.get(w.oracleId) ?? [];
-    list.push({ scryfallId: w.scryfallId, quantity: w.quantity });
+    list.push(w);
     byOracle.set(w.oracleId, list);
   }
-  return (oracleId: string, scryfallId: string): number =>
-    (byOracle.get(oracleId) ?? []).reduce(
-      (sum, w) => sum + (w.scryfallId === null || w.scryfallId === scryfallId ? w.quantity : 0),
+  return (have: HaveCard): number =>
+    (byOracle.get(have.oracleId) ?? []).reduce(
+      (sum, w) => sum + ((w.scryfallId === null || w.scryfallId === have.scryfallId) && wishPrefsMet(w, have) ? w.quantity : 0),
       0,
     );
 }
@@ -443,8 +447,8 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   }, []);
   const theirWanted = useMemo(() => wishMatcher(trade.peerWishlist ?? []), [trade.peerWishlist]);
   const myWanted = useMemo(() => wishMatcher(lists?.wish ?? []), [lists?.wish]);
-  const theyWantCount = (lists?.tradelist ?? []).filter((e) => theirWanted(e.oracleId, e.scryfallId) > 0).length;
-  const iWantCount = (trade.peerTradelist ?? []).filter((l) => myWanted(l.oracleId, l.scryfallId) > 0).length;
+  const theyWantCount = (lists?.tradelist ?? []).filter((e) => theirWanted(e) > 0).length;
+  const iWantCount = (trade.peerTradelist ?? []).filter((l) => myWanted(l) > 0).length;
 
   const myTotal = totalOf(myOffer);
   const theirTotal = totalOf(theirOffer);
@@ -576,7 +580,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           onAdd={() => setSheet('get')}
           onScan={() => setScanFor('get')}
           badge={(l) => {
-            const w = myWanted(l.oracleId, l.scryfallId);
+            const w = myWanted(l);
             return w > 0 ? { icon: '⭐', title: `On your wishlist (×${w})`, cls: 'badge-wish' } : null;
           }}
           printings={printMap}
@@ -991,7 +995,7 @@ function BalancePanel({
             name: l.name,
             price: pricedForFinish(printing, l.finish)?.priceEur ?? 0,
             qty: l.quantity - (offered.get(lineKey(l)) ?? 0),
-            wanted: myWanted(l.oracleId, l.scryfallId),
+            wanted: myWanted(l),
             oracle: data.oracles.get(l.oracleId),
             printing,
           };
@@ -1015,7 +1019,7 @@ function BalancePanel({
             name: line.name,
             price: pricedForFinish(printing, e.finish)?.priceEur ?? 0,
             qty: e.quantityForTrade - (offered.get(lineKey(line)) ?? 0),
-            wanted: theirWanted(e.oracleId, e.scryfallId),
+            wanted: theirWanted(e),
             oracle,
             printing,
           };
@@ -1132,7 +1136,7 @@ function AddCardsPanel({
   };
 
   const sortedTradelist = (tradelist ?? [])
-    .map((t) => ({ ...t, wanted: theirWanted(t.entry.oracleId, t.entry.scryfallId) }))
+    .map((t) => ({ ...t, wanted: theirWanted(t.entry) }))
     .sort((a, b) => b.wanted - a.wanted);
 
   // With no query, quick-picks from your own tradelist (partner-wishlist
@@ -1222,7 +1226,7 @@ function AddTheirCardsPanel({
   };
 
   const sorted = [...(lines ?? [])]
-    .map((l) => ({ l, wanted: myWanted(l.oracleId, l.scryfallId) }))
+    .map((l) => ({ l, wanted: myWanted(l) }))
     .sort((a, b) => b.wanted - a.wanted);
 
   // With no query, quick-picks from their tradelist (your wishlist matches

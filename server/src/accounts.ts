@@ -15,6 +15,7 @@ import {
   sanitizeProfile,
   sanitizeTradeLines,
   sanitizeWishLines,
+  wishPrefsMet,
   type ApiErrorBody,
   type AuthResponse,
   type MatchCard,
@@ -438,11 +439,10 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     for (const other of lists) {
       if (other.userId === user.id) continue;
 
-      // They want a card I have for trade / I want a card they have for trade.
-      const theyWant: MatchCard[] = [];
-      for (const [oracleId, name] of mine.haves) if (other.wants.has(oracleId)) theyWant.push({ oracleId, name });
-      const iWant: MatchCard[] = [];
-      for (const [oracleId, name] of other.haves) if (mine.wants.has(oracleId)) iWant.push({ oracleId, name });
+      // They want a card I have for trade / I want a card they have for trade —
+      // a have only counts when it meets the wish's finish/condition/lang prefs.
+      const theyWant = dedupeMatches(mine.haves.filter((h) => other.wants.some((w) => w.oracleId === h.oracleId && wishPrefsMet(w, h))));
+      const iWant = dedupeMatches(other.haves.filter((h) => mine.wants.some((w) => w.oracleId === h.oracleId && wishPrefsMet(w, h))));
 
       if (theyWant.length === 0 && iWant.length === 0) continue;
       matches.push({
@@ -456,6 +456,22 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     matches.sort((a, b) => b.updatedAt - a.updatedAt);
     return { matches } satisfies MatchesResponse;
   });
+}
+
+/**
+ * Collapse matched have-lines to one MatchCard per oracleId (a tradelist can
+ * hold several printings/conditions of the same card; the notification names it
+ * once). First name wins, matching the old deduped-by-oracle behavior.
+ */
+function dedupeMatches(haves: { oracleId: string; name: string }[]): MatchCard[] {
+  const seen = new Set<string>();
+  const out: MatchCard[] = [];
+  for (const h of haves) {
+    if (seen.has(h.oracleId)) continue;
+    seen.add(h.oracleId);
+    out.push({ oracleId: h.oracleId, name: h.name });
+  }
+  return out;
 }
 
 /** The owner's synced deckCards rows for one deck (raw, pre-sanitize). */

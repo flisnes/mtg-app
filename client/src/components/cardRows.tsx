@@ -53,8 +53,12 @@ export function wishCardItem(
     opts.ownership?.lookup(r.entry.oracleId, r.entry.scryfallId ?? r.oracle?.defaultScryfallId),
   );
   // Any finish/condition/lang the wish pins down (undefined = "any", shown as
-  // nothing); English is the norm, so it's only surfaced when non-default.
-  const prefs = [r.entry.finish, r.entry.condition, r.entry.lang && r.entry.lang !== 'en' ? r.entry.lang : undefined]
+  // nothing); condition is a minimum, English is the norm (only shown if not).
+  const prefs = [
+    r.entry.finish,
+    r.entry.condition ? `min ${r.entry.condition}` : undefined,
+    r.entry.lang && r.entry.lang !== 'en' ? r.entry.lang : undefined,
+  ]
     .filter(Boolean)
     .join(' · ');
   const printingSub = r.entry.scryfallId ? (

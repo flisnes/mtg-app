@@ -4,9 +4,13 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
 import {
+  CONDITIONS,
+  FINISHES,
   SYNC_MAX_PULL,
   SYNC_MAX_ROWS_PER_USER,
   sanitizeAvatar,
+  type Condition,
+  type Finish,
   type ProfileAvatar,
   type PublicUser,
   type SnapshotCounts,
@@ -505,8 +509,8 @@ export class AccountStore {
       userId: r.userId,
       username: r.username,
       updatedAt: r.updatedAt,
-      haves: oracleNameMap(r.tradelist),
-      wants: oracleIdSet(r.wishlist),
+      haves: parseHaveLines(r.tradelist),
+      wants: parseWantLines(r.wishlist),
     }));
     this.parsedCache = { version: this.publicListsVersion, lists };
     return lists;
@@ -533,38 +537,72 @@ export class AccountStore {
   }
 }
 
+/** A concrete tradelist card, for matching against wishlist preferences. */
+export interface HaveLine {
+  oracleId: string;
+  name: string;
+  condition: Condition;
+  finish: Finish;
+  lang: string;
+}
+
+/** A wishlist card with its (optional) finish/condition/language preferences. */
+export interface WantLine {
+  oracleId: string;
+  condition?: Condition;
+  finish?: Finish;
+  lang?: string;
+}
+
 export interface ParsedPublicList {
   userId: number;
   username: string;
   updatedAt: number;
-  /** oracleId → display name, from the tradelist (deduped, first name wins). */
-  haves: Map<string, string>;
-  /** oracleIds on the wishlist. */
-  wants: Set<string>;
+  /** Tradelist lines (concrete condition/finish/lang), for pref-aware matching. */
+  haves: HaveLine[];
+  /** Wishlist lines with their preferences. */
+  wants: WantLine[];
 }
 
-function parseLines(json: string): { oracleId?: unknown; name?: unknown }[] {
+const COND_SET = new Set<string>(CONDITIONS);
+const FIN_SET = new Set<string>(FINISHES);
+
+function parseLines(json: string): Record<string, unknown>[] {
   try {
     const v = JSON.parse(json);
-    return Array.isArray(v) ? v : [];
+    return Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
   } catch {
     return [];
   }
 }
 
-function oracleNameMap(json: string): Map<string, string> {
-  const out = new Map<string, string>();
+function parseHaveLines(json: string): HaveLine[] {
+  const out: HaveLine[] = [];
   for (const l of parseLines(json)) {
-    if (typeof l.oracleId === 'string' && !out.has(l.oracleId)) {
-      out.set(l.oracleId, typeof l.name === 'string' ? l.name : '(unknown card)');
-    }
+    if (typeof l.oracleId !== 'string') continue;
+    out.push({
+      oracleId: l.oracleId,
+      name: typeof l.name === 'string' ? l.name : '(unknown card)',
+      // Stored lines are already sanitized concrete TradeLines; fall back defensively.
+      condition: COND_SET.has(l.condition as string) ? (l.condition as Condition) : 'NM',
+      finish: FIN_SET.has(l.finish as string) ? (l.finish as Finish) : 'nonfoil',
+      lang: typeof l.lang === 'string' && l.lang ? l.lang : 'en',
+    });
   }
   return out;
 }
 
-function oracleIdSet(json: string): Set<string> {
-  const out = new Set<string>();
-  for (const l of parseLines(json)) if (typeof l.oracleId === 'string') out.add(l.oracleId);
+function parseWantLines(json: string): WantLine[] {
+  const out: WantLine[] = [];
+  for (const l of parseLines(json)) {
+    if (typeof l.oracleId !== 'string') continue;
+    out.push({
+      oracleId: l.oracleId,
+      ...(COND_SET.has(l.condition as string) ? { condition: l.condition as Condition } : {}),
+      ...(FIN_SET.has(l.finish as string) ? { finish: l.finish as Finish } : {}),
+      ...(typeof l.lang === 'string' && l.lang ? { lang: l.lang } : {}),
+    });
+  }
   return out;
 }
 

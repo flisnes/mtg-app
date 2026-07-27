@@ -26,6 +26,7 @@ import { AvatarEditorSheet, CardSearch } from '../components/AvatarEditorSheet.j
 import { CardSheet, EditionPicker } from '../components/CardSheet.js';
 import { Icon } from '../components/icons.js';
 import { ManaCost } from '../components/ManaCost.js';
+import { useCardArtist } from '../components/useCardArtist.js';
 import { useToast } from '../components/Toast.js';
 import { useEscapeToClose } from '../components/useEscapeToClose.js';
 import { EmptyState, Page } from './Page.js';
@@ -269,6 +270,8 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
               </p>
             )}
           </section>
+
+          {profile.avatar && <ArtCredit scryfallId={profile.avatar.scryfallId} />}
         </>
       )}
 
@@ -314,6 +317,13 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
       )}
     </Page>
   );
+}
+
+/** Credits the artist whose card art the profile picture is cropped from. */
+function ArtCredit({ scryfallId }: { scryfallId: string }) {
+  const artist = useCardArtist(scryfallId);
+  if (!artist) return null;
+  return <p className="profile-art-credit">Profile picture art by {artist}.</p>;
 }
 
 /** Replace slot i (slots beyond the array's end append, keeping it dense). */

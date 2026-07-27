@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.66.0
+
+- **Card artists get their credit.** Profiles now show an "Art by …" line at the bottom, naming the illustrator of the card art your profile picture is cropped from. Shows for anyone's profile whose picture is a card art.
+
 ## 0.65.0
 
 - **Group and sort someone else's deck too.** Viewing a favorite deck on another player's profile now has the same Group-by and Sort controls as your own decks. The mainboard defaults to grouping by card type instead of dumping everything into one big list, and you can regroup by color or sort by name, mana value or price, all without touching their build.

@@ -3414,6 +3414,12 @@ button.ghost {
   align-items: flex-start;
   gap: 0.4rem;
 }
+.profile-art-credit {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
 
 .fav-card-grid {
   display: grid;

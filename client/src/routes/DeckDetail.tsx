@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DECK_FORMATS, type DeckBoard, type DeckFormat, type OracleCard, type Priced, type Printing } from '@mtg/shared';
@@ -19,6 +19,9 @@ import {
 import { addToWishlistBulk } from '../db/dataAccess.js';
 import { checkDeckLegality, formatLabel, type LegalityReport } from '../deck/legality.js';
 import { buildDeckText } from '../deck/deckText.js';
+import { shareDeckLink } from '../deck/share.js';
+import { getUserProfile } from '../account/api.js';
+import { useAccount } from '../account/useAccount.js';
 import { downloadText } from '../import/export.js';
 import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
@@ -69,6 +72,8 @@ export function DeckDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const account = useAccount();
+  const [favDeckIds, setFavDeckIds] = useState<Set<string> | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [scanning, setScanning] = useState<'add' | 'rescan' | null>(null);
   const [exit, setExit] = useState<MissingCard[] | null>(null);
@@ -99,6 +104,31 @@ export function DeckDetail() {
     }));
     return { deck, rows };
   }, [id]);
+
+  // Fetch our own favorited-deck ids so the share action knows whether this
+  // deck is actually browsable — only favorited decks resolve at a share link.
+  useEffect(() => {
+    const session = account.session;
+    if (!account.enabled || !session) {
+      setFavDeckIds(null);
+      return;
+    }
+    let cancelled = false;
+    getUserProfile(session.token, session.username)
+      .then((res) => {
+        if (cancelled) return;
+        const ids = (res.profile?.favoriteDecks ?? [])
+          .map((f) => f.deckId)
+          .filter((x): x is string => typeof x === 'string');
+        setFavDeckIds(new Set(ids));
+      })
+      .catch(() => {
+        if (!cancelled) setFavDeckIds(new Set()); // offline/error — treat as "none known"
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [account.enabled, account.session?.token, account.session?.username]);
 
   const summary = useMemo(() => {
     const rows = data?.rows ?? [];
@@ -173,6 +203,18 @@ export function DeckDetail() {
     toast('Exported deck');
   }
 
+  async function shareDeck() {
+    const session = account.session;
+    if (!session) return;
+    if (!favDeckIds?.has(deck.id)) {
+      toast('Favorite this deck on your profile to share it');
+      return;
+    }
+    const result = await shareDeckLink({ username: session.username, deckId: deck.id, name: deck.name, format: deck.format });
+    if (result === 'copied') toast('Share link copied');
+    else if (result === 'failed') toast('Could not copy the link');
+  }
+
   return (
     <section className="page">
       <div className="deck-head">
@@ -186,6 +228,9 @@ export function DeckDetail() {
             { label: 'Re-scan deck', icon: 'refresh', onClick: () => setScanning('rescan') },
             { label: 'Import list', icon: 'import', onClick: () => setShowImport((v) => !v) },
             { label: 'Export', icon: 'export', onClick: exportDeck },
+            ...(account.enabled && account.session
+              ? [{ label: 'Share deck', icon: 'share' as const, onClick: () => void shareDeck() }]
+              : []),
             {
               label: 'Delete deck',
               icon: 'trash',

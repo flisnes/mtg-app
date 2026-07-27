@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.72.0
+
+- **Share a deck with a link.** Favorited a deck? There's now a Share button — in the deck's ⋯ menu, and at the top of any deck you're viewing on someone's profile. It hands off to your phone's share sheet (or copies the link) so you can drop it in a chat. Whoever opens it needs to be signed in and lands straight on the decklist. Decks you haven't favorited stay private, so the Share button nudges you to favorite one first.
+
 ## 0.71.2
 
 - **Scroll wheel works across the whole window on desktop.** On a wide monitor, parking your mouse in the empty space to the left or right of the content used to leave the scroll wheel dead. The scroll area now fills the window, so you can spin the wheel anywhere.

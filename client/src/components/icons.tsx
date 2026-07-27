@@ -39,6 +39,7 @@ export type IconName =
   | 'grid'
   | 'flip'
   | 'spoilers'
+  | 'share'
   | 'chevronDown';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
@@ -281,6 +282,16 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <path d="M10 3q1 5.5 6.5 6.5Q11 10.5 10 16Q9 10.5 3.5 9.5Q9 8.5 10 3z" />
       <path d="M18 14q.5 2.5 3 3Q18.5 17.5 18 20Q17.5 17.5 15 17Q17.5 16.5 18 14z" />
+    </>
+  ),
+  // Three linked nodes — share a link out.
+  share: (
+    <>
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
     </>
   ),
   // Downward chevron — a control that opens a dropdown.

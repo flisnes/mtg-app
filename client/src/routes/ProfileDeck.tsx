@@ -17,6 +17,9 @@ import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
 import { SortControls, groupCards, priceValue, sortCards, useCardSort } from '../components/CardSorting.js';
 import { SetSymbol } from '../components/SetSymbol.js';
+import { Icon } from '../components/icons.js';
+import { useToast } from '../components/Toast.js';
+import { shareDeckLink } from '../deck/share.js';
 import { EmptyState, Page } from './Page.js';
 
 // Read-only view of someone's favorited deck (/profile/:username/deck/:deckId).
@@ -66,6 +69,7 @@ export function ProfileDeck() {
 
 function ProfileDeckView({ token, username, deckId }: { token: string; username: string; deckId: string }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [deck, setDeck] = useState<LoadedDeck | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useViewMode();
@@ -146,14 +150,27 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
 
   const total = deck ? deck.lines.filter((l) => l.board !== 'side').reduce((s, l) => s + l.quantity, 0) : 0;
 
+  async function share() {
+    // We're viewing this deck, so it's favorited and the link resolves for any
+    // signed-in user. Reuses the current route as the shareable target.
+    const result = await shareDeckLink({ username, deckId, name: deck?.name ?? 'Deck', format: deck?.format });
+    if (result === 'copied') toast('Share link copied');
+    else if (result === 'failed') toast('Could not copy the link');
+  }
+
   return (
     <Page
       title={deck?.name ?? 'Deck'}
       subtitle={deck ? `${formatLabel(deck.format as DeckFormat)} · ${total} cards · ${username}’s deck` : undefined}
       menu={
-        <button className="ghost" onClick={() => navigate(`/profile/${encodeURIComponent(username)}`)}>
-          ‹ {username}’s profile
-        </button>
+        <>
+          <button className="ghost icon-only" aria-label="Share deck" title="Share deck" onClick={() => void share()}>
+            <Icon name="share" size={18} />
+          </button>
+          <button className="ghost" onClick={() => navigate(`/profile/${encodeURIComponent(username)}`)}>
+            ‹ {username}’s profile
+          </button>
+        </>
       }
     >
       {error ? (

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.70.1
+
+- **Tidied up those quick-add buttons.** They were showing on every card you so much as glanced at. Now: in your own decks you get both Collection and Wishlist buttons, on your own wishlist you get a "got it" Add to collection button, and everywhere else (browsing a friend's deck, a trade, price movers) they hide behind a ⋯ menu so the card sheet stays clean.
+
 ## 0.70.0
 
 - **"I've got it" / "I want it" from any card.** Tapping a card you're only browsing (someone else's deck or profile) or a card in one of your own decks now offers quick Collection and Wishlist buttons right in its sheet. Collection files the printing you're looking at; Wishlist adds it as any-printing, same as a normal wish. No more dead-end "Close"-only sheet when you spot something you have or covet.

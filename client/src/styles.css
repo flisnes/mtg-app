@@ -2067,6 +2067,10 @@ button.primary {
   flex-direction: column;
   z-index: 40;
 }
+.options-pop-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
 .options-item {
   display: flex;
   align-items: center;

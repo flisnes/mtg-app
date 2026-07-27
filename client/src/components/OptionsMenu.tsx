@@ -11,7 +11,17 @@ export interface MenuAction {
   onClick: () => void;
 }
 
-export function OptionsMenu({ actions, label = 'Options' }: { actions: MenuAction[]; label?: string }) {
+export function OptionsMenu({
+  actions,
+  label = 'Options',
+  openUp = false,
+}: {
+  actions: MenuAction[];
+  label?: string;
+  /** Open the popup above the trigger — for triggers near the bottom of a
+   *  scrolling container (e.g. the card sheet), where a downward popup clips. */
+  openUp?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -43,7 +53,7 @@ export function OptionsMenu({ actions, label = 'Options' }: { actions: MenuActio
         ⋯
       </button>
       {open && (
-        <div className="options-pop" role="menu" aria-label={label}>
+        <div className={openUp ? 'options-pop options-pop-up' : 'options-pop'} role="menu" aria-label={label}>
           {actions.map((a) => (
             <button
               key={a.label}

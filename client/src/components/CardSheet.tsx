@@ -24,6 +24,7 @@ import { historyChange, type HistoryChange } from '../price/history.js';
 import { CardHistory } from './CardHistory.js';
 import { EventSheet } from './EventSheet.js';
 import { Icon, type IconName } from './icons.js';
+import { OptionsMenu } from './OptionsMenu.js';
 import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
@@ -404,8 +405,8 @@ export function CardSheet({
   }
 
   /** File a card into the user's own collection/wishlist from a sheet that
-   *  otherwise offers no such action — info mode (someone else's deck/profile)
-   *  and deck-slot mode (a card in a deck they may not physically own). One tap:
+   *  otherwise offers no such action — a deck slot (own deck), a wishlist line
+   *  ("got it"), or any card you're only viewing (info mode). One tap:
    *  collection takes the shown printing (NM/nonfoil/en); a wish stays "any
    *  printing" like the normal wishlist add. */
   async function quickAdd(dest: 'collection' | 'wishlist') {
@@ -640,7 +641,11 @@ export function CardSheet({
         </div>
         )}
 
-        {(mode === 'info' || mode === 'deck') && (
+        {/* File-into-your-lists affordance. In your own deck both lists lead as
+            buttons; on your own wishlist "got it" → collection leads; everywhere
+            you're only viewing a card (info mode) it tucks into a ⋯ menu so the
+            sheet stays uncluttered. */}
+        {mode === 'deck' && (
           <div className="sheet-quickadd">
             <span className="sheet-quickadd-label">Add to your</span>
             <div className="sheet-quickadd-btns">
@@ -650,6 +655,31 @@ export function CardSheet({
               <button onClick={() => quickAdd('wishlist')} disabled={busy} title="Add to wishlist">
                 <Icon name="wishlist" size={16} /> Wishlist
               </button>
+            </div>
+          </div>
+        )}
+        {mode === 'wish' && (
+          <div className="sheet-quickadd">
+            <span className="sheet-quickadd-label">Got it?</span>
+            <div className="sheet-quickadd-btns">
+              <button onClick={() => quickAdd('collection')} disabled={busy} title="Add to collection">
+                <Icon name="collection" size={16} /> Add to collection
+              </button>
+            </div>
+          </div>
+        )}
+        {mode === 'info' && (
+          <div className="sheet-quickadd">
+            <span className="sheet-quickadd-label">Add to your lists</span>
+            <div className="sheet-quickadd-btns">
+              <OptionsMenu
+                openUp
+                label="Add to your lists"
+                actions={[
+                  { label: 'Add to collection', icon: 'collection', onClick: () => quickAdd('collection') },
+                  { label: 'Add to wishlist', icon: 'wishlist', onClick: () => quickAdd('wishlist') },
+                ]}
+              />
             </div>
           </div>
         )}

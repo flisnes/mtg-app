@@ -403,6 +403,28 @@ export function CardSheet({
     onClose();
   }
 
+  /** File a card into the user's own collection/wishlist from a sheet that
+   *  otherwise offers no such action — info mode (someone else's deck/profile)
+   *  and deck-slot mode (a card in a deck they may not physically own). One tap:
+   *  collection takes the shown printing (NM/nonfoil/en); a wish stays "any
+   *  printing" like the normal wishlist add. */
+  async function quickAdd(dest: 'collection' | 'wishlist') {
+    setBusy(true);
+    if (dest === 'collection') {
+      await addToCollection({
+        oracleId: oracleCard.oracleId,
+        scryfallId: scryfallId || oracleCard.defaultScryfallId,
+        condition: 'NM',
+        finish: 'nonfoil',
+        lang: 'en',
+        quantity: 1,
+      });
+    } else {
+      await addToWishlist({ oracleId: oracleCard.oracleId, quantity: 1 });
+    }
+    onClose();
+  }
+
   // Portal to <body>: the sheet must escape any stacking context its opener
   // lives in (e.g. the search overlay), or the tab bar can cover its buttons.
   return createPortal(
@@ -616,6 +638,20 @@ export function CardSheet({
             </label>
           )}
         </div>
+        )}
+
+        {(mode === 'info' || mode === 'deck') && (
+          <div className="sheet-quickadd">
+            <span className="sheet-quickadd-label">Add to your</span>
+            <div className="sheet-quickadd-btns">
+              <button onClick={() => quickAdd('collection')} disabled={busy} title="Add to collection">
+                <Icon name="collection" size={16} /> Collection
+              </button>
+              <button onClick={() => quickAdd('wishlist')} disabled={busy} title="Add to wishlist">
+                <Icon name="wishlist" size={16} /> Wishlist
+              </button>
+            </div>
+          </div>
         )}
 
         {mode === 'info' ? (

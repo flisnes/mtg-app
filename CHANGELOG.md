@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.70.0
+
+- **"I've got it" / "I want it" from any card.** Tapping a card you're only browsing (someone else's deck or profile) or a card in one of your own decks now offers quick Collection and Wishlist buttons right in its sheet. Collection files the printing you're looking at; Wishlist adds it as any-printing, same as a normal wish. No more dead-end "Close"-only sheet when you spot something you have or covet.
+
 ## 0.69.0
 
 - **Tidier deck editing.** The little row of buttons under each card while editing a deck is gone. Tap a card to open its sheet and change the quantity, remove it, or set it as your commander from there. Less clutter, same moves.

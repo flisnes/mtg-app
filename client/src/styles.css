@@ -1746,6 +1746,33 @@ button.primary {
   gap: 4px;
 }
 
+/* File-into-your-lists row for sheets that otherwise can't (a card you're only
+   viewing, or a deck slot you may not own): sits above the mode's own actions,
+   set off by a divider so it reads as a separate "and also, for you" affordance. */
+.sheet-quickadd {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+}
+.sheet-quickadd-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.sheet-quickadd-btns {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.sheet-quickadd-btns button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 /* ---- Event (edit-history) modal ---- */
 .event-sheet-head {
   display: flex;

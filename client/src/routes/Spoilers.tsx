@@ -238,7 +238,12 @@ export function Spoilers() {
       )}
 
       {info && (
-        <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
+        <CardSheet
+          oracleCard={info.oracle}
+          initialScryfallId={info.scryfallId}
+          addTarget={{ kind: 'wishlist' }}
+          onClose={() => setInfo(null)}
+        />
       )}
     </Page>
   );

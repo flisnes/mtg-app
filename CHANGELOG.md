@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.67.1
+
+- **Wishlist a spoiler on the spot.** Tapping a card in Spoilers & reprints now opens the full add sheet with Wishlist leading, so you can wish for that shiny new card (or file it into your collection or tradelist) without leaving the view.
+
 ## 0.67.0
 
 - **See what's fresh off the presses.** A new "Spoilers & reprints" view (under More) lets you browse the latest sets, newest first, with upcoming sets tagged before they're even released. Pick a set and filter to just the New cards (their first-ever printing) or just the Reprints, where each reprint tells you where the card first showed up ("first in Unlimited Edition (1993)"). Updates with the daily card-data refresh, so spoiler season lands here as Scryfall reveals it.

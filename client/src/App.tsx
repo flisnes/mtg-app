@@ -15,6 +15,7 @@ import { DeckDetail } from './routes/DeckDetail.js';
 import { Trade } from './routes/Trade.js';
 import { History } from './routes/History.js';
 import { PriceMovers } from './routes/PriceMovers.js';
+import { Spoilers } from './routes/Spoilers.js';
 import { About } from './routes/About.js';
 import { Settings } from './routes/Settings.js';
 import { Community } from './routes/Community.js';
@@ -177,6 +178,7 @@ function AppShell() {
           <Route path="/trade" element={<Trade />} />
           <Route path="/history" element={<History />} />
           <Route path="/movers" element={<PriceMovers />} />
+          <Route path="/spoilers" element={<Spoilers />} />
           <Route path="/about" element={<About />} />
           <Route path="/settings" element={<Settings />} />
           {/* /account was the old combined page; Settings absorbed it. */}

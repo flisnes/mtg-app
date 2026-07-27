@@ -37,7 +37,8 @@ export type IconName =
   | 'qr'
   | 'list'
   | 'grid'
-  | 'flip';
+  | 'flip'
+  | 'spoilers';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -272,6 +273,13 @@ const PATHS: Record<IconName, ReactElement> = {
       <polyline points="3 3 3 8 8 8" />
       <path d="M3 15a9 9 0 0 0 15 3.4l3-2.4" />
       <polyline points="21 21 21 16 16 16" />
+    </>
+  ),
+  // Sparkle — fresh spoilers & reprints (newly revealed cards).
+  spoilers: (
+    <>
+      <path d="M10 3q1 5.5 6.5 6.5Q11 10.5 10 16Q9 10.5 3.5 9.5Q9 8.5 10 3z" />
+      <path d="M18 14q.5 2.5 3 3Q18.5 17.5 18 20Q17.5 17.5 15 17Q17.5 16.5 18 14z" />
     </>
   ),
 };

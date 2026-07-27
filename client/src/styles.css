@@ -1994,6 +1994,24 @@ button.primary {
   color: var(--text-dim);
 }
 
+/* ---- Spoilers & reprints ---- */
+.spoiler-set-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0.5rem;
+  font-weight: 600;
+}
+.spoiler-set-head .fine-print {
+  font-weight: 400;
+}
+.badge.badge-new,
+.tile-badge.badge-new {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
 /* ---- Options (⋯) menu ---- */
 .options-menu {
   position: relative;

@@ -12,6 +12,7 @@ import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js'
 import { getScanExcludedIds } from '../scan/exclusions.js';
 import { CameraScan, type LiveScanState } from '../scan/camera.js';
 import type { ScanPipelineResult } from '../scan/pipeline.js';
+import { CANDIDATE_MAX_DISTANCE, distancesForIds } from '../scan/match.js';
 import { resolveWithOcr } from '../scan/ocr.js';
 import { playPop } from '../scan/pop.js';
 import { checkScanDataUpdate, downloadScanData, getInstalledScanData, type ScanDataManifest } from '../scan/store.js';
@@ -297,6 +298,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraScan | null>(null);
   const closedRef = useRef(false);
+  // The live hash index, so a lock can re-check owned printings' scan distance.
+  const indexRef = useRef<ScanIndex | null>(null);
   const trayRef = useRef<Tray | null>(null);
   const fxSeq = useRef(0);
   // The last lock we auto-added for, so a confirmed edition adds itself once.
@@ -317,6 +320,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     // The sheet may have closed while a download/index-build was in flight; don't
     // build a camera on a torn-down video element (it would acquire and leak it).
     if (closedRef.current || !videoRef.current) return;
+    indexRef.current = index;
     setStage({ kind: 'scanning' });
     const cam = new CameraScan(videoRef.current, index, (s) => {
       setLive(s);
@@ -430,6 +434,30 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       const best = result.match.candidates.find((c) => c.scryfallId === id)!;
       return { scryfallId: id, distance: best.distance, printing, oracle: printing && oracles.get(printing.oracleId) };
     });
+
+    // Cards with a swarm of same-art printings (Command Tower!) can push the
+    // very edition you own past the search's top-N. So re-check the printings
+    // you own of the matched card(s) directly, and splice in any whose art
+    // still matches this scan (within the candidate cutoff) — orderTrayCandidates
+    // then floats them to the front by their owned badge.
+    const idx = indexRef.current;
+    const own = ownershipRef.current;
+    if (idx && own) {
+      const have = new Set(ids);
+      const ownedIds = new Set<string>();
+      for (const oracleId of new Set([...printings.values()].map((p) => p.oracleId))) {
+        for (const sid of own.ownedPrintings(oracleId)) if (!have.has(sid)) ownedIds.add(sid);
+      }
+      const extra = [...distancesForIds(idx, result.hash, ownedIds)].filter(([, d]) => d <= CANDIDATE_MAX_DISTANCE[idx.algo]);
+      if (extra.length) {
+        const extraPrintings = await getPrintingsByIds(extra.map(([id]) => id));
+        for (const [id, distance] of extra) {
+          const printing = extraPrintings.get(id);
+          // Same oracle as a top match, so its OracleCard is already loaded.
+          candidates.push({ scryfallId: id, distance, printing, oracle: printing && oracles.get(printing.oracleId) });
+        }
+      }
+    }
 
     updateTray({ topId, candidates, ocr: 'pending', ocrHit: null, lang: 'en' });
     cameraRef.current?.resume();
@@ -789,6 +817,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const countOf = (scryfallId: string) => session.reduce((n, e) => (e.scryfallId === scryfallId ? n + e.qty : n), 0);
 
   const ownership = useOwnershipIndex();
+  // onLocked is captured once (mount), but ownership loads/changes later — read
+  // it through a ref so a lock always sees the current collection.
+  const ownershipRef = useRef(ownership);
+  useEffect(() => {
+    ownershipRef.current = ownership;
+  }, [ownership]);
 
   return createPortal(
     <div className="scan-screen" role="dialog" aria-label="Scan cards">

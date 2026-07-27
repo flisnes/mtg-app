@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.70.2
+
+- **Scanning now really does favour the editions you own.** On cards with a pile of look-alike printings (hello, Command Tower) the version sitting in your collection could get crowded out of the match tray entirely, forcing an "All editions" detour to fix it. Now any printing you own that matches what's under the camera is pulled into the tray and floated to the front, so the right one is a single tap away.
+
 ## 0.70.1
 
 - **Tidied up those quick-add buttons.** They were showing on every card you so much as glanced at. Now: in your own decks you get both Collection and Wishlist buttons, on your own wishlist you get a "got it" Add to collection button, and everywhere else (browsing a friend's deck, a trade, price movers) they hide behind a ⋯ menu so the card sheet stays clean.

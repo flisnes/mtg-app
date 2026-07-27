@@ -31,6 +31,36 @@ export const CONFIDENT_MARGIN = { 1: 4, 2: 8 } as const;
 /** Anything worse than this is noise, not a candidate. */
 export const CANDIDATE_MAX_DISTANCE = { 1: 18, 2: 36 } as const;
 
+/**
+ * Combined Hamming distance from `query` to each of the given printings that
+ * exists in the index, best (smallest, min over a card's faces) per id.
+ *
+ * The top-N search alone drops editions the user owns when a crowd of
+ * same-art printings (Command Tower has dozens) fills every slot with
+ * near-ties — so the scan tray re-checks the owned printings directly and
+ * keeps the ones whose art really matches. One-time cost per lock, not per
+ * frame, so the extra full pass is fine.
+ */
+export function distancesForIds(index: ScanIndex, query: DHash, ids: ReadonlySet<string>): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!ids.size) return out;
+  const { count, hHi, hLo, vHi, vLo, algo } = index;
+  const qhHi = query.h.hi;
+  const qhLo = query.h.lo;
+  const qvHi = query.v.hi;
+  const qvLo = query.v.lo;
+  const both = algo === 2;
+  for (let i = 0; i < count; i++) {
+    const id = scryfallIdAt(index, i);
+    if (!ids.has(id)) continue;
+    let d = popcount32(hHi[i]! ^ qhHi) + popcount32(hLo[i]! ^ qhLo);
+    if (both) d += popcount32(vHi[i]! ^ qvHi) + popcount32(vLo[i]! ^ qvLo);
+    const prev = out.get(id);
+    if (prev === undefined || d < prev) out.set(id, d);
+  }
+  return out;
+}
+
 /** Top-N nearest records by combined Hamming distance, best first. */
 export function searchHashes(index: ScanIndex, query: DHash, topN = 8): ScanCandidate[] {
   const { count, hHi, hLo, vHi, vLo, algo } = index;

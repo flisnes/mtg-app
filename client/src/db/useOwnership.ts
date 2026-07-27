@@ -19,6 +19,8 @@ export interface OwnedStatus {
 export interface OwnershipIndex {
   /** Ownership of an oracle card; pass the shown printing to resolve exact vs other. */
   lookup(oracleId: string, scryfallId?: string | null): OwnedStatus;
+  /** Every printing (scryfallId) held for this oracle card — empty if none. */
+  ownedPrintings(oracleId: string): string[];
 }
 
 interface OracleOwn {
@@ -49,6 +51,10 @@ export function useOwnershipIndex(): OwnershipIndex | undefined {
         const g = byOracle.get(oracleId);
         if (!g) return NONE;
         return { qty: g.qty, forTrade: g.forTrade, ownsExact: !!scryfallId && g.ids.has(scryfallId) };
+      },
+      ownedPrintings(oracleId) {
+        const g = byOracle.get(oracleId);
+        return g ? [...g.ids] : [];
       },
     };
   }, [rows]);

@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.68.0
+
+- **Scan into a deck, top up your collection too.** Scanning cards straight into a deck now offers to add any scanned printing you don't own yet to your collection, the same prompt re-scanning a deck already gave you. Physical cards you're scanning are usually in hand, so this keeps your collection honest without a second pass. Own them all already? It just adds them to the deck, no interruption.
+- **"Update" now swaps a single copy, not your whole shelf.** On the collection scan prompt, choosing Update for a card you already own swaps just one of your copies for the scanned printing (finish, language or condition too) and keeps your total the same, instead of wiping every copy you own. If you own the card in more than one version, a quick follow-up asks which copy to replace, one card at a time with a 1/N counter when several are queued.
+- **Cleaner trade history for cards you never logged.** Trading away a card that wasn't in your collection now records it as added and then traded away, instead of a lone "traded away" for a card you supposedly never had. Undoing such a trade puts things back exactly as they were.
+
 ## 0.67.1
 
 - **Wishlist a spoiler on the spot.** Tapping a card in Spoilers & reprints now opens the full add sheet with Wishlist leading, so you can wish for that shiny new card (or file it into your collection or tradelist) without leaving the view.

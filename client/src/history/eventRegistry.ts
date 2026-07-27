@@ -39,6 +39,9 @@ function isTrade(e: UserEvent): boolean {
 export function describeEvent(e: UserEvent): EventDisplay {
   switch (e.kind) {
     case 'collection.add':
+      // A backfill for a card given away but never registered — read it as a
+      // plain add, not "Received in trade" (it left the collection, not entered).
+      if (e.reconcile) return { verb: 'Added to collection', icon: 'plus', direction: 'in' };
       if (isTrade(e)) return { verb: 'Received in trade', icon: 'trade', direction: 'in' };
       if (e.source === 'import') return { verb: 'Imported', icon: 'import', direction: 'in' };
       if (e.source === 'sealed') return { verb: 'Sealed product', icon: 'sealed', direction: 'in' };

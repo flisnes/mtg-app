@@ -656,10 +656,20 @@ export interface ImportLine {
  * `replaceOracleIds` lists cards whose import conflict was resolved as
  * "replace": every owned entry of those cards (any printing) is removed
  * before the lines are added, in the same batch, so one undo restores them.
+ *
+ * `removals` is the surgical alternative used by the scan "Update" flow: remove
+ * exactly N copies from specific existing entries (by id) before adding the new
+ * lines, so a scanned printing swaps in for a chosen owned copy without wiping
+ * the rest. Both happen in the same batch as the adds — one undo restores all.
  */
 export async function applyImport(
   lines: ImportLine[],
-  meta: { source?: 'import' | 'sealed' | 'scan'; label?: string; replaceOracleIds?: string[] } = {},
+  meta: {
+    source?: 'import' | 'sealed' | 'scan';
+    label?: string;
+    replaceOracleIds?: string[];
+    removals?: { id: string; qty: number }[];
+  } = {},
 ): Promise<{ entries: number; cards: number }> {
   let cards = 0;
   // Every line of one import/sealed add shares a batchId, so the edit-history
@@ -670,6 +680,7 @@ export async function applyImport(
   // One bulk price lookup for the acquisition price on every line's event.
   const prices = await getPricesByIds(lines.map((l) => l.scryfallId));
   const replace = new Set(meta.replaceOracleIds ?? []);
+  const removals = meta.removals ?? [];
   await db.transaction('rw', COLLECTION_TABLES, async () => {
     const existing = await db.collection.toArray();
     const map = new Map(existing.map((e) => [collectionKey(e), e]));
@@ -693,6 +704,44 @@ export async function applyImport(
           oracleId: e.oracleId,
           scryfallId: e.scryfallId,
           qty: e.quantity,
+          condition: e.condition,
+          finish: e.finish,
+          lang: e.lang,
+          priceEurCents: toCents(priceForFinish(exitPrices.get(e.scryfallId), e.finish).eur),
+          reason: 'other',
+          ...batchExtra,
+        });
+      }
+    }
+
+    if (removals.length > 0) {
+      const byId = new Map(existing.map((e) => [e.id, e]));
+      const exitPrices = await getPricesByIds(
+        removals.map((r) => byId.get(r.id)?.scryfallId).filter((s): s is string => !!s),
+      );
+      for (const r of removals) {
+        const e = byId.get(r.id);
+        if (!e) continue;
+        const take = Math.min(r.qty, e.quantity);
+        if (take <= 0) continue;
+        const remaining = e.quantity - take;
+        if (remaining <= 0) {
+          map.delete(collectionKey(e));
+          await db.collection.delete(e.id);
+          await stageDelete('collection', e.id);
+        } else {
+          e.quantity = remaining;
+          e.quantityForTrade = clamp(e.quantityForTrade, 0, remaining);
+          e.updatedAt = now;
+          await db.collection.put(e);
+          await stagePut('collection', e);
+        }
+        events.push({
+          ts: now,
+          kind: 'collection.remove',
+          oracleId: e.oracleId,
+          scryfallId: e.scryfallId,
+          qty: take,
           condition: e.condition,
           finish: e.finish,
           lang: e.lang,
@@ -1196,6 +1245,7 @@ export async function applyCompletedTrade(
     // Remove given cards (decrement matching entries; reduce trade qty with them).
     for (const line of given) {
       const ex = byKey.get(collectionKey(line));
+      const ownedQty = ex?.quantity ?? 0;
       if (ex) {
         const remaining = ex.quantity - line.quantity;
         if (remaining <= 0) {
@@ -1210,11 +1260,34 @@ export async function applyCompletedTrade(
           await stagePut('collection', ex);
         }
       }
+      // You can't give away what the ledger never recorded you owning. If the
+      // trade hands over more copies than the collection held, backfill the
+      // shortfall as an acquisition first — a history-only add (no row written;
+      // it nets against the removal below) so the card reads "added, then traded
+      // away" instead of a lone, dangling "traded away". ts is a hair earlier so
+      // it sorts before the removal in the timeline.
+      const missing = line.quantity - ownedQty;
+      if (missing > 0) {
+        await emit({
+          ts: now,
+          kind: 'collection.add',
+          oracleId: line.oracleId,
+          scryfallId: line.scryfallId,
+          qty: missing,
+          condition: line.condition,
+          finish: line.finish,
+          lang: line.lang,
+          priceEurCents: centsOf(line.scryfallId, line.finish),
+          source: 'trade',
+          tradeId: sessionId,
+          reconcile: true,
+        });
+      }
       // The event records the full traded quantity even when the card was
       // never registered (or under-registered) in the collection — the trade
       // happened either way, and the card history should say so.
       await emit({
-        ts: now,
+        ts: missing > 0 ? now + 1 : now,
         kind: 'collection.remove',
         oracleId: line.oracleId,
         scryfallId: line.scryfallId,
@@ -1549,7 +1622,13 @@ export async function undoEntry(ref: UndoRef): Promise<{ undone: boolean; reason
     }
 
     const now = Date.now();
-    for (const e of events) await reverseEvent(e, now);
+    // Reverse removals (which add copies back) before adds (which remove copies)
+    // so a trade's backfill add + its removal on the same printing net to what
+    // was truly owned, instead of a clamped-at-zero op leaving phantom copies.
+    const ordered = [...events].sort(
+      (a, b) => (a.kind === 'collection.remove' ? 0 : 1) - (b.kind === 'collection.remove' ? 0 : 1),
+    );
+    for (const e of ordered) await reverseEvent(e, now);
     for (const e of events) {
       await db.events.delete(e.id);
       await stageDelete('events', e.id);

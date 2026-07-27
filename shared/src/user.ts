@@ -206,6 +206,14 @@ export interface UserEvent {
   board?: DeckBoard;
   /** Trade session id for trade-driven changes (also the grouping key). */
   tradeId?: string;
+  /**
+   * collection.add only: this add didn't bring a card in, it backfills the
+   * ledger for a card given away in a trade that was never registered as owned
+   * (so the history reads "added, then traded away" instead of a dangling
+   * removal). No collection row is written for it; it nets against the paired
+   * removal. Rendered as a plain "Added to collection", not "Received in trade".
+   */
+  reconcile?: boolean;
   /** How the change was made; drives the edit-history icon + grouping. */
   source?: EventSource;
   /** Groups the events of one bulk operation (an import or sealed add). */

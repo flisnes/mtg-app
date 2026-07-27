@@ -13,14 +13,11 @@ import {
 import {
   addDeckCardsBulk,
   deleteDeck,
-  moveDeckCard,
-  removeDeckCard,
   renameDeck,
-  setDeckCardQuantity,
   setDeckFormat,
 } from '../db/dataAccess.js';
 import { addToWishlistBulk } from '../db/dataAccess.js';
-import { canBeCommander, checkDeckLegality, formatLabel, type LegalityReport } from '../deck/legality.js';
+import { checkDeckLegality, formatLabel, type LegalityReport } from '../deck/legality.js';
 import { buildDeckText } from '../deck/deckText.js';
 import { downloadText } from '../import/export.js';
 import { useImportAnalysis } from '../import/useImportAnalysis.js';
@@ -58,6 +55,16 @@ interface Row {
   owned: number;
 }
 
+/** What a card row hands the CardSheet to edit a deck slot (incl. commander context). */
+interface DeckCardEdit {
+  id: string;
+  quantity: number;
+  scryfallId?: string;
+  board: DeckBoard;
+  commanderDeck: boolean;
+  hasCommander: boolean;
+}
+
 export function DeckDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
@@ -69,7 +76,7 @@ export function DeckDetail() {
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('deck', { group: 'type' });
-  const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: { id: string; quantity: number; scryfallId?: string } } | null>(null);
+  const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: DeckCardEdit } | null>(null);
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -362,7 +369,7 @@ function Board({
   group: GroupKey;
   view: ViewMode;
   issues: Map<string, string>;
-  onEdit: (target: { card: Priced<OracleCard>; deckCard: { id: string; quantity: number; scryfallId?: string } }) => void;
+  onEdit: (target: { card: Priced<OracleCard>; deckCard: DeckCardEdit }) => void;
   /** Commander-format deck: show move-to/from-command-zone actions. */
   commanderDeck?: boolean;
   /** A commander is already in the command zone: hide "make commander" actions. */
@@ -395,21 +402,12 @@ function Board({
         </>
       ),
       onClick: r.oracle
-        ? () => onEdit({ card: r.oracle!, deckCard: { id: r.id, quantity: r.quantity, scryfallId: r.scryfallId } })
+        ? () =>
+            onEdit({
+              card: r.oracle!,
+              deckCard: { id: r.id, quantity: r.quantity, scryfallId: r.scryfallId, board: r.board, commanderDeck, hasCommander },
+            })
         : undefined,
-      actions: (
-        <>
-          {commanderDeck &&
-            (r.board === 'commander' ? (
-              <button onClick={() => moveDeckCard(r.id, 'main')} aria-label="Move to mainboard" title="Move to mainboard">↓</button>
-            ) : !hasCommander && r.oracle && canBeCommander(r.oracle) ? (
-              <button onClick={() => moveDeckCard(r.id, 'commander')} aria-label="Make commander" title="Make commander">♛</button>
-            ) : null)}
-          <button onClick={() => setDeckCardQuantity(r.id, r.quantity - 1)} aria-label="One fewer">−</button>
-          <button onClick={() => setDeckCardQuantity(r.id, r.quantity + 1)} aria-label="One more">＋</button>
-          <button onClick={() => removeDeckCard(r.id)} aria-label="Remove">✕</button>
-        </>
-      ),
     };
   };
   const groups = group === 'none' ? null : groupCards(rows, (r) => r.oracle, group);

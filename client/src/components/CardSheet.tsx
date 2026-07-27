@@ -7,6 +7,7 @@ import {
   addDeckCard,
   addToCollection,
   addToWishlist,
+  moveDeckCard,
   removeDeckCard,
   removeFromCollection,
   removeFromWishlist,
@@ -121,8 +122,17 @@ export function CardSheet({
   entry?: CollectionEntry;
   /** Edit this wishlist line (edition + quantity) instead of the collection. */
   wishEntry?: WishlistEntry;
-  /** Edit this deck slot's quantity + printing instead of the collection. */
-  deckCard?: { id: string; quantity: number; scryfallId?: string };
+  /** Edit this deck slot's quantity + printing instead of the collection.
+   *  Commander context (only set from a commander-format deck) adds the
+   *  move-to/from-command-zone action to the sheet. */
+  deckCard?: {
+    id: string;
+    quantity: number;
+    scryfallId?: string;
+    board?: DeckBoard;
+    commanderDeck?: boolean;
+    hasCommander?: boolean;
+  };
   /** Edit this scan-session line in memory; Apply reports through onApply. */
   sessionCard?: SessionCardValues;
   /** Session mode: called with the edited values instead of writing to Dexie. */
@@ -631,6 +641,30 @@ export function CardSheet({
             <button onClick={onClose} disabled={busy}>
               Cancel
             </button>
+            {deckCard?.commanderDeck &&
+              (deckCard.board === 'commander' ? (
+                <button
+                  onClick={async () => {
+                    setBusy(true);
+                    await moveDeckCard(deckCard.id, 'main');
+                    onClose();
+                  }}
+                  disabled={busy}
+                >
+                  Move to mainboard
+                </button>
+              ) : !deckCard.hasCommander && canBeCommander(oracleCard) ? (
+                <button
+                  onClick={async () => {
+                    setBusy(true);
+                    await moveDeckCard(deckCard.id, 'commander');
+                    onClose();
+                  }}
+                  disabled={busy}
+                >
+                  Make commander
+                </button>
+              ) : null)}
             {deckAdd && addTo.kind === 'deck' && addTo.format === 'commander' && canBeCommander(oracleCard) && (
               <button onClick={() => save('commander')} disabled={busy}>
                 Add as commander

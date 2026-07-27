@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.69.0
+
+- **Tidier deck editing.** The little row of buttons under each card while editing a deck is gone. Tap a card to open its sheet and change the quantity, remove it, or set it as your commander from there. Less clutter, same moves.
+
 ## 0.68.0
 
 - **Scan into a deck, top up your collection too.** Scanning cards straight into a deck now offers to add any scanned printing you don't own yet to your collection, the same prompt re-scanning a deck already gave you. Physical cards you're scanning are usually in hand, so this keeps your collection honest without a second pass. Own them all already? It just adds them to the deck, no interruption.

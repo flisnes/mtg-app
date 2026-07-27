@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.71.2
+
+- **Scroll wheel works across the whole window on desktop.** On a wide monitor, parking your mouse in the empty space to the left or right of the content used to leave the scroll wheel dead. The scroll area now fills the window, so you can spin the wheel anywhere.
+
 ## 0.71.1
 
 - **Card badges no longer sit on the name.** Those little "New"/"Reprint" tags in Spoilers and the ownership checkmarks on deck cards used to land right on the card's printed title in grid view. They've moved to the bottom-left corner, so you can actually read what the card is called. (Price-trend arrows swapped up to the top-left to make room.)

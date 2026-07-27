@@ -38,7 +38,8 @@ export type IconName =
   | 'list'
   | 'grid'
   | 'flip'
-  | 'spoilers';
+  | 'spoilers'
+  | 'chevronDown';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -282,6 +283,8 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M18 14q.5 2.5 3 3Q18.5 17.5 18 20Q17.5 17.5 15 17Q17.5 16.5 18 14z" />
     </>
   ),
+  // Downward chevron — a control that opens a dropdown.
+  chevronDown: <polyline points="6 9 12 15 18 9" />,
 };
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

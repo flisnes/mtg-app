@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.71.1
+
+- **Card badges no longer sit on the name.** Those little "New"/"Reprint" tags in Spoilers and the ownership checkmarks on deck cards used to land right on the card's printed title in grid view. They've moved to the bottom-left corner, so you can actually read what the card is called. (Price-trend arrows swapped up to the top-left to make room.)
+
+## 0.71.0
+
+- **Spoilers: view several sets at once.** The set picker is now a checklist, so you can tick Star Trek Commander, its tokens, and the Stardates all together and see every new card and reprint from the lot in one combined list. A card reprinted across two of your chosen sets shows just once. Untick down to a single set and you get the familiar release-date header back.
+
 ## 0.70.2
 
 - **Scanning now really does favour the editions you own.** On cards with a pile of look-alike printings (hello, Command Tower) the version sitting in your collection could get crowded out of the match tray entirely, forcing an "All editions" detour to fix it. Now any printing you own that matches what's under the camera is pulled into the tray and floated to the front, so the right one is a single tap away.

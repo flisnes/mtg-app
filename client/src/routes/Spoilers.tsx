@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { OracleCard, Priced, Printing } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
@@ -7,6 +7,7 @@ import { getOracleCardsByIds } from '../db/queries.js';
 import { CardItems, useViewMode, ViewToggle, type CardItem } from '../components/CardViews.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { SetSymbol } from '../components/SetSymbol.js';
+import { Icon } from '../components/icons.js';
 
 // Spoilers & reprints: browse the newest sets and see, per set, which cards are
 // brand new (their first printing) and which are reprints of older cards. All
@@ -122,17 +123,77 @@ async function loadSpoilerData(): Promise<{ summaries: SetSummary[]; bySet: Map<
 
 export function Spoilers() {
   const [view, setView] = useViewMode();
-  const [pickedCode, setPickedCode] = useState<string | null>(null);
+  // null = "not yet chosen", so we default to the newest set. Once the user
+  // touches the picker this becomes an explicit list (possibly empty).
+  const [pickedCodes, setPickedCodes] = useState<string[] | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [kind, setKind] = useState<Kind>('all');
   const [info, setInfo] = useState<{ oracle: Priced<OracleCard>; scryfallId: string } | null>(null);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
 
   const data = useLiveQuery(loadSpoilerData, []);
-  const selected = pickedCode ?? data?.summaries[0]?.code ?? null;
-  const summary = data?.summaries.find((s) => s.code === selected);
-  const cards = selected ? data?.bySet.get(selected) : undefined;
+  const defaultCode = data?.summaries[0]?.code;
+
+  // Which sets are checked. Membership only — display order follows summaries.
+  const selectedSet = useMemo(
+    () => new Set(pickedCodes ?? (defaultCode ? [defaultCode] : [])),
+    [pickedCodes, defaultCode],
+  );
+  const selectedSummaries = useMemo(
+    () => (data?.summaries ?? []).filter((s) => selectedSet.has(s.code)),
+    [data, selectedSet],
+  );
+
+  // Merge every checked set into one list, deduped by card (a staple reprinted
+  // across two chosen sets shows once). A card new in any chosen set counts as
+  // new, so we keep the "new" printing when the same card appears both ways.
+  const cards = useMemo<SpoilerCard[] | undefined>(() => {
+    if (!data) return undefined;
+    const byOracle = new Map<string, SpoilerCard>();
+    for (const s of data.summaries) {
+      if (!selectedSet.has(s.code)) continue;
+      for (const c of data.bySet.get(s.code) ?? []) {
+        const cur = byOracle.get(c.oracleId);
+        if (!cur || (!c.isReprint && cur.isReprint)) byOracle.set(c.oracleId, c);
+      }
+    }
+    return [...byOracle.values()];
+  }, [data, selectedSet]);
+
+  const newCount = cards?.filter((c) => !c.isReprint).length ?? 0;
+  const reprintCount = (cards?.length ?? 0) - newCount;
+  // The lone chosen set gets the richer header (released date / upcoming chip).
+  const single = selectedSummaries.length === 1 ? selectedSummaries[0] : null;
+
+  // Close the picker on outside click or Escape.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [pickerOpen]);
+
+  function toggleSet(code: string) {
+    setPickedCodes((prev) => {
+      const next = new Set(prev ?? (defaultCode ? [defaultCode] : []));
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return [...next];
+    });
+    setKind('all');
+  }
 
   // Names live on the oracle card, not the printing, and CardSheet needs the
-  // priced oracle card — join only the selected set's cards.
+  // priced oracle card — join only the selected sets' cards.
   const oracleMap = useLiveQuery(
     async () => (cards ? getOracleCardsByIds(cards.map((c) => c.oracleId)) : undefined),
     [cards],
@@ -174,65 +235,104 @@ export function Spoilers() {
     >
       {data === undefined ? (
         <p className="search-meta">Shuffling up…</p>
-      ) : data.summaries.length === 0 || !summary ? (
+      ) : data.summaries.length === 0 ? (
         <EmptyState hint="Card data downloads on first launch and refreshes daily.">
           No set data yet.
         </EmptyState>
       ) : (
         <>
           <div className="filter-row">
-            <select
-              value={selected ?? ''}
-              onChange={(e) => {
-                setPickedCode(e.target.value);
-                setKind('all');
-              }}
-              aria-label="Set"
-            >
-              {data.summaries.map((s) => (
-                <option key={s.code} value={s.code}>
-                  {s.name}
-                  {s.upcoming ? ' · upcoming' : ` · ${s.releasedAt.slice(0, 4)}`}
-                </option>
-              ))}
-            </select>
+            <div className="set-picker" ref={pickerRef}>
+              <button
+                type="button"
+                className="set-picker-trigger"
+                onClick={() => setPickerOpen((v) => !v)}
+                aria-haspopup="listbox"
+                aria-expanded={pickerOpen}
+              >
+                <span className="set-picker-label">
+                  {selectedSummaries.length === 0
+                    ? 'Choose sets…'
+                    : single
+                      ? single.name
+                      : `${selectedSummaries.length} sets`}
+                </span>
+                <Icon name="chevronDown" size={16} />
+              </button>
+              {pickerOpen && (
+                <div className="set-picker-panel" role="listbox" aria-multiselectable="true" aria-label="Sets">
+                  {data.summaries.map((s) => {
+                    const checked = selectedSet.has(s.code);
+                    return (
+                      <label key={s.code} className="set-picker-row" role="option" aria-selected={checked}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleSet(s.code)} />
+                        <SetSymbol set={s.code} className="sub-set-symbol" title={s.name} />
+                        <span className="set-picker-name">{s.name}</span>
+                        <span className="set-picker-year">{s.upcoming ? 'upcoming' : s.releasedAt.slice(0, 4)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <ViewToggle mode={view} onChange={setView} />
           </div>
 
-          <div className="spoiler-set-head">
-            <SetSymbol set={summary.code} className="sub-set-symbol" title={summary.name} />
-            <span>{summary.name}</span>
-            {summary.upcoming ? (
-              <span className="chip">Upcoming</span>
-            ) : (
-              <span className="fine-print">Released {summary.releasedAt}</span>
-            )}
-          </div>
-
-          <div className="seg-row" role="group" aria-label="Card kind">
-            <button className={`seg${kind === 'all' ? ' seg-active' : ''}`} onClick={() => setKind('all')} aria-pressed={kind === 'all'}>
-              All ({summary.newCount + summary.reprintCount})
-            </button>
-            <button className={`seg${kind === 'new' ? ' seg-active' : ''}`} onClick={() => setKind('new')} aria-pressed={kind === 'new'}>
-              New ({summary.newCount})
-            </button>
-            <button
-              className={`seg${kind === 'reprints' ? ' seg-active' : ''}`}
-              onClick={() => setKind('reprints')}
-              aria-pressed={kind === 'reprints'}
-            >
-              Reprints ({summary.reprintCount})
-            </button>
-          </div>
-
-          {oracleMap === undefined ? (
-            <p className="search-meta">Loading cards…</p>
-          ) : items.length === 0 ? (
-            <p className="search-meta">
-              {kind === 'new' ? 'No new cards in this set.' : kind === 'reprints' ? 'No reprints in this set.' : 'No cards in this set.'}
-            </p>
+          {selectedSummaries.length === 0 ? (
+            <p className="search-meta">Pick one or more sets to see their spoilers and reprints.</p>
           ) : (
-            <CardItems items={items} view={view} />
+            <>
+              <div className="spoiler-set-head">
+                {single ? (
+                  <>
+                    <SetSymbol set={single.code} className="sub-set-symbol" title={single.name} />
+                    <span>{single.name}</span>
+                    {single.upcoming ? (
+                      <span className="chip">Upcoming</span>
+                    ) : (
+                      <span className="fine-print">Released {single.releasedAt}</span>
+                    )}
+                  </>
+                ) : (
+                  selectedSummaries.map((s) => (
+                    <span key={s.code} className="spoiler-set-tag">
+                      <SetSymbol set={s.code} className="sub-set-symbol" title={s.name} />
+                      {s.name}
+                    </span>
+                  ))
+                )}
+              </div>
+
+              <div className="seg-row" role="group" aria-label="Card kind">
+                <button className={`seg${kind === 'all' ? ' seg-active' : ''}`} onClick={() => setKind('all')} aria-pressed={kind === 'all'}>
+                  All ({newCount + reprintCount})
+                </button>
+                <button className={`seg${kind === 'new' ? ' seg-active' : ''}`} onClick={() => setKind('new')} aria-pressed={kind === 'new'}>
+                  New ({newCount})
+                </button>
+                <button
+                  className={`seg${kind === 'reprints' ? ' seg-active' : ''}`}
+                  onClick={() => setKind('reprints')}
+                  aria-pressed={kind === 'reprints'}
+                >
+                  Reprints ({reprintCount})
+                </button>
+              </div>
+
+              {oracleMap === undefined ? (
+                <p className="search-meta">Loading cards…</p>
+              ) : items.length === 0 ? (
+                <p className="search-meta">
+                  {kind === 'new'
+                    ? 'No new cards in the chosen sets.'
+                    : kind === 'reprints'
+                      ? 'No reprints in the chosen sets.'
+                      : 'No cards in the chosen sets.'}
+                </p>
+              ) : (
+                <CardItems items={items} view={view} />
+              )}
+            </>
           )}
         </>
       )}

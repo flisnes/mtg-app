@@ -813,8 +813,8 @@ button.danger-outline {
   border-color: var(--accent);
   animation: check-pop 0.18s ease;
 }
-/* The select circle owns the top-left corner; shift the info badge down. */
-.card-tile-img:has(.tile-select) .tile-badge {
+/* The select circle owns the top-left corner; shift the trend mark down. */
+.card-tile-img:has(.tile-select) .tile-trend {
   top: 31px;
 }
 /* Selected tile shrinks into an accent ring (the photos-app idiom) so the
@@ -1155,7 +1155,7 @@ body:has(.bulk-bar) .app-main {
 .tile-badge {
   position: absolute;
   left: 4px;
-  top: 4px;
+  bottom: 4px;
   background: rgba(0, 0, 0, 0.8);
   color: #fff;
   font-size: 0.72rem;
@@ -1659,7 +1659,7 @@ body:has(.bulk-bar) .app-main {
 /* Ownership badge sits on the tile's image, inside its padding. */
 .edition-tile .tile-badge {
   left: 0.6rem;
-  top: 0.6rem;
+  bottom: 0.6rem;
   display: inline-flex;
   padding: 0.1rem 0.25rem;
 }
@@ -1913,7 +1913,7 @@ button.primary {
 .tile-trend {
   position: absolute;
   left: 4px;
-  bottom: 4px;
+  top: 4px;
   display: inline-flex;
   align-items: center;
   background: rgba(0, 0, 0, 0.8);
@@ -2032,6 +2032,86 @@ button.primary {
 }
 .spoiler-set-head .fine-print {
   font-weight: 400;
+}
+/* One chosen set, shown when several are combined. */
+.spoiler-set-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+/* Multi-select set picker: a select-styled trigger opening a checkbox panel. */
+.set-picker {
+  position: relative;
+  flex: 1;
+  min-width: 110px;
+}
+.set-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.set-picker-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.set-picker-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(340px, calc(100vw - 1.5rem));
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  z-index: 30;
+  padding: 0.25rem;
+}
+.set-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.set-picker-row:hover {
+  background: var(--surface-2);
+}
+.set-picker-row input {
+  flex-shrink: 0;
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--accent);
+}
+.set-picker-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.set-picker-year {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 0.78rem;
 }
 .badge.badge-new,
 .tile-badge.badge-new {
@@ -3110,6 +3190,8 @@ button.ghost {
 .scan-tile-card .tile-badge {
   left: auto;
   right: 4px;
+  top: 4px;
+  bottom: auto;
 }
 .scan-tile-ocr {
   position: absolute;

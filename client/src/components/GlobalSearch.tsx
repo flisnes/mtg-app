@@ -17,6 +17,7 @@ import { formatLabel } from '../deck/legality.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
 import { ScopedResults, type Scope } from './ScopedResults.js';
+import { ProfileScopedResults } from './ProfileScopedResults.js';
 import type { IconName } from './icons.js';
 import { ownedBadge } from './OwnedBadge.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
@@ -47,16 +48,32 @@ function useSearchTarget(): AddTarget {
   return { kind: 'default' };
 }
 
-// Scope chips let the search look inside what you already own instead of the
-// whole database. They start pre-picked for the list you opened search from, so
-// searching from the collection filters the collection by default.
+// Browsing another user's trade/wishlist (Community page) lets the search scope
+// into *their* published lists too. Only for someone else — on your own the
+// profile pills would just duplicate the Collection/Tradelist/Wishlist ones.
+function useProfileScope(me: string | undefined): { username: string } | null {
+  const { pathname } = useLocation();
+  const username = matchPath('/community/:username', pathname)?.params.username;
+  if (!username || (me && username === me)) return null;
+  return { username };
+}
+
+// Scope chips let the search look inside what you already own (or, on a
+// community page, what the person you're browsing has listed) instead of the
+// whole database. `profileTrade`/`profileWish` target the viewed profile.
+type PillKey = Scope | 'profileTrade' | 'profileWish';
 const SCOPES: { key: Scope; label: string; icon: IconName }[] = [
   { key: 'collection', label: 'Collection', icon: 'collection' },
   { key: 'tradelist', label: 'Tradelist', icon: 'tradelist' },
   { key: 'wishlist', label: 'Wishlist', icon: 'wishlist' },
 ];
-function seedScopes(kind: AddTarget['kind']): Set<Scope> {
-  return kind === 'collection' || kind === 'wishlist' || kind === 'tradelist' ? new Set([kind]) : new Set();
+const isLocalScope = (k: PillKey): k is Scope => k === 'collection' || k === 'tradelist' || k === 'wishlist';
+// Pre-pick a scope for the list you opened search from: your own list pages
+// pick the matching pill; another user's community page picks both of theirs
+// (that's what you're looking at and most likely want to search).
+function seedScopes(kind: AddTarget['kind'], profile: boolean): Set<PillKey> {
+  if (profile) return new Set<PillKey>(['profileTrade', 'profileWish']);
+  return kind === 'collection' || kind === 'wishlist' || kind === 'tradelist' ? new Set<PillKey>([kind]) : new Set();
 }
 
 interface SearchCtx {
@@ -200,15 +217,34 @@ function SearchOverlay({
   const [deckLegalOnly, setDeckLegalOnly] = useState(true);
   const toast = useToast();
   const target = useSearchTarget();
-  const [scopes, setScopes] = useState<Set<Scope>>(() => seedScopes(target.kind));
-  const toggleScope = (key: Scope) =>
+  const { session } = useAccount();
+  const profile = useProfileScope(session?.username);
+  const [scopes, setScopes] = useState<Set<PillKey>>(() => seedScopes(target.kind, !!profile));
+  const toggleScope = (key: PillKey) =>
     setScopes((prev) => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
-  const scoped = scopes.size > 0;
   const ownership = useOwnershipIndex();
+
+  // The full set of pills for this context: your own three everywhere, plus the
+  // viewed user's two on their community page.
+  const pills: { key: PillKey; label: string; icon: IconName; title: string }[] = [
+    ...SCOPES.map((s) => ({ ...s, title: `Search your ${s.label.toLowerCase()}` })),
+    ...(profile
+      ? ([
+          { key: 'profileTrade', label: `${profile.username}’s tradelist`, icon: 'tradelist', title: `Search ${profile.username}’s tradelist` },
+          { key: 'profileWish', label: `${profile.username}’s wishlist`, icon: 'wishlist', title: `Search ${profile.username}’s wishlist` },
+        ] as const)
+      : []),
+  ];
+
+  const localScopes = new Set<Scope>([...scopes].filter(isLocalScope));
+  const profileTradeOn = scopes.has('profileTrade');
+  const profileWishOn = scopes.has('profileWish');
+  const profileActive = !!profile && !!session && (profileTradeOn || profileWishOn);
+  const scoped = localScopes.size > 0 || profileActive;
 
   // Searching from a deck filters to cards you could actually play there: legal
   // in the deck's format and, for Commander, within the commander's identity.
@@ -336,13 +372,13 @@ function SearchOverlay({
     <div className="search-overlay">
       <div className="search-overlay-inner">
         <div className="scope-chips" role="group" aria-label="Search within">
-          {SCOPES.map((s) => (
+          {pills.map((s) => (
             <button
               key={s.key}
               className="chip"
               aria-pressed={scopes.has(s.key)}
               onClick={() => toggleScope(s.key)}
-              title={`Search your ${s.label.toLowerCase()}`}
+              title={s.title}
             >
               <Icon name={s.icon} size={14} /> {s.label}
             </button>
@@ -350,7 +386,18 @@ function SearchOverlay({
         </div>
 
         {scoped ? (
-          <ScopedResults scopes={scopes} query={query} />
+          <>
+            {localScopes.size > 0 && <ScopedResults scopes={localScopes} query={query} />}
+            {profileActive && profile && session && (
+              <ProfileScopedResults
+                token={session.token}
+                username={profile.username}
+                query={query}
+                showTrade={profileTradeOn}
+                showWish={profileWishOn}
+              />
+            )}
+          </>
         ) : (
           <CardSearchView
             query={query}

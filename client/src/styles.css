@@ -603,6 +603,18 @@ button.danger-outline {
 .about-section h2 {
   font-size: 1.05rem;
 }
+/* Section heading with its sort controls pushed to the right; wraps on narrow
+   screens so the controls drop below the title instead of overflowing. */
+.list-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.list-section-head h2 {
+  margin: 0;
+}
 .fine-print {
   color: var(--text-dim);
   font-size: 0.85rem;

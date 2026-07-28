@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.73.0
+
+- **Search and sort other people's lists.** Someone's tradelist runs to hundreds of cards? While browsing their trade & wishlist in Community, the search bar now offers two extra scope pills — "*name*'s tradelist" and "*name*'s wishlist" — so you can hunt for a specific card inside their piles instead of scrolling forever. And both of their lists now carry the same Sort menu as your own collection (by name, mana value, or price), so you can float the pricey stuff to the top.
+
 ## 0.72.1
 
 - **See exactly what someone wants.** Tapping a card on another user's wishlist in Community now spells out their wish: whether they'll take any printing or want a specific edition, plus their minimum condition, finish, and language. No more guessing whether that foil is a must-have.

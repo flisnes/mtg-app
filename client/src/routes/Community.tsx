@@ -1,17 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { wishPrefsMet, type OracleCard, type Priced, type Printing, type PublicUser, type TradeLine, type WishLine } from '@mtg/shared';
-import { ApiError, getUserLists, listUsers } from '../account/api.js';
+import type { PublicUser, TradeLine, WishLine } from '@mtg/shared';
+import { ApiError, listUsers } from '../account/api.js';
 import { useAccount } from '../account/useAccount.js';
-import { db } from '../db/schema.js';
-import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { Avatar } from '../components/Avatar.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
-import { SetSymbol } from '../components/SetSymbol.js';
-import { sanitizeOffer, sanitizeWishlist } from '../trade/validate.js';
+import {
+  SortControls,
+  sortCards,
+  priceValue,
+  pricedForFinish,
+  useCardSort,
+  type SortFields,
+} from '../components/CardSorting.js';
 import { usePagedLimit } from '../components/usePagedLimit.js';
+import {
+  tradeLineItem,
+  wishLineItem,
+  useMyCollection,
+  useMyWants,
+  useResolvedCards,
+  useUserLists,
+  type CardMaps,
+  type InfoTarget,
+} from '../community/userLists.js';
 import { fmtDate } from '../util/format.js';
 import { EmptyState, Page } from './Page.js';
 
@@ -20,68 +33,22 @@ import { EmptyState, Page } from './Page.js';
 // rule as in-person trades: an "any printing" wish matches every printing of
 // that card, a specific-printing wish matches only itself.
 
-
-function lineDetail(l: TradeLine): string {
-  const bits: string[] = [l.condition];
-  if (l.finish !== 'nonfoil') bits.push(l.finish);
-  if (l.lang !== 'en') bits.push(l.lang);
-  return bits.join(' · ');
+/** Sort fields for a trade line, resolved against the viewer's card DB. */
+function tradeFields(line: TradeLine, cards: CardMaps | undefined): SortFields {
+  const oracle = cards?.oracles.get(line.oracleId);
+  const printing = cards?.printings.get(line.scryfallId);
+  return { name: oracle?.name ?? line.name, cmc: oracle?.cmc, price: priceValue(pricedForFinish(printing, line.finish), oracle) };
 }
 
-/** A wish's preferences, spelled out for a trade partner (empty = no prefs). */
-function wishDetail(l: WishLine): string {
-  const bits: string[] = [];
-  if (l.finish && l.finish !== 'nonfoil') bits.push(l.finish);
-  if (l.condition) bits.push(`min ${l.condition}`);
-  if (l.lang && l.lang !== 'en') bits.push(l.lang);
-  return bits.join(' · ');
-}
-
-/** My wishlist as a matcher over their tradelist lines (respects my prefs). */
-function useMyWants(): (line: TradeLine) => boolean {
-  const wishes = useLiveQuery(() => db.wishlist.toArray(), [], []);
-  return useMemo(() => {
-    const byOracle = new Map<string, typeof wishes>();
-    for (const w of wishes) {
-      const list = byOracle.get(w.oracleId) ?? [];
-      list.push(w);
-      byOracle.set(w.oracleId, list);
-    }
-    return (line) =>
-      (byOracle.get(line.oracleId) ?? []).some(
-        (w) => (w.scryfallId === null || w.scryfallId === line.scryfallId) && wishPrefsMet(w, line),
-      );
-  }, [wishes]);
-}
-
-/** Matcher over their wishlist lines (null = any printing of the card). */
-type HaveFn = (wish: WishLine) => boolean;
-
-/**
- * My collection as two matchers over their wishlist lines:
- *  - `have`: I already have it marked for trade (I'm offering it), and
- *  - `own`: I own a copy at all (whether or not it's on my tradelist).
- * Same printing rule as trades (a specific-printing wish matches only that
- * printing, an "any printing" wish matches every printing), and the copy must
- * also meet the wish's finish/condition/language preferences.
- */
-function useMyCollection(): { have: HaveFn; own: HaveFn } {
-  const entries = useLiveQuery(() => db.collection.toArray(), [], []);
-  return useMemo(() => {
-    const matcher = (rows: typeof entries): HaveFn => {
-      const byOracle = new Map<string, typeof rows>();
-      for (const e of rows) {
-        const list = byOracle.get(e.oracleId) ?? [];
-        list.push(e);
-        byOracle.set(e.oracleId, list);
-      }
-      return (wish) =>
-        (byOracle.get(wish.oracleId) ?? []).some(
-          (e) => (wish.scryfallId === null || wish.scryfallId === e.scryfallId) && wishPrefsMet(wish, e),
-        );
-    };
-    return { have: matcher(entries.filter((e) => e.quantityForTrade > 0)), own: matcher(entries) };
-  }, [entries]);
+/** Sort fields for a wish line (may be "any printing" and have no finish). */
+function wishFields(line: WishLine, cards: CardMaps | undefined): SortFields {
+  const oracle = cards?.oracles.get(line.oracleId);
+  const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
+  return {
+    name: oracle?.name ?? line.name,
+    cmc: oracle?.cmc,
+    price: priceValue(pricedForFinish(printing, line.finish ?? 'nonfoil'), oracle),
+  };
 }
 
 export function Community() {
@@ -184,17 +151,6 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
   );
 }
 
-/** Resolved card-DB data for the lines we're showing, from the viewer's local DB. */
-interface CardMaps {
-  oracles: Map<string, Priced<OracleCard>>;
-  printings: Map<string, Priced<Printing>>;
-}
-
-/** The card-info sheet target: an oracle card, optionally pinned to a printing.
- *  For a wishlist tile, `wish` carries their preferences so the sheet can show
- *  them read-only (any printing / min condition / finish / language). */
-type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string; wish?: WishLine };
-
 function UserLists({
   token,
   username,
@@ -208,77 +164,38 @@ function UserLists({
   onBack: () => void;
 }) {
   const navigate = useNavigate();
-  const [lists, setLists] = useState<{ updatedAt: number; tradelist: TradeLine[]; wishlist: WishLine[] } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { lists, error } = useUserLists(token, username);
+  const cards = useResolvedCards(lists);
   const [view, setView] = useViewMode();
   const [info, setInfo] = useState<InfoTarget | null>(null);
   const iWant = useMyWants();
   const { have: iHave, own: iOwn } = useMyCollection();
 
-  useEffect(() => {
-    let cancelled = false;
-    getUserLists(token, username)
-      .then((res) => {
-        if (cancelled) return;
-        // Same trust model as trade shares: the other side is untrusted input.
-        setLists({
-          updatedAt: res.updatedAt,
-          tradelist: sanitizeOffer(res.tradelist),
-          wishlist: sanitizeWishlist(res.wishlist),
-        });
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.friendlyMessage : 'Could not load lists.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, username]);
-
-  // The wire lines carry only name + ids; resolve images and set/printing detail
-  // from the viewer's own synced card DB (like the own-list screens do).
-  const cards = useLiveQuery<CardMaps>(async () => {
-    if (!lists) return { oracles: new Map(), printings: new Map() };
-    const oracleIds = [...lists.tradelist, ...lists.wishlist].map((l) => l.oracleId);
-    const scryfallIds = [
-      ...lists.tradelist.map((l) => l.scryfallId),
-      ...lists.wishlist.map((l) => l.scryfallId),
-    ].filter((id): id is string => id !== null);
-    const [oracles, printings] = await Promise.all([
-      getOracleCardsByIds(oracleIds),
-      getPrintingsByIds(scryfallIds),
-    ]);
-    return { oracles, printings };
-  }, [lists]);
-
-  // Sort the strongest signal to the top: notification hit, then a direct
-  // list match, then "you own it but haven't listed it", then by name.
-  const hiSort = (a: { hi: boolean; match: boolean; own: boolean; line: { name: string } }, b: typeof a) =>
-    Number(b.hi) - Number(a.hi) ||
-    Number(b.match) - Number(a.match) ||
-    Number(b.own) - Number(a.own) ||
-    a.line.name.localeCompare(b.line.name);
+  // Same collection-style sort controls as the own-list screens. A deep-linked
+  // notification hit (`hi`) still pins to the very top; everything else follows
+  // the chosen sort, tie-broken by name.
+  const [tradeSort, setTradeSort] = useCardSort('community-trade');
+  const [wishSort, setWishSort] = useCardSort('community-wish');
+  const pinHi = <T extends { hi: boolean }>(rows: T[]) => [...rows].sort((a, b) => Number(b.hi) - Number(a.hi));
 
   const trade = useMemo(() => {
     if (!lists) return [];
-    return lists.tradelist
-      .map((l) => ({ line: l, match: iWant(l), own: false, hi: highlight?.has(l.oracleId) ?? false }))
-      .sort(hiSort);
-  }, [lists, iWant, highlight]);
+    const enriched = lists.tradelist.map((l) => ({ line: l, match: iWant(l), own: false, hi: highlight?.has(l.oracleId) ?? false }));
+    return pinHi(sortCards(enriched, (t) => tradeFields(t.line, cards), tradeSort));
+  }, [lists, iWant, highlight, cards, tradeSort]);
 
   const wish = useMemo(() => {
     if (!lists) return [];
-    return lists.wishlist
-      .map((l) => {
-        const match = iHave(l);
-        // "own" is the new highlight: a card of theirs sitting in my
-        // collection that I haven't put on my tradelist yet. If it's already
-        // for trade, the ⇄ match badge already says so — don't double-flag.
-        const own = !match && iOwn(l);
-        return { line: l, match, own, hi: highlight?.has(l.oracleId) ?? false };
-      })
-      .sort(hiSort);
-  }, [lists, iHave, iOwn, highlight]);
+    const enriched = lists.wishlist.map((l) => {
+      const match = iHave(l);
+      // "own" is the new highlight: a card of theirs sitting in my collection
+      // that I haven't put on my tradelist yet. If it's already for trade, the
+      // ⇄ match badge already says so — don't double-flag.
+      const own = !match && iOwn(l);
+      return { line: l, match, own, hi: highlight?.has(l.oracleId) ?? false };
+    });
+    return pinHi(sortCards(enriched, (w) => wishFields(w.line, cards), wishSort));
+  }, [lists, iHave, iOwn, highlight, cards, wishSort]);
 
   const tradeMatches = trade.filter((t) => t.match).length;
   const wishMatches = wish.filter((w) => w.match).length;
@@ -291,77 +208,21 @@ function UserLists({
 
   const tradeItems = useMemo(
     (): CardItem[] =>
-      trade.map(({ line, match, hi }, i) => {
-        const oracle = cards?.oracles.get(line.oracleId);
-        const printing = cards?.printings.get(line.scryfallId);
-        return {
-          key: `${line.scryfallId}-${i}`,
-          name: oracle?.name ?? line.name,
-          image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-          count: line.quantity,
-          sub: (
-            <>
-              {printing && <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />}
-              {printing ? `${printing.setName} · #${printing.collectorNumber} · ` : ''}
-              {lineDetail(line)}
-            </>
-          ),
-          badge: hi ? '🔔 you want this' : match ? '⭐ you want this' : undefined,
-          badgeClass: hi ? 'badge-match' : 'own-trade',
-          badgeTitle: 'On your wishlist',
-          onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId }) : undefined,
-        };
-      }),
+      trade.map(({ line, match, hi }, i) =>
+        tradeLineItem(line, `${line.scryfallId}-${i}`, cards, { match, hi }, (oracle) =>
+          setInfo({ oracle, scryfallId: line.scryfallId }),
+        ),
+      ),
     [trade, cards],
   );
 
   const wishItems = useMemo(
     (): CardItem[] =>
-      wish.map(({ line, match, own, hi }, i) => {
-        const oracle = cards?.oracles.get(line.oracleId);
-        const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
-        const detail = wishDetail(line);
-        const printingSub = line.scryfallId ? (
-          printing ? (
-            <>
-              <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />
-              {`${printing.setName} · #${printing.collectorNumber}`}
-            </>
-          ) : (
-            'specific printing'
-          )
-        ) : (
-          'any printing'
-        );
-        return {
-          key: `${line.oracleId}-${i}`,
-          name: oracle?.name ?? line.name,
-          image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-          foil: !!line.finish && line.finish !== 'nonfoil',
-          count: line.quantity,
-          sub: detail ? (
-            <>
-              {printingSub} · {detail}
-            </>
-          ) : (
-            printingSub
-          ),
-          badge: hi
-            ? '🔔 you have this'
-            : match
-              ? '⇄ you have this'
-              : own
-                ? '✓ you own this'
-                : undefined,
-          badgeClass: hi ? 'badge-match' : match ? 'own-trade' : 'own-yes',
-          badgeTitle: match
-            ? 'In your tradelist'
-            : own
-              ? 'You own this but haven’t listed it for trade. Add it to your tradelist to offer it.'
-              : undefined,
-          onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId ?? undefined, wish: line }) : undefined,
-        };
-      }),
+      wish.map(({ line, match, own, hi }, i) =>
+        wishLineItem(line, `${line.oracleId}-${i}`, cards, { match, own, hi }, (oracle) =>
+          setInfo({ oracle, scryfallId: line.scryfallId ?? undefined, wish: line }),
+        ),
+      ),
     [wish, cards],
   );
 
@@ -402,7 +263,10 @@ function UserLists({
           </div>
 
           <section className="about-section">
-            <h2>Has for trade ({trade.length})</h2>
+            <div className="list-section-head">
+              <h2>Has for trade ({trade.length})</h2>
+              {trade.length > 0 && <SortControls prefs={tradeSort} onChange={setTradeSort} />}
+            </div>
             {trade.length === 0 ? (
               <p className="fine-print">Nothing marked for trade.</p>
             ) : (
@@ -418,7 +282,10 @@ function UserLists({
           </section>
 
           <section className="about-section">
-            <h2>Wants ({wish.length})</h2>
+            <div className="list-section-head">
+              <h2>Wants ({wish.length})</h2>
+              {wish.length > 0 && <SortControls prefs={wishSort} onChange={setWishSort} />}
+            </div>
             {wish.length === 0 ? (
               <p className="fine-print">Empty wishlist.</p>
             ) : (

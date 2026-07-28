@@ -12,7 +12,7 @@ import { ApiError, getUserLists } from '../account/api.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { SetSymbol } from '../components/SetSymbol.js';
-import { sanitizeOffer, sanitizeWishlist } from '../trade/validate.js';
+import { sanitizePublicTradelist, sanitizePublicWishlist } from '../trade/validate.js';
 import type { CardItem } from '../components/CardViews.js';
 
 // Shared machinery for viewing another user's published trade/wishlist: the
@@ -66,8 +66,8 @@ export function useUserLists(token: string, username: string): { lists: UserList
         if (cancelled) return;
         setLists({
           updatedAt: res.updatedAt,
-          tradelist: sanitizeOffer(res.tradelist),
-          wishlist: sanitizeWishlist(res.wishlist),
+          tradelist: sanitizePublicTradelist(res.tradelist),
+          wishlist: sanitizePublicWishlist(res.wishlist),
         });
       })
       .catch((err) => {

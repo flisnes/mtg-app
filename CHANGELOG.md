@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.74.0
+
+- **Community lists you can swipe.** A user's trade and wishlist now each show as a single row of cards you swipe sideways (flick on mobile, scroll wheel or the arrow buttons on desktop) — no more scrolling past a giant grid to reach their wants. More cards load as you swipe toward the end. The cards you care about come first: on their trades, the ones you want; on their wishes, the ones you have (then the ones you own but haven't listed). Prefer the old stacked grid? There's a new layout toggle next to the sort menu. And each list has a **See all** button that opens the full list with its own search box, sort, and infinite scroll.
+- **The whole tradelist shows now.** Big tradelists were being cut off at 500 cards when viewed in Community, even though the count said more. All shared cards are visible again (up to the 5,000 publish limit).
+
 ## 0.73.0
 
 - **Search and sort other people's lists.** Someone's tradelist runs to hundreds of cards? While browsing their trade & wishlist in Community, the search bar now offers two extra scope pills — "*name*'s tradelist" and "*name*'s wishlist" — so you can hunt for a specific card inside their piles instead of scrolling forever. And both of their lists now carry the same Sort menu as your own collection (by name, mana value, or price), so you can float the pricey stuff to the top.

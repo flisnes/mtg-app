@@ -1092,6 +1092,91 @@ body:has(.bulk-bar) .app-main {
   text-align: center;
 }
 
+/* ---- Community: swipeable card rows ---- */
+/* One list as a single horizontal strip. The scroll container owns overflow;
+   arrow buttons flank it (desktop only — touch just swipes). */
+.card-row-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.card-row-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  /* Leave room so tile badges/qty pills aren't clipped at the edges. */
+  padding: 2px 0 0.4rem;
+  scrollbar-width: thin;
+}
+/* Reuse the tile look, but lay them out as a non-wrapping row of fixed cards. */
+.card-grid.card-row {
+  display: flex;
+  flex-wrap: nowrap;
+  grid-template-columns: none;
+  gap: 0.6rem;
+}
+.card-grid.card-row > .card-tile {
+  flex: 0 0 110px;
+  width: 110px;
+}
+.card-row-arrow {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+}
+.card-row-arrow:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+/* Touch devices swipe the row directly; the arrows are mouse affordances. */
+@media (hover: none) {
+  .card-row-arrow {
+    display: none;
+  }
+}
+
+/* Section head that also carries a "See all" alongside the sort controls. */
+.list-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.see-all {
+  white-space: nowrap;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.85rem;
+}
+.list-all-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Search box with a leading magnifier (the See-all full list). */
+.search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0.6rem 0 0.9rem;
+}
+.search-field svg {
+  position: absolute;
+  left: 0.8rem;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+.search-field .search-input {
+  padding-left: 2.3rem;
+}
+
 /* Foil sheen: an iridescent overlay for foil / etched cards. Every host — grid
    tile, list thumb, pile face, card sheet — gives it a positioned, clipped box
    to fill, so it inherits that box's rounding and sits above the card art. */

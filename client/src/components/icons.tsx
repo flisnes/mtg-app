@@ -40,6 +40,9 @@ export type IconName =
   | 'flip'
   | 'spoilers'
   | 'share'
+  | 'search'
+  | 'chevronLeft'
+  | 'chevronRight'
   | 'chevronDown';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
@@ -294,6 +297,17 @@ const PATHS: Record<IconName, ReactElement> = {
       <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
     </>
   ),
+  // Magnifier — search.
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </>
+  ),
+  // Left chevron — scroll / page backwards.
+  chevronLeft: <polyline points="15 6 9 12 15 18" />,
+  // Right chevron — scroll / page forwards.
+  chevronRight: <polyline points="9 6 15 12 9 18" />,
   // Downward chevron — a control that opens a dropdown.
   chevronDown: <polyline points="6 9 12 15 18 9" />,
 };

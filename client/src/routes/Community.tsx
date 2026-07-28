@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { PublicUser, TradeLine, WishLine } from '@mtg/shared';
+import type { OracleCard, PublicUser, TradeLine, WishLine } from '@mtg/shared';
 import { ApiError, listUsers } from '../account/api.js';
 import { useAccount } from '../account/useAccount.js';
+import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
 import { Avatar } from '../components/Avatar.js';
+import { CardRow } from '../components/CardRow.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
 import {
@@ -12,8 +14,11 @@ import {
   priceValue,
   pricedForFinish,
   useCardSort,
+  type CardSortPrefs,
   type SortFields,
 } from '../components/CardSorting.js';
+import { Icon } from '../components/icons.js';
+import { LoadMoreSentinel } from '../components/LoadMoreSentinel.js';
 import { usePagedLimit } from '../components/usePagedLimit.js';
 import {
   tradeLineItem,
@@ -27,6 +32,44 @@ import {
 } from '../community/userLists.js';
 import { fmtDate } from '../util/format.js';
 import { EmptyState, Page } from './Page.js';
+
+const PAGE_SIZE = 60;
+
+// One trade/wishlist line paired with how it relates to the viewer:
+//  match — trade: they have a card I want; wish: I have a card they want.
+//  own   — wish only: I own the card but haven't listed it for trade yet.
+//  hi    — a deep-linked notification hit, pinned above everything.
+type TradeEntry = { line: TradeLine; match: boolean; own: false; hi: boolean };
+type WishEntry = { line: WishLine; match: boolean; own: boolean; hi: boolean };
+
+// Matches float to the top of a Community list (hi > match > own), keeping the
+// chosen sort order within each tier (Array.prototype.sort is stable).
+function rankOf(r: { hi: boolean; match: boolean; own: boolean }): number {
+  return r.hi ? 3 : r.match ? 2 : r.own ? 1 : 0;
+}
+
+/** Two layouts for a user's lists: swipeable rows (default) or the old stacks. */
+type Layout = 'row' | 'stack';
+const LAYOUT_KEY = 'communityLayout';
+
+function useLayout(): [Layout, (l: Layout) => void] {
+  const [layout, setLayout] = useState<Layout>(() => {
+    try {
+      return localStorage.getItem(LAYOUT_KEY) === 'stack' ? 'stack' : 'row';
+    } catch {
+      return 'row';
+    }
+  });
+  const set = (l: Layout) => {
+    setLayout(l);
+    try {
+      localStorage.setItem(LAYOUT_KEY, l);
+    } catch {
+      /* ignore */
+    }
+  };
+  return [layout, set];
+}
 
 // Community: browse other users' published trade/wishlists (uploaded with
 // their backups) and highlight matches against your own data, using the same
@@ -151,6 +194,31 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
   );
 }
 
+function buildTradeItems(rows: TradeEntry[], cards: CardMaps | undefined, onOpen: (t: InfoTarget) => void): CardItem[] {
+  return rows.map(({ line, match, hi }, i) =>
+    tradeLineItem(line, `${line.scryfallId}-${i}`, cards, { match, hi }, (oracle) =>
+      onOpen({ oracle, scryfallId: line.scryfallId }),
+    ),
+  );
+}
+
+function buildWishItems(rows: WishEntry[], cards: CardMaps | undefined, onOpen: (t: InfoTarget) => void): CardItem[] {
+  return rows.map(({ line, match, own, hi }, i) =>
+    wishLineItem(line, `${line.oracleId}-${i}`, cards, { match, own, hi }, (oracle) =>
+      onOpen({ oracle, scryfallId: line.scryfallId ?? undefined, wish: line }),
+    ),
+  );
+}
+
+/** Sort by the chosen key, then float matches to the front (stable). */
+function orderRows<T extends { hi: boolean; match: boolean; own: boolean }>(
+  rows: T[],
+  fieldsOf: (r: T) => SortFields,
+  sort: CardSortPrefs,
+): T[] {
+  return [...sortCards(rows, fieldsOf, sort)].sort((a, b) => rankOf(b) - rankOf(a));
+}
+
 function UserLists({
   token,
   username,
@@ -164,83 +232,134 @@ function UserLists({
   onBack: () => void;
 }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { lists, error } = useUserLists(token, username);
   const cards = useResolvedCards(lists);
+  const [layout, setLayout] = useLayout();
   const [view, setView] = useViewMode();
   const [info, setInfo] = useState<InfoTarget | null>(null);
   const iWant = useMyWants();
   const { have: iHave, own: iOwn } = useMyCollection();
 
-  // Same collection-style sort controls as the own-list screens. A deep-linked
-  // notification hit (`hi`) still pins to the very top; everything else follows
-  // the chosen sort, tie-broken by name.
+  // Same collection-style sort controls as the own-list screens, shared with
+  // the "See all" view. Matches (and deep-linked notification hits) float to the
+  // top here; the full-list view respects the pure sort so search stays useful.
   const [tradeSort, setTradeSort] = useCardSort('community-trade');
   const [wishSort, setWishSort] = useCardSort('community-wish');
-  const pinHi = <T extends { hi: boolean }>(rows: T[]) => [...rows].sort((a, b) => Number(b.hi) - Number(a.hi));
 
-  const trade = useMemo(() => {
-    if (!lists) return [];
-    const enriched = lists.tradelist.map((l) => ({ line: l, match: iWant(l), own: false, hi: highlight?.has(l.oracleId) ?? false }));
-    return pinHi(sortCards(enriched, (t) => tradeFields(t.line, cards), tradeSort));
-  }, [lists, iWant, highlight, cards, tradeSort]);
-
-  const wish = useMemo(() => {
-    if (!lists) return [];
-    const enriched = lists.wishlist.map((l) => {
-      const match = iHave(l);
-      // "own" is the new highlight: a card of theirs sitting in my collection
-      // that I haven't put on my tradelist yet. If it's already for trade, the
-      // ⇄ match badge already says so — don't double-flag.
-      const own = !match && iOwn(l);
-      return { line: l, match, own, hi: highlight?.has(l.oracleId) ?? false };
-    });
-    return pinHi(sortCards(enriched, (w) => wishFields(w.line, cards), wishSort));
-  }, [lists, iHave, iOwn, highlight, cards, wishSort]);
-
-  const tradeMatches = trade.filter((t) => t.match).length;
-  const wishMatches = wish.filter((w) => w.match).length;
-  const wishOwned = wish.filter((w) => w.own).length;
-
-  // Page both lists — another user's tradelist/wishlist can run to thousands of
-  // lines, and this renders card tiles with images for each.
-  const tradePaged = usePagedLimit(`${username}|trade|${trade.length}`, 60);
-  const wishPaged = usePagedLimit(`${username}|wish|${wish.length}`, 60);
-
-  const tradeItems = useMemo(
-    (): CardItem[] =>
-      trade.map(({ line, match, hi }, i) =>
-        tradeLineItem(line, `${line.scryfallId}-${i}`, cards, { match, hi }, (oracle) =>
-          setInfo({ oracle, scryfallId: line.scryfallId }),
-        ),
-      ),
-    [trade, cards],
+  // Enrich each line with how it relates to me (unsorted — the display layers
+  // and the See-all view apply their own order).
+  const tradeBase = useMemo<TradeEntry[]>(
+    () =>
+      (lists?.tradelist ?? []).map((l) => ({
+        line: l,
+        match: iWant(l),
+        own: false,
+        hi: highlight?.has(l.oracleId) ?? false,
+      })),
+    [lists, iWant, highlight],
+  );
+  const wishBase = useMemo<WishEntry[]>(
+    () =>
+      (lists?.wishlist ?? []).map((l) => {
+        const match = iHave(l);
+        // "own": a card of theirs I have but haven't listed for trade. If it's
+        // already for trade the ⇄ match badge says so — don't double-flag.
+        const own = !match && iOwn(l);
+        return { line: l, match, own, hi: highlight?.has(l.oracleId) ?? false };
+      }),
+    [lists, iHave, iOwn, highlight],
   );
 
-  const wishItems = useMemo(
-    (): CardItem[] =>
-      wish.map(({ line, match, own, hi }, i) =>
-        wishLineItem(line, `${line.oracleId}-${i}`, cards, { match, own, hi }, (oracle) =>
-          setInfo({ oracle, scryfallId: line.scryfallId ?? undefined, wish: line }),
-        ),
-      ),
-    [wish, cards],
+  const tradeMatches = tradeBase.filter((t) => t.match).length;
+  const wishMatches = wishBase.filter((w) => w.match).length;
+  const wishOwned = wishBase.filter((w) => w.own).length;
+
+  // Matches-first order for the overview (the See-all view sorts its own copy).
+  const tradeOrdered = useMemo(
+    () => orderRows(tradeBase, (t) => tradeFields(t.line, cards), tradeSort),
+    [tradeBase, cards, tradeSort],
   );
+  const wishOrdered = useMemo(
+    () => orderRows(wishBase, (w) => wishFields(w.line, cards), wishSort),
+    [wishBase, cards, wishSort],
+  );
+
+  const menu = (
+    <>
+      <button className="ghost" onClick={onBack}>
+        ‹ All users
+      </button>
+      <button className="ghost" onClick={() => navigate(`/profile/${encodeURIComponent(username)}`)}>
+        Profile
+      </button>
+    </>
+  );
+  const sheet = info && (
+    <CardSheet
+      oracleCard={info.oracle}
+      initialScryfallId={info.scryfallId}
+      wishView={info.wish}
+      readOnly
+      onClose={() => setInfo(null)}
+    />
+  );
+
+  // "See all" is a URL sub-mode (?all=trade|wish) so the back button returns to
+  // the overview, reusing the already-fetched lists.
+  const all = searchParams.get('all');
+  const openAll = (which: 'trade' | 'wish') =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('all', which);
+        return next;
+      },
+      { replace: false },
+    );
+  const closeAll = () =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('all');
+        return next;
+      },
+      { replace: false },
+    );
+
+  if (lists && (all === 'trade' || all === 'wish')) {
+    return (
+      <Page title={username} menu={menu}>
+        {all === 'trade' ? (
+          <UserListAll
+            heading="Has for trade"
+            rows={tradeBase}
+            cards={cards}
+            fieldsOf={(t) => tradeFields(t.line, cards)}
+            build={(rows) => buildTradeItems(rows, cards, setInfo)}
+            sort={tradeSort}
+            setSort={setTradeSort}
+            onClose={closeAll}
+          />
+        ) : (
+          <UserListAll
+            heading="Wants"
+            rows={wishBase}
+            cards={cards}
+            fieldsOf={(w) => wishFields(w.line, cards)}
+            build={(rows) => buildWishItems(rows, cards, setInfo)}
+            sort={wishSort}
+            setSort={setWishSort}
+            onClose={closeAll}
+          />
+        )}
+        {sheet}
+      </Page>
+    );
+  }
 
   return (
-    <Page
-      title={username}
-      subtitle={lists ? `Lists updated ${fmtDate(lists.updatedAt)}.` : undefined}
-      menu={
-        <>
-          <button className="ghost" onClick={onBack}>
-            ‹ All users
-          </button>
-          <button className="ghost" onClick={() => navigate(`/profile/${encodeURIComponent(username)}`)}>
-            Profile
-          </button>
-        </>
-      }
-    >
+    <Page title={username} subtitle={lists ? `Lists updated ${fmtDate(lists.updatedAt)}.` : undefined} menu={menu}>
       {error ? (
         <EmptyState>{error}</EmptyState>
       ) : !lists ? (
@@ -258,59 +377,202 @@ function UserLists({
               <span />
             )}
             <div className="meta-actions">
-              <ViewToggle mode={view} onChange={setView} />
+              <LayoutToggle layout={layout} onChange={setLayout} />
+              {layout === 'stack' && <ViewToggle mode={view} onChange={setView} />}
             </div>
           </div>
 
-          <section className="about-section">
-            <div className="list-section-head">
-              <h2>Has for trade ({trade.length})</h2>
-              {trade.length > 0 && <SortControls prefs={tradeSort} onChange={setTradeSort} />}
-            </div>
-            {trade.length === 0 ? (
-              <p className="fine-print">Nothing marked for trade.</p>
-            ) : (
-              <>
-                <CardItems view={view} items={tradeItems.slice(0, tradePaged.limit)} />
-                {tradeItems.length > tradePaged.limit && (
-                  <button className="show-more" onClick={tradePaged.showMore}>
-                    Show {Math.min(60, tradeItems.length - tradePaged.limit)} more
-                  </button>
-                )}
-              </>
-            )}
-          </section>
+          <ListSection
+            heading="Has for trade"
+            count={tradeBase.length}
+            emptyLabel="Nothing marked for trade."
+            layout={layout}
+            view={view}
+            sort={tradeSort}
+            setSort={setTradeSort}
+            onSeeAll={() => openAll('trade')}
+            items={tradeOrdered}
+            build={(rows) => buildTradeItems(rows, cards, setInfo)}
+            signature={`${username}|trade|${tradeBase.length}`}
+          />
 
-          <section className="about-section">
-            <div className="list-section-head">
-              <h2>Wants ({wish.length})</h2>
-              {wish.length > 0 && <SortControls prefs={wishSort} onChange={setWishSort} />}
-            </div>
-            {wish.length === 0 ? (
-              <p className="fine-print">Empty wishlist.</p>
-            ) : (
-              <>
-                <CardItems view={view} items={wishItems.slice(0, wishPaged.limit)} />
-                {wishItems.length > wishPaged.limit && (
-                  <button className="show-more" onClick={wishPaged.showMore}>
-                    Show {Math.min(60, wishItems.length - wishPaged.limit)} more
-                  </button>
-                )}
-              </>
-            )}
-          </section>
+          <ListSection
+            heading="Wants"
+            count={wishBase.length}
+            emptyLabel="Empty wishlist."
+            layout={layout}
+            view={view}
+            sort={wishSort}
+            setSort={setWishSort}
+            onSeeAll={() => openAll('wish')}
+            items={wishOrdered}
+            build={(rows) => buildWishItems(rows, cards, setInfo)}
+            signature={`${username}|wish|${wishBase.length}`}
+          />
         </>
       )}
-
-      {info && (
-        <CardSheet
-          oracleCard={info.oracle}
-          initialScryfallId={info.scryfallId}
-          wishView={info.wish}
-          readOnly
-          onClose={() => setInfo(null)}
-        />
-      )}
+      {sheet}
     </Page>
+  );
+}
+
+/** Row/stack toggle mirroring ViewToggle's look. */
+function LayoutToggle({ layout, onChange }: { layout: Layout; onChange: (l: Layout) => void }) {
+  return (
+    <div className="view-toggle" role="group" aria-label="Layout">
+      <button
+        className={layout === 'row' ? 'active' : ''}
+        onClick={() => onChange('row')}
+        aria-pressed={layout === 'row'}
+        title="Swipeable rows"
+      >
+        ⇄
+      </button>
+      <button
+        className={layout === 'stack' ? 'active' : ''}
+        onClick={() => onChange('stack')}
+        aria-pressed={layout === 'stack'}
+        title="Stacked grid"
+      >
+        ≣
+      </button>
+    </div>
+  );
+}
+
+/** One list on the overview: a swipeable row or a paged stack, with a "See all". */
+function ListSection<T extends { hi: boolean; match: boolean; own: boolean }>({
+  heading,
+  count,
+  emptyLabel,
+  layout,
+  view,
+  sort,
+  setSort,
+  onSeeAll,
+  items,
+  build,
+  signature,
+}: {
+  heading: string;
+  count: number;
+  emptyLabel: string;
+  layout: Layout;
+  view: 'list' | 'grid' | 'pile';
+  sort: CardSortPrefs;
+  setSort: (p: CardSortPrefs) => void;
+  onSeeAll: () => void;
+  items: T[];
+  build: (rows: T[]) => CardItem[];
+  signature: string;
+}) {
+  const { limit, showMore } = usePagedLimit(signature, PAGE_SIZE);
+  const visible = build(items.slice(0, limit));
+  const hasMore = items.length > limit;
+
+  return (
+    <section className="about-section">
+      <div className="list-section-head">
+        <h2>
+          {heading} ({count})
+        </h2>
+        <div className="list-section-actions">
+          {count > 0 && <SortControls prefs={sort} onChange={setSort} />}
+          {count > 0 && (
+            <button className="ghost see-all" onClick={onSeeAll}>
+              See all
+            </button>
+          )}
+        </div>
+      </div>
+      {count === 0 ? (
+        <p className="fine-print">{emptyLabel}</p>
+      ) : layout === 'row' ? (
+        <CardRow items={visible} hasMore={hasMore} onLoadMore={showMore} />
+      ) : (
+        <>
+          <CardItems view={view} items={visible} />
+          {hasMore && (
+            <button className="show-more" onClick={showMore}>
+              Show {Math.min(PAGE_SIZE, items.length - limit)} more
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Full-screen list with its own search, sort, view toggle and scroll autoload. */
+function UserListAll<T extends { hi: boolean; match: boolean; own: boolean; line: { oracleId: string } }>({
+  heading,
+  rows,
+  cards,
+  fieldsOf,
+  build,
+  sort,
+  setSort,
+  onClose,
+}: {
+  heading: string;
+  rows: T[];
+  cards: CardMaps | undefined;
+  fieldsOf: (r: T) => SortFields;
+  build: (rows: T[]) => CardItem[];
+  sort: CardSortPrefs;
+  setSort: (p: CardSortPrefs) => void;
+  onClose: () => void;
+}) {
+  const [view, setView] = useViewMode();
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = compileCardQuery(query);
+    const sorted = sortCards(rows, fieldsOf, sort);
+    if (q.isEmpty) return sorted;
+    return sorted.filter((r) => {
+      const oracle = cards?.oracles.get(r.line.oracleId) as OracleCard | undefined;
+      return !!oracle && q.matches(toSearchableEntry(oracle));
+    });
+  }, [rows, cards, fieldsOf, sort, query]);
+
+  const { limit, showMore } = usePagedLimit(`all|${heading}|${query}|${rows.length}`, PAGE_SIZE);
+  const items = build(filtered.slice(0, limit));
+
+  return (
+    <>
+      <div className="list-section-head">
+        <button className="ghost see-all" onClick={onClose}>
+          ‹ Back
+        </button>
+        <h2 className="list-all-heading">
+          {heading} ({rows.length})
+        </h2>
+        <div className="list-section-actions">
+          <SortControls prefs={sort} onChange={setSort} />
+          <ViewToggle mode={view} onChange={setView} />
+        </div>
+      </div>
+
+      <div className="search-field">
+        <Icon name="search" size={16} />
+        <input
+          className="search-input"
+          type="search"
+          placeholder="Search these cards…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="search-meta">Nothing here matches.</p>
+      ) : (
+        <>
+          <CardItems view={view} items={items} />
+          <LoadMoreSentinel hasMore={filtered.length > items.length} onLoadMore={showMore} rearmKey={items.length} />
+        </>
+      )}
+    </>
   );
 }

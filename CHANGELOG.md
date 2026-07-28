@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.74.1
+
+- **Oversized cards loom large in the pile.** In goblin mode's pile view, oversized cards (the big Commander precon planeswalkers and the like) now scatter at their true-to-life size — noticeably bigger than the normal cards around them, just like the real shoebox.
+
 ## 0.74.0
 
 - **Community lists you can swipe.** A user's trade and wishlist now each show as a single row of cards you swipe sideways (flick on mobile, scroll wheel or the arrow buttons on desktop) — no more scrolling past a giant grid to reach their wants. More cards load as you swipe toward the end. The cards you care about come first: on their trades, the ones you want; on their wishes, the ones you have (then the ones you own but haven't listed). Prefer the old stacked grid? There's a new layout toggle next to the sort menu. And each list has a **See all** button that opens the full list with its own search box, sort, and infinite scroll.

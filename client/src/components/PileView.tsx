@@ -26,6 +26,8 @@ export interface PileEntry {
   imageBack: string | null;
   /** Iridescent foil sheen over the front face (foil / etched finishes). */
   foil?: boolean;
+  /** Physically oversized card (Commander precon oversized, etc.) — rendered larger to scale. */
+  oversized?: boolean;
   /** Physical copies owned; the pile renders up to MAX_COPIES of them. */
   count: number;
   /** Long-press / keyboard open. faceDown tells the caller what's showing. */
@@ -37,6 +39,8 @@ export const CARD_BACK_URL = 'https://backs.scryfall.io/normal/0/a/0aeebaf5-8c7d
 
 const CARD_W = 96;
 const CARD_H = 134;
+/** Oversized cards (3.5"×5") run ~1.4× a standard 2.5"×3.5" card, linearly. */
+const OVERSIZED_SCALE = 1.4;
 /** Copies rendered per entry — enough mess without turning 40 Islands into 40 nodes. */
 const MAX_COPIES = 4;
 /** Average card-area overlap; higher = denser, thicker pile. */
@@ -78,6 +82,9 @@ interface Spot {
   rot: number;
   z: number;
   faceDown: boolean;
+  /** Per-copy footprint — oversized cards are larger than the standard CARD_W/H. */
+  w: number;
+  h: number;
 }
 
 export function PileView({ items }: { items: PileEntry[] }) {
@@ -100,26 +107,30 @@ export function PileView({ items }: { items: PileEntry[] }) {
       Array.from({ length: Math.max(1, Math.min(entry.count, MAX_COPIES)) }, (_, i) => ({
         entry,
         copyKey: `${entry.key}#${i}`,
+        w: entry.oversized ? Math.round(CARD_W * OVERSIZED_SCALE) : CARD_W,
+        h: entry.oversized ? Math.round(CARD_H * OVERSIZED_SCALE) : CARD_H,
       })),
     );
     // Deterministic shuffle so the heap isn't secretly in collection order.
     copies.sort((a, b) => hash(a.copyKey) - hash(b.copyKey));
     if (!width) return { copies, spots: new Map<string, Spot>(), height: 420 };
 
-    const height = Math.max(420, Math.ceil((copies.length * CARD_W * CARD_H) / (width * COVERAGE)) + CARD_H);
-    const bleedX = CARD_W * 0.25;
-    const bleedY = CARD_H * 0.2;
+    const totalArea = copies.reduce((s, c) => s + c.w * c.h, 0);
+    const maxH = copies.reduce((m, c) => Math.max(m, c.h), CARD_H);
+    const height = Math.max(420, Math.ceil(totalArea / (width * COVERAGE)) + maxH);
     const spots = new Map<string, Spot>();
     copies.forEach((c, i) => {
+      const bleedX = c.w * 0.25;
+      const bleedY = c.h * 0.2;
       const rand = mulberry32(hash(c.copyKey));
-      const x = -bleedX + rand() * (width - CARD_W + 2 * bleedX);
-      const y = -bleedY + rand() * (height - CARD_H + 2 * bleedY);
+      const x = -bleedX + rand() * (width - c.w + 2 * bleedX);
+      const y = -bleedY + rand() * (height - c.h + 2 * bleedY);
       let rot = (rand() * 2 - 1) * 32;
       const p = rand();
       if (p < 0.1) rot += 90;
       else if (p < 0.2) rot -= 90;
       else if (p < 0.3) rot += 180;
-      spots.set(c.copyKey, { x, y, rot, z: i + 1, faceDown: rand() < 0.12 });
+      spots.set(c.copyKey, { x, y, rot, z: i + 1, faceDown: rand() < 0.12, w: c.w, h: c.h });
     });
     return { copies, spots, height };
   }, [items, width]);
@@ -219,8 +230,8 @@ function PileCard({
     return `translate(${x}px, ${y}px) rotate(${spot.rot}deg)`;
   }
 
-  const clampX = (x: number) => Math.min(Math.max(x, -CARD_W / 2), boundsW - CARD_W / 2);
-  const clampY = (y: number) => Math.min(Math.max(y, -CARD_H / 2), boundsH - CARD_H / 2);
+  const clampX = (x: number) => Math.min(Math.max(x, -spot.w / 2), boundsW - spot.w / 2);
+  const clampY = (y: number) => Math.min(Math.max(y, -spot.h / 2), boundsH - spot.h / 2);
 
   function flip(): void {
     setFaceDown((f) => !f);
@@ -363,7 +374,7 @@ function PileCard({
       role="button"
       tabIndex={0}
       aria-label={faceDown && !entry.imageBack ? 'Face-down card' : entry.name}
-      style={{ width: CARD_W, height: CARD_H, zIndex: z }}
+      style={{ width: spot.w, height: spot.h, zIndex: z }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

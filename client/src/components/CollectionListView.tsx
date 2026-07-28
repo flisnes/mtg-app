@@ -183,6 +183,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
                 image: r.printing?.imageNormal ?? r.oracle?.imageNormal ?? r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
                 imageBack: r.printing?.imageBackNormal ?? r.oracle?.imageBackNormal ?? r.printing?.imageBackSmall ?? r.oracle?.imageBackSmall ?? null,
                 foil: r.entry.finish !== 'nonfoil',
+                oversized: /oversized/i.test(r.printing?.setName ?? ''),
                 count: r.entry.quantity,
                 onLongPress: (faceDown) => {
                   // Face-down single-faced card: only the generic back is

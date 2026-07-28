@@ -190,8 +190,10 @@ interface CardMaps {
   printings: Map<string, Priced<Printing>>;
 }
 
-/** The card-info sheet target: an oracle card, optionally pinned to a printing. */
-type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string };
+/** The card-info sheet target: an oracle card, optionally pinned to a printing.
+ *  For a wishlist tile, `wish` carries their preferences so the sheet can show
+ *  them read-only (any printing / min condition / finish / language). */
+type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string; wish?: WishLine };
 
 function UserLists({
   token,
@@ -357,7 +359,7 @@ function UserLists({
             : own
               ? 'You own this but haven’t listed it for trade. Add it to your tradelist to offer it.'
               : undefined,
-          onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId ?? undefined }) : undefined,
+          onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId ?? undefined, wish: line }) : undefined,
         };
       }),
     [wish, cards],
@@ -434,7 +436,13 @@ function UserLists({
       )}
 
       {info && (
-        <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
+        <CardSheet
+          oracleCard={info.oracle}
+          initialScryfallId={info.scryfallId}
+          wishView={info.wish}
+          readOnly
+          onClose={() => setInfo(null)}
+        />
       )}
     </Page>
   );

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { CollectionEntry, Condition, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Condition, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
 import {
   addDeckCard,
@@ -106,6 +106,7 @@ export function CardSheet({
   oracleCard,
   entry,
   wishEntry,
+  wishView,
   deckCard,
   sessionCard,
   onApply,
@@ -123,6 +124,10 @@ export function CardSheet({
   entry?: CollectionEntry;
   /** Edit this wishlist line (edition + quantity) instead of the collection. */
   wishEntry?: WishlistEntry;
+  /** Read-only view of someone else's wish (Community): show their edition
+   *  (incl. "any printing"), minimum condition, finish and language as a
+   *  disabled form. Only meaningful in info mode. */
+  wishView?: WishLine;
   /** Edit this deck slot's quantity + printing instead of the collection.
    *  Commander context (only set from a commander-format deck) adds the
    *  move-to/from-command-zone action to the sheet. */
@@ -176,9 +181,12 @@ export function CardSheet({
   // at all, so those variants drop the collection-specific fields below.
   const wishAdd = mode === 'add' && addTo.kind === 'wishlist';
   const deckAdd = mode === 'add' && addTo.kind === 'deck';
-  // Editing or adding a wish: condition/finish/lang are all optional and lead
-  // with an "Any" choice (a wish isn't for one specific copy).
-  const wishMode = mode === 'wish' || wishAdd;
+  // Viewing someone else's wish (Community): the same wish fields, but the
+  // sheet is read-only, so nothing here is editable.
+  const wishInfo = mode === 'info' && !!wishView;
+  // Editing, adding or viewing a wish: condition/finish/lang are all optional
+  // and lead with an "Any" choice (a wish isn't for one specific copy).
+  const wishMode = mode === 'wish' || wishAdd || wishInfo;
   // Add mode into a personal list: which list leads (the primary button). The
   // other two ride along as compact +icon quick-adds, so a card found while
   // searching one list can still be filed anywhere. A context-free ('default')
@@ -205,19 +213,23 @@ export function CardSheet({
   // In wish mode the empty string means "any printing" (no specific edition).
   const [scryfallId, setScryfallId] = useState(
     wishMode
-      ? wishEntry?.scryfallId ?? ANY_PRINTING
+      ? wishEntry?.scryfallId ?? wishView?.scryfallId ?? ANY_PRINTING
       : entry?.scryfallId ?? deckCard?.scryfallId ?? sessionCard?.scryfallId ?? initialScryfallId ?? oracleCard.defaultScryfallId,
   );
   // Empty string is the "Any" sentinel, used only in wish mode (mirrors
   // ANY_PRINTING for the edition). Collection/edit/session modes stay concrete.
   const [condition, setCondition] = useState<Condition | ''>(
-    entry?.condition ?? sessionCard?.condition ?? (wishMode ? wishEntry?.condition ?? '' : 'NM'),
+    entry?.condition ?? sessionCard?.condition ?? (wishMode ? wishEntry?.condition ?? wishView?.condition ?? '' : 'NM'),
   );
   const [finish, setFinish] = useState<Finish | ''>(
-    entry?.finish ?? sessionCard?.finish ?? (wishMode ? wishEntry?.finish ?? '' : 'nonfoil'),
+    entry?.finish ?? sessionCard?.finish ?? (wishMode ? wishEntry?.finish ?? wishView?.finish ?? '' : 'nonfoil'),
   );
-  const [lang, setLang] = useState<string>(entry?.lang ?? sessionCard?.lang ?? (wishMode ? wishEntry?.lang ?? '' : 'en'));
-  const [quantity, setQuantity] = useState(entry?.quantity ?? wishEntry?.quantity ?? deckCard?.quantity ?? sessionCard?.quantity ?? 1);
+  const [lang, setLang] = useState<string>(
+    entry?.lang ?? sessionCard?.lang ?? (wishMode ? wishEntry?.lang ?? wishView?.lang ?? '' : 'en'),
+  );
+  const [quantity, setQuantity] = useState(
+    entry?.quantity ?? wishEntry?.quantity ?? wishView?.quantity ?? deckCard?.quantity ?? sessionCard?.quantity ?? 1,
+  );
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
   const [busy, setBusy] = useState(false);
   const [trend, setTrend] = useState<HistoryChange | null>(null);
@@ -626,7 +638,7 @@ export function CardSheet({
         </div>
         )}
 
-        {mode !== 'info' && (
+        {(mode !== 'info' || wishInfo) && (
         <div className="field-grid">
           <label className="field">
             <span>Quantity</span>

@@ -6,8 +6,9 @@ import { ManaCost } from './ManaCost.js';
 // rendered as rows (CardList) or a tile grid (CardGrid), switched by the
 // shared list⇄grid preference (localStorage, synchronous). Tapping a card
 // opens whatever the caller wires up — usually the CardSheet. The collection
-// additionally supports 'pile' (goblin mode, PileView.tsx); callers that
-// don't pass allowPile see 'grid' instead of a stored 'pile'.
+// additionally supports 'pile' (goblin mode, PileView.tsx), but that isn't a
+// toggle: goblin mode forces the pile and hides list/grid entirely, so this
+// preference only ever holds 'list' or 'grid' (any legacy 'pile' → 'grid').
 
 export type ViewMode = 'list' | 'grid' | 'pile';
 const KEY = 'cardViewMode';
@@ -24,7 +25,7 @@ function readMode(): ViewMode {
 let currentMode: ViewMode = readMode();
 const viewModeListeners = new Set<(m: ViewMode) => void>();
 
-export function useViewMode(allowPile = false): [ViewMode, (m: ViewMode) => void] {
+export function useViewMode(): [ViewMode, (m: ViewMode) => void] {
   const [mode, setMode] = useState<ViewMode>(currentMode);
   useEffect(() => {
     viewModeListeners.add(setMode);
@@ -42,18 +43,17 @@ export function useViewMode(allowPile = false): [ViewMode, (m: ViewMode) => void
     }
     viewModeListeners.forEach((cb) => cb(m));
   };
-  return [mode === 'pile' && !allowPile ? 'grid' : mode, set];
+  // 'pile' is never a stored/toggled preference (goblin mode drives it); coerce
+  // any legacy value to 'grid' so callers only ever see list/grid.
+  return [mode === 'pile' ? 'grid' : mode, set];
 }
 
 export function ViewToggle({
   mode,
   onChange,
-  showPile = false,
 }: {
   mode: ViewMode;
   onChange: (m: ViewMode) => void;
-  /** Offer the pile view (goblin mode, collection only). */
-  showPile?: boolean;
 }) {
   return (
     <div className="view-toggle" role="group" aria-label="View mode">
@@ -73,16 +73,6 @@ export function ViewToggle({
       >
         ▦
       </button>
-      {showPile && (
-        <button
-          className={mode === 'pile' ? 'active' : ''}
-          onClick={() => onChange('pile')}
-          aria-pressed={mode === 'pile'}
-          title="Pile view (goblin mode)"
-        >
-          🂠
-        </button>
-      )}
     </div>
   );
 }

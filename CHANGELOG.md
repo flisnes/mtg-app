@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.74.2
+
+- **Goblin mode goes all in.** Flipping on goblin mode now dumps your whole collection straight into the pile, no list or grid, no toggle out. Want your sorting back? Turn goblin mode off in settings. Just like Richard Garfield intended.
+
 ## 0.74.1
 
 - **Oversized cards loom large in the pile.** In goblin mode's pile view, oversized cards (the big Commander precon planeswalkers and the like) now scatter at their true-to-life size — noticeably bigger than the normal cards around them, just like the real shoebox.

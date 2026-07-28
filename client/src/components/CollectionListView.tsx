@@ -29,11 +29,12 @@ function useJoinedCollection(): JoinedEntry[] | undefined {
 export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean }) {
   const rows = useJoinedCollection();
   const [editing, setEditing] = useState<JoinedEntry | null>(null);
-  // Pile view is goblin-mode only and never offered on the tradelist screen.
+  // Goblin mode *replaces* the collection with the pile — it's the only view
+  // while enabled, and there's no toggle out of it (turn goblin mode off in
+  // settings to get list/grid + sorting back). Never on the tradelist screen.
   const goblin = useGoblinMode();
-  const allowPile = goblin && !onlyTrade;
-  const [view, setView] = useViewMode(allowPile);
-  const pileMode = view === 'pile' && allowPile;
+  const pileMode = goblin && !onlyTrade;
+  const [view, setView] = useViewMode();
   const [info, setInfo] = useState<JoinedEntry | null>(null);
   const [cardBack, setCardBack] = useState(false);
   const [sort, setSort] = useCardSort(onlyTrade ? 'tradelist' : 'collection');
@@ -167,7 +168,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
             </button>
           )}
           {!pileMode && <SortControls prefs={sort} onChange={setSort} withChange withDates />}
-          <ViewToggle mode={view} onChange={setView} showPile={allowPile} />
+          {!pileMode && <ViewToggle mode={view} onChange={setView} />}
         </div>
       </div>
 

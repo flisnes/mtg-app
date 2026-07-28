@@ -342,11 +342,7 @@ function PreferencesSection() {
   return (
     <section className="about-section">
       <h2>Goblin mode</h2>
-      <p className="fine-print">
-        Adds a third way to view your collection: one big, unsorted pile. Shove cards around with your finger to dig
-        through it, double-tap a card to flip it over, and press and hold one for its details. Sorting and filtering
-        are for humans.
-      </p>
+      <p className="fine-print">Just like Richard Garfield intended.</p>
       <label className="agree-row">
         <input type="checkbox" checked={goblinMode} onChange={(e) => void setGoblinMode(e.target.checked)} />
         <span>Enable goblin mode</span>

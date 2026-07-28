@@ -389,7 +389,10 @@ function PileCard({
           ) : (
             <span className="pile-ph">{entry.name}</span>
           )}
-          {entry.foil && entry.image && <span className="foil-sheen" aria-hidden />}
+          {/* Sheen only while face-up: its mix-blend-mode would otherwise flatten the
+              3D flip (killing backface-visibility) and mirror the front onto the back.
+              A real Magic card back is never foil, so dropping it face-down is correct. */}
+          {entry.foil && entry.image && !faceDown && <span className="foil-sheen" aria-hidden />}
         </div>
         <div className="pile-face pile-back">
           <img src={entry.imageBack ?? CARD_BACK_URL} alt="" loading="lazy" draggable={false} />

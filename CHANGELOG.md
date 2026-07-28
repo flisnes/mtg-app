@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.74.3
+
+- **Foils show their proper backside in the pile.** In goblin mode, flipping a foil card over now reveals the real Magic card back instead of a mirrored, shiny version of the front. As it should be: the card back is never foil.
+
 ## 0.74.2
 
 - **Goblin mode goes all in.** Flipping on goblin mode now dumps your whole collection straight into the pile, no list or grid, no toggle out. Want your sorting back? Turn goblin mode off in settings. Just like Richard Garfield intended.

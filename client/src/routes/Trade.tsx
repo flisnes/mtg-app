@@ -730,11 +730,15 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           target={{
             kind: 'trade',
             label: scanFor === 'give' ? 'Trade: you give' : 'Trade: you get',
-            onAdd: (c) =>
-              addLine(
+            // One commit for the whole scan, with each card's scanned count.
+            onAdd: (cards) =>
+              addMany(
                 scanFor,
-                { oracleId: c.oracleId, scryfallId: c.scryfallId, name: c.name, quantity: c.quantity, condition: 'NM', finish: c.finish, lang: c.lang },
-                999,
+                cards.map((c) => ({
+                  line: { oracleId: c.oracleId, scryfallId: c.scryfallId, name: c.name, quantity: c.quantity, condition: 'NM', finish: c.finish, lang: c.lang },
+                  count: c.quantity,
+                  max: 999,
+                })),
               ),
           }}
           onClose={() => setScanFor(null)}

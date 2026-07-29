@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.75.2
+
+- **The whole scanned stack lands in the trade.** Scanning a pile of cards into a trade offer only ever added one of them — the rest of your scan list vanished on the way in, and stacks of the same card came in as a single copy. Now the full list arrives in one go, counts and all.
+
 ## 0.75.1
 
 - **Binders stay binders across your devices.** A binder or box made on one device arrived on your other devices as a plain deck. The cards and counts were all there, only the label was wrong, and the server's copy was correct the whole time. Fixed, and the app repairs the ones already sitting on your devices: next time you open it, it re-reads your account from the server and your binders and boxes turn back into binders and boxes. Same fix for a binder restored from an exported backup file, and for history lines that showed a deck icon for a binder.

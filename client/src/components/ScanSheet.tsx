@@ -65,7 +65,9 @@ export type ScanTarget =
       format?: DeckFormat;
       rescan?: boolean;
     }
-  | { kind: 'trade'; label?: string; onAdd: (card: ScannedCard) => void };
+  // The whole session lands in one call: an offer is committed as a single
+  // snapshot, so adding card-by-card would have each add overwrite the last.
+  | { kind: 'trade'; label?: string; onAdd: (cards: ScannedCard[]) => void };
 
 interface Candidate {
   scryfallId: string;
@@ -812,9 +814,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           );
           break;
         case 'trade':
-          for (const e of session) {
-            target.onAdd({ oracleId: e.oracleId, scryfallId: e.scryfallId, name: e.name, finish: e.finish, lang: e.lang, quantity: e.qty });
-          }
+          target.onAdd(
+            session.map((e) => ({ oracleId: e.oracleId, scryfallId: e.scryfallId, name: e.name, finish: e.finish, lang: e.lang, quantity: e.qty })),
+          );
           break;
       }
       toast(`Added ${total} card${total === 1 ? '' : 's'} to ${targetLabel(target)}`);

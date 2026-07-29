@@ -23,9 +23,24 @@ The user-facing surface is the PWA (`client/`). Drive it in a real browser; ther
 
 ## Driving gotchas
 
-- First run shows a **welcome screen** — click "Get started" before looking for the app; then the Search route has `.search-input`.
+- **Two gates before the real UI, and both must be clicked through in order** (this bites every time). On a fresh IndexedDB:
+  1. **"Download"** — the card-DB download gate (`CardDbGate`). One-time ~1 MB fetch.
+  2. **"Get started"** — the onboarding/welcome screen. Only appears after the download completes.
+
+  Only then does the app proper render. Any Playwright script that jumps straight to app selectors will hang on these — click both first. Prefer in-app hash navigation (`window.location.hash = '#/…'`) over `page.goto` for subsequent steps so you don't re-trigger onboarding.
 - Ready = `.search-input` visible. The card-DB gate can take a while on first import; use a generous timeout.
 - Search result rows are `.result-row`, price is `.result-price`.
 - Card DB state lives in IndexedDB database `mtg` (stores: `oracleCards`, `printings`, `priceShards`, `settings`). Read counts/settings via `page.evaluate` with raw `indexedDB.open('mtg')`.
 - The app fetches `manifest.json` ~3× per load (sync + update beacon) — ignore duplicates when asserting the request log.
 - Simulate "prices-only day" / "data changed" by generating variant fixture dirs (different `MAX_CARDS`, or hand-patch the prices file + manifest v2 block, gzip + sha256 must match) and switching the static server's root between page reloads — IndexedDB persists across reloads in one browser context, so update paths are exercised realistically.
+
+## Clean up after yourself
+
+Always terminate the dev/static/relay servers and any Playwright processes you started once verification is done (and definitely after pushing) — don't leave them holding ports (5173 Vite, 8787 fixture static, the trade relay).
+
+Shell job control (`kill %1`) does NOT stop these background tool processes. Kill the actual PID tree and confirm the ports are clear:
+
+```bash
+netstat -ano | grep -E ':5173|:8787'
+taskkill //PID <pid> //T //F
+```

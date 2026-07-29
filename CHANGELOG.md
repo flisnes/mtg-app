@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.74.4
+
+- **Card data keeps flowing.** Scryfall changed how they hand out their nightly card dump (a new gzipped JSONL format), which had quietly broken our nightly rebuild — new cards and fresh prices would have stopped arriving. Reconnected to the new format, so the daily updates land as usual.
+
 ## 0.74.3
 
 - **Foils show their proper backside in the pile.** In goblin mode, flipping a foil card over now reveals the real Magic card back instead of a mirrored, shiny version of the front. As it should be: the card back is never foil.

@@ -1,14 +1,13 @@
 import { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
-import { gzipSync } from 'node:zlib';
+import { gzipSync, createGunzip } from 'node:zlib';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-// stream-json is CommonJS; default-import the modules and pull the factories off.
-import streamJson from 'stream-json';
-import streamArrayMod from 'stream-json/streamers/StreamArray.js';
-const { parser } = streamJson;
-const { streamArray } = streamArrayMod;
+// stream-json is CommonJS; default-import the module and pull the factory off.
+// Scryfall bulk data is JSONL now, so we use the line parser, not StreamArray.
+import jsonlMod from 'stream-json/jsonl/Parser.js';
+const { parser: jsonlParser } = jsonlMod;
 import type { CardDbChunkMeta, CardDbManifest, OracleCard, PriceMap, PriceTuple, Priced, Printing } from '@mtg/shared';
 import { getBulkEntry, openBulkStream } from './scryfall.js';
 import { slimCard, type RawCard, type SlimResult } from './slimCard.js';
@@ -153,11 +152,14 @@ async function main(): Promise<void> {
   console.log(`[pipeline] bulk type: ${BULK_TYPE}`);
 
   const entry = await getBulkEntry(BULK_TYPE);
-  console.log(`[pipeline] ${BULK_TYPE} updated_at=${entry.updated_at} size≈${(entry.size / 1e6).toFixed(0)}MB`);
+  console.log(`[pipeline] ${BULK_TYPE} updated_at=${entry.updated_at} size≈${(entry.compressed_size / 1e6).toFixed(0)}MB`);
 
-  const webStream = await openBulkStream(entry.download_uri);
+  const webStream = await openBulkStream(entry.jsonl_download_uri);
   const nodeStream = Readable.fromWeb(webStream as Parameters<typeof Readable.fromWeb>[0]);
-  const pipeline = nodeStream.pipe(parser()).pipe(streamArray());
+  // The JSONL file is served as raw gzip (no Content-Encoding), so gunzip it
+  // ourselves, then parse line-delimited JSON — each line is one card object.
+  const gunzip = createGunzip();
+  const pipeline = nodeStream.pipe(gunzip).pipe(jsonlParser());
 
   const printings: Printing[] = [];
   const prices: PriceMap = {};
@@ -194,6 +196,7 @@ async function main(): Promise<void> {
     });
     pipeline.on('end', () => resolve());
     pipeline.on('error', reject);
+    gunzip.on('error', reject);
     nodeStream.on('error', reject);
   });
 

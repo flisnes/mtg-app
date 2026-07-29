@@ -11,9 +11,11 @@ const HEADERS = {
 
 export interface BulkEntry {
   type: string;
-  download_uri: string;
+  // Scryfall migrated bulk data to JSONL (2026-07): the old `download_uri`
+  // (a JSON array) and `size` fields are gone, replaced by these.
+  jsonl_download_uri: string;
   updated_at: string;
-  size: number;
+  compressed_size: number;
 }
 
 /** Look up a bulk-data entry by type (e.g. 'default_cards', 'oracle_cards'). */
@@ -26,7 +28,11 @@ export async function getBulkEntry(type: string): Promise<BulkEntry> {
   return entry;
 }
 
-/** Open the bulk file as a byte stream. fetch transparently gunzips the transfer. */
+/**
+ * Open the bulk file as a byte stream. The JSONL bulk files are served as
+ * `application/gzip` with NO `Content-Encoding`, so fetch does NOT decompress
+ * them — the caller must pipe this through a gunzip step.
+ */
 export async function openBulkStream(downloadUri: string): Promise<ReadableStream<Uint8Array>> {
   const res = await fetch(downloadUri, { headers: { 'User-Agent': HEADERS['User-Agent'] } });
   if (!res.ok || !res.body) throw new Error(`bulk download HTTP ${res.status}`);

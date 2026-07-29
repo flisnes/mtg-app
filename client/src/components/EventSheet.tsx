@@ -3,7 +3,7 @@ import type { OracleCard, Priced } from '@mtg/shared';
 import { CardList, type CardItem } from './CardViews.js';
 import { Icon } from './icons.js';
 import { useCardMaps } from '../db/useCardMaps.js';
-import { useEscapeToClose } from './useEscapeToClose.js';
+import { useDismiss } from './useDismiss.js';
 import { describeBatch, describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { entryEvents, type HistoryEntry } from '../history/useHistoryEntries.js';
 import { fmtCents, fmtDateTime } from '../util/format.js';
@@ -27,7 +27,7 @@ export function EventSheet({
 }) {
   const events = entryEvents(entry);
   const { printMap, oracleMap } = useCardMaps(events.map((e) => ({ scryfallId: e.scryfallId ?? '', oracleId: e.oracleId })));
-  useEscapeToClose(onClose);
+  useDismiss(onClose);
 
   const display = entry.kind === 'batch' ? describeBatch(entry.source, entry.label, entry.events[0]?.kind) : describeEvent(entry.event);
   const totalCards = events.reduce((s, e) => s + (e.qty ?? 0), 0);

@@ -29,7 +29,7 @@ import { Icon } from '../components/icons.js';
 import { ManaCost } from '../components/ManaCost.js';
 import { useCardArtist } from '../components/useCardArtist.js';
 import { useToast } from '../components/Toast.js';
-import { useEscapeToClose } from '../components/useEscapeToClose.js';
+import { useDismiss } from '../components/useDismiss.js';
 import { EmptyState, Page } from './Page.js';
 
 // Public profile page (/profile/:username): profile picture plus up to three
@@ -345,7 +345,7 @@ function FavoriteCardPickerSheet({
   onClear: () => void;
   onClose: () => void;
 }) {
-  useEscapeToClose(onClose);
+  useDismiss(onClose);
   // Two steps, like the profile-picture editor: search a card, then pick the
   // printing from the same edition grid the card sheet uses.
   const [pending, setPending] = useState<{ card: Priced<OracleCard>; printings: Priced<Printing>[] } | null>(null);
@@ -401,7 +401,7 @@ function FavoriteDeckPickerSheet({
   onClear: () => void;
   onClose: () => void;
 }) {
-  useEscapeToClose(onClose);
+  useDismiss(onClose);
 
   // Same summary the Decks page computes: mainboard count + color identity.
   // Only actual decks — a profile shows off brews, not where you keep your bulk.

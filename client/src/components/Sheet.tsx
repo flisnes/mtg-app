@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
-import { useEscapeToClose } from './useEscapeToClose.js';
+import { useDismiss } from './useDismiss.js';
 
 // The one bottom-sheet shell, so every sheet behaves identically: a portal to
 // <body> (the tab bar's stacking context can otherwise cover the sheet's own
@@ -23,7 +23,7 @@ export function Sheet({
   className?: string;
   children: ReactNode;
 }) {
-  useEscapeToClose(onClose);
+  useDismiss(onClose);
   return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div

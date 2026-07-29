@@ -22,6 +22,7 @@ import { useToast } from './Toast.js';
 import { ownedBadge, type OwnedBadgeSpec } from './OwnedBadge.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
+import { useDismiss } from './useDismiss.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
 // camera fills the top of the screen and never pauses; each lock (S3 consensus
@@ -833,6 +834,20 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     onClose();
   };
 
+  // Back / Escape peels the scanner's own layers before leaving the scan. The
+  // sheets that live in their own components (session list, replace picker,
+  // re-scan review) register themselves and sit above this one; only the
+  // inline layers need naming here. A commit in flight claims nothing.
+  useDismiss(
+    committing
+      ? null
+      : conflictStep
+        ? () => setConflictStep(null)
+        : settingsOpen
+          ? () => setSettingsOpen(false)
+          : close,
+  );
+
   /** Session copies of a printing across finishes/boards — the tile's badge. */
   const countOf = (scryfallId: string) => session.reduce((n, e) => (e.scryfallId === scryfallId ? n + e.qty : n), 0);
 
@@ -1121,6 +1136,7 @@ function RescanChangesSheet({
   const changed = changes.filter((c) => c.kind === 'change');
   const removed = changes.filter((c) => c.kind === 'remove');
   const rows = [...added, ...changed, ...removed];
+  useDismiss(busy ? null : onBack);
   return (
     <div className="sheet-backdrop" onClick={onBack}>
       <div className="sheet scan-list-sheet" role="dialog" aria-label="Re-scan changes" onClick={(e) => e.stopPropagation()}>
@@ -1192,6 +1208,7 @@ function RescanCollectionSheet({
   const allPicked = picked.size === entries.length;
   const chosen = entries.filter((e) => picked.has(entryKey(e)));
   const chosenQty = chosen.reduce((n, e) => n + e.qty, 0);
+  useDismiss(busy ? null : onBack);
   return (
     <div className="sheet-backdrop" onClick={onBack}>
       <div className="sheet scan-list-sheet" role="dialog" aria-label="Add scanned cards to collection" onClick={(e) => e.stopPropagation()}>
@@ -1284,6 +1301,7 @@ function ReplaceCopySheet({
     return parts.join(' · ');
   };
   const scanned = plan.conflict.incoming.map((l) => describe(l)).join(', ');
+  useDismiss(busy ? null : onBack);
 
   return (
     <div className="sheet-backdrop" onClick={onBack}>
@@ -1449,6 +1467,9 @@ function SessionSheet({
     }
     onChange(mergeSession(entries.map((x, j) => (j === i ? next : x))));
   };
+
+  // The per-line card sheet stacks above this one and dismisses first.
+  useDismiss(busy ? null : onClose);
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>

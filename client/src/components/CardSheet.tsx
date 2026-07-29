@@ -33,7 +33,7 @@ import { formatPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
 import { Sparkline } from './Sparkline.js';
-import { useEscapeToClose } from './useEscapeToClose.js';
+import { useDismiss } from './useDismiss.js';
 
 // Bottom-sheet for a card's details, in six modes:
 //  - add (default): add the card somewhere new — where depends on addTarget
@@ -260,7 +260,7 @@ export function CardSheet({
   // nested card sheet when the user drills from that event into another card.
   const [eventEntry, setEventEntry] = useState<HistoryEntry | null>(null);
   const [nestedCard, setNestedCard] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
-  useEscapeToClose(busy ? null : onClose);
+  useDismiss(busy ? null : onClose);
 
   useEffect(() => {
     void getPrintingsForOracle(oracleCard.oracleId).then(setPrintings);
@@ -937,7 +937,7 @@ export function EditionPicker({
   onSelect: (scryfallId: string) => void;
   onClose: () => void;
 }) {
-  useEscapeToClose(onClose);
+  useDismiss(onClose);
   // stopPropagation on the backdrop: this overlay nests inside the card
   // sheet's backdrop, whose click handler would otherwise also close the sheet.
   return (

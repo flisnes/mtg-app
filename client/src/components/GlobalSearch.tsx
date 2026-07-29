@@ -28,6 +28,7 @@ import { AccountMenu } from './AccountMenu.js';
 import { NotificationBell } from './NotificationBell.js';
 import { useAccount } from '../account/useAccount.js';
 import { useOwnAvatar } from '../account/ownProfile.js';
+import { useDismiss } from './useDismiss.js';
 
 // Card search is the front door to the hobby, so it lives in a persistent
 // header instead of a tab: the input is reachable from every screen, and
@@ -147,24 +148,16 @@ export function GlobalSearchBar() {
     }
   }, [path, setOpen, inputRef]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setOpen(false);
-        inputRef.current?.blur();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, setOpen, inputRef]);
-
   function close() {
     setQuery('');
     setFilters({});
     setOpen(false);
     inputRef.current?.blur();
   }
+
+  // Escape and the back button dismiss the overlay through the shared stack, so
+  // a sheet opened from a search result closes before the search itself does.
+  useDismiss(open ? close : null);
 
   return (
     <>

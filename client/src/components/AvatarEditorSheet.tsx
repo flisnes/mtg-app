@@ -4,7 +4,7 @@ import { AVATAR_MAX_ZOOM, type OracleCard, type Priced, type Printing, type Prof
 import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { getPrintingsForOracle } from '../db/queries.js';
 import { artCropUrl, clampCropCenter, cropLayout } from './Avatar.js';
-import { useEscapeToClose } from './useEscapeToClose.js';
+import { useDismiss } from './useDismiss.js';
 
 // Profile-picture editor: search any card, pick a printing, then pan (drag),
 // pinch or slide to zoom the art inside a circular frame — the usual
@@ -19,7 +19,7 @@ export function AvatarEditorSheet({
   onSave: (avatar: ProfileAvatar) => void;
   onClose: () => void;
 }) {
-  useEscapeToClose(onClose);
+  useDismiss(onClose);
   const [card, setCard] = useState<Priced<OracleCard> | null>(null);
 
   return createPortal(

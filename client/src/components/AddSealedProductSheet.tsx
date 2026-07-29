@@ -5,6 +5,7 @@ import { applyImport, type ImportLine } from '../db/dataAccess.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { loadSealedProducts } from '../sealed/store.js';
 import { useToast } from './Toast.js';
+import { useDismiss } from './useDismiss.js';
 
 // "Add sealed product" (see sealed-products feature). Search a named,
 // non-randomized product (precon deck, Secret Lair, gift box…) and add every
@@ -51,6 +52,10 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
   const [copies, setCopies] = useState(1);
   const [adding, setAdding] = useState(false);
   const toast = useToast();
+
+  // Back / Escape steps out of a chosen product first (mirroring the ‹ Back
+  // button), then closes the sheet.
+  useDismiss(adding ? null : selected ? () => setSelected(null) : onClose);
 
   useEffect(() => {
     let cancelled = false;

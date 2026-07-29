@@ -19,7 +19,7 @@ import { ownedBadge, type OwnedBadgeSpec } from '../components/OwnedBadge.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { TradeQr } from '../components/TradeQr.js';
-import { useEscapeToClose } from '../components/useEscapeToClose.js';
+import { useDismiss } from '../components/useDismiss.js';
 import { TRADE_ENABLED } from '../trade/config.js';
 import {
   clearPersistedTrade,
@@ -851,7 +851,7 @@ function OfferPanel({
 
 /** Generic bottom sheet for the trade tools (portals to <body>, like CardSheet). */
 function TradeSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  useEscapeToClose(onClose);
+  useDismiss(onClose);
   return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
@@ -875,7 +875,7 @@ function TradeSheet({ title, onClose, children }: { title: string; onClose: () =
  * anywhere else in the app, instead of a cramped little list.
  */
 function TradePickerOverlay({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  useEscapeToClose(onClose);
+  useDismiss(onClose);
   return createPortal(
     <div className="picker-overlay" role="dialog" aria-label={title}>
       <header className="picker-overlay-head">

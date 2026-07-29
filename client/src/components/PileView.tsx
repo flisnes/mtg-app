@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useEscapeToClose } from './useEscapeToClose.js';
+import { useDismiss } from './useDismiss.js';
 
 // Goblin mode's pile view: every copy of every card scattered face-up-or-down
 // across one big heap, like a shoebox dumped on the table. No sorting, no
@@ -404,7 +404,7 @@ function PileCard({
 
 /** "Card info" for the Magic card back — what you get for long-pressing a face-down card. No peeking. */
 export function CardBackSheet({ onClose }: { onClose: () => void }) {
-  useEscapeToClose(onClose);
+  useDismiss(onClose);
   return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Card back">

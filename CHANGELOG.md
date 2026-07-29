@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.78.0
+
+- **The back button closes what's on top of the screen.** On a phone, backing out of a card sheet used to bounce you out of the deck (or the collection, or wherever you were) with the sheet still in your face. Now back does the obvious thing: it closes the card sheet, then the search overlay, then the picker you opened on top of that — one layer at a time, exactly like Escape does on a desktop — and only leaves the page once nothing's left to close. The scanner's screens play along too, and a swipe-back on iOS counts as a back press. Nothing has to be tapped twice: closing a sheet with its own button doesn't leave a phantom back press behind.
+
 ## 0.77.0
 
 - **The camera can finally read the weird cards.** Sagas, split cards and Aftermath, Classes, Cases, flip cards, full-art lands, borderless and extended-art printings, and anything in an old pre-8th-Edition frame: scanning these mostly just failed, and for some of them it could never have worked. The scanner was comparing the wrong piece of cardboard. It looks at a fixed window on the card, but the reference index it matches against was built from each card's *artwork*, and on a Saga the artwork is a tall panel down the right-hand side, on a split card it's sideways, on a full-art land it's the whole card. The index is now built from the same window on the same card image the scanner looks at, so it lines up on every card layout Wizards has ever printed, including ones they haven't invented yet. In testing, Sagas, Classes and Cases went from "impossible" to identified at near-perfect confidence.

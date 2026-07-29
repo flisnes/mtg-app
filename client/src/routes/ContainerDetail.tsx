@@ -56,6 +56,7 @@ import {
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { Sheet } from '../components/Sheet.js';
+import { DeckHistory, HISTORY_ANCHOR } from '../components/DeckHistory.js';
 
 interface Row {
   id: string;
@@ -95,6 +96,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const [exit, setExit] = useState<MissingCard[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('deck', { group: 'type' });
   const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: DeckCardEdit } | null>(null);
@@ -238,6 +240,14 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     toast(`Exported ${meta.noun}`);
   }
 
+  /** Expand the history panel and scroll it into view (it renders below the cards). */
+  function showHistory() {
+    setHistoryOpen(true);
+    requestAnimationFrame(() =>
+      document.getElementById(HISTORY_ANCHOR)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  }
+
   async function shareDeck() {
     const session = account.session;
     if (!session) return;
@@ -263,6 +273,9 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
             { label: `Re-scan ${meta.noun}`, icon: 'refresh', onClick: () => setScanning('rescan') },
             { label: 'Import list', icon: 'import', onClick: () => setShowImport((v) => !v) },
             { label: 'Export', icon: 'export', onClick: exportDeck },
+            // The panel lives at the very bottom, under however many cards are
+            // filed here, so the menu opens it *and* takes you to it.
+            { label: 'History', icon: 'history', onClick: showHistory },
             // Storage mirrors real shelves, so "everything in this box is up for
             // grabs" is the action that earns its place here; a deck you're
             // brewing isn't offered for trade wholesale.
@@ -384,6 +397,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           emptyHint={`Nothing filed here yet. Search above, scan a stack, or select cards in your collection and file them into this ${meta.noun}.`}
         />
       )}
+
+      <DeckHistory deckId={id} kind={kind} open={historyOpen} onToggle={() => setHistoryOpen((v) => !v)} />
 
       {info && <CardSheet oracleCard={info.card} deckCard={info.deckCard} onClose={() => setInfo(null)} />}
 

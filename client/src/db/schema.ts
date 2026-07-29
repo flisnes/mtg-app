@@ -185,6 +185,14 @@ export class MtgDatabase extends Dexie {
     this.version(10).stores({
       events: 'id, ts, oracleId, kind, batchId, tradeId',
     });
+
+    // v11: index events by deckId. A container's own history panel asks for
+    // "every event for this deck", which otherwise walks the whole log every
+    // time a deck page opens. Sparse like batchId/tradeId (only slot events
+    // carry a deckId), so no upgrade callback is needed.
+    this.version(11).stores({
+      events: 'id, ts, oracleId, kind, batchId, tradeId, deckId',
+    });
   }
 }
 

@@ -1,4 +1,4 @@
-import type { EventSource, RemovalReason, UserEvent, UserEventKind } from '@mtg/shared';
+import type { ContainerKind, DeckBoard, EventSource, RemovalReason, UserEvent, UserEventKind } from '@mtg/shared';
 import type { IconName } from '../components/icons.js';
 import { CONTAINER_META } from '../deck/containers.js';
 
@@ -92,13 +92,54 @@ export function describeBatch(source: EventSource, label?: string, kind?: UserEv
   return { verb: 'Imported', icon: 'import', direction: 'in' };
 }
 
+const BOARD_NOUN: Record<DeckBoard, string> = {
+  main: 'mainboard',
+  side: 'sideboard',
+  commander: 'command zone',
+};
+
+/**
+ * Wording for a slot event seen from *inside* its own container's history,
+ * where the container's name is already the page title. Naming it again ("Added
+ * to Mono-Red Burn") wastes the line, so the board is what gets said instead;
+ * storage has no boards, so it just goes in or out.
+ */
+export function describeDeckEvent(e: UserEvent, kind: ContainerKind): EventDisplay {
+  const added = e.kind === 'deck.add';
+  const shape = { icon: (added ? 'plus' : 'minus') as IconName, direction: (added ? 'in' : 'out') as EventDirection };
+  if (kind !== 'deck') return { verb: added ? 'Filed here' : 'Taken out', ...shape };
+  const where = BOARD_NOUN[e.board ?? 'main'];
+  return { verb: added ? `Added to ${where}` : `Removed from ${where}`, ...shape };
+}
+
+/**
+ * Deck-scoped wording for a batch of slot events (a scan, a pasted list, a
+ * multi-select filed away). Takes the totals rather than the events because a
+ * re-scan reconciles — it can add *and* remove in one pass, and then neither
+ * "added" nor "removed" is the honest word for it.
+ */
+export function describeDeckBatch(source: EventSource, added: number, removed: number): EventDisplay {
+  if (added > 0 && removed > 0) {
+    return { verb: source === 'scan' ? 'Re-scanned' : 'Reconciled', icon: 'refresh', direction: 'neutral' };
+  }
+  const out = removed > 0;
+  const direction: EventDirection = out ? 'out' : 'in';
+  if (source === 'scan') return { verb: out ? 'Removed by scan' : 'Scanned in', icon: 'camera', direction };
+  if (source === 'import') return { verb: 'Imported list', icon: 'import', direction };
+  return { verb: out ? 'Removed in bulk' : 'Added in bulk', icon: out ? 'minus' : 'plus', direction };
+}
+
+/** Signed quantity text for a direction, or null when there's no quantity. */
+export function signedQty(direction: EventDirection, qty?: number): string | null {
+  if (!qty) return null;
+  if (direction === 'in') return `+${qty}`;
+  if (direction === 'out') return `−${qty}`;
+  return `${qty}×`;
+}
+
 /** Signed quantity badge text for an event, or null when there's no quantity. */
 export function qtyBadge(e: UserEvent): string | null {
-  if (!e.qty) return null;
-  const dir = describeEvent(e).direction;
-  if (dir === 'in') return `+${e.qty}`;
-  if (dir === 'out') return `−${e.qty}`;
-  return `${e.qty}×`;
+  return signedQty(describeEvent(e).direction, e.qty);
 }
 
 // ---------------------------------------------------------------------------

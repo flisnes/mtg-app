@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.76.0
+
+- **Every deck now remembers how it got here.** There's a new History section at the bottom of any deck, binder or box: every card you've put in or taken out, newest first, grouped by the day it happened, with the deck's size at the end of each day and a little line showing it grow and shrink. Tap a change to see the details (and the card's own history from there). It's in the ⋯ menu too, which opens it and takes you straight to it. Nothing new is being recorded for this — it's the same log the Edit history page has always kept, just told from the deck's point of view. A scan or a pasted list still counts as one change, and a re-scan says what it added *and* what it took away.
+- **Imports and scans stay whole across your devices.** An imported list, a scanned pile or a bulk deck add arrived on your other devices (or back from a backup file) shattered into one line per card, having forgotten it was ever an import — so it lost its label and couldn't be undone in one go. It now travels intact.
+
 ## 0.75.2
 
 - **The whole scanned stack lands in the trade.** Scanning a pile of cards into a trade offer only ever added one of them — the rest of your scan list vanished on the way in, and stacks of the same card came in as a single copy. Now the full list arrives in one go, counts and all.

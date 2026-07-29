@@ -36,7 +36,13 @@ export function entryEvents(e: HistoryEntry): UserEvent[] {
   return e.kind === 'batch' ? e.events : [e.event];
 }
 
-function groupEntries(events: UserEvent[]): HistoryEntry[] {
+/**
+ * Collapse the lines of one operation into a single entry. `events` must arrive
+ * newest-first; the result is newest-first too. Also used by the per-container
+ * history panel (history/useDeckHistory), so a scan into a deck reads as one
+ * entry there exactly as it does here.
+ */
+export function groupEntries(events: UserEvent[]): HistoryEntry[] {
   // `events` arrives newest-first, so an entry's first-seen event is its newest.
   const map = new Map<string, HistoryEntry>();
   for (const e of events) {

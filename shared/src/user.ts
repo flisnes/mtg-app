@@ -192,6 +192,8 @@ export const USER_EVENT_KINDS: readonly UserEventKind[] = [
  */
 export type EventSource = 'manual' | 'import' | 'sealed' | 'trade' | 'scan';
 
+export const EVENT_SOURCES: readonly EventSource[] = ['manual', 'import', 'sealed', 'trade', 'scan'];
+
 export interface UserEvent {
   id: string;
   /** When it happened (ms epoch). */

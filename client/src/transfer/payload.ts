@@ -2,6 +2,7 @@ import {
   CONDITIONS,
   CONTAINER_KINDS,
   DECK_FORMATS,
+  EVENT_SOURCES,
   FINISHES,
   REMOVAL_REASONS,
   USERNAME_RE,
@@ -13,6 +14,7 @@ import {
   type DeckBoard,
   type DeckCard,
   type DeckFormat,
+  type EventSource,
   type Finish,
   type PriceHistory,
   type RemovalReason,
@@ -250,6 +252,7 @@ export function sanitizeTradeRow(raw: unknown): Trade | null {
 
 const KINDS = new Set<string>(USER_EVENT_KINDS);
 const REASONS = new Set<string>(REMOVAL_REASONS);
+const SOURCES = new Set<string>(EVENT_SOURCES);
 
 export function sanitizeEventRow(raw: unknown): UserEvent | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -276,6 +279,14 @@ export function sanitizeEventRow(raw: unknown): UserEvent | null {
     ...(CONTAINERS.has(r.deckKind as string) ? { deckKind: r.deckKind as ContainerKind } : {}),
     ...(BOARDS.has(r.board as string) ? { board: r.board as DeckBoard } : {}),
     ...(id(r.tradeId) ? { tradeId: id(r.tradeId)! } : {}),
+    // Provenance and batch grouping. Dropping these used to shatter an import,
+    // a scan or a bulk deck add into one row per card once it came back from
+    // the server (or a backup file), and lost its "Imported / Scanned" label
+    // along with the ability to undo it as one entry.
+    ...(SOURCES.has(r.source as string) ? { source: r.source as EventSource } : {}),
+    ...(id(r.batchId) ? { batchId: id(r.batchId)! } : {}),
+    ...(typeof r.batchLabel === 'string' && r.batchLabel ? { batchLabel: r.batchLabel.slice(0, 200) } : {}),
+    ...(r.reconcile === true ? { reconcile: true } : {}),
   };
 }
 

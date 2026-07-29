@@ -1980,6 +1980,38 @@ button.primary {
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
 }
+/* Collapsible section header (the deck/binder/box history panel): the section's
+   h2 plus a caret, a size sparkline and the net card change, all one hit area. */
+.history-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+}
+.history-toggle-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.05rem;
+}
+.history-caret {
+  display: flex;
+  color: var(--text-dim);
+  transition: transform 0.15s ease;
+}
+.history-caret.open {
+  transform: rotate(90deg);
+}
+/* Two numbers instead of one (a re-scan that both added and removed) needs the
+   room; the single-number rows keep their narrower column. */
+.history-qty-both {
+  min-width: 4.5em;
+}
 .history-edit {
   padding: 0.4rem 0.5rem 0.6rem;
   border-left: 2px solid var(--border);

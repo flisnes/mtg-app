@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Reference reader + acceptance tests for cardhashes.bin (Phase S1).
+"""Reference reader + acceptance tests for cardhashes2.bin (Phase S1).
 
   verify.py --out-dir ./out                      # parse blob, print header
   verify.py --out-dir ./out --data-dir ./data \
             --self-match 1000                    # S1 acceptance criterion
 
-Self-match test: sample N records from the art index, re-encode each cached
-art crop as JPEG quality 70 (simulating lossy re-processing), re-hash, and
-search the whole blob. Passes when >= 99% find their own record as the best
-match at Hamming distance <= 10 per 64-bit hash (<= 20 combined H+V).
+Self-match test: sample N records from the card index, re-encode each cached
+card image as JPEG quality 70 (simulating lossy re-processing), crop ART_BOX
+out of it exactly as hashgen did, re-hash, and search the whole blob. Passes
+when >= 99% find their own record as the best match at Hamming distance <= 10
+per 64-bit hash (<= 20 combined H+V).
 
 Uses numpy for the search when available (recommended for full blobs);
 falls back to pure Python otherwise (fine for small smoke-test blobs).
@@ -27,7 +28,7 @@ import uuid
 
 from PIL import Image
 
-from hashgen import dhash64
+from hashgen import BLOB_FORMAT_VERSION, BLOB_NAME, MANIFEST_NAME, crop_art, dhash64
 
 try:
     import numpy as np
@@ -41,8 +42,9 @@ def read_blob(path: str):
     magic, fmt, algo, _res, count = struct.unpack_from("<4sIHHI", data, 0)
     if magic != b"BNDH":
         raise SystemExit(f"bad magic {magic!r}")
-    if fmt != 1:
-        raise SystemExit(f"unknown format version {fmt}")
+    if fmt != BLOB_FORMAT_VERSION:
+        raise SystemExit(f"unknown format version {fmt} "
+                         f"(this build reads v{BLOB_FORMAT_VERSION})")
     if algo not in (1, 2):
         raise SystemExit(f"unknown algo {algo}")
     stride = 40 if algo == 2 else 32
@@ -94,7 +96,7 @@ def best_match(blob, qh: int, qv: int):
 
 
 def self_match(blob, data_dir: str, sample: int) -> bool:
-    index_path = os.path.join(data_dir, "artindex.jsonl")
+    index_path = os.path.join(data_dir, "cardindex.jsonl")
     with open(index_path, encoding="utf-8") as f:
         entries = [json.loads(line) for line in f if line.strip()]
     by_key = {(uuid.UUID(e["id"]).bytes, e["face"]): e["file"] for e in entries}
@@ -109,13 +111,14 @@ def self_match(blob, data_dir: str, sample: int) -> bool:
     ok = 0
     shared_art = 0
     for n, (rec_i, filename) in enumerate(picks, 1):
-        path = os.path.join(data_dir, "artcache", filename)
+        path = os.path.join(data_dir, "cardcache", filename)
         with Image.open(path) as img:
             buf = io.BytesIO()
             img.convert("RGB").save(buf, "JPEG", quality=70)
         with Image.open(buf) as reenc:
-            qh = dhash64(reenc, vertical=False)
-            qv = dhash64(reenc, vertical=True)
+            art = crop_art(reenc)
+            qh = dhash64(art, vertical=False)
+            qv = dhash64(art, vertical=True)
         i, d = best_match(blob, qh, qv)
         # Identical-art reprints hash identically — the true record can't
         # always be top-1, but it must be RECOVERABLE: within the threshold of
@@ -148,12 +151,12 @@ def main() -> int:
                     help="run the self-match acceptance test on N samples")
     args = ap.parse_args()
 
-    blob_path = os.path.join(args.out_dir, "cardhashes.bin")
+    blob_path = os.path.join(args.out_dir, BLOB_NAME)
     blob = read_blob(blob_path)
     print(f"blob: {blob['count']} records, algo={blob['algo']}, "
           f"{os.path.getsize(blob_path) / 1e6:.1f} MB")
 
-    manifest_path = os.path.join(args.out_dir, "manifest.json")
+    manifest_path = os.path.join(args.out_dir, MANIFEST_NAME)
     if os.path.exists(manifest_path):
         with open(manifest_path) as f:
             manifest = json.load(f)

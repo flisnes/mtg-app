@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.77.0
+
+- **The camera can finally read the weird cards.** Sagas, split cards and Aftermath, Classes, Cases, flip cards, full-art lands, borderless and extended-art printings, and anything in an old pre-8th-Edition frame: scanning these mostly just failed, and for some of them it could never have worked. The scanner was comparing the wrong piece of cardboard. It looks at a fixed window on the card, but the reference index it matches against was built from each card's *artwork*, and on a Saga the artwork is a tall panel down the right-hand side, on a split card it's sideways, on a full-art land it's the whole card. The index is now built from the same window on the same card image the scanner looks at, so it lines up on every card layout Wizards has ever printed, including ones they haven't invented yet. In testing, Sagas, Classes and Cases went from "impossible" to identified at near-perfect confidence.
+- **Your scanner will download a fresh index once.** The first scan after this update re-downloads the card index (about the same size as before). Nothing you've scanned or collected is affected.
+- Known gap, for the completists: on the text-heavy layouts (Sagas, Classes, Cases, split cards) the window lands mostly on rules text, so a **non-English** copy of one of those is still hit and miss. English copies are unaffected, and every other layout reads fine in any language. A proper fix for this is on the list.
+
 ## 0.76.0
 
 - **Every deck now remembers how it got here.** There's a new History section at the bottom of any deck, binder or box: every card you've put in or taken out, newest first, grouped by the day it happened, with the deck's size at the end of each day and a little line showing it grow and shrink. Tap a change to see the details (and the card's own history from there). It's in the ⋯ menu too, which opens it and takes you straight to it. Nothing new is being recorded for this — it's the same log the Edit history page has always kept, just told from the deck's point of view. A scan or a pasted list still counts as one change, and a re-scan says what it added *and* what it took away.

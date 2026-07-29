@@ -1,4 +1,4 @@
-// Parser for cardhashes.bin (format defined in scanjob/hashgen.py — keep in
+// Parser for cardhashes2.bin (format defined in scanjob/hashgen.py — keep in
 // sync). Little-endian: 16-byte header (magic "BNDH", u32 format version,
 // u16 algo, u16 reserved, u32 count), then per record: u64 hashH,
 // [u64 hashV when algo=2], 16-byte scryfall UUID, u8 faceIndex, 7 pad bytes.
@@ -7,6 +7,15 @@
 // never touches BigInt on the hot path.
 
 import { popcount32 } from './hash.js';
+
+/**
+ * Blob format this build understands. v1 records hashed Scryfall's per-card
+ * `art_crop`, which sits somewhere different on every layout; v2 records hash
+ * CROP_BOXES.art of the full 488×680 card, matching what the client produces
+ * from a warp. The record layout is unchanged, so the two are byte-compatible
+ * and silently mismatched — hence the hard version check.
+ */
+export const BLOB_FORMAT_VERSION = 2;
 
 /**
  * Records whose combined H+V popcount is below this are dropped at parse
@@ -93,7 +102,11 @@ export function parseHashBlob(buf: ArrayBuffer): ScanIndex {
   const magic = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
   if (magic !== 'BNDH') throw new Error('scan blob: bad magic');
   const formatVersion = view.getUint32(4, true);
-  if (formatVersion !== 1) throw new Error(`scan blob: unknown format version ${formatVersion}`);
+  if (formatVersion !== BLOB_FORMAT_VERSION) {
+    throw new Error(
+      `scan blob: format version ${formatVersion}, this build reads v${BLOB_FORMAT_VERSION}`,
+    );
+  }
   const algo = view.getUint16(8, true);
   if (algo !== 1 && algo !== 2) throw new Error(`scan blob: unknown algo ${algo}`);
   const count = view.getUint32(12, true);

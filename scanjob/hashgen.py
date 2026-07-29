@@ -2,15 +2,41 @@
 """Binder card-scanning hash job (Phase S1).
 
 Downloads the Scryfall `default_cards` bulk file, fetches every printing's
-art-crop image into a permanent local cache, computes a 64-bit horizontal +
-vertical dHash per printing face, and publishes a versioned binary blob
-(`cardhashes.bin`) plus a small `manifest.json` beacon into a directory served
-by Caddy. The PWA downloads the blob and matches camera/photo art crops
-against it fully on-device.
+full card image into a permanent local cache, crops one fixed rectangle out of
+it, computes a 64-bit horizontal + vertical dHash per printing face, and
+publishes a versioned binary blob (`cardhashes2.bin`) plus a small
+`manifest2.json` beacon into a directory served by Caddy. The PWA downloads the
+blob and matches camera/photo scans against it fully on-device.
+
+WHY THE FULL CARD IMAGE AND NOT `art_crop` (format v2, 2026-07-29)
+  Format v1 hashed Scryfall's per-card `art_crop`, whose position on the
+  physical card varies by layout. The client can only ever produce "the whole
+  card, flattened into a rectangle" from a photo, so it hashes one fixed box
+  and had no way to know that a Saga's art is a tall panel on the right or
+  that a split card's is rotated. Wherever the two regions disagreed, the hash
+  distance floor exceeded the match threshold and the card was unrecognisable
+  no matter how good the photo: measured floors were 57 (saga), 67 (split), 69
+  (class), 19-22 (extended art and pre-8th-edition frames), against a lock
+  threshold of 24.
+
+  Scryfall's `normal` image is 488x680, which is exactly the client's
+  CANONICAL_CARD, so both sides now crop the same fractions of the same
+  geometry and perform an identical sequence of operations. The floor is ~0
+  for every layout ever printed, with no per-layout knowledge on either side.
+
+  Known gap: on text-heavy layouts (saga, class, case, split) ART_BOX lands
+  largely on rules text, so a NON-ENGLISH copy pays a language penalty of ~13
+  (split) to ~22 (class/case) Hamming. English copies are unaffected. The fix
+  is a small secondary index over just those layouts, deliberately deferred:
+  giving every record extra boxes doubled the collision surface.
 
 The card filter mirrors the card-DB pipeline (pipeline/src/slimCard.ts): skip
 entries without oracle_id/name, digital-only cards, and non-paper cards — so
 every blob record resolves against the client's local printings table.
+Playtest cards are additionally excluded (see scan_excluded).
+
+Crop box (must stay in sync with client/src/scan/crops.ts CROP_BOXES.art):
+  ART_BOX, as fractions of the 488x680 card, applied before hashing.
 
 dHash definition (must stay bit-identical with client/src/scan/hash.ts):
   horizontal: grayscale (ITU-R 601-2 L, Pillow convert("L")) -> bilinear
@@ -19,7 +45,7 @@ dHash definition (must stay bit-identical with client/src/scan/hash.ts):
   packing:    64 bits MSB-first: bit (63 - (y*8 + x)) holds comparison (y, x)
 
 Blob format (little-endian):
-  Header (16 bytes): magic "BNDH", u32 format version (1), u16 algo
+  Header (16 bytes): magic "BNDH", u32 format version (2), u16 algo
     (2 = horizontal + vertical dHash), u16 reserved, u32 record count
   Record (40 bytes): u64 hashH, u64 hashV, 16-byte scryfall UUID,
     u8 faceIndex, 7 pad bytes
@@ -28,8 +54,10 @@ Usage:
   hashgen.py --data-dir /var/lib/binder-scan --out-dir /srv/scan
   hashgen.py --bulk-file small.json --limit 50   # local smoke test
 
-State and the image cache live under --data-dir; only cardhashes.bin and
-manifest.json are published (atomically) into --out-dir.
+State and the image cache live under --data-dir; only cardhashes2.bin and
+manifest2.json are published (atomically) into --out-dir. The v1 files are left
+untouched so clients on an older build keep working during a rollout; delete
+them (and data/artcache/) once everyone has updated.
 """
 
 from __future__ import annotations
@@ -58,11 +86,34 @@ SCRYFALL_BULK_INDEX = "https://api.scryfall.com/bulk-data"
 USER_AGENT = "BinderScanHashJob/1.0 (github.com/flisnes/mtg-app)"
 MIN_REQUEST_INTERVAL = 0.11  # ~9 req/s, under Scryfall's 10/s guideline
 BLOB_MAGIC = b"BNDH"
-BLOB_FORMAT_VERSION = 1
+BLOB_FORMAT_VERSION = 2
 ALGO = 2  # horizontal + vertical dHash
+
+# Published filenames. v2 sits alongside the v1 pair so a client that has not
+# picked up the new build yet keeps reading a blob it can still parse.
+BLOB_NAME = "cardhashes2.bin"
+MANIFEST_NAME = "manifest2.json"
+
+# Scryfall's `normal` image size, and the client's CANONICAL_CARD. Asserted per
+# image: if Scryfall ever changes it, the crop fractions still hold but the
+# resampling chain no longer matches the client's warp bit-for-bit.
+CARD_IMAGE_SIZE = (488, 680)
+
+# The region of the card both sides hash, as fractions of CARD_IMAGE_SIZE.
+# MUST stay identical to client/src/scan/crops.ts CROP_BOXES.art. Changing it
+# on one side alone silently breaks every match; changing it on both sides
+# invalidates the whole published blob.
+ART_BOX = (0.08, 0.11, 0.92, 0.56)
 
 
 # --- dHash ------------------------------------------------------------------
+
+def crop_art(img: Image.Image) -> Image.Image:
+    """The ART_BOX region of a full card image, in pixels."""
+    w, h = img.size
+    x0, y0, x1, y1 = ART_BOX
+    return img.crop((round(x0 * w), round(y0 * h), round(x1 * w), round(y1 * h)))
+
 
 def dhash64(img: Image.Image, vertical: bool) -> int:
     """64-bit dHash. Horizontal: 9x8 resize, compare left/right neighbours.
@@ -143,18 +194,22 @@ def iter_cards(bulk_path: str):
 
 # --- Card selection (mirrors pipeline/src/slimCard.ts) ------------------------
 
-def art_crop_faces(card: dict):
-    """Yield (face_index, art_crop_uri) for every hashable face of a card."""
+def card_image_faces(card: dict):
+    """Yield (face_index, normal_image_uri) for every hashable face of a card.
+
+    `normal` is the whole card at 488x680, not the art crop: see the module
+    docstring for why the full card is what gets hashed.
+    """
     uris = card.get("image_uris")
     if uris:
-        art = uris.get("art_crop")
-        if art:
-            yield 0, art
+        img = uris.get("normal")
+        if img:
+            yield 0, img
         return
     for i, face in enumerate(card.get("card_faces") or []):
-        art = (face.get("image_uris") or {}).get("art_crop")
-        if art:
-            yield i, art
+        img = (face.get("image_uris") or {}).get("normal")
+        if img:
+            yield i, img
 
 
 def keep_card(card: dict) -> bool:
@@ -168,15 +223,28 @@ def keep_card(card: dict) -> bool:
     return True
 
 
+def scan_excluded(card: dict) -> bool:
+    """Printings the camera must never suggest, on top of keep_card.
+
+    Playtest cards (Mystery Booster and friends) are mostly white with a few
+    lines of black text, so they sit close to whatever low-texture surface the
+    camera happens to see and a real session kept locking onto them off a bare
+    table. client/src/scan/exclusions.ts filters them out of already-downloaded
+    blobs by set/collector number; this is the durable version, using the flag
+    Scryfall actually publishes.
+    """
+    return "playtest" in (card.get("promo_types") or [])
+
+
 # --- Image cache --------------------------------------------------------------
 
 def cache_path(cache_dir: str, uri: str) -> str:
     return os.path.join(cache_dir, hashlib.sha1(uri.encode()).hexdigest() + ".jpg")
 
 
-def fetch_art(session: requests.Session, limiter: RateLimiter,
-              cache_dir: str, uri: str) -> str | None:
-    """Return the cached file path for an art crop, downloading if missing."""
+def fetch_image(session: requests.Session, limiter: RateLimiter,
+                cache_dir: str, uri: str) -> str | None:
+    """Return the cached file path for a card image, downloading if missing."""
     path = cache_path(cache_dir, uri)
     if os.path.exists(path):
         return path
@@ -217,9 +285,9 @@ def sha256_file(path: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Binder scan-hash generation job")
     ap.add_argument("--data-dir", default="./data",
-                    help="state + permanent art-crop cache (never served)")
+                    help="state + permanent card-image cache (never served)")
     ap.add_argument("--out-dir", default="./out",
-                    help="published dir (served by Caddy): cardhashes.bin + manifest.json")
+                    help=f"published dir (served by Caddy): {BLOB_NAME} + {MANIFEST_NAME}")
     ap.add_argument("--bulk-file", default=None,
                     help="use a local bulk JSON instead of downloading (testing)")
     ap.add_argument("--limit", type=int, default=None,
@@ -228,7 +296,9 @@ def main() -> int:
                     help="run even if the bulk updated_at is unchanged")
     args = ap.parse_args()
 
-    cache_dir = os.path.join(args.data_dir, "artcache")
+    # Separate from v1's artcache/ so both can coexist during the rollout and
+    # the 8.4 GB of now-unused art crops can be deleted in one go afterwards.
+    cache_dir = os.path.join(args.data_dir, "cardcache")
     os.makedirs(cache_dir, exist_ok=True)
     os.makedirs(args.out_dir, exist_ok=True)
     state_path = os.path.join(args.data_dir, "state.json")
@@ -241,10 +311,11 @@ def main() -> int:
     session.headers["User-Agent"] = USER_AGENT
     limiter = RateLimiter(MIN_REQUEST_INTERVAL)
 
-    # Hash cache: art for an existing printing never changes, so hashes are as
-    # permanent as the image cache. Keyed by cache filename, hex-encoded.
-    # Without this every run re-decodes ~90k JPEGs for no reason.
-    hashcache_path = os.path.join(args.data_dir, "hashcache.json")
+    # Hash cache: the image for an existing printing never changes, so hashes
+    # are as permanent as the image cache. Keyed by cache filename, hex-encoded.
+    # Without this every run re-decodes ~90k JPEGs for no reason. Versioned
+    # with the crop contract: a v1 entry is the hash of a different region.
+    hashcache_path = os.path.join(args.data_dir, "hashcache-v2.json")
     hashcache: dict[str, list[str]] = {}
     if os.path.exists(hashcache_path):
         try:
@@ -259,7 +330,7 @@ def main() -> int:
     else:
         entry = find_bulk_entry(session, limiter)
         bulk_updated_at = entry["updated_at"]
-        blob_published = os.path.exists(os.path.join(args.out_dir, "cardhashes.bin"))
+        blob_published = os.path.exists(os.path.join(args.out_dir, BLOB_NAME))
         if (not args.force and blob_published
                 and state.get("bulkUpdatedAt") == bulk_updated_at):
             print(f"[scanjob] bulk unchanged ({bulk_updated_at}), nothing to do")
@@ -276,11 +347,12 @@ def main() -> int:
     # Hash every kept printing face. The art index (id/face -> cache file) is
     # rewritten each run for verify.py's self-match test.
     records: list[tuple[int, int, bytes, int]] = []
-    art_index_path = os.path.join(args.data_dir, "artindex.jsonl")
-    seen = kept = fetched = failed = reused = 0
+    card_index_path = os.path.join(args.data_dir, "cardindex.jsonl")
+    seen = kept = fetched = failed = reused = excluded = 0
+    odd_size = 0
     started = time.monotonic()
 
-    with open(art_index_path, "w", encoding="utf-8") as art_index:
+    with open(card_index_path, "w", encoding="utf-8") as card_index:
         for card in iter_cards(bulk_path):
             seen += 1
             if seen % 5000 == 0:
@@ -289,9 +361,12 @@ def main() -> int:
                       f"{failed} failed ({rate:.0f} cards/s)…")
             if not keep_card(card):
                 continue
-            for face, uri in art_crop_faces(card):
+            if scan_excluded(card):
+                excluded += 1
+                continue
+            for face, uri in card_image_faces(card):
                 was_cached = os.path.exists(cache_path(cache_dir, uri))
-                path = fetch_art(session, limiter, cache_dir, uri)
+                path = fetch_image(session, limiter, cache_dir, uri)
                 if path is None:
                     failed += 1
                     continue
@@ -305,8 +380,11 @@ def main() -> int:
                 else:
                     try:
                         with Image.open(path) as img:
-                            h = dhash64(img, vertical=False)
-                            v = dhash64(img, vertical=True)
+                            if img.size != CARD_IMAGE_SIZE:
+                                odd_size += 1
+                            art = crop_art(img)
+                            h = dhash64(art, vertical=False)
+                            v = dhash64(art, vertical=True)
                     except OSError as e:
                         print(f"[scanjob] WARN: unreadable image {path}: {e}",
                               file=sys.stderr)
@@ -314,7 +392,7 @@ def main() -> int:
                         continue
                     hashcache[filename] = [f"{h:016x}", f"{v:016x}"]
                 records.append((h, v, uuid.UUID(card["id"]).bytes, face))
-                art_index.write(json.dumps(
+                card_index.write(json.dumps(
                     {"id": card["id"], "face": face,
                      "file": os.path.basename(path)}) + "\n")
                 kept += 1
@@ -346,11 +424,12 @@ def main() -> int:
         print(f"[scanjob] blob unchanged (v{version}), beacon not bumped")
     else:
         version = int(state.get("version", 0)) + 1
-        blob_path = os.path.join(args.out_dir, "cardhashes.bin")
+        blob_path = os.path.join(args.out_dir, BLOB_NAME)
         os.replace(blob_tmp.name, blob_path)
         os.chmod(blob_path, 0o644)
         manifest = {
             "version": version,
+            "formatVersion": BLOB_FORMAT_VERSION,
             "algo": ALGO,
             "count": len(records),
             "bytes": os.path.getsize(blob_path),
@@ -358,11 +437,11 @@ def main() -> int:
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "bulkUpdatedAt": bulk_updated_at,
         }
-        manifest_tmp = os.path.join(args.out_dir, ".manifest.json.tmp")
+        manifest_tmp = os.path.join(args.out_dir, "." + MANIFEST_NAME + ".tmp")
         with open(manifest_tmp, "w") as f:
             json.dump(manifest, f, indent=2)
-        os.replace(manifest_tmp, os.path.join(args.out_dir, "manifest.json"))
-        os.chmod(os.path.join(args.out_dir, "manifest.json"), 0o644)
+        os.replace(manifest_tmp, os.path.join(args.out_dir, MANIFEST_NAME))
+        os.chmod(os.path.join(args.out_dir, MANIFEST_NAME), 0o644)
         print(f"[scanjob] published v{version}: {len(records)} records, "
               f"{manifest['bytes'] / 1e6:.1f} MB, sha256={blob_sha[:8]}")
 
@@ -375,7 +454,12 @@ def main() -> int:
 
     print(f"[scanjob] done: {seen} cards seen, {kept} faces hashed "
           f"({reused} hashes reused, {fetched} new images fetched, "
-          f"{failed} failed)")
+          f"{failed} failed, {excluded} playtest cards excluded)")
+    if odd_size:
+        print(f"[scanjob] WARN: {odd_size} images were not "
+              f"{CARD_IMAGE_SIZE[0]}x{CARD_IMAGE_SIZE[1]}; the crop still "
+              f"applies but the resampling no longer matches the client's warp",
+              file=sys.stderr)
     return 0
 
 

@@ -14,7 +14,7 @@ import { resolveWithOcr, type OcrResolution } from '../scan/ocr.js';
 import {
   checkScanDataUpdate,
   downloadScanData,
-  getInstalledScanData,
+  getUsableScanData,
   installScanBlob,
   type ScanDataRow,
 } from '../scan/store.js';
@@ -69,7 +69,9 @@ export function ScanTest() {
     filterScanIndex(parseHashBlob(blob), await getScanExcludedIds());
 
   useEffect(() => {
-    void getInstalledScanData().then(async (row) => {
+    // getUsableScanData, not getInstalledScanData: a row left from the v1
+    // blob format would make buildIndex throw on mount.
+    void getUsableScanData().then(async (row) => {
       if (!row) return;
       setInstalled(row);
       setIndex(await buildIndex(row.blob));
@@ -321,7 +323,7 @@ export function ScanTest() {
             </button>
           )}
           <label className="scan-file-btn">
-            Load cardhashes.bin…
+            Load cardhashes2.bin…
             <input
               type="file"
               accept=".bin"

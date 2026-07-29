@@ -15,7 +15,7 @@ import type { ScanPipelineResult } from '../scan/pipeline.js';
 import { CANDIDATE_MAX_DISTANCE, distancesForIds } from '../scan/match.js';
 import { resolveWithOcr } from '../scan/ocr.js';
 import { playPop } from '../scan/pop.js';
-import { checkScanDataUpdate, downloadScanData, getInstalledScanData, type ScanDataManifest } from '../scan/store.js';
+import { checkScanDataUpdate, downloadScanData, getUsableScanData, type ScanDataManifest } from '../scan/store.js';
 import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
 import { useToast } from './Toast.js';
@@ -354,7 +354,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const installed = await getInstalledScanData();
+      const installed = await getUsableScanData();
       if (cancelled) return;
       if (installed) {
         const index = await buildIndex(installed.blob);

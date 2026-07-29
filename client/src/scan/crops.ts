@@ -1,6 +1,12 @@
 // Crop boxes as data, not code (handover §S3) — fractions of the canonical
-// warped card rect. Old frames may need their own boxes later.
+// warped card rect.
 
+/**
+ * The size every detected card is warped to. Deliberately identical to
+ * Scryfall's `normal` image size: scanjob/hashgen.py crops CROP_BOXES.art out
+ * of that image to build the index, so both sides hash the same region of the
+ * same geometry and no per-layout knowledge is needed on either side.
+ */
 export const CANONICAL_CARD = { width: 488, height: 680 } as const;
 
 export interface CropBox {
@@ -11,7 +17,15 @@ export interface CropBox {
 }
 
 export const CROP_BOXES: Record<'art' | 'infoStrip', CropBox> = {
-  /** Art window of the modern frame. */
+  /**
+   * The region matched against the hash index. On a modern frame this is the
+   * art window; on other layouts it is whatever happens to be printed there,
+   * which is fine because the index hashes the identical box.
+   *
+   * MUST stay identical to ART_BOX in scanjob/hashgen.py. Changing it on one
+   * side alone silently breaks every match; changing it on both sides
+   * invalidates the whole published blob and needs a format-version bump.
+   */
   art: { x0: 0.08, y0: 0.11, x1: 0.92, y1: 0.56 },
   /**
    * Bottom-left info block: both printed lines — collector number + rarity,

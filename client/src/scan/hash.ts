@@ -1,5 +1,5 @@
-// dHash-64 of card art, bit-identical with scanjob/hashgen.py (which hashes
-// Scryfall art crops with Pillow). Both sides:
+// dHash-64 of a card crop, bit-identical with scanjob/hashgen.py (which crops
+// the same box out of Scryfall's 488×680 card image with Pillow). Both sides:
 //   horizontal: grayscale → bilinear resize to 9×8 → bit = px[y][x] > px[y][x+1]
 //   vertical:   grayscale → bilinear resize to 8×9 → bit = px[y][x] > px[y+1][x]
 //   packing:    MSB-first row-major — bit (63 − (y·8 + x)) = comparison (y, x)

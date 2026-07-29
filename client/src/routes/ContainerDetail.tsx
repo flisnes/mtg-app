@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
-import { DECK_FORMATS, type DeckBoard, type DeckFormat, type OracleCard, type Priced, type Printing } from '@mtg/shared';
+import {
+  DECK_FORMATS,
+  type ContainerKind,
+  type DeckBoard,
+  type DeckFormat,
+  type OracleCard,
+  type Priced,
+  type Printing,
+} from '@mtg/shared';
 import { db } from '../db/schema.js';
 import {
   getOracleCardsByIds,
@@ -14,10 +22,12 @@ import {
   addDeckCardsBulk,
   deleteDeck,
   renameDeck,
+  setContainerForTrade,
   setDeckFormat,
 } from '../db/dataAccess.js';
 import { addToWishlistBulk } from '../db/dataAccess.js';
 import { checkDeckLegality, formatLabel, type LegalityReport } from '../deck/legality.js';
+import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { buildDeckText } from '../deck/deckText.js';
 import { shareDeckLink } from '../deck/share.js';
 import { getUserProfile } from '../account/api.js';
@@ -68,7 +78,13 @@ interface DeckCardEdit {
   hasCommander: boolean;
 }
 
-export function DeckDetail() {
+/**
+ * One deck, binder or box. The same screen for all three (they're the same
+ * stored row — see deck/containers.ts): a binder or box simply has no format, no
+ * legality panel, no sideboard or command zone, and swaps deck-brewing actions
+ * for storage ones ("mark everything in here for trade").
+ */
+export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -164,20 +180,39 @@ export function DeckDetail() {
     [data],
   );
 
+  const meta = CONTAINER_META[kind];
+  const isDeck = kind === 'deck';
+
   if (data === undefined) return <div className="page">Loading…</div>;
-  if (!data.deck) return <div className="page">Deck not found.</div>;
+  // A row is only reachable under its own kind's route, so a mismatch (an old
+  // bookmark, a hand-typed hash) is a miss rather than the wrong screen.
+  if (!data.deck || containerKind(data.deck) !== kind) {
+    return <div className="page">{meta.Noun} not found.</div>;
+  }
   const deck = data.deck;
-  const isCommander = (deck.format ?? 'casual') === 'commander';
+  const isCommander = isDeck && (deck.format ?? 'casual') === 'commander';
   const commander = sortRows(data.rows.filter((r) => r.board === 'commander'), sort);
   const main = sortRows(data.rows.filter((r) => r.board === 'main'), sort);
   const side = sortRows(data.rows.filter((r) => r.board === 'side'), sort);
 
   async function goBack() {
-    const candidates = await computeDeckWishlistCandidates(id);
+    // Only a brewed deck has "cards I still need" — a binder or box holds what
+    // you already own, so there's nothing to wishlist on the way out.
+    const candidates = isDeck ? await computeDeckWishlistCandidates(id) : [];
     if (candidates.length) {
       setExit(candidates);
       setPicked(new Set(candidates.map((c) => c.oracleId))); // all ticked by default
-    } else navigate('/decks');
+    } else navigate(meta.path);
+  }
+
+  /** Storage action: put every card filed here on the tradelist, or take it off. */
+  async function markAllForTrade(forTrade: boolean) {
+    const n = await setContainerForTrade(id, forTrade);
+    if (n === 0) {
+      toast(forTrade ? 'Nothing here is in your collection to mark' : `Nothing in this ${meta.noun} was for trade`);
+    } else {
+      toast(`${forTrade ? 'Marked' : 'Unmarked'} ${n} card${n === 1 ? '' : 's'} for trade`);
+    }
   }
 
   async function addMissingToWishlist(candidates: MissingCard[]) {
@@ -190,7 +225,7 @@ export function DeckDetail() {
       );
       toast(`Added ${chosen.length} card${chosen.length === 1 ? '' : 's'} to wishlist`);
     }
-    navigate('/decks');
+    navigate(meta.path);
   }
 
   function exportDeck() {
@@ -200,7 +235,7 @@ export function DeckDetail() {
       commander.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
     );
     downloadText(`${deck.name.replace(/[^\w-]+/g, '_')}.txt`, text);
-    toast('Exported deck');
+    toast(`Exported ${meta.noun}`);
   }
 
   async function shareDeck() {
@@ -219,26 +254,35 @@ export function DeckDetail() {
     <section className="page">
       <div className="deck-head">
         <button className="linklike" onClick={goBack}>
-          ‹ Decks
+          ‹ {meta.Plural}
         </button>
         <OptionsMenu
-          label="Deck options"
+          label={`${meta.Noun} options`}
           actions={[
             { label: 'Scan cards', icon: 'camera', onClick: () => setScanning('add') },
-            { label: 'Re-scan deck', icon: 'refresh', onClick: () => setScanning('rescan') },
+            { label: `Re-scan ${meta.noun}`, icon: 'refresh', onClick: () => setScanning('rescan') },
             { label: 'Import list', icon: 'import', onClick: () => setShowImport((v) => !v) },
             { label: 'Export', icon: 'export', onClick: exportDeck },
-            ...(account.enabled && account.session
+            // Storage mirrors real shelves, so "everything in this box is up for
+            // grabs" is the action that earns its place here; a deck you're
+            // brewing isn't offered for trade wholesale.
+            ...(isDeck
+              ? []
+              : [
+                  { label: 'Mark all for trade', icon: 'tradelist' as const, onClick: () => void markAllForTrade(true) },
+                  { label: 'Remove all from trade', icon: 'close' as const, onClick: () => void markAllForTrade(false) },
+                ]),
+            ...(isDeck && account.enabled && account.session
               ? [{ label: 'Share deck', icon: 'share' as const, onClick: () => void shareDeck() }]
               : []),
             {
-              label: 'Delete deck',
+              label: `Delete ${meta.noun}`,
               icon: 'trash',
               danger: true,
               onClick: async () => {
                 if (!window.confirm(`Delete “${deck.name}”? This can’t be undone.`)) return;
                 await deleteDeck(id);
-                navigate('/decks');
+                navigate(meta.path);
               },
             },
           ]}
@@ -257,30 +301,45 @@ export function DeckDetail() {
           if (e.key === 'Enter') e.currentTarget.blur(); // commits via onBlur
           else if (e.key === 'Escape') setNameDraft(null); // discard edits
         }}
-        aria-label="Deck name"
+        aria-label={`${meta.Noun} name`}
       />
 
       <div className="deck-meta">
-        <label className="field" style={{ maxWidth: 160 }}>
-          <span>Format</span>
-          <select value={deck.format ?? 'casual'} onChange={(e) => void setDeckFormat(id, e.target.value as DeckFormat)}>
-            {DECK_FORMATS.map((f) => (
-              <option key={f} value={f}>
-                {formatLabel(f)}
-              </option>
-            ))}
-          </select>
-        </label>
+        {isDeck && (
+          <label className="field" style={{ maxWidth: 160 }}>
+            <span>Format</span>
+            <select value={deck.format ?? 'casual'} onChange={(e) => void setDeckFormat(id, e.target.value as DeckFormat)}>
+              {DECK_FORMATS.map((f) => (
+                <option key={f} value={f}>
+                  {formatLabel(f)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <p className="search-meta">
-          You own <strong>{summary.have}</strong> of <strong>{summary.need}</strong> cards
+          {isDeck ? (
+            <>
+              You own <strong>{summary.have}</strong> of <strong>{summary.need}</strong> cards
+            </>
+          ) : (
+            <>
+              <strong>{summary.need}</strong> card{summary.need === 1 ? '' : 's'} filed here
+              {/* Filed but not in the collection: the app's records and the real
+                  shelf disagree, which is worth saying out loud. */}
+              {summary.need > summary.have && (
+                <> · <strong>{summary.need - summary.have}</strong> not in your collection</>
+              )}
+            </>
+          )}
           {value && <> · worth <strong>{value}</strong></>}
         </p>
       </div>
 
-      <LegalityPanel report={legality} format={deck.format ?? 'casual'} />
+      {isDeck && <LegalityPanel report={legality} format={deck.format ?? 'casual'} />}
 
       <div className="list-toolbar">
-        <p className="search-meta grow">Search above to add cards to this deck.</p>
+        <p className="search-meta grow">Search above to add cards to this {meta.noun}.</p>
         <SortControls prefs={sort} onChange={setSort} groups />
         <ViewToggle mode={view} onChange={setView} />
       </div>
@@ -290,31 +349,54 @@ export function DeckDetail() {
           deckId={id}
           onDone={(added) => {
             setShowImport(false);
-            toast(`Added ${added} cards to the deck`);
+            toast(`Added ${added} cards to the ${meta.noun}`);
           }}
         />
       )}
 
-      {(isCommander || commander.length > 0) && (
+      {isDeck ? (
+        <>
+          {(isCommander || commander.length > 0) && (
+            <Board
+              title="Commander"
+              rows={commander}
+              group="none"
+              view={view}
+              issues={legality.issues}
+              onEdit={setInfo}
+              commanderDeck={isCommander}
+              emptyHint="No commander yet. Use ♛ on a card below, or the +Cmdr button in search."
+            />
+          )}
+          <Board title="Mainboard" rows={main} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} hasCommander={commander.length > 0} />
+          <Board title="Sideboard" rows={side} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} hasCommander={commander.length > 0} />
+        </>
+      ) : (
+        // Storage has one pile — no boards to split it into. Slots written before
+        // (or by an import that guessed a sideboard) still show up here.
         <Board
-          title="Commander"
-          rows={commander}
-          group="none"
+          title="Cards"
+          rows={sortRows([...commander, ...main, ...side], sort)}
+          group={sort.group}
           view={view}
           issues={legality.issues}
           onEdit={setInfo}
-          commanderDeck={isCommander}
-          emptyHint="No commander yet. Use ♛ on a card below, or the +Cmdr button in search."
+          emptyHint={`Nothing filed here yet. Search above, scan a stack, or select cards in your collection and file them into this ${meta.noun}.`}
         />
       )}
-      <Board title="Mainboard" rows={main} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} hasCommander={commander.length > 0} />
-      <Board title="Sideboard" rows={side} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} hasCommander={commander.length > 0} />
 
       {info && <CardSheet oracleCard={info.card} deckCard={info.deckCard} onClose={() => setInfo(null)} />}
 
       {scanning && (
         <ScanSheet
-          target={{ kind: 'deck', deckId: id, deckName: deck.name, format: deck.format, rescan: scanning === 'rescan' }}
+          target={{
+            kind: 'deck',
+            deckId: id,
+            deckName: deck.name,
+            containerKind: kind,
+            format: deck.format,
+            rescan: scanning === 'rescan',
+          }}
           onClose={() => setScanning(null)}
         />
       )}
@@ -332,7 +414,7 @@ export function DeckDetail() {
             });
           const toggleAll = () => setPicked(allPicked ? new Set() : new Set(exit.map((c) => c.oracleId)));
           return (
-            <Sheet onClose={() => navigate('/decks')} label="Add missing cards to wishlist">
+            <Sheet onClose={() => navigate(meta.path)} label="Add missing cards to wishlist">
               <h2 style={{ margin: 0 }}>Add missing cards to wishlist?</h2>
               <p className="fine-print">
                 This deck needs {exit.reduce((s, c) => s + c.addQty, 0)} card{exit.length === 1 ? '' : 's'} you don’t own
@@ -363,7 +445,7 @@ export function DeckDetail() {
                 ))}
               </ul>
               <div className="sheet-actions">
-                <button onClick={() => navigate('/decks')}>Skip</button>
+                <button onClick={() => navigate(meta.path)}>Skip</button>
                 <button className="primary" disabled={chosen.length === 0} onClick={() => addMissingToWishlist(exit)}>
                   Add {chosen.length} to wishlist
                 </button>

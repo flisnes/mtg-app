@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import type { ContainerKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
+import { CONTAINER_META } from '../deck/containers.js';
 import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
 import { addDeckCardsBulk, removeCollectionEntriesBulk, setQuantityForTradeBulk } from '../db/dataAccess.js';
 import { CardSheet } from './CardSheet.js';
@@ -9,7 +11,8 @@ import { collectionCardItem } from './cardRows.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { LoadMoreSentinel } from './LoadMoreSentinel.js';
 import { BulkActionBar, type BulkAction } from './BulkActionBar.js';
-import { DeckPickerSheet } from './DeckPickerSheet.js';
+import { ContainerPickerSheet } from './ContainerPickerSheet.js';
+import { usePlacementIndex } from '../db/usePlacements.js';
 import { useMultiSelect } from './useMultiSelect.js';
 import { PileView, CardBackSheet, type PileEntry } from './PileView.js';
 import { SortControls, priceValue, pricedForFinish, sortCards, useCardSort } from './CardSorting.js';
@@ -42,7 +45,8 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const moverFlags = useMoverFlags();
   const toast = useToast();
   const sel = useMultiSelect();
-  const [pickingDeck, setPickingDeck] = useState(false);
+  const placements = usePlacementIndex();
+  const [pickingContainer, setPickingContainer] = useState(false);
 
   // scryfallId → recorded price change; only loaded while a change sort is
   // active (the histories table is the biggest user-data table).
@@ -116,14 +120,15 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     toast(`Deleted ${n} ${n === 1 ? 'entry' : 'entries'}`);
     sel.exit();
   }
-  async function bulkAddDeck(deckId: string) {
-    setPickingDeck(false);
+  /** File the selection into a deck, binder or box (one card per selected entry). */
+  async function bulkAddContainer(containerId: string, kind: ContainerKind) {
+    setPickingContainer(false);
     const n = selectedRows.length;
     await addDeckCardsBulk(
-      deckId,
+      containerId,
       selectedRows.map((r) => ({ oracleId: r.entry.oracleId, quantity: 1, board: 'main' as const, scryfallId: r.entry.scryfallId })),
     );
-    toast(`Added ${n} card${plural(n)} to deck`);
+    toast(`Added ${n} card${plural(n)} to ${CONTAINER_META[kind].noun}`);
     sel.exit();
   }
 
@@ -135,7 +140,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     : [
         { label: 'Add to tradelist', icon: 'tradelist', onClick: bulkAddTradelist },
         { label: 'Remove from tradelist', icon: 'close', onClick: bulkRemoveTradelist },
-        { label: 'Add to deck', icon: 'decks', onClick: () => setPickingDeck(true) },
+        { label: 'File away', icon: 'decks', onClick: () => setPickingContainer(true) },
         { label: 'Delete', icon: 'trash', danger: true, onClick: bulkDelete },
       ];
 
@@ -205,7 +210,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           selectable={sel.active}
           selectedKeys={sel.selected}
           onToggleSelect={sel.toggle}
-          items={visible.map((r) => collectionCardItem(r, { moverFlags, onClick: () => setEditing(r) }))}
+          items={visible.map((r) => collectionCardItem(r, { moverFlags, placements, onClick: () => setEditing(r) }))}
         />
       )}
       {!pileMode && (
@@ -225,7 +230,9 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           actions={bulkActions}
         />
       )}
-      {pickingDeck && <DeckPickerSheet onPick={bulkAddDeck} onClose={() => setPickingDeck(false)} />}
+      {pickingContainer && (
+        <ContainerPickerSheet onPick={bulkAddContainer} onClose={() => setPickingContainer(false)} />
+      )}
 
       {editing?.oracle && <CardSheet oracleCard={editing.oracle} entry={editing.entry} onClose={() => setEditing(null)} />}
       {info?.oracle && <CardSheet oracleCard={info.oracle} initialScryfallId={info.entry.scryfallId} readOnly onClose={() => setInfo(null)} />}

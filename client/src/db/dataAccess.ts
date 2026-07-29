@@ -1,6 +1,7 @@
 import type {
   CollectionEntry,
   Condition,
+  ContainerKind,
   Deck,
   DeckBoard,
   DeckCard,
@@ -819,7 +820,29 @@ export async function clearTradelist(): Promise<number> {
 // ---------------------------------------------------------------------------
 // Decks (beta plan §4). Deck slots reference oracle cards ("4x Lightning Bolt");
 // legality checking lives in deck/legality.ts.
+//
+// Binders and boxes are the same rows with `kind` set: storage instead of a
+// brewed list. Every function below works on all three — a binder just never
+// gets a format, a sideboard or a commander — so there is one code path for
+// adds, scans, imports, re-scans and deletion, not three.
 // ---------------------------------------------------------------------------
+
+/**
+ * The event fields that name where a slot change happened. `deckKind` is only
+ * written for storage, so a deck event looks exactly as it always did.
+ */
+function containerRef(deck: Deck | undefined): { deckName?: string; deckKind?: ContainerKind } {
+  if (!deck) return {};
+  const kind = deck.kind ?? 'deck';
+  return { deckName: deck.name, ...(kind === 'deck' ? {} : { deckKind: kind }) };
+}
+
+/** Fallback name per kind when the user creates one without typing a name. */
+const UNTITLED: Record<ContainerKind, string> = {
+  deck: 'Untitled deck',
+  binder: 'Untitled binder',
+  box: 'Untitled box',
+};
 
 /** Bump the deck's updatedAt and stage it; returns the deck (for its name). */
 async function touchDeck(deckId: string, now: number): Promise<Deck | undefined> {
@@ -831,9 +854,21 @@ async function touchDeck(deckId: string, now: number): Promise<Deck | undefined>
   return deck;
 }
 
-export async function createDeck(name: string, format: DeckFormat = 'casual'): Promise<string> {
+/** Create a deck, binder or box. Only decks carry a format. */
+export async function createContainer(
+  name: string,
+  kind: ContainerKind = 'deck',
+  format: DeckFormat = 'casual',
+): Promise<string> {
   const now = Date.now();
-  const deck: Deck = { id: newId(), name: name.trim() || 'Untitled deck', format, createdAt: now, updatedAt: now };
+  const deck: Deck = {
+    id: newId(),
+    name: name.trim() || UNTITLED[kind],
+    kind,
+    ...(kind === 'deck' ? { format } : {}),
+    createdAt: now,
+    updatedAt: now,
+  };
   await db.transaction('rw', [db.decks, db.outbox], async () => {
     await db.decks.add(deck);
     await stagePut('decks', deck);
@@ -845,7 +880,7 @@ export async function renameDeck(id: string, name: string): Promise<void> {
   await db.transaction('rw', [db.decks, db.outbox], async () => {
     const deck = await db.decks.get(id);
     if (!deck) return;
-    deck.name = name.trim() || 'Untitled deck';
+    deck.name = name.trim() || UNTITLED[deck.kind ?? 'deck'];
     deck.updatedAt = Date.now();
     await db.decks.put(deck);
     await stagePut('decks', deck);
@@ -877,7 +912,7 @@ export async function deleteDeck(id: string): Promise<void> {
         ...(c.scryfallId ? { scryfallId: c.scryfallId } : {}),
         qty: c.quantity,
         deckId: id,
-        ...(deck ? { deckName: deck.name } : {}),
+        ...containerRef(deck),
         board: c.board,
       });
     }
@@ -931,7 +966,7 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
       ...(input.scryfallId ? { scryfallId: input.scryfallId } : {}),
       qty: quantity,
       deckId: input.deckId,
-      ...(deck ? { deckName: deck.name } : {}),
+      ...containerRef(deck),
       board,
     });
   });
@@ -991,7 +1026,7 @@ export async function addDeckCardsBulk(
         ...(c.scryfallId ? { scryfallId: c.scryfallId } : {}),
         qty: c.quantity,
         deckId,
-        ...(deck ? { deckName: deck.name } : {}),
+        ...containerRef(deck),
         board: c.board,
         ...batchExtra,
       });
@@ -1037,7 +1072,7 @@ export async function reconcileDeck(
       batchId,
       ...(deck ? { batchLabel: deck.name } : {}),
     };
-    const nameExtra = deck ? { deckName: deck.name } : {};
+    const nameExtra = containerRef(deck);
 
     for (const t of target) {
       if (t.quantity <= 0) continue;
@@ -1148,7 +1183,7 @@ export async function moveDeckCard(id: string, board: DeckBoard): Promise<void> 
       ...(card.scryfallId ? { scryfallId: card.scryfallId } : {}),
       qty: card.quantity,
       deckId: card.deckId,
-      ...(deck ? { deckName: deck.name } : {}),
+      ...containerRef(deck),
     };
     await emit({ ts: now, kind: 'deck.remove', ...base, board: card.board });
     await emit({ ts: now, kind: 'deck.add', ...base, board });
@@ -1191,7 +1226,7 @@ async function patchDeckCard(
         ...(card.scryfallId ? { scryfallId: card.scryfallId } : {}),
         qty: removedAll ? card.quantity : Math.abs(delta),
         deckId: card.deckId,
-        ...(deck ? { deckName: deck.name } : {}),
+        ...containerRef(deck),
         board: card.board,
       });
     }
@@ -1210,6 +1245,76 @@ export async function updateDeckCard(id: string, patch: { quantity: number; scry
 
 export async function removeDeckCard(id: string): Promise<void> {
   await patchDeckCard(id, { quantity: 0 });
+}
+
+/**
+ * Mark every card in a container for trade (or clear the flag), the bulk
+ * "this whole box is up for grabs" action. Container slots name an oracle card
+ * and (usually) a preferred printing, so each slot is matched against the
+ * copies actually owned — the slot's printing first, then any other edition of
+ * the same card — for up to the slot's quantity. Cards you don't own are
+ * skipped. Returns how many copies changed.
+ */
+export async function setContainerForTrade(containerId: string, forTrade: boolean): Promise<number> {
+  const slots = await db.deckCards.where('deckId').equals(containerId).toArray();
+  const requests: MarkForTradeRequest[] = slots.map((s) => ({
+    oracleId: s.oracleId,
+    scryfallId: s.scryfallId ?? '',
+    // A slot doesn't track condition/finish/language, so no copy scores on
+    // those: the printing decides the match, and ties go to whatever's first.
+    condition: 'NM',
+    finish: 'nonfoil',
+    lang: 'en',
+    quantity: s.quantity,
+  }));
+  return forTrade ? markOwnedForTrade(requests) : unmarkOwnedForTrade(requests);
+}
+
+/**
+ * The inverse of markOwnedForTrade: take copies back off the tradelist,
+ * preferring the requested printing. Unmarking isn't an event (nothing entered
+ * or left the collection) — the same as clearing the flag from the tradelist
+ * screen. Returns how many copies were unflagged.
+ */
+async function unmarkOwnedForTrade(requests: MarkForTradeRequest[]): Promise<number> {
+  if (requests.length === 0) return 0;
+  let unflagged = 0;
+  await db.transaction('rw', [db.collection, db.outbox], async () => {
+    const now = Date.now();
+    const oracleIds = [...new Set(requests.map((r) => r.oracleId))];
+    const owned = await db.collection.where('oracleId').anyOf(oracleIds).toArray();
+    const byOracle = new Map<string, CollectionEntry[]>();
+    for (const e of owned) {
+      const arr = byOracle.get(e.oracleId);
+      if (arr) arr.push(e);
+      else byOracle.set(e.oracleId, [e]);
+    }
+    const touched = new Set<CollectionEntry>();
+    for (const req of requests) {
+      const entries = byOracle.get(req.oracleId);
+      if (!entries) continue;
+      const ranked = [...entries].sort(
+        (a, b) => Number(b.scryfallId === req.scryfallId) - Number(a.scryfallId === req.scryfallId),
+      );
+      let remaining = req.quantity;
+      for (const e of ranked) {
+        if (remaining <= 0) break;
+        if (e.quantityForTrade <= 0) continue;
+        const take = Math.min(e.quantityForTrade, remaining);
+        e.quantityForTrade -= take;
+        e.updatedAt = now;
+        remaining -= take;
+        unflagged += take;
+        touched.add(e);
+      }
+    }
+    const writes = [...touched];
+    if (writes.length > 0) {
+      await db.collection.bulkPut(writes);
+      await stagePutMany('collection', writes);
+    }
+  });
+  return unflagged;
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,8 @@ import type { ReactElement, SVGProps } from 'react';
 export type IconName =
   | 'collection'
   | 'decks'
+  | 'binder'
+  | 'box'
   | 'trade'
   | 'tradelist'
   | 'wishlist'
@@ -60,6 +62,23 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <rect x="3" y="6" width="13" height="15" rx="2" />
       <path d="M7 6V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-2" />
+    </>
+  ),
+  // Ring binder, rings on the spine — a binder of stored cards.
+  binder: (
+    <>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M9 3v18" />
+      <circle cx="6.5" cy="8" r="1" />
+      <circle cx="6.5" cy="16" r="1" />
+    </>
+  ),
+  // Closed crate seen in three-quarter view — a box of stored cards.
+  box: (
+    <>
+      <path d="M21 8.2v7.6a2 2 0 0 1-1 1.74l-7 3.9a2 2 0 0 1-2 0l-7-3.9A2 2 0 0 1 3 15.8V8.2a2 2 0 0 1 1-1.74l7-3.9a2 2 0 0 1 2 0l7 3.9A2 2 0 0 1 21 8.2z" />
+      <polyline points="3.3 7.2 12 12 20.7 7.2" />
+      <path d="M12 21.6V12" />
     </>
   ),
   // Bidirectional swap — the act of trading.

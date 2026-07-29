@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.75.0
+
+- **Binders and boxes.** Decks are no longer the only place a card can live. The Decks tab now has three segments: **Decks**, **Binders** and **Boxes**. A binder or box works exactly like a deck minus the format and the sideboard, so you can build "Blue box" or "Small green binder" and file cards into it: search from inside it, scan a stack with the camera, re-scan it to reconcile what's really there, import or export a list, rename it, delete it. In your collection, select a few cards and hit **File away** to drop them into any deck, binder or box (you can create one right there in the picker).
+- **Cards tell you where they are.** Every card image in your collection now carries a small corner glyph for the deck, binder or box it's filed in, and the card sheet has a **Filed in** row of pills. Tap a pill to jump straight to that deck, binder or box. Filed a card in two places at once? The badge and the pill row flag it (⚠ 2 placed / 1 owned) instead of stopping you: the app trusts your shelves over its bookkeeping.
+- **A whole box up for grabs.** A binder or box has **Mark all for trade** and **Remove all from trade** in its ⋯ menu, so the trade-fodder crate goes on your tradelist in one tap.
+
 ## 0.74.4
 
 - **Card data keeps flowing.** Scryfall changed how they hand out their nightly card dump (a new gzipped JSONL format), which had quietly broken our nightly rebuild — new cards and fresh prices would have stopped arriving. Reconnected to the new format, so the daily updates land as usual.

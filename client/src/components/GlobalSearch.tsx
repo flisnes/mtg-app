@@ -9,11 +9,12 @@ import {
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { matchPath, useLocation } from 'react-router-dom';
-import type { Color, DeckBoard, DeckFormat, OracleCard, Priced } from '@mtg/shared';
+import { CONTAINER_KINDS, type Color, type DeckBoard, type DeckFormat, type OracleCard, type Priced } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
 import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
 import { formatLabel } from '../deck/legality.js';
+import { CONTAINER_META } from '../deck/containers.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
 import { ScopedResults, type Scope } from './ScopedResults.js';
@@ -40,8 +41,12 @@ import { useOwnAvatar } from '../account/ownProfile.js';
 // keep a quick-add.
 function useSearchTarget(): AddTarget {
   const { pathname } = useLocation();
-  const deckId = matchPath('/decks/:id', pathname)?.params.id;
-  if (deckId) return { kind: 'deck', deckId };
+  // Decks, binders and boxes all take the 'deck' target (same stored rows);
+  // containerKind only changes the wording and hides the board buttons.
+  for (const kind of CONTAINER_KINDS) {
+    const id = matchPath(`${CONTAINER_META[kind].path}/:id`, pathname)?.params.id;
+    if (id) return { kind: 'deck', deckId: id, containerKind: kind };
+  }
   if (pathname === '/' || pathname === '/collection') return { kind: 'collection' };
   if (pathname === '/wishlist') return { kind: 'wishlist' };
   if (pathname === '/tradelist') return { kind: 'tradelist' };
@@ -246,6 +251,9 @@ function SearchOverlay({
   const profileActive = !!profile && !!session && (profileTradeOn || profileWishOn);
   const scoped = localScopes.size > 0 || profileActive;
 
+  // Wording for the container being searched from (a deck, binder or box).
+  const containerMeta = CONTAINER_META[(target.kind === 'deck' && target.containerKind) || 'deck'];
+
   // Searching from a deck filters to cards you could actually play there: legal
   // in the deck's format and, for Commander, within the commander's identity.
   const deckId = target.kind === 'deck' ? target.deckId : undefined;
@@ -287,15 +295,26 @@ function SearchOverlay({
     await addToCollection({ oracleId: card.oracleId, scryfallId: card.defaultScryfallId, condition: 'NM', finish: 'nonfoil', lang: 'en', quantityForTrade: 1 });
     toast(`Added ${card.name} to tradelist`);
   }
-  async function quickDeck(card: OracleCard, deckId: string, board: DeckBoard) {
+  async function quickDeck(card: OracleCard, deckId: string, board: DeckBoard, noun = 'deck') {
     await addDeckCard({ deckId, oracleId: card.oracleId, board });
     const suffix = board === 'side' ? ' (sideboard)' : board === 'commander' ? ' (commander)' : '';
-    toast(`Added ${card.name}${suffix} to deck`);
+    toast(`Added ${card.name}${suffix} to ${noun}`);
   }
 
   function actionsFor(card: Priced<OracleCard>): ReactNode {
     switch (target.kind) {
-      case 'deck':
+      case 'deck': {
+        // Storage is one pile: a single quick-add, no board buttons.
+        if (containerMeta.kind !== 'deck') {
+          return (
+            <button
+              title={`Add to ${containerMeta.noun}`}
+              onClick={() => quickDeck(card, target.deckId, 'main', containerMeta.noun)}
+            >
+              +<Icon name={containerMeta.icon} size={16} />
+            </button>
+          );
+        }
         return (
           <>
             <button title="Add to mainboard" onClick={() => quickDeck(card, target.deckId, 'main')}>
@@ -311,6 +330,7 @@ function SearchOverlay({
             )}
           </>
         );
+      }
       case 'collection':
         return (
           <button title="Add to collection" onClick={() => quickCollection(card)}>
@@ -347,7 +367,10 @@ function SearchOverlay({
   }
 
   const targetHint = {
-    deck: 'Adding a result puts it in this deck (main or sideboard).',
+    deck:
+      containerMeta.kind === 'deck'
+        ? 'Adding a result puts it in this deck (main or sideboard).'
+        : `Adding a result files it in this ${containerMeta.noun}.`,
     collection: 'Adding a result puts it in your collection.',
     wishlist: 'Adding a result puts it on your wishlist.',
     tradelist: 'Adding a result puts it in your collection, marked for trade.',

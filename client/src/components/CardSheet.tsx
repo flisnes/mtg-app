@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { CollectionEntry, Condition, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
 import {
   addDeckCard,
@@ -17,6 +17,9 @@ import {
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
 import { canBeCommander } from '../deck/legality.js';
+import { CONTAINER_META } from '../deck/containers.js';
+import { usePlacementIndex } from '../db/usePlacements.js';
+import { PlacementPills } from './PlacementBadge.js';
 import { db } from '../db/schema.js';
 import { getPriceHistory } from '../price/tracking.js';
 import { getMergedPriceHistory } from '../price/serverHistory.js';
@@ -51,7 +54,8 @@ export type AddTarget =
   | { kind: 'collection' }
   | { kind: 'wishlist' }
   | { kind: 'tradelist' }
-  | { kind: 'deck'; deckId: string; format?: DeckFormat }
+  /** A deck, binder or box; `containerKind` (default 'deck') picks the wording. */
+  | { kind: 'deck'; deckId: string; containerKind?: ContainerKind; format?: DeckFormat }
   | { kind: 'default' };
 
 const ADD_LABEL: Record<AddTarget['kind'], string> = {
@@ -61,6 +65,16 @@ const ADD_LABEL: Record<AddTarget['kind'], string> = {
   deck: 'Add to mainboard',
   default: 'Add to collection',
 };
+
+/** The primary button's label. Storage has one pile, so it names the container
+ *  ("Add to box") where a deck names the board it's filling. */
+function addLabel(target: AddTarget): string {
+  if (target.kind === 'deck') {
+    const meta = CONTAINER_META[target.containerKind ?? 'deck'];
+    if (meta.kind !== 'deck') return `Add to ${meta.noun}`;
+  }
+  return ADD_LABEL[target.kind];
+}
 
 /** The three personal lists a card can be filed into, in button order:
  *  the sheet leads with the list it was opened from and offers the other two
@@ -181,6 +195,9 @@ export function CardSheet({
   // at all, so those variants drop the collection-specific fields below.
   const wishAdd = mode === 'add' && addTo.kind === 'wishlist';
   const deckAdd = mode === 'add' && addTo.kind === 'deck';
+  // Adding into a real deck (not a binder or box): only then are the sideboard
+  // and command-zone buttons meaningful.
+  const deckAddIsDeck = deckAdd && (addTo.kind !== 'deck' || (addTo.containerKind ?? 'deck') === 'deck');
   // Viewing someone else's wish (Community): the same wish fields, but the
   // sheet is read-only, so nothing here is editable.
   const wishInfo = mode === 'info' && !!wishView;
@@ -284,6 +301,9 @@ export function CardSheet({
     () => db.collection.where('oracleId').equals(oracleCard.oracleId).toArray(),
     [oracleCard.oracleId],
   );
+  // Where this card is filed (deck / binder / box) — the pills under the name.
+  const placements = usePlacementIndex();
+  const placement = placements?.lookup(oracleCard.oracleId);
   const ownedQty = ownedEntries?.reduce((s, e) => s + e.quantity, 0) ?? 0;
   const ownedForTrade = ownedEntries?.reduce((s, e) => s + e.quantityForTrade, 0) ?? 0;
   // Do we own the exact printing currently shown? (Not just some other edition.)
@@ -495,6 +515,15 @@ export function CardSheet({
             {trend && trend.points > 1 && <PriceTrend trend={trend} />}
           </div>
         </div>
+
+        {/* Where the copies live. Full width under the head, since a binder or
+            box name is longer than the info column beside the art. */}
+        {placement && placement.places.length > 0 && (
+          <div className="sheet-places">
+            <span className="sheet-places-label">Filed in</span>
+            <PlacementPills info={placement} onNavigate={onClose} />
+          </div>
+        )}
 
         <div className="seg-row sheet-tabs" role="tablist" aria-label="Card view">
           <button
@@ -743,12 +772,12 @@ export function CardSheet({
                   Make commander
                 </button>
               ) : null)}
-            {deckAdd && addTo.kind === 'deck' && addTo.format === 'commander' && canBeCommander(oracleCard) && (
+            {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && addTo.format === 'commander' && canBeCommander(oracleCard) && (
               <button onClick={() => save('commander')} disabled={busy}>
                 Add as commander
               </button>
             )}
-            {deckAdd && (
+            {deckAdd && deckAddIsDeck && (
               <button onClick={() => save('side')} disabled={busy}>
                 Add to sideboard
               </button>
@@ -772,7 +801,7 @@ export function CardSheet({
               </>
             ) : (
               <button className="primary" onClick={() => save()} disabled={busy}>
-                {mode === 'add' ? ADD_LABEL[addTo.kind] : mode === 'session' ? applyLabel ?? 'Apply' : 'Save'}
+                {mode === 'add' ? addLabel(addTo) : mode === 'session' ? applyLabel ?? 'Apply' : 'Save'}
               </button>
             )}
           </div>

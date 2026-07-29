@@ -11,6 +11,7 @@ import { LoadMoreSentinel } from './LoadMoreSentinel.js';
 import { collectionCardItem, wishCardItem } from './cardRows.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
+import { usePlacementIndex } from '../db/usePlacements.js';
 
 export type Scope = 'collection' | 'wishlist' | 'tradelist';
 
@@ -35,6 +36,7 @@ export function ScopedResults({ scopes, query }: { scopes: Set<Scope>; query: st
   const [editWish, setEditWish] = useState<JoinedWish | null>(null);
   const moverFlags = useMoverFlags();
   const ownership = useOwnershipIndex();
+  const placements = usePlacementIndex();
 
   const needCollection = scopes.has('collection') || scopes.has('tradelist');
   const needWishlist = scopes.has('wishlist');
@@ -68,7 +70,10 @@ export function ScopedResults({ scopes, query }: { scopes: Set<Scope>; query: st
       for (const r of collRows ?? []) {
         if (!showAllCollection && r.entry.quantityForTrade <= 0) continue;
         if (!matches(collIndex, r.entry.id)) continue;
-        out.push({ ...collectionCardItem(r, { moverFlags, onClick: () => setEditColl(r) }), key: `c:${r.entry.id}` });
+        out.push({
+          ...collectionCardItem(r, { moverFlags, placements, onClick: () => setEditColl(r) }),
+          key: `c:${r.entry.id}`,
+        });
       }
     }
     if (needWishlist) {
@@ -82,7 +87,7 @@ export function ScopedResults({ scopes, query }: { scopes: Set<Scope>; query: st
     }
     out.sort((a, b) => a.name.localeCompare(b.name));
     return out;
-  }, [collRows, wishRows, collIndex, wishIndex, query, needCollection, needWishlist, showAllCollection, moverFlags, ownership]);
+  }, [collRows, wishRows, collIndex, wishIndex, query, needCollection, needWishlist, showAllCollection, moverFlags, ownership, placements]);
 
   const { limit, showMore } = usePagedLimit(`${query}|${[...scopes].sort().join(',')}`, 60);
   const visible = items.slice(0, limit);

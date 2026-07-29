@@ -10,8 +10,8 @@ import { GlobalSearchBar, GlobalSearchProvider } from './components/GlobalSearch
 import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
 import { Tradelist } from './routes/Tradelist.js';
-import { Decks } from './routes/Decks.js';
-import { DeckDetail } from './routes/DeckDetail.js';
+import { Containers } from './routes/Containers.js';
+import { ContainerDetail } from './routes/ContainerDetail.js';
 import { Trade } from './routes/Trade.js';
 import { History } from './routes/History.js';
 import { PriceMovers } from './routes/PriceMovers.js';
@@ -173,8 +173,14 @@ function AppShell() {
           <Route path="/tradelist" element={<Tradelist />} />
           <Route path="/import" element={<Import />} />
           <Route path="/export" element={<Export />} />
-          <Route path="/decks" element={<Decks />} />
-          <Route path="/decks/:id" element={<DeckDetail />} />
+          {/* Decks, binders and boxes: one screen, three segments (they're all
+              rows of the decks table — see deck/containers.ts). */}
+          <Route path="/decks" element={<Containers kind="deck" />} />
+          <Route path="/decks/:id" element={<ContainerDetail kind="deck" />} />
+          <Route path="/binders" element={<Containers kind="binder" />} />
+          <Route path="/binders/:id" element={<ContainerDetail kind="binder" />} />
+          <Route path="/boxes" element={<Containers kind="box" />} />
+          <Route path="/boxes/:id" element={<ContainerDetail kind="box" />} />
           <Route path="/trade" element={<Trade />} />
           <Route path="/history" element={<History />} />
           <Route path="/movers" element={<PriceMovers />} />

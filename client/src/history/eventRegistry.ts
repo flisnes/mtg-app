@@ -1,5 +1,6 @@
 import type { EventSource, RemovalReason, UserEvent, UserEventKind } from '@mtg/shared';
 import type { IconName } from '../components/icons.js';
+import { CONTAINER_META } from '../deck/containers.js';
 
 // Single source of truth for how a recorded UserEvent is presented — its label,
 // icon, and qty direction — plus the filter categories the edit-history view
@@ -30,6 +31,17 @@ function boardSuffix(e: UserEvent): string {
   return e.board === 'side' ? ' (sideboard)' : e.board === 'commander' ? ' (commander)' : '';
 }
 
+// Deck slot events cover binders and boxes too (same rows); `deckKind` is only
+// set for storage, so anything without it reads as a deck, as it always did.
+function containerIcon(e: UserEvent): IconName {
+  return CONTAINER_META[e.deckKind ?? 'deck'].icon;
+}
+
+/** "a deck" / "a binder" / "a box", for an event whose container is long gone. */
+function containerNoun(e: UserEvent): string {
+  return `a ${CONTAINER_META[e.deckKind ?? 'deck'].noun}`;
+}
+
 /** A collection event came from a trade (new events carry source; old ones only tradeId). */
 function isTrade(e: UserEvent): boolean {
   return e.source === 'trade' || e.tradeId != null;
@@ -50,9 +62,9 @@ export function describeEvent(e: UserEvent): EventDisplay {
       if (isTrade(e)) return { verb: 'Traded away', icon: 'trade', direction: 'out' };
       return { verb: REASON_LABELS[e.reason ?? 'sold'], icon: 'minus', direction: 'out' };
     case 'deck.add':
-      return { verb: `Added to ${e.deckName ?? 'a deck'}${boardSuffix(e)}`, icon: 'decks', direction: 'in' };
+      return { verb: `Added to ${e.deckName ?? containerNoun(e)}${boardSuffix(e)}`, icon: containerIcon(e), direction: 'in' };
     case 'deck.remove':
-      return { verb: `Removed from ${e.deckName ?? 'a deck'}`, icon: 'decks', direction: 'out' };
+      return { verb: `Removed from ${e.deckName ?? containerNoun(e)}`, icon: containerIcon(e), direction: 'out' };
     case 'wish.add':
       return { verb: 'Added to wishlist', icon: 'wishlist', direction: 'neutral' };
     case 'wish.fulfilled':
@@ -116,7 +128,8 @@ export const FILTER_CATEGORIES: readonly FilterCategory[] = [
   { value: 'sealed', label: 'Sealed products', match: (e) => e.source === 'sealed' },
   { value: 'trade', label: 'Trades', match: isTrade },
   { value: 'wishlist', label: 'Wishlist', match: (e) => e.kind.startsWith('wish.') },
-  { value: 'deck', label: 'Decks', match: (e) => e.kind.startsWith('deck.') },
+  // One category for every container: decks, binders and boxes share the kind.
+  { value: 'deck', label: 'Decks & storage', match: (e) => e.kind.startsWith('deck.') },
   { value: 'tradelist', label: 'Tradelist', match: (e) => e.kind === 'tradelist.mark' },
 ];
 

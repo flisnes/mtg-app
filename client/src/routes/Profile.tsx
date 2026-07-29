@@ -21,6 +21,7 @@ import { useAccount } from '../account/useAccount.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds, getPrintingsForOracle } from '../db/queries.js';
 import { formatLabel } from '../deck/legality.js';
+import { containerKind } from '../deck/containers.js';
 import { Avatar } from '../components/Avatar.js';
 import { AvatarEditorSheet, CardSearch } from '../components/AvatarEditorSheet.js';
 import { CardSheet, EditionPicker } from '../components/CardSheet.js';
@@ -403,8 +404,11 @@ function FavoriteDeckPickerSheet({
   useEscapeToClose(onClose);
 
   // Same summary the Decks page computes: mainboard count + color identity.
+  // Only actual decks — a profile shows off brews, not where you keep your bulk.
   const decks = useLiveQuery(async () => {
-    const list = await db.decks.orderBy('updatedAt').reverse().toArray();
+    const list = (await db.decks.orderBy('updatedAt').reverse().toArray()).filter(
+      (d) => containerKind(d) === 'deck',
+    );
     return Promise.all(
       list.map(async (deck) => {
         const cards = await db.deckCards.where('deckId').equals(deck.id).toArray();

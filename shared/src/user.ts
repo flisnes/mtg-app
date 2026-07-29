@@ -49,6 +49,18 @@ export interface WishlistEntry {
 /** 'commander' is the command zone: counts toward Commander's 100, sets the color identity. */
 export type DeckBoard = 'main' | 'side' | 'commander';
 
+/**
+ * What a `Deck` row actually is. Decks are lists you brew (format, legality,
+ * boards); binders and boxes are storage — the same slots, no format, one board,
+ * used to mirror where the cards physically live. All three share the
+ * decks/deckCards tables (and therefore sync, scanning, import and the event
+ * log); the kind only changes what the UI offers. Absent = 'deck' (every row
+ * written before storage existed).
+ */
+export type ContainerKind = 'deck' | 'binder' | 'box';
+
+export const CONTAINER_KINDS: readonly ContainerKind[] = ['deck', 'binder', 'box'];
+
 /** A deck's format; 'casual' means no legality checks. */
 export type DeckFormat = Format | 'casual';
 
@@ -66,7 +78,10 @@ export const DECK_FORMATS: readonly DeckFormat[] = [
 export interface Deck {
   id: string;
   name: string;
-  /** Missing on decks created before formats existed → treat as 'casual'. */
+  /** Deck, binder or box. Missing on rows written before storage existed → 'deck'. */
+  kind?: ContainerKind;
+  /** Missing on decks created before formats existed → treat as 'casual'.
+   *  Meaningless (and unset) on binders and boxes. */
   format?: DeckFormat;
   description?: string;
   createdAt: number;
@@ -203,6 +218,9 @@ export interface UserEvent {
   deckId?: string;
   /** Denormalized so history still renders after the deck is deleted. */
   deckName?: string;
+  /** Set only when the container was a binder or box, so the history line picks
+   *  the right glyph. Absent = a deck (every event written before storage). */
+  deckKind?: ContainerKind;
   board?: DeckBoard;
   /** Trade session id for trade-driven changes (also the grouping key). */
   tradeId?: string;

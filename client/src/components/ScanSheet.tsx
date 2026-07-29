@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { CollectionEntry, Condition, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
+import type { CollectionEntry, Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { addDeckCardsBulk, addToWishlistBulk, applyImport, collectionKey, markOwnedForTrade, reconcileDeck } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
 import { getOracleCard, getOracleCardsByIds, getPrinting, getPrintingsByIds } from '../db/queries.js';
@@ -20,6 +20,7 @@ import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
 import { useToast } from './Toast.js';
 import { ownedBadge, type OwnedBadgeSpec } from './OwnedBadge.js';
+import { CONTAINER_META } from '../deck/containers.js';
 import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
@@ -52,9 +53,18 @@ export type ScanTarget =
   | { kind: 'collection' }
   | { kind: 'tradelist' }
   | { kind: 'wishlist' }
-  // `rescan` reconciles the deck to exactly what was scanned (add/remove/change
-  // quantities) instead of only adding — see complete()'s deck branch.
-  | { kind: 'deck'; deckId: string; deckName?: string; format?: DeckFormat; rescan?: boolean }
+  // A deck, binder or box (all the same stored row — `containerKind` only picks
+  // the wording and, for storage, drops the board picker). `rescan` reconciles
+  // it to exactly what was scanned (add/remove/change quantities) instead of
+  // only adding — see complete()'s deck branch.
+  | {
+      kind: 'deck';
+      deckId: string;
+      deckName?: string;
+      containerKind?: ContainerKind;
+      format?: DeckFormat;
+      rescan?: boolean;
+    }
   | { kind: 'trade'; label?: string; onAdd: (card: ScannedCard) => void };
 
 interface Candidate {
@@ -198,9 +208,17 @@ const BOARD_LABELS: Record<DeckBoard, string> = {
   commander: 'command zone',
 };
 
-/** Which boards a deck scan can target (commander only for commander decks). */
-function deckBoards(format?: DeckFormat): DeckBoard[] {
-  return format === 'commander' ? ['main', 'side', 'commander'] : ['main', 'side'];
+/** Which boards a scan can target: storage has one pile, decks have boards
+ *  (and the command zone only in Commander). */
+function deckBoards(target: { containerKind?: ContainerKind; format?: DeckFormat }): DeckBoard[] {
+  if ((target.containerKind ?? 'deck') !== 'deck') return ['main'];
+  return target.format === 'commander' ? ['main', 'side', 'commander'] : ['main', 'side'];
+}
+
+/** "deck" / "binder" / "box" for a container target; the target's own name otherwise. */
+function targetNoun(target: ScanTarget): string {
+  if (target.kind === 'deck') return CONTAINER_META[target.containerKind ?? 'deck'].noun;
+  return target.kind === 'trade' ? 'offer' : target.kind;
 }
 
 function targetLabel(target: ScanTarget): string {
@@ -740,7 +758,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     if (target.kind === 'deck' && target.rescan) {
       const review = await buildRescanReview(target.deckId);
       if (review.changes.length === 0 && review.unowned.length === 0) {
-        toast('No changes — this deck already matches your scan');
+        toast(`No changes — this ${targetNoun(target)} already matches your scan`);
         finishScan();
         return;
       }
@@ -888,9 +906,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           )}
         </div>
 
-        {target.kind === 'deck' && stage.kind === 'scanning' && (
+        {target.kind === 'deck' && deckBoards(target).length > 1 && stage.kind === 'scanning' && (
           <div className="seg-row scan-cam-board" role="radiogroup" aria-label="Add to board">
-            {deckBoards(target.format).map((b) => (
+            {deckBoards(target).map((b) => (
               <button key={b} role="radio" aria-checked={board === b} className={board === b ? 'seg seg-active' : 'seg'} onClick={() => setBoard(b)}>
                 {b === 'main' ? 'Main' : b === 'side' ? 'Side' : 'Commander'}
               </button>
@@ -1042,6 +1060,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         <RescanChangesSheet
           changes={rescanStep.changes}
           deckName={targetLabel(target)}
+          showBoards={deckBoards(target).length > 1}
           busy={committing}
           nextLabel={rescanStep.unowned.length > 0 ? 'Next' : `Apply ${rescanStep.changes.length} change${rescanStep.changes.length === 1 ? '' : 's'}`}
           onNext={() => (rescanStep.unowned.length > 0 ? setRescanPhase('collection') : void applyRescan())}
@@ -1081,6 +1100,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
 function RescanChangesSheet({
   changes,
   deckName,
+  showBoards,
   busy,
   nextLabel,
   onNext,
@@ -1088,6 +1108,8 @@ function RescanChangesSheet({
 }: {
   changes: DeckChange[];
   deckName: string;
+  /** Decks split into boards; a binder or box is one pile, so the label is noise. */
+  showBoards: boolean;
   busy: boolean;
   nextLabel: string;
   onNext: () => void;
@@ -1118,7 +1140,7 @@ function RescanChangesSheet({
                   {c.image ? <img className="scan-list-thumb" src={c.image} alt="" /> : <span className="scan-list-thumb" />}
                   <span className="scan-list-info">
                     <strong>{c.name}</strong>
-                    <span className="scan-printing">{BOARD_LABELS[c.board]}</span>
+                    {showBoards && <span className="scan-printing">{BOARD_LABELS[c.board]}</span>}
                   </span>
                 </span>
                 {c.kind === 'add' && <span className="rescan-tag rescan-add">Added ×{c.quantity}</span>}
@@ -1392,7 +1414,7 @@ function SessionSheet({
 
   const cycleBoard = (i: number) => {
     if (target.kind !== 'deck') return;
-    const boards = deckBoards(target.format);
+    const boards = deckBoards(target);
     onChange(
       mergeSession(
         entries.map((e, j) => (j === i ? { ...e, board: boards[(boards.indexOf(e.board) + 1) % boards.length]! } : e)),
@@ -1454,7 +1476,7 @@ function SessionSheet({
                     </span>
                   </span>
                 </button>
-                {target.kind === 'deck' && (
+                {target.kind === 'deck' && deckBoards(target).length > 1 && (
                   <button className="scan-chip" onClick={() => cycleBoard(i)}>
                     {BOARD_LABELS[e.board]}
                   </button>

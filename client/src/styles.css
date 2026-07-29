@@ -2825,6 +2825,13 @@ button.ghost.icon-only {
   color: var(--text);
   font-weight: 600;
 }
+/* A segment that is real navigation (the Decks / Binders / Boxes switch) is an
+   anchor, so it needs the padding and centring a <button> gets for free. */
+a.seg {
+  padding: 0.6rem 1rem;
+  text-align: center;
+  text-decoration: none;
+}
 .account-disclaimer {
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -3779,4 +3786,93 @@ button.ghost.icon-only {
 .avatar-edition-selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* ---- Where a card is filed: deck / binder / box ---- */
+
+/* List rows: a compact glyph chip next to the ownership badge. */
+.badge-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  color: var(--text-dim);
+  vertical-align: middle;
+}
+.badge-place-over {
+  background: rgba(255, 92, 92, 0.18);
+  color: var(--danger);
+}
+.place-badge-count {
+  font-variant-numeric: tabular-nums;
+}
+/* Grid tiles: the free top-right corner (badge takes bottom-left, count
+   bottom-right, trend/select top-left). */
+.tile-place {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  background: rgba(0, 0, 0, 0.8);
+  color: #d0d0d8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.1rem 0.3rem;
+  border-radius: 6px;
+  line-height: 1.2;
+}
+.tile-place.badge-place-over {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* Card sheet: one tappable pill per container, each a link to that page. */
+.sheet-places {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 0;
+}
+.sheet-places-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.place-pills {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+.place-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.place-pill:hover {
+  border-color: var(--accent);
+}
+.place-pill-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 12rem;
+}
+.place-pill-qty {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.place-pill-warn {
+  border-color: var(--danger);
+  color: var(--danger);
+  cursor: help;
 }

@@ -1,5 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import type { ContainerKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
+import { containerKind } from '../deck/containers.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { addToTotal, formatTotal, pricedForFinish, type PriceTotal } from './CardSorting.js';
 
@@ -33,10 +35,13 @@ export function useCollectionValue(onlyTrade = false): PriceTotal | undefined {
   }, [onlyTrade]);
 }
 
-/** Combined value of every card across every deck. */
-export function useDecksValue(): PriceTotal | undefined {
+/** Combined value of every card across every deck, binder or box of one kind. */
+export function useContainersValue(kind: ContainerKind): PriceTotal | undefined {
   return useLiveQuery(async () => {
-    const cards = await db.deckCards.toArray();
+    const ids = new Set(
+      (await db.decks.toArray()).filter((d) => containerKind(d) === kind).map((d) => d.id),
+    );
+    const cards = (await db.deckCards.toArray()).filter((c) => ids.has(c.deckId));
     const [oracleMap, printMap] = await Promise.all([
       getOracleCardsByIds(cards.map((c) => c.oracleId)),
       getPrintingsByIds(cards.map((c) => c.scryfallId).filter((s): s is string => !!s)),
@@ -46,7 +51,7 @@ export function useDecksValue(): PriceTotal | undefined {
       addToTotal(total, c.quantity, c.scryfallId ? printMap.get(c.scryfallId) : undefined, oracleMap.get(c.oracleId));
     }
     return total;
-  }, []);
+  }, [kind]);
 }
 
 /** Format a live total for the header, or undefined while it loads. */

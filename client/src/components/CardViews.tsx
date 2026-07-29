@@ -87,6 +87,10 @@ export interface CardItem {
   badge?: ReactNode;
   badgeClass?: string;
   badgeTitle?: string;
+  /** Where the card is filed (deck / binder / box). Sits after the primary
+   *  badge in list rows and in the tile's free top-right corner, so it never
+   *  competes with the ownership / for-trade badge. */
+  place?: { node: ReactNode; cls?: string; title?: string };
   /** Dim the entry (e.g. unowned deck cards). */
   dim?: boolean;
   /** Iridescent foil sheen over the image (foil / etched finishes). */
@@ -167,6 +171,11 @@ export function CardList({
                 {it.badge && (
                   <span className={`badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
                     {it.badge}
+                  </span>
+                )}
+                {it.place && (
+                  <span className={`badge ${it.place.cls ?? ''}`} title={it.place.title}>
+                    {it.place.node}
                   </span>
                 )}
               </div>
@@ -269,6 +278,11 @@ export function CardGrid({
               {it.badge && (
                 <span className={`tile-badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
                   {it.badge}
+                </span>
+              )}
+              {it.place && (
+                <span className={`tile-place ${it.place.cls ?? ''}`} title={it.place.title}>
+                  {it.place.node}
                 </span>
               )}
               {it.count != null && it.count !== 1 && <span className="tile-count">×{it.count}</span>}

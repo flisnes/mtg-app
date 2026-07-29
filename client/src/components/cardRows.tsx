@@ -2,8 +2,10 @@ import type { JoinedEntry, JoinedWish } from '../db/queries.js';
 import type { CardItem } from './CardViews.js';
 import type { useMoverFlags } from '../price/useMoverFlags.js';
 import type { useOwnershipIndex } from '../db/useOwnership.js';
+import type { PlacementIndex } from '../db/usePlacements.js';
 import { SetSymbol } from './SetSymbol.js';
 import { ownedBadge } from './OwnedBadge.js';
+import { placementBadge } from './PlacementBadge.js';
 import { formatPrice, pricedForFinish } from './CardSorting.js';
 
 // One place that turns an owned entry (collection or wishlist) into a CardItem,
@@ -17,9 +19,11 @@ type Ownership = ReturnType<typeof useOwnershipIndex>;
 /** A collection/tradelist row: printing + condition + finish, with a "for trade" badge. */
 export function collectionCardItem(
   r: JoinedEntry,
-  opts: { moverFlags?: MoverFlags; onClick?: () => void },
+  opts: { moverFlags?: MoverFlags; placements?: PlacementIndex; onClick?: () => void },
 ): CardItem {
+  const place = placementBadge(opts.placements?.lookup(r.entry.oracleId));
   return {
+    ...(place ? { place } : {}),
     key: r.entry.id,
     name: r.oracle?.name ?? '(unknown card)',
     image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,

@@ -1,5 +1,6 @@
 import {
   CONDITIONS,
+  CONTAINER_KINDS,
   DECK_FORMATS,
   FINISHES,
   REMOVAL_REASONS,
@@ -7,6 +8,7 @@ import {
   USER_EVENT_KINDS,
   type CollectionEntry,
   type Condition,
+  type ContainerKind,
   type Deck,
   type DeckBoard,
   type DeckCard,
@@ -92,6 +94,7 @@ const CONDS = new Set<string>(CONDITIONS);
 const FINS = new Set<string>(FINISHES);
 const FORMATS = new Set<string>(DECK_FORMATS);
 const BOARDS = new Set<string>(['main', 'side', 'commander']);
+const CONTAINERS = new Set<string>(CONTAINER_KINDS);
 
 const MAX_ID = 64;
 const MAX_QTY = 9999;
@@ -197,10 +200,15 @@ export function sanitizeDeckRow(raw: unknown): Deck | null {
   const r = raw as Record<string, unknown>;
   const deckId = id(r.id);
   if (!deckId) return null;
+  // A missing/unknown kind is a deck — that is every row written before storage
+  // existed. Only decks carry a format, so don't invent 'casual' for a binder:
+  // that would make the row look like a deck to anything reading format.
+  const kind = (CONTAINERS.has(r.kind as string) ? r.kind : 'deck') as ContainerKind;
   return {
     id: deckId,
     name: typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, 200) : 'Untitled deck',
-    format: (FORMATS.has(r.format as string) ? r.format : 'casual') as DeckFormat,
+    kind,
+    ...(kind === 'deck' ? { format: (FORMATS.has(r.format as string) ? r.format : 'casual') as DeckFormat } : {}),
     ...(typeof r.description === 'string' && r.description ? { description: r.description.slice(0, 2000) } : {}),
     createdAt: ts(r.createdAt),
     updatedAt: ts(r.updatedAt),
@@ -265,6 +273,7 @@ export function sanitizeEventRow(raw: unknown): UserEvent | null {
     ...(REASONS.has(r.reason as string) ? { reason: r.reason as RemovalReason } : {}),
     ...(id(r.deckId) ? { deckId: id(r.deckId)! } : {}),
     ...(typeof r.deckName === 'string' && r.deckName ? { deckName: r.deckName.slice(0, 200) } : {}),
+    ...(CONTAINERS.has(r.deckKind as string) ? { deckKind: r.deckKind as ContainerKind } : {}),
     ...(BOARDS.has(r.board as string) ? { board: r.board as DeckBoard } : {}),
     ...(id(r.tradeId) ? { tradeId: id(r.tradeId)! } : {}),
   };

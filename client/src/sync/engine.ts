@@ -377,6 +377,35 @@ export function onSessionChanged(): void {
 }
 
 // ---------------------------------------------------------------------------
+// One-time repairs
+// ---------------------------------------------------------------------------
+
+/** Ids of repairs already applied on this device (not a version number — a
+ *  device can skip releases and must still run every repair it never ran). */
+const KEY_REPAIRS = 'syncRepairs';
+
+/**
+ * v0.75.1: sanitizeDeckRow dropped `kind`, so every binder and box that arrived
+ * from the server landed as a plain deck (and every synced history line lost its
+ * `deckKind`). Fixing the sanitizer only helps rows sent from now on: the cursor
+ * is already past the flattened ones, and the server resends nothing below it.
+ *
+ * So rewind the cursor once. The server still has the correct rows — sync-row
+ * content is opaque to it, `kind` was always in the stored JSON — and a re-pull
+ * only skips an incoming row when the local copy is STRICTLY newer, so the
+ * equal-stamped flattened rows get rewritten while pending local edits still win.
+ */
+async function runOneTimeRepairs(): Promise<void> {
+  const done = (await getSetting<string[]>(KEY_REPAIRS)) ?? [];
+  if (done.includes('containerKinds')) return;
+  const state = await getSyncState();
+  if (state && state.cursor > 0) {
+    await setSetting(KEY_SYNC_STATE, { ...state, cursor: 0 } satisfies SyncState);
+  }
+  await setSetting(KEY_REPAIRS, [...done, 'containerKinds']);
+}
+
+// ---------------------------------------------------------------------------
 // Wiring
 // ---------------------------------------------------------------------------
 
@@ -404,6 +433,14 @@ export function initSyncEngine(): void {
     error: () => {},
   });
 
-  void ensureSocket();
-  void syncNow();
+  // Repairs first: a rewound cursor must be durable before anything can pull,
+  // including a sync_notify off the socket (which would save the old cursor back
+  // and strand the repair, since it is only ever attempted once). If it fails,
+  // sync still starts and the repair retries on the next app open.
+  void runOneTimeRepairs()
+    .catch(() => {})
+    .then(() => {
+      void ensureSocket();
+      return syncNow();
+    });
 }

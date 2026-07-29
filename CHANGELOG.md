@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.75.1
+
+- **Binders stay binders across your devices.** A binder or box made on one device arrived on your other devices as a plain deck. The cards and counts were all there, only the label was wrong, and the server's copy was correct the whole time. Fixed, and the app repairs the ones already sitting on your devices: next time you open it, it re-reads your account from the server and your binders and boxes turn back into binders and boxes. Same fix for a binder restored from an exported backup file, and for history lines that showed a deck icon for a binder.
+
 ## 0.75.0
 
 - **Binders and boxes.** Decks are no longer the only place a card can live. The Decks tab now has three segments: **Decks**, **Binders** and **Boxes**. A binder or box works exactly like a deck minus the format and the sideboard, so you can build "Blue box" or "Small green binder" and file cards into it: search from inside it, scan a stack with the camera, re-scan it to reconcile what's really there, import or export a list, rename it, delete it. In your collection, select a few cards and hit **File away** to drop them into any deck, binder or box (you can create one right there in the picker).

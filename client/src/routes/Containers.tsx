@@ -10,7 +10,7 @@ import { formatLabel } from '../deck/legality.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { Icon } from '../components/icons.js';
 import { ManaCost } from '../components/ManaCost.js';
-import { HeaderValue, headerValue, useContainersValue } from '../components/ValueSummary.js';
+import { HeaderValue, missingValue, useContainersValue, valueText } from '../components/ValueSummary.js';
 
 // Canonical WUBRG order for pip display.
 const COLOR_ORDER: Color[] = ['W', 'U', 'B', 'R', 'G'];
@@ -51,6 +51,10 @@ export function Containers({ kind }: { kind: ContainerKind }) {
   }, [kind]);
 
   const value = useContainersValue(kind);
+  // Header leads with what the copies you actually hold are worth; the cards on
+  // a list you don't own yet aren't money on your shelf.
+  const ownedTotal = value ? (valueText(value.total.owned) ?? '—') : undefined;
+  const missingTotal = value ? valueText(missingValue(value.total)) : undefined;
 
   async function create() {
     const id = await createContainer(name, kind, format);
@@ -59,7 +63,17 @@ export function Containers({ kind }: { kind: ContainerKind }) {
   }
 
   return (
-    <Page title={meta.Plural} subtitle={meta.subtitle} aside={<HeaderValue value={headerValue(value)} />}>
+    <Page
+      title={meta.Plural}
+      subtitle={meta.subtitle}
+      aside={
+        <HeaderValue
+          label="Owned value"
+          value={ownedTotal}
+          note={missingTotal && `+${missingTotal} not owned`}
+        />
+      }
+    >
       <div className="seg-row" role="tablist" aria-label="Decks, binders or boxes">
         {CONTAINER_KINDS.map((k) => (
           <Link
@@ -110,7 +124,11 @@ export function Containers({ kind }: { kind: ContainerKind }) {
         </div>
       ) : (
         <ul className="menu-list">
-          {rows.map(({ deck, main, side, colors }) => (
+          {rows.map(({ deck, main, side, colors }) => {
+            const own = value?.byId.get(deck.id);
+            const ownText = own && valueText(own.owned);
+            const missText = own && valueText(missingValue(own));
+            return (
             <li key={deck.id}>
               <Link className="menu-item" to={`${meta.path}/${deck.id}`}>
                 <span className="menu-icon" aria-hidden>
@@ -133,6 +151,19 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                         {main} card{main === 1 ? '' : 's'}
                       </span>
                     )}
+                    {/* What you own in here, not what the list would cost to build. */}
+                    {ownText && (
+                      <span
+                        className="badge badge-value"
+                        title={
+                          missText
+                            ? `${ownText} owned · ${missText} more in cards you don't own`
+                            : `${ownText} owned — everything here is in your collection`
+                        }
+                      >
+                        {ownText}
+                      </span>
+                    )}
                   </span>
                 </span>
                 <span className="menu-chevron" aria-hidden>
@@ -140,7 +171,8 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                 </span>
               </Link>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </Page>

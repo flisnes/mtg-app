@@ -41,9 +41,8 @@ import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import { ownedBadge } from '../components/OwnedBadge.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
+import { containerValue, missingValue, valueText } from '../components/ValueSummary.js';
 import {
-  addToTotal,
-  formatTotal,
   SortControls,
   groupCards,
   priceValue,
@@ -51,7 +50,6 @@ import {
   useCardSort,
   type CardSortPrefs,
   type GroupKey,
-  type PriceTotal,
 } from '../components/CardSorting.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
@@ -165,13 +163,15 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     return { need, have };
   }, [data]);
 
+  // Worth leads with the copies you own — the money actually sitting here — and
+  // names the gap separately, rather than quoting a total you don't hold.
   const value = useMemo(() => {
     const rows = data?.rows ?? [];
     if (rows.length === 0) return undefined;
-    const total: PriceTotal = { eur: 0, usd: 0 };
-    for (const r of rows) addToTotal(total, r.quantity, r.printing, r.oracle);
-    return formatTotal(total);
+    return containerValue(rows);
   }, [data]);
+  const ownedWorth = valueText(value?.owned);
+  const missingWorth = value && valueText(missingValue(value));
 
   const legality = useMemo<LegalityReport>(
     () =>
@@ -345,7 +345,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               )}
             </>
           )}
-          {value && <> · worth <strong>{value}</strong></>}
+          {ownedWorth && <> · <strong>{ownedWorth}</strong> owned</>}
+          {missingWorth && <> · <strong>{missingWorth}</strong> missing</>}
         </p>
       </div>
 

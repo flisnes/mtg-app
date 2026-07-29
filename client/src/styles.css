@@ -379,6 +379,11 @@ button.danger-outline {
   font-weight: 600;
   white-space: nowrap;
 }
+.header-value-note {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
 .page-header h1 {
   margin: 0.25rem 0 0.25rem;
   font-size: 1.5rem;
@@ -2135,6 +2140,11 @@ button.primary {
 .badge-trade {
   background: rgba(124, 108, 255, 0.2);
   color: var(--accent);
+}
+/* Value of the copies you own in a deck, binder or box. */
+.badge-value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 .qty-pill {
   font-variant-numeric: tabular-nums;

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.79.0
+
+- **Decks, binders and boxes now tell you what you actually own.** The value on a deck, binder or box used to be the price of the whole list, whether the cards were in your collection or still on someone else's shelf — a 60-card brew you'd bought four cards for happily claimed to be worth €400. Now the number that leads is the value of the copies you own, and what's missing is priced separately: "€82 owned · €318 missing". The Decks/Binders/Boxes list says the same thing at the top ("Owned value", with the rest noted underneath), and every deck, binder and box in the list now carries its own owned value next to the card count. One copy covers one slot, so a card sitting in both your mainboard and your sideboard isn't counted as two copies you own.
+
 ## 0.78.0
 
 - **The back button closes what's on top of the screen.** On a phone, backing out of a card sheet used to bounce you out of the deck (or the collection, or wherever you were) with the sheet still in your face. Now back does the obvious thing: it closes the card sheet, then the search overlay, then the picker you opened on top of that — one layer at a time, exactly like Escape does on a desktop — and only leaves the page once nothing's left to close. The scanner's screens play along too, and a swipe-back on iOS counts as a back press. Nothing has to be tapped twice: closing a sheet with its own button doesn't leave a phantom back press behind.

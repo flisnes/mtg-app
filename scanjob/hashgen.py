@@ -63,6 +63,7 @@ them (and data/artcache/) once everyone has updated.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import io
 import json
@@ -78,7 +79,7 @@ import requests
 from PIL import Image
 
 try:
-    import ijson  # streaming parse: default_cards is far too big for json.load
+    import ijson  # streaming parse for legacy JSON-array --bulk-file fixtures
 except ImportError:  # pragma: no cover - smoke tests may use a small --bulk-file
     ijson = None
 
@@ -183,13 +184,39 @@ def download_bulk(session: requests.Session, limiter: RateLimiter,
 
 
 def iter_cards(bulk_path: str):
-    """Stream card objects from the bulk JSON array without loading it all."""
-    if ijson is not None:
-        with open(bulk_path, "rb") as f:
-            yield from ijson.items(f, "item")
-    else:
-        with open(bulk_path, "r", encoding="utf-8") as f:
-            yield from json.load(f)
+    """Stream card objects from a bulk file without loading it all.
+
+    Scryfall migrated bulk data to gzipped JSONL in 2026-07 (the old
+    `download_uri` JSON array and `size` fields are gone), so the real input is
+    now one JSON object per line. Legacy JSON-array fixtures are still accepted
+    so `--bulk-file test-bulk.json` keeps working for the local smoke test.
+    """
+    with open(bulk_path, "rb") as probe:
+        head = probe.read(2)
+    if head == b"\x1f\x8b":
+        with gzip.open(bulk_path, "rt", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    yield json.loads(line)
+        return
+    if head.lstrip()[:1] == b"[":
+        if ijson is None and os.path.getsize(bulk_path) > 100 * 1024 * 1024:
+            raise RuntimeError(
+                "ijson is required for large JSON-array bulk files "
+                "(pip install ijson)")
+        if ijson is not None:
+            with open(bulk_path, "rb") as f:
+                yield from ijson.items(f, "item")
+        else:
+            with open(bulk_path, "r", encoding="utf-8") as f:
+                yield from json.load(f)
+        return
+    with open(bulk_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                yield json.loads(line)
 
 
 # --- Card selection (mirrors pipeline/src/slimCard.ts) ------------------------
@@ -335,14 +362,10 @@ def main() -> int:
                 and state.get("bulkUpdatedAt") == bulk_updated_at):
             print(f"[scanjob] bulk unchanged ({bulk_updated_at}), nothing to do")
             return 0
-        bulk_path = os.path.join(args.data_dir, "bulk-default-cards.json")
-        print(f"[scanjob] downloading bulk ({entry['size'] / 1e6:.0f} MB)…")
-        download_bulk(session, limiter, entry["download_uri"], bulk_path)
-
-    if ijson is None and os.path.getsize(bulk_path) > 100 * 1024 * 1024:
-        print("[scanjob] ERROR: ijson is required for full bulk files "
-              "(pip install ijson)", file=sys.stderr)
-        return 1
+        bulk_path = os.path.join(args.data_dir, "bulk-default-cards.jsonl.gz")
+        size_mb = entry["compressed_size"] / 1e6
+        print(f"[scanjob] downloading bulk ({size_mb:.0f} MB gzipped)…")
+        download_bulk(session, limiter, entry["jsonl_download_uri"], bulk_path)
 
     # Hash every kept printing face. The art index (id/face -> cache file) is
     # rewritten each run for verify.py's self-match test.

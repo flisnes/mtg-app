@@ -122,5 +122,12 @@ picker (by design).
   on a device.
 - `state.json` records the bulk `updated_at`; unchanged bulk → the job exits
   without doing any work.
+- Scryfall migrated bulk data to gzipped JSONL in 2026-07: `download_uri` and
+  `size` are gone, replaced by `jsonl_download_uri` and `compressed_size` (the
+  same migration `pipeline/src/scryfall.ts` already carries). The cached bulk
+  file is `data/bulk-default-cards.jsonl.gz`; the old
+  `data/bulk-default-cards.json` is dead and can be deleted. `iter_cards` still
+  accepts a plain JSON array so small `--bulk-file` fixtures keep working, which
+  is the only thing `ijson` is still needed for.
 - Blob format and the dHash bit layout are documented in `hashgen.py` and must
   stay in sync with `client/src/scan/` (blob.ts / hash.ts).

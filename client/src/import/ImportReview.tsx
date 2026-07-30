@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import type { OracleCard } from '@mtg/shared';
 import { resolveOracleByName } from '../cardDb/search.js';
+import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
+import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
 import { useCardSearch } from '../cardDb/useCardSearch.js';
 import type { ResolveResult, ResolvedLine, UnmatchedLine } from './types.js';
 
@@ -19,8 +21,11 @@ export function ImportReview({
   extraSummary,
 }: {
   result: ResolveResult;
-  /** Turn a hand-picked card for an unmatched line into a resolved line. */
-  makeResolved: (u: UnmatchedLine, card: OracleCard) => ResolvedLine;
+  /**
+   * Turn a hand-picked card for an unmatched line into a resolved line.
+   * `scryfallId` is the printing the user's preference selects for that card.
+   */
+  makeResolved: (u: UnmatchedLine, card: OracleCard, scryfallId: string) => ResolvedLine;
   onConfirm: (lines: ResolvedLine[]) => void | Promise<void>;
   onCancel: () => void;
   confirmLabel?: (count: number) => string;
@@ -32,8 +37,11 @@ export function ImportReview({
   const [picking, setPicking] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const resolve = (index: number, card: OracleCard) => {
-    setFixed((m) => new Map(m).set(index, makeResolved(result.unmatched[index]!, card)));
+  // Hand-fixed lines get the same printing the user's preference would pick
+  // anywhere else, not blindly the card DB's representative one.
+  const resolve = async (index: number, card: OracleCard) => {
+    const scryfallId = await preferredScryfallId(card);
+    setFixed((m) => new Map(m).set(index, makeResolved(result.unmatched[index]!, card, scryfallId)));
     setPicking(null);
   };
   const unfix = (index: number) =>
@@ -89,7 +97,7 @@ export function ImportReview({
                           className="chip"
                           onClick={async () => {
                             const card = await resolveOracleByName(s);
-                            if (card) resolve(i, card);
+                            if (card) await resolve(i, card);
                           }}
                         >
                           {s}
@@ -101,7 +109,7 @@ export function ImportReview({
                     </div>
                   )}
 
-                  {picking === i && !chosen && <CardPicker onPick={(card) => resolve(i, card)} />}
+                  {picking === i && !chosen && <CardPicker onPick={(card) => void resolve(i, card)} />}
                 </li>
               );
             })}
@@ -133,6 +141,7 @@ export function ImportReview({
 function CardPicker({ onPick }: { onPick: (card: OracleCard) => void }) {
   const [q, setQ] = useState('');
   const { results } = useCardSearch(q, { limit: 12 });
+  const shown = useDisplayPrintings(results);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
       <input
@@ -147,17 +156,20 @@ function CardPicker({ onPick }: { onPick: (card: OracleCard) => void }) {
       />
       {results.length > 0 && (
         <ul className="result-list">
-          {results.map((c) => (
-            <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
-              <button className="result-open" style={{ cursor: 'pointer' }} onClick={() => onPick(c)}>
-                {c.imageSmall && <img className="result-thumb" src={c.imageSmall} alt="" loading="lazy" width={40} height={56} />}
-                <div className="result-main">
-                  <div className="result-name">{c.name}</div>
-                  <div className="result-sub">{c.typeLine}</div>
-                </div>
-              </button>
-            </li>
-          ))}
+          {results.map((c) => {
+            const image = shown.get(c.oracleId)?.imageSmall ?? c.imageSmall;
+            return (
+              <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
+                <button className="result-open" style={{ cursor: 'pointer' }} onClick={() => onPick(c)}>
+                  {image && <img className="result-thumb" src={image} alt="" loading="lazy" width={40} height={56} />}
+                  <div className="result-main">
+                    <div className="result-name">{c.name}</div>
+                    <div className="result-sub">{c.typeLine}</div>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

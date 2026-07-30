@@ -1,7 +1,8 @@
 import { type ReactNode } from 'react';
-import type { OracleCard, Priced, Rarity } from '@mtg/shared';
+import type { OracleCard, Priced, Printing, Rarity } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { useCardSearch } from '../cardDb/useCardSearch.js';
+import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { formatPrice } from './CardSorting.js';
@@ -60,14 +61,14 @@ export function CardSearchView({
   showFilters?: boolean;
   /** Shown in place of results when there's nothing to search for yet. */
   emptyState: ReactNode;
-  badgeFor?: (card: Priced<OracleCard>) => ResultBadge | null;
+  badgeFor?: (card: Priced<OracleCard>, printing?: Priced<Printing>) => ResultBadge | null;
   /** Per-result quick action (e.g. a ＋). Omit entirely to keep results clean
    *  and let the card sheet (opened by tapping a tile) carry the add action. */
-  actionsFor?: (card: Priced<OracleCard>) => ReactNode;
+  actionsFor?: (card: Priced<OracleCard>, printing?: Priced<Printing>) => ReactNode;
   /** Show quick actions only in list view; grid tiles stay clean and the card
    *  sheet (opened by tapping a tile) carries the add actions instead. */
   listOnlyActions?: boolean;
-  onCardClick: (card: Priced<OracleCard>) => void;
+  onCardClick: (card: Priced<OracleCard>, printing?: Priced<Printing>) => void;
 }) {
   const [view, setView] = useViewMode();
   const eff = effectiveFilters ?? filters;
@@ -80,6 +81,9 @@ export function CardSearchView({
   const { limit, showMore } = usePagedLimit(`${query}|${JSON.stringify(eff)}`, PAGE_SIZE);
 
   const { results, total, searching } = useCardSearch(query, { filters: eff, limit, enabled: hasCriteria });
+  // Which printing each result should appear as. Empty (and free) unless the
+  // user has moved off the default "latest printing" preference.
+  const shown = useDisplayPrintings(results);
 
   const setFilter = (key: keyof SearchFilters, value: string) =>
     setFilters((f) => ({ ...f, [key]: value || undefined }));
@@ -150,11 +154,12 @@ export function CardSearchView({
           <CardItems
             view={view}
             items={results.map((card): CardItem => {
-              const b = badgeFor?.(card);
+              const printing = shown.get(card.oracleId);
+              const b = badgeFor?.(card, printing);
               return {
                 key: card.oracleId,
                 name: card.name,
-                image: card.imageSmall ?? null,
+                image: printing?.imageSmall ?? card.imageSmall ?? null,
                 mana: card.manaCost,
                 badge: b?.icon,
                 badgeClass: b?.cls,
@@ -162,12 +167,15 @@ export function CardSearchView({
                 sub: (
                   <>
                     <span className={`rarity-dot rarity-${card.rarity}`} aria-hidden />
+                    {printing ? `${printing.setName} · ` : ''}
                     {card.typeLine}
                   </>
                 ),
-                price: formatPrice(card) ?? '—',
-                onClick: () => onCardClick(card),
-                actions: !actionsFor || (listOnlyActions && view === 'grid') ? undefined : actionsFor(card),
+                // The chosen printing's own price, not the representative one's.
+                price: formatPrice(printing, card) ?? '—',
+                onClick: () => onCardClick(card, printing),
+                actions:
+                  !actionsFor || (listOnlyActions && view === 'grid') ? undefined : actionsFor(card, printing),
               };
             })}
           />

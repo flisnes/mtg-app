@@ -24,6 +24,8 @@ import { db } from '../db/schema.js';
 import { getPriceHistory } from '../price/tracking.js';
 import { getMergedPriceHistory } from '../price/serverHistory.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
+import { fmtPriceIn } from '../price/rates.js';
+import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { CardHistory } from './CardHistory.js';
 import { EventSheet } from './EventSheet.js';
 import { Icon, type IconName } from './icons.js';
@@ -227,11 +229,14 @@ export function CardSheet({
   const showFinish = mode === 'session' ? sessionCard!.finish !== undefined : showCfl;
   const showLang = mode === 'session' ? sessionCard!.lang !== undefined : showCfl;
   const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
+  // A printing this card is already tied to: the copy in the collection, the
+  // deck's recorded edition, a scanned card, or the one the caller was showing.
+  const recordedId = entry?.scryfallId ?? deckCard?.scryfallId ?? sessionCard?.scryfallId ?? initialScryfallId;
   // In wish mode the empty string means "any printing" (no specific edition).
   const [scryfallId, setScryfallId] = useState(
     wishMode
       ? wishEntry?.scryfallId ?? wishView?.scryfallId ?? ANY_PRINTING
-      : entry?.scryfallId ?? deckCard?.scryfallId ?? sessionCard?.scryfallId ?? initialScryfallId ?? oracleCard.defaultScryfallId,
+      : recordedId ?? oracleCard.defaultScryfallId,
   );
   // Empty string is the "Any" sentinel, used only in wish mode (mirrors
   // ANY_PRINTING for the edition). Collection/edit/session modes stay concrete.
@@ -264,6 +269,25 @@ export function CardSheet({
 
   useEffect(() => {
     void getPrintingsForOracle(oracleCard.oracleId).then(setPrintings);
+  }, [oracleCard.oracleId]);
+
+  // Nothing tied this sheet to an edition (adding a card the caller didn't
+  // resolve a printing for), so honour the printing preference rather than
+  // silently landing on the card DB's representative one. Skipped in wish mode,
+  // where "any printing" is the point.
+  useEffect(() => {
+    if (recordedId || wishMode) return;
+    let live = true;
+    void preferredScryfallId(oracleCard).then((id) => {
+      // Don't stomp a choice the user made in the edition picker meanwhile.
+      if (live && id !== oracleCard.defaultScryfallId) {
+        setScryfallId((cur) => (cur === oracleCard.defaultScryfallId ? id : cur));
+      }
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oracleCard.oracleId]);
 
   // Recorded price history for the shown printing (collection cards are
@@ -997,13 +1021,11 @@ export function EditionPicker({
 /** Recorded price movement of the shown printing: sparkline + change since tracking began. */
 function PriceTrend({ trend }: { trend: HistoryChange }) {
   const dir = trend.delta > 0.001 ? 'up' : trend.delta < -0.001 ? 'down' : 'flat';
-  const sym = trend.cur === 'eur' ? '€' : '$';
   return (
     <div className="sheet-price-trend">
       <Sparkline values={trend.series} />
       <div className={`price-change price-${dir}`}>
-        {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·'} {sym}
-        {Math.abs(trend.delta).toFixed(2)}
+        {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·'} {fmtPriceIn(Math.abs(trend.delta), trend.cur)}
         {trend.pct != null && ` (${trend.pct >= 0 ? '+' : '−'}${Math.abs(trend.pct).toFixed(1)}%)`}
         <span className="fine-print"> · {trend.points} pts</span>
       </div>

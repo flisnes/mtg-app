@@ -6,6 +6,7 @@ import { useCardDbUpdate } from './cardDb/useCardDbUpdate.js';
 import { getSetting, setSetting } from './db/settings.js';
 import { Onboarding } from './components/Onboarding.js';
 import { ToastProvider, useToast } from './components/Toast.js';
+import { UpdatePrompt } from './components/UpdatePrompt.js';
 import { GlobalSearchBar, GlobalSearchProvider } from './components/GlobalSearch.js';
 import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
@@ -29,6 +30,7 @@ import { ScanTest } from './routes/ScanTest.js';
 import { maybeFetchMatches } from './account/notifications.js';
 import { initSyncEngine } from './sync/engine.js';
 import { recordCollectionPrices } from './price/tracking.js';
+import { ensureRates } from './price/rates.js';
 import { Icon, type IconName } from './components/icons.js';
 
 const PRIMARY_NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
@@ -45,6 +47,9 @@ export function App() {
     void getSetting<boolean>('onboardingComplete').then((v) => setOnboarded(!!v));
     // Record today's price for every card in the collection (deduped per day).
     void recordCollectionPrices();
+    // Top up today's exchange rates if the display currency needs any (no-op
+    // when prices are shown in the currency Scryfall already quotes).
+    void ensureRates();
     // Signed-in: start the sync engine (live push + outbox drain), then
     // refresh trade-match notifications (throttled).
     initSyncEngine();
@@ -81,12 +86,12 @@ function AppShell() {
   const [offlineReady, setOfflineReady] = useState(false);
   const toast = useToast();
   const {
-    prompt: cardDataPrompt,
-    downloading: updatingCardData,
-    progress: cardDataProgress,
+    prompt: dataPrompt,
+    downloading: updatingData,
+    progress: dataProgress,
     epoch,
-    applyUpdate: applyCardData,
-    dismiss: dismissCardData,
+    applyUpdate: applyData,
+    dismiss: dismissData,
   } = useCardDbUpdate();
 
   useEffect(() => {
@@ -139,27 +144,20 @@ function AppShell() {
           </button>
         </div>
       )}
-      {cardDataPrompt && !showUpdate && (
-        <div className="banner banner-update" role="status">
-          {updatingCardData ? (
-            <div className="banner-progress">
-              <span>{cardDataProgress?.label ?? 'Updating card data…'}</span>
-              <div className="progress">
-                <div className="progress-bar" style={{ width: `${Math.round((cardDataProgress?.fraction ?? 0) * 100)}%` }} />
-              </div>
-            </div>
-          ) : (
-            <>
-              <span>Card data update available (~{mb(cardDataPrompt.sizeBytes)} MB).</span>
-              <span className="banner-actions">
-                <button onClick={applyCardData}>Update</button>
-                <button onClick={dismissCardData}>Not now</button>
-              </span>
-            </>
-          )}
-        </div>
+      {dataPrompt && !showUpdate && (
+        <UpdatePrompt
+          message={
+            dataPrompt.kind === 'prices'
+              ? `Updated card prices available (~${mb(dataPrompt.sizeBytes)} MB).`
+              : `Card data update available (~${mb(dataPrompt.sizeBytes)} MB).`
+          }
+          busy={updatingData}
+          progress={dataProgress}
+          onAccept={applyData}
+          onDecline={dismissData}
+        />
       )}
-      {offlineReady && !showUpdate && !cardDataPrompt && (
+      {offlineReady && !showUpdate && !dataPrompt && (
         <div className="banner banner-offline" role="status" onAnimationEnd={() => setOfflineReady(false)}>
           Ready to work offline.
         </div>

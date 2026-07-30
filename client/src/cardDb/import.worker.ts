@@ -186,9 +186,12 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
     }
 
     // Record the data version last: if anything above throws, the version stays
-    // stale and the next launch picks up the remaining chunks.
-    await setSetting('cardDbVersion', req.dataVersion);
-    await setSetting('cardDbUpdatedAt', req.cardDbUpdatedAt);
+    // stale and the next launch picks up the remaining chunks. Skipped for a
+    // prices-only run that left card chunks behind (see ImportRequest).
+    if (req.stampVersion !== false) {
+      await setSetting('cardDbVersion', req.dataVersion);
+      await setSetting('cardDbUpdatedAt', req.cardDbUpdatedAt);
+    }
 
     post({ type: 'done' });
   } catch (err) {

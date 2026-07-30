@@ -5,6 +5,7 @@ import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { moverStats, swingStats, type MoverStats, type SwingStats } from '../price/movers.js';
+import { fmtPriceIn } from '../price/rates.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { Sparkline } from '../components/Sparkline.js';
@@ -231,5 +232,5 @@ function SwingSub({ m }: { m: Mover }) {
 }
 
 function formatMoney(cur: 'eur' | 'usd', v: number): string {
-  return `${cur === 'eur' ? '€' : '$'}${v.toFixed(2)}`;
+  return fmtPriceIn(v, cur);
 }

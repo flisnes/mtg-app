@@ -28,6 +28,33 @@ export async function getBulkEntry(type: string): Promise<BulkEntry> {
   return entry;
 }
 
+const SETS_INDEX = 'https://api.scryfall.com/sets';
+
+/**
+ * Every set's code → `set_type`, from the (single, paginated-but-small) sets
+ * endpoint. Used to tell a normal release apart from a promo product, Secret
+ * Lair, token sheet or memorabilia set, which the bulk card rows don't say.
+ */
+export async function getSetTypes(): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  let url: string | undefined = SETS_INDEX;
+  while (url) {
+    const res = await fetch(url, { headers: HEADERS });
+    if (!res.ok) throw new Error(`sets index HTTP ${res.status}`);
+    const json = (await res.json()) as {
+      data: { code?: string; set_type?: string }[];
+      has_more?: boolean;
+      next_page?: string;
+    };
+    for (const s of json.data) {
+      if (s.code && s.set_type) out[s.code] = s.set_type;
+    }
+    url = json.has_more ? json.next_page : undefined;
+  }
+  if (Object.keys(out).length === 0) throw new Error('sets index returned no usable sets');
+  return out;
+}
+
 /**
  * Open the bulk file as a byte stream. The JSONL bulk files are served as
  * `application/gzip` with NO `Content-Encoding`, so fetch does NOT decompress

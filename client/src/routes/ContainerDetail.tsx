@@ -583,9 +583,9 @@ function ImportPanel({ deckId, onDone }: { deckId: string; onDone: (added: numbe
 
   // A deck slot keys on oracle + board; keep the resolved printing so the deck
   // remembers which edition the list used (like a hand-picked printing).
-  const makeResolved = (u: UnmatchedLine, card: OracleCard): ResolvedLine => ({
+  const makeResolved = (u: UnmatchedLine, card: OracleCard, scryfallId: string): ResolvedLine => ({
     oracleId: card.oracleId,
-    scryfallId: card.defaultScryfallId,
+    scryfallId,
     name: card.name,
     quantity: u.quantity,
     quantityForTrade: 0,

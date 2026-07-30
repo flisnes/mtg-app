@@ -329,6 +329,31 @@ button.danger-outline {
   gap: 0.4rem;
   width: 100%;
 }
+/* Update ribbons that carry a "don't ask again" line stack instead of sitting
+   on one row (see components/UpdatePrompt.tsx). */
+.banner-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+.banner-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.banner-remember {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  opacity: 0.9;
+  cursor: pointer;
+}
+.banner-remember input {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
 /* On the purple ribbon the accent-coloured bar would vanish — invert it. */
 .banner-update .progress {
   background: rgba(255, 255, 255, 0.22);
@@ -340,6 +365,18 @@ button.danger-outline {
   background: var(--surface-2);
   color: var(--text-dim);
   justify-content: center;
+}
+
+/* One data feed's row in Settings → Automatic downloads. */
+.download-feed {
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--border);
+}
+.download-feed:first-of-type {
+  border-top: none;
+}
+.download-feed .fine-print {
+  margin: 0.35rem 0 0.5rem;
 }
 
 /* ---- Pages ---- */
@@ -3226,6 +3263,38 @@ a.seg {
   padding: 1.5rem;
   text-align: center;
   color: #fff;
+}
+/* "Newer scan data available" offer: floats over the live camera without
+   interrupting the scan (see ScanSheet's refreshOffer). */
+.scan-cam-offer {
+  position: absolute;
+  top: 3.6rem;
+  left: 0.75rem;
+  right: 0.75rem;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.7rem;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 0.85rem;
+}
+.scan-cam-offer p {
+  margin: 0;
+}
+.scan-cam-offer-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.scan-cam-offer-remember {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  opacity: 0.85;
+  cursor: pointer;
 }
 .scan-tray {
   flex: 1 1 0;

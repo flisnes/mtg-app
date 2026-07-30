@@ -1,6 +1,7 @@
 import type { CardDbArtifactMeta, CardDbManifest, SealedProduct } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { CARD_DB_BASE } from '../cardDb/config.js';
+import { getPrefs } from '../prefs.js';
 import { sha256Hex } from '../util/sha256.js';
 
 // Sealed products (see sealed-products feature). The pipeline expands MTGJSON
@@ -51,11 +52,16 @@ async function download(meta: CardDbArtifactMeta): Promise<SealedStoreRow> {
  * online and the hash has moved, otherwise serves the cached copy. Any
  * network/parse error falls back to whatever is cached; only a total absence of
  * data resolves to 'unavailable' (the UI shows a "not available yet" message).
+ *
+ * The *refresh* follows the card-database download policy, since it's the same
+ * kind of spend on the same kind of data. The first download doesn't: the user
+ * just opened "Add sealed product", and there's nothing to show without it.
  */
 export async function loadSealedProducts(): Promise<SealedLoad> {
   const installed = await db.sealed.get('current');
+  const mayRefresh = !installed || getPrefs().cardDbPolicy !== 'never';
 
-  if (CARD_DB_BASE) {
+  if (CARD_DB_BASE && mayRefresh) {
     try {
       const meta = (await fetchManifest()).v2?.sealed;
       if (meta && installed?.sha256 !== meta.sha256) {

@@ -34,8 +34,18 @@ export type InitialPlan =
 /** What a background refresh should do when a usable local DB already exists. */
 export type BgUpdate =
   | { kind: 'none' }
-  | { kind: 'prices'; run: RunSync }
-  | { kind: 'card-data'; sizeBytes: number; run: RunSync };
+  | { kind: 'prices'; sizeBytes: number; run: RunSync }
+  | {
+      kind: 'card-data';
+      sizeBytes: number;
+      run: RunSync;
+      /**
+       * Prices ride along inside `run`, but they're two separate user choices —
+       * someone who declines a 14 MB card-data update may still want the small
+       * daily price file. Present when prices also changed.
+       */
+      prices?: { sizeBytes: number; run: RunSync };
+    };
 
 type InstalledChunks = Record<'oracle' | 'printings', Record<string, { sha256: string; count: number }>>;
 
@@ -118,6 +128,7 @@ function workerRun(
   meta: Pick<CardDbManifest, 'cardDbVersion' | 'pricesUpdatedAt'>,
   chunks: ChunkTask[],
   prices: CardDbArtifactMeta | null,
+  stampVersion = true,
 ): RunSync {
   return async (onState) => {
     await runImportWorker(
@@ -128,6 +139,7 @@ function workerRun(
         pricesUpdatedAt: meta.pricesUpdatedAt,
         chunks,
         prices,
+        stampVersion,
       },
       onState,
     );
@@ -208,7 +220,17 @@ export async function checkForBackgroundUpdate(): Promise<BgUpdate> {
       kind: 'card-data',
       sizeBytes: totalBytes(chunks, prices),
       run: workerRun(manifest.v2, manifest, chunks, prices),
+      // A prices-only run while card chunks are still outstanding must not claim
+      // the new card-data version — About would then report a date the card rows
+      // don't have. Hence stampVersion: false.
+      ...(prices
+        ? { prices: { sizeBytes: prices.bytes, run: workerRun(manifest.v2, manifest, [], prices, false) } }
+        : {}),
     };
   }
-  return { kind: 'prices', run: workerRun(manifest.v2, manifest, [], manifest.v2.prices) };
+  return {
+    kind: 'prices',
+    sizeBytes: manifest.v2.prices.bytes,
+    run: workerRun(manifest.v2, manifest, [], manifest.v2.prices),
+  };
 }

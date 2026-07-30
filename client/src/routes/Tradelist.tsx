@@ -80,9 +80,9 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
     analyze(content, { tradelistMode: 'all' });
   }
 
-  const makeResolved = (u: UnmatchedLine, card: OracleCard): ResolvedLine => ({
+  const makeResolved = (u: UnmatchedLine, card: OracleCard, scryfallId: string): ResolvedLine => ({
     oracleId: card.oracleId,
-    scryfallId: card.defaultScryfallId,
+    scryfallId,
     name: card.name,
     quantity: u.quantity,
     quantityForTrade: u.quantity,

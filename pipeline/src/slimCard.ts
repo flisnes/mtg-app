@@ -15,6 +15,7 @@ export interface RawCard {
   set: string;
   set_name: string;
   collector_number: string;
+  promo?: boolean;
   mana_cost?: string;
   cmc?: number;
   type_line?: string;
@@ -171,6 +172,9 @@ export function slimCard(card: RawCard): SlimResult | null {
     lang: card.lang,
     finishes: finishes(card.finishes),
     releasedAt: card.released_at,
+    // Omitted (not false) when it's a normal printing — that's the vast
+    // majority, and the flag would otherwise cost bytes on every row.
+    ...(card.promo ? { promo: true } : {}),
     imageSmall: img.small,
     imageNormal: img.normal,
     // Omitted (not null) for single-faced cards to keep the artifacts slim.

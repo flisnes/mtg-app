@@ -16,6 +16,7 @@ import { CANDIDATE_MAX_DISTANCE, distancesForIds } from '../scan/match.js';
 import { resolveWithOcr } from '../scan/ocr.js';
 import { playPop } from '../scan/pop.js';
 import { checkScanDataUpdate, downloadScanData, getUsableScanData, type ScanDataManifest } from '../scan/store.js';
+import { getPrefs, setPrefs } from '../prefs.js';
 import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
 import { useToast } from './Toast.js';
@@ -289,6 +290,10 @@ function orderTrayCandidates(tray: Tray, ownership?: OwnershipIndex): Candidate[
 export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target?: ScanTarget; onClose: () => void }) {
   const storageKey = sessionStorageKey(target);
   const [stage, setStage] = useState<Stage>({ kind: 'setup', message: 'Checking scan data…' });
+  // A newer card-art index is published and the user hasn't said whether we may
+  // fetch it. Scanning carries on meanwhile with the copy already installed.
+  const [refreshOffer, setRefreshOffer] = useState<ScanDataManifest | null>(null);
+  const [rememberScanChoice, setRememberScanChoice] = useState(false);
   const [live, setLive] = useState<LiveScanState | null>(null);
   const [tray, setTray] = useState<Tray | null>(null);
   // Restore a previous scan for this destination that a reload interrupted.
@@ -364,9 +369,16 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         // Scan immediately on the installed index, but check the beacon in the
         // background: the scanjob keeps publishing newer versions, and without
         // this a device runs on its first download forever. The fresh blob is
-        // installed for the next scan session (no disruptive mid-scan swap).
+        // installed for the next scan session (no disruptive mid-scan swap) —
+        // and only with the user's say-so, since it's a few MB.
+        const policy = getPrefs().scanDataPolicy;
+        if (policy === 'never') return;
         void checkScanDataUpdate()
-          .then((u) => (u.kind === 'update' ? downloadScanData(u.manifest) : undefined))
+          .then((u) => {
+            if (cancelled || u.kind !== 'update') return;
+            if (policy === 'always') return void downloadScanData(u.manifest);
+            setRefreshOffer(u.manifest);
+          })
           .catch(() => {});
         return;
       }
@@ -950,6 +962,44 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
                 Download scan data (~{(stage.download.bytes / 1e6).toFixed(0)} MB)
               </button>
             )}
+          </div>
+        )}
+
+        {refreshOffer && stage.kind === 'scanning' && (
+          <div className="scan-cam-offer" role="status">
+            <p>
+              Newer card-art data is available (~{(refreshOffer.bytes / 1e6).toFixed(0)} MB). It installs for your
+              next scan; this one carries on either way.
+            </p>
+            <div className="scan-cam-offer-actions">
+              <button
+                className="primary"
+                onClick={() => {
+                  if (rememberScanChoice) setPrefs({ scanDataPolicy: 'always' });
+                  void downloadScanData(refreshOffer).catch(() => {});
+                  setRefreshOffer(null);
+                  toast('Downloading newer scan data in the background');
+                }}
+              >
+                Download
+              </button>
+              <button
+                onClick={() => {
+                  if (rememberScanChoice) setPrefs({ scanDataPolicy: 'never' });
+                  setRefreshOffer(null);
+                }}
+              >
+                Not now
+              </button>
+            </div>
+            <label className="scan-cam-offer-remember">
+              <input
+                type="checkbox"
+                checked={rememberScanChoice}
+                onChange={(e) => setRememberScanChoice(e.target.checked)}
+              />
+              <span>Don’t ask again (changeable in Settings)</span>
+            </label>
           </div>
         )}
       </div>

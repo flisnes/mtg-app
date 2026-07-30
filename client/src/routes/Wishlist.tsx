@@ -176,9 +176,9 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
 
   // Wishlist wishes are printing-agnostic by default — a pasted "4 Lightning
   // Bolt" means "any printing", so every imported line lands as such.
-  const makeResolved = (u: UnmatchedLine, card: OracleCard): ResolvedLine => ({
+  const makeResolved = (u: UnmatchedLine, card: OracleCard, scryfallId: string): ResolvedLine => ({
     oracleId: card.oracleId,
-    scryfallId: card.defaultScryfallId,
+    scryfallId,
     name: card.name,
     quantity: u.quantity,
     quantityForTrade: 0,

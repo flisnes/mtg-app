@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ResolveResponse, ResolveResult, TradelistMode } from './types.js';
+import { getPrefs } from '../prefs.js';
+import type { ResolveRequest, ResolveResponse, ResolveResult, TradelistMode } from './types.js';
 
 // Shared import driver (beta plan §5). Owns the resolve worker's lifecycle so
 // both the collection Import route and the deck ImportPanel can reuse the same
@@ -39,7 +40,14 @@ export function useImportAnalysis() {
       setStatus({ kind: 'error', message: e.message || 'import worker crashed' });
       worker.terminate();
     };
-    worker.postMessage({ text, tradelistMode: opts.tradelistMode ?? 'none' });
+    // Snapshot the printing preferences for the worker — it can't read
+    // localStorage, so lines that name no edition would otherwise ignore them.
+    const { printing, preferOwnedPrinting, baseCurrency } = getPrefs();
+    worker.postMessage({
+      text,
+      tradelistMode: opts.tradelistMode ?? 'none',
+      printingPrefs: { printing, preferOwnedPrinting, baseCurrency },
+    } satisfies ResolveRequest);
   }
 
   function reset() {

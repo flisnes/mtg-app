@@ -8,8 +8,17 @@ import { dirname, join } from 'node:path';
 // Scryfall bulk data is JSONL now, so we use the line parser, not StreamArray.
 import jsonlMod from 'stream-json/jsonl/Parser.js';
 const { parser: jsonlParser } = jsonlMod;
-import type { CardDbChunkMeta, CardDbManifest, OracleCard, PriceMap, PriceTuple, Priced, Printing } from '@mtg/shared';
-import { getBulkEntry, openBulkStream } from './scryfall.js';
+import type {
+  CardDbChunkMeta,
+  CardDbManifest,
+  OracleCard,
+  PriceMap,
+  PriceTuple,
+  Priced,
+  Printing,
+  SetTypeMap,
+} from '@mtg/shared';
+import { getBulkEntry, getSetTypes, openBulkStream } from './scryfall.js';
 import { slimCard, type RawCard, type SlimResult } from './slimCard.js';
 import { buildSealedProducts } from './sealed.js';
 
@@ -23,6 +32,8 @@ import { buildSealedProducts } from './sealed.js';
 //     what actually moved. See client/src/cardDb/sync.ts.
 //   - prices.<hash>.json.gz — all prices, separate because they churn daily
 //     while the card data itself changes rarely;
+//   - sets.<hash>.json.gz — set code → set_type, for the client's non-promo
+//     printing preference (a few KB, fetched lazily);
 //   - legacy whole-file artifacts (prices embedded) for pre-chunking clients;
 //   - manifest.json tying it all together.
 //
@@ -238,6 +249,20 @@ async function main(): Promise<void> {
     }
   }
 
+  // Set types (code → set_type), so the client can tell a normal release from a
+  // promo product, Secret Lair or token sheet — the bulk card rows don't say.
+  // Tiny and best-effort: without it the "latest non-promo printing" preference
+  // just falls back to the plain latest printing.
+  let setsArtifact: Artifact | undefined;
+  try {
+    const setTypes = await getSetTypes();
+    const sorted: SetTypeMap = Object.fromEntries(Object.entries(setTypes).sort(([a], [b]) => (a < b ? -1 : 1)));
+    setsArtifact = emitHashed('sets', sorted, Object.keys(sorted).length);
+    console.log(`[pipeline]   sets: ${setsArtifact.count} set types (${setsArtifact.bytes} B)`);
+  } catch (err) {
+    console.warn('[pipeline] set-type fetch failed; shipping without it:', (err as Error).message);
+  }
+
   // Legacy whole-file artifacts with prices embedded, for pre-chunking clients.
   const priceOf = (id: string): { priceEur: number | null; priceUsd: number | null } => {
     const p = prices[id];
@@ -262,6 +287,7 @@ async function main(): Promise<void> {
       chunks: { oracle: oracleChunks, printings: printingsChunks },
       prices: meta(pricesArtifact),
       ...(sealedArtifact ? { sealed: meta(sealedArtifact) } : {}),
+      ...(setsArtifact ? { sets: meta(setsArtifact) } : {}),
     },
   };
   writeFileSync(join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));

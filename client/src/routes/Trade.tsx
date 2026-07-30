@@ -12,6 +12,7 @@ import type { SearchFilters } from '../cardDb/search.js';
 import { CardSheet, type SessionCardValues } from '../components/CardSheet.js';
 import { CardSearchView } from '../components/CardSearchView.js';
 import { formatPrice, pricedForFinish } from '../components/CardSorting.js';
+import { fmtEur } from '../price/rates.js';
 import { CardItems, CardList, type CardItem } from '../components/CardViews.js';
 import { CodeJoinForm } from '../components/CodeJoinForm.js';
 import { Icon } from '../components/icons.js';
@@ -599,7 +600,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             onClick={() => setSheet('balance')}
             disabled={!editable}
           >
-            <strong>€{Math.abs(diff).toFixed(2)}</strong>
+            <strong>{fmtEur(Math.abs(diff))}</strong>
             <span>{Math.abs(diff) < BALANCE_EPSILON ? 'balanced' : diff > 0 ? 'you give more' : 'you get more'}</span>
           </button>
           <div className="trade-bar-status">{barStatus}</div>
@@ -792,7 +793,7 @@ function OfferPanel({
       <header className="trade-col-head">
         <h3>{title}</h3>
         <span className="trade-col-total" aria-label={`Total ${title.toLowerCase()}`}>
-          €{total.toFixed(2)}
+          {fmtEur(total)}
         </span>
       </header>
       {lines.length === 0 ? (
@@ -974,7 +975,7 @@ function BalancePanel({
 
   const gap = Math.abs(diff);
   if (gap < BALANCE_EPSILON) {
-    return <p className="fine-print">This trade is already balanced (difference €{gap.toFixed(2)}).</p>;
+    return <p className="fine-print">This trade is already balanced (difference {fmtEur(gap)}).</p>;
   }
   const iGiveMore = diff > 0;
   if (iGiveMore && peerTradelist === null) {
@@ -1037,7 +1038,7 @@ function BalancePanel({
   if (suggestions.length === 0) {
     return (
       <p className="fine-print">
-        Nothing on {iGiveMore ? 'their' : 'your'} tradelist (with a known price) can close the €{gap.toFixed(2)} gap.
+        Nothing on {iGiveMore ? 'their' : 'your'} tradelist (with a known price) can close the {fmtEur(gap)} gap.
       </p>
     );
   }
@@ -1052,12 +1053,12 @@ function BalancePanel({
       <p className="fine-print">
         {iGiveMore ? (
           <>
-            You’re giving <strong>€{gap.toFixed(2)}</strong> more. From <strong>their</strong> tradelist, you could add
+            You’re giving <strong>{fmtEur(gap)}</strong> more. From <strong>their</strong> tradelist, you could add
             to what you get:
           </>
         ) : (
           <>
-            You’re getting <strong>€{gap.toFixed(2)}</strong> more. From <strong>your</strong> tradelist, you could add
+            You’re getting <strong>{fmtEur(gap)}</strong> more. From <strong>your</strong> tradelist, you could add
             to what you give:
           </>
         )}
@@ -1081,7 +1082,7 @@ function BalancePanel({
                 {c.line.condition} · {c.line.finish}
               </>
             ),
-            price: `€${c.price.toFixed(2)}`,
+            price: fmtEur(c.price),
             onClick: oracle ? () => onInfo(oracle, c.line.scryfallId, { side: lightSide }) : undefined,
             actions: (
               <button
@@ -1095,8 +1096,8 @@ function BalancePanel({
         })}
       />
       <p className="fine-print">
-        Adds €{pickedTotal.toFixed(2)}, bringing the difference from €{gap.toFixed(2)} down to €{after.toFixed(2)}.
-        Prices are EUR estimates; unpriced cards are skipped.
+        Adds {fmtEur(pickedTotal)}, bringing the difference from {fmtEur(gap)} down to {fmtEur(after)}. Prices are
+        estimates based on Scryfall’s EUR figures; unpriced cards are skipped.
       </p>
       <button
         className="primary"
@@ -1133,10 +1134,15 @@ function AddCardsPanel({
   }, []);
 
   // Owned cards seed the sheet with the copy you have (edition/condition/
-  // finish/language); anything you don't own starts from the card's defaults.
-  const compose = (card: Priced<OracleCard>) => {
+  // finish/language); anything you don't own starts from the printing the search
+  // result was showing, then the card's defaults.
+  const compose = (card: Priced<OracleCard>, printing?: Priced<Printing>) => {
     const e = ownership?.get(card.oracleId)?.entry;
-    onCompose(card, e ? { scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang } : undefined);
+    if (e) {
+      onCompose(card, { scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang });
+      return;
+    }
+    onCompose(card, printing ? { scryfallId: printing.scryfallId } : undefined);
   };
 
   const sortedTradelist = (tradelist ?? [])
@@ -1187,7 +1193,7 @@ function AddCardsPanel({
       filters={filters}
       setFilters={setFilters}
       emptyState={emptyState}
-      badgeFor={(card) => ownIndicator(ownership?.get(card.oracleId), card.defaultScryfallId)}
+      badgeFor={(card, printing) => ownIndicator(ownership?.get(card.oracleId), printing?.scryfallId ?? card.defaultScryfallId)}
       onCardClick={compose}
     />
   );
@@ -1221,12 +1227,13 @@ function AddTheirCardsPanel({
   // Their tradelist knows the exact printing they registered — seed the sheet
   // with it (the card-DB default is the newest edition, usually the wrong
   // guess). Anything not on their list starts from the card's defaults.
-  const compose = (card: Priced<OracleCard>) => {
+  const compose = (card: Priced<OracleCard>, printing?: Priced<Printing>) => {
     const listed = bestPeerLine(lines, card.oracleId);
-    onCompose(
-      card,
-      listed ? { scryfallId: listed.scryfallId, condition: listed.condition, finish: listed.finish, lang: listed.lang } : undefined,
-    );
+    if (listed) {
+      onCompose(card, { scryfallId: listed.scryfallId, condition: listed.condition, finish: listed.finish, lang: listed.lang });
+      return;
+    }
+    onCompose(card, printing ? { scryfallId: printing.scryfallId } : undefined);
   };
 
   const sorted = [...(lines ?? [])]

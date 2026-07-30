@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { matchPath, useLocation } from 'react-router-dom';
-import { CONTAINER_KINDS, type Color, type DeckBoard, type DeckFormat, type OracleCard, type Priced } from '@mtg/shared';
+import { CONTAINER_KINDS, type Color, type DeckBoard, type DeckFormat, type OracleCard, type Priced, type Printing } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
 import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
@@ -211,7 +211,9 @@ function SearchOverlay({
   filters: SearchFilters;
   setFilters: React.Dispatch<React.SetStateAction<SearchFilters>>;
 }) {
-  const [sheetCard, setSheetCard] = useState<Priced<OracleCard> | null>(null);
+  // The sheet opens on the printing the result was showing, so tapping a tile
+  // doesn't silently swap to a different edition than the one you tapped.
+  const [sheetCard, setSheetCard] = useState<{ card: Priced<OracleCard>; scryfallId?: string } | null>(null);
   const [deckLegalOnly, setDeckLegalOnly] = useState(true);
   const toast = useToast();
   const target = useSearchTarget();
@@ -275,17 +277,20 @@ function SearchOverlay({
     [filters, deckFilterActive, deckCtx],
   );
 
-  // Quick-add uses the default printing / NM / nonfoil / en; the sheet is for detail.
-  async function quickCollection(card: OracleCard) {
-    await addToCollection({ oracleId: card.oracleId, scryfallId: card.defaultScryfallId, condition: 'NM', finish: 'nonfoil', lang: 'en' });
+  // Quick-add uses the printing the result is showing (the user's preference,
+  // or the card DB's representative) / NM / nonfoil / en; the sheet is for detail.
+  const shownId = (card: OracleCard, printing?: Printing) => printing?.scryfallId ?? card.defaultScryfallId;
+
+  async function quickCollection(card: OracleCard, printing?: Printing) {
+    await addToCollection({ oracleId: card.oracleId, scryfallId: shownId(card, printing), condition: 'NM', finish: 'nonfoil', lang: 'en' });
     toast(`Added ${card.name} to collection`);
   }
   async function quickWishlist(card: OracleCard) {
     await addToWishlist({ oracleId: card.oracleId, scryfallId: null });
     toast(`Added ${card.name} to wishlist`);
   }
-  async function quickTradelist(card: OracleCard) {
-    await addToCollection({ oracleId: card.oracleId, scryfallId: card.defaultScryfallId, condition: 'NM', finish: 'nonfoil', lang: 'en', quantityForTrade: 1 });
+  async function quickTradelist(card: OracleCard, printing?: Printing) {
+    await addToCollection({ oracleId: card.oracleId, scryfallId: shownId(card, printing), condition: 'NM', finish: 'nonfoil', lang: 'en', quantityForTrade: 1 });
     toast(`Added ${card.name} to tradelist`);
   }
   async function quickDeck(card: OracleCard, deckId: string, board: DeckBoard, noun = 'deck') {
@@ -294,7 +299,7 @@ function SearchOverlay({
     toast(`Added ${card.name}${suffix} to ${noun}`);
   }
 
-  function actionsFor(card: Priced<OracleCard>): ReactNode {
+  function actionsFor(card: Priced<OracleCard>, printing?: Priced<Printing>): ReactNode {
     switch (target.kind) {
       case 'deck': {
         // Storage is one pile: a single quick-add, no board buttons.
@@ -326,7 +331,7 @@ function SearchOverlay({
       }
       case 'collection':
         return (
-          <button title="Add to collection" onClick={() => quickCollection(card)}>
+          <button title="Add to collection" onClick={() => quickCollection(card, printing)}>
             +<Icon name="collection" size={16} />
           </button>
         );
@@ -338,20 +343,20 @@ function SearchOverlay({
         );
       case 'tradelist':
         return (
-          <button title="Add to tradelist" onClick={() => quickTradelist(card)}>
+          <button title="Add to tradelist" onClick={() => quickTradelist(card, printing)}>
             +<Icon name="tradelist" size={16} />
           </button>
         );
       default:
         return (
           <>
-            <button title="Add to collection" onClick={() => quickCollection(card)}>
+            <button title="Add to collection" onClick={() => quickCollection(card, printing)}>
               +<Icon name="collection" size={16} />
             </button>
             <button title="Add to wishlist" onClick={() => quickWishlist(card)}>
               +<Icon name="wishlist" size={16} />
             </button>
-            <button title="Add to tradelist" onClick={() => quickTradelist(card)}>
+            <button title="Add to tradelist" onClick={() => quickTradelist(card, printing)}>
               +<Icon name="tradelist" size={16} />
             </button>
           </>
@@ -423,16 +428,17 @@ function SearchOverlay({
             filterExtras={filterExtras}
             showFilters={false}
             emptyState={emptyState}
-            badgeFor={(card) => ownedBadge(ownership?.lookup(card.oracleId, card.defaultScryfallId))}
+            badgeFor={(card, printing) => ownedBadge(ownership?.lookup(card.oracleId, shownId(card, printing)))}
             actionsFor={actionsFor}
             listOnlyActions
-            onCardClick={setSheetCard}
+            onCardClick={(card, printing) => setSheetCard({ card, scryfallId: printing?.scryfallId })}
           />
         )}
 
         {sheetCard && (
           <CardSheet
-            oracleCard={sheetCard}
+            oracleCard={sheetCard.card}
+            initialScryfallId={sheetCard.scryfallId}
             addTarget={target.kind === 'deck' ? { ...target, format: deckCtx?.format } : target}
             onClose={() => setSheetCard(null)}
           />

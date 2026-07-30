@@ -2,6 +2,7 @@
 import type { Finish, OracleCard, Printing } from '@mtg/shared';
 import { normalize as normalizeText } from '../cardDb/querySyntax.js';
 import { buildNameMultiIndex, cardPriority } from '../cardDb/search.js';
+import { resolveDisplayPrintings } from '../cardDb/preferredPrinting.js';
 import { db } from '../db/schema.js';
 import { parseImport } from './parse.js';
 import type { ParsedLine, ResolveRequest, ResolveResponse, ResolvedLine, UnmatchedLine } from './types.js';
@@ -62,8 +63,18 @@ function pickOracle(line: ParsedLine, candidates: OracleCard[], byOracle: Map<st
   return candidates[0]!;
 }
 
-/** Choose the concrete printing for a matched line. */
-function resolvePrinting(line: ParsedLine, oracle: OracleCard, printings: Printing[]): Printing | undefined {
+/**
+ * Choose the concrete printing for a matched line. What the file says wins — an
+ * explicit Scryfall id, then a set code (plus collector number). Only a line
+ * that names no edition at all ("4 Lightning Bolt") falls through to
+ * `preferred`, the user's printing preference for that card.
+ */
+function resolvePrinting(
+  line: ParsedLine,
+  oracle: OracleCard,
+  printings: Printing[],
+  preferred?: Printing,
+): Printing | undefined {
   if (line.scryfallId) {
     const byId = printings.find((p) => p.scryfallId === line.scryfallId);
     if (byId) return byId;
@@ -79,12 +90,13 @@ function resolvePrinting(line: ParsedLine, oracle: OracleCard, printings: Printi
       return inSet[0];
     }
   }
+  if (preferred) return preferred;
   return printings.find((p) => p.scryfallId === oracle.defaultScryfallId) ?? printings[0];
 }
 
 self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
   try {
-    const { text, tradelistMode = 'none' } = e.data;
+    const { text, tradelistMode = 'none', printingPrefs } = e.data;
 
     post({ type: 'progress', label: 'Parsing…', fraction: 0.05 });
     const { format, lines } = parseImport(text);
@@ -155,11 +167,17 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
       else byOracle.set(p.oracleId, [p]);
     }
 
+    // The user's preferred printing per oracle card, for lines that name no
+    // edition. Empty (and free) on the default 'latest' preference.
+    const preferred = printingPrefs
+      ? await resolveDisplayPrintings(oracleIds, { prefs: printingPrefs })
+      : new Map<string, Printing>();
+
     const resolved: ResolvedLine[] = [];
     for (const { line, candidates } of candidateMatches) {
       const oracle = pickOracle(line, candidates, byOracle);
       const printings = byOracle.get(oracle.oracleId) ?? [];
-      const printing = resolvePrinting(line, oracle, printings);
+      const printing = resolvePrinting(line, oracle, printings, preferred.get(oracle.oracleId));
       if (!printing) {
         unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, finish: line.finish, board: line.board, suggestions: [] });
         continue;

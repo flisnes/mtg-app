@@ -58,6 +58,16 @@ export interface Printing {
   lang: string;
   finishes: Finish[];
   releasedAt: string; // ISO date
+  /**
+   * Scryfall's `promo` flag: prerelease/buy-a-box/promo-pack stampings and the
+   * like. Omitted (not false) for the overwhelming majority of printings, which
+   * aren't promos — same sparse convention as the back-face images. Absent on
+   * card DBs built before this field, so treat missing as "not known to be a
+   * promo" rather than "definitely normal". Set-wide promo products are better
+   * identified by set type (see SetTypeMap); this covers the handful of promos
+   * that live inside an ordinary set's own numbering.
+   */
+  promo?: boolean;
   imageSmall: string | null;
   imageNormal: string | null;
   /** Back-face images for double-faced cards (absent for single-faced ones and on card DBs built before this field). */
@@ -140,8 +150,47 @@ export interface CardDbManifest {
      * builds made before the feature (and on runs where the MTGJSON fetch fails).
      */
     sealed?: CardDbArtifactMeta;
+    /**
+     * Set code → Scryfall set type, for telling a normal set apart from a promo
+     * product, Secret Lair, token sheet or memorabilia set. Tiny (~4 KB gzipped
+     * for every set ever printed) and fetched lazily like `sealed`. Absent on
+     * builds made before the preferred-printing setting existed.
+     */
+    sets?: CardDbArtifactMeta;
   };
 }
+
+/**
+ * Set code → Scryfall `set_type`. The client uses this to resolve the "latest
+ * non-promo printing" preference; see PROMO_SET_TYPES.
+ */
+export type SetTypeMap = Record<string, string>;
+
+/**
+ * Set types whose printings are promos or novelties rather than a normal
+ * release: promo packs and judge/FNM foils (`promo`), Secret Lair and other
+ * boxed oddities (`box`), token sheets, oversized/art-series memorabilia,
+ * premium inserts like Kaladesh Inventions (`masterpiece`), Un-sets (`funny`),
+ * and the digital-only or novelty remainder.
+ *
+ * A denylist rather than an allowlist on purpose: if Scryfall adds a set type we
+ * haven't seen, treating it as a normal set is the safer failure — the user
+ * still gets a real printing, just possibly a promo one.
+ */
+export const PROMO_SET_TYPES: ReadonlySet<string> = new Set([
+  'promo',
+  'token',
+  'memorabilia',
+  'box',
+  'funny',
+  'masterpiece',
+  'minigame',
+  'vanguard',
+  'treasure_chest',
+  'arsenal',
+  'spellbook',
+  'alchemy',
+]);
 
 /** One chunk of an artifact: all rows whose id starts with `key` (one hex char). */
 export interface CardDbChunkMeta extends CardDbArtifactMeta {

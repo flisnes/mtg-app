@@ -1,4 +1,5 @@
 import type { Condition, DeckBoard, Finish } from '@mtg/shared';
+import type { PrintingPrefs } from '../cardDb/preferredPrinting.js';
 
 // Import pipeline types (beta plan §5). Text/CSV → ParsedLine → resolved
 // against the card DB → applied to the collection, with unmatched lines sent
@@ -66,6 +67,12 @@ export type TradelistMode = 'none' | 'file' | 'all';
 export interface ResolveRequest {
   text: string;
   tradelistMode?: TradelistMode;
+  /**
+   * The printing preferences, snapshotted by the caller. Workers can't read
+   * localStorage, so a line that names no set gets the user's preferred printing
+   * only because it's passed in here.
+   */
+  printingPrefs?: PrintingPrefs;
 }
 
 export type ResolveResponse =

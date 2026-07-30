@@ -17,7 +17,16 @@ import { deleteAllUserData } from '../db/dataAccess.js';
 import { setGoblinMode, useGoblinMode } from '../components/useGoblinMode.js';
 import { formatDiagnostics } from '../errorLog.js';
 import { Page } from './Page.js';
-import { fmtDateTime as fmtWhen } from '../util/format.js';
+import { fmtDate, fmtDateTime as fmtWhen } from '../util/format.js';
+import { setPrefs, type PrintingPref, type UpdatePolicy } from '../prefs.js';
+import { usePrefs } from '../usePrefs.js';
+import { CURRENCIES, ensureRates, rateSummary } from '../price/rates.js';
+import {
+  checkCardDataNow,
+  checkPricesNow,
+  checkScanDataNow,
+  type CheckOutcome,
+} from '../cardDb/manualCheck.js';
 
 // One home for everything management-y: your account (auth + sync), your data
 // (transfer/backup), and preferences. Purely informational bits (version,
@@ -56,6 +65,9 @@ export function Settings() {
   return (
     <Page title="Settings">
       <AccountSection />
+      <CurrencySection />
+      <PrintingSection />
+      <DownloadsSection />
       <PreferencesSection />
       <DataSection signedIn={!!account.session} />
       <TroubleSection />
@@ -330,6 +342,216 @@ function SignedIn() {
         <p className="fine-print">Deleting removes your synced data and shared lists from the server. Data on this device stays.</p>
       </section>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Prices & currency
+// ---------------------------------------------------------------------------
+
+function CurrencySection() {
+  const { displayCurrency, baseCurrency } = usePrefs();
+  const [checking, setChecking] = useState(false);
+  const rate = rateSummary();
+  const converting = displayCurrency !== baseCurrency;
+
+  // Switching either currency may need a rate we haven't fetched yet.
+  const change = (patch: Partial<{ displayCurrency: string; baseCurrency: 'EUR' | 'USD' }>) => {
+    setPrefs(patch);
+    setChecking(true);
+    void ensureRates().finally(() => setChecking(false));
+  };
+
+  return (
+    <section className="about-section">
+      <h2>Prices &amp; currency</h2>
+      <p className="fine-print">
+        Card prices come from Scryfall in euros and US dollars. Pick any other currency and the app converts them for
+        display; what gets recorded in your history never changes.
+      </p>
+
+      <label className="field">
+        Show prices in
+        <select value={displayCurrency} onChange={(e) => change({ displayCurrency: e.target.value })}>
+          {CURRENCIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.code} — {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <p className="fine-print">Base prices (what conversions start from, and what shows if a rate isn’t available):</p>
+      <div className="seg-row" role="radiogroup" aria-label="Base currency">
+        {(['EUR', 'USD'] as const).map((c) => (
+          <button
+            key={c}
+            role="radio"
+            aria-checked={baseCurrency === c}
+            className={baseCurrency === c ? 'seg seg-active' : 'seg'}
+            onClick={() => change({ baseCurrency: c })}
+          >
+            {c === 'EUR' ? '€ Euro' : '$ US dollar'}
+          </button>
+        ))}
+      </div>
+
+      {converting && (
+        <p className="fine-print">
+          {checking
+            ? 'Fetching today’s rate…'
+            : rate
+              ? `${rate.text} · European Central Bank reference rate via Frankfurter, ${fmtRateDate(rate.date)}.`
+              : `No exchange rate available yet, so prices are showing in ${baseCurrency}. Rates are fetched once a day and need a connection.`}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** "2026-07-29" → "29 Jul 2026", matching the app's other dates. */
+function fmtRateDate(iso: string): string {
+  const ts = Date.parse(iso);
+  return Number.isNaN(ts) ? iso : fmtDate(ts);
+}
+
+// ---------------------------------------------------------------------------
+// Card printings
+// ---------------------------------------------------------------------------
+
+const PRINTING_OPTIONS: { value: PrintingPref; label: string; hint: string }[] = [
+  { value: 'latest', label: 'Newest printing', hint: 'The most recent edition of the card. This is the default.' },
+  {
+    value: 'latestNonPromo',
+    label: 'Newest normal printing',
+    hint: 'The most recent edition from an ordinary set — skipping promos, prerelease stamps, Secret Lairs and the like.',
+  },
+  { value: 'first', label: 'First printing', hint: 'The oldest edition — the card as it originally appeared.' },
+  { value: 'cheapest', label: 'Cheapest printing', hint: 'The least expensive edition with a known price.' },
+];
+
+function PrintingSection() {
+  const { printing, preferOwnedPrinting } = usePrefs();
+
+  return (
+    <section className="about-section">
+      <h2>Card printings</h2>
+      <p className="fine-print">
+        Which edition a card shows as in search results, and which one gets recorded when you add it without picking
+        one yourself. Cards already in your collection, decks and boxes keep the printing they were filed under.
+      </p>
+
+      <label className="field">
+        Show cards as their
+        <select value={printing} onChange={(e) => setPrefs({ printing: e.target.value as PrintingPref })}>
+          {PRINTING_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="fine-print">{PRINTING_OPTIONS.find((o) => o.value === printing)?.hint}</p>
+
+      <label className="agree-row">
+        <input
+          type="checkbox"
+          checked={preferOwnedPrinting}
+          onChange={(e) => setPrefs({ preferOwnedPrinting: e.target.checked })}
+        />
+        <span>Prefer a printing I already own, when I own one</span>
+      </label>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Automatic downloads
+// ---------------------------------------------------------------------------
+
+const POLICY_OPTIONS: { value: UpdatePolicy; label: string }[] = [
+  { value: 'ask', label: 'Ask me first' },
+  { value: 'always', label: 'Download automatically' },
+  { value: 'never', label: 'Never download' },
+];
+
+function DownloadsSection() {
+  const prefs = usePrefs();
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const runCheck = async (key: string, fn: () => Promise<CheckOutcome>) => {
+    setBusy(key);
+    try {
+      toast((await fn()).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const feeds: {
+    key: string;
+    title: string;
+    blurb: string;
+    policy: UpdatePolicy;
+    set: (p: UpdatePolicy) => void;
+    check: () => Promise<CheckOutcome>;
+  }[] = [
+    {
+      key: 'prices',
+      title: 'Card prices',
+      blurb: 'Refreshed daily, around 3 MB each time. Without it, prices and collection values slowly go stale.',
+      policy: prefs.pricesPolicy,
+      set: (pricesPolicy) => setPrefs({ pricesPolicy }),
+      check: checkPricesNow,
+    },
+    {
+      key: 'cardDb',
+      title: 'Card database',
+      blurb:
+        'New sets, corrected card text and the sealed-product list. Only the parts that changed download, so it is usually small — but a big change (or a first install) runs to about 14 MB.',
+      policy: prefs.cardDbPolicy,
+      set: (cardDbPolicy) => setPrefs({ cardDbPolicy }),
+      check: checkCardDataNow,
+    },
+    {
+      key: 'scanData',
+      title: 'Card scanning data',
+      blurb:
+        'The card-art index the camera scanner matches against, about 4 MB. Newer versions recognise newer cards; the copy you have keeps working either way.',
+      policy: prefs.scanDataPolicy,
+      set: (scanDataPolicy) => setPrefs({ scanDataPolicy }),
+      check: checkScanDataNow,
+    },
+  ];
+
+  return (
+    <section className="about-section">
+      <h2>Automatic downloads</h2>
+      <p className="fine-print">
+        Nothing downloads without your say-so. Each of these asks the first time it has something new, and “don’t ask
+        again” on that prompt lands here — where you can change your mind, or fetch an update on demand.
+      </p>
+
+      {feeds.map((f) => (
+        <div key={f.key} className="download-feed">
+          <label className="field">
+            {f.title}
+            <select value={f.policy} onChange={(e) => f.set(e.target.value as UpdatePolicy)}>
+              {POLICY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="fine-print">{f.blurb}</p>
+          <button onClick={() => void runCheck(f.key, f.check)} disabled={busy !== null}>
+            {busy === f.key ? 'Checking…' : 'Check now'}
+          </button>
+        </div>
+      ))}
+    </section>
   );
 }
 

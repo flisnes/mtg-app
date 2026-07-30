@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { Color, Finish, OracleCard } from '@mtg/shared';
 import { priceForFinish } from '../cardDb/prices.js';
+import { getPrefs, type BaseCurrency } from '../prefs.js';
+import { convertToDisplay, fmtConverted, fmtMoney } from '../price/rates.js';
 
 // Shared sort/group machinery for every card list in the app (decks,
 // collection, tradelist, wishlist). Views adapt their row shape via a small
@@ -91,49 +93,71 @@ export function pricedForFinish<T extends FinishPriced>(
   return { priceEur: eur, priceUsd: usd };
 }
 
-/** Numeric price for sorting: EUR from any source, else USD (matches formatPrice). */
-export function priceValue(...sources: ({ priceEur: number | null; priceUsd: number | null } | undefined)[]): number | null {
-  for (const s of sources) if (s?.priceEur != null) return s.priceEur;
-  for (const s of sources) if (s?.priceUsd != null) return s.priceUsd;
+type PricedSource = { priceEur: number | null; priceUsd: number | null } | undefined;
+
+/**
+ * The first price available in the user's base currency, else the first in the
+ * other one, tagged with which it is. Callers convert or format from there.
+ */
+function pickPrice(sources: PricedSource[]): { amount: number; currency: BaseCurrency } | null {
+  const base = getPrefs().baseCurrency;
+  const first = base === 'EUR' ? (s: NonNullable<PricedSource>) => s.priceEur : (s: NonNullable<PricedSource>) => s.priceUsd;
+  const other = base === 'EUR' ? (s: NonNullable<PricedSource>) => s.priceUsd : (s: NonNullable<PricedSource>) => s.priceEur;
+  const otherCurrency: BaseCurrency = base === 'EUR' ? 'USD' : 'EUR';
+  for (const s of sources) if (s && first(s) != null) return { amount: first(s)!, currency: base };
+  for (const s of sources) if (s && other(s) != null) return { amount: other(s)!, currency: otherCurrency };
   return null;
 }
 
-/** Display price with its currency: EUR from any source, else USD, else undefined. */
-export function formatPrice(...sources: ({ priceEur: number | null; priceUsd: number | null } | undefined)[]): string | undefined {
-  for (const s of sources) if (s?.priceEur != null) return `€${s.priceEur.toFixed(2)}`;
-  for (const s of sources) if (s?.priceUsd != null) return `$${s.priceUsd.toFixed(2)}`;
-  return undefined;
+/**
+ * Numeric price for sorting. Everything is normalised into the display currency
+ * so a list mixing EUR-only and USD-only cards sorts by real value rather than
+ * by which currency each card happened to be priced in.
+ */
+export function priceValue(...sources: PricedSource[]): number | null {
+  const picked = pickPrice(sources);
+  if (!picked) return null;
+  return convertToDisplay(picked.amount, picked.currency) ?? picked.amount;
+}
+
+/** Display price in the user's currency; falls back to the raw quote when no rate is available. */
+export function formatPrice(...sources: PricedSource[]): string | undefined {
+  const picked = pickPrice(sources);
+  if (!picked) return undefined;
+  return fmtConverted(picked.amount, picked.currency) ?? fmtMoney(picked.amount, picked.currency);
 }
 
 // ---- Value totals ----
-// A running sum kept per currency: each card contributes to whichever currency
-// its displayed price uses (EUR preferred, matching priceValue/formatPrice), so
-// the total lines up with the per-card prices shown in the list.
+// Sums are kept per source currency, because a card may only be priced in one
+// of the two. Formatting converts both into the display currency and adds them
+// up; without a rate it falls back to reporting the two buckets side by side,
+// which is what the app did before conversion existed.
 export interface PriceTotal {
   eur: number;
   usd: number;
 }
 
-type PricedSource = { priceEur: number | null; priceUsd: number | null } | undefined;
-
-/** Add qty × per-card value into the matching currency bucket (EUR preferred). */
+/** Add qty × per-card value into the matching currency bucket. */
 export function addToTotal(total: PriceTotal, qty: number, ...sources: PricedSource[]): void {
-  for (const s of sources) if (s?.priceEur != null) { total.eur += s.priceEur * qty; return; }
-  for (const s of sources) if (s?.priceUsd != null) { total.usd += s.priceUsd * qty; return; }
+  const picked = pickPrice(sources);
+  if (!picked) return;
+  if (picked.currency === 'EUR') total.eur += picked.amount * qty;
+  else total.usd += picked.amount * qty;
 }
 
-function fmtAmount(n: number, symbol: string): string {
-  // Cents matter for small piles; big collections just want a clean round figure.
-  const digits = n >= 1000 ? 0 : 2;
-  return symbol + n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-
-/** Format a value total; combines currencies with "+" only when both are present. */
+/** Format a value total: one converted figure, or the raw buckets joined by "+". */
 export function formatTotal({ eur, usd }: PriceTotal): string {
+  if (eur <= 0 && usd <= 0) return '—';
+  const convertedEur = eur > 0 ? convertToDisplay(eur, 'EUR') : 0;
+  const convertedUsd = usd > 0 ? convertToDisplay(usd, 'USD') : 0;
+  if (convertedEur != null && convertedUsd != null) {
+    return fmtMoney(convertedEur + convertedUsd, getPrefs().displayCurrency);
+  }
+  // No usable rate — show what we know rather than nothing.
   const parts: string[] = [];
-  if (eur > 0) parts.push(fmtAmount(eur, '€'));
-  if (usd > 0) parts.push(fmtAmount(usd, '$'));
-  return parts.length ? parts.join(' + ') : '—';
+  if (eur > 0) parts.push(fmtMoney(eur, 'EUR'));
+  if (usd > 0) parts.push(fmtMoney(usd, 'USD'));
+  return parts.join(' + ');
 }
 
 export function sortCards<T>(items: T[], get: (t: T) => SortFields, prefs: Pick<CardSortPrefs, 'key' | 'dir'>): T[] {

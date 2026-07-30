@@ -39,6 +39,7 @@ export class MtgDatabase extends Dexie {
   outbox!: Table<SyncChange, [string, string]>;
   scanData!: Table<import('../scan/store.js').ScanDataRow, string>;
   sealed!: Table<import('../sealed/store.js').SealedStoreRow, string>;
+  setTypes!: Table<import('../cardDb/setTypes.js').SetTypesRow, string>;
 
   constructor() {
     super('mtg');
@@ -193,6 +194,11 @@ export class MtgDatabase extends Dexie {
     this.version(11).stores({
       events: 'id, ts, oracleId, kind, batchId, tradeId, deckId',
     });
+
+    // v12 (printing preferences): set code → set_type, one lazily-fetched row
+    // keyed 'current' like scanData/sealed. Lets the client tell a normal
+    // release from a promo product without bloating every printing row.
+    this.version(12).stores({ setTypes: 'key' });
   }
 }
 

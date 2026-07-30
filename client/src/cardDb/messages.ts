@@ -25,6 +25,15 @@ export interface ImportRequest {
   chunks: ChunkTask[];
   /** Null when prices haven't changed since the installed set. */
   prices: CardDbArtifactMeta | null;
+  /**
+   * Record `dataVersion` when the import finishes. False for a prices-only run
+   * taken while card chunks are still outstanding (the user wanted the small
+   * price file but declined the card data): stamping the version would make the
+   * About screen claim a card-data date the installed rows don't have.
+   * Freshness itself is unaffected either way — chunk staleness is decided by
+   * per-chunk hashes, not this version.
+   */
+  stampVersion?: boolean;
 }
 
 export type WorkerResponse =

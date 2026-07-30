@@ -4,7 +4,7 @@ import { CONTAINER_META } from '../deck/containers.js';
 import type { PlacementInfo } from '../db/usePlacements.js';
 import { Icon } from './icons.js';
 
-// "Where do I keep this card?", in two shapes: a corner badge on card images
+// "Where do I keep this printing?", in two shapes: a corner badge on card images
 // (collection, tradelist, search results) and tappable pills in the card sheet.
 // Both read the same PlacementInfo, so a card's badge and its pills can never
 // disagree.
@@ -12,6 +12,9 @@ import { Icon } from './icons.js';
 //   deck glyph / binder glyph / box glyph — the kind of container holding it
 //   ×N                                    — how many containers, when >1
 //   ⚠ (amber)                             — more copies placed than owned
+//
+// The containers are the ones holding the shown printing; the ⚠ count is
+// card-wide (see usePlacements), so it says "in total" wherever it's spelled out.
 
 export interface PlacementBadgeSpec {
   node: ReactNode;
@@ -29,7 +32,7 @@ export function placementBadge(info: PlacementInfo | undefined, size = 12): Plac
     .map((p) => `${p.name} (${p.quantity})`)
     .join(' · ');
   const title = info.over
-    ? `${detail} · ${info.placed} placed, only ${info.owned} owned`
+    ? `${detail} · ${info.placed} placed in total, only ${info.owned} owned`
     : `In ${detail}`;
   return {
     node: (
@@ -74,7 +77,10 @@ export function PlacementPills({ info, onNavigate }: { info: PlacementInfo; onNa
         );
       })}
       {info.over && (
-        <span className="place-pill place-pill-warn" title={`${info.placed} copies placed, ${info.owned} owned`}>
+        <span
+          className="place-pill place-pill-warn"
+          title={`${info.placed} copies placed across every printing, ${info.owned} owned`}
+        >
           ⚠ {info.placed} placed / {info.owned} owned
         </span>
       )}

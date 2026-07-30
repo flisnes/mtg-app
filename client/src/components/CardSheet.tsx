@@ -325,9 +325,10 @@ export function CardSheet({
     () => db.collection.where('oracleId').equals(oracleCard.oracleId).toArray(),
     [oracleCard.oracleId],
   );
-  // Where this card is filed (deck / binder / box) — the pills under the name.
+  // Where this printing is filed (deck / binder / box) — the pills under the
+  // name. Follows the edition picker: switch editions and the pills follow.
   const placements = usePlacementIndex();
-  const placement = placements?.lookup(oracleCard.oracleId);
+  const placement = placements?.lookup(oracleCard.oracleId, shownId);
   const ownedQty = ownedEntries?.reduce((s, e) => s + e.quantity, 0) ?? 0;
   const ownedForTrade = ownedEntries?.reduce((s, e) => s + e.quantityForTrade, 0) ?? 0;
   // Do we own the exact printing currently shown? (Not just some other edition.)

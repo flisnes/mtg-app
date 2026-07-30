@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.80.1
+
+- **The "it's in a deck" badge now points at the right copy.** If you own an Enlightened Tutor from Mirage and another from The List, and only The List one is in a deck, the little deck badge used to appear on both — it only knew the card was filed somewhere, not which edition. Now it sits on the copy that's actually in the deck, and the card sheet's pills follow the edition you're looking at. Cards added to a deck by name only (a pasted decklist, say) don't pin an edition, so those still show on every printing — there's nothing to match against. The "more copies placed than owned" warning still counts every copy of the card across every printing, which is the only way to count it honestly when some slots name no edition.
+
 ## 0.80.0
 
 - **Prices in your own currency.** Settings has a new **Prices & currency** section. Pick any of 30 currencies — kroner, pounds, złoty, yen, take your pick — and every price in the app converts to it: card prices, collection and deck values, trade balances, price history, the lot. Rates are the European Central Bank's daily reference rates, fetched once a day. You also choose which of Scryfall's two currencies (euros or dollars) conversions start from, and that's what shows if a rate can't be fetched. Two side effects worth having: a collection holding some euro-priced and some dollar-priced cards used to report its total as "€412 + $38", and now adds up to one number; and sorting by price no longer sorts euro cards and dollar cards into separate piles. What gets *recorded* in your history is untouched, so switching currency never rewrites your own numbers.

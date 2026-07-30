@@ -21,7 +21,9 @@ export function collectionCardItem(
   r: JoinedEntry,
   opts: { moverFlags?: MoverFlags; placements?: PlacementIndex; onClick?: () => void },
 ): CardItem {
-  const place = placementBadge(opts.placements?.lookup(r.entry.oracleId));
+  // Per printing: the badge belongs on the copy that's actually filed away, not
+  // on every edition of the card.
+  const place = placementBadge(opts.placements?.lookup(r.entry.oracleId, r.entry.scryfallId));
   return {
     ...(place ? { place } : {}),
     key: r.entry.id,

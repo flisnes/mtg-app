@@ -1248,6 +1248,132 @@ export async function removeDeckCard(id: string): Promise<void> {
 }
 
 /**
+ * Delete whole slots in one go (the multi-select "remove these from this deck /
+ * binder / box"). Every line shares a batchId labelled with the container, so
+ * the edit history shows one entry the user can undo in a single tap. Returns
+ * how many copies were removed.
+ */
+export async function removeDeckCardsBulk(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  let removed = 0;
+  await db.transaction('rw', DECK_TABLES, async () => {
+    const now = Date.now();
+    const batchId = newId();
+    const slots = (await db.deckCards.bulkGet(ids)).filter((c): c is DeckCard => !!c);
+    if (slots.length === 0) return;
+    // Selection lives on one screen, so these are all one container's slots —
+    // but touch each named deck anyway rather than assume it.
+    const decks = new Map<string, Deck | undefined>();
+    for (const deckId of new Set(slots.map((s) => s.deckId))) {
+      decks.set(deckId, await touchDeck(deckId, now));
+    }
+    await db.deckCards.bulkDelete(slots.map((s) => s.id));
+    for (const s of slots) await stageDelete('deckCards', s.id);
+    for (const s of slots) removed += s.quantity;
+    await emitMany(
+      slots.map((s) => {
+        const deck = decks.get(s.deckId);
+        return {
+          ts: now,
+          kind: 'deck.remove' as const,
+          oracleId: s.oracleId,
+          ...(s.scryfallId ? { scryfallId: s.scryfallId } : {}),
+          qty: s.quantity,
+          deckId: s.deckId,
+          ...containerRef(deck),
+          board: s.board,
+          source: 'manual' as const,
+          batchId,
+          ...(deck ? { batchLabel: deck.name } : {}),
+        };
+      }),
+    );
+  });
+  return removed;
+}
+
+/**
+ * Take copies of the given cards out of *another* container — the multi-select
+ * fix for a card promised to two places at once. A slot matches on the card and,
+ * when both sides name one, on the printing: the same rule the placement badges
+ * use, so what the picker offered is what comes off. Up to `quantity` copies are
+ * taken per card, exact printing first; a slot emptied that way is deleted.
+ * Returns how many copies were removed.
+ */
+export async function removeDeckCardsMatching(
+  containerId: string,
+  cards: Array<{ oracleId: string; scryfallId?: string; quantity: number }>,
+): Promise<number> {
+  if (cards.length === 0) return 0;
+  let removed = 0;
+  await db.transaction('rw', DECK_TABLES, async () => {
+    const now = Date.now();
+    const batchId = newId();
+    const slots = await db.deckCards.where('deckId').equals(containerId).toArray();
+    const byOracle = new Map<string, DeckCard[]>();
+    for (const s of slots) {
+      const arr = byOracle.get(s.oracleId);
+      if (arr) arr.push(s);
+      else byOracle.set(s.oracleId, [s]);
+    }
+    // Copies taken off each slot, accumulated so two selected printings of one
+    // card don't each write their own event line for the same slot.
+    const taken = new Map<DeckCard, number>();
+    for (const card of cards) {
+      const candidates = (byOracle.get(card.oracleId) ?? []).filter(
+        (s) => !s.scryfallId || !card.scryfallId || s.scryfallId === card.scryfallId,
+      );
+      // Exact printing first, then the edition-less slots (a pasted decklist).
+      const ranked = [...candidates].sort(
+        (a, b) => Number(b.scryfallId === card.scryfallId) - Number(a.scryfallId === card.scryfallId),
+      );
+      let remaining = card.quantity;
+      for (const s of ranked) {
+        if (remaining <= 0) break;
+        const room = s.quantity - (taken.get(s) ?? 0);
+        if (room <= 0) continue;
+        const take = Math.min(room, remaining);
+        taken.set(s, (taken.get(s) ?? 0) + take);
+        remaining -= take;
+        removed += take;
+      }
+    }
+    if (taken.size === 0) return;
+    const deck = await touchDeck(containerId, now);
+    const puts: DeckCard[] = [];
+    const deletes: string[] = [];
+    const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
+    taken.forEach((qty, slot) => {
+      if (qty >= slot.quantity) deletes.push(slot.id);
+      else puts.push({ ...slot, quantity: slot.quantity - qty, updatedAt: now });
+      events.push({
+        ts: now,
+        kind: 'deck.remove',
+        oracleId: slot.oracleId,
+        ...(slot.scryfallId ? { scryfallId: slot.scryfallId } : {}),
+        qty,
+        deckId: containerId,
+        ...containerRef(deck),
+        board: slot.board,
+        source: 'manual',
+        batchId,
+        ...(deck ? { batchLabel: deck.name } : {}),
+      });
+    });
+    if (puts.length > 0) {
+      await db.deckCards.bulkPut(puts);
+      await stagePutMany('deckCards', puts);
+    }
+    if (deletes.length > 0) {
+      await db.deckCards.bulkDelete(deletes);
+      for (const id of deletes) await stageDelete('deckCards', id);
+    }
+    await emitMany(events);
+  });
+  return removed;
+}
+
+/**
  * Mark every card in a container for trade (or clear the flag), the bulk
  * "this whole box is up for grabs" action. Container slots name an oracle card
  * and (usually) a preferred printing, so each slot is matched against the
@@ -1256,7 +1382,19 @@ export async function removeDeckCard(id: string): Promise<void> {
  * skipped. Returns how many copies changed.
  */
 export async function setContainerForTrade(containerId: string, forTrade: boolean): Promise<number> {
-  const slots = await db.deckCards.where('deckId').equals(containerId).toArray();
+  return setSlotsForTrade(await db.deckCards.where('deckId').equals(containerId).toArray(), forTrade);
+}
+
+/**
+ * The same thing for a hand-picked set of slots (multi-select in a deck, binder
+ * or box). Returns how many copies changed.
+ */
+export async function setDeckCardsForTrade(ids: string[], forTrade: boolean): Promise<number> {
+  const slots = (await db.deckCards.bulkGet(ids)).filter((s): s is DeckCard => !!s);
+  return setSlotsForTrade(slots, forTrade);
+}
+
+async function setSlotsForTrade(slots: DeckCard[], forTrade: boolean): Promise<number> {
   const requests: MarkForTradeRequest[] = slots.map((s) => ({
     oracleId: s.oracleId,
     scryfallId: s.scryfallId ?? '',

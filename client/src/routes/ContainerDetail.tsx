@@ -21,8 +21,11 @@ import {
 import {
   addDeckCardsBulk,
   deleteDeck,
+  removeDeckCardsBulk,
+  removeDeckCardsMatching,
   renameDeck,
   setContainerForTrade,
+  setDeckCardsForTrade,
   setDeckFormat,
 } from '../db/dataAccess.js';
 import { addToWishlistBulk } from '../db/dataAccess.js';
@@ -55,6 +58,11 @@ import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { Sheet } from '../components/Sheet.js';
 import { DeckHistory, HISTORY_ANCHOR } from '../components/DeckHistory.js';
+import { BulkActionBar, type BulkAction } from '../components/BulkActionBar.js';
+import { ContainerPickerSheet } from '../components/ContainerPickerSheet.js';
+import { useMultiSelect, type MultiSelect } from '../components/useMultiSelect.js';
+import { usePlacementIndex } from '../db/usePlacements.js';
+import { Icon } from '../components/icons.js';
 
 interface Row {
   id: string;
@@ -98,6 +106,11 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('deck', { group: 'type' });
   const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: DeckCardEdit } | null>(null);
+  const sel = useMultiSelect();
+  // 'file' picks somewhere to *also* put the selection, 'unfile' picks somewhere
+  // to take it out of — the two halves of sorting out a card promised twice.
+  const [picking, setPicking] = useState<'file' | 'unfile' | null>(null);
+  const placements = usePlacementIndex();
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -216,6 +229,79 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       toast(`${forTrade ? 'Marked' : 'Unmarked'} ${n} card${n === 1 ? '' : 's'} for trade`);
     }
   }
+
+  // ---- Multi-select ----------------------------------------------------
+  // Selection is keyed by slot id, so it spans every board: pick a commander
+  // and three sideboard cards and one action covers the lot.
+  const selectedRows = data.rows.filter((r) => sel.selected.has(r.id));
+  const allKeys = data.rows.map((r) => r.id);
+  const selectedCopies = selectedRows.reduce((s, r) => s + r.quantity, 0);
+  const plural = (n: number) => (n === 1 ? '' : 's');
+
+  // Which *other* containers hold the selection, and how much of it — the list
+  // the "Unfile" picker offers, so resolving a double-promised card is two taps
+  // rather than a hunt through every deck you own.
+  const elsewhere = new Map<string, number>();
+  for (const r of selectedRows) {
+    for (const p of placements?.lookup(r.oracleId, r.scryfallId).places ?? []) {
+      if (p.containerId === id) continue;
+      elsewhere.set(p.containerId, (elsewhere.get(p.containerId) ?? 0) + 1);
+    }
+  }
+
+  async function bulkRemove() {
+    const n = selectedRows.length;
+    if (!window.confirm(`Remove ${n} card${plural(n)} from “${deck.name}”?`)) return;
+    const copies = await removeDeckCardsBulk(selectedRows.map((r) => r.id));
+    toast(`Removed ${copies} card${plural(copies)} from the ${meta.noun}`);
+    sel.exit();
+  }
+
+  /** Mark the selected cards' owned copies for trade (or take them back off). */
+  async function bulkTrade(forTrade: boolean) {
+    const n = await setDeckCardsForTrade(selectedRows.map((r) => r.id), forTrade);
+    if (n === 0) {
+      toast(forTrade ? 'None of those are in your collection to mark' : 'None of those were for trade');
+    } else {
+      toast(`${forTrade ? 'Marked' : 'Unmarked'} ${n} card${plural(n)} for trade`);
+    }
+    sel.exit();
+  }
+
+  /** Also file the selection into another deck, binder or box. */
+  async function bulkFile(containerId: string, targetKind: ContainerKind) {
+    setPicking(null);
+    await addDeckCardsBulk(
+      containerId,
+      selectedRows.map((r) => ({ oracleId: r.oracleId, quantity: r.quantity, board: 'main' as const, scryfallId: r.scryfallId })),
+    );
+    toast(`Added ${selectedCopies} card${plural(selectedCopies)} to ${CONTAINER_META[targetKind].noun.toLowerCase()}`);
+    sel.exit();
+  }
+
+  /** Take the selection back out of another container (the conflict fix). */
+  async function bulkUnfile(containerId: string, targetKind: ContainerKind) {
+    setPicking(null);
+    const removed = await removeDeckCardsMatching(
+      containerId,
+      selectedRows.map((r) => ({ oracleId: r.oracleId, scryfallId: r.scryfallId, quantity: r.quantity })),
+    );
+    toast(
+      removed === 0
+        ? `Nothing matched in that ${CONTAINER_META[targetKind].noun.toLowerCase()}`
+        : `Removed ${removed} card${plural(removed)} from that ${CONTAINER_META[targetKind].noun.toLowerCase()}`,
+    );
+    sel.exit();
+  }
+
+  const bulkActions: BulkAction[] = [
+    { label: 'Add to tradelist', icon: 'tradelist', onClick: () => void bulkTrade(true) },
+    { label: 'Remove from tradelist', icon: 'close', onClick: () => void bulkTrade(false) },
+    { label: 'File away…', icon: 'decks', onClick: () => setPicking('file') },
+    // Nothing to unfile from unless the selection is filed somewhere else too.
+    { label: 'Unfile…', icon: 'minus', disabled: elsewhere.size === 0, onClick: () => setPicking('unfile') },
+    { label: `Remove from ${meta.noun}`, icon: 'trash', danger: true, onClick: () => void bulkRemove() },
+  ];
 
   async function addMissingToWishlist(candidates: MissingCard[]) {
     const chosen = candidates.filter((c) => picked.has(c.oracleId));
@@ -354,6 +440,11 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
 
       <div className="list-toolbar">
         <p className="search-meta grow">Search above to add cards to this {meta.noun}.</p>
+        {!sel.active && data.rows.length > 0 && (
+          <button className="select-toggle" onClick={sel.enter} title="Select multiple cards">
+            <Icon name="check" size={15} /> Select
+          </button>
+        )}
         <SortControls prefs={sort} onChange={setSort} groups />
         <ViewToggle mode={view} onChange={setView} />
       </div>
@@ -378,12 +469,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               view={view}
               issues={legality.issues}
               onEdit={setInfo}
+              sel={sel}
               commanderDeck={isCommander}
               emptyHint="No commander yet. Use ♛ on a card below, or the +Cmdr button in search."
             />
           )}
-          <Board title="Mainboard" rows={main} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} hasCommander={commander.length > 0} />
-          <Board title="Sideboard" rows={side} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} commanderDeck={isCommander} hasCommander={commander.length > 0} />
+          <Board title="Mainboard" rows={main} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} sel={sel} commanderDeck={isCommander} hasCommander={commander.length > 0} />
+          <Board title="Sideboard" rows={side} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} sel={sel} commanderDeck={isCommander} hasCommander={commander.length > 0} />
         </>
       ) : (
         // Storage has one pile — no boards to split it into. Slots written before
@@ -395,7 +487,42 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           view={view}
           issues={legality.issues}
           onEdit={setInfo}
+          sel={sel}
           emptyHint={`Nothing filed here yet. Search above, scan a stack, or select cards in your collection and file them into this ${meta.noun}.`}
+        />
+      )}
+
+      {sel.active && (
+        <BulkActionBar
+          count={selectedRows.length}
+          allSelected={allKeys.length > 0 && allKeys.every((k) => sel.selected.has(k))}
+          onToggleAll={() => sel.toggleAll(allKeys)}
+          onCancel={sel.exit}
+          actions={bulkActions}
+        />
+      )}
+
+      {picking === 'file' && (
+        <ContainerPickerSheet
+          title="File away"
+          label="Choose a deck, binder or box"
+          excludeId={id}
+          onPick={bulkFile}
+          onClose={() => setPicking(null)}
+        />
+      )}
+      {picking === 'unfile' && (
+        <ContainerPickerSheet
+          title="Take out of"
+          label="Choose where to remove these from"
+          only={new Set(elsewhere.keys())}
+          noteFor={(cid) => {
+            const n = elsewhere.get(cid) ?? 0;
+            return `holds ${n} of these`;
+          }}
+          emptyText="None of the selected cards are filed anywhere else."
+          onPick={bulkUnfile}
+          onClose={() => setPicking(null)}
         />
       )}
 
@@ -503,6 +630,7 @@ function Board({
   view,
   issues,
   onEdit,
+  sel,
   commanderDeck = false,
   hasCommander = false,
   emptyHint,
@@ -513,6 +641,8 @@ function Board({
   view: ViewMode;
   issues: Map<string, string>;
   onEdit: (target: { card: Priced<OracleCard>; deckCard: DeckCardEdit }) => void;
+  /** Multi-select state, shared across every board so one bar covers them all. */
+  sel?: MultiSelect;
   /** Commander-format deck: show move-to/from-command-zone actions. */
   commanderDeck?: boolean;
   /** A commander is already in the command zone: hide "make commander" actions. */
@@ -554,6 +684,7 @@ function Board({
     };
   };
   const groups = group === 'none' ? null : groupCards(rows, (r) => r.oracle, group);
+  const selProps = { selectable: sel?.active, selectedKeys: sel?.selected, onToggleSelect: sel?.toggle };
   return (
     <div className="about-section">
       <h2>
@@ -567,11 +698,11 @@ function Board({
             <h3 className="card-group-title">
               {g.label} <span className="badge">{g.items.reduce((s, r) => s + r.quantity, 0)}</span>
             </h3>
-            <CardItems view={view} items={g.items.map(toItem)} />
+            <CardItems view={view} items={g.items.map(toItem)} {...selProps} />
           </div>
         ))
       ) : (
-        <CardItems view={view} items={rows.map(toItem)} />
+        <CardItems view={view} items={rows.map(toItem)} {...selProps} />
       )}
     </div>
   );

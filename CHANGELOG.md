@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.82.0
+
+- **Select cards inside a deck, binder or box.** The **Select** button that Collection has had for a while now sits in every deck, binder and box too, next to the sort and view controls. Tick as many cards as you like — the selection spans the mainboard, sideboard and command zone at once, so "Select all" really does mean all of it — and the action bar slides up with everything you can do to the lot.
+- **Five bulk actions.** **Add to tradelist** and **Remove from tradelist** flag the owned copies of everything you've picked, so a shelf of a box you've decided to sell is one selection instead of forty taps. **Remove from deck** (or binder, or box) empties those slots out. **File away…** also puts them in another deck, binder or box, creating one on the spot if you like. And **Unfile…** takes them *out* of one, which is the fix for the card you've promised twice.
+- **Unfile knows where to look.** Rather than making you hunt through every deck you own, the Unfile sheet lists only the containers that actually hold something you've selected, and says how much of it each one is holding — "Casual · holds 2 of these". Pick one and those copies come off. It matches on the edition when both sides name one, the same rule the little deck badge uses, so what the sheet offers is what gets removed.
+- **All of it undoes in one tap.** A bulk removal lands in the edit history as a single entry ("Removed from Mono-Red Burn · 4 cards"), not four, and undoing it puts every slot back.
+
 ## 0.81.0
 
 - **Search your collection, then sort it and select it.** When the two search bars became one, the search-and-then-operate workflow quietly went with them: you could search your collection in the overlay, but the results arrived name-sorted with no way to pick them out and act on them. Now, when search is pointed at the very list you're standing on, it filters that page in place instead of covering it. Tap the search bar on Collection and you get a slim chip row under the header; type `t:creature -c:r mv<=3` and the collection narrows to those cards, still with its own sorting, its own **Select**, and the full set of bulk actions. Select all now means "all of the ones I searched for", so filing sixty commons into a box is a search, a tap and a tap. Same on Wishlist and Tradelist. The entry and card counts at the top follow the filter too, which is a quick way to price out a slice of the collection.

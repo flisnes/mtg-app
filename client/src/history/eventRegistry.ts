@@ -80,10 +80,25 @@ export function describeEvent(e: UserEvent): EventDisplay {
  * How to render a grouped batch entry (import / sealed / scan / trade). `kind`
  * is a representative event of the batch: deck and wishlist batches are named
  * for their destination (a scan into a deck still reads "Added to <deck>"),
- * everything else by how the batch was made.
+ * everything else by how the batch was made. `deckKind` (that same event's) is
+ * only set for storage, so a batch without it keeps the deck icon it always had.
  */
-export function describeBatch(source: EventSource, label?: string, kind?: UserEventKind): EventDisplay {
-  if (kind === 'deck.add') return { verb: `Added to ${label ?? 'a deck'}`, icon: 'decks', direction: 'in' };
+export function describeBatch(
+  source: EventSource,
+  label?: string,
+  kind?: UserEventKind,
+  deckKind?: ContainerKind,
+): EventDisplay {
+  const containerIcon = CONTAINER_META[deckKind ?? 'deck'].icon;
+  if (kind === 'deck.add') return { verb: `Added to ${label ?? 'a deck'}`, icon: containerIcon, direction: 'in' };
+  // A bulk removal from a deck, binder or box (multi-select "remove these").
+  if (kind === 'deck.remove') {
+    return {
+      verb: `Removed from ${label ?? `a ${CONTAINER_META[deckKind ?? 'deck'].noun}`}`,
+      icon: containerIcon,
+      direction: 'out',
+    };
+  }
   if (kind === 'wish.add') return { verb: 'Added to wishlist', icon: 'wishlist', direction: 'neutral' };
   if (kind === 'tradelist.mark') return { verb: 'Marked for trade', icon: 'tradelist', direction: 'neutral' };
   if (source === 'scan') return { verb: 'Scanned', icon: 'camera', direction: 'in' };

@@ -11,9 +11,10 @@ import { wishCardItem } from '../components/cardRows.js';
 import { BulkActionBar } from '../components/BulkActionBar.js';
 import { useMultiSelect } from '../components/useMultiSelect.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
+import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { addToTotal, formatTotal, priceValue, SortControls, sortCards, useCardSort, type PriceTotal } from '../components/CardSorting.js';
 import { HeaderValue } from '../components/ValueSummary.js';
-import { useOpenSearch } from '../components/GlobalSearch.js';
+import { useListFilter, useOpenSearch } from '../components/GlobalSearch.js';
 import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
@@ -37,6 +38,10 @@ export function Wishlist() {
   const toast = useToast();
   const sel = useMultiSelect();
   const rows = useLiveQuery(async () => joinWishlistEntries(await db.wishlist.toArray()), []);
+  // Header search scoped to the wishlist narrows these rows in place, so sort,
+  // Select and the bulk remove all act on the search result.
+  const query = useListFilter('wishlist');
+  const matchesQuery = useEntryMatcher(rows, query);
 
   // Per-printing "last edited" (the top of that printing's History tab), not
   // entry.updatedAt — see CollectionListView. "Any printing" wishes span the
@@ -47,7 +52,7 @@ export function Wishlist() {
   const filtered = useMemo(() => {
     if (!rows) return [];
     return sortCards(
-      rows,
+      rows.filter(matchesQuery),
       (r) => ({
         name: r.oracle?.name,
         cmc: r.oracle?.cmc,
@@ -57,7 +62,7 @@ export function Wishlist() {
       }),
       sort,
     );
-  }, [rows, sort, lastEdited]);
+  }, [rows, matchesQuery, sort, lastEdited]);
 
   // Value covers the whole wishlist, not just the filtered view.
   const value = useMemo(() => {
@@ -130,15 +135,19 @@ export function Wishlist() {
               <ViewToggle mode={view} onChange={setView} />
             </div>
           </div>
-          <CardItems
-            view={view}
-            selectable={sel.active}
-            selectedKeys={sel.selected}
-            onToggleSelect={sel.toggle}
-            items={filtered.map((r) =>
-              wishCardItem(r, { ownership, moverFlags, onClick: r.oracle ? () => setEditing(r) : undefined }),
-            )}
-          />
+          {filtered.length === 0 ? (
+            <p className="search-meta">Nothing here matches.</p>
+          ) : (
+            <CardItems
+              view={view}
+              selectable={sel.active}
+              selectedKeys={sel.selected}
+              onToggleSelect={sel.toggle}
+              items={filtered.map((r) =>
+                wishCardItem(r, { ownership, moverFlags, onClick: r.oracle ? () => setEditing(r) : undefined }),
+              )}
+            />
+          )}
         </>
       )}
 

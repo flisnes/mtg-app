@@ -20,7 +20,8 @@ import { historyChange } from '../price/history.js';
 import { loadLastEdited, lastEditedFor } from '../history/lastEdited.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { useGoblinMode } from './useGoblinMode.js';
-import { useOpenSearch } from './GlobalSearch.js';
+import { useEntryMatcher } from '../db/useEntryMatcher.js';
+import { useListFilter, useOpenSearch } from './GlobalSearch.js';
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
 
@@ -32,6 +33,11 @@ function useJoinedCollection(): JoinedEntry[] | undefined {
 export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean }) {
   const rows = useJoinedCollection();
   const [editing, setEditing] = useState<JoinedEntry | null>(null);
+  // The header search bar, when it's scoped to this list, narrows these rows
+  // instead of covering them — so sort, Select and the bulk actions below all
+  // operate on the search result. Blank whenever search isn't pointed here.
+  const query = useListFilter(onlyTrade ? 'tradelist' : 'collection');
+  const matchesQuery = useEntryMatcher(rows, query);
   // Goblin mode *replaces* the collection with the pile — it's the only view
   // while enabled, and there's no toggle out of it (turn goblin mode off in
   // settings to get list/grid + sorting back). Never on the tradelist screen.
@@ -69,9 +75,15 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const needEdited = sort.key === 'updated';
   const lastEdited = useLiveQuery(async () => (needEdited ? loadLastEdited() : undefined), [needEdited]);
 
+  // Rows this view is showing at all, before sorting: the tradelist filter plus
+  // whatever the search bar is narrowing to. The pile needs the unsorted set.
+  const matching = useMemo(
+    () => (rows ?? []).filter((r) => (!onlyTrade || r.entry.quantityForTrade > 0) && matchesQuery(r)),
+    [rows, onlyTrade, matchesQuery],
+  );
+
   const filtered = useMemo(() => {
     if (!rows) return [];
-    const matching = onlyTrade ? rows.filter((r) => r.entry.quantityForTrade > 0) : rows;
     return sortCards(
       matching,
       (r) => ({
@@ -85,14 +97,14 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       }),
       sort,
     );
-  }, [rows, onlyTrade, sort, changes, lastEdited]);
+  }, [rows, matching, sort, changes, lastEdited]);
 
   const totalQty = filtered.reduce((s, r) => s + r.entry.quantity, 0);
 
   // Page the rendered list — the collection is the one list guaranteed to reach
   // thousands of entries, so rendering all of them (each a tile with images and
-  // badges) janks on phones. Reset to page one when the sort changes.
-  const filterSig = JSON.stringify({ onlyTrade, sort });
+  // badges) janks on phones. Reset to page one when the sort or search changes.
+  const filterSig = JSON.stringify({ onlyTrade, sort, query });
   const { limit, showMore } = usePagedLimit(filterSig, 60);
   const visible = filtered.slice(0, limit);
 
@@ -146,7 +158,9 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
 
   if (rows === undefined) return <p className="search-meta">Loading…</p>;
 
-  const emptyState = (
+  const emptyState = query ? (
+    <p className="search-meta">Nothing here matches.</p>
+  ) : (
     <div className="empty-state">
       <p>Nothing here yet.</p>
       <p className="empty-phase">
@@ -162,9 +176,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     <>
       <div className="meta-row">
         <p className="search-meta">
-          {pileMode ? rows.length : filtered.length} entr{(pileMode ? rows.length : filtered.length) === 1 ? 'y' : 'ies'} ·{' '}
-          {pileMode ? rows.reduce((s, r) => s + r.entry.quantity, 0) : totalQty} card
-          {(pileMode ? rows.reduce((s, r) => s + r.entry.quantity, 0) : totalQty) === 1 ? '' : 's'}
+          {filtered.length} entr{filtered.length === 1 ? 'y' : 'ies'} · {totalQty} card{totalQty === 1 ? '' : 's'}
         </p>
         <div className="meta-actions">
           {!pileMode && !sel.active && filtered.length > 0 && (
@@ -178,11 +190,11 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       </div>
 
       {pileMode ? (
-        rows.length === 0 ? (
+        matching.length === 0 ? (
           emptyState
         ) : (
           <PileView
-            items={rows.map(
+            items={matching.map(
               (r): PileEntry => ({
                 key: r.entry.id,
                 name: r.oracle?.name ?? '(unknown card)',

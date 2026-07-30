@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { OracleCard } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { joinCollectionEntries, joinWishlistEntries, type JoinedEntry, type JoinedWish } from '../db/queries.js';
-import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '../cardDb/querySyntax.js';
+import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
@@ -15,22 +14,16 @@ import { usePlacementIndex } from '../db/usePlacements.js';
 
 export type Scope = 'collection' | 'wishlist' | 'tradelist';
 
-// The global search, scoped to what you already own: instead of the whole card
-// database, it searches across the collection / tradelist / wishlist you've
-// picked and shows the same per-entry rows the list pages do (printing,
-// quantity, condition), tapping through to the same editor. Multiple scopes
-// union together; an empty query lists everything in scope. When no scope is
-// active the overlay falls back to the full-database card search instead.
+// The global search, scoped to one of your own lists: instead of the whole card
+// database it searches that collection / tradelist / wishlist and shows the
+// same per-entry rows the list pages do (printing, quantity, condition),
+// tapping through to the same editor. An empty query lists everything in scope.
+//
+// This is the *away* case only — search scoped to the page you're already on
+// filters that page in place instead (see GlobalSearch). So there's no sorting
+// or multi-select here: those live on the list pages, which is the whole point.
 
-// Pre-normalise each row's match fields once per data change so the
-// Scryfall-syntax filter (t:/cmc:/o:/…) runs cheaply on every keystroke.
-function buildIndex(rows: { entry: { id: string }; oracle?: OracleCard }[] | undefined): Map<string, SearchableEntry> {
-  const m = new Map<string, SearchableEntry>();
-  rows?.forEach((r) => r.oracle && m.set(r.entry.id, toSearchableEntry(r.oracle)));
-  return m;
-}
-
-export function ScopedResults({ scopes, query }: { scopes: Set<Scope>; query: string }) {
+export function ScopedResults({ scope, query }: { scope: Scope; query: string }) {
   const [view, setView] = useViewMode();
   const [editColl, setEditColl] = useState<JoinedEntry | null>(null);
   const [editWish, setEditWish] = useState<JoinedWish | null>(null);
@@ -38,38 +31,29 @@ export function ScopedResults({ scopes, query }: { scopes: Set<Scope>; query: st
   const ownership = useOwnershipIndex();
   const placements = usePlacementIndex();
 
-  const needCollection = scopes.has('collection') || scopes.has('tradelist');
-  const needWishlist = scopes.has('wishlist');
+  const needCollection = scope === 'collection' || scope === 'tradelist';
+  const needWishlist = scope === 'wishlist';
 
-  const collRows = useLiveQuery(
+  const collRows = useLiveQuery<JoinedEntry[]>(
     async () => (needCollection ? joinCollectionEntries(await db.collection.toArray()) : []),
     [needCollection],
   );
-  const wishRows = useLiveQuery(
+  const wishRows = useLiveQuery<JoinedWish[]>(
     async () => (needWishlist ? joinWishlistEntries(await db.wishlist.toArray()) : []),
     [needWishlist],
   );
 
-  const collIndex = useMemo(() => buildIndex(collRows), [collRows]);
-  const wishIndex = useMemo(() => buildIndex(wishRows), [wishRows]);
-
-  // If "collection" is picked it already covers every entry; "tradelist" alone
-  // narrows to the cards actually marked for trade.
-  const showAllCollection = scopes.has('collection');
+  const collMatches = useEntryMatcher(collRows, query);
+  const wishMatches = useEntryMatcher(wishRows, query);
 
   const items = useMemo(() => {
-    const q = compileCardQuery(query);
-    const matches = (index: Map<string, SearchableEntry>, id: string) => {
-      if (q.isEmpty) return true;
-      const se = index.get(id);
-      return !!se && q.matches(se);
-    };
-
     const out: CardItem[] = [];
     if (needCollection) {
       for (const r of collRows ?? []) {
-        if (!showAllCollection && r.entry.quantityForTrade <= 0) continue;
-        if (!matches(collIndex, r.entry.id)) continue;
+        // 'collection' covers every entry; 'tradelist' narrows to the copies
+        // actually marked for trade.
+        if (scope === 'tradelist' && r.entry.quantityForTrade <= 0) continue;
+        if (!collMatches(r)) continue;
         out.push({
           ...collectionCardItem(r, { moverFlags, placements, onClick: () => setEditColl(r) }),
           key: `c:${r.entry.id}`,
@@ -78,7 +62,7 @@ export function ScopedResults({ scopes, query }: { scopes: Set<Scope>; query: st
     }
     if (needWishlist) {
       for (const r of wishRows ?? []) {
-        if (!matches(wishIndex, r.entry.id)) continue;
+        if (!wishMatches(r)) continue;
         out.push({
           ...wishCardItem(r, { ownership, moverFlags, onClick: r.oracle ? () => setEditWish(r) : undefined }),
           key: `w:${r.entry.id}`,
@@ -87,9 +71,9 @@ export function ScopedResults({ scopes, query }: { scopes: Set<Scope>; query: st
     }
     out.sort((a, b) => a.name.localeCompare(b.name));
     return out;
-  }, [collRows, wishRows, collIndex, wishIndex, query, needCollection, needWishlist, showAllCollection, moverFlags, ownership, placements]);
+  }, [collRows, wishRows, collMatches, wishMatches, scope, needCollection, needWishlist, moverFlags, ownership, placements]);
 
-  const { limit, showMore } = usePagedLimit(`${query}|${[...scopes].sort().join(',')}`, 60);
+  const { limit, showMore } = usePagedLimit(`${query}|${scope}`, 60);
   const visible = items.slice(0, limit);
 
   const loading = (needCollection && collRows === undefined) || (needWishlist && wishRows === undefined);

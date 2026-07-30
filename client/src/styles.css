@@ -283,6 +283,23 @@ button.danger-outline {
   gap: 1rem;
 }
 
+/* Search scoped to the page you're already on: the page filters itself, so all
+   we need is a slim chip bar under the header instead of the full overlay. */
+.search-scopebar {
+  position: sticky;
+  top: calc(var(--header-h) + var(--safe-top));
+  z-index: 15;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 0.6rem 1rem;
+}
+.search-scopebar .search-overlay-inner {
+  gap: 0.5rem;
+}
+.search-scopebar .search-meta {
+  margin: 0;
+}
+
 /* Scope chips: narrow the global search to what you already own. */
 .scope-chips {
   display: flex;

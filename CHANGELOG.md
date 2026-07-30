@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.81.0
+
+- **Search your collection, then sort it and select it.** When the two search bars became one, the search-and-then-operate workflow quietly went with them: you could search your collection in the overlay, but the results arrived name-sorted with no way to pick them out and act on them. Now, when search is pointed at the very list you're standing on, it filters that page in place instead of covering it. Tap the search bar on Collection and you get a slim chip row under the header; type `t:creature -c:r mv<=3` and the collection narrows to those cards, still with its own sorting, its own **Select**, and the full set of bulk actions. Select all now means "all of the ones I searched for", so filing sixty commons into a box is a search, a tap and a tap. Same on Wishlist and Tradelist. The entry and card counts at the top follow the filter too, which is a quick way to price out a slice of the collection.
+- **The chip is the switch between the two searches.** With the Collection chip lit you're filtering what you own; turn it off and the full-database search opens over the page as before, ready to add something new. "Search for cards" links on empty lists always go straight to the database search. Picking a different list's chip (Wishlist while you're on Tradelist) still opens the overlay, since there's no page there to filter.
+- **One list at a time.** The scope chips used to be tickboxes, so you could search your collection and wishlist at once. That combination had no sensible home for sorting or bulk actions ("add to tradelist" on a wishlist row?), so the three are now one-of.
+
 ## 0.80.1
 
 - **The "it's in a deck" badge now points at the right copy.** If you own an Enlightened Tutor from Mirage and another from The List, and only The List one is in a deck, the little deck badge used to appear on both — it only knew the card was filed somewhere, not which edition. Now it sits on the copy that's actually in the deck, and the card sheet's pills follow the edition you're looking at. Cards added to a deck by name only (a pasted decklist, say) don't pin an edition, so those still show on every printing — there's nothing to match against. The "more copies placed than owned" warning still counts every copy of the card across every printing, which is the only way to count it honestly when some slots name no edition.

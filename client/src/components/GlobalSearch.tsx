@@ -34,6 +34,13 @@ import { useDismiss } from './useDismiss.js';
 // header instead of a tab: the input is reachable from every screen, and
 // focusing it opens a full results overlay (filters, quick-adds, card sheet).
 // Esc, ✕, or navigating to another tab closes the overlay.
+//
+// One exception, and it's the important one: when the scope is the very list
+// you're standing on (Collection scope on /collection), the results ARE that
+// page, so search filters it in place instead of covering it — you keep the
+// page's sorting, multi-select and bulk actions and just narrow what they
+// operate on. The overlay shrinks to a scope bar; turning the chip off expands
+// it back to a full database search. See `useListFilter`.
 
 // What adding a result does depends on where the user searched from: the deck
 // editor adds to that deck, the collection adds to the collection, and so on.
@@ -48,10 +55,17 @@ function useSearchTarget(): AddTarget {
     const id = matchPath(`${CONTAINER_META[kind].path}/:id`, pathname)?.params.id;
     if (id) return { kind: 'deck', deckId: id, containerKind: kind };
   }
-  if (pathname === '/' || pathname === '/collection') return { kind: 'collection' };
-  if (pathname === '/wishlist') return { kind: 'wishlist' };
-  if (pathname === '/tradelist') return { kind: 'tradelist' };
-  return { kind: 'default' };
+  const scope = listScopeFor(pathname);
+  return scope ? { kind: scope } : { kind: 'default' };
+}
+
+/** The list a page *is*, if it's one of the three that render their own rows.
+ *  Scoping search to this page's own list filters it in place. */
+function listScopeFor(pathname: string): Scope | null {
+  if (pathname === '/' || pathname === '/collection') return 'collection';
+  if (pathname === '/wishlist') return 'wishlist';
+  if (pathname === '/tradelist') return 'tradelist';
+  return null;
 }
 
 // Browsing another user's trade/wishlist (Community page) lets the search scope
@@ -64,28 +78,28 @@ function useProfileScope(me: string | undefined): { username: string } | null {
   return { username };
 }
 
-// Scope chips let the search look inside what you already own (or, on a
+// Scope chips let the search look inside one of your own lists (or, on a
 // community page, what the person you're browsing has listed) instead of the
-// whole database. `profileTrade`/`profileWish` target the viewed profile.
-type PillKey = Scope | 'profileTrade' | 'profileWish';
+// whole database. Your three are mutually exclusive — a selection spanning two
+// of them has no single list to render into and makes bulk actions ambiguous
+// ("add to tradelist" on a wishlist row?).
 const SCOPES: { key: Scope; label: string; icon: IconName }[] = [
   { key: 'collection', label: 'Collection', icon: 'collection' },
   { key: 'tradelist', label: 'Tradelist', icon: 'tradelist' },
   { key: 'wishlist', label: 'Wishlist', icon: 'wishlist' },
 ];
-const isLocalScope = (k: PillKey): k is Scope => k === 'collection' || k === 'tradelist' || k === 'wishlist';
-// Pre-pick a scope for the list you opened search from: your own list pages
-// pick the matching pill; another user's community page picks both of theirs
-// (that's what you're looking at and most likely want to search).
-function seedScopes(kind: AddTarget['kind'], profile: boolean): Set<PillKey> {
-  if (profile) return new Set<PillKey>(['profileTrade', 'profileWish']);
-  return kind === 'collection' || kind === 'wishlist' || kind === 'tradelist' ? new Set<PillKey>([kind]) : new Set();
-}
 
 interface SearchCtx {
   open: boolean;
   setOpen: (v: boolean) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  query: string;
+  setQuery: (v: string) => void;
+  filters: SearchFilters;
+  setFilters: React.Dispatch<React.SetStateAction<SearchFilters>>;
+  /** The one list the search is narrowed to, or null for the whole database. */
+  scope: Scope | null;
+  setScope: (s: Scope | null) => void;
 }
 
 const Ctx = createContext<SearchCtx | null>(null);
@@ -94,25 +108,62 @@ const Ctx = createContext<SearchCtx | null>(null);
 export function useOpenSearch(): () => void {
   const ctx = useContext(Ctx);
   return () => {
+    // These entry points mean "go find a card", so they always search the whole
+    // database — never the (usually empty) list that offered the button.
+    ctx?.setScope(null);
     ctx?.setOpen(true);
     ctx?.inputRef.current?.focus();
   };
 }
 
+/**
+ * The live search query when search is scoped to *this page's own list*, else
+ * ''. List views (collection, tradelist, wishlist) call this and filter their
+ * rows with it, which is what keeps sorting, multi-select and bulk actions
+ * working on a searched-down list.
+ */
+export function useListFilter(scope: Scope): string {
+  const ctx = useContext(Ctx);
+  const { pathname } = useLocation();
+  if (!ctx?.open || ctx.scope !== scope || listScopeFor(pathname) !== scope) return '';
+  return ctx.query;
+}
+
 export function GlobalSearchProvider({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState<SearchFilters>({});
+  // Pre-pick the list you're standing on, so search on /wishlist starts by
+  // filtering the wishlist.
+  const [scope, setScope] = useState<Scope | null>(() => listScopeFor(pathname));
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const value = useMemo(() => ({ open, setOpen, inputRef }), [open]);
+
+  // Navigating away (the tab bar stays tappable under the overlay) closes
+  // search and drops the query, filters and scope, so reopening it on the new
+  // page doesn't resurrect the old one's search.
+  const prevPath = useRef(pathname);
+  useEffect(() => {
+    if (prevPath.current === pathname) return;
+    prevPath.current = pathname;
+    setQuery('');
+    setFilters({});
+    setScope(listScopeFor(pathname));
+    setOpen(false);
+    inputRef.current?.blur();
+  }, [pathname]);
+
+  const value = useMemo(
+    () => ({ open, setOpen, inputRef, query, setQuery, filters, setFilters, scope, setScope }),
+    [open, query, filters, scope],
+  );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 /** The header search bar + results overlay. Render once, inside the provider. */
 export function GlobalSearchBar() {
   const ctx = useContext(Ctx)!;
-  const { open, setOpen, inputRef } = ctx;
-  const [query, setQuery] = useState('');
-  const [filters, setFilters] = useState<SearchFilters>({});
-  const location = useLocation();
+  const { open, setOpen, inputRef, query, setQuery, setFilters } = ctx;
   const { enabled: accountsEnabled, session, syncReady, pendingChanges, sync } = useAccount();
   const signedIn = !!session;
   const ownAvatar = useOwnAvatar(session);
@@ -132,21 +183,6 @@ export function GlobalSearchBar() {
           : !syncReady
             ? 'sync setup pending'
             : 'synced';
-
-  // Navigating away (tab bar stays tappable under the overlay) closes search.
-  const path = location.pathname;
-  const prevPath = useRef(path);
-  useEffect(() => {
-    if (prevPath.current !== path) {
-      prevPath.current = path;
-      // Clear the query/filters too (same as close()), so reopening search
-      // after navigating away doesn't resurrect the old query and filters.
-      setQuery('');
-      setFilters({});
-      setOpen(false);
-      inputRef.current?.blur();
-    }
-  }, [path, setOpen, inputRef]);
 
   function close() {
     setQuery('');
@@ -197,20 +233,14 @@ export function GlobalSearchBar() {
           )
         )}
       </header>
-      {open && <SearchOverlay query={query} filters={filters} setFilters={setFilters} />}
+      {open && <SearchOverlay />}
     </>
   );
 }
 
-function SearchOverlay({
-  query,
-  filters,
-  setFilters,
-}: {
-  query: string;
-  filters: SearchFilters;
-  setFilters: React.Dispatch<React.SetStateAction<SearchFilters>>;
-}) {
+function SearchOverlay() {
+  const { query, filters, setFilters, scope, setScope } = useContext(Ctx)!;
+  const { pathname } = useLocation();
   // The sheet opens on the printing the result was showing, so tapping a tile
   // doesn't silently swap to a different edition than the one you tapped.
   const [sheetCard, setSheetCard] = useState<{ card: Priced<OracleCard>; scryfallId?: string } | null>(null);
@@ -219,32 +249,57 @@ function SearchOverlay({
   const target = useSearchTarget();
   const { session } = useAccount();
   const profile = useProfileScope(session?.username);
-  const [scopes, setScopes] = useState<Set<PillKey>>(() => seedScopes(target.kind, !!profile));
-  const toggleScope = (key: PillKey) =>
-    setScopes((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
+  // The viewed user's two lists are what you're looking at on their page, so
+  // both start on. They're independent of your own (single) scope.
+  const [profileTradeOn, setProfileTradeOn] = useState(!!profile);
+  const [profileWishOn, setProfileWishOn] = useState(!!profile);
   const ownership = useOwnershipIndex();
 
   // The full set of pills for this context: your own three everywhere, plus the
   // viewed user's two on their community page.
-  const pills: { key: PillKey; label: string; icon: IconName; title: string }[] = [
-    ...SCOPES.map((s) => ({ ...s, title: `Search your ${s.label.toLowerCase()}` })),
+  const pills: { key: string; label: string; icon: IconName; title: string; on: boolean; toggle: () => void }[] = [
+    ...SCOPES.map((s) => ({
+      key: s.key,
+      label: s.label,
+      icon: s.icon,
+      title: `Search your ${s.label.toLowerCase()}`,
+      on: scope === s.key,
+      toggle: () => setScope(scope === s.key ? null : s.key),
+    })),
     ...(profile
-      ? ([
-          { key: 'profileTrade', label: `${profile.username}’s tradelist`, icon: 'tradelist', title: `Search ${profile.username}’s tradelist` },
-          { key: 'profileWish', label: `${profile.username}’s wishlist`, icon: 'wishlist', title: `Search ${profile.username}’s wishlist` },
-        ] as const)
+      ? [
+          {
+            key: 'profileTrade',
+            label: `${profile.username}’s tradelist`,
+            icon: 'tradelist' as IconName,
+            title: `Search ${profile.username}’s tradelist`,
+            on: profileTradeOn,
+            toggle: () => setProfileTradeOn((v) => !v),
+          },
+          {
+            key: 'profileWish',
+            label: `${profile.username}’s wishlist`,
+            icon: 'wishlist' as IconName,
+            title: `Search ${profile.username}’s wishlist`,
+            on: profileWishOn,
+            toggle: () => setProfileWishOn((v) => !v),
+          },
+        ]
       : []),
   ];
 
-  const localScopes = new Set<Scope>([...scopes].filter(isLocalScope));
-  const profileTradeOn = scopes.has('profileTrade');
-  const profileWishOn = scopes.has('profileWish');
+  const chips = (
+    <div className="scope-chips" role="group" aria-label="Search within">
+      {pills.map((s) => (
+        <button key={s.key} className="chip" aria-pressed={s.on} onClick={s.toggle} title={s.title}>
+          <Icon name={s.icon} size={14} /> {s.label}
+        </button>
+      ))}
+    </div>
+  );
+
   const profileActive = !!profile && !!session && (profileTradeOn || profileWishOn);
-  const scoped = localScopes.size > 0 || profileActive;
+  const scoped = !!scope || profileActive;
 
   // Wording for the container being searched from (a deck, binder or box).
   const containerMeta = CONTAINER_META[(target.kind === 'deck' && target.containerKind) || 'deck'];
@@ -276,6 +331,25 @@ function SearchOverlay({
         : filters,
     [filters, deckFilterActive, deckCtx],
   );
+
+  // Scoped to the list this very page renders: it filters itself (keeping its
+  // sort, multi-select and bulk actions), so all the overlay contributes is the
+  // chip row. Everything else gets the full-screen results. Every hook above
+  // has to stay above this return — toggling the chip flips the branch.
+  if (scope && listScopeFor(pathname) === scope) {
+    return (
+      <div className="search-scopebar">
+        <div className="search-overlay-inner">
+          {chips}
+          {!query && (
+            <p className="search-meta">
+              Filtering your {scope}. Turn the chip off to search every card instead.
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Quick-add uses the printing the result is showing (the user's preference,
   // or the card DB's representative) / NM / nonfoil / en; the sheet is for detail.
@@ -392,23 +466,11 @@ function SearchOverlay({
   return (
     <div className="search-overlay">
       <div className="search-overlay-inner">
-        <div className="scope-chips" role="group" aria-label="Search within">
-          {pills.map((s) => (
-            <button
-              key={s.key}
-              className="chip"
-              aria-pressed={scopes.has(s.key)}
-              onClick={() => toggleScope(s.key)}
-              title={s.title}
-            >
-              <Icon name={s.icon} size={14} /> {s.label}
-            </button>
-          ))}
-        </div>
+        {chips}
 
         {scoped ? (
           <>
-            {localScopes.size > 0 && <ScopedResults scopes={localScopes} query={query} />}
+            {scope && <ScopedResults scope={scope} query={query} />}
             {profileActive && profile && session && (
               <ProfileScopedResults
                 token={session.token}

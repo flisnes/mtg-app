@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.84.0
+
+- **The pickers are there wherever you scan.** Finish, condition and language used to vanish when you scanned into a deck, binder, box or wishlist. They don't any more. A box scan offers to add anything you don't own yet to your collection, and that copy now goes in as the foil Japanese one you actually scanned instead of a plain English NM. A scanned wish keeps the finish and language you picked too, and leaves them as "any" if you didn't touch them.
+- **Change a picker after you've tapped.** Tap **+1**, then notice the card is foil: switching Finish now fixes the copy you just added instead of only the next one. Same for condition and language, for everything the card in frame has put on the list. Values still reset to Nonfoil / NM / read-language when the next card locks, so what you fix stays fixed.
+- **A padlock, bottom left, for the lock.** The card the scanner is holding on to now has a face: a padlock with a ring that counts down its hold. Tap it and the lock lets go at once, which is how you scan the second copy of the same card without hunting for something else to point the camera at. Left alone, the lock lets go on its own once the hold is up and the card leaves the frame, so a pile with doubles just works.
+- **Condition pile is gone.** It sounded useful and wasn't; the per-card Cond picker does the job. Finish, Language and Set pins are unchanged.
+
 ## 0.83.0
 
 - **Finish, condition and language while you scan.** Scanning used to file every card as a Near Mint nonfoil and take the language from whatever the reader could make out. There's now a slim row of three small pickers between the camera and the match tray, and whatever they say is what the next card you tap gets. So the one foil in the stack is one tap on **Foil** away, and the beaten-up Counterspell can go in as **HP** without a trip through the list afterwards.

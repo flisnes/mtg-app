@@ -3271,6 +3271,48 @@ a.seg {
   align-items: flex-end;
   gap: 0.3rem;
 }
+/* Lock state, bottom-left over the camera: a padlock in a ring that drains
+   through the lock's hold. Tap = let go, so the next card can lock. */
+.scan-lock-badge {
+  position: absolute;
+  bottom: 0.6rem;
+  left: 0.6rem;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.4);
+  display: grid;
+  place-items: center;
+}
+.scan-lock-held {
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.85);
+}
+/* Held, but past its hold: it lets go as soon as the card leaves the frame. */
+.scan-lock-stale {
+  color: rgba(255, 255, 255, 0.55);
+}
+.scan-lock-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  /* Start the countdown at 12 o'clock. */
+  transform: rotate(-90deg);
+}
+.scan-lock-ring-track {
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 2.5;
+}
+.scan-lock-ring-fill {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
 .scan-cam-status {
   position: absolute;
   bottom: 0.6rem;

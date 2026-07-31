@@ -522,6 +522,10 @@ export interface WishlistBulkLine {
   /** null = "any printing". */
   scryfallId: string | null;
   quantity: number;
+  /** Desired condition/finish/language; undefined = "any" (what an import gives). */
+  condition?: Condition;
+  finish?: Finish;
+  lang?: string;
 }
 
 /**
@@ -556,6 +560,9 @@ export async function addToWishlistBulk(
           id: newId(),
           oracleId: l.oracleId,
           scryfallId: l.scryfallId,
+          ...(l.condition ? { condition: l.condition } : {}),
+          ...(l.finish ? { finish: l.finish } : {}),
+          ...(l.lang ? { lang: l.lang } : {}),
           quantity: l.quantity,
           createdAt: now,
           updatedAt: now,
@@ -563,7 +570,17 @@ export async function addToWishlistBulk(
         map.set(keyOf(l), entry);
         touched.add(entry);
       }
-      events.push({ ts: now, kind: 'wish.add', oracleId: l.oracleId, scryfallId: l.scryfallId, qty: l.quantity, ...batchExtra });
+      events.push({
+        ts: now,
+        kind: 'wish.add',
+        oracleId: l.oracleId,
+        scryfallId: l.scryfallId,
+        ...(l.condition ? { condition: l.condition } : {}),
+        ...(l.finish ? { finish: l.finish } : {}),
+        ...(l.lang ? { lang: l.lang } : {}),
+        qty: l.quantity,
+        ...batchExtra,
+      });
     }
     const writes = [...touched];
     await db.wishlist.bulkPut(writes);

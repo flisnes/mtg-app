@@ -34,6 +34,7 @@ export type IconName =
   | 'check'
   | 'checkDouble'
   | 'lock'
+  | 'unlock'
   | 'account'
   | 'community'
   | 'bell'
@@ -228,6 +229,13 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <rect x="4" y="10" width="16" height="11" rx="2" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+    </>
+  ),
+  // Same padlock, shackle swung open — "nothing is locked right now".
+  unlock: (
+    <>
+      <rect x="4" y="10" width="16" height="11" rx="2" />
+      <path d="M8 10V7a4 4 0 0 1 7.7-1.4" />
     </>
   ),
   // Horizontal ellipsis — the "More" overflow.

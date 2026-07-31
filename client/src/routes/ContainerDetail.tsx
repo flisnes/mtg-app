@@ -736,10 +736,11 @@ function Board({
     // Ownership checkmark (own this exact printing / another / for trade), same
     // as everywhere else. A legality problem still wins the badge slot (⚠). A
     // lands-box basic is had by definition, so it gets the plain check.
-    // A slot's double check means "I own a copy that fits this slot": the edition
-    // it pins, in the finish, condition and language it asks for. Anything it
-    // leaves on "any" is satisfied by whatever you have — so a name-only decklist
-    // still double-checks the moment you own the card.
+    // A slot's double check means "I own exactly this card": it names an edition,
+    // finish, condition and language, and a copy in your collection fits. A slot
+    // that leaves any of those on "any" hasn't picked a card yet, so it keeps the
+    // single check even when you own the thing.
+    const pinned = !!r.scryfallId && !!r.finish && !!r.condition && !!r.lang;
     const own = r.anyBasic
       ? { icon: <Icon name="check" size={13} />, cls: 'own-yes', title: 'Any printing — from your lands box' }
       : ownedBadge(
@@ -750,7 +751,9 @@ function Board({
             lang: r.lang,
           }),
           13,
-          { yes: 'including one that fits this slot', no: 'but nothing matching this slot' },
+          pinned
+            ? { yes: 'including the copy this slot names', no: 'but nothing matching this slot' }
+            : { yes: 'including the copy this slot names', no: 'this slot hasn’t picked a copy yet' },
         );
     return {
       key: r.id,

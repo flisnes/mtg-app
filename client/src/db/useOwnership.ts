@@ -34,10 +34,10 @@ export interface OwnershipIndex {
   /** Ownership of an oracle card; pass the shown printing to resolve exact vs other. */
   lookup(oracleId: string, scryfallId?: string | null): OwnedStatus;
   /**
-   * Ownership measured against what a slot wants: `ownsExact` is true when some
-   * owned copy meets every preference the slot names. "Any" preferences match
-   * anything, so a slot that pins nothing counts as had the moment you own the
-   * card in any edition.
+   * Ownership measured against what a slot wants: `ownsExact` is true only when
+   * the slot names all four (edition, finish, condition, language) *and* you own
+   * a copy meeting them. A slot still on "any" is a shopping note, not a card
+   * you can point at, so it stays on the single check.
    */
   lookupWanted(oracleId: string, wants: OwnWants): OwnedStatus;
   /** Every printing (scryfallId) held for this oracle card — empty if none. */
@@ -80,9 +80,12 @@ export function useOwnershipIndex(): OwnershipIndex | undefined {
       lookupWanted(oracleId, wants) {
         const g = byOracle.get(oracleId);
         if (!g) return NONE;
-        const met = g.entries.some(
-          (e) => (!wants.scryfallId || wants.scryfallId === e.scryfallId) && wishPrefsMet(wants, e),
-        );
+        // Exact means exact: the slot has to say which printing, finish,
+        // condition and language it means before we can claim you have *that*
+        // card. Leave anything on "any" and it's the single check.
+        const pinned = !!wants.scryfallId && !!wants.finish && !!wants.condition && !!wants.lang;
+        const met =
+          pinned && g.entries.some((e) => wants.scryfallId === e.scryfallId && wishPrefsMet(wants, e));
         return { qty: g.qty, forTrade: g.forTrade, ownsExact: met };
       },
       ownedPrintings(oracleId) {

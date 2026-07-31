@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { CollectionEntry, Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
@@ -193,6 +194,7 @@ export function CardSheet({
 }) {
   const mode = wishEntry ? 'wish' : deckCard ? 'deck' : entry ? 'edit' : sessionCard ? 'session' : readOnly ? 'info' : 'add';
   const editing = mode === 'edit';
+  const navigate = useNavigate();
   // An owned collection entry opens read-only with an Edit toggle; add/wish/
   // deck/session are always a form; info is never editable.
   const [editMode, setEditMode] = useState(false);
@@ -378,6 +380,15 @@ export function CardSheet({
       (a, b) => rank(a) - rank(b) || CONDITIONS.indexOf(a.condition) - CONDITIONS.indexOf(b.condition),
     );
   }, [ownedEntries, printings]);
+  // The copy the "In your collection" badge taps through to: the shown printing
+  // if you own it, else whatever you do own. Gives the user a one-tap route from
+  // a deck slot (or a search hit) to the entry itself, where quantity, condition
+  // and the rest can be corrected. Never from a scan session — leaving that sheet
+  // mid-scan would throw the session away.
+  const collectionTarget =
+    mode === 'session' || mode === 'edit'
+      ? undefined
+      : ownedCopies.find((e) => e.scryfallId === shownId) ?? ownedCopies[0];
   // Printings with copies marked for trade — their edition tile gets the purple tag.
   const ownedForTradeIds = useMemo(
     () => new Set((ownedEntries ?? []).filter((e) => e.quantityForTrade > 0).map((e) => e.scryfallId)),
@@ -569,19 +580,19 @@ export function CardSheet({
           <div className="sheet-info">
             <div className="sheet-name">{oracleCard.name}</div>
             {mode !== 'edit' && ownedQty > 0 && (
-              <div
-                className={`badge sheet-owned ${ownedForTrade > 0 ? 'own-trade' : 'own-yes'}`}
-                title={
-                  (ownedForTrade > 0
-                    ? `You own ${ownedQty} (${ownedForTrade} for trade)`
-                    : `You own ${ownedQty}`) +
-                  (ownsExact ? ' · including this exact printing' : ' · other printing(s)')
+              <OwnedHere
+                qty={ownedQty}
+                forTrade={ownedForTrade}
+                ownsExact={ownsExact}
+                onOpen={
+                  collectionTarget
+                    ? () => {
+                        onClose();
+                        navigate(`/collection?entry=${encodeURIComponent(collectionTarget.id)}`);
+                      }
+                    : undefined
                 }
-              >
-                <Icon name={ownedForTrade > 0 ? 'tradelist' : ownsExact ? 'checkDouble' : 'check'} size={13} />
-                In your collection (×{ownedQty}
-                {ownedForTrade > 0 ? `, ${ownedForTrade} for trade` : ''})
-              </div>
+              />
             )}
             {oracleCard.manaCost && (
               <div className="result-sub">
@@ -1007,6 +1018,42 @@ function QtyStepper({
         <Icon name="plus" size={16} />
       </button>
     </div>
+  );
+}
+
+/**
+ * The "In your collection (×N)" badge under the card name. When `onOpen` is
+ * given it's a button that jumps to that copy's sheet on the Collection screen
+ * (chevron included, so it reads as a way out of here) — handy when the deck slot
+ * you're looking at says the wrong thing and the fix belongs on the entry.
+ */
+function OwnedHere({
+  qty,
+  forTrade,
+  ownsExact,
+  onOpen,
+}: {
+  qty: number;
+  forTrade: number;
+  ownsExact: boolean;
+  onOpen?: () => void;
+}) {
+  const cls = `badge sheet-owned ${forTrade > 0 ? 'own-trade' : 'own-yes'}`;
+  const detail = ownsExact ? ' · including this exact printing' : ' · other printing(s)';
+  const owned = forTrade > 0 ? `You own ${qty} (${forTrade} for trade)` : `You own ${qty}`;
+  const body = (
+    <>
+      <Icon name={forTrade > 0 ? 'tradelist' : ownsExact ? 'checkDouble' : 'check'} size={13} />
+      In your collection (×{qty}
+      {forTrade > 0 ? `, ${forTrade} for trade` : ''})
+      {onOpen && <Icon name="chevronRight" size={13} />}
+    </>
+  );
+  if (!onOpen) return <div className={cls} title={owned + detail}>{body}</div>;
+  return (
+    <button type="button" className={`${cls} sheet-owned-link`} title={`${owned}${detail} · open it in your collection`} onClick={onOpen}>
+      {body}
+    </button>
   );
 }
 

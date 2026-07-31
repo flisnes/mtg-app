@@ -5,10 +5,11 @@ import type { OwnedStatus } from '../db/useOwnership.js';
 // (search, scan, wishlist, decks, trade, the card sheet). Feeds the generic
 // `badge` slot on CardItem / the ResultBadge on CardSearchView.
 //
-//   double check (green)  — you own this exact printing (for a deck slot: a copy
-//                           matching everything the slot asks for)
+//   double check (green)  — you own this exact printing (for a deck slot: the
+//                           exact card it names, down to finish/condition/language)
 //   single check (green)  — you own another printing of this card (for a slot:
-//                           you own it, but nothing that matches)
+//                           you own it, but not the exact card — or the slot
+//                           hasn't named one yet)
 //   tag (purple)          — you have copies marked for trade
 //   nothing               — you don't own it
 //

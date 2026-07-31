@@ -2794,6 +2794,18 @@ button.chip[aria-pressed='true'] {
   margin: 0.15rem 0 0;
   font-weight: 600;
 }
+/* Same badge, but it taps through to that copy on the Collection screen: the
+   border plus the trailing chevron are what say "this one goes somewhere". */
+.sheet-owned-link {
+  border: 1px solid var(--border);
+  color: var(--text);
+  /* The info column stretches its children; a badge must hug its text. */
+  align-self: flex-start;
+}
+.sheet-owned-link:hover,
+.sheet-owned-link:focus-visible {
+  border-color: var(--accent);
+}
 .badge.badge-wish {
   background: rgba(234, 197, 79, 0.15);
   color: #eac54f;

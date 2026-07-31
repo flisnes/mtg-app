@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.86.1
+
+- **The double check is now strictly "I have *that* card".** A deck slot only earns it once it names an edition, finish, condition and language *and* a copy in your collection fits. Leave anything on **Any** and it keeps the single check: you own the card, but the slot hasn't decided which copy fills it. Correcting 0.86.0, where an undecided slot double-checked on ownership alone. Condition is still a minimum, so a slot asking for LP is happy with your NM copy.
+- **"In your collection (×N)" is a shortcut now.** The green badge under a card's name is a button: tap it and you land on that copy's sheet in your collection, chevron and all. Handy the moment a deck slot tells you something is off and the fix belongs on the entry itself.
+
 ## 0.86.0
 
 - **A deck slot can name the exact card you mean.** Tap a card in a deck, binder or box and the sheet now has **Minimum condition**, **Finish** and **Language** next to Edition, all four starting on **Any** — the same "any printing / any finish" wording the wishlist has always had. So the mainboard can ask for the foil Japanese Counterspell while the sideboard is happy with whatever's in the drawer.

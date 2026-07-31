@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { ContainerKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
@@ -53,6 +54,20 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const sel = useMultiSelect();
   const placements = usePlacementIndex();
   const [pickingContainer, setPickingContainer] = useState(false);
+
+  // Deep link from another sheet's "In your collection" badge: ?entry=<id> opens
+  // that entry's sheet here. One-shot — the param is dropped as soon as it's been
+  // honored, so closing the sheet (or a reload) doesn't reopen it.
+  const [params, setParams] = useSearchParams();
+  const wantedEntry = params.get('entry');
+  useEffect(() => {
+    if (!wantedEntry || !rows) return;
+    const row = rows.find((r) => r.entry.id === wantedEntry);
+    if (row) setEditing(row);
+    const next = new URLSearchParams(params);
+    next.delete('entry');
+    setParams(next, { replace: true });
+  }, [wantedEntry, rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // scryfallId → recorded price change; only loaded while a change sort is
   // active (the histories table is the biggest user-data table).

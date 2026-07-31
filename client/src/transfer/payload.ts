@@ -225,11 +225,14 @@ export function sanitizeDeckCardRow(raw: unknown): DeckCard | null {
   const oracleId = id(r.oracleId);
   if (!slotId || !deckId || !oracleId) return null;
   const scryfallId = id(r.scryfallId);
+  // An "any printing" basic pins no edition — the flag and a printing are
+  // mutually exclusive, so the flag wins if a sender sends both.
+  const anyBasic = r.anyBasic === true;
   return {
     id: slotId,
     deckId,
     oracleId,
-    ...(scryfallId ? { scryfallId } : {}),
+    ...(anyBasic ? { anyBasic } : scryfallId ? { scryfallId } : {}),
     quantity: qty(r.quantity),
     board: (BOARDS.has(r.board as string) ? r.board : 'main') as DeckBoard,
     updatedAt: ts(r.updatedAt),

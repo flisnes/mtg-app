@@ -96,6 +96,14 @@ export interface DeckCard {
   scryfallId?: string;
   quantity: number;
   board: DeckBoard;
+  /**
+   * "Any printing" basic land — the ones you grab from the lands box, whatever
+   * edition is on top. The slot is deliberately detached from the collection:
+   * it never consumes owned copies, adds no money to the deck's worth, and
+   * always counts as had (nobody wants to scan 24 Islands). Never carries a
+   * scryfallId; display falls back to the card's default printing.
+   */
+  anyBasic?: boolean;
   updatedAt: number;
 }
 

@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.85.0
+
+- **Basics come from the lands box now.** Add a basic land to a deck and it goes in as **any printing**: the copy you grab off the top of the pile, whatever set it's from. It counts toward the deck's card count and toward "you own X of Y", it never eats one of the Islands in your collection, and it adds nothing to what the deck is worth. Nobody should have to scan 24 Islands to stop a deck reading 36/60.
+- **It's the default, not a setting.** +Main on a basic, the card sheet's Add button, and pasted decklists all file basics this way. If you do want the specific foil Unglued Island, the Edition dropdown still lists every printing — pick one and the slot goes back to being a copy you own. Binders and boxes are unchanged: they hold real cardboard, so basics there are counted like anything else.
+- **The rest of the app plays along.** Any-printing basics don't show a deck badge on your collection lands, don't trip the "promised more copies than you own" flag, aren't offered when a deck asks what to wishlist on the way out, and are skipped by "mark everything for trade". Re-scanning a deck leaves them where they are, since no camera can see a card you never sleeved.
+
 ## 0.84.0
 
 - **The pickers are there wherever you scan.** Finish, condition and language used to vanish when you scanned into a deck, binder, box or wishlist. They don't any more. A box scan offers to add anything you don't own yet to your collection, and that copy now goes in as the foil Japanese one you actually scanned instead of a plain English NM. A scanned wish keeps the finish and language you picked too, and leaves them as "any" if you didn't touch them.

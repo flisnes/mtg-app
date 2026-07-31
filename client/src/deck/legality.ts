@@ -137,6 +137,10 @@ const isNonDeckCard = (o: OracleCard) => {
 };
 
 const isLandCard = (o: OracleCard) => /\bLand\b/.test(o.typeLine);
+
+/** A basic land (incl. Snow-Covered ones and Wastes) — the "any printing" deck slots. */
+export const isBasicLand = (o: { typeLine: string }) => /\bBasic\b/.test(o.typeLine) && /\bLand\b/.test(o.typeLine);
+
 const isPermanentCard = (o: OracleCard) => /\b(Creature|Artifact|Enchantment|Land|Planeswalker|Battle)\b/.test(o.typeLine);
 
 /** Per-companion deckbuilding restriction → description of the first violation, or null. */

@@ -13,7 +13,7 @@ import { CONTAINER_KINDS, type Color, type DeckBoard, type DeckFormat, type Orac
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
 import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
-import { formatLabel } from '../deck/legality.js';
+import { formatLabel, isBasicLand } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
@@ -368,9 +368,12 @@ function SearchOverlay() {
     toast(`Added ${card.name} to tradelist`);
   }
   async function quickDeck(card: OracleCard, deckId: string, board: DeckBoard, noun = 'deck') {
-    await addDeckCard({ deckId, oracleId: card.oracleId, board });
+    // A basic land in a deck defaults to "any printing" — whatever's on top of
+    // the lands box. Binders and boxes hold real cardboard, so they don't.
+    const anyBasic = containerMeta.kind === 'deck' && isBasicLand(card);
+    await addDeckCard({ deckId, oracleId: card.oracleId, board, anyBasic });
     const suffix = board === 'side' ? ' (sideboard)' : board === 'commander' ? ' (commander)' : '';
-    toast(`Added ${card.name}${suffix} to ${noun}`);
+    toast(`Added ${card.name}${suffix} to ${noun}${anyBasic ? ' (any printing)' : ''}`);
   }
 
   function actionsFor(card: Priced<OracleCard>, printing?: Priced<Printing>): ReactNode {

@@ -16,7 +16,7 @@ import {
   updateWishlistEntry,
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
-import { canBeCommander } from '../deck/legality.js';
+import { canBeCommander, isBasicLand } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { PlacementPills } from './PlacementBadge.js';
@@ -151,6 +151,8 @@ export function CardSheet({
     id: string;
     quantity: number;
     scryfallId?: string;
+    /** The slot is an "any printing" basic (see DeckCard.anyBasic). */
+    anyBasic?: boolean;
     board?: DeckBoard;
     commanderDeck?: boolean;
     hasCommander?: boolean;
@@ -200,6 +202,12 @@ export function CardSheet({
   // Adding into a real deck (not a binder or box): only then are the sideboard
   // and command-zone buttons meaningful.
   const deckAddIsDeck = deckAdd && (addTo.kind !== 'deck' || (addTo.containerKind ?? 'deck') === 'deck');
+  // Basic lands in a container can be "any printing": whatever's on top of the
+  // lands box. Offered when filing a basic into a container or editing such a
+  // slot; the default when the container is a deck, since nobody sleeves 24
+  // specific Islands. Binders and boxes hold real cardboard, so they opt in.
+  const basicAny = (deckAdd || mode === 'deck') && isBasicLand(oracleCard);
+  const basicAnyDefault = basicAny && (deckAddIsDeck || !!deckCard?.anyBasic);
   // Viewing someone else's wish (Community): the same wish fields, but the
   // sheet is read-only, so nothing here is editable.
   const wishInfo = mode === 'info' && !!wishView;
@@ -232,12 +240,17 @@ export function CardSheet({
   // A printing this card is already tied to: the copy in the collection, the
   // deck's recorded edition, a scanned card, or the one the caller was showing.
   const recordedId = entry?.scryfallId ?? deckCard?.scryfallId ?? sessionCard?.scryfallId ?? initialScryfallId;
-  // In wish mode the empty string means "any printing" (no specific edition).
+  // In wish mode (and for a lands-box basic) the empty string means "any
+  // printing" — no specific edition.
   const [scryfallId, setScryfallId] = useState(
     wishMode
       ? wishEntry?.scryfallId ?? wishView?.scryfallId ?? ANY_PRINTING
-      : recordedId ?? oracleCard.defaultScryfallId,
+      : basicAnyDefault
+        ? ANY_PRINTING
+        : recordedId ?? oracleCard.defaultScryfallId,
   );
+  /** The edition picker is sitting on "any printing" — a basic from the lands box. */
+  const anyBasicPicked = basicAny && scryfallId === ANY_PRINTING;
   // Empty string is the "Any" sentinel, used only in wish mode (mirrors
   // ANY_PRINTING for the edition). Collection/edit/session modes stay concrete.
   const [condition, setCondition] = useState<Condition | ''>(
@@ -274,7 +287,8 @@ export function CardSheet({
   // Nothing tied this sheet to an edition (adding a card the caller didn't
   // resolve a printing for), so honour the printing preference rather than
   // silently landing on the card DB's representative one. Skipped in wish mode,
-  // where "any printing" is the point.
+  // where "any printing" is the point (a lands-box basic sits on the same empty
+  // sentinel, which the setter below leaves alone).
   useEffect(() => {
     if (recordedId || wishMode) return;
     let live = true;
@@ -412,7 +426,7 @@ export function CardSheet({
     } else if (wishEntry) {
       await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, ...wishPrefs, quantity });
     } else if (deckCard) {
-      await updateDeckCard(deckCard.id, { quantity, scryfallId });
+      await updateDeckCard(deckCard.id, { quantity, scryfallId, anyBasic: anyBasicPicked });
     } else if (editing && entry) {
       await updateCollectionEntry(entry.id, {
         scryfallId,
@@ -421,7 +435,13 @@ export function CardSheet({
         quantityForTrade: clampedForTrade,
       });
     } else if (addTo.kind === 'deck') {
-      await addDeckCard({ deckId: addTo.deckId, oracleId: oracleCard.oracleId, scryfallId, board, quantity });
+      await addDeckCard({
+        deckId: addTo.deckId,
+        oracleId: oracleCard.oracleId,
+        ...(anyBasicPicked ? { anyBasic: true } : { scryfallId }),
+        board,
+        quantity,
+      });
     } else {
       // Add mode into one of the three personal lists. An explicit button
       // (dest) wins; otherwise the sheet's own scope decides, and a
@@ -617,7 +637,11 @@ export function CardSheet({
                 }}
                 disabled={!formEditable && !onEditionChange}
               >
-                {wishMode && <option value={ANY_PRINTING}>Any printing</option>}
+                {wishMode ? (
+                  <option value={ANY_PRINTING}>Any printing</option>
+                ) : (
+                  basicAny && <option value={ANY_PRINTING}>Any printing (from your lands box)</option>
+                )}
                 {highlighted.length > 0 ? (
                   <>
                     {visibleHighlighted.length > 0 && (
@@ -839,7 +863,7 @@ export function CardSheet({
         <EditionPicker
           printings={highlighted.length > 0 ? [...highlighted, ...otherPrintings] : otherPrintings}
           selected={scryfallId}
-          anyOption={wishMode}
+          anyOption={wishMode || basicAny}
           notes={highlightPrintings?.notes}
           ownedIds={ownedIds}
           ownedForTradeIds={ownedForTradeIds}
@@ -951,7 +975,7 @@ export function EditionPicker({
 }: {
   printings: Priced<Printing>[];
   selected: string;
-  /** Lead with the wishlist's "any printing" tile. */
+  /** Lead with the "any printing" tile (a wish, or a lands-box basic). */
   anyOption?: boolean;
   /** Short annotations per printing (e.g. the trade board's "×2, 1 for trade"). */
   notes?: Map<string, string>;

@@ -104,6 +104,9 @@ export function usePlacementIndex(): PlacementIndex | undefined {
     }
     const byOracle = new Map<string, Buckets>();
     for (const s of data.slots) {
+      // An "any printing" basic promises nothing about your shelves: it isn't a
+      // copy you own, so it neither files a card away nor over-promises one.
+      if (s.anyBasic) continue;
       const container = byId.get(s.deckId);
       if (!container) continue; // orphan slot (a delete that hasn't synced yet)
       const place: Placement = {

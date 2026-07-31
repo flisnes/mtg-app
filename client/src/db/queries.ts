@@ -96,12 +96,16 @@ export interface MissingCard {
 /**
  * Cards this deck needs that aren't fully owned and aren't already on the
  * wishlist (beta plan §6). addQty = needed − owned, aggregated per oracle card
- * across boards.
+ * across boards. "Any printing" basics are already covered by the lands box, so
+ * they never turn up here.
  */
 export async function computeDeckWishlistCandidates(deckId: string): Promise<MissingCard[]> {
   const deckCards = await db.deckCards.where('deckId').equals(deckId).toArray();
   const needed = new Map<string, number>();
-  for (const dc of deckCards) needed.set(dc.oracleId, (needed.get(dc.oracleId) ?? 0) + dc.quantity);
+  for (const dc of deckCards) {
+    if (dc.anyBasic) continue;
+    needed.set(dc.oracleId, (needed.get(dc.oracleId) ?? 0) + dc.quantity);
+  }
 
   const oracleIds = [...needed.keys()];
   const [owned, wishlist, oracleMap] = await Promise.all([

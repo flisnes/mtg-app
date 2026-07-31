@@ -952,7 +952,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       if (cur) cur.quantity += e.qty;
       else slotMap.set(key, { oracleId: e.oracleId, board: e.board, quantity: e.qty, scryfallId: e.scryfallId, name: e.name, image: e.image });
     }
-    const current = await db.deckCards.where('deckId').equals(deckId).toArray();
+    // "Any printing" basics are invisible to a scan — reconcileDeck leaves them
+    // alone, so the preview mustn't offer to sweep them away either.
+    const current = (await db.deckCards.where('deckId').equals(deckId).toArray()).filter((c) => !c.anyBasic);
     const oracleMap = await getOracleCardsByIds(current.map((c) => c.oracleId));
     const curMap = new Map(current.map((c) => [`${c.oracleId}|${c.board}`, c]));
 

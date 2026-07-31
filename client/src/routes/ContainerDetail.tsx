@@ -29,7 +29,7 @@ import {
   setDeckFormat,
 } from '../db/dataAccess.js';
 import { addToWishlistBulk } from '../db/dataAccess.js';
-import { checkDeckLegality, formatLabel, type LegalityReport } from '../deck/legality.js';
+import { checkDeckLegality, formatLabel, isBasicLand, type LegalityReport } from '../deck/legality.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { buildDeckText } from '../deck/deckText.js';
 import { shareDeckLink } from '../deck/share.js';
@@ -70,6 +70,8 @@ interface Row {
   scryfallId?: string;
   quantity: number;
   board: DeckBoard;
+  /** "Any printing" basic land: no edition, no money, always counted as had. */
+  anyBasic?: boolean;
   oracle?: Priced<OracleCard>;
   printing?: Priced<Printing>;
   owned: number;
@@ -80,6 +82,7 @@ interface DeckCardEdit {
   id: string;
   quantity: number;
   scryfallId?: string;
+  anyBasic?: boolean;
   board: DeckBoard;
   commanderDeck: boolean;
   hasCommander: boolean;
@@ -127,6 +130,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       scryfallId: c.scryfallId,
       quantity: c.quantity,
       board: c.board,
+      anyBasic: c.anyBasic,
       oracle: oracleMap.get(c.oracleId),
       printing: c.scryfallId ? printMap.get(c.scryfallId) : undefined,
       owned: owned.get(c.oracleId) ?? 0,
@@ -162,13 +166,20 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const summary = useMemo(() => {
     const rows = data?.rows ?? [];
     const byOracle = new Map<string, { need: number; owned: number }>();
+    let need = 0;
+    let have = 0;
     for (const r of rows) {
+      // "Any printing" basics come out of the lands box, not the collection:
+      // needed, and always had, without touching the owned counts.
+      if (r.anyBasic) {
+        need += r.quantity;
+        have += r.quantity;
+        continue;
+      }
       const cur = byOracle.get(r.oracleId) ?? { need: 0, owned: r.owned };
       cur.need += r.quantity;
       byOracle.set(r.oracleId, cur);
     }
-    let need = 0;
-    let have = 0;
     byOracle.forEach((v) => {
       need += v.need;
       have += Math.min(v.owned, v.need);
@@ -273,7 +284,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     setPicking(null);
     await addDeckCardsBulk(
       containerId,
-      selectedRows.map((r) => ({ oracleId: r.oracleId, quantity: r.quantity, board: 'main' as const, scryfallId: r.scryfallId })),
+      selectedRows.map((r) => ({
+        oracleId: r.oracleId,
+        quantity: r.quantity,
+        board: 'main' as const,
+        scryfallId: r.scryfallId,
+        anyBasic: r.anyBasic,
+      })),
     );
     toast(`Added ${selectedCopies} card${plural(selectedCopies)} to ${CONTAINER_META[targetKind].noun.toLowerCase()}`);
     sel.exit();
@@ -452,6 +469,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       {showImport && (
         <ImportPanel
           deckId={id}
+          basicsAnyPrinting={isDeck}
           onDone={(added) => {
             setShowImport(false);
             toast(`Added ${added} cards to the ${meta.noun}`);
@@ -603,7 +621,12 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
 function sortRows(rows: Row[], prefs: CardSortPrefs): Row[] {
   return sortCards(
     rows,
-    (r) => ({ name: r.oracle?.name, cmc: r.oracle?.cmc, price: priceValue(r.printing, r.oracle) }),
+    (r) => ({
+      name: r.oracle?.name,
+      cmc: r.oracle?.cmc,
+      // A lands-box basic costs the deck nothing, so it sorts by nothing.
+      price: r.anyBasic ? 0 : priceValue(r.printing, r.oracle),
+    }),
     prefs,
   );
 }
@@ -653,11 +676,14 @@ function Board({
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
   const toItem = (r: Row): CardItem => {
-    const enough = r.owned >= r.quantity;
+    const enough = r.anyBasic || r.owned >= r.quantity;
     const issue = issues.get(r.oracleId);
     // Ownership checkmark (own this exact printing / another / for trade), same
-    // as everywhere else. A legality problem still wins the badge slot (⚠).
-    const own = ownedBadge(ownership?.lookup(r.oracleId, r.scryfallId ?? r.oracle?.defaultScryfallId));
+    // as everywhere else. A legality problem still wins the badge slot (⚠). A
+    // lands-box basic is had by definition, so it gets the plain check.
+    const own = r.anyBasic
+      ? { icon: <Icon name="check" size={13} />, cls: 'own-yes', title: 'Any printing — from your lands box' }
+      : ownedBadge(ownership?.lookup(r.oracleId, r.scryfallId ?? r.oracle?.defaultScryfallId));
     return {
       key: r.id,
       name: r.oracle?.name ?? '(unknown card)',
@@ -670,7 +696,7 @@ function Board({
       dim: !enough,
       sub: (
         <>
-          owned {r.owned}
+          {r.anyBasic ? 'any printing' : `owned ${r.owned}`}
           {issue && <span className="badge badge-illegal-chip">{issue}</span>}
         </>
       ),
@@ -678,7 +704,15 @@ function Board({
         ? () =>
             onEdit({
               card: r.oracle!,
-              deckCard: { id: r.id, quantity: r.quantity, scryfallId: r.scryfallId, board: r.board, commanderDeck, hasCommander },
+              deckCard: {
+                id: r.id,
+                quantity: r.quantity,
+                scryfallId: r.scryfallId,
+                anyBasic: r.anyBasic,
+                board: r.board,
+                commanderDeck,
+                hasCommander,
+              },
             })
         : undefined,
     };
@@ -708,7 +742,16 @@ function Board({
   );
 }
 
-function ImportPanel({ deckId, onDone }: { deckId: string; onDone: (added: number) => void }) {
+function ImportPanel({
+  deckId,
+  basicsAnyPrinting,
+  onDone,
+}: {
+  deckId: string;
+  /** Decks pull their basics from the lands box; a binder or box holds real cards. */
+  basicsAnyPrinting: boolean;
+  onDone: (added: number) => void;
+}) {
   const [text, setText] = useState('');
   const { status, analyze, reset } = useImportAnalysis();
 
@@ -727,9 +770,21 @@ function ImportPanel({ deckId, onDone }: { deckId: string; onDone: (added: numbe
   });
 
   async function confirm(lines: ResolvedLine[]) {
+    // A pasted list's basics are the ones you'd fetch from the lands box, not
+    // copies the list expects you to own — same default as adding them by hand.
+    const oracles = basicsAnyPrinting ? await getOracleCardsByIds(lines.map((l) => l.oracleId)) : null;
+    const isAny = (l: ResolvedLine) => {
+      const oracle = oracles?.get(l.oracleId);
+      return !!oracle && isBasicLand(oracle);
+    };
     await addDeckCardsBulk(
       deckId,
-      lines.map((l) => ({ oracleId: l.oracleId, quantity: l.quantity, board: l.board ?? 'main', scryfallId: l.scryfallId })),
+      lines.map((l) => ({
+        oracleId: l.oracleId,
+        quantity: l.quantity,
+        board: l.board ?? 'main',
+        ...(isAny(l) ? { anyBasic: true } : { scryfallId: l.scryfallId }),
+      })),
     );
     onDone(lines.reduce((s, l) => s + l.quantity, 0));
   }

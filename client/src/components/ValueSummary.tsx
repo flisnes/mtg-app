@@ -65,6 +65,8 @@ export interface ValueSlot {
   quantity: number;
   /** Copies of this oracle card owned, across every printing. */
   owned: number;
+  /** "Any printing" basic land — free, and no claim on the collection. */
+  anyBasic?: boolean;
   printing?: PriceSource;
   oracle?: PriceSource;
 }
@@ -83,11 +85,14 @@ function addValue(into: ContainerValue, from: ContainerValue): void {
 /** Split a container's slots into what you own and what the full list is worth. */
 export function containerValue(slots: ValueSlot[]): ContainerValue {
   const value = emptyValue();
+  // "Any printing" basics are worth nothing on either side of the ledger: you
+  // never bought them for this deck, and nobody prices a lands-box Island.
+  const counted = slots.filter((s) => !s.anyBasic);
   // One copy in the collection covers one slot, so spend a pool per oracle card:
   // the same card in a mainboard and a sideboard isn't two copies you own.
   const pool = new Map<string, number>();
-  for (const s of slots) if (!pool.has(s.oracleId)) pool.set(s.oracleId, s.owned);
-  for (const s of slots) {
+  for (const s of counted) if (!pool.has(s.oracleId)) pool.set(s.oracleId, s.owned);
+  for (const s of counted) {
     addToTotal(value.listed, s.quantity, s.printing, s.oracle);
     const have = Math.min(pool.get(s.oracleId) ?? 0, s.quantity);
     if (have > 0) {
@@ -128,6 +133,7 @@ export function useContainersValue(kind: ContainerKind): ContainersValue | undef
         oracleId: c.oracleId,
         quantity: c.quantity,
         owned: ownedMap.get(c.oracleId) ?? 0,
+        ...(c.anyBasic ? { anyBasic: true } : {}),
         printing: c.scryfallId ? printMap.get(c.scryfallId) : undefined,
         oracle: oracleMap.get(c.oracleId),
       });

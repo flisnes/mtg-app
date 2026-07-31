@@ -939,6 +939,14 @@ export async function deleteDeck(id: string): Promise<void> {
   });
 }
 
+/**
+ * What makes a container slot unique: the card, the board, and whether it's an
+ * "any printing" basic. The last part keeps the lands-box Islands out of the
+ * slot holding the Islands you actually own.
+ */
+const slotKey = (c: { oracleId: string; board: DeckBoard; anyBasic?: boolean }) =>
+  `${c.oracleId}|${c.board}|${c.anyBasic ? 'any' : ''}`;
+
 export interface AddDeckCardInput {
   deckId: string;
   oracleId: string;
@@ -946,18 +954,23 @@ export interface AddDeckCardInput {
   scryfallId?: string;
   quantity?: number;
   board?: DeckBoard;
+  /** "Any printing" basic land — see DeckCard.anyBasic. Pins no printing. */
+  anyBasic?: boolean;
 }
 
-/** Add a slot, merging into an existing (deckId, oracleId, board) slot. */
+/** Add a slot, merging into an existing (deckId, oracleId, board, anyBasic) slot. */
 export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
   const board = input.board ?? 'main';
   const quantity = input.quantity ?? 1;
+  const anyBasic = !!input.anyBasic;
   await db.transaction('rw', DECK_TABLES, async () => {
     const now = Date.now();
+    // "Any printing" basics are their own slot: four Islands from the lands box
+    // shouldn't fold into the four foil Islands you actually own.
     const existing = await db.deckCards
       .where('[deckId+board]')
       .equals([input.deckId, board])
-      .and((c) => c.oracleId === input.oracleId)
+      .and((c) => c.oracleId === input.oracleId && !!c.anyBasic === anyBasic)
       .first();
     let slot: DeckCard;
     if (existing) {
@@ -967,7 +980,7 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
         id: newId(),
         deckId: input.deckId,
         oracleId: input.oracleId,
-        ...(input.scryfallId ? { scryfallId: input.scryfallId } : {}),
+        ...(anyBasic ? { anyBasic: true } : input.scryfallId ? { scryfallId: input.scryfallId } : {}),
         quantity,
         board,
         updatedAt: now,
@@ -980,7 +993,7 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
       ts: now,
       kind: 'deck.add',
       oracleId: input.oracleId,
-      ...(input.scryfallId ? { scryfallId: input.scryfallId } : {}),
+      ...(!anyBasic && input.scryfallId ? { scryfallId: input.scryfallId } : {}),
       qty: quantity,
       deckId: input.deckId,
       ...containerRef(deck),
@@ -996,15 +1009,14 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
  */
 export async function addDeckCardsBulk(
   deckId: string,
-  cards: Array<{ oracleId: string; quantity: number; board: DeckBoard; scryfallId?: string }>,
+  cards: Array<{ oracleId: string; quantity: number; board: DeckBoard; scryfallId?: string; anyBasic?: boolean }>,
   meta: { source?: EventSource } = {},
 ): Promise<void> {
   const batchId = newId();
   await db.transaction('rw', DECK_TABLES, async () => {
     const now = Date.now();
     const existing = await db.deckCards.where('deckId').equals(deckId).toArray();
-    const keyOf = (c: { oracleId: string; board: DeckBoard }) => `${c.oracleId}|${c.board}`;
-    const map = new Map(existing.map((c) => [keyOf(c), c]));
+    const map = new Map(existing.map((c) => [slotKey(c), c]));
     const touched = new Set<DeckCard>();
     const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
     const deck = await touchDeck(deckId, now);
@@ -1016,11 +1028,12 @@ export async function addDeckCardsBulk(
       ...(deck ? { batchLabel: deck.name } : {}),
     };
     for (const c of cards) {
-      const ex = map.get(keyOf(c));
+      const ex = map.get(slotKey(c));
       if (ex) {
         ex.quantity += c.quantity;
-        // Adopt the imported printing if the slot didn't already have one.
-        if (!ex.scryfallId && c.scryfallId) ex.scryfallId = c.scryfallId;
+        // Adopt the imported printing if the slot didn't already have one (an
+        // "any printing" basic never takes one on).
+        if (!ex.anyBasic && !ex.scryfallId && c.scryfallId) ex.scryfallId = c.scryfallId;
         ex.updatedAt = now;
         touched.add(ex);
       } else {
@@ -1030,17 +1043,17 @@ export async function addDeckCardsBulk(
           oracleId: c.oracleId,
           quantity: c.quantity,
           board: c.board,
-          scryfallId: c.scryfallId,
+          ...(c.anyBasic ? { anyBasic: true } : { scryfallId: c.scryfallId }),
           updatedAt: now,
         };
-        map.set(keyOf(c), dc);
+        map.set(slotKey(c), dc);
         touched.add(dc);
       }
       events.push({
         ts: now,
         kind: 'deck.add',
         oracleId: c.oracleId,
-        ...(c.scryfallId ? { scryfallId: c.scryfallId } : {}),
+        ...(!c.anyBasic && c.scryfallId ? { scryfallId: c.scryfallId } : {}),
         qty: c.quantity,
         deckId,
         ...containerRef(deck),
@@ -1063,7 +1076,8 @@ export async function addDeckCardsBulk(
  * entry, labelled with the deck name. A slot whose quantity is unchanged emits
  * no event (a bare preferred-printing adoption stages silently, like
  * patchDeckCard). The user's hand-picked printing is kept; a scanned printing is
- * only adopted when the slot had none. Returns the change counts.
+ * only adopted when the slot had none. "Any printing" basic slots sit this out
+ * entirely — no camera can see a card you never sleeved. Returns the change counts.
  */
 export async function reconcileDeck(
   deckId: string,
@@ -1077,8 +1091,7 @@ export async function reconcileDeck(
   await db.transaction('rw', DECK_TABLES, async () => {
     const now = Date.now();
     const existing = await db.deckCards.where('deckId').equals(deckId).toArray();
-    const keyOf = (c: { oracleId: string; board: DeckBoard }) => `${c.oracleId}|${c.board}`;
-    const curMap = new Map(existing.map((c) => [keyOf(c), c]));
+    const curMap = new Map(existing.map((c) => [slotKey(c), c]));
     const seen = new Set<string>();
     const puts: DeckCard[] = [];
     const deletes: string[] = [];
@@ -1093,7 +1106,7 @@ export async function reconcileDeck(
 
     for (const t of target) {
       if (t.quantity <= 0) continue;
-      const key = keyOf(t);
+      const key = slotKey(t);
       seen.add(key);
       const cur = curMap.get(key);
       if (!cur) {
@@ -1144,6 +1157,9 @@ export async function reconcileDeck(
 
     for (const [key, cur] of curMap) {
       if (seen.has(key)) continue;
+      // An "any printing" basic isn't a piece of cardboard the camera could have
+      // seen, so a re-scan neither matches nor sweeps it away.
+      if (cur.anyBasic) continue;
       deletes.push(cur.id);
       removed++;
       events.push({
@@ -1181,7 +1197,7 @@ export async function moveDeckCard(id: string, board: DeckBoard): Promise<void> 
     const existing = await db.deckCards
       .where('[deckId+board]')
       .equals([card.deckId, board])
-      .and((c) => c.oracleId === card.oracleId)
+      .and((c) => c.oracleId === card.oracleId && !!c.anyBasic === !!card.anyBasic)
       .first();
     if (existing) {
       const merged: DeckCard = { ...existing, quantity: existing.quantity + card.quantity, updatedAt: now };
@@ -1210,7 +1226,7 @@ export async function moveDeckCard(id: string, board: DeckBoard): Promise<void> 
 /** Change a slot's quantity/printing; quantity ≤ 0 deletes the slot. */
 async function patchDeckCard(
   id: string,
-  patch: { quantity?: number; scryfallId?: string },
+  patch: { quantity?: number; scryfallId?: string; anyBasic?: boolean },
 ): Promise<void> {
   await db.transaction('rw', DECK_TABLES, async () => {
     const card = await db.deckCards.get(id);
@@ -1218,15 +1234,20 @@ async function patchDeckCard(
     const now = Date.now();
     const quantity = patch.quantity ?? card.quantity;
     const delta = quantity - card.quantity;
+    const anyBasic = patch.anyBasic ?? !!card.anyBasic;
 
     if (quantity <= 0) {
       await db.deckCards.delete(id);
       await stageDelete('deckCards', id);
     } else {
+      // The two are exclusive: a lands-box basic pins no edition, and pinning
+      // one turns the slot back into a copy you're counting on owning.
       const next: DeckCard = {
         ...card,
         quantity,
-        ...(patch.scryfallId ? { scryfallId: patch.scryfallId } : {}),
+        ...(anyBasic
+          ? { anyBasic: true, scryfallId: undefined }
+          : { anyBasic: undefined, ...(patch.scryfallId ? { scryfallId: patch.scryfallId } : {}) }),
         updatedAt: now,
       };
       await db.deckCards.put(next);
@@ -1256,7 +1277,10 @@ export async function setDeckCardQuantity(id: string, quantity: number): Promise
 }
 
 /** Update a slot's quantity and preferred printing (deck edit sheet). */
-export async function updateDeckCard(id: string, patch: { quantity: number; scryfallId: string }): Promise<void> {
+export async function updateDeckCard(
+  id: string,
+  patch: { quantity: number; scryfallId: string; anyBasic?: boolean },
+): Promise<void> {
   await patchDeckCard(id, patch);
 }
 
@@ -1338,7 +1362,9 @@ export async function removeDeckCardsMatching(
     const taken = new Map<DeckCard, number>();
     for (const card of cards) {
       const candidates = (byOracle.get(card.oracleId) ?? []).filter(
-        (s) => !s.scryfallId || !card.scryfallId || s.scryfallId === card.scryfallId,
+        // A lands-box basic never claimed one of your copies, so taking it out
+        // resolves nothing — it isn't a placement the picker offered either.
+        (s) => !s.anyBasic && (!s.scryfallId || !card.scryfallId || s.scryfallId === card.scryfallId),
       );
       // Exact printing first, then the edition-less slots (a pasted decklist).
       const ranked = [...candidates].sort(
@@ -1396,7 +1422,8 @@ export async function removeDeckCardsMatching(
  * and (usually) a preferred printing, so each slot is matched against the
  * copies actually owned — the slot's printing first, then any other edition of
  * the same card — for up to the slot's quantity. Cards you don't own are
- * skipped. Returns how many copies changed.
+ * skipped, as are "any printing" basics (that slot never claimed a copy of
+ * yours, so it has none to offer). Returns how many copies changed.
  */
 export async function setContainerForTrade(containerId: string, forTrade: boolean): Promise<number> {
   return setSlotsForTrade(await db.deckCards.where('deckId').equals(containerId).toArray(), forTrade);
@@ -1412,7 +1439,7 @@ export async function setDeckCardsForTrade(ids: string[], forTrade: boolean): Pr
 }
 
 async function setSlotsForTrade(slots: DeckCard[], forTrade: boolean): Promise<number> {
-  const requests: MarkForTradeRequest[] = slots.map((s) => ({
+  const requests: MarkForTradeRequest[] = slots.filter((s) => !s.anyBasic).map((s) => ({
     oracleId: s.oracleId,
     scryfallId: s.scryfallId ?? '',
     // A slot doesn't track condition/finish/language, so no copy scores on

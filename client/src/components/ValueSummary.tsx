@@ -134,7 +134,8 @@ export function useContainersValue(kind: ContainerKind): ContainersValue | undef
         quantity: c.quantity,
         owned: ownedMap.get(c.oracleId) ?? 0,
         ...(c.anyBasic ? { anyBasic: true } : {}),
-        printing: c.scryfallId ? printMap.get(c.scryfallId) : undefined,
+        // A slot asking for a foil is worth the foil price, not the nonfoil one.
+        printing: c.scryfallId ? pricedForFinish(printMap.get(c.scryfallId), c.finish ?? 'nonfoil') : undefined,
         oracle: oracleMap.get(c.oracleId),
       });
       slots.set(c.deckId, list);

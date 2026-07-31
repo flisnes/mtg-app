@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.86.0
+
+- **A deck slot can name the exact card you mean.** Tap a card in a deck, binder or box and the sheet now has **Minimum condition**, **Finish** and **Language** next to Edition, all four starting on **Any** — the same "any printing / any finish" wording the wishlist has always had. So the mainboard can ask for the foil Japanese Counterspell while the sideboard is happy with whatever's in the drawer.
+- **"Pick one from my collection."** The new link under Edition opens your own copies of that card as tiles — TSP #157 · LP · Foil · de, ×1 — and picking one fills in the edition, finish, condition and language in a single tap. That's the shortcut: point the slot at the piece of cardboard you actually own instead of setting four dropdowns.
+- **The double check now means "I have *that* one".** A slot gets the double check when a copy you own meets everything it asks for. Ask for a foil while your only copy is nonfoil and it drops to the single check — you own the card, just not the one this deck wants. Slots left on "any" double-check the moment you own the card in any edition, so pasted decklists behave exactly as before. A deck asking for foils is also priced at foil prices.
+- **Two new actions in a deck's ⋯ menu.** **Add missing cards to wishlist** brings up the sheet that used to only appear as you left a deck, so you can ask for it whenever — and it stays on the deck page afterwards. The wishes inherit what the deck's slots asked for, so a foil deck doesn't go shopping for nonfoils. **Add all owned cards to tradelist** (and its undo) was a binder-and-box action; decks get it too, for the evening you decide to break one up.
+
 ## 0.85.0
 
 - **Basics come from the lands box now.** Add a basic land to a deck and it goes in as **any printing**: the copy you grab off the top of the pile, whatever set it's from. It counts toward the deck's card count and toward "you own X of Y", it never eats one of the Islands in your collection, and it adds nothing to what the deck is worth. Nobody should have to scan 24 Islands to stop a deck reading 36/60.

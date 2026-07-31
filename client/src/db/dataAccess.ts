@@ -947,6 +947,23 @@ export async function deleteDeck(id: string): Promise<void> {
 const slotKey = (c: { oracleId: string; board: DeckBoard; anyBasic?: boolean }) =>
   `${c.oracleId}|${c.board}|${c.anyBasic ? 'any' : ''}`;
 
+/** What a slot asks of the copy filling it; every field undefined = "any". */
+export interface SlotWants {
+  condition?: Condition;
+  finish?: Finish;
+  lang?: string;
+}
+
+/** The wants worth storing — drops the "any" (undefined) ones. */
+function wantFields(wants: SlotWants | undefined): SlotWants {
+  if (!wants) return {};
+  return {
+    ...(wants.condition ? { condition: wants.condition } : {}),
+    ...(wants.finish ? { finish: wants.finish } : {}),
+    ...(wants.lang ? { lang: wants.lang } : {}),
+  };
+}
+
 export interface AddDeckCardInput {
   deckId: string;
   oracleId: string;
@@ -956,6 +973,8 @@ export interface AddDeckCardInput {
   board?: DeckBoard;
   /** "Any printing" basic land — see DeckCard.anyBasic. Pins no printing. */
   anyBasic?: boolean;
+  /** Finish/condition/language the slot wants (e.g. copied off a collection copy). */
+  wants?: SlotWants;
 }
 
 /** Add a slot, merging into an existing (deckId, oracleId, board, anyBasic) slot. */
@@ -980,7 +999,7 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
         id: newId(),
         deckId: input.deckId,
         oracleId: input.oracleId,
-        ...(anyBasic ? { anyBasic: true } : input.scryfallId ? { scryfallId: input.scryfallId } : {}),
+        ...(anyBasic ? { anyBasic: true } : { ...(input.scryfallId ? { scryfallId: input.scryfallId } : {}), ...wantFields(input.wants) }),
         quantity,
         board,
         updatedAt: now,
@@ -1009,7 +1028,14 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
  */
 export async function addDeckCardsBulk(
   deckId: string,
-  cards: Array<{ oracleId: string; quantity: number; board: DeckBoard; scryfallId?: string; anyBasic?: boolean }>,
+  cards: Array<{
+    oracleId: string;
+    quantity: number;
+    board: DeckBoard;
+    scryfallId?: string;
+    anyBasic?: boolean;
+    wants?: SlotWants;
+  }>,
   meta: { source?: EventSource } = {},
 ): Promise<void> {
   const batchId = newId();
@@ -1031,9 +1057,12 @@ export async function addDeckCardsBulk(
       const ex = map.get(slotKey(c));
       if (ex) {
         ex.quantity += c.quantity;
-        // Adopt the imported printing if the slot didn't already have one (an
-        // "any printing" basic never takes one on).
-        if (!ex.anyBasic && !ex.scryfallId && c.scryfallId) ex.scryfallId = c.scryfallId;
+        // Adopt the incoming printing and wants if the slot named none of its own
+        // (an "any printing" basic never takes any on).
+        if (!ex.anyBasic) {
+          if (!ex.scryfallId && c.scryfallId) ex.scryfallId = c.scryfallId;
+          if (!ex.condition && !ex.finish && !ex.lang) Object.assign(ex, wantFields(c.wants));
+        }
         ex.updatedAt = now;
         touched.add(ex);
       } else {
@@ -1043,7 +1072,7 @@ export async function addDeckCardsBulk(
           oracleId: c.oracleId,
           quantity: c.quantity,
           board: c.board,
-          ...(c.anyBasic ? { anyBasic: true } : { scryfallId: c.scryfallId }),
+          ...(c.anyBasic ? { anyBasic: true } : { scryfallId: c.scryfallId, ...wantFields(c.wants) }),
           updatedAt: now,
         };
         map.set(slotKey(c), dc);
@@ -1223,10 +1252,15 @@ export async function moveDeckCard(id: string, board: DeckBoard): Promise<void> 
   });
 }
 
-/** Change a slot's quantity/printing; quantity ≤ 0 deletes the slot. */
+/**
+ * Change a slot's quantity/printing/wants; quantity ≤ 0 deletes the slot.
+ * `scryfallId` and `wants` are only touched when the patch names them, and an
+ * empty string / an all-undefined `wants` clears them back to "any" — so the
+ * edit sheet can move a slot from a pinned foil to "any edition, any finish".
+ */
 async function patchDeckCard(
   id: string,
-  patch: { quantity?: number; scryfallId?: string; anyBasic?: boolean },
+  patch: { quantity?: number; scryfallId?: string; anyBasic?: boolean; wants?: SlotWants },
 ): Promise<void> {
   await db.transaction('rw', DECK_TABLES, async () => {
     const card = await db.deckCards.get(id);
@@ -1235,19 +1269,27 @@ async function patchDeckCard(
     const quantity = patch.quantity ?? card.quantity;
     const delta = quantity - card.quantity;
     const anyBasic = patch.anyBasic ?? !!card.anyBasic;
+    // A cleared want has to be written as undefined, not left off the object.
+    const clearedWants: SlotWants = { condition: undefined, finish: undefined, lang: undefined };
+    const wants = patch.wants ? { ...clearedWants, ...wantFields(patch.wants) } : {};
 
     if (quantity <= 0) {
       await db.deckCards.delete(id);
       await stageDelete('deckCards', id);
     } else {
-      // The two are exclusive: a lands-box basic pins no edition, and pinning
-      // one turns the slot back into a copy you're counting on owning.
+      // The two are exclusive: a lands-box basic pins no edition (and asks
+      // nothing of your copies), and pinning one turns the slot back into a copy
+      // you're counting on owning.
       const next: DeckCard = {
         ...card,
         quantity,
         ...(anyBasic
-          ? { anyBasic: true, scryfallId: undefined }
-          : { anyBasic: undefined, ...(patch.scryfallId ? { scryfallId: patch.scryfallId } : {}) }),
+          ? { anyBasic: true, scryfallId: undefined, ...clearedWants }
+          : {
+              anyBasic: undefined,
+              ...('scryfallId' in patch ? { scryfallId: patch.scryfallId || undefined } : {}),
+              ...wants,
+            }),
         updatedAt: now,
       };
       await db.deckCards.put(next);
@@ -1276,10 +1318,11 @@ export async function setDeckCardQuantity(id: string, quantity: number): Promise
   await patchDeckCard(id, { quantity });
 }
 
-/** Update a slot's quantity and preferred printing (deck edit sheet). */
+/** Update a slot's quantity, preferred printing and wants (deck edit sheet).
+ *  An empty `scryfallId` means "any edition"; omitted wants mean "any". */
 export async function updateDeckCard(
   id: string,
-  patch: { quantity: number; scryfallId: string; anyBasic?: boolean },
+  patch: { quantity: number; scryfallId: string; anyBasic?: boolean; wants?: SlotWants },
 ): Promise<void> {
   await patchDeckCard(id, patch);
 }
@@ -1442,11 +1485,12 @@ async function setSlotsForTrade(slots: DeckCard[], forTrade: boolean): Promise<n
   const requests: MarkForTradeRequest[] = slots.filter((s) => !s.anyBasic).map((s) => ({
     oracleId: s.oracleId,
     scryfallId: s.scryfallId ?? '',
-    // A slot doesn't track condition/finish/language, so no copy scores on
-    // those: the printing decides the match, and ties go to whatever's first.
-    condition: 'NM',
-    finish: 'nonfoil',
-    lang: 'en',
+    // A slot that names a finish/condition/language points at the copy it means;
+    // where it says "any", fall back to the usual defaults so the printing
+    // decides the match and ties go to whatever's first.
+    condition: s.condition ?? 'NM',
+    finish: s.finish ?? 'nonfoil',
+    lang: s.lang ?? 'en',
     quantity: s.quantity,
   }));
   return forTrade ? markOwnedForTrade(requests) : unmarkOwnedForTrade(requests);

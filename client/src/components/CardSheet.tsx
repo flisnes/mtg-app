@@ -153,6 +153,10 @@ export function CardSheet({
     scryfallId?: string;
     /** The slot is an "any printing" basic (see DeckCard.anyBasic). */
     anyBasic?: boolean;
+    /** What the slot wants of the copy filling it; undefined = any. */
+    condition?: Condition;
+    finish?: Finish;
+    lang?: string;
     board?: DeckBoard;
     commanderDeck?: boolean;
     hasCommander?: boolean;
@@ -214,6 +218,11 @@ export function CardSheet({
   // Editing, adding or viewing a wish: condition/finish/lang are all optional
   // and lead with an "Any" choice (a wish isn't for one specific copy).
   const wishMode = mode === 'wish' || wishAdd || wishInfo;
+  // A container slot works the same way: it says what the deck wants of the copy
+  // filling it, so every field can sit on "any" — until you pick a copy out of
+  // your collection, which fills them all in.
+  const deckPrefs = mode === 'deck' || deckAdd;
+  const anyPrefs = wishMode || deckPrefs;
   // Add mode into a personal list: which list leads (the primary button). The
   // other two ride along as compact +icon quick-adds, so a card found while
   // searching one list can still be filed anywhere. A context-free ('default')
@@ -230,8 +239,10 @@ export function CardSheet({
     mode === 'edit' ||
     (mode === 'add' && (addTo.kind === 'collection' || addTo.kind === 'tradelist' || addTo.kind === 'default'));
   // The condition/finish/lang selects show for collection entries and for wishes
-  // (as "Any"-able preferences); "For trade" stays gated on collectionFields alone.
-  const showCfl = collectionFields || wishMode;
+  // and container slots (as "Any"-able preferences); "For trade" stays gated on
+  // collectionFields alone. A lands-box basic is detached from the collection, so
+  // there is nothing for it to prefer.
+  const showCfl = collectionFields || wishMode || deckPrefs;
   // Session lines only edit the fields their scan target tracks.
   const showCondition = mode === 'session' ? sessionCard!.condition !== undefined : showCfl;
   const showFinish = mode === 'session' ? sessionCard!.finish !== undefined : showCfl;
@@ -247,20 +258,28 @@ export function CardSheet({
       ? wishEntry?.scryfallId ?? wishView?.scryfallId ?? ANY_PRINTING
       : basicAnyDefault
         ? ANY_PRINTING
-        : recordedId ?? oracleCard.defaultScryfallId,
+        : // A slot that pins no edition means it: "any printing" is a real answer
+          // here, not a gap to fill with the card's default.
+          mode === 'deck'
+          ? deckCard!.scryfallId ?? ANY_PRINTING
+          : recordedId ?? oracleCard.defaultScryfallId,
   );
   /** The edition picker is sitting on "any printing" — a basic from the lands box. */
   const anyBasicPicked = basicAny && scryfallId === ANY_PRINTING;
   // Empty string is the "Any" sentinel, used only in wish mode (mirrors
   // ANY_PRINTING for the edition). Collection/edit/session modes stay concrete.
   const [condition, setCondition] = useState<Condition | ''>(
-    entry?.condition ?? sessionCard?.condition ?? (wishMode ? wishEntry?.condition ?? wishView?.condition ?? '' : 'NM'),
+    entry?.condition ??
+      sessionCard?.condition ??
+      (anyPrefs ? wishEntry?.condition ?? wishView?.condition ?? deckCard?.condition ?? '' : 'NM'),
   );
   const [finish, setFinish] = useState<Finish | ''>(
-    entry?.finish ?? sessionCard?.finish ?? (wishMode ? wishEntry?.finish ?? wishView?.finish ?? '' : 'nonfoil'),
+    entry?.finish ??
+      sessionCard?.finish ??
+      (anyPrefs ? wishEntry?.finish ?? wishView?.finish ?? deckCard?.finish ?? '' : 'nonfoil'),
   );
   const [lang, setLang] = useState<string>(
-    entry?.lang ?? sessionCard?.lang ?? (wishMode ? wishEntry?.lang ?? wishView?.lang ?? '' : 'en'),
+    entry?.lang ?? sessionCard?.lang ?? (anyPrefs ? wishEntry?.lang ?? wishView?.lang ?? deckCard?.lang ?? '' : 'en'),
   );
   const [quantity, setQuantity] = useState(
     entry?.quantity ?? wishEntry?.quantity ?? wishView?.quantity ?? deckCard?.quantity ?? sessionCard?.quantity ?? 1,
@@ -272,6 +291,8 @@ export function CardSheet({
   const [tab, setTab] = useState<'details' | 'history'>(initialTab ?? 'details');
   // Visual "view all editions" grid, layered over the sheet.
   const [allEditions, setAllEditions] = useState(false);
+  // "Pick one from my collection" (container slots): the owned-copies overlay.
+  const [pickingCopy, setPickingCopy] = useState(false);
   // Filter the (often very long) Edition dropdown by set name or set code.
   const [editionQuery, setEditionQuery] = useState('');
   // Event info modal opened from the History tab (out of edit mode), plus a
@@ -290,7 +311,7 @@ export function CardSheet({
   // where "any printing" is the point (a lands-box basic sits on the same empty
   // sentinel, which the setter below leaves alone).
   useEffect(() => {
-    if (recordedId || wishMode) return;
+    if (recordedId || wishMode || mode === 'deck') return;
     let live = true;
     void preferredScryfallId(oracleCard).then((id) => {
       // Don't stomp a choice the user made in the edition picker meanwhile.
@@ -349,6 +370,14 @@ export function CardSheet({
   const ownsExact = !!scryfallId && (ownedEntries?.some((e) => e.scryfallId === scryfallId) ?? false);
   // The exact printings we own — the "view all editions" grid double-checks these.
   const ownedIds = useMemo(() => new Set((ownedEntries ?? []).map((e) => e.scryfallId)), [ownedEntries]);
+  // The copies themselves, newest edition first, for "pick one from my collection".
+  const ownedCopies = useMemo(() => {
+    const order = new Map(printings.map((p, i) => [p.scryfallId, i]));
+    const rank = (e: CollectionEntry) => order.get(e.scryfallId) ?? printings.length;
+    return [...(ownedEntries ?? [])].sort(
+      (a, b) => rank(a) - rank(b) || CONDITIONS.indexOf(a.condition) - CONDITIONS.indexOf(b.condition),
+    );
+  }, [ownedEntries, printings]);
   // Printings with copies marked for trade — their edition tile gets the purple tag.
   const ownedForTradeIds = useMemo(
     () => new Set((ownedEntries ?? []).filter((e) => e.quantityForTrade > 0).map((e) => e.scryfallId)),
@@ -375,8 +404,11 @@ export function CardSheet({
   const showEditionSearch = (formEditable || !!onEditionChange) && printings.length > 6;
   // A wish can want any finish (esp. an "any printing" wish, where no single
   // printing constrains the choice); a collection entry is limited to what the
-  // selected printing actually comes in.
-  const availableFinishes = wishMode ? FINISHES : printing?.finishes ?? (['nonfoil'] as Finish[]);
+  // selected printing actually comes in. A slot follows its edition where it pins
+  // one — asking for a foil that was never printed would never match a copy.
+  const availableFinishes = wishMode
+    ? FINISHES
+    : printing?.finishes ?? (deckPrefs ? FINISHES : (['nonfoil'] as Finish[]));
 
   // Full-size image + price for the currently-selected printing (falls back to the oracle default).
   const cardImage = printing?.imageNormal ?? oracleCard.imageNormal ?? printing?.imageSmall ?? oracleCard.imageSmall ?? null;
@@ -412,8 +444,9 @@ export function CardSheet({
     };
   }
 
-  // A wish stores its preferences as-is ('' → undefined = "any"); a collection
-  // entry needs a concrete condition/finish/lang, so fall back to the defaults.
+  // A wish (and a container slot) stores its preferences as-is ('' → undefined =
+  // "any"); a collection entry needs a concrete condition/finish/lang, so fall
+  // back to the defaults.
   const wishPrefs = { condition: condition || undefined, finish: finish || undefined, lang: lang || undefined };
   const concrete = { condition: condition || 'NM', finish: finish || 'nonfoil', lang: lang || 'en' };
 
@@ -426,7 +459,7 @@ export function CardSheet({
     } else if (wishEntry) {
       await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, ...wishPrefs, quantity });
     } else if (deckCard) {
-      await updateDeckCard(deckCard.id, { quantity, scryfallId, anyBasic: anyBasicPicked });
+      await updateDeckCard(deckCard.id, { quantity, scryfallId, anyBasic: anyBasicPicked, wants: wishPrefs });
     } else if (editing && entry) {
       await updateCollectionEntry(entry.id, {
         scryfallId,
@@ -438,7 +471,7 @@ export function CardSheet({
       await addDeckCard({
         deckId: addTo.deckId,
         oracleId: oracleCard.oracleId,
-        ...(anyBasicPicked ? { anyBasic: true } : { scryfallId }),
+        ...(anyBasicPicked ? { anyBasic: true } : { scryfallId, wants: wishPrefs }),
         board,
         quantity,
       });
@@ -637,10 +670,13 @@ export function CardSheet({
                 }}
                 disabled={!formEditable && !onEditionChange}
               >
-                {wishMode ? (
-                  <option value={ANY_PRINTING}>Any printing</option>
+                {/* A basic in a container spends its "any" on the lands box (the
+                    slot is detached from the collection entirely); everything
+                    else means "any edition of this card that I own". */}
+                {basicAny ? (
+                  <option value={ANY_PRINTING}>Any printing (from your lands box)</option>
                 ) : (
-                  basicAny && <option value={ANY_PRINTING}>Any printing (from your lands box)</option>
+                  anyPrefs && <option value={ANY_PRINTING}>Any printing</option>
                 )}
                 {highlighted.length > 0 ? (
                   <>
@@ -672,13 +708,23 @@ export function CardSheet({
           </div>
         </label>
 
-        {(showCondition || showFinish || showLang) && (
+        {/* The shortcut that makes a slot concrete: point it at a copy you
+            actually have and the edition, finish, condition and language all come
+            along, so the double check means "this very card". */}
+        {deckPrefs && formEditable && ownedCopies.length > 0 && (
+          <button type="button" className="linklike pick-copy-btn" onClick={() => setPickingCopy(true)}>
+            <Icon name="collection" size={14} /> Pick one from my collection
+          </button>
+        )}
+
+        {/* A lands-box basic never claims a copy of yours, so it prefers nothing. */}
+        {(showCondition || showFinish || showLang) && !anyBasicPicked && (
         <div className="field-grid">
           {showCondition && (
           <label className="field">
-            <span>{wishMode ? 'Minimum condition' : 'Condition'}</span>
+            <span>{anyPrefs ? 'Minimum condition' : 'Condition'}</span>
             <select value={condition} onChange={(e) => setCondition(e.target.value as Condition | '')} disabled={!formEditable}>
-              {wishMode && <option value="">Any</option>}
+              {anyPrefs && <option value="">Any</option>}
               {CONDITIONS.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -691,7 +737,7 @@ export function CardSheet({
           <label className="field">
             <span>Finish</span>
             <select value={finish} onChange={(e) => setFinish(e.target.value as Finish | '')} disabled={!formEditable}>
-              {wishMode && <option value="">Any</option>}
+              {anyPrefs && <option value="">Any</option>}
               {availableFinishes.map((f) => (
                 <option key={f} value={f}>
                   {FINISH_LABELS[f]}
@@ -704,7 +750,7 @@ export function CardSheet({
           <label className="field">
             <span>Language</span>
             <select value={lang} onChange={(e) => setLang(e.target.value)} disabled={!formEditable}>
-              {wishMode && <option value="">Any</option>}
+              {anyPrefs && <option value="">Any</option>}
               {LANGS.map((l) => (
                 <option key={l} value={l}>
                   {l}
@@ -863,7 +909,7 @@ export function CardSheet({
         <EditionPicker
           printings={highlighted.length > 0 ? [...highlighted, ...otherPrintings] : otherPrintings}
           selected={scryfallId}
-          anyOption={wishMode || basicAny}
+          anyOption={anyPrefs || basicAny}
           notes={highlightPrintings?.notes}
           ownedIds={ownedIds}
           ownedForTradeIds={ownedForTradeIds}
@@ -873,6 +919,21 @@ export function CardSheet({
             setAllEditions(false);
           }}
           onClose={() => setAllEditions(false)}
+        />
+      )}
+      {pickingCopy && (
+        <CopyPicker
+          copies={ownedCopies}
+          printings={printings}
+          selected={{ scryfallId, condition, finish, lang }}
+          onSelect={(copy) => {
+            setScryfallId(copy.scryfallId);
+            setCondition(copy.condition);
+            setFinish(copy.finish);
+            setLang(copy.lang);
+            setPickingCopy(false);
+          }}
+          onClose={() => setPickingCopy(false)}
         />
       )}
       {eventEntry && (
@@ -1034,6 +1095,89 @@ export function EditionPicker({
                   <SetSymbol set={p.set} title={p.setName} /> {p.set.toUpperCase()} #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
                 </span>
                 <span className="edition-tile-sub">{notes?.get(p.scryfallId) ?? formatPrice(p) ?? ''}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** How a copy reads in the picker: "NM · Foil · ja". */
+function copyDetail(e: CollectionEntry): string {
+  const bits: string[] = [e.condition];
+  if (e.finish !== 'nonfoil') bits.push(FINISH_LABELS[e.finish]);
+  if (e.lang !== 'en') bits.push(e.lang);
+  return bits.join(' · ');
+}
+
+/**
+ * The copies of one card you actually own, as pickable tiles — the container
+ * slot's "pick one from my collection". Picking a copy fills in the slot's
+ * edition, finish, condition and language in one tap, which is what turns a
+ * vague "I need a Lightning Bolt" into "this Beta one, lightly played".
+ */
+function CopyPicker({
+  copies,
+  printings,
+  selected,
+  onSelect,
+  onClose,
+}: {
+  copies: CollectionEntry[];
+  printings: Priced<Printing>[];
+  /** What the sheet currently asks for, so the matching tile reads as selected. */
+  selected: { scryfallId: string; condition: Condition | ''; finish: Finish | ''; lang: string };
+  onSelect: (copy: CollectionEntry) => void;
+  onClose: () => void;
+}) {
+  useDismiss(onClose);
+  const byId = new Map(printings.map((p) => [p.scryfallId, p]));
+  const isSelected = (e: CollectionEntry) =>
+    e.scryfallId === selected.scryfallId &&
+    e.condition === selected.condition &&
+    e.finish === selected.finish &&
+    e.lang === selected.lang;
+  return (
+    <div
+      className="sheet-backdrop"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      <div className="sheet edition-picker-sheet" role="dialog" aria-label="Your copies" onClick={(e) => e.stopPropagation()}>
+        <div className="edition-picker-head">
+          <h2>Your copies</h2>
+          <button onClick={onClose} aria-label="Close">
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+        <div className="edition-grid">
+          {copies.map((e) => {
+            const p = byId.get(e.scryfallId);
+            const img = p?.imageSmall ?? p?.imageNormal;
+            return (
+              <button
+                key={e.id}
+                className={isSelected(e) ? 'edition-tile edition-tile-selected' : 'edition-tile'}
+                onClick={() => onSelect(e)}
+              >
+                <span className={`tile-badge ${e.quantityForTrade > 0 ? 'own-trade' : 'own-yes'}`} title={`You own ${e.quantity}`}>
+                  ×{e.quantity}
+                </span>
+                {img ? <img src={img} alt={p?.setName ?? ''} loading="lazy" /> : <span className="edition-tile-ph">{p?.setName ?? 'Unknown set'}</span>}
+                <span className="edition-tile-caption">
+                  {p ? (
+                    <>
+                      <SetSymbol set={p.set} title={p.setName} /> {p.set.toUpperCase()} #{p.collectorNumber}
+                    </>
+                  ) : (
+                    'Unknown edition'
+                  )}
+                </span>
+                <span className="edition-tile-sub">{copyDetail(e)}</span>
               </button>
             );
           })}

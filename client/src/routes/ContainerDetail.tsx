@@ -3,9 +3,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   DECK_FORMATS,
+  type Condition,
   type ContainerKind,
   type DeckBoard,
   type DeckFormat,
+  type Finish,
   type OracleCard,
   type Priced,
   type Printing,
@@ -40,7 +42,7 @@ import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
 import type { ResolvedLine, UnmatchedLine } from '../import/types.js';
 import { useToast } from '../components/Toast.js';
-import { CardSheet } from '../components/CardSheet.js';
+import { CardSheet, FINISH_LABELS } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import { ownedBadge } from '../components/OwnedBadge.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
@@ -49,6 +51,7 @@ import {
   SortControls,
   groupCards,
   priceValue,
+  pricedForFinish,
   sortCards,
   useCardSort,
   type CardSortPrefs,
@@ -72,6 +75,10 @@ interface Row {
   board: DeckBoard;
   /** "Any printing" basic land: no edition, no money, always counted as had. */
   anyBasic?: boolean;
+  /** What the slot wants of the copy filling it; undefined = any. */
+  condition?: Condition;
+  finish?: Finish;
+  lang?: string;
   oracle?: Priced<OracleCard>;
   printing?: Priced<Printing>;
   owned: number;
@@ -83,9 +90,21 @@ interface DeckCardEdit {
   quantity: number;
   scryfallId?: string;
   anyBasic?: boolean;
+  condition?: Condition;
+  finish?: Finish;
+  lang?: string;
   board: DeckBoard;
   commanderDeck: boolean;
   hasCommander: boolean;
+}
+
+/** A slot's wants, spelled out for the row's sub-line ('' = it wants nothing special). */
+function wantsDetail(r: Row): string {
+  const bits: string[] = [];
+  if (r.finish) bits.push(FINISH_LABELS[r.finish]);
+  if (r.condition) bits.push(`min ${r.condition}`);
+  if (r.lang) bits.push(r.lang);
+  return bits.join(' · ');
 }
 
 /**
@@ -102,7 +121,10 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const [favDeckIds, setFavDeckIds] = useState<Set<string> | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [scanning, setScanning] = useState<'add' | 'rescan' | null>(null);
-  const [exit, setExit] = useState<MissingCard[] | null>(null);
+  // The "add what's missing to your wishlist" sheet. It shows up on the way out
+  // of a deck (`leaving`), and on demand from the ⋯ menu — same sheet, but asking
+  // for it deliberately shouldn't also walk you off the page.
+  const [wishSheet, setWishSheet] = useState<{ cards: MissingCard[]; leaving: boolean } | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -131,6 +153,9 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       quantity: c.quantity,
       board: c.board,
       anyBasic: c.anyBasic,
+      condition: c.condition,
+      finish: c.finish,
+      lang: c.lang,
       oracle: oracleMap.get(c.oracleId),
       printing: c.scryfallId ? printMap.get(c.scryfallId) : undefined,
       owned: owned.get(c.oracleId) ?? 0,
@@ -192,7 +217,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const value = useMemo(() => {
     const rows = data?.rows ?? [];
     if (rows.length === 0) return undefined;
-    return containerValue(rows);
+    // A slot that asks for a foil is worth the foil price.
+    return containerValue(rows.map((r) => ({ ...r, printing: pricedForFinish(r.printing, r.finish ?? 'nonfoil') })));
   }, [data]);
   const ownedWorth = valueText(value?.owned);
   const missingWorth = value && valueText(missingValue(value));
@@ -225,10 +251,20 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     // Only a brewed deck has "cards I still need" — a binder or box holds what
     // you already own, so there's nothing to wishlist on the way out.
     const candidates = isDeck ? await computeDeckWishlistCandidates(id) : [];
-    if (candidates.length) {
-      setExit(candidates);
-      setPicked(new Set(candidates.map((c) => c.oracleId))); // all ticked by default
-    } else navigate(meta.path);
+    if (candidates.length) openWishSheet(candidates, true);
+    else navigate(meta.path);
+  }
+
+  function openWishSheet(candidates: MissingCard[], leaving: boolean) {
+    setWishSheet({ cards: candidates, leaving });
+    setPicked(new Set(candidates.map((c) => c.oracleId))); // all ticked by default
+  }
+
+  /** ⋯ menu: wishlist whatever this deck still needs, without leaving the page. */
+  async function wishlistMissing() {
+    const candidates = await computeDeckWishlistCandidates(id);
+    if (candidates.length) openWishSheet(candidates, false);
+    else toast(`Nothing missing — this ${meta.noun} is covered by your collection and wishlist`);
   }
 
   /** Storage action: put every card filed here on the tradelist, or take it off. */
@@ -290,6 +326,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         board: 'main' as const,
         scryfallId: r.scryfallId,
         anyBasic: r.anyBasic,
+        wants: { condition: r.condition, finish: r.finish, lang: r.lang },
       })),
     );
     toast(`Added ${selectedCopies} card${plural(selectedCopies)} to ${CONTAINER_META[targetKind].noun.toLowerCase()}`);
@@ -320,17 +357,27 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     { label: `Remove from ${meta.noun}`, icon: 'trash', danger: true, onClick: () => void bulkRemove() },
   ];
 
-  async function addMissingToWishlist(candidates: MissingCard[]) {
+  async function addMissingToWishlist(candidates: MissingCard[], leaving: boolean) {
     const chosen = candidates.filter((c) => picked.has(c.oracleId));
     if (chosen.length) {
-      // One batch so the whole add is a single (undoable) edit-history entry.
+      // One batch so the whole add is a single (undoable) edit-history entry. The
+      // wish inherits what the deck's slots asked for, so a deck wanting a foil
+      // doesn't go shopping for a nonfoil.
       await addToWishlistBulk(
-        chosen.map((c) => ({ oracleId: c.oracleId, scryfallId: null, quantity: c.addQty })),
+        chosen.map((c) => ({
+          oracleId: c.oracleId,
+          scryfallId: null,
+          quantity: c.addQty,
+          ...(c.condition ? { condition: c.condition } : {}),
+          ...(c.finish ? { finish: c.finish } : {}),
+          ...(c.lang ? { lang: c.lang } : {}),
+        })),
         { source: 'manual', label: deck.name },
       );
       toast(`Added ${chosen.length} card${chosen.length === 1 ? '' : 's'} to wishlist`);
     }
-    navigate(meta.path);
+    if (leaving) navigate(meta.path);
+    else setWishSheet(null);
   }
 
   function exportDeck() {
@@ -379,15 +426,16 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
             // The panel lives at the very bottom, under however many cards are
             // filed here, so the menu opens it *and* takes you to it.
             { label: 'History', icon: 'history', onClick: showHistory },
-            // Storage mirrors real shelves, so "everything in this box is up for
-            // grabs" is the action that earns its place here; a deck you're
-            // brewing isn't offered for trade wholesale.
+            // Only a brewed deck has cards you don't have yet; a binder or box is
+            // a record of what's already on your shelf.
             ...(isDeck
-              ? []
-              : [
-                  { label: 'Mark all for trade', icon: 'tradelist' as const, onClick: () => void markAllForTrade(true) },
-                  { label: 'Remove all from trade', icon: 'close' as const, onClick: () => void markAllForTrade(false) },
-                ]),
+              ? [{ label: 'Add missing cards to wishlist', icon: 'wishlist' as const, onClick: () => void wishlistMissing() }]
+              : []),
+            // Whether it's a box you're emptying or a deck you're breaking up,
+            // "everything in here is up for grabs" is one tap — it only ever
+            // touches copies you actually own.
+            { label: 'Add all owned cards to tradelist', icon: 'tradelist', onClick: () => void markAllForTrade(true) },
+            { label: 'Remove all owned cards from tradelist', icon: 'close', onClick: () => void markAllForTrade(false) },
             ...(isDeck && account.enabled && account.session
               ? [{ label: 'Share deck', icon: 'share' as const, onClick: () => void shareDeck() }]
               : []),
@@ -562,10 +610,12 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         />
       )}
 
-      {exit &&
+      {wishSheet &&
         (() => {
-          const allPicked = exit.every((c) => picked.has(c.oracleId));
-          const chosen = exit.filter((c) => picked.has(c.oracleId));
+          const { cards, leaving } = wishSheet;
+          const dismiss = () => (leaving ? navigate(meta.path) : setWishSheet(null));
+          const allPicked = cards.every((c) => picked.has(c.oracleId));
+          const chosen = cards.filter((c) => picked.has(c.oracleId));
           const toggle = (oracleId: string) =>
             setPicked((prev) => {
               const next = new Set(prev);
@@ -573,13 +623,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               else next.add(oracleId);
               return next;
             });
-          const toggleAll = () => setPicked(allPicked ? new Set() : new Set(exit.map((c) => c.oracleId)));
+          const toggleAll = () => setPicked(allPicked ? new Set() : new Set(cards.map((c) => c.oracleId)));
           return (
-            <Sheet onClose={() => navigate(meta.path)} label="Add missing cards to wishlist">
+            <Sheet onClose={dismiss} label="Add missing cards to wishlist">
               <h2 style={{ margin: 0 }}>Add missing cards to wishlist?</h2>
               <p className="fine-print">
-                This deck needs {exit.reduce((s, c) => s + c.addQty, 0)} card{exit.length === 1 ? '' : 's'} you don’t own
-                and haven’t wishlisted. Pick which to add:
+                This deck needs {cards.reduce((s, c) => s + c.addQty, 0)} card{cards.length === 1 ? '' : 's'} you don’t
+                own and haven’t wishlisted. Pick which to add:
               </p>
               <div className="list-toolbar">
                 <label className="chip" style={{ alignSelf: 'flex-start' }}>
@@ -587,11 +637,11 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
                   {allPicked ? 'Unselect all' : 'Select all'}
                 </label>
                 <span className="search-meta grow">
-                  {chosen.length} of {exit.length} selected
+                  {chosen.length} of {cards.length} selected
                 </span>
               </div>
               <ul className="result-list" style={{ maxHeight: '40dvh', overflowY: 'auto' }}>
-                {exit.map((c) => (
+                {cards.map((c) => (
                   <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
                     <label
                       className="result-main"
@@ -606,8 +656,12 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
                 ))}
               </ul>
               <div className="sheet-actions">
-                <button onClick={() => navigate(meta.path)}>Skip</button>
-                <button className="primary" disabled={chosen.length === 0} onClick={() => addMissingToWishlist(exit)}>
+                <button onClick={dismiss}>{leaving ? 'Skip' : 'Cancel'}</button>
+                <button
+                  className="primary"
+                  disabled={chosen.length === 0}
+                  onClick={() => addMissingToWishlist(cards, leaving)}
+                >
                   Add {chosen.length} to wishlist
                 </button>
               </div>
@@ -678,12 +732,26 @@ function Board({
   const toItem = (r: Row): CardItem => {
     const enough = r.anyBasic || r.owned >= r.quantity;
     const issue = issues.get(r.oracleId);
+    const wants = r.anyBasic ? '' : wantsDetail(r);
     // Ownership checkmark (own this exact printing / another / for trade), same
     // as everywhere else. A legality problem still wins the badge slot (⚠). A
     // lands-box basic is had by definition, so it gets the plain check.
+    // A slot's double check means "I own a copy that fits this slot": the edition
+    // it pins, in the finish, condition and language it asks for. Anything it
+    // leaves on "any" is satisfied by whatever you have — so a name-only decklist
+    // still double-checks the moment you own the card.
     const own = r.anyBasic
       ? { icon: <Icon name="check" size={13} />, cls: 'own-yes', title: 'Any printing — from your lands box' }
-      : ownedBadge(ownership?.lookup(r.oracleId, r.scryfallId ?? r.oracle?.defaultScryfallId));
+      : ownedBadge(
+          ownership?.lookupWanted(r.oracleId, {
+            scryfallId: r.scryfallId,
+            condition: r.condition,
+            finish: r.finish,
+            lang: r.lang,
+          }),
+          13,
+          { yes: 'including one that fits this slot', no: 'but nothing matching this slot' },
+        );
     return {
       key: r.id,
       name: r.oracle?.name ?? '(unknown card)',
@@ -697,6 +765,7 @@ function Board({
       sub: (
         <>
           {r.anyBasic ? 'any printing' : `owned ${r.owned}`}
+          {wants && ` · ${wants}`}
           {issue && <span className="badge badge-illegal-chip">{issue}</span>}
         </>
       ),
@@ -709,6 +778,9 @@ function Board({
                 quantity: r.quantity,
                 scryfallId: r.scryfallId,
                 anyBasic: r.anyBasic,
+                condition: r.condition,
+                finish: r.finish,
+                lang: r.lang,
                 board: r.board,
                 commanderDeck,
                 hasCommander,

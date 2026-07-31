@@ -7,7 +7,9 @@
 //  - Collection entries are unique on (scryfallId, condition, finish, lang);
 //    adding a duplicate increments quantity.
 //  - "Owned" (for deck checkmarks) = sum of quantity over all CollectionEntry
-//    with a matching oracleId (any printing counts).
+//    with a matching oracleId (any printing counts). A deck slot that pins an
+//    edition/finish/condition/language only counts as *had* when some owned copy
+//    meets those (the double check); otherwise it's the single check.
 
 import type { Finish, Format } from './card.js';
 
@@ -92,10 +94,20 @@ export interface DeckCard {
   id: string;
   deckId: string;
   oracleId: string;
-  /** Preferred printing for display (image/price). Undefined = the card's default printing. */
+  /** Preferred printing for display (image/price). Undefined = "any edition". */
   scryfallId?: string;
   quantity: number;
   board: DeckBoard;
+  /**
+   * What the slot wants of the copy filling it, in the same shape (and with the
+   * same "undefined = any" rule) as a WishlistEntry: pick a copy out of your
+   * collection and the slot remembers its finish, condition and language, so the
+   * ownership check knows whether you really have *that* card. Condition is a
+   * minimum, like a wish — see wishPrefsMet.
+   */
+  condition?: Condition;
+  finish?: Finish;
+  lang?: string;
   /**
    * "Any printing" basic land — the ones you grab from the lands box, whatever
    * edition is on top. The slot is deliberately detached from the collection:

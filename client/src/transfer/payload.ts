@@ -225,14 +225,21 @@ export function sanitizeDeckCardRow(raw: unknown): DeckCard | null {
   const oracleId = id(r.oracleId);
   if (!slotId || !deckId || !oracleId) return null;
   const scryfallId = id(r.scryfallId);
-  // An "any printing" basic pins no edition — the flag and a printing are
-  // mutually exclusive, so the flag wins if a sender sends both.
+  // An "any printing" basic pins no edition and asks nothing of your copies —
+  // the flag and a printing/wants are mutually exclusive, so the flag wins if a
+  // sender sends both. Wants are optional like a wish's: unknown values stay
+  // undefined, i.e. "any".
   const anyBasic = r.anyBasic === true;
+  const wants = {
+    ...(CONDS.has(r.condition as string) ? { condition: r.condition as Condition } : {}),
+    ...(FINS.has(r.finish as string) ? { finish: r.finish as Finish } : {}),
+    ...(typeof r.lang === 'string' && r.lang ? { lang: r.lang.slice(0, 10) } : {}),
+  };
   return {
     id: slotId,
     deckId,
     oracleId,
-    ...(anyBasic ? { anyBasic } : scryfallId ? { scryfallId } : {}),
+    ...(anyBasic ? { anyBasic } : { ...(scryfallId ? { scryfallId } : {}), ...wants }),
     quantity: qty(r.quantity),
     board: (BOARDS.has(r.board as string) ? r.board : 'main') as DeckBoard,
     updatedAt: ts(r.updatedAt),

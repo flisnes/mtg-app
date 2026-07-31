@@ -5,8 +5,10 @@ import type { OwnedStatus } from '../db/useOwnership.js';
 // (search, scan, wishlist, decks, trade, the card sheet). Feeds the generic
 // `badge` slot on CardItem / the ResultBadge on CardSearchView.
 //
-//   double check (green)  — you own this exact printing
-//   single check (green)  — you own another printing of this card
+//   double check (green)  — you own this exact printing (for a deck slot: a copy
+//                           matching everything the slot asks for)
+//   single check (green)  — you own another printing of this card (for a slot:
+//                           you own it, but nothing that matches)
 //   tag (purple)          — you have copies marked for trade
 //   nothing               — you don't own it
 //
@@ -20,12 +22,25 @@ export interface OwnedBadgeSpec {
   title: string;
 }
 
-export function ownedBadge(status: OwnedStatus | undefined, size = 13): OwnedBadgeSpec | null {
+/** How the title spells out `ownsExact`. A deck slot asks for more than an
+ *  edition (finish, condition, language), so it words the two cases its way. */
+export interface OwnedBadgeTerms {
+  yes: string;
+  no: string;
+}
+
+const PRINTING_TERMS: OwnedBadgeTerms = { yes: 'including this exact printing', no: 'other printing(s)' };
+
+export function ownedBadge(
+  status: OwnedStatus | undefined,
+  size = 13,
+  terms: OwnedBadgeTerms = PRINTING_TERMS,
+): OwnedBadgeSpec | null {
   if (!status || status.qty === 0) return null;
   const trade = status.forTrade > 0;
   const name = trade ? 'tradelist' : status.ownsExact ? 'checkDouble' : 'check';
   const title =
     (trade ? `You have ${status.qty} (${status.forTrade} for trade)` : `You own ${status.qty}`) +
-    (status.ownsExact ? ' · including this exact printing' : ' · other printing(s)');
+    ` · ${status.ownsExact ? terms.yes : terms.no}`;
   return { icon: <Icon name={name} size={size} />, cls: trade ? 'own-trade' : 'own-yes', title };
 }

@@ -1,4 +1,13 @@
-import type { CollectionEntry, OracleCard, Priced, Printing, WishlistEntry } from '@mtg/shared';
+import type {
+  CollectionEntry,
+  Condition,
+  DeckCard,
+  Finish,
+  OracleCard,
+  Priced,
+  Printing,
+  WishlistEntry,
+} from '@mtg/shared';
 import { db } from './schema.js';
 import { withPrices } from '../cardDb/prices.js';
 
@@ -91,6 +100,27 @@ export interface MissingCard {
   oracleId: string;
   name: string;
   addQty: number;
+  /** What the deck's slots want of the copy, when they all agree — the wish
+   *  inherits it, so a deck asking for a foil wishes for a foil. */
+  condition?: Condition;
+  finish?: Finish;
+  lang?: string;
+}
+
+/** The wants shared by every slot of one card, or undefined where they differ. */
+function agreedWants(slots: DeckCard[]): Pick<MissingCard, 'condition' | 'finish' | 'lang'> {
+  const same = <T,>(pick: (s: DeckCard) => T | undefined): T | undefined => {
+    const first = pick(slots[0]!);
+    return first !== undefined && slots.every((s) => pick(s) === first) ? first : undefined;
+  };
+  const condition = same((s) => s.condition);
+  const finish = same((s) => s.finish);
+  const lang = same((s) => s.lang);
+  return {
+    ...(condition ? { condition } : {}),
+    ...(finish ? { finish } : {}),
+    ...(lang ? { lang } : {}),
+  };
 }
 
 /**
@@ -102,9 +132,13 @@ export interface MissingCard {
 export async function computeDeckWishlistCandidates(deckId: string): Promise<MissingCard[]> {
   const deckCards = await db.deckCards.where('deckId').equals(deckId).toArray();
   const needed = new Map<string, number>();
+  const slotsFor = new Map<string, DeckCard[]>();
   for (const dc of deckCards) {
     if (dc.anyBasic) continue;
     needed.set(dc.oracleId, (needed.get(dc.oracleId) ?? 0) + dc.quantity);
+    const list = slotsFor.get(dc.oracleId);
+    if (list) list.push(dc);
+    else slotsFor.set(dc.oracleId, [dc]);
   }
 
   const oracleIds = [...needed.keys()];
@@ -119,7 +153,14 @@ export async function computeDeckWishlistCandidates(deckId: string): Promise<Mis
   for (const [oracleId, need] of needed) {
     if (wishlisted.has(oracleId)) continue;
     const addQty = need - (owned.get(oracleId) ?? 0);
-    if (addQty > 0) out.push({ oracleId, name: oracleMap.get(oracleId)?.name ?? '(unknown card)', addQty });
+    if (addQty > 0) {
+      out.push({
+        oracleId,
+        name: oracleMap.get(oracleId)?.name ?? '(unknown card)',
+        addQty,
+        ...agreedWants(slotsFor.get(oracleId) ?? []),
+      });
+    }
   }
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;

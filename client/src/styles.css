@@ -300,6 +300,79 @@ button.danger-outline {
   margin: 0;
 }
 
+/* Recent searches: shown in place of results until something is typed, so a
+   long Scryfall query survives a trip back to the deck you're building. */
+.recent-searches {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.recent-searches-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.recent-searches-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.recent-search-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.recent-search-list li {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+}
+.recent-search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--surface);
+  text-align: left;
+}
+.recent-search:hover {
+  border-color: var(--accent);
+}
+.recent-search svg {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+/* Queries can be long; keep them on one line so the list stays scannable. */
+.recent-search-q {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+.recent-search-forget {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 0.6rem;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+.recent-search-forget:hover {
+  color: var(--text);
+}
+/* In the slim scope bar the list sits on top of the page it's filtering, so it
+   scrolls instead of shoving the rows you're looking at off screen. */
+.search-scopebar .recent-search-list {
+  max-height: 33vh;
+  overflow-y: auto;
+}
+
 /* Scope chips: narrow the global search to what you already own. */
 .scope-chips {
   display: flex;

@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.88.0
+
+- **The search bar remembers what you just typed.** Tap it with nothing in the box and your last ten searches are sitting there, newest first — one tap puts a query back. Deck building is a loop of "search, look at the deck, search again", and a hand-typed `t:goblin o:"draw a card" cmc<=3` used to die every time you closed the search.
+- **A search is banked when you're done with it**: on Enter, when you close the search, or when you wander off to another tab mid-query. Never while you're still typing, so the list holds real searches and not every prefix of "lightning".
+- **Refining counts as the same search.** Come back to `t:goblin` and add `cmc<=3` and you get one entry, not two.
+- **One list, wherever you search.** The same Scryfall syntax works on your collection, tradelist and wishlist, so those queries are remembered too — and the list is offered with the scope chips as well, not just on database searches. A query you wrote against the whole database is one tap away from being pointed at your own binders.
+- **Yours to prune.** ✕ forgets one search, **Clear** wipes the list. It stays on this device and isn't synced.
+
 ## 0.87.0
 
 - **The command zone takes two again.** Setting a second commander had quietly stopped working: once one card sat in the zone, the **Make commander** and **Add as commander** buttons vanished for everything else. Partner, Partner with, Friends forever, Doctor's companion and Backgrounds are all back, and the button says **Make second commander** so you can see what you're doing.

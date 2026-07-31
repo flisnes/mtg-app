@@ -17,6 +17,7 @@ import { formatLabel, isBackground, isBasicLand, isValidCommanderPair } from '..
 import { CONTAINER_META } from '../deck/containers.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
+import { RecentSearches, recordSearch } from './RecentSearches.js';
 import { ScopedResults, type Scope } from './ScopedResults.js';
 import { ProfileScopedResults } from './ProfileScopedResults.js';
 import type { IconName } from './icons.js';
@@ -141,17 +142,19 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
 
   // Navigating away (the tab bar stays tappable under the overlay) closes
   // search and drops the query, filters and scope, so reopening it on the new
-  // page doesn't resurrect the old one's search.
+  // page doesn't resurrect the old one's search. The query goes to the recent
+  // list on the way out, which is what makes the round trip survivable.
   const prevPath = useRef(pathname);
   useEffect(() => {
     if (prevPath.current === pathname) return;
     prevPath.current = pathname;
+    recordSearch(query);
     setQuery('');
     setFilters({});
     setScope(listScopeFor(pathname));
     setOpen(false);
     inputRef.current?.blur();
-  }, [pathname]);
+  }, [pathname, query]);
 
   const value = useMemo(
     () => ({ open, setOpen, inputRef, query, setQuery, filters, setFilters, scope, setScope }),
@@ -184,7 +187,12 @@ export function GlobalSearchBar() {
             ? 'sync setup pending'
             : 'synced';
 
+  // Closing is the usual "I'm done with this search for now" — off to look at
+  // the deck — so it's the main thing that feeds the recent list. Scope doesn't
+  // matter: the same Scryfall syntax searches your own lists, and one shared
+  // list means a query typed against the database can be reused on a binder.
   function close() {
+    recordSearch(query);
     setQuery('');
     setFilters({});
     setOpen(false);
@@ -207,9 +215,13 @@ export function GlobalSearchBar() {
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(true)}
           // Results update live; Enter just dismisses the (mobile) keyboard
-          // so it stops covering them. The overlay stays open.
+          // so it stops covering them. The overlay stays open. It does count as
+          // committing the query though, so the recent list gets it now rather
+          // than only if the search is closed cleanly.
           onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur();
+            if (e.key !== 'Enter') return;
+            recordSearch(query);
+            e.currentTarget.blur();
           }}
           enterKeyHint="search"
           aria-label="Search cards"
@@ -239,7 +251,7 @@ export function GlobalSearchBar() {
 }
 
 function SearchOverlay() {
-  const { query, filters, setFilters, scope, setScope } = useContext(Ctx)!;
+  const { query, setQuery, filters, setFilters, scope, setScope } = useContext(Ctx)!;
   const { pathname } = useLocation();
   // The sheet opens on the printing the result was showing, so tapping a tile
   // doesn't silently swap to a different edition than the one you tapped.
@@ -359,9 +371,12 @@ function SearchOverlay() {
         <div className="search-overlay-inner">
           {chips}
           {!query && (
-            <p className="search-meta">
-              Filtering your {scope}. Turn the chip off to search every card instead.
-            </p>
+            <>
+              <p className="search-meta">
+                Filtering your {scope}. Turn the chip off to search every card instead.
+              </p>
+              <RecentSearches onPick={setQuery} />
+            </>
           )}
         </div>
       </div>
@@ -477,10 +492,16 @@ function SearchOverlay() {
     </label>
   );
 
+  // Nothing typed yet: the recent searches are the offer, with the usual hint
+  // under them. Picking one just fills the query — results update live, and the
+  // keyboard stays down so it doesn't cover them.
   const emptyState = (
-    <p className="search-meta">
-      Type a card name to search the whole card database.{targetHint && ` ${targetHint}`}
-    </p>
+    <>
+      <RecentSearches onPick={setQuery} />
+      <p className="search-meta">
+        Type a card name to search the whole card database.{targetHint && ` ${targetHint}`}
+      </p>
+    </>
   );
 
   return (
@@ -490,6 +511,9 @@ function SearchOverlay() {
 
         {scoped ? (
           <>
+            {/* An empty scoped query lists everything in scope, so there's no
+                empty state to hang these off — they go above the list. */}
+            {!query && <RecentSearches onPick={setQuery} />}
             {scope && <ScopedResults scope={scope} query={query} />}
             {profileActive && profile && session && (
               <ProfileScopedResults

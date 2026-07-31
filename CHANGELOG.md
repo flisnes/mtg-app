@@ -2,6 +2,15 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.83.0
+
+- **Finish, condition and language while you scan.** Scanning used to file every card as a Near Mint nonfoil and take the language from whatever the reader could make out. There's now a slim row of three small pickers between the camera and the match tray, and whatever they say is what the next card you tap gets. So the one foil in the stack is one tap on **Foil** away, and the beaten-up Counterspell can go in as **HP** without a trip through the list afterwards.
+- **Pin them for a whole pile.** Behind the gear you can now pin **Finish pile**, **Language pile** and **Condition pile** to a value. Pinned means every card added takes it, the reader can't overrule the language (it does misread non-English cards), and the pickers don't reset between cards. Unpinned, the pickers belong to the card in frame and fall back to Nonfoil / NM / whatever the reader says as soon as the next one locks. The old "Foil pile" tickbox has grown into the Finish pin, etched included.
+- **Set pile, for when the whole box is from one set.** Tick it and the scanner captures the set of the card in frame, then suggests only that set's printings. This is the fix for Command Tower and friends, where three dozen editions share the same art and picking the right tile was a squint-and-guess. If a card turns out not to be from the pinned set, all the matches come back and the row says so, so nothing gets stuck.
+- **Every pin is visible.** Each active pin sits as a little padlocked chip over the camera, and the pinned pickers wear a padlock too. A pin left on from last night's pile shouldn't be something you discover forty cards later. Pins are remembered between sessions for the same reason a half-finished scan is.
+- **Change your mind afterwards, as before.** Tap any row in the scanned-cards list and the card sheet still edits the edition, finish, condition, language and count of that line before anything is written.
+- **Auto-add no longer skips a repeat.** With "Auto-add pinpointed edition" on, going back to a card it had already added once (A, B, A, which is just what a binder page of near-duplicates looks like) quietly added nothing the second time. It adds it now. Auto-add also fires when a set pin leaves exactly one candidate standing, which gets a whole set pile in without waiting on the reader.
+
 ## 0.82.0
 
 - **Select cards inside a deck, binder or box.** The **Select** button that Collection has had for a while now sits in every deck, binder and box too, next to the sort and view controls. Tick as many cards as you like — the selection spans the mainboard, sideboard and command zone at once, so "Select all" really does mean all of it — and the action bar slides up with everything you can do to the lot.

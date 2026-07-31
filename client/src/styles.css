@@ -3215,6 +3215,17 @@ a.seg {
   flex-shrink: 0;
   accent-color: var(--accent);
 }
+/* Pile pins: "Off" or a value, in the same slot the checkboxes use. */
+.scan-lock-select {
+  flex-shrink: 0;
+  min-width: 5.2rem;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.78rem;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+}
 .scan-cam-side {
   position: absolute;
   right: 0.6rem;
@@ -3249,6 +3260,16 @@ a.seg {
 .scan-cam-chip-on {
   background: var(--accent);
   border-color: var(--accent);
+}
+.scan-cam-chip svg {
+  vertical-align: -1px;
+}
+/* Stack of "pinned for this pile" chips under the list button. */
+.scan-cam-locks {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
 }
 .scan-cam-status {
   position: absolute;
@@ -3312,6 +3333,50 @@ a.seg {
   font-size: 0.78rem;
   opacity: 0.85;
   cursor: pointer;
+}
+/* Slim bar between camera and tray: finish/condition/language for the card in
+   frame. A padlocked one is pinned in the scan settings and survives the card. */
+.scan-picks {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.6rem;
+  background: #000;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.scan-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.scan-pick select {
+  padding: 0.15rem 0.25rem;
+  font-size: 0.75rem;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.scan-pick-locked {
+  color: var(--accent);
+}
+.scan-pick-locked select {
+  border-color: var(--accent);
+}
+.scan-pick-note {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: #f6c177;
+  font-size: 0.7rem;
 }
 .scan-tray {
   flex: 1 1 0;

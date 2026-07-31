@@ -105,8 +105,8 @@ export interface SessionCardValues {
 /** Sentinel for the "any printing" edition option in wish mode. */
 const ANY_PRINTING = '';
 
-const FINISH_LABELS: Record<Finish, string> = { nonfoil: 'Nonfoil', foil: 'Foil', etched: 'Etched' };
-const LANGS = ['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht'];
+export const FINISH_LABELS: Record<Finish, string> = { nonfoil: 'Nonfoil', foil: 'Foil', etched: 'Etched' };
+export const LANGS = ['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht'];
 
 /** One Edition dropdown entry, optionally annotated (e.g. "×2, 1 for trade"). */
 function printingOption(p: Priced<Printing>, note?: string) {

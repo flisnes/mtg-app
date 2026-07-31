@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CollectionEntry, Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
+import { CONDITIONS, FINISHES } from '@mtg/shared';
 import { addDeckCardsBulk, addToWishlistBulk, applyImport, collectionKey, markOwnedForTrade, reconcileDeck } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
 import { getOracleCard, getOracleCardsByIds, getPrinting, getPrintingsByIds } from '../db/queries.js';
 import { ImportConflicts } from '../import/ImportConflicts.js';
 import { findImportConflicts, type ConflictChoice, type ImportConflict } from '../import/conflicts.js';
 import type { ResolvedLine } from '../import/types.js';
-import { CardSheet, type SessionCardValues } from './CardSheet.js';
+import { CardSheet, FINISH_LABELS, LANGS, type SessionCardValues } from './CardSheet.js';
 import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
 import { getScanExcludedIds } from '../scan/exclusions.js';
 import { CameraScan, type LiveScanState } from '../scan/camera.js';
@@ -29,8 +30,11 @@ import { useDismiss } from './useDismiss.js';
 // camera fills the top of the screen and never pauses; each lock (S3 consensus
 // + S4 OCR) fills a horizontal candidate tray along the bottom. Tapping a
 // candidate's top half adds +1 to a session list, the bottom half takes one
-// back — no scrolling, no per-card confirm step. A list button reviews and
-// edits the session; completing it writes everything to the target at once.
+// back — no scrolling, no per-card confirm step. A slim picker bar above the
+// tray carries the finish/condition/language the next tap records, and the scan
+// settings can pin any of them (plus a single set) for a prepared pile. A list
+// button reviews and edits the session; completing it writes everything to the
+// target at once.
 //
 // The same screen feeds several destinations (a `ScanTarget`): the collection,
 // the tradelist, the wishlist, a deck, or a live trade offer. Everything up to
@@ -43,9 +47,9 @@ export interface ScannedCard {
   oracleId: string;
   scryfallId: string;
   name: string;
-  /** From the foil toggle (irrelevant to deck slots, which store no finish). */
+  /** From the tray's Finish picker (irrelevant to deck slots, which store no finish). */
   finish: Finish;
-  /** From OCR, defaulting to English. */
+  /** From the tray's Language picker: what OCR read, or the pinned pile language. */
   lang: string;
   quantity: number;
 }
@@ -93,7 +97,6 @@ interface Tray {
   ocr: OcrState;
   /** The candidate OCR confirmed (or weakly matched), if any. */
   ocrHit: string | null;
-  lang: string;
 }
 
 /** One line of the scan session — what "complete" will write. */
@@ -106,10 +109,44 @@ interface SessionEntry {
   image?: string;
   finish: Finish;
   lang: string;
-  /** 'NM' until edited in the session list's card sheet. */
+  /** From the tray's Condition picker (NM unless changed or locked). */
   condition: Condition;
   board: DeckBoard;
   qty: number;
+}
+
+/**
+ * "I've prepared a pile" pins, set in the scan settings: while a lock is on,
+ * every card added takes that value and the per-card pickers can't be reset out
+ * of it (OCR won't override a locked language either). `null` = lock off. The
+ * set lock holds a set code, or `''` while it waits to take the set from the
+ * next card scanned — you're holding the pile, not a set list.
+ */
+interface ScanLocks {
+  lang: string | null;
+  finish: Finish | null;
+  condition: Condition | null;
+  set: string | null;
+}
+
+const NO_LOCKS: ScanLocks = { lang: null, finish: null, condition: null, set: null };
+
+/** Locks survive a reload (a pile takes more than one sitting); every active one
+ *  shows as a chip over the camera, so a stale pin can't apply unnoticed. */
+function loadLocks(): ScanLocks {
+  try {
+    const raw = localStorage.getItem('scan-locks');
+    if (!raw) return NO_LOCKS;
+    const p = JSON.parse(raw) as Partial<Record<keyof ScanLocks, unknown>>;
+    return {
+      lang: typeof p.lang === 'string' && LANGS.includes(p.lang) ? p.lang : null,
+      finish: FINISHES.includes(p.finish as Finish) ? (p.finish as Finish) : null,
+      condition: CONDITIONS.includes(p.condition as Condition) ? (p.condition as Condition) : null,
+      set: typeof p.set === 'string' ? p.set : null,
+    };
+  } catch {
+    return NO_LOCKS;
+  }
 }
 
 /** +1/−1 tap feedback on a tray tile; seq remounts the animation per tap. */
@@ -206,6 +243,27 @@ function finishMatters(target: ScanTarget): boolean {
   return target.kind !== 'deck' && target.kind !== 'wishlist';
 }
 
+/** Language, same rule: a deck slot and a wish are printings, not physical copies. */
+function langMatters(target: ScanTarget): boolean {
+  return finishMatters(target);
+}
+
+/** Condition is only recorded where copies are: the collection and the tradelist. */
+function conditionMatters(target: ScanTarget): boolean {
+  return target.kind === 'collection' || target.kind === 'tradelist';
+}
+
+/**
+ * Set lock: only that set's printings are suggested — the point of scanning a
+ * sealed-set pile. If the scan matched none of them the filter steps aside
+ * rather than leaving an empty tray (the picker row says so).
+ */
+function filterBySet(candidates: Candidate[], set: string | null): Candidate[] {
+  if (!set) return candidates;
+  const hits = candidates.filter((c) => c.printing?.set === set);
+  return hits.length ? hits : candidates;
+}
+
 const BOARD_LABELS: Record<DeckBoard, string> = {
   main: 'mainboard',
   side: 'sideboard',
@@ -300,7 +358,13 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const [session, setSession] = useState<SessionEntry[]>(() => loadStoredSession(storageKey));
   const [listOpen, setListOpen] = useState(false);
   const [fx, setFx] = useState<TapFx | null>(null);
-  const [foil, setFoil] = useState(false);
+  // Pile pins (scan settings) and the values the next +1 will use. Unpinned,
+  // the pickers belong to the card in frame: finish and condition fall back to
+  // Nonfoil/NM on every new lock, and the language follows what OCR reads.
+  const [locks, setLocks] = useState<ScanLocks>(loadLocks);
+  const [finish, setFinish] = useState<Finish>(locks.finish ?? 'nonfoil');
+  const [condition, setCondition] = useState<Condition>(locks.condition ?? 'NM');
+  const [lang, setLang] = useState<string>(locks.lang ?? 'en');
   const [board, setBoard] = useState<DeckBoard>('main');
   const [settingsOpen, setSettingsOpen] = useState(false);
   // When on, pinpointing an edition (OCR confirms the printing, the green check)
@@ -330,6 +394,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const fxSeq = useRef(0);
   // The last lock we auto-added for, so a confirmed edition adds itself once.
   const autoAddedRef = useRef<string | null>(null);
+  // onLocked is the mount-time closure (the camera callback is built once), so
+  // the locks it reads come through a ref, like the index and ownership do.
+  const locksRef = useRef(locks);
+  // The user picked a language for the card in frame — a late OCR reading must
+  // not overwrite it (they can read the card; the OCR is guessing).
+  const langTouchedRef = useRef(false);
   const toast = useToast();
 
   const total = session.reduce((n, e) => n + e.qty, 0);
@@ -359,6 +429,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // Scan data must be installed before the camera is useful.
   useEffect(() => {
     let cancelled = false;
+    // StrictMode runs this effect twice (mount → cleanup → mount) on the same
+    // instance, and the cleanup latches closedRef — without clearing it the
+    // second pass would refuse to build a camera and dev never scans anything.
+    closedRef.current = false;
     void (async () => {
       const installed = await getUsableScanData();
       if (cancelled) return;
@@ -419,6 +493,15 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     }
   }, [autoAdd]);
 
+  useEffect(() => {
+    locksRef.current = locks;
+    try {
+      localStorage.setItem('scan-locks', JSON.stringify(locks));
+    } catch {
+      /* ignore */
+    }
+  }, [locks]);
+
   // Tell the user once if a previous scan was restored after a reload.
   const restoredRef = useRef(false);
   useEffect(() => {
@@ -458,6 +541,18 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       return;
     }
 
+    // A new card in frame: the pickers start from the pile pins, or from the
+    // safe defaults when nothing is pinned. The auto-add guard is per lock, so
+    // it clears here too — without that, coming back to a card already
+    // auto-added once (A, B, A — a binder page of near-duplicates) never adds
+    // the second copy.
+    const pins = locksRef.current;
+    autoAddedRef.current = null;
+    langTouchedRef.current = false;
+    setFinish(pins.finish ?? 'nonfoil');
+    setCondition(pins.condition ?? 'NM');
+    setLang(pins.lang ?? 'en');
+
     // Join candidates with the card DB; collapse per-face duplicates.
     const ids = [...new Set(result.match.candidates.map((c) => c.scryfallId))];
     const printings = await getPrintingsByIds(ids);
@@ -492,7 +587,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       }
     }
 
-    updateTray({ topId, candidates, ocr: 'pending', ocrHit: null, lang: 'en' });
+    updateTray({ topId, candidates, ocr: 'pending', ocrHit: null });
     cameraRef.current?.resume();
 
     // S4: OCR the info strip to pin down printing + language. By the time it
@@ -517,21 +612,32 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         candidates: ordered,
         ocr: resolution.confirmed ? 'confirmed' : resolution.weak ? 'weak' : 'none',
         ocrHit: hit?.scryfallId ?? null,
-        lang: resolution.parsed?.lang ?? current.lang,
       });
+      const read = resolution.parsed?.lang;
+      if (read && !locksRef.current.lang && !langTouchedRef.current) setLang(read);
+      armSetLock(ordered[0]?.printing?.set);
     } catch {
       const current = trayRef.current;
       if (current?.topId === topId) updateTray({ ...current, ocr: 'unavailable' });
+      armSetLock(trayRef.current?.candidates[0]?.printing?.set);
     }
   };
 
-  /** +1/−1 from a tray tile, into the session list. */
-  const bump = (c: Candidate, delta: 1 | -1, lang: string) => {
+  /** A set lock switched on with nothing in frame takes its set from this card. */
+  const armSetLock = (set?: string) => {
+    if (!set) return;
+    setLocks((l) => (l.set === '' ? { ...l, set } : l));
+  };
+
+  /** +1/−1 from a tray tile, into the session list, with the tray's current
+   *  finish/condition/language (only the ones the target actually records). */
+  const bump = (c: Candidate, delta: 1 | -1) => {
     if (!c.printing) return;
-    const finish: Finish = finishMatters(target) && foil ? 'foil' : 'nonfoil';
+    const f: Finish = finishMatters(target) ? finish : 'nonfoil';
+    const cond: Condition = conditionMatters(target) ? condition : 'NM';
+    const l = langMatters(target) ? lang : 'en';
     const b: DeckBoard = target.kind === 'deck' ? board : 'main';
-    // Fresh scans are always NM; conditions are set afterwards in the list.
-    const key = entryKey({ scryfallId: c.scryfallId, finish, condition: 'NM', board: b });
+    const key = entryKey({ scryfallId: c.scryfallId, finish: f, condition: cond, board: b });
     let i = session.findIndex((e) => entryKey(e) === key);
     if (delta > 0) {
       // Rising pop: pitch climbs a semitone per copy already piled up.
@@ -548,9 +654,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             set: c.printing.set,
             collectorNumber: c.printing.collectorNumber,
             image: c.printing.imageNormal ?? undefined,
-            finish,
-            lang,
-            condition: 'NM',
+            finish: f,
+            lang: l,
+            condition: cond,
             board: b,
             qty: 1,
           },
@@ -573,17 +679,61 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     setFx({ id: c.scryfallId, delta, seq: ++fxSeq.current });
   };
 
-  // Auto-add: once OCR pinpoints the edition for a lock (the green check on the
-  // tile), drop +1 of it into the session — one add per lock, guarded by the ref.
+  // Auto-add: once the edition for a lock is pinpointed, drop +1 of it into the
+  // session — one add per lock, guarded by the ref. OCR pinpoints it (the green
+  // check on the tile); so does a set lock that leaves exactly one candidate
+  // standing, which is how a foil-heavy set pile gets through without OCR.
   useEffect(() => {
-    if (!autoAdd || !tray || !tray.ocrHit) return;
-    if (tray.ocr !== 'confirmed' && tray.ocr !== 'weak') return;
+    if (!autoAdd || !tray || tray.ocr === 'pending') return;
     if (autoAddedRef.current === tray.topId) return;
+    const byOcr =
+      tray.ocrHit && (tray.ocr === 'confirmed' || tray.ocr === 'weak')
+        ? tray.candidates.find((c) => c.scryfallId === tray.ocrHit)
+        : undefined;
+    const inSet = locks.set ? tray.candidates.filter((c) => c.printing?.set === locks.set) : [];
+    const hit = byOcr ?? (inSet.length === 1 ? inSet[0] : undefined);
+    if (!hit) return;
     autoAddedRef.current = tray.topId;
-    const hit = tray.candidates.find((c) => c.scryfallId === tray.ocrHit);
-    if (hit) bump(hit, 1, tray.lang);
+    bump(hit, 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tray, autoAdd]);
+  }, [tray, autoAdd, locks.set]);
+
+  // Picker change: if that value is pinned, the pin moves with it (the pile
+  // turned out to be Japanese after all); otherwise it's just this card.
+  const pickFinish = (f: Finish) => {
+    setFinish(f);
+    setLocks((l) => (l.finish ? { ...l, finish: f } : l));
+  };
+  const pickCondition = (c: Condition) => {
+    setCondition(c);
+    setLocks((l) => (l.condition ? { ...l, condition: c } : l));
+  };
+  const pickLang = (v: string) => {
+    setLang(v);
+    langTouchedRef.current = true;
+    setLocks((l) => (l.lang ? { ...l, lang: v } : l));
+  };
+
+  // Lock selects in the settings popover ('' = off). Switching one on also
+  // applies it to the card already in frame, so the first card isn't the odd one.
+  const lockFinish = (v: string) => {
+    setLocks((l) => ({ ...l, finish: (v || null) as Finish | null }));
+    if (v) setFinish(v as Finish);
+  };
+  const lockCondition = (v: string) => {
+    setLocks((l) => ({ ...l, condition: (v || null) as Condition | null }));
+    if (v) setCondition(v as Condition);
+  };
+  const lockLang = (v: string) => {
+    setLocks((l) => ({ ...l, lang: v || null }));
+    if (v) {
+      setLang(v);
+      langTouchedRef.current = false;
+    }
+  };
+  const lockSet = (on: boolean) => {
+    setLocks((l) => ({ ...l, set: on ? (trayRef.current?.candidates[0]?.printing?.set ?? '') : null }));
+  };
 
   const openList = () => {
     cameraRef.current?.pause();
@@ -871,6 +1021,20 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     ownershipRef.current = ownership;
   }, [ownership]);
 
+  // Everything pinned right now, as chips over the camera: a pin left on from
+  // the last pile is exactly the sort of thing you notice one binder too late.
+  const lockChips = [
+    finishMatters(target) && locks.finish ? FINISH_LABELS[locks.finish] : null,
+    langMatters(target) && locks.lang ? locks.lang.toUpperCase() : null,
+    conditionMatters(target) && locks.condition ? locks.condition : null,
+    locks.set !== null ? (locks.set ? locks.set.toUpperCase() : 'Set: next card') : null,
+  ].filter((s): s is string => !!s);
+
+  const shown = tray ? filterBySet(orderTrayCandidates(tray, ownership), locks.set) : [];
+  /** Set lock on, but nothing in this scan came from it — the tray shows everything. */
+  const setMissed = !!locks.set && !!tray && !tray.candidates.some((c) => c.printing?.set === locks.set);
+  const showPicks = finishMatters(target) || conditionMatters(target) || langMatters(target);
+
   return createPortal(
     <div className="scan-screen" role="dialog" aria-label="Scan cards">
       <div className="scan-camera">
@@ -914,12 +1078,64 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             {finishMatters(target) && (
               <label className="scan-setting">
                 <span>
-                  <strong>Foil pile</strong>
-                  <small>Scanning a stack of foils? Every card you add is marked as foil</small>
+                  <strong>Finish pile</strong>
+                  <small>A stack of foils (or etched)? Pin it and every card you add gets that finish</small>
                 </span>
-                <input type="checkbox" checked={foil} onChange={(e) => setFoil(e.target.checked)} />
+                <select className="scan-lock-select" value={locks.finish ?? ''} onChange={(e) => lockFinish(e.target.value)}>
+                  <option value="">Off</option>
+                  {FINISHES.map((f) => (
+                    <option key={f} value={f}>
+                      {FINISH_LABELS[f]}
+                    </option>
+                  ))}
+                </select>
               </label>
             )}
+            {langMatters(target) && (
+              <label className="scan-setting">
+                <span>
+                  <strong>Language pile</strong>
+                  <small>Pin the pile&rsquo;s language; the reader can&rsquo;t overrule it (it misreads non-English cards)</small>
+                </span>
+                <select className="scan-lock-select" value={locks.lang ?? ''} onChange={(e) => lockLang(e.target.value)}>
+                  <option value="">Off</option>
+                  {LANGS.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {conditionMatters(target) && (
+              <label className="scan-setting">
+                <span>
+                  <strong>Condition pile</strong>
+                  <small>Sorted the played ones out already? Pin their grade instead of tapping it per card</small>
+                </span>
+                <select className="scan-lock-select" value={locks.condition ?? ''} onChange={(e) => lockCondition(e.target.value)}>
+                  <option value="">Off</option>
+                  {CONDITIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="scan-setting">
+              <span>
+                <strong>Set pile</strong>
+                <small>
+                  {locks.set
+                    ? `Only ${locks.set.toUpperCase()} printings are suggested (they still show if the scan matches none)`
+                    : locks.set === ''
+                      ? 'Waiting — the next card you scan sets it'
+                      : 'One set only: suggest just that set’s printings, taken from the card in frame'}
+                </small>
+              </span>
+              <input type="checkbox" checked={locks.set !== null} onChange={(e) => lockSet(e.target.checked)} />
+            </label>
           </div>
         )}
 
@@ -928,10 +1144,14 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             <Icon name="list" />
             {total > 0 && <span className="scan-cam-badge">{total}</span>}
           </button>
-          {finishMatters(target) && foil && (
-            <span className="scan-cam-chip scan-cam-chip-on" aria-hidden>
-              Foil pile
-            </span>
+          {lockChips.length > 0 && (
+            <div className="scan-cam-locks" aria-label="Pinned for this pile">
+              {lockChips.map((t) => (
+                <span key={t} className="scan-cam-chip scan-cam-chip-on">
+                  <Icon name="lock" size={11} /> {t}
+                </span>
+              ))}
+            </div>
           )}
         </div>
 
@@ -1004,9 +1224,54 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         )}
       </div>
 
+      {/* What the next +1 records. Pinned values wear a padlock; the rest belong
+          to the card in frame and reset with it. */}
+      {showPicks && stage.kind === 'scanning' && (
+        <div className="scan-picks" role="group" aria-label="Details for the card you add next">
+          {finishMatters(target) && (
+            <label className={locks.finish ? 'scan-pick scan-pick-locked' : 'scan-pick'}>
+              <span>{locks.finish ? <Icon name="lock" size={10} /> : null} Finish</span>
+              <select value={finish} onChange={(e) => pickFinish(e.target.value as Finish)}>
+                {FINISHES.map((f) => (
+                  <option key={f} value={f}>
+                    {FINISH_LABELS[f]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {conditionMatters(target) && (
+            <label className={locks.condition ? 'scan-pick scan-pick-locked' : 'scan-pick'}>
+              <span>{locks.condition ? <Icon name="lock" size={10} /> : null} Cond</span>
+              <select value={condition} onChange={(e) => pickCondition(e.target.value as Condition)}>
+                {CONDITIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {langMatters(target) && (
+            <label className={locks.lang ? 'scan-pick scan-pick-locked' : 'scan-pick'}>
+              <span>{locks.lang ? <Icon name="lock" size={10} /> : null} Lang</span>
+              <select value={lang} onChange={(e) => pickLang(e.target.value)}>
+                {LANGS.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+                {!LANGS.includes(lang) && <option value={lang}>{lang}</option>}
+              </select>
+            </label>
+          )}
+          {setMissed && <span className="scan-pick-note">No {locks.set!.toUpperCase()} match</span>}
+        </div>
+      )}
+
       <div className="scan-tray">
         {tray ? (
-          orderTrayCandidates(tray, ownership).map((c) => (
+          shown.map((c) => (
             <TrayTile
               key={c.scryfallId}
               candidate={c}
@@ -1014,7 +1279,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
               confirmed={tray.ocrHit === c.scryfallId && (tray.ocr === 'confirmed' || tray.ocr === 'weak')}
               owned={ownedBadge(ownership?.lookup(c.oracle?.oracleId ?? '', c.scryfallId))}
               fx={fx?.id === c.scryfallId ? fx : null}
-              onBump={(delta) => bump(c, delta, tray.lang)}
+              onBump={(delta) => bump(c, delta)}
             />
           ))
         ) : (
@@ -1290,7 +1555,8 @@ function RescanCollectionSheet({
                   <strong>{e.name}</strong>
                   <span className="scan-printing">
                     {e.set.toUpperCase()} #{e.collectorNumber} · {e.lang}
-                    {e.finish === 'foil' ? ' · Foil' : ''}
+                    {e.finish !== 'nonfoil' ? ` · ${FINISH_LABELS[e.finish]}` : ''}
+                    {e.condition !== 'NM' ? ` · ${e.condition}` : ''}
                     {e.qty > 1 ? ` · ×${e.qty}` : ''}
                   </span>
                 </span>
@@ -1475,7 +1741,7 @@ function SessionSheet({
   // Row tap opens the card sheet on that line for full editing (edition,
   // condition, finish, language, quantity); Apply rewrites the line in place.
   const [editing, setEditing] = useState<{ index: number; oracle: Priced<OracleCard> } | null>(null);
-  const trackCondition = target.kind === 'collection' || target.kind === 'tradelist';
+  const trackCondition = conditionMatters(target);
 
   const adjust = (i: number, delta: number) => {
     const e = entries[i]!;
@@ -1544,7 +1810,7 @@ function SessionSheet({
                     <strong>{e.name}</strong>
                     <span className="scan-printing">
                       {e.set.toUpperCase()} #{e.collectorNumber} · {e.lang}
-                      {finishMatters(target) && e.finish === 'foil' ? ' · Foil' : ''}
+                      {finishMatters(target) && e.finish !== 'nonfoil' ? ` · ${FINISH_LABELS[e.finish]}` : ''}
                       {trackCondition && e.condition !== 'NM' ? ` · ${e.condition}` : ''}
                     </span>
                   </span>
@@ -1585,7 +1851,7 @@ function SessionSheet({
             sessionCard={{
               scryfallId: entries[editing.index]!.scryfallId,
               quantity: entries[editing.index]!.qty,
-              lang: finishMatters(target) ? entries[editing.index]!.lang : undefined,
+              lang: langMatters(target) ? entries[editing.index]!.lang : undefined,
               finish: finishMatters(target) ? entries[editing.index]!.finish : undefined,
               condition: trackCondition ? entries[editing.index]!.condition : undefined,
             }}

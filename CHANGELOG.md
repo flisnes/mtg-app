@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.87.0
+
+- **The command zone takes two again.** Setting a second commander had quietly stopped working: once one card sat in the zone, the **Make commander** and **Add as commander** buttons vanished for everything else. Partner, Partner with, Friends forever, Doctor's companion and Backgrounds are all back, and the button says **Make second commander** so you can see what you're doing.
+- **Backgrounds specifically.** A Background is an enchantment, not a legendary creature, so it never even offered the button. Now it does: put Jaheira in the zone and Raised by Giants can join her. Two Backgrounds still can't share the zone — somebody has to say "Choose a Background".
+- **Searching from the deck no longer hides your Background.** With one commander in the zone, the deck-legal filter used to trim results to that commander's colors, which is exactly the wrong thing to do to the second commander that widens them. A legal partner or Background now comes through whatever its colors.
+- **A lone Background says what it needs.** The legality panel used to call it "not a legendary creature"; it now says it needs a commander that says "Choose a Background", which is the actual missing half.
+
 ## 0.86.1
 
 - **The double check is now strictly "I have *that* card".** A deck slot only earns it once it names an edition, finish, condition and language *and* a copy in your collection fits. Leave anything on **Any** and it keeps the single check: you own the card, but the slot hasn't decided which copy fills it. Correcting 0.86.0, where an undecided slot double-checked on ownership alone. Condition is still a minimum, so a slot asking for LP is happy with your NM copy.

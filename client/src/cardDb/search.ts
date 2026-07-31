@@ -20,6 +20,8 @@ export interface SearchFilters {
   legalIn?: DeckFormat;
   /** Only cards whose color identity fits within this set (Commander). */
   identity?: readonly Color[];
+  /** Let these through the identity filter anyway (a second commander widens it). */
+  identityExempt?: (card: OracleCard) => boolean;
 }
 
 type Indexed = SearchableEntry;
@@ -132,7 +134,12 @@ export async function searchCards(
       const status = entry.card.legalities[legalIn];
       if (status !== 'legal' && status !== 'restricted') continue;
     }
-    if (filters.identity && !entry.card.colorIdentity.every((c) => filters.identity!.includes(c))) continue;
+    if (
+      filters.identity &&
+      !entry.card.colorIdentity.every((c) => filters.identity!.includes(c)) &&
+      !filters.identityExempt?.(entry.card)
+    )
+      continue;
     if (!matchesQuery(entry, parsed)) continue;
 
     // Rank: exact > prefix > word-start > substring > scattered words. Terms

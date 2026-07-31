@@ -94,8 +94,8 @@ interface DeckCardEdit {
   finish?: Finish;
   lang?: string;
   board: DeckBoard;
+  deckId: string;
   commanderDeck: boolean;
-  hasCommander: boolean;
 }
 
 /** A slot's wants, spelled out for the row's sub-line ('' = it wants nothing special). */
@@ -531,6 +531,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
             <Board
               title="Commander"
               rows={commander}
+              deckId={id}
               group="none"
               view={view}
               issues={legality.issues}
@@ -540,8 +541,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               emptyHint="No commander yet. Use ♛ on a card below, or the +Cmdr button in search."
             />
           )}
-          <Board title="Mainboard" rows={main} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} sel={sel} commanderDeck={isCommander} hasCommander={commander.length > 0} />
-          <Board title="Sideboard" rows={side} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} sel={sel} commanderDeck={isCommander} hasCommander={commander.length > 0} />
+          <Board title="Mainboard" rows={main} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} sel={sel} commanderDeck={isCommander} />
+          <Board title="Sideboard" rows={side} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} sel={sel} commanderDeck={isCommander} />
         </>
       ) : (
         // Storage has one pile — no boards to split it into. Slots written before
@@ -549,6 +550,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         <Board
           title="Cards"
           rows={sortRows([...commander, ...main, ...side], sort)}
+          deckId={id}
           group={sort.group}
           view={view}
           issues={legality.issues}
@@ -703,17 +705,19 @@ function LegalityPanel({ report, format }: { report: LegalityReport; format: Dec
 function Board({
   title,
   rows,
+  deckId,
   group,
   view,
   issues,
   onEdit,
   sel,
   commanderDeck = false,
-  hasCommander = false,
   emptyHint,
 }: {
   title: string;
   rows: Row[];
+  /** The container these rows live in, so the card sheet can read its command zone. */
+  deckId: string;
   group: GroupKey;
   view: ViewMode;
   issues: Map<string, string>;
@@ -722,8 +726,6 @@ function Board({
   sel?: MultiSelect;
   /** Commander-format deck: show move-to/from-command-zone actions. */
   commanderDeck?: boolean;
-  /** A commander is already in the command zone: hide "make commander" actions. */
-  hasCommander?: boolean;
   emptyHint?: string;
 }) {
   const ownership = useOwnershipIndex();
@@ -785,8 +787,8 @@ function Board({
                 finish: r.finish,
                 lang: r.lang,
                 board: r.board,
+                deckId,
                 commanderDeck,
-                hasCommander,
               },
             })
         : undefined,

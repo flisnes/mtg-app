@@ -65,7 +65,8 @@ const hasPlainPartner = (o: OracleCard) => /^Partner(?: *\(|$)/m.test(text(o));
 const hasFriendsForever = (o: OracleCard) => /^Friends forever/m.test(text(o));
 const hasDoctorsCompanion = (o: OracleCard) => /^Doctor's companion/m.test(text(o));
 const hasChooseABackground = (o: OracleCard) => /Choose a Background/.test(text(o));
-const isBackground = (o: OracleCard) => /\bBackground\b/.test(o.typeLine);
+/** A Background enchantment: only ever a commander next to "Choose a Background". */
+export const isBackground = (o: OracleCard) => /\bBackground\b/.test(o.typeLine);
 const isDoctor = (o: OracleCard) => /\bTime Lord\b/.test(o.typeLine) && /\bDoctor\b/.test(o.typeLine);
 
 function partnerWithName(o: OracleCard): string | null {
@@ -89,6 +90,25 @@ export function isValidCommanderPair(a: OracleCard, b: OracleCard): boolean {
   if (hasChooseABackground(b) && isBackground(a)) return true;
   if (isDoctor(a) && hasDoctorsCompanion(b)) return true;
   if (isDoctor(b) && hasDoctorsCompanion(a)) return true;
+  return false;
+}
+
+/**
+ * Whether a card may be moved into the command zone next to whoever is already
+ * standing there — what the "Make commander" affordances ask before offering
+ * themselves.
+ *
+ * Empty zone: rule 903.3, plus Backgrounds. A Background is never a commander
+ * on its own, but people brew in whatever order they like, so it's allowed in
+ * and the legality panel asks for its "Choose a Background" partner.
+ *
+ * One commander already there: anything that forms a legal pair with them —
+ * this is how Backgrounds, Partners, Friends forever and the Doctor's
+ * companions reach the command zone at all. Two is the hard ceiling.
+ */
+export function canJoinCommandZone(oracle: OracleCard, present: readonly OracleCard[]): boolean {
+  if (present.length === 0) return canBeCommander(oracle) || isBackground(oracle);
+  if (present.length === 1) return isValidCommanderPair(present[0]!, oracle);
   return false;
 }
 
@@ -325,7 +345,11 @@ export function checkDeckLegality(format: DeckFormat | undefined, cards: Legalit
       }
     } else if (commanderCount === 1) {
       const c = commanders[0]!;
-      if (c.oracle && !canBeCommander(c.oracle)) {
+      if (c.oracle && isBackground(c.oracle)) {
+        // A Background is halfway there: it just needs the other half.
+        problems.push(`${c.oracle.name} is a Background — it needs a commander that says "Choose a Background".`);
+        issues.set(c.oracleId, 'needs a partner');
+      } else if (c.oracle && !canBeCommander(c.oracle)) {
         problems.push(`${c.oracle.name} can't be your commander (not a legendary creature, Vehicle, or Spacecraft, and nothing lets it be your commander).`);
         issues.set(c.oracleId, 'invalid commander');
       }

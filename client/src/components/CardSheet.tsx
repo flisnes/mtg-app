@@ -17,7 +17,7 @@ import {
   updateWishlistEntry,
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
-import { canBeCommander, isBasicLand } from '../deck/legality.js';
+import { canJoinCommandZone, isBasicLand } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { PlacementPills } from './PlacementBadge.js';
@@ -159,8 +159,9 @@ export function CardSheet({
     finish?: Finish;
     lang?: string;
     board?: DeckBoard;
+    /** The deck this slot lives in, so the sheet can read its command zone. */
+    deckId?: string;
     commanderDeck?: boolean;
-    hasCommander?: boolean;
   };
   /** Edit this scan-session line in memory; Apply reports through onApply. */
   sessionCard?: SessionCardValues;
@@ -208,6 +209,25 @@ export function CardSheet({
   // Adding into a real deck (not a binder or box): only then are the sideboard
   // and command-zone buttons meaningful.
   const deckAddIsDeck = deckAdd && (addTo.kind !== 'deck' || (addTo.containerKind ?? 'deck') === 'deck');
+  // Who's in the command zone right now. The command-zone buttons need the
+  // actual cards, not just a count: a Background or a Partner is only offered
+  // when it pairs with whoever is already there (see canJoinCommandZone).
+  const commandZoneDeckId =
+    deckCard?.commanderDeck && deckCard.deckId
+      ? deckCard.deckId
+      : deckAddIsDeck && addTo.kind === 'deck' && addTo.format === 'commander'
+        ? addTo.deckId
+        : undefined;
+  const commandZone = useLiveQuery(
+    async () => {
+      if (!commandZoneDeckId) return [];
+      const rows = await db.deckCards.where('[deckId+board]').equals([commandZoneDeckId, 'commander']).toArray();
+      const oracles = await db.oracleCards.bulkGet(rows.map((r) => r.oracleId));
+      return oracles.filter((o): o is OracleCard => !!o);
+    },
+    [commandZoneDeckId],
+    [] as OracleCard[],
+  );
   // Basic lands in a container can be "any printing": whatever's on top of the
   // lands box. Offered when filing a basic into a container or editing such a
   // slot; the default when the container is a deck, since nobody sleeves 24
@@ -866,7 +886,7 @@ export function CardSheet({
                 >
                   Move to mainboard
                 </button>
-              ) : !deckCard.hasCommander && canBeCommander(oracleCard) ? (
+              ) : canJoinCommandZone(oracleCard, commandZone) ? (
                 <button
                   onClick={async () => {
                     setBusy(true);
@@ -875,12 +895,12 @@ export function CardSheet({
                   }}
                   disabled={busy}
                 >
-                  Make commander
+                  {commandZone.length === 1 ? 'Make second commander' : 'Make commander'}
                 </button>
               ) : null)}
-            {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && addTo.format === 'commander' && canBeCommander(oracleCard) && (
+            {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && addTo.format === 'commander' && canJoinCommandZone(oracleCard, commandZone) && (
               <button onClick={() => save('commander')} disabled={busy}>
-                Add as commander
+                {commandZone.length === 1 ? 'Add as second commander' : 'Add as commander'}
               </button>
             )}
             {deckAdd && deckAddIsDeck && (

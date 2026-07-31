@@ -13,7 +13,7 @@ import { CONTAINER_KINDS, type Color, type DeckBoard, type DeckFormat, type Orac
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
 import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
-import { formatLabel, isBasicLand } from '../deck/legality.js';
+import { formatLabel, isBackground, isBasicLand, isValidCommanderPair } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
@@ -313,23 +313,40 @@ function SearchOverlay() {
     if (!deck) return null;
     const format: DeckFormat = deck.format ?? 'casual';
     let identity: Color[] | null = null;
+    let commanders: OracleCard[] = [];
     if (format === 'commander') {
-      const commanders = await db.deckCards.where('[deckId+board]').equals([deckId, 'commander']).toArray();
-      if (commanders.length) {
-        const oracles = await db.oracleCards.bulkGet(commanders.map((c) => c.oracleId));
-        identity = [...new Set(oracles.filter(Boolean).flatMap((o) => o!.colorIdentity))];
+      const rows = await db.deckCards.where('[deckId+board]').equals([deckId, 'commander']).toArray();
+      if (rows.length) {
+        const oracles = await db.oracleCards.bulkGet(rows.map((c) => c.oracleId));
+        commanders = oracles.filter((o): o is OracleCard => !!o);
+        identity = [...new Set(commanders.flatMap((o) => o.colorIdentity))];
       }
     }
-    return { format, identity };
+    return { format, identity, commanders };
   }, [deckId]);
   const deckFilterActive = deckLegalOnly && !!deckCtx && deckCtx.format !== 'casual';
+
+  // One commander in the zone shouldn't hide the partner or Background that
+  // would join them: the second commander is exactly what widens the identity.
+  // (Legendary-or-Background first, so the pairing regexes only run on the few.)
+  const partnerExempt = useMemo(() => {
+    const solo = deckCtx?.commanders.length === 1 ? deckCtx.commanders[0]! : null;
+    if (!solo) return undefined;
+    return (c: OracleCard) =>
+      (/\bLegendary\b/.test(c.typeLine) || isBackground(c)) && isValidCommanderPair(solo, c);
+  }, [deckCtx]);
 
   const effectiveFilters = useMemo<SearchFilters>(
     () =>
       deckFilterActive
-        ? { ...filters, legalIn: deckCtx!.format, identity: deckCtx!.identity ?? undefined }
+        ? {
+            ...filters,
+            legalIn: deckCtx!.format,
+            identity: deckCtx!.identity ?? undefined,
+            identityExempt: partnerExempt,
+          }
         : filters,
-    [filters, deckFilterActive, deckCtx],
+    [filters, deckFilterActive, deckCtx, partnerExempt],
   );
 
   // Scoped to the list this very page renders: it filters itself (keeping its

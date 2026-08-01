@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.88.3
+
+- **Prices are written the way the currency is actually written.** Pick kroner and you get "1 234,56 kr" — space between the thousands, comma before the øre — even if your browser is set to English. Before, an English browser forced English punctuation onto every currency ("kr 1,234.56").
+- **Yen and won lose their decimals**, since neither has a subunit: ￥1 235, not ￥1 234,56.
+- **Editing an acquisition price now happens in your currency.** The field is labelled with your currency's symbol, shows the converted amount, and takes a comma or a dot as the decimal mark. What gets stored is unchanged (euros), so switching currency later still never rewrites your history.
+- The exchange rate on the settings screen follows the same rule: "1 EUR = 11,5 NOK".
+
 ## 0.88.2
 
 - **"Filed in" tells your two copies apart.** Own a Mox Diamond in English and one in Spanish, put each in a different deck, and each copy's badge now names its own deck — instead of both claiming to be in both. The same goes for foil vs nonfoil, and for condition: whatever the deck slot says it wants of the copy filling it, only the copies that could fill it get the badge.

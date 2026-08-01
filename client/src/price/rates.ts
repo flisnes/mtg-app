@@ -13,44 +13,56 @@ import { getPrefs, notifyPrefsChanged, type BaseCurrency } from '../prefs.js';
 const ENDPOINT = 'https://api.frankfurter.dev/v1/latest?base=EUR';
 const STORAGE_KEY = 'fxRates';
 
-/** The 30 currencies the ECB publishes, in the order the picker shows them. */
-export const CURRENCIES: { code: string; name: string }[] = [
-  { code: 'EUR', name: 'Euro' },
-  { code: 'USD', name: 'US dollar' },
-  { code: 'GBP', name: 'British pound' },
-  { code: 'NOK', name: 'Norwegian krone' },
-  { code: 'SEK', name: 'Swedish krona' },
-  { code: 'DKK', name: 'Danish krone' },
-  { code: 'ISK', name: 'Icelandic króna' },
-  { code: 'CHF', name: 'Swiss franc' },
-  { code: 'PLN', name: 'Polish złoty' },
-  { code: 'CZK', name: 'Czech koruna' },
-  { code: 'HUF', name: 'Hungarian forint' },
-  { code: 'RON', name: 'Romanian leu' },
-  { code: 'TRY', name: 'Turkish lira' },
-  { code: 'CAD', name: 'Canadian dollar' },
-  { code: 'AUD', name: 'Australian dollar' },
-  { code: 'NZD', name: 'New Zealand dollar' },
-  { code: 'JPY', name: 'Japanese yen' },
-  { code: 'CNY', name: 'Chinese yuan' },
-  { code: 'HKD', name: 'Hong Kong dollar' },
-  { code: 'SGD', name: 'Singapore dollar' },
-  { code: 'KRW', name: 'South Korean won' },
-  { code: 'INR', name: 'Indian rupee' },
-  { code: 'IDR', name: 'Indonesian rupiah' },
-  { code: 'MYR', name: 'Malaysian ringgit' },
-  { code: 'PHP', name: 'Philippine peso' },
-  { code: 'THB', name: 'Thai baht' },
-  { code: 'ILS', name: 'Israeli shekel' },
-  { code: 'MXN', name: 'Mexican peso' },
-  { code: 'BRL', name: 'Brazilian real' },
-  { code: 'ZAR', name: 'South African rand' },
+/**
+ * The 30 currencies the ECB publishes, in the order the picker shows them, each
+ * with the locale it's written in. Amounts are formatted in the *currency's*
+ * locale rather than the browser's, so a krone total groups the Norwegian way
+ * ("kr 12 346") even in an English browser, and a yen total drops the decimals
+ * yen never had. Israel gets en-IL, not he-IL: the Hebrew pattern carries RTL
+ * marks that flip the surrounding text in our left-to-right lists.
+ */
+export const CURRENCIES: { code: string; name: string; locale: string }[] = [
+  { code: 'EUR', name: 'Euro', locale: 'de-DE' },
+  { code: 'USD', name: 'US dollar', locale: 'en-US' },
+  { code: 'GBP', name: 'British pound', locale: 'en-GB' },
+  { code: 'NOK', name: 'Norwegian krone', locale: 'nb-NO' },
+  { code: 'SEK', name: 'Swedish krona', locale: 'sv-SE' },
+  { code: 'DKK', name: 'Danish krone', locale: 'da-DK' },
+  { code: 'ISK', name: 'Icelandic króna', locale: 'is-IS' },
+  { code: 'CHF', name: 'Swiss franc', locale: 'de-CH' },
+  { code: 'PLN', name: 'Polish złoty', locale: 'pl-PL' },
+  { code: 'CZK', name: 'Czech koruna', locale: 'cs-CZ' },
+  { code: 'HUF', name: 'Hungarian forint', locale: 'hu-HU' },
+  { code: 'RON', name: 'Romanian leu', locale: 'ro-RO' },
+  { code: 'TRY', name: 'Turkish lira', locale: 'tr-TR' },
+  { code: 'CAD', name: 'Canadian dollar', locale: 'en-CA' },
+  { code: 'AUD', name: 'Australian dollar', locale: 'en-AU' },
+  { code: 'NZD', name: 'New Zealand dollar', locale: 'en-NZ' },
+  { code: 'JPY', name: 'Japanese yen', locale: 'ja-JP' },
+  { code: 'CNY', name: 'Chinese yuan', locale: 'zh-CN' },
+  { code: 'HKD', name: 'Hong Kong dollar', locale: 'zh-HK' },
+  { code: 'SGD', name: 'Singapore dollar', locale: 'en-SG' },
+  { code: 'KRW', name: 'South Korean won', locale: 'ko-KR' },
+  { code: 'INR', name: 'Indian rupee', locale: 'en-IN' },
+  { code: 'IDR', name: 'Indonesian rupiah', locale: 'id-ID' },
+  { code: 'MYR', name: 'Malaysian ringgit', locale: 'ms-MY' },
+  { code: 'PHP', name: 'Philippine peso', locale: 'en-PH' },
+  { code: 'THB', name: 'Thai baht', locale: 'th-TH' },
+  { code: 'ILS', name: 'Israeli shekel', locale: 'en-IL' },
+  { code: 'MXN', name: 'Mexican peso', locale: 'es-MX' },
+  { code: 'BRL', name: 'Brazilian real', locale: 'pt-BR' },
+  { code: 'ZAR', name: 'South African rand', locale: 'en-ZA' },
 ];
 
-const KNOWN = new Set(CURRENCIES.map((c) => c.code));
+const KNOWN = new Map(CURRENCIES.map((c) => [c.code, c]));
 
 export function isKnownCurrency(code: string): boolean {
   return KNOWN.has(code);
+}
+
+/** The locale a currency is written in; undefined (= the browser's) if we don't know it. */
+export function localeFor(currency: string): string | undefined {
+  return KNOWN.get(currency)?.locale;
 }
 
 interface RateCache {
@@ -159,17 +171,19 @@ export function canConvert(): boolean {
 // a NumberFormat is expensive enough to be worth caching per (currency, digits).
 const fmtCache = new Map<string, Intl.NumberFormat | null>();
 
-function formatter(currency: string, digits: number): Intl.NumberFormat | null {
-  const key = `${currency}:${digits}`;
+/** `digits: null` = let the currency decide (2 for euros, 0 for yen…). */
+function formatter(currency: string, digits: number | null): Intl.NumberFormat | null {
+  const key = `${currency}:${digits ?? 'auto'}`;
   if (fmtCache.has(key)) return fmtCache.get(key)!;
-  const opts = { minimumFractionDigits: digits, maximumFractionDigits: digits };
+  const locale = localeFor(currency);
+  const opts = digits == null ? {} : { minimumFractionDigits: digits, maximumFractionDigits: digits };
   let f: Intl.NumberFormat | null = null;
   try {
-    f = new Intl.NumberFormat(undefined, { style: 'currency', currency, currencyDisplay: 'narrowSymbol', ...opts });
+    f = new Intl.NumberFormat(locale, { style: 'currency', currency, currencyDisplay: 'narrowSymbol', ...opts });
   } catch {
     try {
       // Engine without narrowSymbol support: the wide symbol still reads fine.
-      f = new Intl.NumberFormat(undefined, { style: 'currency', currency, ...opts });
+      f = new Intl.NumberFormat(locale, { style: 'currency', currency, ...opts });
     } catch {
       f = null; // unknown code — fmtMoney appends it by hand
     }
@@ -181,13 +195,25 @@ function formatter(currency: string, digits: number): Intl.NumberFormat | null {
 /**
  * Render an amount as money. Cents matter for single cards and small piles; a
  * five-figure collection total just wants a clean round number, which is the
- * rule the old fmtAmount used.
+ * rule the old fmtAmount used. Below that threshold the currency picks its own
+ * precision, so yen and won don't sprout a decimal point they never use.
  */
 export function fmtMoney(amount: number, currency: string): string {
-  const digits = Math.abs(amount) >= 1000 ? 0 : 2;
+  const digits = Math.abs(amount) >= 1000 ? 0 : null;
   const f = formatter(currency, digits);
   if (f) return f.format(amount);
-  return `${amount.toFixed(digits)} ${currency}`;
+  return `${amount.toFixed(digits ?? 2)} ${currency}`;
+}
+
+/** Minor-unit digits Intl uses for a currency — 2 for most, 0 for yen and friends. */
+export function currencyDigits(currency: string): number {
+  return formatter(currency, null)?.resolvedOptions().maximumFractionDigits ?? 2;
+}
+
+/** The symbol Intl renders for a currency ("€", "kr", "$"), or the code itself. */
+export function currencySymbol(currency: string): string {
+  const parts = formatter(currency, 0)?.formatToParts(0);
+  return parts?.find((p) => p.type === 'currency')?.value ?? currency;
 }
 
 /** Convert and format in one step; null when no rate is available. */
@@ -216,12 +242,78 @@ export function fmtEur(amount: number): string {
   return fmtPriceIn(amount, 'eur');
 }
 
-/** "1 EUR = 10.998 NOK" for the settings screen; null when there's nothing to show. */
+const plainCache = new Map<string, Intl.NumberFormat | null>();
+
+/** An amount as a bare number in the currency's notation — no symbol, no grouping. */
+function fmtPlain(amount: number, currency: string): string {
+  const digits = currencyDigits(currency);
+  if (!plainCache.has(currency)) {
+    let f: Intl.NumberFormat | null = null;
+    try {
+      f = new Intl.NumberFormat(localeFor(currency), {
+        useGrouping: false,
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      });
+    } catch {
+      f = null;
+    }
+    plainCache.set(currency, f);
+  }
+  return plainCache.get(currency)?.format(amount) ?? amount.toFixed(digits);
+}
+
+/**
+ * A typed amount, in any of the notations our currencies use: "12.34", "12,34",
+ * grouped, or spaced. Null when there's no number in there — which the callers
+ * treat the same as an empty field, i.e. "no price recorded".
+ */
+function parseAmount(text: string): number | null {
+  // Spaces group in the Nordics (non-breaking ones at that), ’ in Switzerland.
+  const cleaned = text.replace(/[\s\u00a0\u202f\u2019']/gu, '');
+  if (!cleaned) return null;
+  // Whichever of . or , comes last is the decimal mark; earlier ones group.
+  const dec = Math.max(cleaned.lastIndexOf('.'), cleaned.lastIndexOf(','));
+  const normalized =
+    dec < 0 ? cleaned : `${cleaned.slice(0, dec).replace(/[.,]/g, '')}.${cleaned.slice(dec + 1)}`;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * How to take a typed price in and put it back out. Amounts are stored in EUR
+ * whatever the settings say, but the user types in the currency they read
+ * prices in — which is the display currency when a rate exists, EUR when not.
+ */
+export function moneyInput(): {
+  currency: string;
+  /** An EUR amount as the bare number the field shows. */
+  text: (eur: number) => string;
+  /** What the user typed, back in EUR; null when the field holds no number. */
+  toEur: (text: string) => number | null;
+} {
+  const { displayCurrency } = getPrefs();
+  const rate = displayCurrency === 'EUR' ? null : convertToDisplay(1, 'EUR');
+  const currency = rate == null ? 'EUR' : displayCurrency;
+  return {
+    currency,
+    text: (eur) => fmtPlain(rate == null ? eur : eur * rate, currency),
+    toEur: (text) => {
+      const n = parseAmount(text);
+      return n == null ? null : rate == null ? n : n / rate;
+    },
+  };
+}
+
+/** "1 EUR = 10,998 NOK" for the settings screen; null when there's nothing to show. */
 export function rateSummary(): { text: string; date: string } | null {
   const { displayCurrency, baseCurrency } = getPrefs();
   if (displayCurrency === baseCurrency) return null;
   const cached = load();
   const per = convertToDisplay(1, baseCurrency);
   if (!cached || per == null) return null;
-  return { text: `1 ${baseCurrency} = ${per.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')} ${displayCurrency}`, date: cached.date };
+  // The rate is a plain number, but it's a number *in* the display currency, so
+  // it takes that currency's decimal mark: "10,998 NOK", not "10.998 NOK".
+  const rate = new Intl.NumberFormat(localeFor(displayCurrency), { maximumFractionDigits: 4 }).format(per);
+  return { text: `1 ${baseCurrency} = ${rate} ${displayCurrency}`, date: cached.date };
 }

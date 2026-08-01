@@ -5,6 +5,7 @@ import { REMOVAL_REASONS } from '@mtg/shared';
 import { editUserEvent } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
 import { centsAround } from '../price/history.js';
+import { currencySymbol, moneyInput } from '../price/rates.js';
 import { describeEvent, qtyBadge, REASON_LABELS } from '../history/eventRegistry.js';
 import { fmtCents, fmtDate } from '../util/format.js';
 
@@ -146,7 +147,10 @@ function HistoryRow({
   const hasInlineEdit = e.kind === 'collection.add' || e.kind === 'collection.remove';
   const inlineEditing = editMode && hasInlineEdit;
   const [editing, setEditing] = useState(false);
-  const [priceText, setPriceText] = useState(e.priceEurCents != null ? (e.priceEurCents / 100).toFixed(2) : '');
+  // Prices are stored in EUR cents but typed in whatever currency the rest of
+  // the row shows, so the editor converts on the way in and back out.
+  const money = moneyInput();
+  const [priceText, setPriceText] = useState(e.priceEurCents != null ? money.text(e.priceEurCents / 100) : '');
   const [reason, setReason] = useState<RemovalReason>(e.reason ?? 'sold');
 
   const badge = qtyBadge(e);
@@ -165,8 +169,8 @@ function HistoryRow({
       : undefined;
 
   async function save() {
-    const trimmed = priceText.trim().replace(',', '.');
-    const cents = trimmed === '' ? null : Math.round(Number(trimmed) * 100);
+    const eur = money.toEur(priceText);
+    const cents = eur == null ? null : Math.round(eur * 100);
     await editUserEvent(e.id, {
       priceEurCents: cents != null && Number.isFinite(cents) && cents >= 0 ? cents : null,
       ...(e.kind === 'collection.remove' ? { reason } : {}),
@@ -204,10 +208,13 @@ function HistoryRow({
       {editing && inlineEditing && (
         <div className="history-edit">
           <label className="field">
-            <span>{e.kind === 'collection.add' ? 'Price when acquired (€/ea)' : 'Price when removed (€/ea)'}</span>
+            <span>
+              {e.kind === 'collection.add' ? 'Price when acquired' : 'Price when removed'} (
+              {currencySymbol(money.currency)}/ea)
+            </span>
             <input
               inputMode="decimal"
-              placeholder={hint != null ? `≈ ${(hint / 100).toFixed(2)}` : 'unknown'}
+              placeholder={hint != null ? `≈ ${money.text(hint / 100)}` : 'unknown'}
               value={priceText}
               onChange={(ev) => setPriceText(ev.target.value)}
             />

@@ -11,7 +11,7 @@ import type { ResolvedLine } from '../import/types.js';
 import { CardSheet, FINISH_LABELS, LANGS, type SessionCardValues } from './CardSheet.js';
 import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
 import { getScanExcludedIds } from '../scan/exclusions.js';
-import { CameraScan, type LiveScanState } from '../scan/camera.js';
+import { CameraScan, getPreferredCameraId, listCameras, type CameraOption, type LiveScanState } from '../scan/camera.js';
 import type { ScanPipelineResult } from '../scan/pipeline.js';
 import { CANDIDATE_MAX_DISTANCE, distancesForIds } from '../scan/match.js';
 import { resolveWithOcr } from '../scan/ocr.js';
@@ -386,6 +386,11 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const [lockNow, setLockNow] = useState(0);
   const [board, setBoard] = useState<DeckBoard>('main');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The lenses this device offers, and which one is pinned ('' = let the OS
+  // choose). Only enumerated once the settings are opened: labels stay blank
+  // until camera permission has been granted anyway.
+  const [cameras, setCameras] = useState<CameraOption[]>([]);
+  const [cameraId, setCameraId] = useState(() => getPreferredCameraId() ?? '');
   // When on, pinpointing an edition (OCR confirms the printing, the green check)
   // adds +1 of it on its own. Persisted so the preference sticks between scans.
   const [autoAdd, setAutoAdd] = useState(() => localStorage.getItem('scan-autoadd') === '1');
@@ -528,6 +533,17 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       /* ignore */
     }
   }, [autoAdd]);
+
+  // Fill the camera picker when the settings open, and re-read the pin: a
+  // pinned lens that has since disappeared is dropped by the camera on start,
+  // and the picker must show that rather than a device it isn't using.
+  useEffect(() => {
+    if (!settingsOpen || stage.kind !== 'scanning') return;
+    void listCameras().then((list) => {
+      setCameras(list);
+      setCameraId(getPreferredCameraId() ?? '');
+    });
+  }, [settingsOpen, stage.kind]);
 
   useEffect(() => {
     locksRef.current = locks;
@@ -834,6 +850,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   };
   const lockSet = (on: boolean) => {
     setLocks((l) => ({ ...l, set: on ? (trayRef.current?.candidates[0]?.printing?.set ?? '') : null }));
+  };
+
+  /** Swap lenses without disturbing the session — the stream is all that changes. */
+  const pickCamera = (id: string) => {
+    setCameraId(id);
+    void cameraRef.current?.switchTo(id || null);
   };
 
   const openList = () => {
@@ -1179,6 +1201,22 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
 
         {settingsOpen && stage.kind === 'scanning' && (
           <div className="scan-settings" role="group" aria-label="Scan settings">
+            {cameras.length > 1 && (
+              <label className="scan-setting scan-setting-stacked">
+                <span>
+                  <strong>Camera</strong>
+                  <small>Phones with several rear lenses like to swap mid-pile. Pin the one that focuses best up close.</small>
+                </span>
+                <select className="scan-lock-select scan-camera-select" value={cameraId} onChange={(e) => pickCamera(e.target.value)}>
+                  <option value="">Automatic</option>
+                  {cameras.map((c) => (
+                    <option key={c.deviceId} value={c.deviceId}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="scan-setting">
               <span>
                 <strong>Auto-add pinpointed edition</strong>

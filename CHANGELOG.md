@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.89.0
+
+- **Pick which camera the scanner uses.** Phones with several rear lenses (Pixel, recent Galaxy) decide for themselves which one to point at your card, and keep changing their mind mid-pile — usually to the ultrawide, which can't focus close enough to read a collector number. The scan settings cog now has a **Camera** picker: choose the lens that works and the scanner stays on it, this pile and every one after.
+- Switching lenses mid-scan doesn't cost you anything: the session, the tray and your pile pins all stay put. Set it to **Automatic** to hand the choice back to the phone.
+- The picker only appears when your device actually has more than one camera to pick from.
+
 ## 0.88.3
 
 - **Prices are written the way the currency is actually written.** Pick kroner and you get "1 234,56 kr" — space between the thousands, comma before the øre — even if your browser is set to English. Before, an English browser forced English punctuation onto every currency ("kr 1,234.56").

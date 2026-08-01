@@ -22,6 +22,65 @@ const DETECT_WIDTH = 480;
 /** Idle gap between processed frames — keeps the UI thread breathing. */
 const FRAME_GAP_MS = 60;
 
+/** One rear/front lens the browser will hand us, for the scan settings picker. */
+export interface CameraOption {
+  deviceId: string;
+  label: string;
+}
+
+/**
+ * Which lens the scanner opens. Multi-lens phones (Pixel, recent Galaxy) treat
+ * `facingMode: environment` as "pick a rear camera for me" and then keep
+ * swapping between the wide and the ultrawide as the focus distance drifts —
+ * mid-pile that means half the frames come from the lens that can't resolve a
+ * collector number. Pinning a deviceId takes the choice away from the OS.
+ * `null` = no preference, back to facingMode.
+ */
+const CAMERA_PREF_KEY = 'scan-camera-device';
+
+export function getPreferredCameraId(): string | null {
+  try {
+    return localStorage.getItem(CAMERA_PREF_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function setPreferredCameraId(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(CAMERA_PREF_KEY, id);
+    else localStorage.removeItem(CAMERA_PREF_KEY);
+  } catch {
+    /* private mode — the pin just won't survive the session */
+  }
+}
+
+/**
+ * Android Chrome labels its cameras "camera2 0, facing back", which is not a
+ * thing to put in front of a user. Everything else (desktop, iOS) already has a
+ * human label, so leave those alone.
+ */
+function prettyLabel(raw: string, index: number): string {
+  const m = /^camera2?\s+(\d+),\s*facing\s+(back|front)$/i.exec(raw.trim());
+  if (m) return `${m[2]!.toLowerCase() === 'back' ? 'Back' : 'Front'} camera ${Number(m[1]) + 1}`;
+  return raw.trim() || `Camera ${index + 1}`;
+}
+
+/**
+ * The cameras available to the picker. Labels are blank until the user has
+ * granted camera access at least once, so call this while the scanner is live.
+ */
+export async function listCameras(): Promise<CameraOption[]> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices
+      .filter((d) => d.kind === 'videoinput' && d.deviceId)
+      .map((d, i) => ({ deviceId: d.deviceId, label: prettyLabel(d.label, i) }));
+  } catch {
+    return [];
+  }
+}
+
 export class CameraScan {
   private stream: MediaStream | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -39,29 +98,31 @@ export class CameraScan {
     private readonly onState: (s: LiveScanState) => void,
   ) {}
 
-  /** Request the camera and begin scanning. Call from a user gesture. */
-  async start(): Promise<void> {
-    this.stopped = false;
-    this.onState({ status: 'starting' });
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: false,
-      });
-    } catch (e) {
-      this.onState({ status: 'error', message: e instanceof Error ? e.message : 'camera unavailable' });
-      return;
+  /**
+   * The pinned lens if there is one, otherwise "some rear camera". A pinned id
+   * that no longer exists (new phone, browser rotated its ids) is dropped
+   * rather than left to fail every start from here on.
+   */
+  private async openStream(): Promise<MediaStream> {
+    const size = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+    const pinned = getPreferredCameraId();
+    if (pinned) {
+      try {
+        return await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: pinned }, ...size }, audio: false });
+      } catch {
+        setPreferredCameraId(null);
+      }
     }
+    return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, ...size }, audio: false });
+  }
+
+  /** Attach a fresh stream to the video element. Returns false if teardown won the race. */
+  private async attach(stream: MediaStream): Promise<boolean> {
     // stop() may have run while getUserMedia was pending — don't leave the
     // just-granted camera on with no UI attached.
     if (this.stopped) {
       stream.getTracks().forEach((t) => t.stop());
-      return;
+      return false;
     }
     this.stream = stream;
     this.video.srcObject = this.stream;
@@ -72,9 +133,54 @@ export class CameraScan {
     }
     if (this.stopped) {
       this.stop();
+      return false;
+    }
+    return true;
+  }
+
+  /** Request the camera and begin scanning. Call from a user gesture. */
+  async start(): Promise<void> {
+    this.stopped = false;
+    this.onState({ status: 'starting' });
+    let stream: MediaStream;
+    try {
+      stream = await this.openStream();
+    } catch (e) {
+      this.onState({ status: 'error', message: e instanceof Error ? e.message : 'camera unavailable' });
       return;
     }
+    if (!(await this.attach(stream))) return;
     this.resume();
+  }
+
+  /** The lens actually feeding the video, pinned or picked for us. */
+  currentDeviceId(): string | null {
+    return this.stream?.getVideoTracks()[0]?.getSettings().deviceId ?? null;
+  }
+
+  /**
+   * Point the scanner at another lens mid-session (the scan settings picker),
+   * and remember it. Only the stream swaps — the session, tray and pile pins
+   * are untouched, so a wrong first guess costs a tap, not the pile.
+   */
+  async switchTo(deviceId: string | null): Promise<void> {
+    setPreferredCameraId(deviceId);
+    if (!this.stream || this.stopped) return;
+    const wasRunning = this.running;
+    this.pause();
+    this.stream.getTracks().forEach((t) => t.stop());
+    this.stream = null;
+    this.video.srcObject = null;
+    this.onState({ status: 'starting' });
+    let stream: MediaStream;
+    try {
+      stream = await this.openStream();
+    } catch (e) {
+      this.onState({ status: 'error', message: e instanceof Error ? e.message : 'camera unavailable' });
+      return;
+    }
+    if (!(await this.attach(stream))) return;
+    if (wasRunning) this.resume();
   }
 
   /** Continue scanning (also used after a locked result is confirmed/rejected). */

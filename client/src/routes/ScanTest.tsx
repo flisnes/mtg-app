@@ -9,7 +9,7 @@ import { formatHash64, type DHash } from '../scan/hash.js';
 import type { MatchResult, ScanCandidate } from '../scan/match.js';
 import { orientQuadPortrait, type Quad } from '../scan/geometry.js';
 import { runScanPipeline, type ScanPipelineResult } from '../scan/pipeline.js';
-import { CameraScan, type LiveScanState } from '../scan/camera.js';
+import { CameraScan, getPreferredCameraId, listCameras, type CameraOption, type LiveScanState } from '../scan/camera.js';
 import { resolveWithOcr, type OcrResolution } from '../scan/ocr.js';
 import {
   checkScanDataUpdate,
@@ -62,6 +62,8 @@ export function ScanTest() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraScan | null>(null);
   const [live, setLive] = useState<LiveScanState | null>(null);
+  const [cameras, setCameras] = useState<CameraOption[]>([]);
+  const [cameraId, setCameraId] = useState(() => getPreferredCameraId() ?? '');
 
   // Match production: exclude the printings the camera must never suggest
   // (playtest cards, etc.), so this harness is a faithful regression tool.
@@ -276,7 +278,11 @@ export function ScanTest() {
       }
     });
     cameraRef.current = cam;
-    void cam.start();
+    // Device labels are blank until permission lands, so enumerate after start.
+    void cam.start().then(async () => {
+      setCameras(await listCameras());
+      setCameraId(getPreferredCameraId() ?? '');
+    });
   };
 
   const stopCamera = () => {
@@ -372,6 +378,24 @@ export function ScanTest() {
               )}
               <button onClick={stopCamera}>Stop camera</button>
             </>
+          )}
+          {/* Same pin the scan settings write — the harness must test the lens
+              the real scanner will use. */}
+          {cameras.length > 1 && (
+            <select
+              value={cameraId}
+              onChange={(e) => {
+                setCameraId(e.target.value);
+                void cameraRef.current?.switchTo(e.target.value || null);
+              }}
+            >
+              <option value="">Camera: automatic</option>
+              {cameras.map((c) => (
+                <option key={c.deviceId} value={c.deviceId}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
           )}
         </div>
         <video ref={videoRef} className="scan-video" playsInline autoPlay muted hidden={!live} />

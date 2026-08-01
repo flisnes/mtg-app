@@ -460,6 +460,8 @@ export function CardSheet({
   const [flipped, setFlipped] = useState(false);
   useEffect(() => setFlipped(false), [scryfallId]);
   const shownImage = flipped && cardBackImage ? cardBackImage : cardImage;
+  // Tap the art to read it: the card alone, as large as the screen allows.
+  const [zoomed, setZoomed] = useState(false);
 
   // Keep a concrete finish valid for the chosen printing (skip the "Any"
   // sentinel and wish mode, where the finish is a preference, not a real copy).
@@ -588,7 +590,15 @@ export function CardSheet({
         <div className="sheet-head">
           {cardImage ? (
             <div className="sheet-card-wrap">
-              <img className="sheet-card" src={shownImage ?? cardImage} alt={oracleCard.name} />
+              <button
+                type="button"
+                className="sheet-card-zoom"
+                onClick={() => setZoomed(true)}
+                aria-label={`Enlarge ${oracleCard.name}`}
+                title="Enlarge"
+              >
+                <img className="sheet-card" src={shownImage ?? cardImage} alt={oracleCard.name} />
+              </button>
               {finish && finish !== 'nonfoil' && <span className="foil-sheen" aria-hidden />}
               {cardBackImage && (
                 <button
@@ -944,6 +954,16 @@ export function CardSheet({
         )}
       </div>
 
+      {zoomed && cardImage && (
+        <CardZoom
+          image={shownImage ?? cardImage}
+          backImage={cardBackImage}
+          onFlip={() => setFlipped((f) => !f)}
+          alt={oracleCard.name}
+          foil={!!finish && finish !== 'nonfoil'}
+          onClose={() => setZoomed(false)}
+        />
+      )}
       {allEditions && (
         <EditionPicker
           printings={highlighted.length > 0 ? [...highlighted, ...otherPrintings] : otherPrintings}
@@ -1096,6 +1116,62 @@ function orderByOwned(printings: Priced<Printing>[], ownedIds?: Set<string>): Pr
   const rest: Priced<Printing>[] = [];
   for (const p of printings) (ownedIds.has(p.scryfallId) ? owned : rest).push(p);
   return owned.length === 0 ? printings : [...owned, ...rest];
+}
+
+/**
+ * The card, alone, as big as the screen allows — for when the oracle text on
+ * the sheet's thumbnail is too small to actually read. Tap anywhere (or
+ * Escape / back) to dismiss; the flip button stays, and shares the sheet's flip
+ * state so the face you were looking at is the face you get.
+ */
+function CardZoom({
+  image,
+  backImage,
+  onFlip,
+  alt,
+  foil,
+  onClose,
+}: {
+  image: string;
+  backImage: string | null;
+  onFlip: () => void;
+  alt: string;
+  foil: boolean;
+  onClose: () => void;
+}) {
+  useDismiss(onClose);
+  return (
+    <div
+      className="card-zoom-backdrop"
+      role="dialog"
+      aria-label={alt}
+      onClick={(e) => {
+        // Nested inside the card sheet's own backdrop, whose click handler
+        // would otherwise close the sheet underneath us too.
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      <div className="card-zoom-frame">
+        <img className="card-zoom-img" src={image} alt={alt} />
+        {foil && <span className="foil-sheen" aria-hidden />}
+        {backImage && (
+          <button
+            type="button"
+            className="sheet-flip card-zoom-flip"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFlip();
+            }}
+            aria-label="Flip card"
+            title="Flip card"
+          >
+            <Icon name="flip" size={18} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** Every printing as an image tile — pick an edition by looking at it. */

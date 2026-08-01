@@ -1734,6 +1734,57 @@ body:has(.bulk-bar) .app-main {
   max-width: none;
   border-radius: 0;
 }
+/* The art is a button: tap it for the full-screen read of the card. */
+.sheet-card-zoom {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  cursor: zoom-in;
+}
+/* Full-screen card view: the card and nothing else, tap anywhere to dismiss. */
+.card-zoom-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(1rem + var(--safe-top)) 1rem calc(1rem + var(--safe-bottom));
+  background: rgba(0, 0, 0, 0.85);
+  cursor: zoom-out;
+}
+/* Fit the card to whichever axis runs out first: the viewport's width, or the
+   height once the padding is paid for. Sizing the frame (not just the image)
+   keeps the rounded corners and the foil sheen on the cardboard itself. */
+.card-zoom-frame {
+  position: relative;
+  width: min(
+    100%,
+    560px,
+    (100dvh - 2rem - var(--safe-top) - var(--safe-bottom)) * 488 / 680
+  );
+  aspect-ratio: 488 / 680;
+  border-radius: 4.75% / 3.4%; /* the real corner radius of a Magic card */
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+/* contain, not cover: an oddly-proportioned card (planes, art series) should be
+   shown whole rather than cropped to the standard frame. */
+.card-zoom-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.card-zoom-flip {
+  bottom: 3%;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+}
 /* Flip control on a double-faced card's art — bottom-right, over the image. */
 .sheet-flip {
   /* Centered, not bottom-right: the corner sits on top of the printed P/T. */

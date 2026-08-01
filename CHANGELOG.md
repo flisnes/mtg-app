@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.91.0
+
+- **Tap the card art in a card sheet to blow it up.** The card fills the screen, nothing else on top of it, so you can actually read the rules text without squinting at a thumbnail. Tap anywhere (or press Escape, or use back) to drop it again. Double-faced cards keep their flip button, and foils keep their shimmer.
+
 ## 0.90.0
 
 - **Auto-add gets out of the way when you add the card yourself.** With "Auto-add pinpointed edition" on, tapping +1 while the reader is still working out the printing no longer gets you a second copy a moment later: your tap wins and auto-add stands down for that card.

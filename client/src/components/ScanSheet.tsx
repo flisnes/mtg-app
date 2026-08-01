@@ -349,6 +349,21 @@ function loadStoredSession(key: string | null): SessionEntry[] {
 }
 
 /**
+ * Where auto-add stands for the card in frame. It runs behind the OCR, so the
+ * status pill has to say what it is doing: a user who added the copy by hand
+ * otherwise sits there waiting for a pinpoint that will never land.
+ */
+type AutoAddState = 'idle' | 'waiting' | 'added' | 'missed' | 'stopped';
+
+const AUTO_ADD_NOTES: Record<AutoAddState, string | null> = {
+  idle: null,
+  waiting: 'Pinpointing edition…',
+  added: 'Auto-added this edition',
+  missed: 'Edition unclear: tap to add',
+  stopped: 'Auto-add stopped: you added this one',
+};
+
+/**
  * Tray order: the OCR-confirmed printing stays first, then editions the user
  * already owns bubble up (so their double-check badge is the first thing in
  * view), then the scanner's own distance order. Array.sort is stable, so equal
@@ -394,6 +409,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // When on, pinpointing an edition (OCR confirms the printing, the green check)
   // adds +1 of it on its own. Persisted so the preference sticks between scans.
   const [autoAdd, setAutoAdd] = useState(() => localStorage.getItem('scan-autoadd') === '1');
+  // What auto-add is doing for the card in frame, for the status pill.
+  const [autoState, setAutoState] = useState<AutoAddState>('idle');
   // True while the session is being written — guards against the double-tap
   // that used to commit the whole scan twice (adding two copies of everything).
   const [committing, setCommitting] = useState(false);
@@ -625,6 +642,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     // once (A, B, A — a binder page of near-duplicates) never adds the second copy.
     const pins = locksRef.current;
     autoAddedRef.current = null;
+    setAutoState('idle');
     langTouchedRef.current = false;
     lockAddsRef.current = [];
     releasedRef.current = false;
@@ -748,8 +766,16 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
 
   /** +1/−1 from a tray tile, into the session list, with the picker bar's
    *  finish/condition/language (a deck slot or wish quietly ignores what it doesn't store). */
-  const bump = (c: Candidate, delta: 1 | -1) => {
+  const bump = (c: Candidate, delta: 1 | -1, auto = false) => {
     if (!c.printing) return;
+    // The user got there first: the copy is in the session, so call auto-add off
+    // for this lock instead of dropping a second one in when the OCR lands.
+    // Latching the guard ref is what actually stops it (a later set pin that
+    // narrows the tray to one candidate would otherwise still fire).
+    if (!auto && delta > 0 && autoAdd && trayRef.current && autoAddedRef.current !== trayRef.current.topId) {
+      autoAddedRef.current = trayRef.current.topId;
+      setAutoState('stopped');
+    }
     const f = finish;
     const cond = condition;
     const l = lang;
@@ -802,17 +828,27 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // check on the tile); so does a set lock that leaves exactly one candidate
   // standing, which is how a foil-heavy set pile gets through without OCR.
   useEffect(() => {
-    if (!autoAdd || !tray || tray.ocr === 'pending') return;
-    if (autoAddedRef.current === tray.topId) return;
+    if (!autoAdd || !tray) return;
+    if (autoAddedRef.current === tray.topId) return; // added already, or the user beat it to it
+    if (tray.ocr === 'pending') {
+      setAutoState('waiting');
+      return;
+    }
     const byOcr =
       tray.ocrHit && (tray.ocr === 'confirmed' || tray.ocr === 'weak')
         ? tray.candidates.find((c) => c.scryfallId === tray.ocrHit)
         : undefined;
     const inSet = locks.set ? tray.candidates.filter((c) => c.printing?.set === locks.set) : [];
     const hit = byOcr ?? (inSet.length === 1 ? inSet[0] : undefined);
-    if (!hit) return;
+    // No pinpoint: nothing lands on its own, so drop the "pinpointing" message.
+    // The guard ref stays open — switching a set pin on can still land it.
+    if (!hit) {
+      setAutoState('missed');
+      return;
+    }
     autoAddedRef.current = tray.topId;
-    bump(hit, 1);
+    setAutoState('added');
+    bump(hit, 1, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tray, autoAdd, locks.set]);
 
@@ -1165,6 +1201,11 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const shown = tray ? filterBySet(orderTrayCandidates(tray, ownership), locks.set) : [];
   /** Set lock on, but nothing in this scan came from it — the tray shows everything. */
   const setMissed = !!locks.set && !!tray && !tray.candidates.some((c) => c.printing?.set === locks.set);
+  // Auto-add's running commentary, which outranks the camera's own status while
+  // a card is held in frame. Once the card is pulled away the pill goes back to
+  // "point the camera at a card", so the note clears itself.
+  const autoNote =
+    autoAdd && tray && live && (live.status !== 'scanning' || live.cardSeen) ? AUTO_ADD_NOTES[autoState] : null;
   /** Countdown ring: 1 right after a lock, 0 once the hold is up or it let go. */
   const holdLeft = lockAt === null ? 0 : Math.max(0, Math.min(1, 1 - (lockNow - lockAt) / LOCK_HOLD_MS));
 
@@ -1220,7 +1261,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             <label className="scan-setting">
               <span>
                 <strong>Auto-add pinpointed edition</strong>
-                <small>When the edition is confirmed (green check), add +1 on its own</small>
+                <small>
+                  When the edition is confirmed (green check), add +1 on its own. Adding a copy yourself first stops
+                  it for that card.
+                </small>
               </span>
               <input type="checkbox" checked={autoAdd} onChange={(e) => setAutoAdd(e.target.checked)} />
             </label>
@@ -1329,10 +1373,16 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
 
         {stage.kind === 'scanning' && live && (
           <p className="scan-cam-status">
-            {live.status === 'starting' && 'Starting camera…'}
-            {live.status === 'error' && `Camera failed: ${live.message}`}
-            {live.status === 'scanning' && (live.cardSeen ? 'Hold steady…' : 'Point the camera at a card')}
-            {live.status === 'locked' && 'Card found'}
+            {live.status === 'error'
+              ? `Camera failed: ${live.message}`
+              : (autoNote ??
+                (live.status === 'starting'
+                  ? 'Starting camera…'
+                  : live.status === 'locked'
+                    ? 'Card found'
+                    : live.cardSeen
+                      ? 'Hold steady…'
+                      : 'Point the camera at a card'))}
           </p>
         )}
 

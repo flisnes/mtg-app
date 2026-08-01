@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.90.0
+
+- **Auto-add gets out of the way when you add the card yourself.** With "Auto-add pinpointed edition" on, tapping +1 while the reader is still working out the printing no longer gets you a second copy a moment later: your tap wins and auto-add stands down for that card.
+- **The scanner now says what auto-add is up to.** The little pill under the camera reads "Pinpointing edition…" while it works, "Auto-added this edition" when it lands one, "Edition unclear: tap to add" when it can't tell them apart, and "Auto-add stopped: you added this one" when you got there first. No more wondering whether something is still ticking away in the background.
+
 ## 0.89.0
 
 - **Pick which camera the scanner uses.** Phones with several rear lenses (Pixel, recent Galaxy) decide for themselves which one to point at your card, and keep changing their mind mid-pile — usually to the ultrawide, which can't focus close enough to read a collector number. The scan settings cog now has a **Camera** picker: choose the lens that works and the scanner stays on it, this pile and every one after.

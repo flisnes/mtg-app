@@ -22,6 +22,8 @@ import { sanitizeOffer, sanitizeWishlist } from './validate.js';
 // and persists the in-flight session so an app reload can resume.
 
 const ACTIVE_KEY = 'activeTrade';
+/** Solo trades have no relay session, so the snapshot itself is what's stored. */
+const SOLO_KEY = 'activeSoloTrade';
 
 export interface ActiveTrade {
   code: string;
@@ -49,6 +51,8 @@ export interface TradeSession {
   create: () => void;
   /** Start a partnerless trade: build both sides locally, complete without a peer. */
   startSolo: () => void;
+  /** Pick a stored solo trade back up, both piles intact. */
+  resumeSolo: (snapshot: SessionSnapshot) => void;
   join: (code: string) => void;
   resume: (t: ActiveTrade) => void;
   /** Replace one side's offer — either participant may edit either side. */
@@ -82,6 +86,19 @@ export async function getPersistedTrade(): Promise<ActiveTrade | undefined> {
 /** Forget the persisted in-flight trade (the resume prompt's "Discard"). */
 export async function clearPersistedTrade(): Promise<void> {
   await deleteSetting(ACTIVE_KEY);
+}
+
+/** Read any persisted in-flight solo trade (for the resume prompt). */
+export async function getPersistedSoloTrade(): Promise<SessionSnapshot | undefined> {
+  const snap = await getSetting<SessionSnapshot>(SOLO_KEY);
+  // Only an unfinished trade is worth offering back.
+  if (!snap || snap.state === 'completed' || snap.state === 'cancelled') return undefined;
+  return { ...snap, offers: { a: sanitizeOffer(snap.offers?.a), b: sanitizeOffer(snap.offers?.b) } };
+}
+
+/** Forget the persisted solo trade (its "Discard", and every way it ends). */
+export async function clearPersistedSoloTrade(): Promise<void> {
+  await deleteSetting(SOLO_KEY);
 }
 
 export function useTradeSession(): TradeSession {
@@ -338,23 +355,47 @@ export function useTradeSession(): TradeSession {
     setSnapshot(next);
     if (next.state === 'completed' && !appliedRef.current) {
       appliedRef.current = true;
-      void applyCompletedTrade(next.sessionId, next.offers.a, next.offers.b, null);
+      void applyCompletedTrade(next.sessionId, next.offers.a, next.offers.b, null).finally(
+        () => void clearPersistedSoloTrade(),
+      );
+      return;
     }
+    // A solo trade lives entirely on this device, so the snapshot *is* the
+    // session: mirror every edit, and only let go once it's done or called off.
+    if (next.state === 'completed' || next.state === 'cancelled') void clearPersistedSoloTrade();
+    else void setSetting(SOLO_KEY, next);
   }, []);
 
+  /** Drop any live socket and hand the board to a solo snapshot (fresh or restored). */
+  const enterSolo = useCallback(
+    (snap: SessionSnapshot) => {
+      // Tear down any live socket — a solo trade owns the UI outright.
+      intentionalClose.current = true;
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
+      ws.current?.close();
+      ws.current = null;
+      active.current = {};
+      appliedRef.current = false;
+      peerUsername.current = null;
+      soloRef.current = true;
+      setSolo(true);
+      setSeat('a');
+      setStatus('active');
+      setError(null);
+      setPeerPresent(false);
+      // Treat the absent partner as having shared empty lists, not "not arrived yet".
+      setPeerTradelist([]);
+      setPeerWishlist([]);
+      applySolo(snap);
+    },
+    [applySolo],
+  );
+
   const startSolo = useCallback(() => {
-    // Tear down any live socket — a solo trade owns the UI outright.
-    intentionalClose.current = true;
-    if (reconnectTimer.current) {
-      clearTimeout(reconnectTimer.current);
-      reconnectTimer.current = null;
-    }
-    ws.current?.close();
-    ws.current = null;
-    active.current = {};
-    appliedRef.current = false;
-    peerUsername.current = null;
-    const snap: SessionSnapshot = {
+    enterSolo({
       code: '',
       sessionId: crypto.randomUUID(),
       state: 'building',
@@ -364,19 +405,10 @@ export function useTradeSession(): TradeSession {
       // The partner "seat" is implicit — present so the board never shows a
       // "waiting for the other user" state it can't leave.
       present: { a: true, b: true },
-    };
-    soloRef.current = true;
-    soloSnap.current = snap;
-    setSolo(true);
-    setSeat('a');
-    setStatus('active');
-    setError(null);
-    setPeerPresent(false);
-    // Treat the absent partner as having shared empty lists, not "not arrived yet".
-    setPeerTradelist([]);
-    setPeerWishlist([]);
-    setSnapshot(snap);
-  }, [applySolo]);
+    });
+  }, [enterSolo]);
+
+  const resumeSolo = useCallback((snap: SessionSnapshot) => enterSolo(snap), [enterSolo]);
 
   const create = useCallback(() => connect({ v: PROTOCOL_VERSION, type: 'create_session' }), [connect]);
   const join = useCallback(
@@ -458,6 +490,7 @@ export function useTradeSession(): TradeSession {
     setPeerTradelistLoading(false);
     setPeerWishlist(null);
     void clearPersisted();
+    void clearPersistedSoloTrade();
   }, [clearPersisted]);
 
   // Close the socket (and cancel any pending auto-resume) if the component
@@ -473,5 +506,5 @@ export function useTradeSession(): TradeSession {
     };
   }, []);
 
-  return { status, seat, snapshot, peerPresent, solo, error, peerTradelist, peerTradelistLoading, peerWishlist, create, startSolo, join, resume, sendOffer, requestTradelist, requestWishlist, accept, unaccept, confirmComplete, cancel, reset };
+  return { status, seat, snapshot, peerPresent, solo, error, peerTradelist, peerTradelistLoading, peerWishlist, create, startSolo, resumeSolo, join, resume, sendOffer, requestTradelist, requestWishlist, accept, unaccept, confirmComplete, cancel, reset };
 }

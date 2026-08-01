@@ -8,6 +8,7 @@ import { db } from './schema.js';
 //   pricesSha256    — installed prices-artifact hash (compared to manifest)
 //   pricesUpdatedAt — ISO date shown as "prices updated <date>"
 //   activeTrade     — persisted in-flight trade session (resume prompt)
+//   activeSoloTrade — in-flight solo trade's snapshot, both sides (resume prompt)
 //   accountSession  — signed-in account {token, username} (account/session.ts)
 //   goblinMode      — unlocks the collection pile view (useGoblinMode.ts)
 //   ownProfileAvatar — cached own profile picture for the header (account/ownProfile.ts)

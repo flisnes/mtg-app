@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CODE_LENGTH, wishPrefsMet, type CollectionEntry, type Condition, type Finish, type OracleCard, type Priced, type Printing, type Seat, type TradeLine } from '@mtg/shared';
+import { CODE_LENGTH, wishPrefsMet, type CollectionEntry, type Condition, type Finish, type OracleCard, type Priced, type Printing, type Seat, type SessionSnapshot, type TradeLine } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { collectionKey } from '../db/dataAccess.js';
@@ -18,12 +18,14 @@ import { CodeJoinForm } from '../components/CodeJoinForm.js';
 import { Icon } from '../components/icons.js';
 import { ownedBadge, type OwnedBadgeSpec } from '../components/OwnedBadge.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
-import { ScanSheet } from '../components/ScanSheet.js';
+import { ScanSheet, clearTradeScanSessions } from '../components/ScanSheet.js';
 import { TradeQr } from '../components/TradeQr.js';
 import { useDismiss } from '../components/useDismiss.js';
 import { TRADE_ENABLED } from '../trade/config.js';
 import {
+  clearPersistedSoloTrade,
   clearPersistedTrade,
+  getPersistedSoloTrade,
   getPersistedTrade,
   otherSeat,
   useTradeSession,
@@ -126,11 +128,17 @@ const BALANCE_EPSILON = 0.5;
 export function Trade() {
   const trade = useTradeSession();
   const [resumable, setResumable] = useState<ActiveTrade | null>(null);
+  // A solo trade has no relay session to resume — the stored snapshot *is* the
+  // trade, so it comes back whole (both piles included).
+  const [soloResumable, setSoloResumable] = useState<SessionSnapshot | null>(null);
   // Creator chose "Start ahead": show the board while the seat is still open.
   const [startedAhead, setStartedAhead] = useState(false);
 
   useEffect(() => {
-    if (trade.status === 'idle') void getPersistedTrade().then((t) => setResumable(t ?? null));
+    if (trade.status === 'idle') {
+      void getPersistedTrade().then((t) => setResumable(t ?? null));
+      void getPersistedSoloTrade().then((s) => setSoloResumable(s ?? null));
+    }
     if (trade.status !== 'active') setStartedAhead(false);
   }, [trade.status]);
 
@@ -175,6 +183,28 @@ export function Trade() {
                     Resume
                   </button>
                   <button onClick={() => { void clearPersistedTrade(); setResumable(null); }}>Discard</button>
+                </div>
+              </div>
+            )}
+            {soloResumable && (
+              <div className="empty-state">
+                <p>
+                  You have an unfinished solo trade (
+                  {soloCards(soloResumable)} {soloCards(soloResumable) === 1 ? 'card' : 'cards'}).
+                </p>
+                <div className="confirm-row" style={{ justifyContent: 'center' }}>
+                  <button className="primary" onClick={() => trade.resumeSolo(soloResumable)}>
+                    Resume
+                  </button>
+                  <button
+                    onClick={() => {
+                      void clearPersistedSoloTrade();
+                      clearTradeScanSessions();
+                      setSoloResumable(null);
+                    }}
+                  >
+                    Discard
+                  </button>
                 </div>
               </div>
             )}
@@ -246,6 +276,11 @@ export function Trade() {
 /** Total card count across a set of offer/history lines. */
 function countLines(lines: { quantity: number }[]): number {
   return lines.reduce((s, l) => s + l.quantity, 0);
+}
+
+/** Both piles of a stored solo trade — what the resume prompt offers back. */
+function soloCards(snap: SessionSnapshot): number {
+  return countLines(snap.offers.a) + countLines(snap.offers.b);
 }
 
 /**
@@ -329,6 +364,12 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const myOffer = offers[seat];
   const theirOffer = offers[peer];
   const editable = snap.state !== 'completed' && snap.state !== 'cancelled';
+
+  // An interrupted scan is only worth keeping while its trade is still open:
+  // sweep every other trade's leftovers, and this one's once the deal is done.
+  useEffect(() => {
+    clearTradeScanSessions(editable ? snap.sessionId : undefined);
+  }, [snap.sessionId, editable]);
 
   // Exchange wishlists + tradelists whenever the partner (re)appears, so
   // wishlist⇄tradelist matches surface without anyone pressing anything.
@@ -731,6 +772,9 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           target={{
             kind: 'trade',
             label: scanFor === 'give' ? 'Trade: you give' : 'Trade: you get',
+            // Scoped to this trade and this column, so an interrupted scan comes
+            // back to the offer it was meant for and nowhere else.
+            sessionKey: `${snap.sessionId}:${scanFor}`,
             // One commit for the whole scan, with each card's scanned count.
             onAdd: (cards) =>
               addMany(

@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.92.0
+
+- **A solo trade waits for you now.** Leaving the trade screen mid-deal used to sweep both piles off the table. A solo trade is saved as you build it, and the trade screen offers to pick it back up ("You have an unfinished solo trade (7 cards)"). It's only let go when you complete it, cancel it, or discard it from that prompt.
+- **Scanning into a trade survives an interruption too.** Scans into "You give" or "You get" are now saved like every other scan, per trade and per column, so a call coming in mid-binder doesn't cost you the pile. They're cleared once the trade is done or called off.
+- **A deck re-scan and a deck scan no longer share a saved pile.** They do very different things — one appends, one reconciles the deck to exactly what you scanned — so an interrupted scan now only ever comes back to the one it was started for.
+
 ## 0.91.0
 
 - **Tap the card art in a card sheet to blow it up.** The card fills the screen, nothing else on top of it, so you can actually read the rules text without squinting at a thumbnail. Tap anywhere (or press Escape, or use back) to drop it again. Double-faced cards keep their flip button, and foils keep their shimmer.

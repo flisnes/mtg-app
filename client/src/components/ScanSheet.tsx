@@ -74,7 +74,9 @@ export type ScanTarget =
     }
   // The whole session lands in one call: an offer is committed as a single
   // snapshot, so adding card-by-card would have each add overwrite the last.
-  | { kind: 'trade'; label?: string; onAdd: (cards: ScannedCard[]) => void };
+  // `sessionKey` scopes the persisted scan to one trade + side, so a restored
+  // scan can never land in somebody else's offer.
+  | { kind: 'trade'; label?: string; sessionKey?: string; onAdd: (cards: ScannedCard[]) => void };
 
 interface Candidate {
   scryfallId: string;
@@ -315,8 +317,11 @@ function targetLabel(target: ScanTarget): string {
 
 // A scan session survives an accidental reload: it's mirrored to localStorage
 // keyed by its destination and only cleared when the user commits or discards
-// it. Trade offers are in-memory (the offer itself is gone after a reload), so
-// there's nothing to restore — those aren't persisted.
+// it. Every destination gets its own key — a re-scan is *not* the same session
+// as an add (one reconciles the deck to exactly what was scanned, the other
+// appends), and a trade scan belongs to one trade and one side of it.
+const TRADE_SCAN_PREFIX = 'scan-session:trade:';
+
 function sessionStorageKey(target: ScanTarget): string | null {
   switch (target.kind) {
     case 'collection':
@@ -326,9 +331,29 @@ function sessionStorageKey(target: ScanTarget): string | null {
     case 'wishlist':
       return 'scan-session:wishlist';
     case 'deck':
-      return `scan-session:deck:${target.deckId}`;
+      return `scan-session:${target.rescan ? 'rescan' : 'deck'}:${target.deckId}`;
     case 'trade':
-      return null;
+      return target.sessionKey ? `${TRADE_SCAN_PREFIX}${target.sessionKey}` : null;
+  }
+}
+
+/**
+ * Drop persisted trade scans that don't belong to trade `keep` (omit it to drop
+ * all of them). An offer only exists inside its own trade, so a scan for one
+ * that has finished — or that was walked away from — has nowhere left to land.
+ */
+export function clearTradeScanSessions(keep?: string): void {
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k?.startsWith(TRADE_SCAN_PREFIX)) continue;
+      if (keep && k.startsWith(`${TRADE_SCAN_PREFIX}${keep}:`)) continue;
+      doomed.push(k);
+    }
+    for (const k of doomed) localStorage.removeItem(k);
+  } catch {
+    /* ignore */
   }
 }
 

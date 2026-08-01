@@ -83,13 +83,13 @@ export interface CardItem {
   image: string | null;
   /** Quantity: pill in list rows, corner badge on grid tiles. Hidden when exactly 1. */
   count?: number;
-  /** Small badge: after the name in list rows, top-left on grid tiles. */
+  /** Small badge: after the name in list rows, first mark in the tile's
+   *  bottom-left row on grid tiles. */
   badge?: ReactNode;
   badgeClass?: string;
   badgeTitle?: string;
   /** Where the card is filed (deck / binder / box). Sits after the primary
-   *  badge in list rows and in the tile's free top-right corner, so it never
-   *  competes with the ownership / for-trade badge. */
+   *  badge in list rows and second in the tile's bottom-left mark row. */
   place?: { node: ReactNode; cls?: string; title?: string };
   /** Dim the entry (e.g. unowned deck cards). */
   dim?: boolean;
@@ -106,7 +106,8 @@ export interface CardItem {
   mana?: string | null;
   /** Right-aligned price, list view only. */
   price?: string;
-  /** Recent price movement marker: chart glyph by the price / tile corner. */
+  /** Recent price movement marker: chart glyph by the price / last mark in the
+   *  tile's bottom-left row. */
   trend?: 'up' | 'down';
   /** Action buttons: right edge of list rows, under the image on grid tiles. */
   actions?: ReactNode;
@@ -275,18 +276,23 @@ export function CardGrid({
                 <span className="card-tile-ph">{it.name}</span>
               )}
               {it.foil && it.image && <span className="foil-sheen" aria-hidden />}
-              {it.badge && (
-                <span className={`tile-badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
-                  {it.badge}
-                </span>
-              )}
-              {it.place && (
-                <span className={`tile-place ${it.place.cls ?? ''}`} title={it.place.title}>
-                  {it.place.node}
+              {/* Corner marks share one row along the bottom edge: owned, filed, trend. */}
+              {(it.badge || it.place || it.trend) && (
+                <span className="tile-marks">
+                  {it.badge && (
+                    <span className={`tile-badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
+                      {it.badge}
+                    </span>
+                  )}
+                  {it.place && (
+                    <span className={`tile-place ${it.place.cls ?? ''}`} title={it.place.title}>
+                      {it.place.node}
+                    </span>
+                  )}
+                  {it.trend && <TrendMark dir={it.trend} tile />}
                 </span>
               )}
               {it.count != null && it.count !== 1 && <span className="tile-count">×{it.count}</span>}
-              {it.trend && <TrendMark dir={it.trend} tile />}
               {selectable && (
                 <span className={`tile-select${selected ? ' checked' : ''}`} aria-hidden>
                   {selected && <Icon name="check" size={16} />}

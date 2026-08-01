@@ -1147,17 +1147,19 @@ export function EditionPicker({
                 className={p.scryfallId === selected ? 'edition-tile edition-tile-selected' : 'edition-tile'}
                 onClick={() => onSelect(p.scryfallId)}
               >
-                {ownedIds?.has(p.scryfallId) &&
-                  (ownedForTradeIds?.has(p.scryfallId) ? (
-                    <span className="tile-badge own-trade" title="You own this printing · marked for trade">
-                      <Icon name="tradelist" size={13} />
-                    </span>
-                  ) : (
-                    <span className="tile-badge own-yes" title="You own this exact printing">
-                      <Icon name="checkDouble" size={13} />
-                    </span>
-                  ))}
-                {img ? <img src={img} alt={p.setName} loading="lazy" /> : <span className="edition-tile-ph">{p.setName}</span>}
+                <span className="edition-tile-art">
+                  {img ? <img src={img} alt={p.setName} loading="lazy" /> : <span className="edition-tile-ph">{p.setName}</span>}
+                  {ownedIds?.has(p.scryfallId) &&
+                    (ownedForTradeIds?.has(p.scryfallId) ? (
+                      <span className="tile-badge own-trade" title="You own this printing · marked for trade">
+                        <Icon name="tradelist" size={13} />
+                      </span>
+                    ) : (
+                      <span className="tile-badge own-yes" title="You own this exact printing">
+                        <Icon name="checkDouble" size={13} />
+                      </span>
+                    ))}
+                </span>
                 <span className="edition-tile-caption">
                   <SetSymbol set={p.set} title={p.setName} /> {p.set.toUpperCase()} #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
                 </span>
@@ -1231,10 +1233,12 @@ function CopyPicker({
                 className={isSelected(e) ? 'edition-tile edition-tile-selected' : 'edition-tile'}
                 onClick={() => onSelect(e)}
               >
-                <span className={`tile-badge ${e.quantityForTrade > 0 ? 'own-trade' : 'own-yes'}`} title={`You own ${e.quantity}`}>
-                  ×{e.quantity}
+                <span className="edition-tile-art">
+                  {img ? <img src={img} alt={p?.setName ?? ''} loading="lazy" /> : <span className="edition-tile-ph">{p?.setName ?? 'Unknown set'}</span>}
+                  <span className={`tile-badge ${e.quantityForTrade > 0 ? 'own-trade' : 'own-yes'}`} title={`You own ${e.quantity}`}>
+                    ×{e.quantity}
+                  </span>
                 </span>
-                {img ? <img src={img} alt={p?.setName ?? ''} loading="lazy" /> : <span className="edition-tile-ph">{p?.setName ?? 'Unknown set'}</span>}
                 <span className="edition-tile-caption">
                   {p ? (
                     <>

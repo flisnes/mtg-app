@@ -963,10 +963,6 @@ button.danger-outline {
   border-color: var(--accent);
   animation: check-pop 0.18s ease;
 }
-/* The select circle owns the top-left corner; shift the trend mark down. */
-.card-tile-img:has(.tile-select) .tile-trend {
-  top: 31px;
-}
 /* Selected tile shrinks into an accent ring (the photos-app idiom) so the
    state reads at a glance without painting over the art. */
 .card-tile-img {
@@ -1387,6 +1383,26 @@ body:has(.bulk-bar) .app-main {
   border-radius: 6px;
   line-height: 1.3;
 }
+/* One row of marks hugging the art's bottom-left corner: ownership first, then
+   where it's filed, then the price mover. Grouping them keeps every glyph off
+   the card's own text and out of the tile-count's corner. */
+.tile-marks {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  max-width: calc(100% - 8px);
+}
+/* Compound selectors on purpose: .tile-badge sets position:absolute for its
+   other homes (scan tray, edition picker), and a bare `.tile-marks > *` ties on
+   specificity and loses. */
+.tile-marks > .tile-badge,
+.tile-marks > .tile-place,
+.tile-marks > .tile-trend {
+  position: static;
+}
 .tile-badge {
   position: absolute;
   left: 4px;
@@ -1720,9 +1736,11 @@ body:has(.bulk-bar) .app-main {
 }
 /* Flip control on a double-faced card's art — bottom-right, over the image. */
 .sheet-flip {
+  /* Centered, not bottom-right: the corner sits on top of the printed P/T. */
   position: absolute;
-  right: 6px;
+  left: 50%;
   bottom: 6px;
+  transform: translateX(-50%);
   display: grid;
   place-items: center;
   width: 30px;
@@ -1890,6 +1908,12 @@ body:has(.bulk-bar) .app-main {
   padding: 0.4rem;
   text-align: left;
 }
+/* The art gets its own positioned box so overlay chips anchor to the card, not
+   to the whole tile (which also holds the set caption and price lines). */
+.edition-tile-art {
+  position: relative;
+  display: grid;
+}
 .edition-tile img {
   width: 100%;
   aspect-ratio: 488 / 680;
@@ -1901,10 +1925,10 @@ body:has(.bulk-bar) .app-main {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
-/* Ownership badge sits on the tile's image, inside its padding. */
+/* Ownership badge hugs the art's bottom-left corner, like grid tiles. */
 .edition-tile .tile-badge {
-  left: 0.6rem;
-  bottom: 0.6rem;
+  left: 4px;
+  bottom: 4px;
   display: inline-flex;
   padding: 0.1rem 0.25rem;
 }
@@ -2187,10 +2211,8 @@ button.primary {
   display: inline-flex;
   align-items: center;
 }
+/* Last chip in the tile's bottom-left mark row (see .tile-marks). */
 .tile-trend {
-  position: absolute;
-  left: 4px;
-  top: 4px;
   display: inline-flex;
   align-items: center;
   background: rgba(0, 0, 0, 0.8);
@@ -4135,12 +4157,8 @@ a.seg {
 .place-badge-count {
   font-variant-numeric: tabular-nums;
 }
-/* Grid tiles: the free top-right corner (badge takes bottom-left, count
-   bottom-right, trend/select top-left). */
+/* Grid tiles: second chip in the bottom-left mark row (see .tile-marks). */
 .tile-place {
-  position: absolute;
-  right: 4px;
-  top: 4px;
   display: inline-flex;
   align-items: center;
   gap: 0.1rem;

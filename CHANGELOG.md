@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.88.1
+
+- **The flip button no longer sits on a creature's power/toughness.** It moved to the bottom centre of the card, so you can read 7/7 and still turn the card over.
+- **Ownership checkmarks in the edition picker are back on the card.** They were floating a line too low, printed over the price under each printing.
+- **All three card-corner markers line up along the bottom-left of the art**: what you own, where it's filed (deck/binder/box), then which way its price is moving. They used to be scattered across three different corners.
+
 ## 0.88.0
 
 - **The search bar remembers what you just typed.** Tap it with nothing in the box and your last ten searches are sitting there, newest first — one tap puts a query back. Deck building is a loop of "search, look at the deck, search again", and a hand-typed `t:goblin o:"draw a card" cmc<=3` used to die every time you closed the search.

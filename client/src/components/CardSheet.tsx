@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { CollectionEntry, Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Condition, ContainerKind, CopyPrefs, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
 import {
   addDeckCard,
@@ -383,9 +383,17 @@ export function CardSheet({
     [oracleCard.oracleId],
   );
   // Where this printing is filed (deck / binder / box) — the pills under the
-  // name. Follows the edition picker: switch editions and the pills follow.
+  // name. Follows the edition picker: switch editions and the pills follow. When
+  // the sheet is about one concrete copy (a collection entry) or one slot, its
+  // finish/condition/language narrow the pills further, so two copies of a card
+  // that differ only in language each point at their own deck. A search hit or a
+  // fresh add knows no copy, so it stays per printing.
   const placements = usePlacementIndex();
-  const placement = placements?.lookup(oracleCard.oracleId, shownId);
+  const copyPrefs: CopyPrefs | undefined =
+    mode === 'edit' || mode === 'deck'
+      ? { condition: condition || undefined, finish: finish || undefined, lang: lang || undefined }
+      : undefined;
+  const placement = placements?.lookup(oracleCard.oracleId, shownId, copyPrefs);
   const ownedQty = ownedEntries?.reduce((s, e) => s + e.quantity, 0) ?? 0;
   const ownedForTrade = ownedEntries?.reduce((s, e) => s + e.quantityForTrade, 0) ?? 0;
   // Do we own the exact printing currently shown? (Not just some other edition.)

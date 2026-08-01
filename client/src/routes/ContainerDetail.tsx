@@ -288,9 +288,12 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // Which *other* containers hold the selection, and how much of it — the list
   // the "Unfile" picker offers, so resolving a double-promised card is two taps
   // rather than a hunt through every deck you own.
+  // A slot's own wants narrow the list the same way they narrow the badges: the
+  // deck holding your English copy isn't holding the Spanish one.
   const elsewhere = new Map<string, number>();
   for (const r of selectedRows) {
-    for (const p of placements?.lookup(r.oracleId, r.scryfallId).places ?? []) {
+    const wants = { condition: r.condition, finish: r.finish, lang: r.lang };
+    for (const p of placements?.lookup(r.oracleId, r.scryfallId, wants).places ?? []) {
       if (p.containerId === id) continue;
       elsewhere.set(p.containerId, (elsewhere.get(p.containerId) ?? 0) + 1);
     }
@@ -338,7 +341,12 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     setPicking(null);
     const removed = await removeDeckCardsMatching(
       containerId,
-      selectedRows.map((r) => ({ oracleId: r.oracleId, scryfallId: r.scryfallId, quantity: r.quantity })),
+      selectedRows.map((r) => ({
+        oracleId: r.oracleId,
+        scryfallId: r.scryfallId,
+        quantity: r.quantity,
+        wants: { condition: r.condition, finish: r.finish, lang: r.lang },
+      })),
     );
     toast(
       removed === 0

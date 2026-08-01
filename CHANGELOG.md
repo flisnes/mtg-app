@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.88.2
+
+- **"Filed in" tells your two copies apart.** Own a Mox Diamond in English and one in Spanish, put each in a different deck, and each copy's badge now names its own deck — instead of both claiming to be in both. The same goes for foil vs nonfoil, and for condition: whatever the deck slot says it wants of the copy filling it, only the copies that could fill it get the badge.
+- A slot that names no edition and no preferences (a pasted decklist) still counts for every copy you own, as before. **Unfile…** follows the same rule, so what the badge showed is what comes off.
+
 ## 0.88.1
 
 - **The flip button no longer sits on a creature's power/toughness.** It moved to the bottom centre of the card, so you can read 7/7 and still turn the card over.

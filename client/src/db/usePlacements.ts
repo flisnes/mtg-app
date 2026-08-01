@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
+import { prefsCompatible, type ContainerKind, type CopyPrefs, type DeckBoard } from '@mtg/shared';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { ContainerKind, DeckBoard } from '@mtg/shared';
 import { db } from './schema.js';
 
 // One shared answer to "where is this card?" — the deck / binder / box badge on
@@ -9,11 +9,13 @@ import { db } from './schema.js';
 // covers all three, and every render site reads the same index instead of
 // rolling its own query.
 //
-// Placements are per printing, not per copy: a slot says "1 Enlightened Tutor
-// (The List) in the Legacy deck", not which piece of cardboard. So the badge on
-// a Mirage copy stays clean while the List copy shows the deck glyph. A slot
-// that pins no printing (added by name, e.g. a pasted decklist) can be any
-// edition, so it counts for every printing of that card.
+// Placements narrow as far as the slot lets them. A slot says "1 Enlightened
+// Tutor (The List) in the Legacy deck", so the badge on a Mirage copy stays
+// clean while the List copy shows the deck glyph; pick the copy out of your
+// collection and the slot also remembers its finish, condition and language, so
+// your Spanish Mox Diamond and your English one point at different decks. What a
+// slot leaves unsaid it doesn't narrow on: a name-only decklist slot pins no
+// edition and no traits, so it counts for every copy of that card.
 //
 // The over-placement flag stays card-wide on purpose: it compares every copy
 // placed anywhere against every copy owned in any printing. Narrowing it per
@@ -33,8 +35,9 @@ export interface Placement {
 }
 
 export interface PlacementInfo {
-  /** Containers holding this printing (or the card, when no printing was asked
-   *  about), decks first, then binders, then boxes. */
+  /** Containers whose slots could be the copy asked about (every container
+   *  holding the card, when neither printing nor traits were given), decks
+   *  first, then binders, then boxes. */
   places: Placement[];
   /** Copies placed across every container, all printings (card-wide). */
   placed: number;
@@ -45,35 +48,50 @@ export interface PlacementInfo {
 }
 
 export interface PlacementIndex {
-  /** Where a card is filed; pass the shown printing to narrow it to that edition. */
-  lookup(oracleId: string, scryfallId?: string | null): PlacementInfo;
+  /**
+   * Where a card is filed. Pass the shown printing to narrow it to that edition,
+   * and the copy's traits (a collection entry, or what a slot wants) to narrow it
+   * to that piece of cardboard. Leave either out and it doesn't narrow on it.
+   */
+  lookup(oracleId: string, scryfallId?: string | null, copy?: CopyPrefs): PlacementInfo;
 }
 
 const NONE: PlacementInfo = { places: [], placed: 0, owned: 0, over: false };
 
 const KIND_ORDER: Record<ContainerKind, number> = { deck: 0, binder: 1, box: 2 };
 
+/** A filed slot: where it is, plus what it asks of the copy filling it. */
+interface Slot extends Placement {
+  /** The edition it pins; undefined = any (a slot added by name). */
+  scryfallId?: string;
+  prefs: CopyPrefs;
+}
+
 interface OraclePlacements {
-  /** Every container, whatever printing. */
-  any: Placement[];
-  /** Per pinned printing, already merged with the edition-less slots. */
-  perPrinting: Map<string, Placement[]>;
-  /** The edition-less slots alone — the answer for a printing with no slot of its own. */
-  anyEdition: Placement[];
+  slots: Slot[];
   placed: number;
   owned: number;
   over: boolean;
+  /** Merged answers per question asked — a list view asks the same one per row. */
+  cache: Map<string, Placement[]>;
 }
 
 // One card can sit in several boards of one deck (main + sideboard), or in one
 // deck twice under different editions; merge those into a single placement so a
 // badge counts containers, not slots.
-function mergeByContainer(places: Placement[]): Placement[] {
+function mergeByContainer(slots: Slot[]): Placement[] {
   const merged = new Map<string, Placement>();
-  for (const p of places) {
-    const cur = merged.get(p.containerId);
-    if (cur) cur.quantity += p.quantity;
-    else merged.set(p.containerId, { ...p });
+  for (const s of slots) {
+    const cur = merged.get(s.containerId);
+    if (cur) cur.quantity += s.quantity;
+    else
+      merged.set(s.containerId, {
+        containerId: s.containerId,
+        kind: s.kind,
+        name: s.name,
+        quantity: s.quantity,
+        board: s.board,
+      });
   }
   return [...merged.values()].sort(
     (a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.name.localeCompare(b.name),
@@ -96,66 +114,60 @@ export function usePlacementIndex(): PlacementIndex | undefined {
     const owned = new Map<string, number>();
     for (const e of data.entries) owned.set(e.oracleId, (owned.get(e.oracleId) ?? 0) + e.quantity);
 
-    // Raw slots bucketed per oracle card, split by the printing they pin (if any).
-    interface Buckets {
-      all: Placement[];
-      pinned: Map<string, Placement[]>;
-      loose: Placement[];
-    }
-    const byOracle = new Map<string, Buckets>();
+    // Raw slots bucketed per oracle card, each keeping the edition and the traits
+    // it asks for; the filtering happens per question at lookup time.
+    const byOracle = new Map<string, Slot[]>();
     for (const s of data.slots) {
       // An "any printing" basic promises nothing about your shelves: it isn't a
       // copy you own, so it neither files a card away nor over-promises one.
       if (s.anyBasic) continue;
       const container = byId.get(s.deckId);
       if (!container) continue; // orphan slot (a delete that hasn't synced yet)
-      const place: Placement = {
+      const slot: Slot = {
         containerId: container.id,
         kind: container.kind ?? 'deck',
         name: container.name,
         quantity: s.quantity,
         board: s.board,
+        ...(s.scryfallId ? { scryfallId: s.scryfallId } : {}),
+        prefs: { condition: s.condition, finish: s.finish, lang: s.lang },
       };
-      let g = byOracle.get(s.oracleId);
-      if (!g) {
-        g = { all: [], pinned: new Map(), loose: [] };
-        byOracle.set(s.oracleId, g);
-      }
-      g.all.push(place);
-      if (s.scryfallId) {
-        const arr = g.pinned.get(s.scryfallId);
-        if (arr) arr.push(place);
-        else g.pinned.set(s.scryfallId, [place]);
-      } else {
-        g.loose.push(place);
-      }
+      const arr = byOracle.get(s.oracleId);
+      if (arr) arr.push(slot);
+      else byOracle.set(s.oracleId, [slot]);
     }
 
     const infos = new Map<string, OraclePlacements>();
-    byOracle.forEach((g, oracleId) => {
-      const any = mergeByContainer(g.all);
-      const anyEdition = mergeByContainer(g.loose);
-      const perPrinting = new Map<string, Placement[]>();
-      // An edition-less slot could be this printing, so it rides along with every
-      // pinned one.
-      g.pinned.forEach((places, id) => perPrinting.set(id, mergeByContainer([...places, ...g.loose])));
-      const placed = any.reduce((s, p) => s + p.quantity, 0);
+    byOracle.forEach((slots, oracleId) => {
+      // Card-wide on purpose (see the note up top): every copy placed anywhere,
+      // against every copy owned in any printing.
+      const placed = slots.reduce((sum, s) => sum + s.quantity, 0);
       const ownedQty = owned.get(oracleId) ?? 0;
       infos.set(oracleId, {
-        any,
-        perPrinting,
-        anyEdition,
+        slots,
         placed,
         owned: ownedQty,
         over: placed > ownedQty,
+        cache: new Map(),
       });
     });
 
     return {
-      lookup(oracleId: string, scryfallId?: string | null) {
+      lookup(oracleId: string, scryfallId?: string | null, copy?: CopyPrefs) {
         const g = infos.get(oracleId);
         if (!g) return NONE;
-        const places = !scryfallId ? g.any : g.perPrinting.get(scryfallId) ?? g.anyEdition;
+        const key = `${scryfallId ?? ''}|${copy?.finish ?? ''}|${copy?.lang ?? ''}|${copy?.condition ?? ''}`;
+        let places = g.cache.get(key);
+        if (!places) {
+          places = mergeByContainer(
+            g.slots.filter(
+              (s) =>
+                (!scryfallId || !s.scryfallId || s.scryfallId === scryfallId) &&
+                (!copy || prefsCompatible(s.prefs, copy)),
+            ),
+          );
+          g.cache.set(key, places);
+        }
         return { places, placed: g.placed, owned: g.owned, over: g.over };
       },
     };

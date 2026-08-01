@@ -1,7 +1,9 @@
+import { prefsCompatible } from '@mtg/shared';
 import type {
   CollectionEntry,
   Condition,
   ContainerKind,
+  CopyPrefs,
   Deck,
   DeckBoard,
   DeckCard,
@@ -1379,14 +1381,15 @@ export async function removeDeckCardsBulk(ids: string[]): Promise<number> {
 /**
  * Take copies of the given cards out of *another* container — the multi-select
  * fix for a card promised to two places at once. A slot matches on the card and,
- * when both sides name one, on the printing: the same rule the placement badges
- * use, so what the picker offered is what comes off. Up to `quantity` copies are
- * taken per card, exact printing first; a slot emptied that way is deleted.
- * Returns how many copies were removed.
+ * where both sides say so, on the printing and on the finish/condition/language
+ * the slot wants: the same rule the placement badges use, so what the picker
+ * offered is what comes off. Up to `quantity` copies are taken per card, exact
+ * printing first; a slot emptied that way is deleted. Returns how many copies
+ * were removed.
  */
 export async function removeDeckCardsMatching(
   containerId: string,
-  cards: Array<{ oracleId: string; scryfallId?: string; quantity: number }>,
+  cards: Array<{ oracleId: string; scryfallId?: string; quantity: number; wants?: CopyPrefs }>,
 ): Promise<number> {
   if (cards.length === 0) return 0;
   let removed = 0;
@@ -1407,7 +1410,10 @@ export async function removeDeckCardsMatching(
       const candidates = (byOracle.get(card.oracleId) ?? []).filter(
         // A lands-box basic never claimed one of your copies, so taking it out
         // resolves nothing — it isn't a placement the picker offered either.
-        (s) => !s.anyBasic && (!s.scryfallId || !card.scryfallId || s.scryfallId === card.scryfallId),
+        (s) =>
+          !s.anyBasic &&
+          (!s.scryfallId || !card.scryfallId || s.scryfallId === card.scryfallId) &&
+          (!card.wants || prefsCompatible(s, card.wants)),
       );
       // Exact printing first, then the edition-less slots (a pasted decklist).
       const ranked = [...candidates].sort(

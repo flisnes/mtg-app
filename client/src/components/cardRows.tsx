@@ -21,9 +21,16 @@ export function collectionCardItem(
   r: JoinedEntry,
   opts: { moverFlags?: MoverFlags; placements?: PlacementIndex; onClick?: () => void },
 ): CardItem {
-  // Per printing: the badge belongs on the copy that's actually filed away, not
-  // on every edition of the card.
-  const place = placementBadge(opts.placements?.lookup(r.entry.oracleId, r.entry.scryfallId));
+  // Per copy: the badge belongs on the card that's actually filed away, not on
+  // every edition — nor on your English copy when it's the Spanish one that's in
+  // the deck.
+  const place = placementBadge(
+    opts.placements?.lookup(r.entry.oracleId, r.entry.scryfallId, {
+      condition: r.entry.condition,
+      finish: r.entry.finish,
+      lang: r.entry.lang,
+    }),
+  );
   return {
     ...(place ? { place } : {}),
     key: r.entry.id,

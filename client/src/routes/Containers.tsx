@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useNavigate } from 'react-router-dom';
-import { CONTAINER_KINDS, DECK_FORMATS, type Color, type ContainerKind, type DeckFormat } from '@mtg/shared';
+import {
+  CONTAINER_KINDS,
+  DECK_FORMATS,
+  normalizeColors,
+  type Color,
+  type ContainerKind,
+  type DeckFormat,
+} from '@mtg/shared';
 import { Page } from './Page.js';
 import { db } from '../db/schema.js';
 import { createContainer } from '../db/dataAccess.js';
@@ -14,6 +21,36 @@ import { HeaderValue, missingValue, useContainersValue, valueText } from '../com
 
 // Canonical WUBRG order for pip display.
 const COLOR_ORDER: Color[] = ['W', 'U', 'B', 'R', 'G'];
+
+/** Share of a container's coloured cards a colour needs before it earns a pip. */
+const DOMINANT_SHARE = 0.1;
+
+/**
+ * Colours that actually characterise a binder or box, weighted by copies.
+ *
+ * Not the colour-identity union a deck gets: identity counts every mana symbol
+ * on the card (Ana Battlemage is a green creature with a {U}{B} kicker), so
+ * four strays in an 800-card box lit up all five pips and a shelf of sorted
+ * boxes all looked the same. Printed colours, and only the ones pulling their
+ * weight. Colourless cards and lands abstain rather than voting for nothing —
+ * a box with no coloured cards falls back to {C}.
+ */
+function dominantColors(
+  cards: { oracleId: string; quantity: number }[],
+  oracles: Map<string, { colors: Color[] }>,
+): Color[] {
+  const tally = new Map<Color, number>();
+  let colored = 0;
+  for (const card of cards) {
+    const cardColors = normalizeColors(oracles.get(card.oracleId)?.colors);
+    if (cardColors.length === 0) continue;
+    colored += card.quantity;
+    for (const c of cardColors) tally.set(c, (tally.get(c) ?? 0) + card.quantity);
+  }
+  // A multicolour card votes in every one of its colours, so the leading colour
+  // always clears 1/5 of the pile: this never comes back empty.
+  return COLOR_ORDER.filter((c) => (tally.get(c) ?? 0) >= colored * DOMINANT_SHARE);
+}
 
 /**
  * Decks, binders and boxes, one screen with three segments. All three are rows
@@ -38,13 +75,19 @@ export function Containers({ kind }: { kind: ContainerKind }) {
         // Commander sits in the 100-card deck, so count it toward the mainboard.
         const main = cards.filter((c) => c.board !== 'side').reduce((s, c) => s + c.quantity, 0);
         const side = cards.filter((c) => c.board === 'side').reduce((s, c) => s + c.quantity, 0);
-        // Colors = union of every card's colour identity (for a legal commander
-        // deck this collapses to the commander's identity; for a box it shows
-        // what's in there, which is the point of a "blue box").
+        // A deck's colours are the union of every card's colour identity (for a
+        // legal commander deck that collapses to the commander's identity). A
+        // binder or box is hundreds of unrelated cards, where that union always
+        // saturates to WUBRG — it gets the colours it's actually made of.
         const oracles = await getOracleCardsByIds(cards.map((c) => c.oracleId));
-        const present = new Set<Color>();
-        for (const card of oracles.values()) for (const c of card.colorIdentity) present.add(c);
-        const colors = COLOR_ORDER.filter((c) => present.has(c));
+        let colors: Color[];
+        if (isDeck) {
+          const present = new Set<Color>();
+          for (const card of oracles.values()) for (const c of card.colorIdentity) present.add(c);
+          colors = COLOR_ORDER.filter((c) => present.has(c));
+        } else {
+          colors = dominantColors(cards, oracles);
+        }
         return { deck, main, side, colors };
       }),
     );

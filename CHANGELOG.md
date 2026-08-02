@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.93.3
+
+- **Binders and boxes show their actual colors now.** A 300-card box that's mostly green with a handful of blue splashers used to light up all five color pips — when you sorted by color, even tiny "off-color" piles lit up WUBRG and a whole shelf looked identical. Binders and boxes now show the colors that make up at least 10% of the colored cards in there (weighted by copies), keeping your sort honest. Decks still get the full color-identity union, since illegal manabases are a feature, not a bug.
+
 ## 0.93.2
 
 - **Mono-colored flip cards aren't multicolor anymore.** Sort a box by color and Hound Tamer, Nissa, Vastwood Seer and every other double-faced card landed in Multicolor, however green both sides were. A card that doesn't have one mana cost has one per face, so the app adds the faces' colors together — and "green plus green" was being counted as two colors. Werewolves go back to the Green pile, and `c:m` in search stops claiming them too. Genuinely two-colored flip cards are unaffected.

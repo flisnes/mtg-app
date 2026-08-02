@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { ContainerKind } from '@mtg/shared';
@@ -31,6 +31,15 @@ function useJoinedCollection(): JoinedEntry[] | undefined {
   return useLiveQuery(async () => joinCollectionEntries(await db.collection.toArray()), []);
 }
 
+/** Narrow the list to copies that are (or aren't) in a deck, binder or box. */
+type PlaceFilter = 'all' | 'unfiled' | 'filed';
+
+const PLACE_OPTIONS: [PlaceFilter, string][] = [
+  ['all', 'Filed: Any'],
+  ['unfiled', 'Filed: Nowhere'],
+  ['filed', 'Filed: Somewhere'],
+];
+
 export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean }) {
   const rows = useJoinedCollection();
   const [editing, setEditing] = useState<JoinedEntry | null>(null);
@@ -54,6 +63,9 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const sel = useMultiSelect();
   const placements = usePlacementIndex();
   const [pickingContainer, setPickingContainer] = useState(false);
+  // Deliberately not persisted: a filter that hides cards shouldn't outlive the
+  // visit that set it, or you come back tomorrow to a collection with holes.
+  const [placeFilter, setPlaceFilter] = useState<PlaceFilter>('all');
 
   // Deep link from another sheet's "In your collection" badge: ?entry=<id> opens
   // that entry's sheet here. One-shot — the param is dropped as soon as it's been
@@ -90,11 +102,34 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const needEdited = sort.key === 'updated';
   const lastEdited = useLiveQuery(async () => (needEdited ? loadLastEdited() : undefined), [needEdited]);
 
+  // "Filed" means exactly what the row's badge means: this copy — printing,
+  // finish, condition, language — sits in a deck, binder or box. So "Nowhere"
+  // is the set of cards with no placement badge, and selecting all of them is
+  // the two-tap way to grab everything still loose in the shoebox. Until the
+  // index loads there's nothing to judge by, so everything passes rather than
+  // the list flashing empty.
+  const matchesPlacement = useCallback(
+    (r: JoinedEntry) => {
+      if (placeFilter === 'all' || !placements) return true;
+      const filed =
+        placements.lookup(r.entry.oracleId, r.entry.scryfallId, {
+          condition: r.entry.condition,
+          finish: r.entry.finish,
+          lang: r.entry.lang,
+        }).places.length > 0;
+      return placeFilter === 'filed' ? filed : !filed;
+    },
+    [placeFilter, placements],
+  );
+
   // Rows this view is showing at all, before sorting: the tradelist filter plus
   // whatever the search bar is narrowing to. The pile needs the unsorted set.
   const matching = useMemo(
-    () => (rows ?? []).filter((r) => (!onlyTrade || r.entry.quantityForTrade > 0) && matchesQuery(r)),
-    [rows, onlyTrade, matchesQuery],
+    () =>
+      (rows ?? []).filter(
+        (r) => (!onlyTrade || r.entry.quantityForTrade > 0) && matchesPlacement(r) && matchesQuery(r),
+      ),
+    [rows, onlyTrade, matchesPlacement, matchesQuery],
   );
 
   const filtered = useMemo(() => {
@@ -119,7 +154,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // Page the rendered list — the collection is the one list guaranteed to reach
   // thousands of entries, so rendering all of them (each a tile with images and
   // badges) janks on phones. Reset to page one when the sort or search changes.
-  const filterSig = JSON.stringify({ onlyTrade, sort, query });
+  const filterSig = JSON.stringify({ onlyTrade, sort, query, placeFilter });
   const { limit, showMore } = usePagedLimit(filterSig, 60);
   const visible = filtered.slice(0, limit);
 
@@ -173,7 +208,9 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
 
   if (rows === undefined) return <p className="search-meta">Loading…</p>;
 
-  const emptyState = query ? (
+  // An active filter emptying the list is not an empty collection — don't offer
+  // the "add some cards" onboarding to someone who has simply filed them all.
+  const emptyState = query || placeFilter !== 'all' ? (
     <p className="search-meta">Nothing here matches.</p>
   ) : (
     <div className="empty-state">
@@ -199,6 +236,21 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
               <Icon name="check" size={15} /> Select
             </button>
           )}
+          <div className="sort-controls">
+            <select
+              className={placeFilter === 'all' ? '' : 'filter-on'}
+              value={placeFilter}
+              onChange={(e) => setPlaceFilter(e.target.value as PlaceFilter)}
+              aria-label="Filter by where cards are filed"
+              title="Show only cards that are (or aren't) in a deck, binder or box"
+            >
+              {PLACE_OPTIONS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
           {!pileMode && <SortControls prefs={sort} onChange={setSort} withChange withDates />}
           {!pileMode && <ViewToggle mode={view} onChange={setView} />}
         </div>

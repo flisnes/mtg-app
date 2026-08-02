@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.93.0
+
+- **Find the cards you haven't filed anywhere.** Collection and tradelist get a "Filed" dropdown next to the sort control: leave it on *Any*, or narrow to *Nowhere* (nothing in a deck, binder or box) or *Somewhere*. It reads the same placement the little deck/binder/box badge shows, right down to finish and language, so what you filter for is what the badges say. Pair it with Select → Select all and every loose card is picked in two taps, ready to file away in one go. The dropdown turns purple while it's hiding rows, and resets when you leave the screen.
+
 ## 0.92.1
 
 - **No more "download the card database" out of nowhere.** If a card-data update was cut short — you tapped "Update now" for a new app version, the phone put the app to sleep, the connection dropped — the app decided its database was broken and marched you back through first-run setup for the full ~17 MB. The database was fine the whole time; only its row tally was a few chunks behind. The tally no longer has a vote, and it quietly corrects itself.

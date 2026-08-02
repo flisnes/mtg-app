@@ -838,6 +838,10 @@ button.danger-outline {
   align-items: center;
   gap: 0.5rem;
   margin-left: auto;
+  /* Five controls (Select + Filed + Sort + direction + view) don't fit one
+     phone-width line — wrap onto a second row rather than run off the edge. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .search-syntax-hint code {
@@ -864,6 +868,11 @@ button.danger-outline {
   font: inherit;
   font-size: 0.85rem;
   min-width: 0;
+}
+/* A select that's actively hiding rows says so, so a short list is never a mystery. */
+.sort-controls select.filter-on {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .sort-controls .sort-dir {
   background: var(--surface);

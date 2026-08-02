@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { hasUsableLocalDb, prepareInitialDownload, type RunSync, type SyncState } from './sync.js';
 
 // Gates the app on a ready card database (beta plan §3). When a usable local DB
@@ -10,7 +10,7 @@ import { hasUsableLocalDb, prepareInitialDownload, type RunSync, type SyncState 
 
 type GateState =
   | { status: 'checking' }
-  | { status: 'confirm'; sizeBytes?: number }
+  | { status: 'confirm'; sizeBytes?: number; resuming?: boolean }
   | SyncState;
 
 const mb = (n: number) => Math.max(1, Math.round(n / 1e6));
@@ -20,6 +20,20 @@ export function CardDbGate({ children }: { children: ReactNode }) {
   const [attempt, setAttempt] = useState(0);
   const lastAttempt = useRef(-1);
   const run = useRef<RunSync | null>(null);
+
+  const startDownload = useCallback(() => {
+    const r = run.current;
+    if (!r) return;
+    void (async () => {
+      try {
+        await r((s) => setState(s));
+        setState({ status: 'ready' });
+      } catch (err) {
+        if (!navigator.onLine) return setState({ status: 'offline-no-db' });
+        setState({ status: 'error', message: err instanceof Error ? err.message : String(err) });
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     // Run once per distinct attempt — immune to StrictMode's dev double-invoke.
@@ -33,23 +47,12 @@ export function CardDbGate({ children }: { children: ReactNode }) {
       if (plan.kind === 'offline-no-db') return setState({ status: 'offline-no-db' });
       if (plan.kind === 'error') return setState({ status: 'error', message: plan.message });
       run.current = plan.run;
-      setState({ status: 'confirm', sizeBytes: plan.sizeBytes });
+      // Everything's already on disk and only the version stamp is missing —
+      // there's no data to spend, so don't make anyone tap a button for it.
+      if (plan.sizeBytes === 0) return startDownload();
+      setState({ status: 'confirm', sizeBytes: plan.sizeBytes, resuming: plan.resuming });
     })();
-  }, [attempt]);
-
-  const startDownload = () => {
-    const r = run.current;
-    if (!r) return;
-    void (async () => {
-      try {
-        await r((s) => setState(s));
-        setState({ status: 'ready' });
-      } catch (err) {
-        if (!navigator.onLine) return setState({ status: 'offline-no-db' });
-        setState({ status: 'error', message: err instanceof Error ? err.message : String(err) });
-      }
-    })();
-  };
+  }, [attempt, startDownload]);
 
   if (state.status === 'ready') return <>{children}</>;
 
@@ -66,13 +69,15 @@ export function CardDbGate({ children }: { children: ReactNode }) {
         {state.status === 'confirm' && (
           <>
             <p className="gate-msg">
-              One-time setup downloads the card database
+              {state.resuming ? 'Finishing the card database download' : 'One-time setup downloads the card database'}
               {state.sizeBytes ? ` (~${mb(state.sizeBytes)} MB)` : ' (~14 MB)'}.
             </p>
             <p className="gate-note">
-              It’s stored on your device and works offline afterwards.
+              {state.resuming
+                ? 'Only the pieces that didn’t make it last time — what you already have stays put.'
+                : 'It’s stored on your device and works offline afterwards.'}
             </p>
-            <button onClick={startDownload}>Download</button>
+            <button onClick={startDownload}>{state.resuming ? 'Continue' : 'Download'}</button>
           </>
         )}
 

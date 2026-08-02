@@ -1,6 +1,6 @@
 import type { CardDbArtifactMeta, CardDbManifest } from '@mtg/shared';
 import { db } from '../db/schema.js';
-import { getSetting } from '../db/settings.js';
+import { getSetting, setSetting } from '../db/settings.js';
 import { CARD_DB_BASE } from './config.js';
 import type { ChunkTask, ImportRequest, WorkerResponse } from './messages.js';
 import { runScryfallFallback } from './fallback.js';
@@ -27,7 +27,13 @@ export type RunSync = (onState: (s: SyncState) => void) => Promise<void>;
 
 /** What the blocking first-run path needs to do (no usable local DB yet). */
 export type InitialPlan =
-  | { kind: 'download'; sizeBytes?: number; run: RunSync }
+  | {
+      kind: 'download';
+      sizeBytes?: number;
+      run: RunSync;
+      /** Picking up an interrupted install: some chunks are already on disk. */
+      resuming?: boolean;
+    }
   | { kind: 'offline-no-db' }
   | { kind: 'error'; message: string };
 
@@ -70,10 +76,21 @@ async function readInstalled(): Promise<InstalledInfo> {
   return { version, counts, chunks, pricesSha, actualOracle, actualPrintings };
 }
 
-/** A local DB is usable if a version is recorded and the row counts still match it. */
+/**
+ * A local DB is usable once an install has run to completion (a version is
+ * stamped, last of all) and the card tables actually hold rows.
+ *
+ * Row counts are deliberately NOT part of this test. Chunk imports are atomic,
+ * but the counts bookkeeping is only checkpointed every N chunks, so any
+ * interruption — an app-update reload, a backgrounded PWA, a chunk URL that
+ * 404s — routinely leaves the recorded counts a few rows behind the tables.
+ * The database in that state is perfectly coherent (a mix of old and new
+ * chunks), yet the old equality check called it broken and sent the client back
+ * through the first-run gate for all ~17 MB. Per-chunk hashes are the real
+ * freshness signal; the background delta check picks up whatever was left.
+ */
 function localDbUsable(info: InstalledInfo): boolean {
-  if (!info.version || !info.counts) return false;
-  return info.actualOracle === info.counts.oracle && info.actualPrintings === info.counts.printings;
+  return !!info.version && info.actualOracle > 0 && info.actualPrintings > 0;
 }
 
 async function fetchManifest(base: string): Promise<CardDbManifest> {
@@ -159,7 +176,14 @@ function fallbackRun(): RunSync {
 
 /** Cheap, network-free check: is there a complete local DB we can run the app on right now? */
 export async function hasUsableLocalDb(): Promise<boolean> {
-  return localDbUsable(await readInstalled());
+  const info = await readInstalled();
+  if (!localDbUsable(info)) return false;
+  // Counts no longer gate the app, but About still shows them — reconcile a
+  // checkpoint the last run didn't reach rather than leaving a stale figure.
+  if (info.counts?.oracle !== info.actualOracle || info.counts?.printings !== info.actualPrintings) {
+    await setSetting('cardDbCounts', { oracle: info.actualOracle, printings: info.actualPrintings });
+  }
+  return true;
 }
 
 /**
@@ -184,11 +208,19 @@ export async function prepareInitialDownload(): Promise<InitialPlan> {
   // don't brick the app over it — degrade to the fallback.
   if (!manifest.v2) return fallback();
 
-  const chunks = changedChunks(manifest.v2, undefined); // fresh DB → every chunk
+  // Resume rather than restart. An install interrupted before it stamped a
+  // version still left rows and per-chunk bookkeeping behind, so only the
+  // chunks it never got are actually owed. Empty tables mean there's nothing to
+  // trust (fresh install, or the browser cleared us out) — take the lot.
+  const installed = await readInstalled();
+  const resuming = installed.actualOracle > 0 && installed.actualPrintings > 0;
+  const chunks = changedChunks(manifest.v2, resuming ? installed.chunks : undefined);
+  const prices = resuming && installed.pricesSha === manifest.v2.prices.sha256 ? null : manifest.v2.prices;
   return {
     kind: 'download',
-    sizeBytes: totalBytes(chunks, manifest.v2.prices),
-    run: workerRun(manifest.v2, manifest, chunks, manifest.v2.prices),
+    sizeBytes: totalBytes(chunks, prices),
+    run: workerRun(manifest.v2, manifest, chunks, prices),
+    resuming,
   };
 }
 

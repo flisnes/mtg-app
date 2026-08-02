@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.92.1
+
+- **No more "download the card database" out of nowhere.** If a card-data update was cut short — you tapped "Update now" for a new app version, the phone put the app to sleep, the connection dropped — the app decided its database was broken and marched you back through first-run setup for the full ~17 MB. The database was fine the whole time; only its row tally was a few chunks behind. The tally no longer has a vote, and it quietly corrects itself.
+- **An interrupted download picks up where it stopped.** Even when setup does have to run, it now only asks for the pieces that never arrived — a few hundred KB instead of starting the whole thing over. If everything already landed and only the final bookkeeping was missing, it just finishes silently.
+- **Nightly builds ship less.** Two whole-database files were still being republished every night for app versions from long before the download-only-what-changed work, and superseded pieces were never cleaned up. Both are gone, which trims the daily update for everyone.
+
 ## 0.92.0
 
 - **A solo trade waits for you now.** Leaving the trade screen mid-deal used to sweep both piles off the table. A solo trade is saved as you build it, and the trade screen offers to pick it back up ("You have an unfinished solo trade (7 cards)"). It's only let go when you complete it, cancel it, or discard it from that prompt.

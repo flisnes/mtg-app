@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import { gzipSync, createGunzip } from 'node:zlib';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 // stream-json is CommonJS; default-import the module and pull the factory off.
@@ -14,7 +14,6 @@ import type {
   OracleCard,
   PriceMap,
   PriceTuple,
-  Priced,
   Printing,
   SetTypeMap,
 } from '@mtg/shared';
@@ -34,8 +33,11 @@ import { buildSealedProducts } from './sealed.js';
 //     while the card data itself changes rarely;
 //   - sets.<hash>.json.gz — set code → set_type, for the client's non-promo
 //     printing preference (a few KB, fetched lazily);
-//   - legacy whole-file artifacts (prices embedded) for pre-chunking clients;
 //   - manifest.json tying it all together.
+//
+// Superseded artifacts are pruned after each build (one build's grace window),
+// so OUT_DIR — which CI caches and the deploy copies into the site verbatim —
+// holds what's actually served rather than every chunk ever emitted.
 //
 // Env knobs:
 //   BULK_TYPE   default 'default_cards' (use 'oracle_cards' for a fast dry run)
@@ -126,13 +128,6 @@ interface Artifact {
   count: number;
 }
 
-function emit(filename: string, json: string, count: number): Artifact {
-  const sha256 = createHash('sha256').update(json).digest('hex');
-  const gz = gzipSync(Buffer.from(json), { level: 9 });
-  writeFileSync(join(OUT_DIR, filename), gz);
-  return { filename, bytes: gz.length, sha256, count };
-}
-
 /** Emit with a content-addressed name so chunk URLs are immutable (HTTP-cache safe). */
 function emitHashed(prefix: string, data: unknown, count: number): Artifact {
   const json = JSON.stringify(data);
@@ -158,9 +153,54 @@ function emitChunks<T>(name: string, rows: T[], idOf: (row: T) => string): CardD
   });
 }
 
+/** Every `.json.gz` filename a manifest points a client at. */
+function referenced(m: CardDbManifest | null): Set<string> {
+  const out = new Set<string>();
+  if (!m) return out;
+  for (const a of [m.artifacts?.oracle, m.artifacts?.printings, m.v2?.prices, m.v2?.sealed, m.v2?.sets]) {
+    if (a) out.add(a.url);
+  }
+  for (const c of [...(m.v2?.chunks.oracle ?? []), ...(m.v2?.chunks.printings ?? [])]) out.add(c.url);
+  return out;
+}
+
+/**
+ * Drop artifacts no longer served. Filenames are content-addressed, so every
+ * build that changes a chunk writes a new file and leaves the old one sitting
+ * in OUT_DIR — which the CI cache carries forward and the deploy copies wholesale
+ * into the site, growing it by the day for files nothing links to.
+ *
+ * The previous build's files are kept as a grace window: a client that fetched
+ * the old manifest minutes before a deploy still finds the chunks it was
+ * promised, instead of 404ing mid-import.
+ */
+function pruneUnreferenced(current: CardDbManifest, previous: CardDbManifest | null): { files: number; bytes: number } {
+  const keep = referenced(current);
+  for (const url of referenced(previous)) keep.add(url);
+
+  let files = 0;
+  let bytes = 0;
+  for (const name of readdirSync(OUT_DIR)) {
+    if (!name.endsWith('.json.gz') || keep.has(name)) continue;
+    const path = join(OUT_DIR, name);
+    bytes += statSync(path).size;
+    unlinkSync(path);
+    files++;
+  }
+  return { files, bytes };
+}
+
 async function main(): Promise<void> {
   mkdirSync(OUT_DIR, { recursive: true });
   console.log(`[pipeline] bulk type: ${BULK_TYPE}`);
+
+  // Read before anything overwrites it — this build's grace window (see pruneUnreferenced).
+  let previous: CardDbManifest | null = null;
+  try {
+    previous = JSON.parse(readFileSync(join(OUT_DIR, 'manifest.json'), 'utf8')) as CardDbManifest;
+  } catch {
+    /* first build in this OUT_DIR, or an unreadable manifest — nothing to preserve */
+  }
 
   const entry = await getBulkEntry(BULK_TYPE);
   console.log(`[pipeline] ${BULK_TYPE} updated_at=${entry.updated_at} size≈${(entry.compressed_size / 1e6).toFixed(0)}MB`);
@@ -263,24 +303,10 @@ async function main(): Promise<void> {
     console.warn('[pipeline] set-type fetch failed; shipping without it:', (err as Error).message);
   }
 
-  // Legacy whole-file artifacts with prices embedded, for pre-chunking clients.
-  const priceOf = (id: string): { priceEur: number | null; priceUsd: number | null } => {
-    const p = prices[id];
-    return { priceEur: p?.[0] ?? null, priceUsd: p?.[1] ?? null };
-  };
-  const legacyOracle: Priced<OracleCard>[] = oracleCards.map((c) => ({ ...c, ...priceOf(c.defaultScryfallId) }));
-  const legacyPrintings: Priced<Printing>[] = printings.map((p) => ({ ...p, ...priceOf(p.scryfallId) }));
-  const oracleArtifact = emit('oracle-slim.json.gz', JSON.stringify(legacyOracle), legacyOracle.length);
-  const printingsArtifact = emit('printings-slim.json.gz', JSON.stringify(legacyPrintings), legacyPrintings.length);
-
   const meta = (a: Artifact) => ({ url: a.filename, bytes: a.bytes, sha256: a.sha256, count: a.count });
   const manifest: CardDbManifest = {
     cardDbVersion: entry.updated_at,
     latestAppVersion: process.env.APP_VERSION ?? clientVersion(),
-    artifacts: {
-      oracle: meta(oracleArtifact),
-      printings: meta(printingsArtifact),
-    },
     pricesUpdatedAt: entry.updated_at,
     v2: {
       dataVersion,
@@ -291,6 +317,7 @@ async function main(): Promise<void> {
     },
   };
   writeFileSync(join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  const pruned = pruneUnreferenced(manifest, previous);
 
   const mb = (n: number) => (n / 1e6).toFixed(1);
   const chunkCount = oracleChunks.length + printingsChunks.length;
@@ -298,8 +325,7 @@ async function main(): Promise<void> {
   console.log(`[pipeline] wrote artifacts to ${OUT_DIR}`);
   console.log(`[pipeline]   card data (${chunkCount} chunks)  ${mb(chunkTotal)}MB  dataVersion=${dataVersion.slice(0, 8)}`);
   console.log(`[pipeline]   ${pricesArtifact.filename}  ${mb(pricesArtifact.bytes)}MB  (${pricesArtifact.count} priced printings)`);
-  console.log(`[pipeline]   legacy oracle-slim.json.gz   ${mb(oracleArtifact.bytes)}MB  (${oracleArtifact.count} cards)`);
-  console.log(`[pipeline]   legacy printings-slim.json.gz ${mb(printingsArtifact.bytes)}MB  (${printingsArtifact.count} printings)`);
+  if (pruned.files) console.log(`[pipeline]   pruned ${pruned.files} superseded artifacts (${mb(pruned.bytes)}MB)`);
 }
 
 void main().catch((err) => {

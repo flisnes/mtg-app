@@ -128,8 +128,13 @@ export interface CardDbManifest {
   latestAppVersion: string;
   /** Optional hard floor: clients below this get the trade view blocked. */
   minSupportedVersion?: string;
-  /** Legacy whole-file artifacts (prices embedded), kept for pre-chunking clients. */
-  artifacts: {
+  /**
+   * Legacy whole-file artifacts (prices embedded), for clients older than the
+   * chunked scheme (v0.45). No longer emitted: prices ride inside them, so they
+   * churned in full every night — ~14 MB republished daily for a client
+   * generation that no longer exists.
+   */
+  artifacts?: {
     oracle: CardDbArtifactMeta;
     printings: CardDbArtifactMeta;
   };

@@ -331,6 +331,9 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         anyBasic: r.anyBasic,
         wants: { condition: r.condition, finish: r.finish, lang: r.lang },
       })),
+      // Same cardboard, new home: keep the printing and traits apart rather than
+      // merging the foil into the slot that happens to hold the nonfoil.
+      { exact: true },
     );
     toast(`Added ${selectedCopies} card${plural(selectedCopies)} to ${CONTAINER_META[targetKind].noun.toLowerCase()}`);
     sel.exit();

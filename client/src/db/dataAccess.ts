@@ -956,6 +956,21 @@ export interface SlotWants {
   lang?: string;
 }
 
+/**
+ * The stricter identity, for filing copies you physically own: printing, finish,
+ * condition and language all count. A decklist line is happy to fold "Wrath of
+ * God" into one slot however many editions you feed it; a box of cards is not,
+ * because the Alpha one and the beat-up Portal one are different pieces of
+ * cardboard sitting in there. "Any printing" basics stay their own slot as ever.
+ */
+const exactSlotKey = (
+  c: { oracleId: string; board: DeckBoard; anyBasic?: boolean; scryfallId?: string },
+  wants: SlotWants | undefined,
+) =>
+  c.anyBasic
+    ? slotKey(c)
+    : `${c.oracleId}|${c.board}|${c.scryfallId ?? ''}|${wants?.condition ?? ''}|${wants?.finish ?? ''}|${wants?.lang ?? ''}`;
+
 /** The wants worth storing — drops the "any" (undefined) ones. */
 function wantFields(wants: SlotWants | undefined): SlotWants {
   if (!wants) return {};
@@ -1024,7 +1039,9 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
 }
 
 /**
- * Bulk-add (deck import / scan / multi-select), merging by (oracleId, board).
+ * Bulk-add (deck import / scan / multi-select), merging by (oracleId, board) —
+ * or, with `exact`, by the full copy identity (printing + finish + condition +
+ * language), which is what filing cards you own out of the collection wants.
  * Every line shares a batchId so the edit-history view collapses the whole
  * operation into one entry (labelled with the deck name).
  */
@@ -1038,13 +1055,18 @@ export async function addDeckCardsBulk(
     anyBasic?: boolean;
     wants?: SlotWants;
   }>,
-  meta: { source?: EventSource } = {},
+  meta: { source?: EventSource; exact?: boolean } = {},
 ): Promise<void> {
   const batchId = newId();
+  const keyOf = meta.exact
+    ? (c: { oracleId: string; board: DeckBoard; anyBasic?: boolean; scryfallId?: string }, w?: SlotWants) =>
+        exactSlotKey(c, w)
+    : (c: { oracleId: string; board: DeckBoard; anyBasic?: boolean }) => slotKey(c);
   await db.transaction('rw', DECK_TABLES, async () => {
     const now = Date.now();
     const existing = await db.deckCards.where('deckId').equals(deckId).toArray();
-    const map = new Map(existing.map((c) => [slotKey(c), c]));
+    // A stored slot carries its wants as plain fields, so it is its own wants.
+    const map = new Map(existing.map((c) => [keyOf(c, c), c]));
     const touched = new Set<DeckCard>();
     const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
     const deck = await touchDeck(deckId, now);
@@ -1056,7 +1078,7 @@ export async function addDeckCardsBulk(
       ...(deck ? { batchLabel: deck.name } : {}),
     };
     for (const c of cards) {
-      const ex = map.get(slotKey(c));
+      const ex = map.get(keyOf(c, c.wants));
       if (ex) {
         ex.quantity += c.quantity;
         // Adopt the incoming printing and wants if the slot named none of its own
@@ -1077,7 +1099,7 @@ export async function addDeckCardsBulk(
           ...(c.anyBasic ? { anyBasic: true } : { scryfallId: c.scryfallId, ...wantFields(c.wants) }),
           updatedAt: now,
         };
-        map.set(slotKey(c), dc);
+        map.set(keyOf(c, c.wants), dc);
         touched.add(dc);
       }
       events.push({

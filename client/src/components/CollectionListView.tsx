@@ -182,15 +182,27 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     toast(`Deleted ${n} ${n === 1 ? 'entry' : 'entries'}`);
     sel.exit();
   }
-  /** File the selection into a deck, binder or box (one card per selected entry). */
+  /**
+   * File the selection into a deck, binder or box. These are cards you own and
+   * are holding, so the slots copy the entry whole: every copy of it, in that
+   * printing, finish, condition and language. Two editions of the same card stay
+   * two slots (`exact`) instead of folding into one generic line.
+   */
   async function bulkAddContainer(containerId: string, kind: ContainerKind) {
     setPickingContainer(false);
-    const n = selectedRows.length;
+    const copies = selectedRows.reduce((sum, r) => sum + r.entry.quantity, 0);
     await addDeckCardsBulk(
       containerId,
-      selectedRows.map((r) => ({ oracleId: r.entry.oracleId, quantity: 1, board: 'main' as const, scryfallId: r.entry.scryfallId })),
+      selectedRows.map((r) => ({
+        oracleId: r.entry.oracleId,
+        quantity: r.entry.quantity,
+        board: 'main' as const,
+        scryfallId: r.entry.scryfallId,
+        wants: { condition: r.entry.condition, finish: r.entry.finish, lang: r.entry.lang },
+      })),
+      { exact: true },
     );
-    toast(`Added ${n} card${plural(n)} to ${CONTAINER_META[kind].noun}`);
+    toast(`Added ${copies} card${plural(copies)} to ${CONTAINER_META[kind].noun}`);
     sel.exit();
   }
 

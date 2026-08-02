@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.93.1
+
+- **Filing from your collection files the actual cards.** "File away" from the collection multi-select used to drop a generic line into the box: right card, but printing aside, everything set to "Any" condition, finish and language, and only one copy no matter how many you own. Now the slot is a carbon copy of the entry you picked — all its copies, that printing, that finish, that condition, that language. Two editions of the same card stay two separate lines instead of collapsing into one, so your foil Japanese Forests and your beat-up English ones sit in the box as the different piles of cardboard they are. Same for "File these somewhere else too" from inside a deck, binder or box.
+
 ## 0.93.0
 
 - **Find the cards you haven't filed anywhere.** Collection and tradelist get a "Filed" dropdown next to the sort control: leave it on *Any*, or narrow to *Nowhere* (nothing in a deck, binder or box) or *Somewhere*. It reads the same placement the little deck/binder/box badge shows, right down to finish and language, so what you filter for is what the badges say. Pair it with Select → Select all and every loose card is picked in two taps, ready to file away in one go. The dropdown turns purple while it's hiding rows, and resets when you leave the screen.

@@ -1,4 +1,4 @@
-import { FORMATS, type Color, type Format, type OracleCard, type Rarity } from '@mtg/shared';
+import { FORMATS, normalizeColors, type Color, type Format, type OracleCard, type Rarity } from '@mtg/shared';
 
 // Scryfall-style search syntax. A query is whitespace-separated terms, ANDed
 // together; `-` prefixes negate a term. Bare words (or quoted phrases) match
@@ -230,7 +230,9 @@ function termMatches(entry: SearchableEntry, t: QueryTerm): boolean {
     case 'type':
       return entry.lowerType.includes(t.value);
     case 'colorset': {
-      const colors = entry.card[t.field];
+      // Normalized: pre-dedupe card DBs repeat a DFC's face colors, which would
+      // otherwise read as multicolor and break exact (=) matches.
+      const colors = normalizeColors(entry.card[t.field]);
       if (t.special === 'colorless') return t.op === '!=' ? colors.length > 0 : colors.length === 0;
       if (t.special === 'multicolor') return t.op === '!=' ? colors.length <= 1 : colors.length > 1;
       return matchColorSet(colors, t.op, t.set!);

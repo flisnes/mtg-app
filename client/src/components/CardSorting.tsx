@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Color, Finish, OracleCard } from '@mtg/shared';
+import { normalizeColors, type Color, type Finish, type OracleCard } from '@mtg/shared';
 import { priceForFinish } from '../cardDb/prices.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
 import { convertToDisplay, fmtConverted, fmtMoney } from '../price/rates.js';
@@ -209,8 +209,11 @@ function typeGroup(typeLine: string | undefined): string {
 
 function colorGroup(card: GroupableCard | undefined): string {
   if (!card) return 'Other';
-  if (card.colors.length > 1) return 'Multicolor';
-  if (card.colors.length === 1) return COLOR_NAMES[card.colors[0]!];
+  // Normalized here too: card DBs built before the DFC dedupe store a
+  // mono-colored double-faced card as e.g. ['G','G'].
+  const colors = normalizeColors(card.colors);
+  if (colors.length > 1) return 'Multicolor';
+  if (colors.length === 1) return COLOR_NAMES[colors[0]!];
   return card.typeLine.split('//')[0]!.includes('Land') ? 'Land' : 'Colorless';
 }
 

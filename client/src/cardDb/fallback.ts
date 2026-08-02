@@ -1,4 +1,4 @@
-import type { Color, Finish, OracleCard, PriceMap, PriceTuple, Printing, Rarity } from '@mtg/shared';
+import { normalizeColors, type Finish, type OracleCard, type PriceMap, type PriceTuple, type Printing, type Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { deleteSetting, setSetting } from '../db/settings.js';
 import { SCRYFALL_BULK_INDEX } from './config.js';
@@ -10,7 +10,6 @@ import { buildPriceShards } from './prices.js';
 // card, so the edition picker is limited until the VM is reachable again.
 // Runs on the main thread (rare path); the primary path uses the worker.
 
-const COLORS = new Set(['W', 'U', 'B', 'R', 'G']);
 const FINISHES = new Set(['nonfoil', 'foil', 'etched']);
 const RARITIES = new Set(['common', 'uncommon', 'rare', 'mythic', 'special', 'bonus']);
 
@@ -34,7 +33,13 @@ interface RawCard {
   digital?: boolean;
   games?: string[];
   image_uris?: { small?: string; normal?: string };
-  card_faces?: Array<{ mana_cost?: string; type_line?: string; oracle_text?: string; image_uris?: { small?: string; normal?: string } }>;
+  card_faces?: Array<{
+    mana_cost?: string;
+    type_line?: string;
+    oracle_text?: string;
+    colors?: string[];
+    image_uris?: { small?: string; normal?: string };
+  }>;
   prices?: {
     eur?: string | null;
     usd?: string | null;
@@ -44,7 +49,6 @@ interface RawCard {
   };
 }
 
-const asColors = (v?: string[]): Color[] => (v ?? []).filter((c): c is Color => COLORS.has(c));
 const asFinishes = (v?: string[]): Finish[] => {
   const f = (v ?? []).filter((x): x is Finish => FINISHES.has(x));
   return f.length ? f : ['nonfoil'];
@@ -98,8 +102,9 @@ function slim(card: RawCard): { oracle: OracleCard; printing: Printing; prices: 
     cmc: card.cmc ?? 0,
     typeLine: card.type_line || faces.map((f) => f.type_line).filter(Boolean).join(' // ') || '',
     oracleText: card.oracle_text ?? (faces.length ? faces.map((f) => f.oracle_text ?? '').join('\n//\n') : null),
-    colors: asColors(card.colors),
-    colorIdentity: asColors(card.color_identity),
+    // DFCs have no top-level `colors`, only per-face ones (mirrors the pipeline).
+    colors: normalizeColors(card.colors ?? faces.flatMap((f) => f.colors ?? [])),
+    colorIdentity: normalizeColors(card.color_identity),
     rarity: asRarity(card.rarity),
     imageSmall: img.small,
     imageNormal: img.normal,

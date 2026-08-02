@@ -1,5 +1,5 @@
 import type { Color, Finish, Format, LegalityStatus, Printing, Rarity } from '@mtg/shared';
-import { FORMATS } from '@mtg/shared';
+import { FORMATS, normalizeColors } from '@mtg/shared';
 
 // Map a raw Scryfall card object down to our slim Printing, tolerating unknown
 // and added fields (beta plan handoff note). Also carries the oracle-invariant
@@ -44,13 +44,8 @@ export interface RawCard {
   legalities?: Record<string, string>;
 }
 
-const VALID_COLORS = new Set(['W', 'U', 'B', 'R', 'G']);
 const VALID_FINISHES = new Set(['nonfoil', 'foil', 'etched']);
 const VALID_RARITIES = new Set(['common', 'uncommon', 'rare', 'mythic', 'special', 'bonus']);
-
-function colors(values: string[] | undefined): Color[] {
-  return (values ?? []).filter((c): c is Color => VALID_COLORS.has(c));
-}
 
 function finishes(values: string[] | undefined): Finish[] {
   const out = (values ?? []).filter((f): f is Finish => VALID_FINISHES.has(f));
@@ -115,12 +110,14 @@ function oracleFields(card: RawCard): {
   const typeLine = card.type_line || faces.map((f) => f.type_line).filter(Boolean).join(' // ') || '';
   const oracleText =
     card.oracle_text ?? (faces.length ? faces.map((f) => f.oracle_text ?? '').join('\n//\n') : null);
+  // DFCs carry colors per face, so union them — normalizeColors dedupes, or a
+  // mono-colored DFC would look multicolored.
   const faceColors = faces.flatMap((f) => f.colors ?? []);
   return {
     manaCost,
     typeLine,
     oracleText: oracleText || null,
-    colors: colors(card.colors ?? (faceColors.length ? faceColors : undefined)),
+    colors: normalizeColors(card.colors ?? faceColors),
   };
 }
 
@@ -197,7 +194,7 @@ export function slimCard(card: RawCard): SlimResult | null {
       typeLine: of.typeLine,
       oracleText: of.oracleText,
       colors: of.colors,
-      colorIdentity: colors(card.color_identity),
+      colorIdentity: normalizeColors(card.color_identity),
       rarity: rarity(card.rarity),
       legalities: legalities(card.legalities),
     },

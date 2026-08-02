@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.93.2
+
+- **Mono-colored flip cards aren't multicolor anymore.** Sort a box by color and Hound Tamer, Nissa, Vastwood Seer and every other double-faced card landed in Multicolor, however green both sides were. A card that doesn't have one mana cost has one per face, so the app adds the faces' colors together — and "green plus green" was being counted as two colors. Werewolves go back to the Green pile, and `c:m` in search stops claiming them too. Genuinely two-colored flip cards are unaffected.
+
 ## 0.93.1
 
 - **Filing from your collection files the actual cards.** "File away" from the collection multi-select used to drop a generic line into the box: right card, but printing aside, everything set to "Any" condition, finish and language, and only one copy no matter how many you own. Now the slot is a carbon copy of the entry you picked — all its copies, that printing, that finish, that condition, that language. Two editions of the same card stay two separate lines instead of collapsing into one, so your foil Japanese Forests and your beat-up English ones sit in the box as the different piles of cardboard they are. Same for "File these somewhere else too" from inside a deck, binder or box.

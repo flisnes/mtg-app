@@ -7,6 +7,22 @@
 
 export type Color = 'W' | 'U' | 'B' | 'R' | 'G';
 
+/** The five colors in canonical WUBRG order. */
+export const COLORS: readonly Color[] = ['W', 'U', 'B', 'R', 'G'];
+
+/**
+ * Valid colors only, deduplicated, in WUBRG order. Double-faced cards have no
+ * top-level `colors`, so we union their faces — and a mono-green werewolf then
+ * comes out as ['G','G'], which every "colors.length > 1" check reads as
+ * multicolor. Producers and consumers of `colors` both go through this, so old
+ * card DBs built before the fix still group and filter correctly.
+ */
+export function normalizeColors(values: readonly string[] | undefined): Color[] {
+  if (!values || values.length === 0) return [];
+  const seen = new Set(values);
+  return COLORS.filter((c) => seen.has(c));
+}
+
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'mythic' | 'special' | 'bonus';
 
 export type Finish = 'nonfoil' | 'foil' | 'etched';

@@ -46,7 +46,9 @@ export function collectionCardItem(
       r.entry.quantityForTrade > 0 ? (
         <>
           <Icon name="tradelist" size={12} />
-          <span className="badge-ft-count">{r.entry.quantityForTrade}</span>
+          {r.entry.quantityForTrade > 1 && (
+            <span className="badge-ft-count">{r.entry.quantityForTrade}</span>
+          )}
         </>
       ) : undefined,
     badgeClass: 'badge-ft',

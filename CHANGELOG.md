@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.93.5
+
+- **Only show the trade badge count when it is greater than 1.** The icon and outer badge wrapper still show up when quantityForTrade is 1 (or higher), maintaining the indicator while hiding the redundant number 1.
+
 ## 0.93.4
 
 - **The "for trade" badge is a badge now, not an abbreviation.** Cards you've marked for trade used to wear a cryptic "2 FT" tag in the collection. It's now the tradelist symbol with the number of copies beside it, matching the deck/binder/box badge sitting right next to it, in filled purple so the two don't blur together.

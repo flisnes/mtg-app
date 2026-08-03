@@ -9,6 +9,8 @@
   --accent-text: #ffffff;
   --danger: #ff5c5c;
   --ok: #4ec97b;
+  /* --ok, dark enough to carry white text — filled "yes" badges, not glyphs. */
+  --ok-solid: #1f7a47;
   --tab-h: 50px;
   --header-h: 58px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -2058,6 +2060,17 @@ body:has(.bulk-bar) .app-main {
   margin-top: 0.25rem;
   flex-wrap: wrap;
 }
+/* Three answers of similar weight, none of them a throwaway: stack them so each
+   reads as a sentence instead of competing for the same row. */
+.sheet-actions-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+/* Beats .sheet-actions button:first-child, whose auto margin shrinks the primary
+   to its text in a column. */
+.sheet-actions.sheet-actions-stack button:first-child {
+  margin-right: 0;
+}
 .sheet-actions .primary,
 button.primary {
   background: var(--accent);
@@ -2960,6 +2973,15 @@ button.chip[aria-pressed='true'] {
 }
 .badge.own-yes {
   background: rgba(78, 201, 123, 0.15);
+}
+/* Top rung: this is your physical copy, and it lives right here. Filled rather
+   than tinted, because it states a fact about the cardboard instead of hinting
+   at your collection — the same weight the for-trade badge carries. */
+.own-ind.own-filed,
+.badge.own-filed,
+.tile-badge.own-filed {
+  background: var(--ok-solid);
+  color: #fff;
 }
 /* Ownership badge under the card name in the card sheet. */
 .sheet-owned {
@@ -4310,8 +4332,122 @@ a.seg {
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+/* ---- Filing conflicts: one card at a time, art large enough to recognise ---- */
+.conflict-card {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+.conflict-art {
+  width: 120px;
+  max-width: 34vw;
+  border-radius: 8px;
+  flex: none;
+}
+.conflict-art-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 488 / 680;
+  padding: 0.4rem;
+  text-align: center;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.conflict-detail {
+  min-width: 0;
+}
+.conflict-name {
+  margin: 0 0 0.15rem;
+  font-size: 1.05rem;
+}
+.conflict-sum {
+  margin: 0.4rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+.conflict-sum strong {
+  color: var(--text);
+}
+.conflict-q {
+  margin: 1rem 0 0.35rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.conflict-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.conflict-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.conflict-removal {
+  margin-top: 0.6rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+/* A pill that only reports where a card is — no tapping through, so it drops the
+   pointer and the hover border the navigating pills have. */
+.place-pill-static {
+  cursor: default;
+}
+/* "Already filed somewhere else": the cards in the way, one per row, each with
+   the container(s) currently holding it. */
+.filing-clash-list {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.filing-clash {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.4rem 0.55rem;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
+.filing-clash-card {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.filing-clash-where {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+/* The container holding your actual copy — the pill half of the green badge. */
+.place-pill-backed {
+  border-color: var(--ok-solid);
+  background: var(--ok-solid);
+  color: #fff;
+}
+.place-pill-backed .place-pill-qty {
+  color: rgba(255, 255, 255, 0.75);
+}
 .place-pill-warn {
   border-color: var(--danger);
   color: var(--danger);
-  cursor: help;
+}
+.place-pill-warn:hover {
+  border-color: var(--danger);
+  background: rgba(255, 92, 92, 0.15);
 }

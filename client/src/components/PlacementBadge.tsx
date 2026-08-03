@@ -11,10 +11,12 @@ import { Icon } from './icons.js';
 //
 //   deck glyph / binder glyph / box glyph — the kind of container holding it
 //   ×N                                    — how many containers, when >1
-//   ⚠ (amber)                             — more copies placed than owned
+//   ⚠ (amber)                             — that copy is filed in more places
+//                                           than you own copies of it
 //
-// The containers are the ones holding the shown printing; the ⚠ count is
-// card-wide (see usePlacements), so it says "in total" wherever it's spelled out.
+// The ⚠ is about one piece of cardboard, not the card in the abstract: only
+// slots that name a copy of yours down to printing, finish, condition and
+// language can raise it (see usePlacements). A brewed decklist never does.
 
 export interface PlacementBadgeSpec {
   node: ReactNode;
@@ -32,7 +34,7 @@ export function placementBadge(info: PlacementInfo | undefined, size = 12): Plac
     .map((p) => `${p.name} (${p.quantity})`)
     .join(' · ');
   const title = info.over
-    ? `${detail} · ${info.placed} placed in total, only ${info.owned} owned`
+    ? `${detail} · that copy is filed ${info.claimed} times, you own ${info.owned}`
     : `In ${detail}`;
   return {
     node: (
@@ -59,12 +61,15 @@ export function PlacementPills({ info, onNavigate }: { info: PlacementInfo; onNa
     <div className="place-pills">
       {info.places.map((p) => {
         const meta = CONTAINER_META[p.kind];
+        // The container actually holding your copy gets the filled treatment, so
+        // the pills and the green badge tell the same story.
+        const backed = p.backed >= p.quantity;
         return (
           <button
             key={p.containerId}
             type="button"
-            className="place-pill"
-            title={`Go to ${p.name}`}
+            className={backed ? 'place-pill place-pill-backed' : 'place-pill'}
+            title={backed ? `Your copy is here · go to ${p.name}` : `Go to ${p.name}`}
             onClick={() => {
               onNavigate?.();
               navigate(`${meta.path}/${p.containerId}`);
@@ -77,12 +82,17 @@ export function PlacementPills({ info, onNavigate }: { info: PlacementInfo; onNa
         );
       })}
       {info.over && (
-        <span
+        <button
+          type="button"
           className="place-pill place-pill-warn"
-          title={`${info.placed} copies placed across every printing, ${info.owned} owned`}
+          title={`The same copy is filed in ${info.claimed} places and you own ${info.owned} — a card can only be in one of them. Tap to sort it out.`}
+          onClick={() => {
+            onNavigate?.();
+            navigate('/conflicts');
+          }}
         >
-          ⚠ {info.placed} placed / {info.owned} owned
-        </span>
+          ⚠ {info.claimed} filed / {info.owned} owned
+        </button>
       )}
     </div>
   );

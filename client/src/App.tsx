@@ -24,6 +24,7 @@ import { Profile } from './routes/Profile.js';
 import { ProfileDeck } from './routes/ProfileDeck.js';
 import { More } from './routes/More.js';
 import { EditHistory } from './routes/EditHistory.js';
+import { FilingConflicts } from './routes/FilingConflicts.js';
 import { Import } from './routes/Import.js';
 import { Export } from './routes/Export.js';
 import { ScanTest } from './routes/ScanTest.js';
@@ -193,6 +194,7 @@ function AppShell() {
           <Route path="/profile/:username/deck/:deckId" element={<ProfileDeck />} />
           <Route path="/more" element={<More />} />
           <Route path="/edit-history" element={<EditHistory />} />
+          <Route path="/conflicts" element={<FilingConflicts />} />
           {/* Dev harness for card scanning (S2) — deliberately not in the nav. */}
           <Route path="/scan-test" element={<ScanTest />} />
           <Route path="*" element={<Collection />} />

@@ -33,6 +33,7 @@ import {
 import { addToWishlistBulk } from '../db/dataAccess.js';
 import { checkDeckLegality, formatLabel, isBasicLand, type LegalityReport } from '../deck/legality.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
+import { useFiling } from '../deck/useFiling.js';
 import { buildDeckText } from '../deck/deckText.js';
 import { shareDeckLink } from '../deck/share.js';
 import { getUserProfile } from '../account/api.js';
@@ -64,7 +65,7 @@ import { DeckHistory, HISTORY_ANCHOR } from '../components/DeckHistory.js';
 import { BulkActionBar, type BulkAction } from '../components/BulkActionBar.js';
 import { ContainerPickerSheet } from '../components/ContainerPickerSheet.js';
 import { useMultiSelect, type MultiSelect } from '../components/useMultiSelect.js';
-import { usePlacementIndex } from '../db/usePlacements.js';
+import { usePlacementIndex, type PlacementIndex } from '../db/usePlacements.js';
 import { Icon } from '../components/icons.js';
 
 interface Row {
@@ -136,6 +137,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // to take it out of — the two halves of sorting out a card promised twice.
   const [picking, setPicking] = useState<'file' | 'unfile' | null>(null);
   const placements = usePlacementIndex();
+  const { file, sheet: filingSheet } = useFiling();
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -318,10 +320,15 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     sel.exit();
   }
 
-  /** Also file the selection into another deck, binder or box. */
+  /**
+   * File the selection into another deck, binder or box. Same cardboard, new
+   * home: the printing and traits travel with it rather than merging the foil
+   * into the slot that happens to hold the nonfoil — and a copy that's already
+   * filed elsewhere gets the move-or-both question.
+   */
   async function bulkFile(containerId: string, targetKind: ContainerKind) {
     setPicking(null);
-    await addDeckCardsBulk(
+    const mode = await file(
       containerId,
       selectedRows.map((r) => ({
         oracleId: r.oracleId,
@@ -330,12 +337,19 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         scryfallId: r.scryfallId,
         anyBasic: r.anyBasic,
         wants: { condition: r.condition, finish: r.finish, lang: r.lang },
+        label: r.oracle?.name,
+        sub: [r.printing?.setName, r.condition, r.finish, r.lang && r.lang !== 'en' ? r.lang : null]
+          .filter(Boolean)
+          .join(' · '),
       })),
-      // Same cardboard, new home: keep the printing and traits apart rather than
-      // merging the foil into the slot that happens to hold the nonfoil.
-      { exact: true },
     );
-    toast(`Added ${selectedCopies} card${plural(selectedCopies)} to ${CONTAINER_META[targetKind].noun.toLowerCase()}`);
+    if (mode === null) return;
+    const noun = CONTAINER_META[targetKind].noun.toLowerCase();
+    toast(
+      mode === 'move'
+        ? `Moved ${selectedCopies} card${plural(selectedCopies)} to ${noun}`
+        : `Added ${selectedCopies} card${plural(selectedCopies)} to ${noun}`,
+    );
     sel.exit();
   }
 
@@ -547,13 +561,14 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               view={view}
               issues={legality.issues}
               onEdit={setInfo}
+              placements={placements}
               sel={sel}
               commanderDeck={isCommander}
               emptyHint="No commander yet. Use ♛ on a card below, or the +Cmdr button in search."
             />
           )}
-          <Board title="Mainboard" rows={main} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} sel={sel} commanderDeck={isCommander} />
-          <Board title="Sideboard" rows={side} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} sel={sel} commanderDeck={isCommander} />
+          <Board title="Mainboard" rows={main} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} />
+          <Board title="Sideboard" rows={side} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} />
         </>
       ) : (
         // Storage has one pile — no boards to split it into. Slots written before
@@ -566,6 +581,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           view={view}
           issues={legality.issues}
           onEdit={setInfo}
+          placements={placements}
           sel={sel}
           emptyHint={`Nothing filed here yet. Search above, scan a stack, or select cards in your collection and file them into this ${meta.noun}.`}
         />
@@ -604,6 +620,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           onClose={() => setPicking(null)}
         />
       )}
+      {filingSheet}
 
       <DeckHistory deckId={id} kind={kind} open={historyOpen} onToggle={() => setHistoryOpen((v) => !v)} />
 
@@ -721,6 +738,7 @@ function Board({
   view,
   issues,
   onEdit,
+  placements,
   sel,
   commanderDeck = false,
   emptyHint,
@@ -733,6 +751,8 @@ function Board({
   view: ViewMode;
   issues: Map<string, string>;
   onEdit: (target: { card: Priced<OracleCard>; deckCard: DeckCardEdit }) => void;
+  /** Passed down (not re-queried) so every board reads the same allocation. */
+  placements?: PlacementIndex;
   /** Multi-select state, shared across every board so one bar covers them all. */
   sel?: MultiSelect;
   /** Commander-format deck: show move-to/from-command-zone actions. */
@@ -753,7 +773,12 @@ function Board({
     // finish, condition and language, and a copy in your collection fits. A slot
     // that leaves any of those on "any" hasn't picked a card yet, so it keeps the
     // single check even when you own the thing.
+    //
+    // Above that sits the green collection badge: this slot doesn't just match a
+    // card you own, it *holds* it. A pinned slot that lost the copy to a newer
+    // filing keeps the double check and shows up in the filing conflicts.
     const pinned = !!r.scryfallId && !!r.finish && !!r.condition && !!r.lang;
+    const filedHere = !r.anyBasic && (placements?.allocated(r.id) ?? 0) >= r.quantity;
     const own = r.anyBasic
       ? { icon: <Icon name="check" size={13} />, cls: 'own-yes', title: 'Any printing — from your lands box' }
       : ownedBadge(
@@ -767,6 +792,7 @@ function Board({
           pinned
             ? { yes: 'including the copy this slot names', no: 'but nothing matching this slot' }
             : { yes: 'including the copy this slot names', no: 'this slot hasn’t picked a copy yet' },
+          filedHere,
         );
     return {
       key: r.id,

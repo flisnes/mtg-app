@@ -2,6 +2,23 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.96.0
+
+- **A tool for sorting out double-filed cards.** The amber ⚠ told you a card was in two places and then left you to it. There's now a walkthrough at More → Filing conflicts that deals with them one at a time: it shows the card, says "you own 1, but 2 are filed away", and offers the three things that can actually be true. It's in *this* deck (takes it out of the others), you own more copies than the app knew (adds them, with the acquisition logged), or it's gone — sold, traded, lost — which removes it from your collection and unfiles it everywhere. Skip anything you don't want to decide right now.
+- **The bell tells you when there's filing to sort out.** It now shows up even when you're signed out, since this is about your own cards and nobody else's. Tapping the conflict row goes straight to the walkthrough, and the ⚠ pill in a card's sheet does the same.
+- **"Filed: In too many places"** joins the collection's filed filter, so you can also browse the offenders normally, select them, and use the ordinary bulk actions.
+
+## 0.95.0
+
+- **Filing a card now asks whether you moved it.** Pull a Sol Ring out of your commander deck and put it in a box, and the app used to cheerfully list it in both — you'd notice weeks later via an amber warning. Filing a copy that's already filed somewhere else now stops and asks: move it here, or file it in both places? One question for the whole batch, however many cards you selected, and it names the cards in the way and where they currently live. Brewing is untouched: a decklist that hasn't picked editions claims no actual cardboard, so it never triggers the question.
+- **Tick "always do this" and it stops asking.** The prompt's checkbox lands in Settings → Filing, where you can change your mind between asking each time, always moving, and always filing in both places.
+- **Caveat for scanning:** cards scanned straight into a deck, binder or box still land as generic slots, so they don't claim a specific copy and don't raise the question. File from your collection (or a card's own sheet) when you want the app to track which physical card went where.
+
+## 0.94.0
+
+- **Your deck now shows which cards are *actually* in it.** A card can only be in one place at a time, but the app couldn't say which place. A double checkmark on a deck slot meant "you own this printing" — it never told you whether that copy was sitting in this deck or promised to another one. Slots holding one of your real cards now wear a filled green collection badge, one rung above the double check, and the "Filed in" pills in the card sheet fill in green for the deck, binder or box that's holding it. Only slots that name an actual copy of yours (printing, finish, condition and language, which is what filing from your collection writes) can earn it — a brewed decklist with no editions picked stays on the checkmarks, as it should.
+- **The double-filed warning finally means something.** The amber ⚠ used to compare every copy listed anywhere against every copy you own in any printing, so a pasted decklist naming cards you were still shopping for could set it off, and a genuinely double-filed Spanish foil could hide behind copies of a different edition. It's now about one piece of cardboard: your NM English Sol Ring is filed in two decks, and you own one. If you just filed a card somewhere, that's the place that goes green — the deck it left is the one that starts complaining.
+
 ## 0.93.6
 
 - **Foils sparkle inside decks, binders and boxes too.** A slot asking for a foil or etched copy looked exactly as matte as the nonfoil next to it, so the only way to tell your shiny Sol Ring from the beat-up one was to open it. The foil sheen now shows on those cards in both list and grid view, same as in your collection. Slots still on "any finish" stay matte, since they haven't picked a shiny card yet.

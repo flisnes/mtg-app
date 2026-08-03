@@ -21,6 +21,13 @@ export type PrintingPref = 'latest' | 'latestNonPromo' | 'first' | 'cheapest';
 /** What to do when a data feed has an update waiting. */
 export type UpdatePolicy = 'ask' | 'always' | 'never';
 
+/**
+ * What to do when you file a card that's already filed somewhere else. A card can
+ * only be in one place, so 'move' is the physically honest answer — but brewing
+ * two decks around the same Sol Ring is a real thing to want, hence 'copy'.
+ */
+export type FilingPolicy = 'ask' | 'move' | 'copy';
+
 export interface Prefs {
   /** An ECB currency code (see price/rates.ts CURRENCIES). Equal to base = no conversion. */
   displayCurrency: string;
@@ -32,6 +39,8 @@ export interface Prefs {
   /** Also governs the sealed-product catalog refresh. */
   cardDbPolicy: UpdatePolicy;
   scanDataPolicy: UpdatePolicy;
+  /** Filing a copy that's already filed elsewhere: ask, move it, or file both. */
+  filingPolicy: FilingPolicy;
 }
 
 // 'ask' across the board: a fresh install downloads nothing the user didn't
@@ -44,6 +53,7 @@ const DEFAULTS: Prefs = {
   pricesPolicy: 'ask',
   cardDbPolicy: 'ask',
   scanDataPolicy: 'ask',
+  filingPolicy: 'ask',
 };
 
 const STORAGE_KEY = 'prefs';

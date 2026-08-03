@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { ContainerKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
-import { addDeckCardsBulk, removeCollectionEntriesBulk, setQuantityForTradeBulk } from '../db/dataAccess.js';
+import { removeCollectionEntriesBulk, setQuantityForTradeBulk } from '../db/dataAccess.js';
+import { useFiling } from '../deck/useFiling.js';
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode } from './CardViews.js';
 import { collectionCardItem } from './cardRows.js';
@@ -31,17 +32,21 @@ function useJoinedCollection(): JoinedEntry[] | undefined {
   return useLiveQuery(async () => joinCollectionEntries(await db.collection.toArray()), []);
 }
 
-/** Narrow the list to copies that are (or aren't) in a deck, binder or box. */
-type PlaceFilter = 'all' | 'unfiled' | 'filed';
+/** Narrow the list to copies that are (or aren't) in a deck, binder or box —
+ *  or to the ones promised to more places than you own. */
+type PlaceFilter = 'all' | 'unfiled' | 'filed' | 'conflict';
 
 const PLACE_OPTIONS: [PlaceFilter, string][] = [
   ['all', 'Filed: Any'],
   ['unfiled', 'Filed: Nowhere'],
   ['filed', 'Filed: Somewhere'],
+  ['conflict', 'Filed: In too many places'],
 ];
 
 export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean }) {
   const rows = useJoinedCollection();
+  const navigate = useNavigate();
+  const { file, sheet: filingSheet } = useFiling();
   const [editing, setEditing] = useState<JoinedEntry | null>(null);
   // The header search bar, when it's scoped to this list, narrows these rows
   // instead of covering them — so sort, Select and the bulk actions below all
@@ -111,13 +116,13 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const matchesPlacement = useCallback(
     (r: JoinedEntry) => {
       if (placeFilter === 'all' || !placements) return true;
-      const filed =
-        placements.lookup(r.entry.oracleId, r.entry.scryfallId, {
-          condition: r.entry.condition,
-          finish: r.entry.finish,
-          lang: r.entry.lang,
-        }).places.length > 0;
-      return placeFilter === 'filed' ? filed : !filed;
+      const info = placements.lookup(r.entry.oracleId, r.entry.scryfallId, {
+        condition: r.entry.condition,
+        finish: r.entry.finish,
+        lang: r.entry.lang,
+      });
+      if (placeFilter === 'conflict') return info.over;
+      return placeFilter === 'filed' ? info.places.length > 0 : info.places.length === 0;
     },
     [placeFilter, placements],
   );
@@ -186,12 +191,13 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
    * File the selection into a deck, binder or box. These are cards you own and
    * are holding, so the slots copy the entry whole: every copy of it, in that
    * printing, finish, condition and language. Two editions of the same card stay
-   * two slots (`exact`) instead of folding into one generic line.
+   * two slots instead of folding into one generic line — and any copy already
+   * filed somewhere else gets the move-or-both question (see deck/filing.ts).
    */
   async function bulkAddContainer(containerId: string, kind: ContainerKind) {
     setPickingContainer(false);
     const copies = selectedRows.reduce((sum, r) => sum + r.entry.quantity, 0);
-    await addDeckCardsBulk(
+    const mode = await file(
       containerId,
       selectedRows.map((r) => ({
         oracleId: r.entry.oracleId,
@@ -199,10 +205,19 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         board: 'main' as const,
         scryfallId: r.entry.scryfallId,
         wants: { condition: r.entry.condition, finish: r.entry.finish, lang: r.entry.lang },
+        label: r.oracle?.name,
+        sub: [r.printing?.setName, r.entry.condition, r.entry.finish, r.entry.lang !== 'en' ? r.entry.lang : null]
+          .filter(Boolean)
+          .join(' · '),
       })),
-      { exact: true },
     );
-    toast(`Added ${copies} card${plural(copies)} to ${CONTAINER_META[kind].noun}`);
+    if (mode === null) return; // backed out of the prompt — selection stays put
+    const noun = CONTAINER_META[kind].noun;
+    toast(
+      mode === 'move'
+        ? `Moved ${copies} card${plural(copies)} to ${noun}`
+        : `Added ${copies} card${plural(copies)} to ${noun}`,
+    );
     sel.exit();
   }
 
@@ -222,7 +237,9 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
 
   // An active filter emptying the list is not an empty collection — don't offer
   // the "add some cards" onboarding to someone who has simply filed them all.
-  const emptyState = query || placeFilter !== 'all' ? (
+  const emptyState = placeFilter === 'conflict' && !query ? (
+    <p className="search-meta">Nothing is double-filed. Every copy is in exactly one place.</p>
+  ) : query || placeFilter !== 'all' ? (
     <p className="search-meta">Nothing here matches.</p>
   ) : (
     <div className="empty-state">
@@ -243,6 +260,11 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           {filtered.length} entr{filtered.length === 1 ? 'y' : 'ies'} · {totalQty} card{totalQty === 1 ? '' : 's'}
         </p>
         <div className="meta-actions">
+          {placeFilter === 'conflict' && filtered.length > 0 && (
+            <button className="select-toggle" onClick={() => navigate('/conflicts')} title="Work through these one by one">
+              <Icon name="balance" size={15} /> Sort them out
+            </button>
+          )}
           {!pileMode && !sel.active && filtered.length > 0 && (
             <button className="select-toggle" onClick={sel.enter} title="Select multiple cards">
               <Icon name="check" size={15} /> Select
@@ -324,6 +346,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       {pickingContainer && (
         <ContainerPickerSheet onPick={bulkAddContainer} onClose={() => setPickingContainer(false)} />
       )}
+      {filingSheet}
 
       {editing?.oracle && <CardSheet oracleCard={editing.oracle} entry={editing.entry} onClose={() => setEditing(null)} />}
       {info?.oracle && <CardSheet oracleCard={info.oracle} initialScryfallId={info.entry.scryfallId} readOnly onClose={() => setInfo(null)} />}

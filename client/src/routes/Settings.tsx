@@ -18,7 +18,7 @@ import { setGoblinMode, useGoblinMode } from '../components/useGoblinMode.js';
 import { formatDiagnostics } from '../errorLog.js';
 import { Page } from './Page.js';
 import { fmtDate, fmtDateTime as fmtWhen } from '../util/format.js';
-import { setPrefs, type PrintingPref, type UpdatePolicy } from '../prefs.js';
+import { setPrefs, type FilingPolicy, type PrintingPref, type UpdatePolicy } from '../prefs.js';
 import { usePrefs } from '../usePrefs.js';
 import { CURRENCIES, ensureRates, rateSummary } from '../price/rates.js';
 import {
@@ -67,6 +67,7 @@ export function Settings() {
       <AccountSection />
       <CurrencySection />
       <PrintingSection />
+      <FilingSection />
       <DownloadsSection />
       <PreferencesSection />
       <DataSection signedIn={!!account.session} />
@@ -461,6 +462,54 @@ function PrintingSection() {
         />
         <span>Prefer a printing I already own, when I own one</span>
       </label>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Filing: what happens to a card that's already filed somewhere
+// ---------------------------------------------------------------------------
+
+const FILING_OPTIONS: { value: FilingPolicy; label: string; hint: string }[] = [
+  {
+    value: 'ask',
+    label: 'Ask me each time',
+    hint: 'You get the list of cards in the way and choose move or both, once per batch.',
+  },
+  {
+    value: 'move',
+    label: 'Move it to the new place',
+    hint: 'What actually happens when you pick a card up: it leaves the deck, binder or box it was in.',
+  },
+  {
+    value: 'copy',
+    label: 'File it in both places',
+    hint: 'Keeps every filing. Useful for brewing two decks around one card — the card will show up as double-filed until you sort it out.',
+  },
+];
+
+function FilingSection() {
+  const { filingPolicy } = usePrefs();
+
+  return (
+    <section className="about-section">
+      <h2>Filing</h2>
+      <p className="fine-print">
+        A card can only be in one place at a time. When you file a copy you’ve already put in a deck, binder or box,
+        this decides what happens to the old spot.
+      </p>
+
+      <label className="field">
+        Already filed elsewhere
+        <select value={filingPolicy} onChange={(e) => setPrefs({ filingPolicy: e.target.value as FilingPolicy })}>
+          {FILING_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="fine-print">{FILING_OPTIONS.find((o) => o.value === filingPolicy)?.hint}</p>
     </section>
   );
 }

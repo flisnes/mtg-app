@@ -19,6 +19,8 @@ import {
 import { getPrintingsForOracle } from '../db/queries.js';
 import { canJoinCommandZone, isBasicLand } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
+import { claimKeyOf } from '../deck/filing.js';
+import { useFiling } from '../deck/useFiling.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { PlacementPills } from './PlacementBadge.js';
 import { db } from '../db/schema.js';
@@ -389,6 +391,7 @@ export function CardSheet({
   // that differ only in language each point at their own deck. A search hit or a
   // fresh add knows no copy, so it stays per printing.
   const placements = usePlacementIndex();
+  const { file, sheet: filingSheet } = useFiling();
   const copyPrefs: CopyPrefs | undefined =
     mode === 'edit' || mode === 'deck'
       ? { condition: condition || undefined, finish: finish || undefined, lang: lang || undefined }
@@ -509,13 +512,36 @@ export function CardSheet({
         quantityForTrade: clampedForTrade,
       });
     } else if (addTo.kind === 'deck') {
-      await addDeckCard({
-        deckId: addTo.deckId,
-        oracleId: oracleCard.oracleId,
-        ...(anyBasicPicked ? { anyBasic: true } : { scryfallId, wants: wishPrefs }),
-        board,
-        quantity,
-      });
+      // A slot naming a real copy of yours (edition + all three traits) is
+      // cardboard being filed, so it goes through the filing flow and may offer
+      // to take the card out of wherever it was. Anything vaguer is a brew line
+      // that claims no copy — straight in, merging by card and board as ever.
+      const claims = !anyBasicPicked && !!claimKeyOf({ ...wishPrefs, scryfallId });
+      if (claims) {
+        const mode = await file(addTo.deckId, [
+          {
+            oracleId: oracleCard.oracleId,
+            scryfallId,
+            quantity,
+            board,
+            wants: wishPrefs,
+            label: oracleCard.name,
+            sub: [printing?.setName, condition, finish, lang !== 'en' ? lang : null].filter(Boolean).join(' · '),
+          },
+        ]);
+        if (mode === null) {
+          setBusy(false);
+          return;
+        }
+      } else {
+        await addDeckCard({
+          deckId: addTo.deckId,
+          oracleId: oracleCard.oracleId,
+          ...(anyBasicPicked ? { anyBasic: true } : { scryfallId, wants: wishPrefs }),
+          board,
+          quantity,
+        });
+      }
     } else {
       // Add mode into one of the three personal lists. An explicit button
       // (dest) wins; otherwise the sheet's own scope decides, and a
@@ -1017,6 +1043,7 @@ export function CardSheet({
           onClose={() => setNestedCard(null)}
         />
       )}
+      {filingSheet}
     </div>,
     document.body,
   );

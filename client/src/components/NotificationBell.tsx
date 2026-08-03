@@ -3,13 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import type { MatchCard } from '@mtg/shared';
 import { useNotifications } from '../account/useNotifications.js';
 import { dismissMatch, fetchMatchesNow, markAllSeen } from '../account/notifications.js';
+import { useFilingConflictCount } from '../db/usePlacements.js';
 import { Icon } from './icons.js';
 
 // Bell in the header, next to the account icon. A red dot appears when there's
-// a new match. Opening the dropdown lists every undismissed match (new ones
-// highlighted), refreshes from the server, and marks them seen so the dot
-// clears. Tapping a match opens that user's Community page with the matched
-// cards highlighted.
+// something waiting. Two kinds of thing land here:
+//
+//   Filing conflicts — local, and the reason the bell shows up even when you're
+//     signed out: a copy of yours is filed in more places than you own, which
+//     nothing else on screen is going to nag you about. Taps through to the
+//     walkthrough at /conflicts.
+//   Trade matches — from the server, when signed in. Opening the dropdown lists
+//     every undismissed match (new ones highlighted), refreshes, and marks them
+//     seen so the dot clears. Tapping one opens that user's Community page with
+//     the matched cards highlighted.
 
 function names(cards: MatchCard[], max = 3): string {
   const shown = cards.slice(0, max).map((c) => c.name);
@@ -17,8 +24,9 @@ function names(cards: MatchCard[], max = 3): string {
   return shown.join(', ') + (extra > 0 ? ` +${extra} more` : '');
 }
 
-export function NotificationBell() {
-  const { items, hasNew } = useNotifications();
+export function NotificationBell({ signedIn }: { signedIn: boolean }) {
+  const { items, hasNew: newMatches } = useNotifications();
+  const conflicts = useFilingConflictCount();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   // Which users were new at the moment the dropdown opened — kept so their
@@ -28,7 +36,8 @@ export function NotificationBell() {
   const itemsRef = useRef(items);
   itemsRef.current = items;
 
-  // Opening: freeze the "new" set for highlighting, clear the dot, refresh.
+  // Opening: freeze the "new" set for highlighting, clear the match dot, refresh.
+  // Conflicts are not "seen away" — they stay until the cards are actually sorted.
   useEffect(() => {
     if (!open) {
       setHighlightUsers(new Set());
@@ -63,23 +72,56 @@ export function NotificationBell() {
     navigate(`/community/${encodeURIComponent(username)}${query}`);
   }
 
+  // Nothing to say and nowhere to say it from: signed out with a tidy collection
+  // means the bell would only ever open on an empty panel.
+  if (!signedIn && conflicts === 0) return null;
+
+  const hasNew = newMatches || conflicts > 0;
+
   return (
     <div className="header-bell-wrap" ref={wrapRef}>
       <button
         className="header-account header-bell"
         onClick={() => setOpen((v) => !v)}
-        aria-label={hasNew ? 'Notifications: new matches' : 'Notifications'}
+        aria-label={hasNew ? 'Notifications: something needs your attention' : 'Notifications'}
         aria-expanded={open}
-        title="Trade matches"
+        title="Notifications"
       >
         <Icon name="bell" size={22} />
         {hasNew && <span className="header-bell-dot" aria-hidden />}
       </button>
 
       {open && (
-        <div className="notif-panel" role="dialog" aria-label="Trade matches">
-          <div className="notif-head">Trade matches</div>
-          {items.length === 0 ? (
+        <div className="notif-panel" role="dialog" aria-label="Notifications">
+          {conflicts > 0 && (
+            <>
+              <div className="notif-head">Needs sorting out</div>
+              <ul className="notif-list">
+                <li className="notif-item notif-item-new">
+                  <button
+                    className="notif-open"
+                    onClick={() => {
+                      setOpen(false);
+                      navigate('/conflicts');
+                    }}
+                  >
+                    <span className="notif-user">
+                      <span className="notif-new-dot" aria-hidden />
+                      {conflicts} filing conflict{conflicts === 1 ? '' : 's'}
+                    </span>
+                    <span className="notif-line">
+                      <span className="notif-tag notif-tag-have">Where is it?</span>
+                      {conflicts === 1 ? 'A card is' : 'Cards are'} filed in more places than you own copies —
+                      sort {conflicts === 1 ? 'it' : 'them'} out
+                    </span>
+                  </button>
+                </li>
+              </ul>
+            </>
+          )}
+
+          {signedIn && <div className="notif-head">Trade matches</div>}
+          {!signedIn ? null : items.length === 0 ? (
             <p className="notif-empty">
               No matches yet. When another user wants a card you have, or has one you want, it shows up here.
             </p>

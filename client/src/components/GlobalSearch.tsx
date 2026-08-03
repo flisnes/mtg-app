@@ -231,9 +231,12 @@ export function GlobalSearchBar() {
             ✕
           </button>
         ) : (
-          accountsEnabled && (
-            <>
-              {signedIn && <NotificationBell />}
+          // The bell also carries local filing conflicts, so it isn't gated on
+          // accounts being switched on at all — it hides itself when there's
+          // genuinely nothing to report.
+          <>
+            <NotificationBell signedIn={accountsEnabled && signedIn} />
+            {accountsEnabled && (
               <AccountMenu
                 signedIn={signedIn}
                 username={session?.username}
@@ -241,8 +244,8 @@ export function GlobalSearchBar() {
                 syncTone={syncTone}
                 syncLabel={syncLabel}
               />
-            </>
-          )
+            )}
+          </>
         )}
       </header>
       {open && <SearchOverlay />}

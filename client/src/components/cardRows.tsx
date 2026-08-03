@@ -3,6 +3,7 @@ import type { CardItem } from './CardViews.js';
 import type { useMoverFlags } from '../price/useMoverFlags.js';
 import type { useOwnershipIndex } from '../db/useOwnership.js';
 import type { PlacementIndex } from '../db/usePlacements.js';
+import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
 import { ownedBadge } from './OwnedBadge.js';
 import { placementBadge } from './PlacementBadge.js';
@@ -39,8 +40,16 @@ export function collectionCardItem(
     mana: r.oracle?.manaCost,
     foil: r.entry.finish !== 'nonfoil',
     count: r.entry.quantity,
-    badge: r.entry.quantityForTrade > 0 ? `${r.entry.quantityForTrade} FT` : undefined,
-    badgeClass: 'badge-trade',
+    // Tradelist glyph + how many copies are up for grabs, same shape as the
+    // "filed" badge next to it.
+    badge:
+      r.entry.quantityForTrade > 0 ? (
+        <>
+          <Icon name="tradelist" size={12} />
+          <span className="badge-ft-count">{r.entry.quantityForTrade}</span>
+        </>
+      ) : undefined,
+    badgeClass: 'badge-ft',
     badgeTitle: r.entry.quantityForTrade > 0 ? `${r.entry.quantityForTrade} for trade` : undefined,
     sub: (
       <>

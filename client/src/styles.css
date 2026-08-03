@@ -1428,9 +1428,15 @@ body:has(.bulk-bar) .app-main {
   background: var(--ok);
   color: #05230f;
 }
-.tile-badge.badge-trade {
+.tile-badge.badge-trade,
+.tile-badge.badge-ft {
   background: var(--accent);
   color: #fff;
+}
+.tile-badge.badge-ft {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
 }
 .tile-footer {
   display: flex;
@@ -2359,6 +2365,20 @@ button.primary {
 .badge-trade {
   background: rgba(124, 108, 255, 0.2);
   color: var(--accent);
+}
+/* "N copies for trade": tradelist glyph + count, filled accent so it reads as a
+   claim on the copies rather than a neutral note. */
+.badge-ft {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: var(--accent);
+  color: #fff;
+  vertical-align: middle;
+}
+.badge-ft-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 /* Value of the copies you own in a deck, binder or box. */
 .badge-value {

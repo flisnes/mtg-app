@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.93.4
+
+- **The "for trade" badge is a badge now, not an abbreviation.** Cards you've marked for trade used to wear a cryptic "2 FT" tag in the collection. It's now the tradelist symbol with the number of copies beside it, matching the deck/binder/box badge sitting right next to it, in filled purple so the two don't blur together.
+
 ## 0.93.3
 
 - **Binders and boxes show their actual colors now.** A 300-card box that's mostly green with a handful of blue splashers used to light up all five color pips — when you sorted by color, even tiny "off-color" piles lit up WUBRG and a whole shelf looked identical. Binders and boxes now show the colors that make up at least 10% of the colored cards in there (weighted by copies), keeping your sort honest. Decks still get the full color-identity union, since illegal manabases are a feature, not a bug.

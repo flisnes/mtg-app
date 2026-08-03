@@ -4,7 +4,15 @@ import { FilingChoiceSheet } from '../components/FilingChoiceSheet.js';
 import { db } from '../db/schema.js';
 import { getPrefs } from '../prefs.js';
 import { containerKind } from './containers.js';
-import { applyFiling, findFilingClashes, type FilingClash, type FilingCopy, type FilingMode } from './filing.js';
+import {
+  applyFiling,
+  applyPinning,
+  findFilingClashes,
+  type FilingClash,
+  type FilingCopy,
+  type FilingMode,
+  type PinTarget,
+} from './filing.js';
 
 /**
  * "File these cards there" for any screen that offers it, with the
@@ -13,7 +21,9 @@ import { applyFiling, findFilingClashes, type FilingClash, type FilingCopy, type
  * Render `sheet` somewhere in the caller's tree and await `file(...)`: it settles
  * the policy (ask / move / file both), asks if it must, writes the slots, and
  * resolves with the mode it used — or null if the user backed out, so the caller
- * knows not to toast or exit its selection.
+ * knows not to toast or exit its selection. `pin(...)` asks the same question for
+ * a slot already sitting in the container, which the deck assembler points at a
+ * real card rather than adding a second line.
  */
 export function useFiling() {
   const [pending, setPending] = useState<{
@@ -23,36 +33,52 @@ export function useFiling() {
     resolve: (mode: FilingMode | null) => void;
   } | null>(null);
 
+  /** Settle move-or-both for these copies; null means the user backed out. */
+  const decide = useCallback(
+    async (targetId: string, copies: FilingCopy[]): Promise<{ mode: FilingMode; clashes: FilingClash[] } | null> => {
+      const policy = getPrefs().filingPolicy;
+      // 'copy' never touches the old spot, so there's nothing to look up.
+      const clashes = policy === 'copy' ? [] : await findFilingClashes(targetId, copies);
+      if (policy !== 'ask' || clashes.length === 0) {
+        return { mode: policy === 'move' ? 'move' : 'copy', clashes };
+      }
+      const row = await db.decks.get(targetId);
+      const answer = await new Promise<FilingMode | null>((resolve) =>
+        setPending({
+          clashes,
+          targetName: row?.name ?? 'here',
+          targetKind: containerKind(row),
+          resolve,
+        }),
+      );
+      setPending(null);
+      return answer ? { mode: answer, clashes } : null;
+    },
+    [],
+  );
+
   const file = useCallback(
     async (
       targetId: string,
       copies: FilingCopy[],
       meta: { source?: EventSource } = {},
     ): Promise<FilingMode | null> => {
-      const policy = getPrefs().filingPolicy;
-      // 'copy' never touches the old spot, so there's nothing to look up.
-      const clashes = policy === 'copy' ? [] : await findFilingClashes(targetId, copies);
-      let mode: FilingMode = policy === 'move' ? 'move' : 'copy';
-
-      if (policy === 'ask' && clashes.length > 0) {
-        const row = await db.decks.get(targetId);
-        const answer = await new Promise<FilingMode | null>((resolve) =>
-          setPending({
-            clashes,
-            targetName: row?.name ?? 'here',
-            targetKind: containerKind(row),
-            resolve,
-          }),
-        );
-        setPending(null);
-        if (!answer) return null;
-        mode = answer;
-      }
-
-      await applyFiling(targetId, copies, mode, clashes, meta);
-      return mode;
+      const decided = await decide(targetId, copies);
+      if (!decided) return null;
+      await applyFiling(targetId, copies, decided.mode, decided.clashes, meta);
+      return decided.mode;
     },
-    [],
+    [decide],
+  );
+
+  const pin = useCallback(
+    async (slot: PinTarget, copy: FilingCopy): Promise<FilingMode | null> => {
+      const decided = await decide(slot.deckId, [copy]);
+      if (!decided) return null;
+      await applyPinning(slot, copy, decided.mode, decided.clashes);
+      return decided.mode;
+    },
+    [decide],
   );
 
   const sheet = pending ? (
@@ -65,5 +91,5 @@ export function useFiling() {
     />
   ) : null;
 
-  return { file, sheet };
+  return { file, pin, sheet };
 }

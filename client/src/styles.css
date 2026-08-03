@@ -1981,6 +1981,9 @@ body:has(.bulk-bar) .app-main {
 .edition-tile-art {
   position: relative;
   display: grid;
+  /* The foil sheen fills this box and inherits its rounding, so it has to match
+     the art's own corners or the shine spills past them. */
+  border-radius: 6px;
 }
 .edition-tile img {
   width: 100%;
@@ -2021,6 +2024,48 @@ body:has(.bulk-bar) .app-main {
 .edition-tile-sub {
   font-size: 0.75rem;
   color: var(--text-dim);
+}
+/* Where each of your copies is filed right now, under its traits. Picking the
+   one already in another deck means moving it, so say so before the tap. */
+.copy-tile-where {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+.copy-tile-where .place-pill {
+  font-size: 0.68rem;
+  padding: 0.05rem 0.35rem;
+  gap: 0.2rem;
+}
+.copy-tile-where .place-pill-name {
+  max-width: 7rem;
+}
+
+/* ---- "Assemble from my collection": one card at a time, with a bar to say
+   how far through the list you are. ---- */
+.assemble-sheet {
+  height: 90dvh;
+}
+.assemble-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.assemble-name {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.assemble-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.assemble-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
 }
 
 /* Set symbol inline before a printing's name in list rows (inherits the dim

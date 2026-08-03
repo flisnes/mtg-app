@@ -30,6 +30,7 @@ import { historyChange, type HistoryChange } from '../price/history.js';
 import { fmtPriceIn } from '../price/rates.js';
 import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { CardHistory } from './CardHistory.js';
+import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
 import { EventSheet } from './EventSheet.js';
 import { Icon, type IconName } from './icons.js';
 import { OptionsMenu } from './OptionsMenu.js';
@@ -108,8 +109,10 @@ export interface SessionCardValues {
 /** Sentinel for the "any printing" edition option in wish mode. */
 const ANY_PRINTING = '';
 
-export const FINISH_LABELS: Record<Finish, string> = { nonfoil: 'Nonfoil', foil: 'Foil', etched: 'Etched' };
-export const LANGS = ['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht'];
+// Lives with the copy tiles that spell a finish out; re-exported here because
+// every other caller reaches for it through the card sheet.
+export { FINISH_LABELS };
+export const LANGS =['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht'];
 
 /** One Edition dropdown entry, optionally annotated (e.g. "×2, 1 for trade"). */
 function printingOption(p: Priced<Printing>, note?: string) {
@@ -1275,91 +1278,6 @@ export function EditionPicker({
                   <SetSymbol set={p.set} title={p.setName} /> {p.set.toUpperCase()} #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
                 </span>
                 <span className="edition-tile-sub">{notes?.get(p.scryfallId) ?? formatPrice(p) ?? ''}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** How a copy reads in the picker: "NM · Foil · ja". */
-function copyDetail(e: CollectionEntry): string {
-  const bits: string[] = [e.condition];
-  if (e.finish !== 'nonfoil') bits.push(FINISH_LABELS[e.finish]);
-  if (e.lang !== 'en') bits.push(e.lang);
-  return bits.join(' · ');
-}
-
-/**
- * The copies of one card you actually own, as pickable tiles — the container
- * slot's "pick one from my collection". Picking a copy fills in the slot's
- * edition, finish, condition and language in one tap, which is what turns a
- * vague "I need a Lightning Bolt" into "this Beta one, lightly played".
- */
-function CopyPicker({
-  copies,
-  printings,
-  selected,
-  onSelect,
-  onClose,
-}: {
-  copies: CollectionEntry[];
-  printings: Priced<Printing>[];
-  /** What the sheet currently asks for, so the matching tile reads as selected. */
-  selected: { scryfallId: string; condition: Condition | ''; finish: Finish | ''; lang: string };
-  onSelect: (copy: CollectionEntry) => void;
-  onClose: () => void;
-}) {
-  useDismiss(onClose);
-  const byId = new Map(printings.map((p) => [p.scryfallId, p]));
-  const isSelected = (e: CollectionEntry) =>
-    e.scryfallId === selected.scryfallId &&
-    e.condition === selected.condition &&
-    e.finish === selected.finish &&
-    e.lang === selected.lang;
-  return (
-    <div
-      className="sheet-backdrop"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClose();
-      }}
-    >
-      <div className="sheet edition-picker-sheet" role="dialog" aria-label="Your copies" onClick={(e) => e.stopPropagation()}>
-        <div className="edition-picker-head">
-          <h2>Your copies</h2>
-          <button onClick={onClose} aria-label="Close">
-            <Icon name="close" size={18} />
-          </button>
-        </div>
-        <div className="edition-grid">
-          {copies.map((e) => {
-            const p = byId.get(e.scryfallId);
-            const img = p?.imageSmall ?? p?.imageNormal;
-            return (
-              <button
-                key={e.id}
-                className={isSelected(e) ? 'edition-tile edition-tile-selected' : 'edition-tile'}
-                onClick={() => onSelect(e)}
-              >
-                <span className="edition-tile-art">
-                  {img ? <img src={img} alt={p?.setName ?? ''} loading="lazy" /> : <span className="edition-tile-ph">{p?.setName ?? 'Unknown set'}</span>}
-                  <span className={`tile-badge ${e.quantityForTrade > 0 ? 'own-trade' : 'own-yes'}`} title={`You own ${e.quantity}`}>
-                    ×{e.quantity}
-                  </span>
-                </span>
-                <span className="edition-tile-caption">
-                  {p ? (
-                    <>
-                      <SetSymbol set={p.set} title={p.setName} /> {p.set.toUpperCase()} #{p.collectorNumber}
-                    </>
-                  ) : (
-                    'Unknown edition'
-                  )}
-                </span>
-                <span className="edition-tile-sub">{copyDetail(e)}</span>
               </button>
             );
           })}

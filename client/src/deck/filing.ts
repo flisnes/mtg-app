@@ -1,5 +1,12 @@
 import type { Condition, ContainerKind, DeckBoard, EventSource, Finish } from '@mtg/shared';
-import { addDeckCardsBulk, collectionKey, removeDeckCardsMatching, type SlotWants } from '../db/dataAccess.js';
+import {
+  addDeckCardsBulk,
+  collectionKey,
+  removeDeckCardsMatching,
+  setDeckCardQuantity,
+  updateDeckCard,
+  type SlotWants,
+} from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
 import { containerKind } from './containers.js';
 
@@ -133,26 +140,7 @@ export async function applyFiling(
   clashes: FilingClash[] = [],
   meta: { source?: EventSource } = {},
 ): Promise<void> {
-  if (mode === 'move' && clashes.length > 0) {
-    const bySource = new Map<string, { oracleId: string; scryfallId?: string; quantity: number; wants?: SlotWants }[]>();
-    for (const clash of clashes) {
-      let remaining = clash.copy.quantity;
-      for (const place of clash.elsewhere) {
-        if (remaining <= 0) break;
-        const take = Math.min(remaining, place.quantity);
-        remaining -= take;
-        const arr = bySource.get(place.containerId) ?? [];
-        arr.push({
-          oracleId: clash.copy.oracleId,
-          ...(clash.copy.scryfallId ? { scryfallId: clash.copy.scryfallId } : {}),
-          quantity: take,
-          ...(clash.copy.wants ? { wants: clash.copy.wants } : {}),
-        });
-        bySource.set(place.containerId, arr);
-      }
-    }
-    for (const [containerId, cards] of bySource) await removeDeckCardsMatching(containerId, cards);
-  }
+  if (mode === 'move') await unfileElsewhere(clashes);
 
   await addDeckCardsBulk(
     targetId,
@@ -165,5 +153,85 @@ export async function applyFiling(
       ...(c.wants ? { wants: c.wants } : {}),
     })),
     { exact: true, ...meta },
+  );
+}
+
+/**
+ * Take the clashing copies out of wherever they were, oldest claim first and
+ * only up to the number being filed: pull one Island out of a box of four and
+ * the other three stay put.
+ */
+async function unfileElsewhere(clashes: FilingClash[]): Promise<void> {
+  if (clashes.length === 0) return;
+  const bySource = new Map<string, { oracleId: string; scryfallId?: string; quantity: number; wants?: SlotWants }[]>();
+  for (const clash of clashes) {
+    let remaining = clash.copy.quantity;
+    for (const place of clash.elsewhere) {
+      if (remaining <= 0) break;
+      const take = Math.min(remaining, place.quantity);
+      remaining -= take;
+      const arr = bySource.get(place.containerId) ?? [];
+      arr.push({
+        oracleId: clash.copy.oracleId,
+        ...(clash.copy.scryfallId ? { scryfallId: clash.copy.scryfallId } : {}),
+        quantity: take,
+        ...(clash.copy.wants ? { wants: clash.copy.wants } : {}),
+      });
+      bySource.set(place.containerId, arr);
+    }
+  }
+  for (const [containerId, cards] of bySource) await removeDeckCardsMatching(containerId, cards);
+}
+
+/** A slot the assembler is about to point at a real card. */
+export interface PinTarget {
+  id: string;
+  deckId: string;
+  oracleId: string;
+  board: DeckBoard;
+  /** Copies the slot is asking for right now. */
+  quantity: number;
+}
+
+/**
+ * Point a slot that's already in the container at one of your copies — what
+ * "assemble this deck from my collection" does, card by card.
+ *
+ * Filing *adds* cardboard to a container; pinning re-describes cardboard that's
+ * already listed there, so it must never change the count. When the chosen copy
+ * covers the whole slot the slot simply takes on its printing and traits. When
+ * it covers only part of it (four Bolts wanted, two of that printing owned) the
+ * slot splits: the pinned copies become their own line and the rest stays the
+ * vague slot it was, ready for the next copy.
+ */
+export async function applyPinning(
+  slot: PinTarget,
+  copy: FilingCopy,
+  mode: FilingMode,
+  clashes: FilingClash[] = [],
+): Promise<void> {
+  if (mode === 'move') await unfileElsewhere(clashes);
+  const take = Math.min(copy.quantity, slot.quantity);
+  if (take >= slot.quantity) {
+    await updateDeckCard(slot.id, {
+      quantity: slot.quantity,
+      scryfallId: copy.scryfallId ?? '',
+      ...(copy.wants ? { wants: copy.wants } : {}),
+    });
+    return;
+  }
+  await setDeckCardQuantity(slot.id, slot.quantity - take);
+  await addDeckCardsBulk(
+    slot.deckId,
+    [
+      {
+        oracleId: slot.oracleId,
+        quantity: take,
+        board: slot.board,
+        ...(copy.scryfallId ? { scryfallId: copy.scryfallId } : {}),
+        ...(copy.wants ? { wants: copy.wants } : {}),
+      },
+    ],
+    { exact: true },
   );
 }

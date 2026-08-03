@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.97.0
+
+- **Assemble a deck from your collection.** New in a deck's ⋯ menu (and as "Fill from my collection" in a binder or box): it walks the list card by card and shows the copies you actually own, so you can point each slot at a real piece of cardboard instead of a vague "a Lightning Bolt". Only cards that still need one come up, so a list that's already sorted says so and doesn't waste your time. Pick a copy that lives in another deck and you get the usual "did you move it?" question, because that's exactly what building a deck out of another one is.
+- **A copy that only covers part of a slot fills what it can.** Four Bolts wanted, two of that printing owned: it pins those two, leaves the other two as they were, and stays on the card so you can find a home for the rest.
+- **"Your copies" says where each copy is.** The picker under Edition (and the assembler that reuses it) now shows a pill per copy: the deck, binder or box holding it, green when that's your actual card, or "On the shelf" when it's free. Foils shine there too, so you can tell your shiny one from the matte one without reading the fine print.
+
 ## 0.96.0
 
 - **A tool for sorting out double-filed cards.** The amber ⚠ told you a card was in two places and then left you to it. There's now a walkthrough at More → Filing conflicts that deals with them one at a time: it shows the card, says "you own 1, but 2 are filed away", and offers the three things that can actually be true. It's in *this* deck (takes it out of the others), you own more copies than the app knew (adds them, with the acquisition logged), or it's gone — sold, traded, lost — which removes it from your collection and unfiles it everywhere. Skip anything you don't want to decide right now.

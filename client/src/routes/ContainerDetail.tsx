@@ -59,6 +59,7 @@ import {
   type GroupKey,
 } from '../components/CardSorting.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
+import { AssembleSheet, type AssembleItem } from '../components/AssembleSheet.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { Sheet } from '../components/Sheet.js';
 import { DeckHistory, HISTORY_ANCHOR } from '../components/DeckHistory.js';
@@ -136,6 +137,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // 'file' picks somewhere to *also* put the selection, 'unfile' picks somewhere
   // to take it out of — the two halves of sorting out a card promised twice.
   const [picking, setPicking] = useState<'file' | 'unfile' | null>(null);
+  // The "assemble from my collection" walkthrough, frozen at the moment it opens.
+  const [assembling, setAssembling] = useState<AssembleItem[] | null>(null);
   const placements = usePlacementIndex();
   const { file, sheet: filingSheet } = useFiling();
 
@@ -277,6 +280,25 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     } else {
       toast(`${forTrade ? 'Marked' : 'Unmarked'} ${n} card${n === 1 ? '' : 's'} for trade`);
     }
+  }
+
+  /**
+   * Walk the list card by card, pointing each slot at a copy you actually own.
+   * Only slots that still need one make the cut: a lands-box basic claims no
+   * cardboard, a card you don't own can't be pulled off a shelf, and a slot
+   * already backed by your copy is built. The list is frozen here so resolving a
+   * card doesn't shuffle the ones behind it.
+   */
+  function startAssemble() {
+    if (!placements) return;
+    const todo: AssembleItem[] = [...commander, ...main, ...side]
+      .filter((r) => !r.anyBasic && r.owned > 0 && placements.allocated(r.id) < r.quantity)
+      .map((r) => ({ slotId: r.id, oracleId: r.oracleId, name: r.oracle?.name ?? 'Card' }));
+    if (todo.length === 0) {
+      toast(`Every card here you own is already pointed at a copy`);
+      return;
+    }
+    setAssembling(todo);
   }
 
   // ---- Multi-select ----------------------------------------------------
@@ -444,6 +466,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         <OptionsMenu
           label={`${meta.Noun} options`}
           actions={[
+            // Go and find the cardboard: the list card by card, each showing the
+            // copies you own, so the slots end up pointing at real cards.
+            {
+              label: isDeck ? 'Assemble from my collection' : 'Fill from my collection',
+              icon: 'collection',
+              onClick: startAssemble,
+            },
             { label: 'Scan cards', icon: 'camera', onClick: () => setScanning('add') },
             { label: `Re-scan ${meta.noun}`, icon: 'refresh', onClick: () => setScanning('rescan') },
             { label: 'Import list', icon: 'import', onClick: () => setShowImport((v) => !v) },
@@ -621,6 +650,15 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         />
       )}
       {filingSheet}
+
+      {assembling && (
+        <AssembleSheet
+          containerId={id}
+          kind={kind}
+          items={assembling}
+          onClose={() => setAssembling(null)}
+        />
+      )}
 
       <DeckHistory deckId={id} kind={kind} open={historyOpen} onToggle={() => setHistoryOpen((v) => !v)} />
 

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.93.6
+
+- **Foils sparkle inside decks, binders and boxes too.** A slot asking for a foil or etched copy looked exactly as matte as the nonfoil next to it, so the only way to tell your shiny Sol Ring from the beat-up one was to open it. The foil sheen now shows on those cards in both list and grid view, same as in your collection. Slots still on "any finish" stay matte, since they haven't picked a shiny card yet.
+
 ## 0.93.5
 
 - **Only show the trade badge count when it is greater than 1.** The icon and outer badge wrapper still show up when quantityForTrade is 1 (or higher), maintaining the indicator while hiding the redundant number 1.

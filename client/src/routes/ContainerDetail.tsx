@@ -773,6 +773,9 @@ function Board({
       name: r.oracle?.name ?? '(unknown card)',
       image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
       mana: r.oracle?.manaCost,
+      // A slot asking for a foil or etched copy gets the sheen; one still on
+      // "any finish" hasn't picked a shiny card yet, so it stays matte.
+      foil: !!r.finish && r.finish !== 'nonfoil',
       count: r.quantity,
       badge: issue ? '⚠' : own?.icon,
       badgeClass: issue ? 'badge-illegal' : own?.cls,

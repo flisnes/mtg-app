@@ -95,7 +95,7 @@ export function countsOf(p: TransferPayload): TransferCounts {
 const CONDS = new Set<string>(CONDITIONS);
 const FINS = new Set<string>(FINISHES);
 const FORMATS = new Set<string>(DECK_FORMATS);
-const BOARDS = new Set<string>(['main', 'side', 'commander']);
+const BOARDS = new Set<string>(['main', 'side', 'commander', 'token']);
 const CONTAINERS = new Set<string>(CONTAINER_KINDS);
 
 const MAX_ID = 64;

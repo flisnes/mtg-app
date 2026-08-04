@@ -134,7 +134,9 @@ export async function computeDeckWishlistCandidates(deckId: string): Promise<Mis
   const needed = new Map<string, number>();
   const slotsFor = new Map<string, DeckCard[]>();
   for (const dc of deckCards) {
-    if (dc.anyBasic) continue;
+    // Tokens aren't shopping list material, and "any basic" is already covered
+    // by the lands box.
+    if (dc.anyBasic || dc.board === 'token') continue;
     needed.set(dc.oracleId, (needed.get(dc.oracleId) ?? 0) + dc.quantity);
     const list = slotsFor.get(dc.oracleId);
     if (list) list.push(dc);

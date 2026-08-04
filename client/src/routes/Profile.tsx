@@ -412,7 +412,7 @@ function FavoriteDeckPickerSheet({
     return Promise.all(
       list.map(async (deck) => {
         const cards = await db.deckCards.where('deckId').equals(deck.id).toArray();
-        const main = cards.filter((c) => c.board !== 'side').reduce((s, c) => s + c.quantity, 0);
+        const main = cards.filter((c) => c.board !== 'side' && c.board !== 'token').reduce((s, c) => s + c.quantity, 0);
         const oracles = await getOracleCardsByIds(cards.map((c) => c.oracleId));
         const present = new Set<Color>();
         for (const card of oracles.values()) for (const c of card.colorIdentity) present.add(c);

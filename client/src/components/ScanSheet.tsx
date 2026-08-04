@@ -285,6 +285,7 @@ const BOARD_LABELS: Record<DeckBoard, string> = {
   main: 'mainboard',
   side: 'sideboard',
   commander: 'command zone',
+  token: 'tokens',
 };
 
 /** Which boards a scan can target: storage has one pile, decks have boards

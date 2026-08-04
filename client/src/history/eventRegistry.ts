@@ -28,7 +28,13 @@ export const REASON_LABELS: Record<RemovalReason, string> = {
 };
 
 function boardSuffix(e: UserEvent): string {
-  return e.board === 'side' ? ' (sideboard)' : e.board === 'commander' ? ' (commander)' : '';
+  return e.board === 'side'
+    ? ' (sideboard)'
+    : e.board === 'commander'
+      ? ' (commander)'
+      : e.board === 'token'
+        ? ' (tokens)'
+        : '';
 }
 
 // Deck slot events cover binders and boxes too (same rows); `deckKind` is only
@@ -111,6 +117,7 @@ const BOARD_NOUN: Record<DeckBoard, string> = {
   main: 'mainboard',
   side: 'sideboard',
   commander: 'command zone',
+  token: 'tokens',
 };
 
 /**

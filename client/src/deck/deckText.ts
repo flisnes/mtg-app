@@ -6,6 +6,7 @@ export function buildDeckText(
   main: Array<{ name: string; quantity: number }>,
   side: Array<{ name: string; quantity: number }>,
   commander: Array<{ name: string; quantity: number }> = [],
+  tokens: Array<{ name: string; quantity: number }> = [],
 ): string {
   const lines: string[] = [];
   if (commander.length) {
@@ -14,6 +15,9 @@ export function buildDeckText(
   lines.push('Deck', ...main.map((c) => `${c.quantity} ${c.name}`));
   if (side.length) {
     lines.push('', 'Sideboard', ...side.map((c) => `${c.quantity} ${c.name}`));
+  }
+  if (tokens.length) {
+    lines.push('', 'Tokens', ...tokens.map((c) => `${c.quantity} ${c.name}`));
   }
   return lines.join('\n') + '\n';
 }

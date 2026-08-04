@@ -48,8 +48,13 @@ export interface WishlistEntry {
   updatedAt: number;
 }
 
-/** 'commander' is the command zone: counts toward Commander's 100, sets the color identity. */
-export type DeckBoard = 'main' | 'side' | 'commander';
+/**
+ * 'commander' is the command zone: counts toward Commander's 100, sets the
+ * color identity. 'token' holds the tokens a deck needs to play — never
+ * counted toward deck/sideboard size or checked for format legality (see
+ * deck/legality.ts), and never a wishlist candidate.
+ */
+export type DeckBoard = 'main' | 'side' | 'commander' | 'token';
 
 /**
  * What a `Deck` row actually is. Decks are lists you brew (format, legality,

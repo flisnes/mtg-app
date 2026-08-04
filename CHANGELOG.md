@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.98.0
+
+- **Decks now have a Tokens section.** Add a card that makes tokens — The Necrobloom, say — and the deck view suggests the tokens it needs, spelled out the way you'd actually look for them ("0/1 Green Plant Creature Token", "2/2 Black Zombie Creature Token"). One tap files a suggestion into the deck's own Tokens board; you can also pick a token from your collection or search for one directly, same as any other card. Tokens carry the usual ownership checkmarks and collection badge, but never count toward your deck or sideboard size, and never trip a legality warning.
+
 ## 0.97.0
 
 - **Assemble a deck from your collection.** New in a deck's ⋯ menu (and as "Fill from my collection" in a binder or box): it walks the list card by card and shows the copies you actually own, so you can point each slot at a real piece of cardboard instead of a vague "a Lightning Bolt". Only cards that still need one come up, so a list that's already sorted says so and doesn't waste your time. Pick a copy that lives in another deck and you get the usual "did you move it?" question, because that's exactly what building a deck out of another one is.

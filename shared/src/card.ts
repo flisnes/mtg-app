@@ -62,6 +62,16 @@ export interface OracleCard {
   defaultScryfallId: string;
   /** Legality per tracked format (oracle-invariant). May be absent on card DBs imported before this field existed. */
   legalities?: Partial<Record<Format, LegalityStatus>>;
+  /** Power/toughness for creatures (incl. token creatures); absent for non-creatures and on card DBs built before this field. */
+  power?: string | null;
+  toughness?: string | null;
+  /**
+   * Oracle ids of tokens this card is known to create (Scryfall's `all_parts`,
+   * component `token`), deduplicated. Absent/empty when the card creates none,
+   * or on card DBs built before this field existed. Drives the deck view's
+   * "tokens you'll need" suggestions.
+   */
+  tokenOracleIds?: string[];
 }
 
 /** One physical printing (one Scryfall card id). Drives the edition picker + collection editing. */

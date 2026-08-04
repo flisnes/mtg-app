@@ -148,10 +148,11 @@ function deckCopyOverride(o: OracleCard): number | null {
 
 /**
  * Tokens, emblems, and art-series "cards" are not real deck cards — they never
- * belong in the mainboard, command zone, or sideboard. Mirrors the collision
+ * belong in the mainboard, command zone, or sideboard (a deck's token board is
+ * exactly where they do belong — see checkDeckLegality). Mirrors the collision
  * ranking in cardDb/search.ts (real cards beat these namesakes).
  */
-const isNonDeckCard = (o: OracleCard) => {
+export const isNonDeckCard = (o: OracleCard) => {
   const t = o.typeLine.toLowerCase();
   return t.startsWith('token') || t.includes('emblem') || t === 'card';
 };
@@ -264,11 +265,15 @@ export interface LegalityReport {
   issues: Map<string, string>;
 }
 
-export function checkDeckLegality(format: DeckFormat | undefined, cards: LegalityCard[]): LegalityReport {
+export function checkDeckLegality(format: DeckFormat | undefined, allCards: LegalityCard[]): LegalityReport {
   const fmt = format ?? 'casual';
   const rule = RULES[fmt];
   if (fmt === 'casual') return { checked: false, legal: true, problems: [], issues: new Map() };
   const key = fmt as Format;
+  // The token board holds tokens on purpose — it's not part of the deck being
+  // built, so it's exempt from every rule below (size, copy limits, legality,
+  // color identity, isNonDeckCard's "no tokens in the deck" check).
+  const cards = allCards.filter((c) => c.board !== 'token');
 
   const problems: string[] = [];
   const issues = new Map<string, string>();

@@ -154,14 +154,14 @@ export function sanitizeProfile(v: unknown): UserProfile {
 /** Per-deck line cap (a Commander deck is ~100; this is just a sanity bound). */
 export const MAX_DECK_LINES = 1_000;
 
-const DECK_BOARDS = new Set(['main', 'side', 'commander']);
+const DECK_BOARDS = new Set(['main', 'side', 'commander', 'token']);
 
 export interface PublicDeckLine {
   oracleId: string;
   /** Preferred printing for display; absent = the card's default printing. */
   scryfallId?: string;
   quantity: number;
-  /** DeckBoard as a plain string ('main' | 'side' | 'commander'). */
+  /** DeckBoard as a plain string ('main' | 'side' | 'commander' | 'token'). */
   board: string;
 }
 

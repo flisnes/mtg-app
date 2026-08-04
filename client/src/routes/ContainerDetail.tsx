@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   DECK_FORMATS,
+  type Color,
   type Condition,
   type ContainerKind,
   type DeckBoard,
@@ -21,6 +22,7 @@ import {
   type MissingCard,
 } from '../db/queries.js';
 import {
+  addDeckCard,
   addDeckCardsBulk,
   deleteDeck,
   removeDeckCardsBulk,
@@ -109,6 +111,28 @@ function wantsDetail(r: Row): string {
   return bits.join(' · ');
 }
 
+const COLOR_WORDS: Record<Color, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
+
+/**
+ * Tokens are named tersely by Scryfall ("Plant", "Zombie") — this rebuilds the
+ * fuller description players actually use ("0/1 Green Plant Creature Token"),
+ * out of fields every card already carries. Non-creature tokens (Treasure,
+ * Clue, an emblem…) already have a self-describing name, so they just get
+ * " Token" appended.
+ */
+function tokenLabel(o: {
+  name: string;
+  colors: Color[];
+  typeLine: string;
+  power?: string | null;
+  toughness?: string | null;
+}): string {
+  if (!/\bCreature\b/i.test(o.typeLine)) return `${o.name} Token`;
+  const pt = o.power != null && o.toughness != null ? `${o.power}/${o.toughness} ` : '';
+  const colorWord = o.colors.length ? `${o.colors.map((c) => COLOR_WORDS[c]).join('/')} ` : '';
+  return `${pt}${colorWord}${o.name} Creature Token`;
+}
+
 /**
  * One deck, binder or box. The same screen for all three (they're the same
  * stored row — see deck/containers.ts): a binder or box simply has no format, no
@@ -144,7 +168,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
-    if (!deck) return { deck: null, rows: [] as Row[] };
+    if (!deck) return { deck: null, rows: [] as Row[], suggestedTokens: [] as Priced<OracleCard>[] };
     const cards = await db.deckCards.where('deckId').equals(id).toArray();
     const [oracleMap, printMap, owned] = await Promise.all([
       getOracleCardsByIds(cards.map((c) => c.oracleId)),
@@ -165,7 +189,19 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       printing: c.scryfallId ? printMap.get(c.scryfallId) : undefined,
       owned: owned.get(c.oracleId) ?? 0,
     }));
-    return { deck, rows };
+    // Tokens the deck's own cards create, minus whatever's already sitting in
+    // the token board — the "you'll need these" suggestions.
+    const haveToken = new Set(rows.filter((r) => r.board === 'token').map((r) => r.oracleId));
+    const neededTokenIds = new Set<string>();
+    for (const r of rows) {
+      if (r.board === 'token') continue;
+      for (const t of r.oracle?.tokenOracleIds ?? []) {
+        if (!haveToken.has(t)) neededTokenIds.add(t);
+      }
+    }
+    const suggestedMap = neededTokenIds.size ? await getOracleCardsByIds(neededTokenIds) : new Map<string, Priced<OracleCard>>();
+    const suggestedTokens = [...suggestedMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return { deck, rows, suggestedTokens };
   }, [id]);
 
   // Fetch our own favorited-deck ids so the share action knows whether this
@@ -194,7 +230,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   }, [account.enabled, account.session?.token, account.session?.username]);
 
   const summary = useMemo(() => {
-    const rows = data?.rows ?? [];
+    // Tokens never count toward "cards" — they're a separate, uncounted list.
+    const rows = (data?.rows ?? []).filter((r) => r.board !== 'token');
     const byOracle = new Map<string, { need: number; owned: number }>();
     let need = 0;
     let have = 0;
@@ -220,7 +257,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // Worth leads with the copies you own — the money actually sitting here — and
   // names the gap separately, rather than quoting a total you don't hold.
   const value = useMemo(() => {
-    const rows = data?.rows ?? [];
+    const rows = (data?.rows ?? []).filter((r) => r.board !== 'token');
     if (rows.length === 0) return undefined;
     // A slot that asks for a foil is worth the foil price.
     return containerValue(rows.map((r) => ({ ...r, printing: pricedForFinish(r.printing, r.finish ?? 'nonfoil') })));
@@ -251,6 +288,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const commander = sortRows(data.rows.filter((r) => r.board === 'commander'), sort);
   const main = sortRows(data.rows.filter((r) => r.board === 'main'), sort);
   const side = sortRows(data.rows.filter((r) => r.board === 'side'), sort);
+  const tokens = sortRows(data.rows.filter((r) => r.board === 'token'), sort);
 
   async function goBack() {
     // Only a brewed deck has "cards I still need" — a binder or box holds what
@@ -291,7 +329,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
    */
   function startAssemble() {
     if (!placements) return;
-    const todo: AssembleItem[] = [...commander, ...main, ...side]
+    const todo: AssembleItem[] = [...commander, ...main, ...side, ...tokens]
       .filter((r) => !r.anyBasic && r.owned > 0 && placements.allocated(r.id) < r.quantity)
       .map((r) => ({ slotId: r.id, oracleId: r.oracleId, name: r.oracle?.name ?? 'Card' }));
     if (todo.length === 0) {
@@ -432,6 +470,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       main.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
       side.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
       commander.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
+      tokens.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
     );
     downloadText(`${deck.name.replace(/[^\w-]+/g, '_')}.txt`, text);
     toast(`Exported ${meta.noun}`);
@@ -598,6 +637,12 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           )}
           <Board title="Mainboard" rows={main} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} />
           <Board title="Sideboard" rows={side} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} />
+          {tokens.length > 0 && (
+            <Board title="Tokens" rows={tokens} deckId={id} group="none" view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} />
+          )}
+          {data.suggestedTokens.length > 0 && (
+            <TokenSuggestions deckId={id} view={view} tokens={data.suggestedTokens} />
+          )}
         </>
       ) : (
         // Storage has one pile — no boards to split it into. Slots written before
@@ -834,7 +879,7 @@ function Board({
         );
     return {
       key: r.id,
-      name: r.oracle?.name ?? '(unknown card)',
+      name: r.oracle ? (r.board === 'token' ? tokenLabel(r.oracle) : r.oracle.name) : '(unknown card)',
       image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
       mana: r.oracle?.manaCost,
       // A slot asking for a foil or etched copy gets the sheen; one still on
@@ -893,6 +938,59 @@ function Board({
       ) : (
         <CardItems view={view} items={rows.map(toItem)} {...selProps} />
       )}
+    </div>
+  );
+}
+
+/**
+ * Tokens the deck's own cards make (Scryfall's `all_parts`) that aren't in the
+ * token board yet — e.g. The Necrobloom suggesting its Plant and Zombie. One
+ * tap files it into the token board at quantity 1; the badge shows whether a
+ * copy is already sitting in the collection, same as any other card.
+ */
+function TokenSuggestions({ deckId, view, tokens }: { deckId: string; view: ViewMode; tokens: Priced<OracleCard>[] }) {
+  const ownership = useOwnershipIndex();
+  const [adding, setAdding] = useState<Set<string>>(new Set());
+
+  async function add(oracleId: string) {
+    setAdding((s) => new Set(s).add(oracleId));
+    await addDeckCard({ deckId, oracleId, board: 'token', quantity: 1 });
+  }
+
+  const items: CardItem[] = tokens.map((o) => {
+    const own = ownedBadge(ownership?.lookup(o.oracleId), 13, {
+      yes: 'you own a copy of this token',
+      no: "you don't own this token yet",
+    });
+    return {
+      key: o.oracleId,
+      name: tokenLabel(o),
+      image: o.imageSmall,
+      badge: own?.icon,
+      badgeClass: own?.cls,
+      badgeTitle: own?.title,
+      sub: 'made by a card in this deck',
+      actions: (
+        <button
+          className="ghost icon-only"
+          disabled={adding.has(o.oracleId)}
+          onClick={() => void add(o.oracleId)}
+          aria-label={`Add ${tokenLabel(o)} to tokens`}
+          title="Add to tokens"
+        >
+          <Icon name="plus" size={16} />
+        </button>
+      ),
+    };
+  });
+
+  return (
+    <div className="about-section">
+      <h2>
+        Suggested tokens <span className="badge">{tokens.length}</span>
+      </h2>
+      <p className="fine-print">Made by cards in this deck. Doesn’t count toward your deck size.</p>
+      <CardItems view={view} items={items} />
     </div>
   );
 }

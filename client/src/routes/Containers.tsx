@@ -73,7 +73,8 @@ export function Containers({ kind }: { kind: ContainerKind }) {
       list.map(async (deck) => {
         const cards = await db.deckCards.where('deckId').equals(deck.id).toArray();
         // Commander sits in the 100-card deck, so count it toward the mainboard.
-        const main = cards.filter((c) => c.board !== 'side').reduce((s, c) => s + c.quantity, 0);
+        // Tokens never count toward the deck's size.
+        const main = cards.filter((c) => c.board !== 'side' && c.board !== 'token').reduce((s, c) => s + c.quantity, 0);
         const side = cards.filter((c) => c.board === 'side').reduce((s, c) => s + c.quantity, 0);
         // A deck's colours are the union of every card's colour identity (for a
         // legal commander deck that collapses to the commander's identity). A

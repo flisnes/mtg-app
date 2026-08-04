@@ -99,7 +99,7 @@ function betterRepresentative(a: SlimResult, b: SlimResult): SlimResult {
   return a.printing.scryfallId <= b.printing.scryfallId ? a : b;
 }
 
-function toOracleCard(rep: SlimResult): OracleCard {
+function toOracleCard(rep: SlimResult, tokenOracleIds: string[]): OracleCard {
   const { printing, oracle } = rep;
   return {
     oracleId: printing.oracleId,
@@ -118,6 +118,8 @@ function toOracleCard(rep: SlimResult): OracleCard {
       : {}),
     defaultScryfallId: printing.scryfallId,
     legalities: oracle.legalities,
+    ...(oracle.power != null || oracle.toughness != null ? { power: oracle.power, toughness: oracle.toughness } : {}),
+    ...(tokenOracleIds.length ? { tokenOracleIds } : {}),
   };
 }
 
@@ -254,7 +256,18 @@ async function main(): Promise<void> {
   console.log(`[pipeline] parsed ${seen} cards, kept ${kept} paper printings, ${reps.size} oracle cards`);
   if (duplicates > 0) console.warn(`[pipeline] dropped ${duplicates} duplicate printings (same scryfallId seen twice in bulk data)`);
 
-  const oracleCards: OracleCard[] = [...reps.values()].map(toOracleCard);
+  // Resolve each representative's all_parts token references (scryfall ids) to
+  // oracle ids, so the client can look up "the tokens this card creates" by
+  // oracle card like any other card DB lookup.
+  const scryfallToOracle = new Map(printings.map((p) => [p.scryfallId, p.oracleId]));
+  const oracleCards: OracleCard[] = [...reps.values()].map((rep) => {
+    const tokenIds = new Set<string>();
+    for (const tokenScryfallId of rep.tokenPartIds) {
+      const oracleId = scryfallToOracle.get(tokenScryfallId);
+      if (oracleId && oracleId !== rep.printing.oracleId) tokenIds.add(oracleId);
+    }
+    return toOracleCard(rep, [...tokenIds].sort());
+  });
 
   // Chunked price-less artifacts (primary path).
   const oracleChunks = emitChunks('oracle-slim', oracleCards, (c) => c.oracleId);

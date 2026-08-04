@@ -23,6 +23,8 @@ export interface RawCard {
   colors?: string[];
   color_identity?: string[];
   rarity: string;
+  power?: string;
+  toughness?: string;
   finishes?: string[];
   games?: string[];
   digital?: boolean;
@@ -32,8 +34,12 @@ export interface RawCard {
     type_line?: string;
     oracle_text?: string;
     colors?: string[];
+    power?: string;
+    toughness?: string;
     image_uris?: { small?: string; normal?: string };
   }>;
+  /** Tokens (and other closely-related cards) this card produces or pairs with. */
+  all_parts?: Array<{ id: string; component: string }>;
   prices?: {
     eur?: string | null;
     usd?: string | null;
@@ -104,6 +110,8 @@ function oracleFields(card: RawCard): {
   typeLine: string;
   oracleText: string | null;
   colors: Color[];
+  power: string | null;
+  toughness: string | null;
 } {
   const faces = card.card_faces ?? [];
   const manaCost = card.mana_cost || faces.map((f) => f.mana_cost).filter(Boolean).join(' // ') || null;
@@ -113,11 +121,16 @@ function oracleFields(card: RawCard): {
   // DFCs carry colors per face, so union them — normalizeColors dedupes, or a
   // mono-colored DFC would look multicolored.
   const faceColors = faces.flatMap((f) => f.colors ?? []);
+  // Front-face power/toughness (mirrors images()) — plenty for tokens, which
+  // are virtually always single-faced.
+  const face = faces.find((f) => f.power != null || f.toughness != null);
   return {
     manaCost,
     typeLine,
     oracleText: oracleText || null,
     colors: normalizeColors(card.colors ?? faceColors),
+    power: card.power ?? face?.power ?? null,
+    toughness: card.toughness ?? face?.toughness ?? null,
   };
 }
 
@@ -146,7 +159,11 @@ export interface SlimResult {
     colorIdentity: Color[];
     rarity: Rarity;
     legalities: Partial<Record<Format, LegalityStatus>>;
+    power: string | null;
+    toughness: string | null;
   };
+  /** Scryfall ids of tokens this printing's `all_parts` says the card creates. */
+  tokenPartIds: string[];
 }
 
 /** Returns null for cards we deliberately drop (no oracle_id, non-paper, digital-only). */
@@ -178,6 +195,10 @@ export function slimCard(card: RawCard): SlimResult | null {
     ...(back ? { imageBackSmall: back.small, imageBackNormal: back.normal } : {}),
   };
 
+  const tokenPartIds = (card.all_parts ?? [])
+    .filter((p) => p.component === 'token' && p.id !== card.id)
+    .map((p) => p.id);
+
   return {
     printing,
     prices: {
@@ -197,6 +218,9 @@ export function slimCard(card: RawCard): SlimResult | null {
       colorIdentity: normalizeColors(card.color_identity),
       rarity: rarity(card.rarity),
       legalities: legalities(card.legalities),
+      power: of.power,
+      toughness: of.toughness,
     },
+    tokenPartIds,
   };
 }

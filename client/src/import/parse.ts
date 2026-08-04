@@ -50,6 +50,7 @@ function sectionBoard(line: string): DeckBoard | undefined {
   if (!SECTION_RE.test(line) || /^\d/.test(line)) return undefined;
   if (/^sideboard\b/i.test(line)) return 'side';
   if (/^commander\b/i.test(line)) return 'commander';
+  if (/^tokens?\b/i.test(line)) return 'token';
   return 'main';
 }
 

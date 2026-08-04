@@ -17,7 +17,7 @@ import {
   updateWishlistEntry,
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
-import { canJoinCommandZone, isBasicLand } from '../deck/legality.js';
+import { canJoinCommandZone, isBasicLand, isNonDeckCard } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { claimKeyOf } from '../deck/filing.js';
 import { useFiling } from '../deck/useFiling.js';
@@ -214,6 +214,10 @@ export function CardSheet({
   // Adding into a real deck (not a binder or box): only then are the sideboard
   // and command-zone buttons meaningful.
   const deckAddIsDeck = deckAdd && (addTo.kind !== 'deck' || (addTo.containerKind ?? 'deck') === 'deck');
+  // A token, emblem, or art card can never be a real deck card (see
+  // isNonDeckCard) — offering it doesn't belong in mainboard/sideboard/command
+  // zone, only in the deck's token board.
+  const cardIsToken = isNonDeckCard(oracleCard);
   // Who's in the command zone right now. The command-zone buttons need the
   // actual cards, not just a count: a Background or a Partner is only offered
   // when it pairs with whoever is already there (see canJoinCommandZone).
@@ -945,17 +949,21 @@ export function CardSheet({
                   {commandZone.length === 1 ? 'Make second commander' : 'Make commander'}
                 </button>
               ) : null)}
-            {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && addTo.format === 'commander' && canJoinCommandZone(oracleCard, commandZone) && (
+            {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && !cardIsToken && addTo.format === 'commander' && canJoinCommandZone(oracleCard, commandZone) && (
               <button onClick={() => save('commander')} disabled={busy}>
                 {commandZone.length === 1 ? 'Add as second commander' : 'Add as commander'}
               </button>
             )}
-            {deckAdd && deckAddIsDeck && (
+            {deckAdd && deckAddIsDeck && !cardIsToken && (
               <button onClick={() => save('side')} disabled={busy}>
                 Add to sideboard
               </button>
             )}
-            {listAddKind ? (
+            {deckAdd && deckAddIsDeck && cardIsToken ? (
+              <button className="primary" onClick={() => save('token')} disabled={busy}>
+                Add to tokens
+              </button>
+            ) : listAddKind ? (
               <>
                 {LIST_ORDER.filter((k) => k !== listAddKind).map((k) => (
                   <button

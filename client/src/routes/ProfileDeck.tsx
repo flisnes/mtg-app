@@ -38,6 +38,7 @@ const BOARD_ORDER = [
   { board: 'commander', title: 'Commander' },
   { board: 'main', title: 'Mainboard' },
   { board: 'side', title: 'Sideboard' },
+  { board: 'token', title: 'Tokens' },
 ] as const;
 
 // A resolved deck line: the view item plus the joined card records that
@@ -148,7 +149,9 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
     }).filter((b) => b.entries.length > 0);
   }, [deck, cards, sort]);
 
-  const total = deck ? deck.lines.filter((l) => l.board !== 'side').reduce((s, l) => s + l.quantity, 0) : 0;
+  const total = deck
+    ? deck.lines.filter((l) => l.board !== 'side' && l.board !== 'token').reduce((s, l) => s + l.quantity, 0)
+    : 0;
 
   async function share() {
     // We're viewing this deck, so it's favorited and the link resolves for any

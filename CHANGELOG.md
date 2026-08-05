@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.100.1
+
+- **The "What's changed" popup actually shows up now.** 0.100.0 shipped the popup but got its own debut wrong: an install that predates the feature looked exactly like a fresh install to it, so it quietly noted "you're caught up" instead of showing what changed. It now tells the two apart properly and shows the full list to anyone updating for the first time since this landed.
+
 ## 0.100.0
 
 - **A "What's changed" popup after an update.** Update the app and next launch shows what happened since the version you were on, in plain terms: added, changed, fixed, removed. Fresh installs don't get a backlog dumped on them; the popup only ever shows what you actually missed.

@@ -2,6 +2,10 @@
 // Short, plain-spoken entries — not the fuller writeups in CHANGELOG.md at the
 // repo root. Only versions from 0.98.0 onward are listed: every install still
 // in the wild is already past that point, so nothing older needs a place here.
+//
+// Add an entry here on every version bump, same as CHANGELOG.md (see
+// CLAUDE.md's Conventions section) — otherwise the popup silently has nothing
+// to say about that release.
 export type ChangeKind = 'added' | 'changed' | 'fixed' | 'removed';
 
 export interface ChangelogChange {
@@ -15,6 +19,15 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.100.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The “What’s changed” popup itself: an install updating for the first time since it shipped looked like a fresh install, so it stayed quiet instead of showing what changed. It now shows the full list in that case.',
+      },
+    ],
+  },
   {
     version: '0.100.0',
     changes: [

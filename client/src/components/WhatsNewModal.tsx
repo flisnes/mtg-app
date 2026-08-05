@@ -17,12 +17,18 @@ const KIND_LABEL: Record<ChangeKind, string> = {
  * version this device has caught up on (settings.lastSeenAppVersion) against
  * the running build and returns every changelog entry in between.
  *
- * A device with nothing stored yet — a fresh install, or an existing install
- * updating to the first build that tracks this — has no known baseline to
- * catch up from, so it quietly adopts the current version instead of showing
- * a popup. The stored version only advances past a non-empty list once
- * `dismiss` is called, so leaving mid-session (closing the tab, say) means
- * the popup is still waiting next launch.
+ * A brand-new install stamps its baseline the moment onboarding completes
+ * (see App.tsx), before AppShell — and this hook — ever mounts. So if
+ * `lastSeenAppVersion` is still unset by the time this runs, that's not a
+ * fresh install; it's an existing one updating to the first build that
+ * tracks this. Every real install is already past changelog.ts's oldest
+ * entry, so the full bundled list is the correct thing to show it (rather
+ * than silently skipping, which is what shipped in 0.100.0 and meant nobody
+ * saw that release's own entry).
+ *
+ * The stored version only advances past a non-empty list once `dismiss` is
+ * called, so leaving mid-session (closing the tab, say) means the popup is
+ * still waiting next launch.
  */
 export function useWhatsNew(): { entries: ChangelogEntry[]; dismiss: () => void } | null {
   const [entries, setEntries] = useState<ChangelogEntry[] | null>(null);
@@ -30,12 +36,15 @@ export function useWhatsNew(): { entries: ChangelogEntry[]; dismiss: () => void 
   useEffect(() => {
     void (async () => {
       const seen = await getSetting<string>('lastSeenAppVersion');
-      if (seen !== undefined && isNewer(APP_VERSION, seen)) {
-        const missed = CHANGELOG.filter((e) => isNewer(e.version, seen) && !isNewer(e.version, APP_VERSION));
-        if (missed.length > 0) {
-          setEntries(missed);
-          return;
-        }
+      const missed =
+        seen === undefined
+          ? CHANGELOG.filter((e) => !isNewer(e.version, APP_VERSION))
+          : isNewer(APP_VERSION, seen)
+            ? CHANGELOG.filter((e) => isNewer(e.version, seen) && !isNewer(e.version, APP_VERSION))
+            : [];
+      if (missed.length > 0) {
+        setEntries(missed);
+        return;
       }
       await setSetting('lastSeenAppVersion', APP_VERSION);
     })();

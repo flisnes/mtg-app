@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.102.0
+
+- **"In your collection" now picks the right copy.** If you own several different copies of a card (different printing, finish, condition or language), tapping the "In your collection" badge on its card sheet used to jump to whichever one it found first. It now shows all of them so you can pick the one you meant, and the collection scrolls to and briefly highlights whichever entry you land on.
+
 ## 0.101.0
 
 - **Step through printings from the card sheet.** Arrows now sit over the left and right edges of the card art, so you can flip through a card's other editions without opening the editor. Shows up wherever the edition picker itself is open to changes (adding, editing, wishlist, deck slots).

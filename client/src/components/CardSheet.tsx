@@ -324,6 +324,9 @@ export function CardSheet({
   const [allEditions, setAllEditions] = useState(false);
   // "Pick one from my collection" (container slots): the owned-copies overlay.
   const [pickingCopy, setPickingCopy] = useState(false);
+  // "In your collection" badge, when it owns more than one distinct copy: pick
+  // which one to jump to instead of guessing.
+  const [pickingCollectionTarget, setPickingCollectionTarget] = useState(false);
   // Filter the (often very long) Edition dropdown by set name or set code.
   const [editionQuery, setEditionQuery] = useState('');
   // Event info modal opened from the History tab (out of edit mode), plus a
@@ -689,8 +692,11 @@ export function CardSheet({
                 onOpen={
                   collectionTarget
                     ? () => {
-                        onClose();
-                        navigate(`/collection?entry=${encodeURIComponent(collectionTarget.id)}`);
+                        if (ownedCopies.length > 1) setPickingCollectionTarget(true);
+                        else {
+                          onClose();
+                          navigate(`/collection?entry=${encodeURIComponent(collectionTarget.id)}`);
+                        }
                       }
                     : undefined
                 }
@@ -1061,6 +1067,20 @@ export function CardSheet({
             setPickingCopy(false);
           }}
           onClose={() => setPickingCopy(false)}
+        />
+      )}
+      {pickingCollectionTarget && (
+        <CopyPicker
+          title="Which copy?"
+          copies={ownedCopies}
+          printings={printings}
+          selected={{ scryfallId, condition, finish, lang }}
+          onSelect={(copy) => {
+            setPickingCollectionTarget(false);
+            onClose();
+            navigate(`/collection?entry=${encodeURIComponent(copy.id)}`);
+          }}
+          onClose={() => setPickingCollectionTarget(false)}
         />
       )}
       {eventEntry && (

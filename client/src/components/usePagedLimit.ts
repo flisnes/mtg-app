@@ -11,10 +11,16 @@ import { useEffect, useState } from 'react';
 export function usePagedLimit(
   signature: string,
   pageSize: number,
-): { limit: number; showMore: () => void } {
+): { limit: number; showMore: () => void; ensure: (min: number) => void } {
   const [limit, setLimit] = useState(pageSize);
   useEffect(() => {
     setLimit(pageSize);
   }, [signature, pageSize]);
-  return { limit, showMore: () => setLimit((l) => l + pageSize) };
+  return {
+    limit,
+    showMore: () => setLimit((l) => l + pageSize),
+    // Page in enough to cover a specific row (e.g. a deep link landing past
+    // the first page), without resetting anything already paged in beyond it.
+    ensure: (min: number) => setLimit((l) => Math.max(l, min)),
+  };
 }

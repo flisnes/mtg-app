@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.102.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Tapping "In your collection" with more than one copy owned now lets you pick which one, then scrolls to and highlights it in your collection.',
+      },
+    ],
+  },
+  {
     version: '0.101.0',
     changes: [
       {

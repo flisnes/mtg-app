@@ -1824,6 +1824,33 @@ body:has(.bulk-bar) .app-main {
 .sheet-flip:hover {
   background: rgba(0, 0, 0, 0.78);
 }
+/* Step to the adjacent printing — same circular treatment as .sheet-flip,
+   pinned to the art's left/right edge instead of its bottom. */
+.sheet-edition-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+.sheet-edition-nav:hover {
+  background: rgba(0, 0, 0, 0.78);
+}
+.sheet-edition-prev {
+  left: 6px;
+}
+.sheet-edition-next {
+  right: 6px;
+}
 .sheet-card-ph {
   display: flex;
   align-items: center;

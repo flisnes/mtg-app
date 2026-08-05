@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.101.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Arrows over the card art on the card sheet step through other printings, no need to open the editor.',
+      },
+    ],
+  },
+  {
     version: '0.100.1',
     changes: [
       {

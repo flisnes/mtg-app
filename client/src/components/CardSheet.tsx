@@ -384,6 +384,15 @@ export function CardSheet({
     () => printings.find((p) => p.scryfallId === scryfallId),
     [printings, scryfallId],
   );
+  // Step through printings (newest-first, same order as the dropdown) via the
+  // </> buttons over the art. Only meaningful when sitting on a concrete
+  // printing — "any printing" has no adjacent index to step to.
+  const printingIndex = printing ? printings.findIndex((p) => p.scryfallId === printing.scryfallId) : -1;
+  const printingNavEnabled = (formEditable || !!onEditionChange) && printingIndex >= 0 && printings.length > 1;
+  function gotoPrinting(id: string) {
+    setScryfallId(id);
+    onEditionChange?.(id);
+  }
   // "Do I own this card (any printing)?" — live so it reflects edits made from
   // this very sheet. Shown everywhere except plain edit mode, where the entry
   // being edited already proves ownership.
@@ -633,6 +642,28 @@ export function CardSheet({
                 <img className="sheet-card" src={shownImage ?? cardImage} alt={oracleCard.name} />
               </button>
               {finish && finish !== 'nonfoil' && <span className="foil-sheen" aria-hidden />}
+              {printingNavEnabled && printingIndex > 0 && (
+                <button
+                  type="button"
+                  className="sheet-edition-nav sheet-edition-prev"
+                  onClick={() => gotoPrinting(printings[printingIndex - 1]!.scryfallId)}
+                  aria-label="Previous printing"
+                  title="Previous printing"
+                >
+                  <Icon name="chevronLeft" size={18} />
+                </button>
+              )}
+              {printingNavEnabled && printingIndex < printings.length - 1 && (
+                <button
+                  type="button"
+                  className="sheet-edition-nav sheet-edition-next"
+                  onClick={() => gotoPrinting(printings[printingIndex + 1]!.scryfallId)}
+                  aria-label="Next printing"
+                  title="Next printing"
+                >
+                  <Icon name="chevronRight" size={18} />
+                </button>
+              )}
               {cardBackImage && (
                 <button
                   type="button"

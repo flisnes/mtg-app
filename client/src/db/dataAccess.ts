@@ -1578,6 +1578,40 @@ async function unmarkOwnedForTrade(requests: MarkForTradeRequest[]): Promise<num
 // no-op (idempotent).
 // ---------------------------------------------------------------------------
 
+/**
+ * After a trade removes copies from the collection, take the shortfall out of
+ * filing too — but only when there's exactly one place it could have come
+ * from. Two identical copies filed in two different containers are
+ * deliberately indistinguishable (see usePlacements.ts), so that case is left
+ * for the filing-conflict resolver instead of guessing which one is gone.
+ */
+async function reconcileFilingAfterTrade(line: TradeLine, ownedAfter: number): Promise<void> {
+  const slots = await db.deckCards.where('oracleId').equals(line.oracleId).toArray();
+  const claiming = slots.filter(
+    (s) =>
+      !s.anyBasic &&
+      s.scryfallId === line.scryfallId &&
+      s.condition === line.condition &&
+      s.finish === line.finish &&
+      s.lang === line.lang,
+  );
+  if (claiming.length === 0) return;
+  const claimed = claiming.reduce((n, s) => n + s.quantity, 0);
+  const deficit = claimed - ownedAfter;
+  if (deficit <= 0) return; // still enough filed copies to back every claim
+  const containerIds = new Set(claiming.map((s) => s.deckId));
+  if (containerIds.size !== 1) return; // more than one equally-plausible place — leave for the resolver
+  const containerId = claiming[0]!.deckId;
+  await removeDeckCardsMatching(containerId, [
+    {
+      oracleId: line.oracleId,
+      scryfallId: line.scryfallId,
+      quantity: deficit,
+      wants: { condition: line.condition, finish: line.finish, lang: line.lang },
+    },
+  ]);
+}
+
 export async function applyCompletedTrade(
   sessionId: string,
   given: TradeLine[],
@@ -1594,7 +1628,7 @@ export async function applyCompletedTrade(
   const prices = await getPricesByIds([...given, ...received].map((l) => l.scryfallId));
   const centsOf = (scryfallId: string, finish: Finish) => toCents(priceForFinish(prices.get(scryfallId), finish).eur);
 
-  return db.transaction('rw', [db.collection, db.wishlist, db.trades, db.events, db.outbox], async () => {
+  return db.transaction('rw', [db.collection, db.wishlist, db.trades, db.events, db.outbox, db.decks, db.deckCards], async () => {
     if (await db.trades.get(sessionId)) return { applied: false }; // already applied
 
     const entries = await db.collection.toArray();
@@ -1605,20 +1639,21 @@ export async function applyCompletedTrade(
     for (const line of given) {
       const ex = byKey.get(collectionKey(line));
       const ownedQty = ex?.quantity ?? 0;
+      const finalOwned = ex ? Math.max(0, ex.quantity - line.quantity) : 0;
       if (ex) {
-        const remaining = ex.quantity - line.quantity;
-        if (remaining <= 0) {
+        if (finalOwned <= 0) {
           await db.collection.delete(ex.id);
           await stageDelete('collection', ex.id);
           byKey.delete(collectionKey(line));
         } else {
-          ex.quantity = remaining;
-          ex.quantityForTrade = clamp(ex.quantityForTrade, 0, remaining);
+          ex.quantity = finalOwned;
+          ex.quantityForTrade = clamp(ex.quantityForTrade, 0, finalOwned);
           ex.updatedAt = now;
           await db.collection.put(ex);
           await stagePut('collection', ex);
         }
       }
+      await reconcileFilingAfterTrade(line, finalOwned);
       // You can't give away what the ledger never recorded you owning. If the
       // trade hands over more copies than the collection held, backfill the
       // shortfall as an acquisition first — a history-only add (no row written;

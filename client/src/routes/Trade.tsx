@@ -7,6 +7,7 @@ import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { collectionKey } from '../db/dataAccess.js';
 import { getOracleCardsByIds, getPrintingsByIds, joinCollectionEntries } from '../db/queries.js';
+import { usePlacementIndex } from '../db/usePlacements.js';
 import { useCardMaps } from '../db/useCardMaps.js';
 import type { SearchFilters } from '../cardDb/search.js';
 import { CardSheet, type SessionCardValues } from '../components/CardSheet.js';
@@ -365,6 +366,16 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const theirOffer = offers[peer];
   const editable = snap.state !== 'completed' && snap.state !== 'cancelled';
 
+  // Once the trade lands, check whether any card we gave away is still stuck
+  // in a filing conflict — a copy filed in two places at once, so the app
+  // couldn't tell which one just left. Everything else resolves itself.
+  const placements = usePlacementIndex();
+  const givenKeys = useMemo(() => new Set(myOffer.map((l) => collectionKey(l))), [myOffer]);
+  const tradeConflicts = useMemo(
+    () => (placements?.conflicts ?? []).filter((c) => givenKeys.has(collectionKey(c))),
+    [placements, givenKeys],
+  );
+
   // An interrupted scan is only worth keeping while its trade is still open:
   // sweep every other trade's leftovers, and this one's once the deal is done.
   useEffect(() => {
@@ -505,6 +516,14 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
     return (
       <Page title="Trade complete 🎉">
         <p className="gate-msg">Your collection has been updated.</p>
+        {tradeConflicts.length > 0 && (
+          <p className="gate-msg">
+            <Link to="/conflicts" state={{ tradedKeys: tradeConflicts.map((c) => collectionKey(c)) }}>
+              Sort out {tradeConflicts.length} filing {tradeConflicts.length === 1 ? 'conflict' : 'conflicts'}
+            </Link>
+            {' — looks like a copy was filed in two places.'}
+          </p>
+        )}
         <div className="trade-actions">
           <Link className="chip" to="/history">
             View trade history

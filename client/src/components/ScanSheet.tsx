@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CollectionEntry, Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
-import { addDeckCardsBulk, addToWishlistBulk, applyImport, collectionKey, markOwnedForTrade, reconcileDeck } from '../db/dataAccess.js';
+import { addToWishlistBulk, applyImport, collectionKey, markOwnedForTrade, reconcileDeck } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
 import { getOracleCard, getOracleCardsByIds, getPrinting, getPrintingsByIds } from '../db/queries.js';
 import { ImportConflicts } from '../import/ImportConflicts.js';
@@ -25,6 +25,8 @@ import { ownedBadge, type OwnedBadgeSpec } from './OwnedBadge.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
 import { useDismiss } from './useDismiss.js';
+import { useFiling } from '../deck/useFiling.js';
+import type { FilingCopy } from '../deck/filing.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
 // camera fills the top of the screen and never pauses; each lock (S3 consensus
@@ -248,6 +250,19 @@ interface PickValues {
 // into whichever one landed first.
 const entryKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'condition' | 'lang' | 'board'>) =>
   `${e.scryfallId}|${e.finish}|${e.condition}|${e.lang}|${e.board}`;
+
+/** Session entries as filing-engine copies: a scan names every trait, so each one claims the exact physical copy it saw. */
+function scanCopies(entries: SessionEntry[]): FilingCopy[] {
+  return entries.map((e) => ({
+    oracleId: e.oracleId,
+    scryfallId: e.scryfallId,
+    quantity: e.qty,
+    board: e.board,
+    wants: { condition: e.condition, finish: e.finish, lang: e.lang },
+    label: e.name,
+    sub: [e.set, e.condition, e.finish, e.lang !== 'en' ? e.lang : null].filter(Boolean).join(' · '),
+  }));
+}
 
 /** Collapse duplicate (printing, finish, condition, language, board) lines after a row edit. */
 function mergeSession(entries: SessionEntry[]): SessionEntry[] {
@@ -477,6 +492,11 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // re-tag it (tap +1 first, then notice the card is foil).
   const lockAddsRef = useRef<{ scryfallId: string; board: DeckBoard; qty: number }[]>([]);
   const toast = useToast();
+  // Scanning a card into a deck/binder/box means it's physically there now —
+  // route the write through the same filing engine "File away" uses, so a
+  // scan that names an exact copy already filed elsewhere asks (or, unattended,
+  // moves it) instead of leaving a stale claim behind.
+  const { file, sheet: filingSheet } = useFiling();
 
   const total = session.reduce((n, e) => n + e.qty, 0);
 
@@ -1076,11 +1096,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           { source: 'scan' },
         );
       } else {
-        await addDeckCardsBulk(
-          target.deckId,
-          session.map((e) => ({ oracleId: e.oracleId, scryfallId: e.scryfallId, board: e.board, quantity: e.qty })),
-          { source: 'scan' },
-        );
+        const mode = await file(target.deckId, scanCopies(session), { source: 'scan' });
+        if (mode === null) return; // backed out of the "already filed elsewhere" prompt — leave the review up
       }
       const toAdd = r.unowned.filter((e) => rescanPicked.has(entryKey(e)));
       if (toAdd.length) {
@@ -1162,15 +1179,15 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             { source: 'scan' },
           );
           break;
-        case 'deck':
-          // Deck slots key on oracle + board; keep the scanned printing as the
-          // slot's preferred edition (like a hand-picked printing).
-          await addDeckCardsBulk(
-            target.deckId,
-            session.map((e) => ({ oracleId: e.oracleId, scryfallId: e.scryfallId, board: e.board, quantity: e.qty })),
-            { source: 'scan' },
-          );
+        case 'deck': {
+          // A scan names an exact copy (printing, condition, finish, language),
+          // so it's physical cardboard being filed, not a brew line — route it
+          // through the filing engine, which asks (or moves it) if that same
+          // copy is already claimed somewhere else.
+          const mode = await file(target.deckId, scanCopies(session), { source: 'scan' });
+          if (mode === null) return; // backed out of the "already filed elsewhere" prompt
           break;
+        }
         case 'trade':
           target.onAdd(
             session.map((e) => ({ oracleId: e.oracleId, scryfallId: e.scryfallId, name: e.name, finish: e.finish, lang: e.lang, quantity: e.qty })),
@@ -1655,6 +1672,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           onConfirm={() => void applyRescan()}
         />
       )}
+
+      {filingSheet}
     </div>,
     document.body,
   );

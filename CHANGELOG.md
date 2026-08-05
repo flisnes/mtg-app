@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.99.0
+
+- **Scanning now files the exact card.** When you scan a card into a deck, binder or box, the app now treats it as you physically placing that specific copy there, not just adding a brewing slot. If the exact card (same printing, condition, finish and language) is already filed elsewhere, you get the same question you'd see filing it by hand: move it here or keep both copies filed? With no conflict, it files instantly, so unambiguous scans stay fast.
+
 ## 0.98.1
 
 - **Trading away filed cards is now smarter.** When you trade away a copy that's filed in multiple places (a double-file conflict), the app now automatically removes it from filing if it can figure out which filed copy is gone. If the card was filed in two separate decks, you'll land on the conflict resolver to pick which one lost the copy.

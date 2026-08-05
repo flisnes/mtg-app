@@ -1012,6 +1012,23 @@ button.danger-outline {
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
 }
 
+/* Deep-link landing spot: the collection scrolls to this row/tile and it
+   flashes once so the eye finds it, then fades back to normal. A box-shadow
+   ring (not background) so it reads the same on a list row and a grid tile,
+   whose own background sits on the image button underneath. */
+.row-flash {
+  border-radius: 12px;
+  animation: row-flash 1.6s ease;
+}
+@keyframes row-flash {
+  0% {
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
 /* Bulk-action bar: a floating card just above the tab bar. */
 .bulk-bar {
   position: fixed;

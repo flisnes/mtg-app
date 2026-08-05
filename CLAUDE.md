@@ -36,4 +36,5 @@ There is **no unit-test suite** — the user-facing surface is the PWA, driven i
 - Icons: add to the `IconName` union + `PATHS` in `client/src/components/icons.tsx` (24×24 Feather-style, `currentColor`). Avoid new inline emoji for affordances.
 - Each user-facing release bumps `client/package.json` `version` and tags it in the commit subject, e.g. `... (v0.24.0)`.
 - Each version bump also adds an entry to `CHANGELOG.md` (repo root), newest-first, in the existing user/tester-facing voice (what changed for the user, not the implementation).
+- Each version bump also adds an entry to `client/src/changelog.ts`, newest-first — this feeds the in-app "What's changed" popup shown after an update. Keep it short (a sentence or two, shorter than the `CHANGELOG.md` entry), tag it `added`/`changed`/`fixed`/`removed`, and follow the same language rules (no em-dashes, concise). Skip it only for changes with nothing user-visible to say (pure refactors, internal fixes).
 - Commit/push only when asked; branch off `main` first if asked to commit while on it.

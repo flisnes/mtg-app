@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { forceUpdate, initPwa } from './pwa.js';
 import { isUpdateAvailable } from './appUpdate.js';
+import { APP_VERSION } from './version.js';
 import { useCardDbUpdate } from './cardDb/useCardDbUpdate.js';
 import { getSetting, setSetting } from './db/settings.js';
 import { Onboarding } from './components/Onboarding.js';
@@ -64,6 +65,10 @@ export function App() {
       <Onboarding
         onDone={() => {
           void setSetting('onboardingComplete', true);
+          // Stamped here, not lazily in useWhatsNew: this is the one moment
+          // that unambiguously means "brand-new install, nothing to catch up
+          // on" (see WhatsNewModal.tsx for the other half of this).
+          void setSetting('lastSeenAppVersion', APP_VERSION);
           setOnboarded(true);
         }}
       />

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.101.0
+
+- **Step through printings from the card sheet.** Arrows now sit over the left and right edges of the card art, so you can flip through a card's other editions without opening the editor. Shows up wherever the edition picker itself is open to changes (adding, editing, wishlist, deck slots).
+
 ## 0.100.1
 
 - **The "What's changed" popup actually shows up now.** 0.100.0 shipped the popup but got its own debut wrong: an install that predates the feature looked exactly like a fresh install to it, so it quietly noted "you're caught up" instead of showing what changed. It now tells the two apart properly and shows the full list to anyone updating for the first time since this landed.

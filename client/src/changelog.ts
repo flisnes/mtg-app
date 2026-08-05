@@ -1,0 +1,54 @@
+// User-facing changelog for the "What's changed" popup (WhatsNewModal.tsx).
+// Short, plain-spoken entries — not the fuller writeups in CHANGELOG.md at the
+// repo root. Only versions from 0.98.0 onward are listed: every install still
+// in the wild is already past that point, so nothing older needs a place here.
+export type ChangeKind = 'added' | 'changed' | 'fixed' | 'removed';
+
+export interface ChangelogChange {
+  kind: ChangeKind;
+  text: string;
+}
+
+export interface ChangelogEntry {
+  version: string;
+  changes: ChangelogChange[];
+}
+
+export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.100.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'This “What’s changed” popup, so an update tells you what’s different since you last opened the app.',
+      },
+    ],
+  },
+  {
+    version: '0.99.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Scanning a card into a deck, binder or box now files that exact copy. Already filed elsewhere? You’re asked whether to move it or keep both.',
+      },
+    ],
+  },
+  {
+    version: '0.98.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Trading away a filed card now clears its filing automatically, when the app can tell which copy left.',
+      },
+    ],
+  },
+  {
+    version: '0.98.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Decks now have a Tokens section. Token-making cards suggest what they need, ready to file in one tap.',
+      },
+    ],
+  },
+];

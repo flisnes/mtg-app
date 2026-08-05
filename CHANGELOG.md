@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.98.1
+
+- **Trading away filed cards is now smarter.** When you trade away a copy that's filed in multiple places (a double-file conflict), the app now automatically removes it from filing if it can figure out which filed copy is gone. If the card was filed in two separate decks, you'll land on the conflict resolver to pick which one lost the copy.
+
 ## 0.98.0
 
 - **Decks now have a Tokens section.** Add a card that makes tokens — The Necrobloom, say — and the deck view suggests the tokens it needs, spelled out the way you'd actually look for them ("0/1 Green Plant Creature Token", "2/2 Black Zombie Creature Token"). One tap files a suggestion into the deck's own Tokens board; you can also pick a token from your collection or search for one directly, same as any other card. Tokens carry the usual ownership checkmarks and collection badge, but never count toward your deck or sideboard size, and never trip a legality warning.

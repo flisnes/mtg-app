@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { REMOVAL_REASONS, type OracleCard, type Priced, type Printing, type RemovalReason } from '@mtg/shared';
 import { Page } from './Page.js';
@@ -45,9 +45,15 @@ const keyOf = (c: FilingConflict) => `${c.scryfallId}|${c.condition}|${c.finish}
 
 export function FilingConflicts() {
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const placements = usePlacementIndex();
   const conflicts = placements?.conflicts;
+  // Set when we're linked here straight off a trade's "sort this out" prompt —
+  // lets the affected conflicts (and only those) ask "which did you trade
+  // away" instead of the generic "where is it".
+  const tradedKeys = (location.state as { tradedKeys?: string[] } | null)?.tradedKeys;
+  const fromTrade = useMemo(() => new Set(tradedKeys ?? []), [tradedKeys]);
   // "Not now" is a view state, not a stored one: nothing is written, and coming
   // back to the page offers them again.
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
@@ -193,6 +199,7 @@ export function FilingConflicts() {
   const traits = [conflict.condition, conflict.finish, conflict.lang !== 'en' ? conflict.lang : null]
     .filter(Boolean)
     .join(' · ');
+  const isTradeCaused = fromTrade.has(current.key);
 
   return (
     <Page
@@ -213,13 +220,22 @@ export function FilingConflicts() {
             {traits}
           </p>
           <p className="conflict-sum">
-            You own <strong>{conflict.owned}</strong>, but {conflict.claimed} {conflict.claimed === 1 ? 'is' : 'are'}{' '}
-            filed away. A card can only be in one place.
+            {isTradeCaused ? (
+              <>
+                You traded one of these away, but <strong>{conflict.claimed}</strong>{' '}
+                {conflict.claimed === 1 ? 'is' : 'are'} still filed. Which copy was it?
+              </>
+            ) : (
+              <>
+                You own <strong>{conflict.owned}</strong>, but {conflict.claimed}{' '}
+                {conflict.claimed === 1 ? 'is' : 'are'} filed away. A card can only be in one place.
+              </>
+            )}
           </p>
         </div>
       </div>
 
-      <h3 className="conflict-q">Where is it?</h3>
+      <h3 className="conflict-q">{isTradeCaused ? 'Which copy did you trade away?' : 'Where is it?'}</h3>
       <ul className="menu-list">
         {conflict.places.map((place) => {
           const meta = CONTAINER_META[place.kind];

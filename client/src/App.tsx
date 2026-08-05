@@ -7,6 +7,7 @@ import { getSetting, setSetting } from './db/settings.js';
 import { Onboarding } from './components/Onboarding.js';
 import { ToastProvider, useToast } from './components/Toast.js';
 import { UpdatePrompt } from './components/UpdatePrompt.js';
+import { useWhatsNew, WhatsNewModal } from './components/WhatsNewModal.js';
 import { GlobalSearchBar, GlobalSearchProvider } from './components/GlobalSearch.js';
 import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
@@ -94,6 +95,7 @@ function AppShell() {
     applyUpdate: applyData,
     dismiss: dismissData,
   } = useCardDbUpdate();
+  const whatsNew = useWhatsNew();
 
   useEffect(() => {
     initPwa({
@@ -136,6 +138,7 @@ function AppShell() {
 
   return (
     <div className="app-shell">
+      {whatsNew && <WhatsNewModal entries={whatsNew.entries} onClose={whatsNew.dismiss} />}
       <GlobalSearchBar />
       {showUpdate && (
         <div className="banner banner-update" role="status">

@@ -14,6 +14,8 @@ import { db } from './schema.js';
 //   ownProfileAvatar — cached own profile picture for the header (account/ownProfile.ts)
 //   accountLastBackup / accountSyncConflict / accountAutoBackup /
 //   accountLastAutoBackupAt — backup bookkeeping (account/session.ts)
+//   lastSeenAppVersion — app version the "What's changed" popup has caught the
+//     device up to (components/WhatsNewModal.tsx)
 
 export async function getSetting<T = unknown>(key: string): Promise<T | undefined> {
   const row = await db.settings.get(key);

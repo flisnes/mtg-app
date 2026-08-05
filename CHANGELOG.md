@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.100.0
+
+- **A "What's changed" popup after an update.** Update the app and next launch shows what happened since the version you were on, in plain terms: added, changed, fixed, removed. Fresh installs don't get a backlog dumped on them; the popup only ever shows what you actually missed.
+
 ## 0.99.0
 
 - **Scanning now files the exact card.** When you scan a card into a deck, binder or box, the app now treats it as you physically placing that specific copy there, not just adding a brewing slot. If the exact card (same printing, condition, finish and language) is already filed elsewhere, you get the same question you'd see filing it by hand: move it here or keep both copies filed? With no conflict, it files instantly, so unambiguous scans stay fast.

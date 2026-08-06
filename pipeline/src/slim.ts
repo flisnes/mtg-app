@@ -120,6 +120,9 @@ function toOracleCard(rep: SlimResult, tokenOracleIds: string[]): OracleCard {
     legalities: oracle.legalities,
     ...(oracle.power != null || oracle.toughness != null ? { power: oracle.power, toughness: oracle.toughness } : {}),
     ...(tokenOracleIds.length ? { tokenOracleIds } : {}),
+    ...(oracle.layout ? { layout: oracle.layout } : {}),
+    ...(oracle.reserved ? { reserved: true } : {}),
+    ...(oracle.gameChanger ? { gameChanger: true } : {}),
   };
 }
 

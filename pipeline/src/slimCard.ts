@@ -16,6 +16,9 @@ export interface RawCard {
   set_name: string;
   collector_number: string;
   promo?: boolean;
+  layout?: string;
+  reserved?: boolean;
+  game_changer?: boolean;
   mana_cost?: string;
   cmc?: number;
   type_line?: string;
@@ -161,6 +164,9 @@ export interface SlimResult {
     legalities: Partial<Record<Format, LegalityStatus>>;
     power: string | null;
     toughness: string | null;
+    layout?: string;
+    reserved?: boolean;
+    gameChanger?: boolean;
   };
   /** Scryfall ids of tokens this printing's `all_parts` says the card creates. */
   tokenPartIds: string[];
@@ -220,6 +226,9 @@ export function slimCard(card: RawCard): SlimResult | null {
       legalities: legalities(card.legalities),
       power: of.power,
       toughness: of.toughness,
+      ...(card.layout ? { layout: card.layout } : {}),
+      ...(card.reserved ? { reserved: true } : {}),
+      ...(card.game_changer ? { gameChanger: true } : {}),
     },
     tokenPartIds,
   };

@@ -1,4 +1,4 @@
-import { FORMATS, normalizeColors, type Color, type Format, type OracleCard, type Rarity } from '@mtg/shared';
+import { FORMATS, normalizeColors, type Color, type Finish, type Format, type OracleCard, type Rarity } from '@mtg/shared';
 
 // Scryfall-style search syntax. A query is whitespace-separated terms, ANDed
 // together; `-` prefixes negate a term. Bare words (or quoted phrases) match
@@ -10,7 +10,11 @@ import { FORMATS, normalizeColors, type Color, type Format, type OracleCard, typ
 //   id<=esper-ish     color identity (: means "at most", Commander-style)
 //   r:rare  r>=rare   rarity
 //   mv:2  cmc<=3      mana value
+//   cmc:even          mana value parity (even/odd)
+//   mana>={2}  m:uu   mana cost symbols (: means "at least", like colors)
+//   set:znr  s:znr    printed in this set (any printing, not just the default one)
 //   f:modern          legal in format (restricted counts as legal)
+//   is:transform  is:reserved  is:foil   see IS_KEYWORDS below for the full list
 //
 // Unknown or malformed terms fall back to plain name text so a typo narrows
 // the search visibly instead of being silently dropped.
@@ -24,7 +28,11 @@ export type QueryTerm = { negate: boolean } & (
   | { kind: 'colorset'; field: 'colors' | 'colorIdentity'; op: NumOp; set: Color[] | null; special: 'multicolor' | 'colorless' | null }
   | { kind: 'rarity'; op: NumOp; rank: number }
   | { kind: 'cmc'; op: NumOp; value: number }
+  | { kind: 'cmcParity'; even: boolean }
+  | { kind: 'mana'; op: NumOp; generic: number; symbols: Map<string, number> }
+  | { kind: 'set'; value: string }
   | { kind: 'format'; format: Format }
+  | { kind: 'is'; test: (entry: SearchableEntry) => boolean }
 );
 
 export interface ParsedQuery {
@@ -42,6 +50,14 @@ export interface SearchableEntry {
   normOracle: string;
   /** Oracle text with the card's own (face) names replaced by `~`. */
   normOracleTilde: string;
+  /** Lowercased set codes this card has a printing in. Empty when the caller has no printings to offer, in which case `set:` never matches. */
+  sets: ReadonlySet<string>;
+  /** Finishes available across every printing (union). Empty when the caller has no printings to offer. */
+  finishes: ReadonlySet<Finish>;
+  /** Any printing is a promo (Scryfall's per-printing `promo` flag). */
+  hasPromo: boolean;
+  /** Has more than one printing. */
+  reprint: boolean;
 }
 
 /** Diacritic-insensitive, lowercased (strips combining marks after NFD). */
@@ -55,7 +71,15 @@ export function normalize(s: string): string {
  * full-DB search index (search.ts) and the owned-list filters (collection /
  * wishlist), so every search bar matches identically.
  */
-export function toSearchableEntry(card: OracleCard): SearchableEntry {
+/** The printings-derived facts a search entry needs; absent when the caller has no printings to offer. */
+export interface PrintingSummary {
+  sets?: Iterable<string>;
+  finishes?: Iterable<Finish>;
+  hasPromo?: boolean;
+  reprint?: boolean;
+}
+
+export function toSearchableEntry(card: OracleCard, printings: PrintingSummary = {}): SearchableEntry {
   const normOracle = card.oracleText ? normalize(card.oracleText) : '';
   // Self-references in oracle text become ~ so o:"whenever ~ enters" works.
   let normOracleTilde = normOracle;
@@ -65,12 +89,18 @@ export function toSearchableEntry(card: OracleCard): SearchableEntry {
       if (normFace) normOracleTilde = normOracleTilde.split(normFace).join('~');
     }
   }
+  const sets = new Set<string>();
+  for (const s of printings.sets ?? []) sets.add(s.toLowerCase());
   return {
     card,
     normName: normalize(card.name),
     lowerType: card.typeLine.toLowerCase(),
     normOracle,
     normOracleTilde,
+    sets,
+    finishes: new Set(printings.finishes ?? []),
+    hasPromo: !!printings.hasPromo,
+    reprint: !!printings.reprint,
   };
 }
 
@@ -94,6 +124,9 @@ const COLOR_FIELDS: Record<string, 'colors' | 'colorIdentity'> = {
 const CMC_FIELDS = new Set(['cmc', 'mv', 'manavalue']);
 const FORMAT_FIELDS = new Set(['f', 'format', 'legal']);
 const RARITY_FIELDS = new Set(['r', 'rarity']);
+const MANA_FIELDS = new Set(['m', 'mana']);
+const SET_FIELDS = new Set(['set', 's', 'e', 'edition']);
+const IS_FIELDS = new Set(['is']);
 
 const KNOWN_FIELDS = new Set([
   ...Object.keys(STRING_FIELDS),
@@ -101,6 +134,9 @@ const KNOWN_FIELDS = new Set([
   ...CMC_FIELDS,
   ...FORMAT_FIELDS,
   ...RARITY_FIELDS,
+  ...MANA_FIELDS,
+  ...SET_FIELDS,
+  ...IS_FIELDS,
 ]);
 
 const COLOR_LETTERS: Record<string, Color> = { w: 'W', u: 'U', b: 'B', r: 'R', g: 'G' };
@@ -162,9 +198,32 @@ function fieldTerm(field: string, op: string, value: string, negate: boolean): Q
   }
 
   if (CMC_FIELDS.has(field)) {
+    const v = value.toLowerCase();
+    if (v === 'even' || v === 'odd') {
+      if (op !== ':' && op !== '=') return null;
+      return { kind: 'cmcParity', even: v === 'even', negate };
+    }
     const n = Number(value);
     if (!Number.isFinite(n)) return null;
     return { kind: 'cmc', op: op === ':' ? '=' : (op as NumOp), value: n, negate };
+  }
+
+  if (MANA_FIELDS.has(field)) {
+    const want = parseManaCost(value);
+    if (!want) return null;
+    return { kind: 'mana', op: op === ':' ? '>=' : (op as NumOp), ...want, negate };
+  }
+
+  if (SET_FIELDS.has(field)) {
+    if (op !== ':' && op !== '=') return null;
+    return { kind: 'set', value: value.toLowerCase(), negate };
+  }
+
+  if (IS_FIELDS.has(field)) {
+    if (op !== ':' && op !== '=') return null;
+    const test = IS_KEYWORDS[value.toLowerCase()];
+    if (!test) return null;
+    return { kind: 'is', test, negate };
   }
 
   if (RARITY_FIELDS.has(field)) {
@@ -199,6 +258,167 @@ function parseColorValue(value: string): { set: Color[] | null; special: 'multic
   }
   return set.size ? { set: [...set], special: null } : null;
 }
+
+// One symbol per {brace group}, or shorthand for a single letter/number outside
+// braces (Scryfall: "G is the same as {G}"). Numbers (bare or braced) add to
+// `generic`; everything else (colors, X, hybrid like "2/W", phyrexian "W/P",
+// snow "S") is counted as its own symbol, matching how mana>= actually compares
+// costs: the numeral pip is a magnitude, every other symbol must be present as-is.
+const MANA_TOKEN = /\{([^}]+)\}|([wubrgcxsp])|(\d+)/gi;
+
+function parseManaCost(raw: string): { generic: number; symbols: Map<string, number> } | null {
+  // Split/adventure/room cards store both faces' costs joined by " // "
+  // (slimCard's oracleFields); a card's real mana value is the sum of its
+  // faces (CR 202.3), so the same convention applies here.
+  if (raw.includes(' // ')) {
+    let generic = 0;
+    const symbols = new Map<string, number>();
+    for (const face of raw.split(' // ')) {
+      const parsed = parseManaCost(face);
+      if (!parsed) return null;
+      generic += parsed.generic;
+      for (const [sym, count] of parsed.symbols) symbols.set(sym, (symbols.get(sym) ?? 0) + count);
+    }
+    return { generic, symbols };
+  }
+
+  let generic = 0;
+  const symbols = new Map<string, number>();
+  let end = 0;
+  for (const m of raw.matchAll(MANA_TOKEN)) {
+    if (m.index !== end) return null; // a gap means an unrecognized character
+    end = m.index + m[0].length;
+    const token = (m[1] ?? m[2] ?? m[3])!.toUpperCase();
+    if (/^\d+$/.test(token)) generic += Number(token);
+    else symbols.set(token, (symbols.get(token) ?? 0) + 1);
+  }
+  if (end !== raw.length) return null;
+  return { generic, symbols };
+}
+
+function hasAllSymbols(have: ReadonlyMap<string, number>, want: ReadonlyMap<string, number>): boolean {
+  for (const [sym, count] of want) if ((have.get(sym) ?? 0) < count) return false;
+  return true;
+}
+
+function manaSymbolsOf(card: OracleCard): string[] {
+  const parsed = card.manaCost ? parseManaCost(card.manaCost) : null;
+  return parsed ? [...parsed.symbols.keys()] : [];
+}
+
+// ---- is: keywords ----
+//
+// Most of these are heuristics over type line / oracle text rather than a
+// Scryfall-tagged field, so an odd card can slip through the cracks — treat
+// them as "close enough for search," not rules-accurate. Land archetypes and
+// format-eligibility checks (commander/brawler/duelcommander) are the
+// fuzziest: they don't consult a banned list, that's what f:/legal: is for.
+//
+// Deliberately not implemented: is:newinpauper (needs historical banlist-change
+// data we don't have), is:frenchvanilla (would need a parameterized
+// keyword-ability parser to avoid misfiring constantly), and the printing
+// cosmetics Scryfall tracks per-card (is:full, is:hires, is:glossy, is:default,
+// is:atypical, is:textless, is:oversized, is:universesbeyond) — none of that
+// frame/border metadata is in the pipeline, and it's not useful for a
+// collection/trading app.
+
+const BASIC_LAND_TYPES = ['plains', 'island', 'swamp', 'mountain', 'forest'];
+
+function basicLandTypeCount(lowerType: string): number {
+  return BASIC_LAND_TYPES.filter((t) => lowerType.includes(t)).length;
+}
+
+function isPermanentType(lowerType: string): boolean {
+  return /artifact|battle|creature|enchantment|land|planeswalker|kindred|tribal/.test(lowerType);
+}
+
+function isManland(e: SearchableEntry): boolean {
+  return e.lowerType.includes('land') && /\bbecomes? [^.]*creature/.test(e.normOracle);
+}
+
+function isCommanderEligible(e: SearchableEntry): boolean {
+  return (
+    (e.lowerType.includes('creature') && e.lowerType.includes('legendary')) ||
+    e.normOracle.includes('can be your commander')
+  );
+}
+
+// True duals (Tundra, Volcanic Island, ...) print their mana ability as oracle
+// text too — just as a parenthetical reminder, e.g. "({T}: Add {W} or {U}.)" —
+// so "no oracle text" would wrongly exclude every one of them. Strip every
+// parenthetical and check nothing else is printed.
+function hasOnlyReminderText(oracleText: string | null | undefined): boolean {
+  if (!oracleText?.trim()) return true;
+  return oracleText.replace(/\([^)]*\)/g, '').trim() === '';
+}
+
+const IS_KEYWORDS: Record<string, (e: SearchableEntry) => boolean> = {
+  // Structure — needs OracleCard.layout (absent on card DBs from before it existed).
+  split: (e) => e.card.layout === 'split',
+  flip: (e) => e.card.layout === 'flip',
+  transform: (e) => e.card.layout === 'transform',
+  meld: (e) => e.card.layout === 'meld',
+  leveler: (e) => e.card.layout === 'leveler',
+  adventure: (e) => e.card.layout === 'adventure',
+  saga: (e) => e.card.layout === 'saga',
+  class: (e) => e.card.layout === 'class',
+  case: (e) => e.card.layout === 'case',
+  mdfc: (e) => e.card.layout === 'modal_dfc',
+  modal_dfc: (e) => e.card.layout === 'modal_dfc',
+  dfc: (e) => ['transform', 'modal_dfc', 'meld', 'reversible_card'].includes(e.card.layout ?? ''),
+  battle: (e) => e.card.layout === 'battle' || e.lowerType.includes('battle'),
+
+  // Classification.
+  spell: (e) => !e.lowerType.includes('land'),
+  permanent: (e) => isPermanentType(e.lowerType),
+  historic: (e) =>
+    e.lowerType.includes('artifact') ||
+    e.lowerType.includes('saga') ||
+    (e.lowerType.includes('legendary') && isPermanentType(e.lowerType)),
+  party: (e) => e.lowerType.includes('creature') && ['cleric', 'rogue', 'warrior', 'wizard'].some((t) => e.lowerType.includes(t)),
+  outlaw: (e) =>
+    e.lowerType.includes('creature') &&
+    ['assassin', 'mercenary', 'pirate', 'rogue', 'warlock'].some((t) => e.lowerType.includes(t)),
+  vanilla: (e) => e.lowerType.includes('creature') && !e.card.oracleText?.trim(),
+  bear: (e) => e.lowerType.includes('creature') && e.card.cmc === 2 && e.card.power === '2' && e.card.toughness === '2',
+  modal: (e) => /choose[^.\n]*—/.test(e.normOracle),
+  manland: isManland,
+  creatureland: isManland,
+  companion: (e) => /\bcompanion\b/.test(e.normOracle),
+  partner: (e) => /\bpartner\b/.test(e.normOracle),
+  commander: isCommanderEligible,
+  brawler: isCommanderEligible,
+  duelcommander: isCommanderEligible,
+  oathbreaker: (e) => e.lowerType.includes('planeswalker'),
+
+  // Land archetypes: heuristics on oracle text, not a tagged list.
+  dual: (e) => e.lowerType.includes('land') && basicLandTypeCount(e.lowerType) >= 2 && hasOnlyReminderText(e.card.oracleText),
+  triome: (e) => e.lowerType.includes('land') && basicLandTypeCount(e.lowerType) >= 3,
+  fetchland: (e) =>
+    e.lowerType.includes('land') && e.normOracle.includes('search your library for') && e.normOracle.includes('sacrifice'),
+  shockland: (e) => e.lowerType.includes('land') && /pay 2 life\. if you don.t, it enters tapped/.test(e.normOracle),
+  painland: (e) => e.lowerType.includes('land') && e.normOracle.includes(' deals 1 damage to you'),
+  checkland: (e) => e.lowerType.includes('land') && e.normOracle.includes('unless you control a'),
+  fastland: (e) => e.lowerType.includes('land') && e.normOracle.includes('control two or fewer other lands'),
+  slowland: (e) => e.lowerType.includes('land') && e.normOracle.includes('control two or more other lands'),
+  bounceland: (e) => e.lowerType.includes('land') && e.normOracle.includes("return a land you control to its owner's hand"),
+
+  // Mana symbols — reuses the mana: parser.
+  hybrid: (e) => manaSymbolsOf(e.card).some((s) => s.includes('/') && !s.endsWith('/P')),
+  phyrexian: (e) => manaSymbolsOf(e.card).some((s) => s.endsWith('/P')),
+
+  // Curated flags — need OracleCard.reserved/gameChanger (absent on older card DBs).
+  reserved: (e) => !!e.card.reserved,
+  gamechanger: (e) => !!e.card.gameChanger,
+  'game-changer': (e) => !!e.card.gameChanger,
+
+  // Printing availability — any printing, via the printings join in search.ts.
+  foil: (e) => e.finishes.has('foil'),
+  nonfoil: (e) => e.finishes.has('nonfoil'),
+  etched: (e) => e.finishes.has('etched'),
+  promo: (e) => e.hasPromo,
+  reprint: (e) => e.reprint,
+};
 
 // ---- Matching ----
 
@@ -241,6 +461,14 @@ function termMatches(entry: SearchableEntry, t: QueryTerm): boolean {
       return compareNum(RARITY_RANK[entry.card.rarity], t.op, t.rank);
     case 'cmc':
       return compareNum(entry.card.cmc, t.op, t.value);
+    case 'cmcParity':
+      return entry.card.cmc % 2 === 0 === t.even;
+    case 'mana':
+      return compareMana(entry.card.manaCost, t.op, t);
+    case 'set':
+      return entry.sets.has(t.value);
+    case 'is':
+      return t.test(entry);
     case 'format': {
       const status = entry.card.legalities?.[t.format];
       return status === 'legal' || status === 'restricted';
@@ -252,6 +480,32 @@ function matchColorSet(cardColors: readonly Color[], op: NumOp, set: Color[]): b
   const have = new Set(cardColors);
   const allWanted = set.every((c) => have.has(c)); // card ⊇ query
   const onlyWanted = cardColors.every((c) => set.includes(c)); // card ⊆ query
+  switch (op) {
+    case '=':
+      return allWanted && onlyWanted;
+    case '!=':
+      return !(allWanted && onlyWanted);
+    case '>=':
+      return allWanted;
+    case '<=':
+      return onlyWanted;
+    case '>':
+      return allWanted && !onlyWanted;
+    case '<':
+      return onlyWanted && !allWanted;
+  }
+}
+
+// Same superset/subset shape as matchColorSet, generalized to a mana cost:
+// a numeral magnitude (generic) plus a multiset of every other symbol.
+function compareMana(
+  cardManaCost: string | null,
+  op: NumOp,
+  want: { generic: number; symbols: ReadonlyMap<string, number> },
+): boolean {
+  const have = (cardManaCost && parseManaCost(cardManaCost)) || { generic: 0, symbols: new Map<string, number>() };
+  const allWanted = have.generic >= want.generic && hasAllSymbols(have.symbols, want.symbols); // cost ⊇ query
+  const onlyWanted = have.generic <= want.generic && hasAllSymbols(want.symbols, have.symbols); // cost ⊆ query
   switch (op) {
     case '=':
       return allWanted && onlyWanted;

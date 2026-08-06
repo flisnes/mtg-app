@@ -1,16 +1,23 @@
-import type { Color, DeckFormat, Format, OracleCard, Priced, Rarity } from '@mtg/shared';
+import type { Color, DeckFormat, Finish, Format, OracleCard, Priced, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { withPrices } from './prices.js';
-import { matchesQuery, normalize, parseSearchQuery, toSearchableEntry, type SearchableEntry } from './querySyntax.js';
+import {
+  matchesQuery,
+  normalize,
+  parseSearchQuery,
+  toSearchableEntry,
+  type PrintingSummary,
+  type SearchableEntry,
+} from './querySyntax.js';
 
 // Card search (beta plan §2, §6). The oracle set (~37k) is small enough to hold
 // in memory, which gives fast substring matching (a name-prefix index alone
 // would miss "bolt" → "Lightning Bolt") and cheap in-memory filtering. If this
 // ever gets slow, the plan's escape hatch is MiniSearch — not needed at 37k.
 //
-// Queries support Scryfall-style syntax (o:/t:/c:/id:/r:/mv:/f:, negation with
-// `-`) — see querySyntax.ts. Bare words still match names, so plain queries
-// from the import and trade pickers behave as before.
+// Queries support Scryfall-style syntax (o:/t:/c:/id:/r:/mv:/f:/mana:/set:/is:,
+// negation with `-`) — see querySyntax.ts. Bare words still match names, so
+// plain queries from the import and trade pickers behave as before.
 
 export interface SearchFilters {
   color?: Color | '';
@@ -35,11 +42,39 @@ export function invalidateSearchIndex(): void {
   nameLookup = null;
 }
 
+interface PrintingAgg {
+  sets: string[];
+  finishes: Set<Finish>;
+  hasPromo: boolean;
+  count: number;
+}
+
 /** Load (and cache) the oracle set for in-memory search, with match fields pre-normalised. */
 async function getIndex(): Promise<Indexed[]> {
   if (cache) return cache;
-  const cards = await db.oracleCards.toArray();
-  cache = cards.map(toSearchableEntry);
+  const [cards, printings] = await Promise.all([db.oracleCards.toArray(), db.printings.toArray()]);
+  const byOracle = new Map<string, PrintingAgg>();
+  for (const p of printings) {
+    let agg = byOracle.get(p.oracleId);
+    if (!agg) {
+      agg = { sets: [], finishes: new Set(), hasPromo: false, count: 0 };
+      byOracle.set(p.oracleId, agg);
+    }
+    agg.sets.push(p.set);
+    for (const f of p.finishes) agg.finishes.add(f);
+    if (p.promo) agg.hasPromo = true;
+    agg.count++;
+  }
+  cache = cards.map((c) => {
+    const agg = byOracle.get(c.oracleId);
+    const summary: PrintingSummary | undefined = agg && {
+      sets: agg.sets,
+      finishes: agg.finishes,
+      hasPromo: agg.hasPromo,
+      reprint: agg.count > 1,
+    };
+    return toSearchableEntry(c, summary);
+  });
   return cache;
 }
 

@@ -17,6 +17,7 @@ import { TRADE_ENABLED, TRADE_WS_URL } from '../trade/config.js';
 import {
   sanitizeCollectionRow,
   sanitizeDeckCardRow,
+  sanitizeDeckFolderRow,
   sanitizeDeckRow,
   sanitizeEventRow,
   sanitizeTradeRow,
@@ -99,6 +100,7 @@ const TABLES = {
   wishlist: db.wishlist,
   decks: db.decks,
   deckCards: db.deckCards,
+  deckFolders: db.deckFolders,
   trades: db.trades,
   events: db.events,
 } as const;
@@ -108,6 +110,7 @@ const SANITIZERS: Record<SyncTable, (raw: unknown) => { id: string } | null> = {
   wishlist: sanitizeWishlistRow,
   decks: sanitizeDeckRow,
   deckCards: sanitizeDeckCardRow,
+  deckFolders: sanitizeDeckFolderRow,
   trades: sanitizeTradeRow,
   events: sanitizeEventRow,
 };

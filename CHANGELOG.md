@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.110.0
+
+- **Sort and filter your decks.** The Decks screen now has a filter row: search by name, narrow to a format or a color, and sort by name, format, colors or owned value (with an ascending/descending toggle). Once you've made folders, an "All decks" checkbox flattens the list back to everything at once, ignoring which folder each deck is in.
+
+## 0.109.0
+
+- **Deck folders.** Group your decks into folders from the Decks screen. A folder column shows up on the right once you've created one; tap a folder to open it (decks inside swap in for the unorganized list), and "‹ Up a level" takes you back out. Rename or delete folders from their `⋯` menu — deleting a folder just unfiles its decks, it doesn't delete them. Move a deck between folders with the picker on its row. Folders sync across your devices like everything else.
+
 ## 0.108.0
 
 - **`is:` search keywords.** Search now understands a big batch of `is:` filters: card structure (`is:transform`, `is:mdfc`, `is:split`, `is:saga`, `is:adventure`, `is:meld`, ...), classification (`is:permanent`, `is:vanilla`, `is:party`, `is:outlaw`, `is:commander`, `is:companion`, `is:partner`, ...), mana symbols (`is:hybrid`, `is:phyrexian`), the Reserved List and Commander Game Changers (`is:reserved`, `is:gamechanger`), printing availability (`is:foil`, `is:promo`, `is:reprint`, ...), and common land archetypes (`is:fetchland`, `is:shockland`, `is:painland`, `is:dual`, `is:triome`, ...). This is a one-time full re-download of the card database to pick up the new fields.

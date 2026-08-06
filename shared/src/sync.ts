@@ -13,6 +13,7 @@ export const SYNC_TABLES = [
   'wishlist',
   'decks',
   'deckCards',
+  'deckFolders',
   'trades',
   'events',
 ] as const;

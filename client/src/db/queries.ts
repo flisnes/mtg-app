@@ -87,6 +87,25 @@ export async function joinWishlistEntries(entries: WishlistEntry[]): Promise<Joi
   }));
 }
 
+export interface JoinedDeckCard {
+  entry: DeckCard;
+  oracle?: Priced<OracleCard>;
+  printing?: Priced<Printing>;
+}
+
+/** Join a deck/binder/box's cards with their oracle + printing display data. */
+export async function joinDeckCards(entries: DeckCard[]): Promise<JoinedDeckCard[]> {
+  const [oracleMap, printMap] = await Promise.all([
+    getOracleCardsByIds(entries.map((e) => e.oracleId)),
+    getPrintingsByIds(entries.map((e) => e.scryfallId).filter((id): id is string => !!id)),
+  ]);
+  return entries.map((entry) => ({
+    entry,
+    oracle: oracleMap.get(entry.oracleId),
+    printing: entry.scryfallId ? printMap.get(entry.scryfallId) : undefined,
+  }));
+}
+
 /** Total owned copies per oracleId (summed across all printings), for deck ownership. */
 export async function getOwnedCountsFor(oracleIds: Iterable<string>): Promise<Map<string, number>> {
   const unique = [...new Set(oracleIds)];

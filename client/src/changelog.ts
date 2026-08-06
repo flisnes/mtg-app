@@ -20,6 +20,24 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.108.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Search understands a big batch of is: keywords: card structure (is:transform, is:mdfc, is:saga...), classification (is:permanent, is:vanilla, is:commander...), is:reserved / is:gamechanger, foil/promo/reprint availability, and land archetypes (is:fetchland, is:shockland, is:dual...).',
+      },
+    ],
+  },
+  {
+    version: '0.107.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Search understands more Scryfall syntax: set:znr (or s:/e:) for cards printed in a set, cmc:even / cmc:odd for mana value parity, and mana>={2} (or m:) for matching mana costs by symbol.',
+      },
+    ],
+  },
+  {
     version: '0.106.0',
     changes: [
       {

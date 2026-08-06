@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.108.0
+
+- **`is:` search keywords.** Search now understands a big batch of `is:` filters: card structure (`is:transform`, `is:mdfc`, `is:split`, `is:saga`, `is:adventure`, `is:meld`, ...), classification (`is:permanent`, `is:vanilla`, `is:party`, `is:outlaw`, `is:commander`, `is:companion`, `is:partner`, ...), mana symbols (`is:hybrid`, `is:phyrexian`), the Reserved List and Commander Game Changers (`is:reserved`, `is:gamechanger`), printing availability (`is:foil`, `is:promo`, `is:reprint`, ...), and common land archetypes (`is:fetchland`, `is:shockland`, `is:painland`, `is:dual`, `is:triome`, ...). This is a one-time full re-download of the card database to pick up the new fields.
+
+## 0.107.0
+
+- **More Scryfall-style search syntax.** `set:znr` (or `s:`/`e:`) finds cards printed in a given set, `cmc:even`/`cmc:odd` filters by mana value parity, and `mana>={2}` (or `m:`) matches mana costs by symbol, with the same `>=`/`<=`/`=` comparisons colors already support.
+
 ## 0.106.0
 
 - **Trade reconnects fixed.** Backgrounding the app mid-trade, or a spotty connection while rejoining, could leave a trade looking "no longer open," show "session full" for your own seat, or fail outright with "could not reach the trade server" — sometimes even when your partner was still there waiting. The app now reconnects the moment you bring it back to the foreground instead of waiting on a dead connection to time out, a rejoin that gets a lost reply no longer collides with your own seat, and a dropped connection retries with backoff instead of giving up (or hanging) immediately. Reconnect windows are also more consistent: they're no longer cut short near a trade's time limit, and if both sides step away at once, whoever left last still gets their full window back.

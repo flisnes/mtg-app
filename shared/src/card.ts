@@ -72,6 +72,16 @@ export interface OracleCard {
    * "tokens you'll need" suggestions.
    */
   tokenOracleIds?: string[];
+  /**
+   * Scryfall's card `layout` (e.g. 'normal', 'transform', 'split', 'saga').
+   * Absent on card DBs built before this field existed. Drives the `is:`
+   * structural keywords (is:transform, is:mdfc, is:saga, ...).
+   */
+  layout?: string;
+  /** On the Reserved List. Omitted (not false) when not reserved — nearly every card. */
+  reserved?: boolean;
+  /** A Commander Game Changer (per the Commander Rules Committee list). Omitted when not one. */
+  gameChanger?: boolean;
 }
 
 /** One physical printing (one Scryfall card id). Drives the edition picker + collection editing. */

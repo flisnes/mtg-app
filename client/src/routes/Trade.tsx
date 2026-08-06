@@ -567,6 +567,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   return (
     <Page
       title="Trade"
+      fill
       menu={
         <OptionsMenu
           label="Trade options"
@@ -859,46 +860,48 @@ function OfferPanel({
           {fmtEur(total)}
         </span>
       </header>
-      {lines.length === 0 ? (
-        <p className="trade-empty">{empty}</p>
-      ) : (
-        <CardItems
-          view="grid"
-          items={lines.map((l): CardItem => {
-            const ind = badge(l);
-            const printing = printings?.get(l.scryfallId);
-            const oracle = oracles?.get(l.oracleId);
-            return {
-              key: lineKey(l),
-              name: l.name,
-              image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-              foil: l.finish !== 'nonfoil',
-              count: l.quantity,
-              badge: ind?.icon,
-              badgeClass: ind?.cls,
-              badgeTitle: ind?.title,
-              onClick: oracle
-                ? () => (editable ? onEdit(side, l, oracle) : onInfo(oracle, l.scryfallId, { side }))
-                : undefined,
-              actions: (
-                <>
-                  {editable && (
-                    <button onClick={() => onQty(side, lineKey(l), l.quantity - 1)} aria-label="One fewer">
-                      −
-                    </button>
-                  )}
-                  <span className="tile-price">{formatPrice(pricedForFinish(printing, l.finish)) ?? '—'}</span>
-                  {editable && (
-                    <button onClick={() => onQty(side, lineKey(l), l.quantity + 1)} aria-label="One more">
-                      ＋
-                    </button>
-                  )}
-                </>
-              ),
-            };
-          })}
-        />
-      )}
+      <div className="trade-col-list">
+        {lines.length === 0 ? (
+          <p className="trade-empty">{empty}</p>
+        ) : (
+          <CardItems
+            view="grid"
+            items={lines.map((l): CardItem => {
+              const ind = badge(l);
+              const printing = printings?.get(l.scryfallId);
+              const oracle = oracles?.get(l.oracleId);
+              return {
+                key: lineKey(l),
+                name: l.name,
+                image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+                foil: l.finish !== 'nonfoil',
+                count: l.quantity,
+                badge: ind?.icon,
+                badgeClass: ind?.cls,
+                badgeTitle: ind?.title,
+                onClick: oracle
+                  ? () => (editable ? onEdit(side, l, oracle) : onInfo(oracle, l.scryfallId, { side }))
+                  : undefined,
+                actions: (
+                  <>
+                    {editable && (
+                      <button onClick={() => onQty(side, lineKey(l), l.quantity - 1)} aria-label="One fewer">
+                        −
+                      </button>
+                    )}
+                    <span className="tile-price">{formatPrice(pricedForFinish(printing, l.finish)) ?? '—'}</span>
+                    {editable && (
+                      <button onClick={() => onQty(side, lineKey(l), l.quantity + 1)} aria-label="One more">
+                        ＋
+                      </button>
+                    )}
+                  </>
+                ),
+              };
+            })}
+          />
+        )}
+      </div>
       {editable && (
         <div className="trade-col-actions">
           <button className="trade-add" onClick={onAdd}>

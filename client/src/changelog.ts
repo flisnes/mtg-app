@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.105.0',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The trade screen no longer lets the value/Accept bar cover the Add/Scan buttons. Title and menu stay fixed at the top, the bar docks above the tab bar, and each column scrolls its own cards independently.',
+      },
+    ],
+  },
+  {
     version: '0.104.0',
     changes: [
       {

@@ -8,6 +8,7 @@ export function Page({
   menu,
   aside,
   children,
+  fill,
 }: {
   title: string;
   subtitle?: string;
@@ -16,9 +17,16 @@ export function Page({
   /** Extra header content shown left of the menu (e.g. a total-value readout). */
   aside?: ReactNode;
   children?: ReactNode;
+  /**
+   * Fill the viewport instead of scrolling with the rest of the app: the
+   * header stays put and `.page-body` becomes a fixed-height flex column, so
+   * only whatever the caller scrolls internally moves (e.g. the trade board's
+   * independently-scrolling columns).
+   */
+  fill?: boolean;
 }) {
   return (
-    <section className="page">
+    <section className={fill ? 'page page-fill' : 'page'}>
       <header className="page-header">
         <div className="page-header-text">
           <h1>{title}</h1>
@@ -31,7 +39,7 @@ export function Page({
           </div>
         )}
       </header>
-      <div className="page-body">{children}</div>
+      <div className={fill ? 'page-body page-body-fill' : 'page-body'}>{children}</div>
     </section>
   );
 }

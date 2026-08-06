@@ -16,6 +16,8 @@ export interface Session extends CodeEntry {
   accepted: Record<Seat, boolean>;
   confirmed: Record<Seat, boolean>;
   tokens: { a: string; b: string | null };
+  /** Nonce the seat-b joiner sent, so a retried join_session (lost reply) can be recognized as the same joiner. */
+  joinerNonce: string | null;
   present: Record<Seat, boolean>;
   /** Per-seat disconnect timers (beta plan §7 reconnect window). */
   graceTimers: Partial<Record<Seat, ReturnType<typeof setTimeout>>>;
@@ -44,6 +46,7 @@ export class SessionStore extends CodeStore<Session> {
       accepted: { a: false, b: false },
       confirmed: { a: false, b: false },
       tokens: { a: randomUUID(), b: null },
+      joinerNonce: null,
       present: { a: true, b: false },
       graceTimers: {},
     }));
@@ -51,11 +54,19 @@ export class SessionStore extends CodeStore<Session> {
     return session;
   }
 
-  join(code: string): { session: Session; token: string } {
+  join(code: string, joinerNonce?: string): { session: Session; token: string } {
     const session = this.get(code);
-    if (!session) throw new TransitionError('unknown_session');
-    if (session.tokens.b) throw new TransitionError('session_full');
+    if (!session) throw new TransitionError('unknown_session', 'this code doesn’t match an active trade');
+    if (session.tokens.b) {
+      // The same joiner retrying after a lost reply (e.g. a network blip right
+      // as they joined) gets their existing seat back instead of "session full".
+      if (joinerNonce && session.joinerNonce && session.joinerNonce === joinerNonce) {
+        return { session, token: session.tokens.b };
+      }
+      throw new TransitionError('session_full', 'someone already joined this trade');
+    }
     session.tokens.b = randomUUID();
+    session.joinerNonce = joinerNonce ?? null;
     session.present.b = true;
     session.state = 'paired';
     return { session, token: session.tokens.b };
@@ -64,9 +75,9 @@ export class SessionStore extends CodeStore<Session> {
   /** Reattach a dropped participant. */
   resume(code: string, token: string): { session: Session; seat: Seat } {
     const session = this.get(code);
-    if (!session) throw new TransitionError('unknown_session');
+    if (!session) throw new TransitionError('unknown_session', 'this trade has expired or already ended');
     const seat: Seat | null = session.tokens.a === token ? 'a' : session.tokens.b === token ? 'b' : null;
-    if (!seat) throw new TransitionError('bad_resume');
+    if (!seat) throw new TransitionError('bad_resume', 'could not resume this trade');
     session.present[seat] = true;
     this.clearGrace(session, seat);
     return { session, seat };
@@ -79,9 +90,17 @@ export class SessionStore extends CodeStore<Session> {
   armGrace(session: Session, seat: Seat): void {
     this.clearGrace(session, seat);
     if (!PRE_COMPLETE.includes(session.state)) return;
+    // A disconnect late in the session's life shouldn't have its grace window
+    // cut short by the absolute TTL landing first — guarantee the full window.
+    this.ensureMinTtl(session, config.reconnectGraceMs);
     session.graceTimers[seat] = setTimeout(() => {
       delete session.graceTimers[seat];
       if (session.present[seat] || !PRE_COMPLETE.includes(session.state)) return;
+      const other: Seat = seat === 'a' ? 'b' : 'a';
+      // Both seats dropped around the same time: let whichever seat's own
+      // grace window runs out last make the call, instead of the earlier
+      // disconnect's timer cutting the later one's window short.
+      if (!session.present[other] && session.graceTimers[other]) return;
       this.cancel(session);
       this.onGraceExpired?.(session);
     }, config.reconnectGraceMs);

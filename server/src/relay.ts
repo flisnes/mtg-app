@@ -320,7 +320,8 @@ function handle(
     }
 
     case 'join_session': {
-      const { session, token } = store.join(normalizeCode(msg.sessionCode));
+      const joinNonce = typeof msg.joinNonce === 'string' ? msg.joinNonce.slice(0, 64) : undefined;
+      const { session, token } = store.join(normalizeCode(msg.sessionCode), joinNonce);
       ctx.code = session.code;
       ctx.seat = 'b';
       attach(session.code, 'b', socket);

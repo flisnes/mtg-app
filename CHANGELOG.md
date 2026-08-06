@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.106.0
+
+- **Trade reconnects fixed.** Backgrounding the app mid-trade, or a spotty connection while rejoining, could leave a trade looking "no longer open," show "session full" for your own seat, or fail outright with "could not reach the trade server" — sometimes even when your partner was still there waiting. The app now reconnects the moment you bring it back to the foreground instead of waiting on a dead connection to time out, a rejoin that gets a lost reply no longer collides with your own seat, and a dropped connection retries with backoff instead of giving up (or hanging) immediately. Reconnect windows are also more consistent: they're no longer cut short near a trade's time limit, and if both sides step away at once, whoever left last still gets their full window back.
+
 ## 0.105.0
 
 - **Trade screen scrolling fixed.** The value/Accept bar could end up floating over the Add/Scan buttons once a column filled up with cards. Now the title and menu stay put at the top, the value bar is docked at the bottom above the tab bar, and the two columns scroll their own card lists independently, so Add/Scan are always reachable.

@@ -16,6 +16,8 @@ export interface CodeEntry {
   ip: string;
   createdAt: number;
   ttlTimer?: ReturnType<typeof setTimeout>;
+  /** Wall-clock instant the current ttlTimer will fire. */
+  ttlDeadline?: number;
 }
 
 export abstract class CodeStore<T extends CodeEntry> {
@@ -38,8 +40,20 @@ export abstract class CodeStore<T extends CodeEntry> {
     const entry = build(this.genCode());
     this.entries.set(entry.code, entry);
     this.ipCounts.set(ip, count + 1);
-    entry.ttlTimer = setTimeout(() => this.remove(entry.code), this.opts.ttlMs);
+    this.armTtl(entry, this.opts.ttlMs);
     return entry;
+  }
+
+  /** (Re)arm the absolute-lifetime timer to fire `ms` from now. */
+  protected armTtl(entry: T, ms: number): void {
+    if (entry.ttlTimer) clearTimeout(entry.ttlTimer);
+    entry.ttlDeadline = Date.now() + ms;
+    entry.ttlTimer = setTimeout(() => this.remove(entry.code), ms);
+  }
+
+  /** Push the absolute deadline out so it's never sooner than `minMs` away — never pulls it in. */
+  protected ensureMinTtl(entry: T, minMs: number): void {
+    if ((entry.ttlDeadline ?? 0) - Date.now() < minMs) this.armTtl(entry, minMs);
   }
 
   private genCode(): string {

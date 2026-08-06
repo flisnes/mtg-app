@@ -113,6 +113,9 @@ export function useTradeSession(): TradeSession {
   const [solo, setSolo] = useState(false);
 
   const ws = useRef<WebSocket | null>(null);
+  // The handshake message a fresh create/join/resume was started with, kept so
+  // a lost-before-reply close can retry the same handshake (not just a mid-trade drop).
+  const lastInitial = useRef<ClientMessage | null>(null);
   // Solo mode: a purely local snapshot with no socket. soloRef gates the sender
   // functions; soloSnap holds the current snapshot to mutate on each action.
   const soloRef = useRef(false);
@@ -274,7 +277,7 @@ export function useTradeSession(): TradeSession {
   );
 
   const connect = useCallback(
-    (initial: ClientMessage) => {
+    (initial: ClientMessage, isRetry = false) => {
       // Cancel any pending auto-resume and fully detach the previous socket
       // before opening a new one — otherwise a delayed reconnect racing a fresh
       // create()/join() would leave two live sockets driving the same state.
@@ -288,6 +291,11 @@ export function useTradeSession(): TradeSession {
         prev.close();
       }
 
+      // A fresh (non-retry) connect is a new effort from the user's point of
+      // view — e.g. tapping "Resume" again after giving up — so it gets a
+      // full new run of attempts rather than inheriting a spent counter.
+      if (!isRetry) reconnectAttempts.current = 0;
+      lastInitial.current = initial;
       intentionalClose.current = false;
       setStatus('connecting');
       setError(null);
@@ -305,20 +313,15 @@ export function useTradeSession(): TradeSession {
         if (intentionalClose.current) return;
         const a = active.current;
         const state = stateRef.current;
-        const resumable = !!(a.code && a.resumeToken && state && state !== 'completed' && state !== 'cancelled');
-        if (!resumable) {
-          // No live session to resume. If we never even established one (a.code
-          // unset), the initial connect failed — surface it instead of spinning
-          // on "Connecting…" forever.
-          if (!a.code) {
-            setStatus('error');
-            setError('Could not reach the trade server.');
-          }
-          return;
-        }
+        if (state === 'completed' || state === 'cancelled') return; // trade is over, nothing to resume
+
         if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
           setStatus('error');
-          setError('Lost connection to the trade server. Try resuming from the trade screen.');
+          setError(
+            a.code && a.resumeToken
+              ? 'Lost connection to the trade server. Try resuming from the trade screen.'
+              : 'Could not reach the trade server.',
+          );
           return;
         }
         const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** reconnectAttempts.current);
@@ -326,9 +329,13 @@ export function useTradeSession(): TradeSession {
         setStatus('connecting');
         reconnectTimer.current = setTimeout(() => {
           reconnectTimer.current = null;
-          if (a.code && a.resumeToken) {
-            connect({ v: PROTOCOL_VERSION, type: 'resume', sessionCode: a.code, resumeToken: a.resumeToken });
-          }
+          // Prefer resuming the known seat once we have a token for it;
+          // otherwise retry the original handshake that never got a reply.
+          const retryMsg: ClientMessage | null =
+            a.code && a.resumeToken
+              ? { v: PROTOCOL_VERSION, type: 'resume', sessionCode: a.code, resumeToken: a.resumeToken }
+              : lastInitial.current;
+          if (retryMsg) connect(retryMsg, true);
         }, delay);
       };
     },
@@ -412,7 +419,15 @@ export function useTradeSession(): TradeSession {
 
   const create = useCallback(() => connect({ v: PROTOCOL_VERSION, type: 'create_session' }), [connect]);
   const join = useCallback(
-    (c: string) => connect({ v: PROTOCOL_VERSION, type: 'join_session', sessionCode: c.trim().toUpperCase() }),
+    (c: string) =>
+      connect({
+        v: PROTOCOL_VERSION,
+        type: 'join_session',
+        sessionCode: c.trim().toUpperCase(),
+        // Identifies this join attempt so a retry (lost reply) reclaims the
+        // same seat instead of hitting "session full".
+        joinNonce: crypto.randomUUID(),
+      }),
     [connect],
   );
   const resume = useCallback(
@@ -505,6 +520,26 @@ export function useTradeSession(): TradeSession {
       ws.current?.close();
     };
   }, []);
+
+  // Mobile OSes routinely suspend a backgrounded tab's network stack without
+  // ever firing the socket's close event, so returning to the foreground can
+  // find a socket that's actually dead well before the server's heartbeat (or
+  // backoff after it finally notices) would reconnect on their own. Jump the
+  // queue: reconnect immediately once the page is visible again.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      const socket = ws.current;
+      if (socket && socket.readyState === WebSocket.OPEN) return;
+      const a = active.current;
+      if (!a.code || !a.resumeToken) return;
+      if (stateRef.current === 'completed' || stateRef.current === 'cancelled') return;
+      reconnectAttempts.current = 0;
+      connect({ v: PROTOCOL_VERSION, type: 'resume', sessionCode: a.code, resumeToken: a.resumeToken });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [connect]);
 
   return { status, seat, snapshot, peerPresent, solo, error, peerTradelist, peerTradelistLoading, peerWishlist, create, startSolo, resumeSolo, join, resume, sendOffer, requestTradelist, requestWishlist, accept, unaccept, confirmComplete, cancel, reset };
 }

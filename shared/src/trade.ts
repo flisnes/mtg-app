@@ -44,7 +44,10 @@ export interface SessionSnapshot {
 
 export type ClientMessage =
   | { v: typeof PROTOCOL_VERSION; type: 'create_session' }
-  | { v: typeof PROTOCOL_VERSION; type: 'join_session'; sessionCode: string }
+  // joinNonce identifies this join *attempt*: if the reply is lost and the
+  // client retries with the same nonce, the server hands back the same seat
+  // instead of rejecting it as already taken.
+  | { v: typeof PROTOCOL_VERSION; type: 'join_session'; sessionCode: string; joinNonce?: string }
   | { v: typeof PROTOCOL_VERSION; type: 'resume'; sessionCode: string; resumeToken: string }
   // Either participant may edit either side's offer (in-person trades are
   // built face to face, often from each other's binders). `side` says which

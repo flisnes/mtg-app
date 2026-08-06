@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.106.0',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Trades reconnect properly after your phone backgrounds or the connection drops. Rejoining no longer gets stuck, shows "session full" by mistake, or gives up too soon.',
+      },
+    ],
+  },
+  {
     version: '0.105.0',
     changes: [
       {

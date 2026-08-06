@@ -136,7 +136,10 @@ export function Trade() {
   const [startedAhead, setStartedAhead] = useState(false);
 
   useEffect(() => {
-    if (trade.status === 'idle') {
+    // Also refresh on 'error': a mid-trade drop that exhausts its reconnect
+    // attempts lands here directly (skipping 'idle'), and the persisted trade
+    // is still there to resume — the Resume prompt shouldn't be missing for it.
+    if (trade.status === 'idle' || trade.status === 'error') {
       void getPersistedTrade().then((t) => setResumable(t ?? null));
       void getPersistedSoloTrade().then((s) => setSoloResumable(s ?? null));
     }

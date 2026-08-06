@@ -528,6 +528,27 @@ button.danger-outline {
   gap: 1rem;
 }
 
+/* Fill variant: the header stays put and only `.page-body`'s own flex
+   children scroll (see .trade-board / .trade-col). No sticky/fixed tricks
+   needed — the outer box just doesn't scroll, so nothing above the
+   scrolling area can ever be covered by anything below it, or vice versa. */
+.page-fill {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.page-fill .page-header {
+  flex-shrink: 0;
+}
+.page-body-fill {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .empty-state {
   border: 1px dashed var(--border);
   border-radius: 12px;
@@ -2788,8 +2809,12 @@ button.primary {
   font-size: 1.6rem;
 }
 
-/* The board: the two columns side by side, both editable. */
+/* The board: the two columns side by side, both editable. Bounded to the
+   remaining page height (.page-body-fill) so each column scrolls its own
+   card list instead of growing the page — see .trade-col-list. */
 .trade-board {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.5rem;
@@ -2803,12 +2828,22 @@ button.primary {
   flex-direction: column;
   gap: 0.6rem;
   min-width: 0;
+  min-height: 0;
 }
 .trade-col-head {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.15rem;
+}
+/* The scrolling middle of a column: card tiles (or the empty state). Flex-
+   grows to fill the column, so the head and add/scan actions around it never
+   move and are never covered, no matter how many cards it holds. */
+.trade-col-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .trade-col h3 {
   margin: 0;
@@ -2825,9 +2860,9 @@ button.primary {
   font-variant-numeric: tabular-nums;
 }
 .trade-col-actions {
+  flex-shrink: 0;
   display: flex;
   gap: 0.5rem;
-  margin-top: auto;
 }
 .trade-col-actions .trade-add {
   flex: 1;
@@ -2911,17 +2946,15 @@ button.chip[aria-pressed='true'] {
   color: #eac54f;
 }
 
-/* Sticky dock: totals + action bar stay visible while the board scrolls. */
+/* Docked totals + action bar: a fixed-size flex item below the scrolling
+   board, not a sticky overlay — so it can never end up covering the add/scan
+   buttons at the bottom of a tall column (see .page-fill / .trade-board). */
 .trade-dock {
-  position: sticky;
-  bottom: calc(var(--tab-h) + var(--safe-bottom));
-  z-index: 5;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  background: var(--bg);
-  padding: 0.5rem 0;
-  margin-bottom: -1rem;
+  padding-top: 0.6rem;
 }
 .trade-bar {
   display: flex;

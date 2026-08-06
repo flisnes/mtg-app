@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.105.0
+
+- **Trade screen scrolling fixed.** The value/Accept bar could end up floating over the Add/Scan buttons once a column filled up with cards. Now the title and menu stay put at the top, the value bar is docked at the bottom above the tab bar, and the two columns scroll their own card lists independently, so Add/Scan are always reachable.
+
 ## 0.104.0
 
 - **A "This deck/binder/box" search scope.** Open a deck, binder or box and the search scope row now offers a pill for it, alongside Collection/Tradelist/Wishlist. Turn it on to search just that container's cards, and tap a result to edit its slot right there. Unlike the other three, it never turns itself on when you open search — you're often looking for cards to *add*, so it stays out of the way until you ask for it.

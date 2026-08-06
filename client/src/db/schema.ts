@@ -6,6 +6,7 @@ import type {
   WishlistEntry,
   Deck,
   DeckCard,
+  DeckFolder,
   Trade,
   Setting,
   PriceHistory,
@@ -31,6 +32,7 @@ export class MtgDatabase extends Dexie {
   wishlist!: Table<WishlistEntry, string>;
   decks!: Table<Deck, string>;
   deckCards!: Table<DeckCard, string>;
+  deckFolders!: Table<DeckFolder, string>;
   trades!: Table<Trade, string>;
   settings!: Table<Setting, string>;
   priceHistories!: Table<PriceHistory, string>;
@@ -199,6 +201,15 @@ export class MtgDatabase extends Dexie {
     // keyed 'current' like scanData/sealed. Lets the client tell a normal
     // release from a promo product without bloating every printing row.
     this.version(12).stores({ setTypes: 'key' });
+
+    // v13 (deck folders): decks gain an optional folderId, indexed so opening a
+    // folder doesn't scan every deck (sparse — rows without it are simply
+    // absent from the index, no upgrade callback needed). Folders get their
+    // own table, synced like decks.
+    this.version(13).stores({
+      decks: 'id, name, updatedAt, folderId',
+      deckFolders: 'id, name, updatedAt',
+    });
   }
 }
 
@@ -215,6 +226,7 @@ export const USER_DATA_TABLES = [
   db.wishlist,
   db.decks,
   db.deckCards,
+  db.deckFolders,
   db.trades,
   db.priceHistories,
   db.events,

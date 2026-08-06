@@ -20,6 +20,24 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.110.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Filter and sort the Decks screen: search by name, filter by format or color, sort by name/format/colors/value, and an "All decks" toggle to ignore folders.',
+      },
+    ],
+  },
+  {
+    version: '0.109.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Deck folders. Group decks into folders from the Decks screen, rename or delete them, and move decks between folders. Folders sync across devices.',
+      },
+    ],
+  },
+  {
     version: '0.108.0',
     changes: [
       {

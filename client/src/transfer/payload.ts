@@ -13,6 +13,7 @@ import {
   type Deck,
   type DeckBoard,
   type DeckCard,
+  type DeckFolder,
   type DeckFormat,
   type EventSource,
   type Finish,
@@ -45,6 +46,7 @@ export interface TransferPayload {
   wishlist: WishlistEntry[];
   decks: Deck[];
   deckCards: DeckCard[];
+  deckFolders: DeckFolder[];
   trades: Trade[];
   priceHistories: PriceHistory[];
   /** Card history (sync plan). Absent from pre-v0.11 senders → sanitized to []. */
@@ -71,6 +73,7 @@ export async function exportUserData(): Promise<TransferPayload> {
       wishlist: await db.wishlist.toArray(),
       decks: await db.decks.toArray(),
       deckCards: await db.deckCards.toArray(),
+      deckFolders: await db.deckFolders.toArray(),
       trades: await db.trades.toArray(),
       priceHistories: await db.priceHistories.toArray(),
       events: await db.events.toArray(),
@@ -108,6 +111,7 @@ const CAPS = {
   wishlist: 20_000,
   decks: 2_000,
   deckCards: 200_000,
+  deckFolders: 500,
   trades: 10_000,
   priceHistories: 100_000,
   priceSnapshots: 500_000, // legacy row-per-day senders only
@@ -212,6 +216,21 @@ export function sanitizeDeckRow(raw: unknown): Deck | null {
     kind,
     ...(kind === 'deck' ? { format: (FORMATS.has(r.format as string) ? r.format : 'casual') as DeckFormat } : {}),
     ...(typeof r.description === 'string' && r.description ? { description: r.description.slice(0, 2000) } : {}),
+    // Folders are deck-only; drop a stray folderId on a binder/box row.
+    ...(kind === 'deck' && id(r.folderId) ? { folderId: id(r.folderId)! } : {}),
+    createdAt: ts(r.createdAt),
+    updatedAt: ts(r.updatedAt),
+  };
+}
+
+export function sanitizeDeckFolderRow(raw: unknown): DeckFolder | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const folderId = id(r.id);
+  if (!folderId) return null;
+  return {
+    id: folderId,
+    name: typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, 200) : 'Untitled folder',
     createdAt: ts(r.createdAt),
     updatedAt: ts(r.updatedAt),
   };
@@ -344,13 +363,24 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
   }
   const wishlist = [...wishByKey.values()];
 
-  // Decks, then deck cards restricted to surviving decks.
+  // Folders, then decks — a deck referencing a folder that didn't survive
+  // sanitization (or wasn't sent) becomes unorganized rather than dangling.
+  const deckFolders: DeckFolder[] = [];
+  const folderIds = new Set<string>();
+  for (const r of rows(p.deckFolders, CAPS.deckFolders)) {
+    const folder = sanitizeDeckFolderRow(r);
+    if (!folder || folderIds.has(folder.id)) continue;
+    folderIds.add(folder.id);
+    deckFolders.push(folder);
+  }
+
   const decks: Deck[] = [];
   const deckIds = new Set<string>();
   for (const r of rows(p.decks, CAPS.decks)) {
     const deck = sanitizeDeckRow(r);
     if (!deck || deckIds.has(deck.id)) continue;
     deckIds.add(deck.id);
+    if (deck.folderId && !folderIds.has(deck.folderId)) delete deck.folderId;
     decks.push(deck);
   }
 
@@ -443,5 +473,5 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
     events.push(ev);
   }
 
-  return { version: PAYLOAD_VERSION, collection, wishlist, decks, deckCards, trades, priceHistories, events };
+  return { version: PAYLOAD_VERSION, collection, wishlist, decks, deckCards, deckFolders, trades, priceHistories, events };
 }

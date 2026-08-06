@@ -7,6 +7,7 @@ import type {
   Deck,
   DeckBoard,
   DeckCard,
+  DeckFolder,
   DeckFormat,
   EventSource,
   Finish,
@@ -873,18 +874,19 @@ async function touchDeck(deckId: string, now: number): Promise<Deck | undefined>
   return deck;
 }
 
-/** Create a deck, binder or box. Only decks carry a format. */
+/** Create a deck, binder or box. Only decks carry a format or a folder. */
 export async function createContainer(
   name: string,
   kind: ContainerKind = 'deck',
   format: DeckFormat = 'casual',
+  folderId?: string,
 ): Promise<string> {
   const now = Date.now();
   const deck: Deck = {
     id: newId(),
     name: name.trim() || UNTITLED[kind],
     kind,
-    ...(kind === 'deck' ? { format } : {}),
+    ...(kind === 'deck' ? { format, ...(folderId ? { folderId } : {}) } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -938,6 +940,65 @@ export async function deleteDeck(id: string): Promise<void> {
     await db.deckCards.where('deckId').equals(id).delete();
     await db.decks.delete(id);
     await stageDelete('decks', id);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Deck folders. A flat grouping of decks (deck-only — binders/boxes don't use
+// these), synced as their own table like decks themselves.
+// ---------------------------------------------------------------------------
+
+const DECK_FOLDER_TABLES = [db.deckFolders, db.decks, db.outbox];
+
+const UNTITLED_FOLDER = 'Untitled folder';
+
+export async function createDeckFolder(name: string): Promise<string> {
+  const now = Date.now();
+  const folder: DeckFolder = { id: newId(), name: name.trim() || UNTITLED_FOLDER, createdAt: now, updatedAt: now };
+  await db.transaction('rw', [db.deckFolders, db.outbox], async () => {
+    await db.deckFolders.add(folder);
+    await stagePut('deckFolders', folder);
+  });
+  return folder.id;
+}
+
+export async function renameDeckFolder(id: string, name: string): Promise<void> {
+  await db.transaction('rw', [db.deckFolders, db.outbox], async () => {
+    const folder = await db.deckFolders.get(id);
+    if (!folder) return;
+    folder.name = name.trim() || UNTITLED_FOLDER;
+    folder.updatedAt = Date.now();
+    await db.deckFolders.put(folder);
+    await stagePut('deckFolders', folder);
+  });
+}
+
+/** Delete a folder; the decks inside it become unorganized, not deleted. */
+export async function deleteDeckFolder(id: string): Promise<void> {
+  await db.transaction('rw', DECK_FOLDER_TABLES, async () => {
+    const now = Date.now();
+    const members = await db.decks.where('folderId').equals(id).toArray();
+    for (const deck of members) {
+      delete deck.folderId;
+      deck.updatedAt = now;
+      await db.decks.put(deck);
+      await stagePut('decks', deck);
+    }
+    await db.deckFolders.delete(id);
+    await stageDelete('deckFolders', id);
+  });
+}
+
+/** Move a deck into a folder, or out of any folder when folderId is undefined. */
+export async function setDeckFolder(deckId: string, folderId: string | undefined): Promise<void> {
+  await db.transaction('rw', [db.decks, db.outbox], async () => {
+    const deck = await db.decks.get(deckId);
+    if (!deck) return;
+    if (folderId) deck.folderId = folderId;
+    else delete deck.folderId;
+    deck.updatedAt = Date.now();
+    await db.decks.put(deck);
+    await stagePut('decks', deck);
   });
 }
 

@@ -91,6 +91,20 @@ export interface Deck {
    *  Meaningless (and unset) on binders and boxes. */
   format?: DeckFormat;
   description?: string;
+  /** Groups decks into a DeckFolder. Deck-only; unset = not in a folder. */
+  folderId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * A folder that groups decks in the deck list. Deck-only (binders/boxes don't
+ * use these) — a flat name, no nesting. Same shape/lifecycle as a Deck: LWW on
+ * updatedAt, synced by its own table.
+ */
+export interface DeckFolder {
+  id: string;
+  name: string;
   createdAt: number;
   updatedAt: number;
 }

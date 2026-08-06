@@ -11,6 +11,7 @@ export type IconName =
   | 'decks'
   | 'binder'
   | 'box'
+  | 'folder'
   | 'trade'
   | 'tradelist'
   | 'wishlist'
@@ -83,6 +84,8 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M12 21.6V12" />
     </>
   ),
+  // Folder with a tab — a group of decks.
+  folder: <path d="M3 6a2 2 0 0 1 2-2h4l2 2.5h8A2 2 0 0 1 21 8.5V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   // Bidirectional swap — the act of trading.
   trade: (
     <>

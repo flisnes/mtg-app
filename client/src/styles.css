@@ -1012,23 +1012,6 @@ button.danger-outline {
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
 }
 
-/* Deep-link landing spot: the collection scrolls to this row/tile and it
-   flashes once so the eye finds it, then fades back to normal. A box-shadow
-   ring (not background) so it reads the same on a list row and a grid tile,
-   whose own background sits on the image button underneath. */
-.row-flash {
-  border-radius: 12px;
-  animation: row-flash 1.6s ease;
-}
-@keyframes row-flash {
-  0% {
-    box-shadow: 0 0 0 3px var(--accent);
-  }
-  100% {
-    box-shadow: 0 0 0 3px transparent;
-  }
-}
-
 /* Bulk-action bar: a floating card just above the tab bar. */
 .bulk-bar {
   position: fixed;
@@ -1840,33 +1823,6 @@ body:has(.bulk-bar) .app-main {
 }
 .sheet-flip:hover {
   background: rgba(0, 0, 0, 0.78);
-}
-/* Step to the adjacent printing — same circular treatment as .sheet-flip,
-   pinned to the art's left/right edge instead of its bottom. */
-.sheet-edition-nav {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border-radius: 50%;
-  border: none;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(2px);
-  cursor: pointer;
-}
-.sheet-edition-nav:hover {
-  background: rgba(0, 0, 0, 0.78);
-}
-.sheet-edition-prev {
-  left: 6px;
-}
-.sheet-edition-next {
-  right: 6px;
 }
 .sheet-card-ph {
   display: flex;

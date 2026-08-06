@@ -93,9 +93,6 @@ export interface CardItem {
   place?: { node: ReactNode; cls?: string; title?: string };
   /** Dim the entry (e.g. unowned deck cards). */
   dim?: boolean;
-  /** Briefly flash this row/tile (a deep link landing on it) and let callers
-   *  scrollIntoView it — the DOM id is derived from `key`. */
-  highlight?: boolean;
   /** Iridescent foil sheen over the image (foil / etched finishes). */
   foil?: boolean;
   /** Custom thumbnail (list view only), replacing the default image — e.g. the
@@ -126,12 +123,6 @@ export interface SelectProps {
   selectable?: boolean;
   selectedKeys?: Set<string>;
   onToggleSelect?: (key: string) => void;
-}
-
-/** DOM id for a card row/tile, keyed off CardItem.key — how a caller scrolls
- *  a specific item into view (e.g. the collection deep link from a card sheet). */
-export function cardItemDomId(key: string): string {
-  return `card-item-${key}`;
 }
 
 export function CardItems({
@@ -200,8 +191,7 @@ export function CardList({
         return (
           <li
             key={it.key}
-            id={cardItemDomId(it.key)}
-            className={`result-row${it.dim ? ' result-row-dim' : ''}${selected ? ' selected' : ''}${it.highlight ? ' row-flash' : ''}`}
+            className={`result-row${it.dim ? ' result-row-dim' : ''}${selected ? ' selected' : ''}`}
           >
             {selectable ? (
               <button
@@ -272,11 +262,7 @@ export function CardGrid({
       {items.map((it) => {
         const selected = selectable && !!selectedKeys?.has(it.key);
         return (
-          <li
-            key={it.key}
-            id={cardItemDomId(it.key)}
-            className={`card-tile${it.dim ? ' card-tile-dim' : ''}${selected ? ' selected' : ''}${it.highlight ? ' row-flash' : ''}`}
-          >
+          <li key={it.key} className={`card-tile${it.dim ? ' card-tile-dim' : ''}${selected ? ' selected' : ''}`}>
             <button
               className="card-tile-img"
               onClick={selectable ? () => onToggleSelect?.(it.key) : it.onClick}

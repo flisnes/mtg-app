@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { CollectionEntry, Condition, ContainerKind, CopyPrefs, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
@@ -32,6 +31,7 @@ import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { CardHistory } from './CardHistory.js';
 import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
 import { EventSheet } from './EventSheet.js';
+import { useOpenCollectionSearch } from './GlobalSearch.js';
 import { Icon, type IconName } from './icons.js';
 import { OptionsMenu } from './OptionsMenu.js';
 import type { HistoryEntry } from '../history/useHistoryEntries.js';
@@ -200,7 +200,7 @@ export function CardSheet({
 }) {
   const mode = wishEntry ? 'wish' : deckCard ? 'deck' : entry ? 'edit' : sessionCard ? 'session' : readOnly ? 'info' : 'add';
   const editing = mode === 'edit';
-  const navigate = useNavigate();
+  const openCollectionSearch = useOpenCollectionSearch();
   // An owned collection entry opens read-only with an Edit toggle; add/wish/
   // deck/session are always a form; info is never editable.
   const [editMode, setEditMode] = useState(false);
@@ -324,9 +324,6 @@ export function CardSheet({
   const [allEditions, setAllEditions] = useState(false);
   // "Pick one from my collection" (container slots): the owned-copies overlay.
   const [pickingCopy, setPickingCopy] = useState(false);
-  // "In your collection" badge, when it owns more than one distinct copy: pick
-  // which one to jump to instead of guessing.
-  const [pickingCollectionTarget, setPickingCollectionTarget] = useState(false);
   // Filter the (often very long) Edition dropdown by set name or set code.
   const [editionQuery, setEditionQuery] = useState('');
   // Event info modal opened from the History tab (out of edit mode), plus a
@@ -387,15 +384,6 @@ export function CardSheet({
     () => printings.find((p) => p.scryfallId === scryfallId),
     [printings, scryfallId],
   );
-  // Step through printings (newest-first, same order as the dropdown) via the
-  // </> buttons over the art. Only meaningful when sitting on a concrete
-  // printing — "any printing" has no adjacent index to step to.
-  const printingIndex = printing ? printings.findIndex((p) => p.scryfallId === printing.scryfallId) : -1;
-  const printingNavEnabled = (formEditable || !!onEditionChange) && printingIndex >= 0 && printings.length > 1;
-  function gotoPrinting(id: string) {
-    setScryfallId(id);
-    onEditionChange?.(id);
-  }
   // "Do I own this card (any printing)?" — live so it reflects edits made from
   // this very sheet. Shown everywhere except plain edit mode, where the entry
   // being edited already proves ownership.
@@ -430,15 +418,10 @@ export function CardSheet({
       (a, b) => rank(a) - rank(b) || CONDITIONS.indexOf(a.condition) - CONDITIONS.indexOf(b.condition),
     );
   }, [ownedEntries, printings]);
-  // The copy the "In your collection" badge taps through to: the shown printing
-  // if you own it, else whatever you do own. Gives the user a one-tap route from
-  // a deck slot (or a search hit) to the entry itself, where quantity, condition
-  // and the rest can be corrected. Never from a scan session — leaving that sheet
-  // mid-scan would throw the session away.
-  const collectionTarget =
-    mode === 'session' || mode === 'edit'
-      ? undefined
-      : ownedCopies.find((e) => e.scryfallId === shownId) ?? ownedCopies[0];
+  // The "In your collection" badge jumps to a Collection search for this card's
+  // name, never from a scan session — leaving that sheet mid-scan would throw
+  // the session away — or edit mode, which already shows the entry itself.
+  const canOpenInCollection = mode !== 'session' && mode !== 'edit';
   // Printings with copies marked for trade — their edition tile gets the purple tag.
   const ownedForTradeIds = useMemo(
     () => new Set((ownedEntries ?? []).filter((e) => e.quantityForTrade > 0).map((e) => e.scryfallId)),
@@ -645,28 +628,6 @@ export function CardSheet({
                 <img className="sheet-card" src={shownImage ?? cardImage} alt={oracleCard.name} />
               </button>
               {finish && finish !== 'nonfoil' && <span className="foil-sheen" aria-hidden />}
-              {printingNavEnabled && printingIndex > 0 && (
-                <button
-                  type="button"
-                  className="sheet-edition-nav sheet-edition-prev"
-                  onClick={() => gotoPrinting(printings[printingIndex - 1]!.scryfallId)}
-                  aria-label="Previous printing"
-                  title="Previous printing"
-                >
-                  <Icon name="chevronLeft" size={18} />
-                </button>
-              )}
-              {printingNavEnabled && printingIndex < printings.length - 1 && (
-                <button
-                  type="button"
-                  className="sheet-edition-nav sheet-edition-next"
-                  onClick={() => gotoPrinting(printings[printingIndex + 1]!.scryfallId)}
-                  aria-label="Next printing"
-                  title="Next printing"
-                >
-                  <Icon name="chevronRight" size={18} />
-                </button>
-              )}
               {cardBackImage && (
                 <button
                   type="button"
@@ -690,13 +651,10 @@ export function CardSheet({
                 forTrade={ownedForTrade}
                 ownsExact={ownsExact}
                 onOpen={
-                  collectionTarget
+                  canOpenInCollection
                     ? () => {
-                        if (ownedCopies.length > 1) setPickingCollectionTarget(true);
-                        else {
-                          onClose();
-                          navigate(`/collection?entry=${encodeURIComponent(collectionTarget.id)}`);
-                        }
+                        onClose();
+                        openCollectionSearch(oracleCard.name);
                       }
                     : undefined
                 }
@@ -1067,20 +1025,6 @@ export function CardSheet({
             setPickingCopy(false);
           }}
           onClose={() => setPickingCopy(false)}
-        />
-      )}
-      {pickingCollectionTarget && (
-        <CopyPicker
-          title="Which copy?"
-          copies={ownedCopies}
-          printings={printings}
-          selected={{ scryfallId, condition, finish, lang }}
-          onSelect={(copy) => {
-            setPickingCollectionTarget(false);
-            onClose();
-            navigate(`/collection?entry=${encodeURIComponent(copy.id)}`);
-          }}
-          onClose={() => setPickingCollectionTarget(false)}
         />
       )}
       {eventEntry && (

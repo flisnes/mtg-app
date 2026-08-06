@@ -1,4 +1,5 @@
-import type { JoinedEntry, JoinedWish } from '../db/queries.js';
+import type { ContainerKind, DeckBoard } from '@mtg/shared';
+import type { JoinedEntry, JoinedWish, JoinedDeckCard } from '../db/queries.js';
 import type { CardItem } from './CardViews.js';
 import type { useMoverFlags } from '../price/useMoverFlags.js';
 import type { useOwnershipIndex } from '../db/useOwnership.js';
@@ -115,6 +116,35 @@ export function wishCardItem(
     ),
     // "Any printing" wishes are tracked via the oracle's default printing.
     trend: opts.moverFlags?.get(r.entry.scryfallId ?? r.oracle?.defaultScryfallId ?? ''),
+    onClick: opts.onClick,
+  };
+}
+
+const BOARD_LABEL: Record<DeckBoard, string> = { main: '', side: 'Sideboard', commander: 'Commander', token: 'Token' };
+
+/** A deck/binder/box slot: which board it's in (deck), or its printing (storage). */
+export function deckCardItem(r: JoinedDeckCard, opts: { kind: ContainerKind; onClick?: () => void }): CardItem {
+  return {
+    key: r.entry.id,
+    name: r.oracle?.name ?? '(unknown card)',
+    image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
+    mana: r.oracle?.manaCost,
+    foil: !!r.entry.finish && r.entry.finish !== 'nonfoil',
+    count: r.entry.quantity,
+    sub:
+      opts.kind === 'deck' ? (
+        BOARD_LABEL[r.entry.board] || undefined
+      ) : r.entry.anyBasic ? (
+        'any printing'
+      ) : (
+        r.printing && (
+          <>
+            <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />
+            {r.printing.setName} · #{r.printing.collectorNumber}
+          </>
+        )
+      ),
+    price: formatPrice(pricedForFinish(r.printing, r.entry.finish ?? 'nonfoil'), r.oracle) ?? '—',
     onClick: opts.onClick,
   };
 }

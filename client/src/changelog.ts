@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.104.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'A “This deck/binder/box” pill in search, so you can search just that container’s cards. It never turns on by itself — tap it when you want it.',
+      },
+    ],
+  },
+  {
     version: '0.103.0',
     changes: [
       {

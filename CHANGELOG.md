@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.104.0
+
+- **A "This deck/binder/box" search scope.** Open a deck, binder or box and the search scope row now offers a pill for it, alongside Collection/Tradelist/Wishlist. Turn it on to search just that container's cards, and tap a result to edit its slot right there. Unlike the other three, it never turns itself on when you open search — you're often looking for cards to *add*, so it stays out of the way until you ask for it.
+
 ## 0.103.0
 
 - **"In your collection" now opens a search instead of guessing a copy.** Tapping the badge on a card sheet takes you to Collection, scoped and searched for that exact card name, so you see every copy you own at once instead of being dropped onto one entry. This replaces the printing-navigation-arrows and copy-picker changes from 0.101.0/0.102.0, which didn't earn their keep in testing.

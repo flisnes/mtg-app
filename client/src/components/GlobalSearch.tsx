@@ -20,6 +20,7 @@ import { CardSearchView } from './CardSearchView.js';
 import { RecentSearches, recordSearch } from './RecentSearches.js';
 import { ScopedResults, type Scope } from './ScopedResults.js';
 import { ProfileScopedResults } from './ProfileScopedResults.js';
+import { ContainerScopedResults } from './ContainerScopedResults.js';
 import type { IconName } from './icons.js';
 import { ownedBadge } from './OwnedBadge.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
@@ -306,7 +307,17 @@ function SearchOverlay() {
   const [profileWishOn, setProfileWishOn] = useState(!!profile);
   const ownership = useOwnershipIndex();
 
-  // The full set of pills for this context: your own three everywhere, plus the
+  // Unlike the three list pills, this one never starts on — standing on a deck
+  // doesn't mean you want search narrowed to it, since half of what you're
+  // there to do is find cards that *aren't* in it yet. So the pill offers the
+  // scope; it never assumes it the way listScopeFor does for your own lists.
+  const [containerOn, setContainerOn] = useState(false);
+
+  // Wording for the container being searched from (a deck, binder or box).
+  const containerMeta = CONTAINER_META[(target.kind === 'deck' && target.containerKind) || 'deck'];
+
+  // The full set of pills for this context: your own three everywhere, this
+  // container's one wherever you're standing on a deck/binder/box, plus the
   // viewed user's two on their community page.
   const pills: { key: string; label: string; icon: IconName; title: string; on: boolean; toggle: () => void }[] = [
     ...SCOPES.map((s) => ({
@@ -315,8 +326,26 @@ function SearchOverlay() {
       icon: s.icon,
       title: `Search your ${s.label.toLowerCase()}`,
       on: scope === s.key,
-      toggle: () => setScope(scope === s.key ? null : s.key),
+      toggle: () => {
+        setScope(scope === s.key ? null : s.key);
+        setContainerOn(false);
+      },
     })),
+    ...(target.kind === 'deck'
+      ? [
+          {
+            key: 'container',
+            label: `This ${containerMeta.noun}`,
+            icon: containerMeta.icon,
+            title: `Search this ${containerMeta.noun}`,
+            on: containerOn,
+            toggle: () => {
+              setContainerOn((v) => !v);
+              setScope(null);
+            },
+          },
+        ]
+      : []),
     ...(profile
       ? [
           {
@@ -350,10 +379,7 @@ function SearchOverlay() {
   );
 
   const profileActive = !!profile && !!session && (profileTradeOn || profileWishOn);
-  const scoped = !!scope || profileActive;
-
-  // Wording for the container being searched from (a deck, binder or box).
-  const containerMeta = CONTAINER_META[(target.kind === 'deck' && target.containerKind) || 'deck'];
+  const scoped = !!scope || profileActive || containerOn;
 
   // Searching from a deck filters to cards you could actually play there: legal
   // in the deck's format and, for Commander, within the commander's identity.
@@ -554,6 +580,9 @@ function SearchOverlay() {
                 empty state to hang these off — they go above the list. */}
             {!query && <RecentSearches onPick={setQuery} />}
             {scope && <ScopedResults scope={scope} query={query} />}
+            {containerOn && target.kind === 'deck' && (
+              <ContainerScopedResults deckId={target.deckId} kind={containerMeta.kind} format={deckCtx?.format} query={query} />
+            )}
             {profileActive && profile && session && (
               <ProfileScopedResults
                 token={session.token}

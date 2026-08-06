@@ -139,14 +139,12 @@ export function CopyGrid({
 
 /** The grid as an overlay, for the card sheet's edition shortcut. */
 export function CopyPicker({
-  title = 'Your copies',
   copies,
   printings,
   selected,
   onSelect,
   onClose,
 }: {
-  title?: string;
   copies: CollectionEntry[];
   printings: Priced<Printing>[];
   selected: CopySelection;
@@ -165,11 +163,11 @@ export function CopyPicker({
       <div
         className="sheet edition-picker-sheet"
         role="dialog"
-        aria-label={title}
+        aria-label="Your copies"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="edition-picker-head">
-          <h2>{title}</h2>
+          <h2>Your copies</h2>
           <button onClick={onClose} aria-label="Close">
             <Icon name="close" size={18} />
           </button>

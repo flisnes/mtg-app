@@ -20,7 +20,7 @@ type Ownership = ReturnType<typeof useOwnershipIndex>;
 /** A collection/tradelist row: printing + condition + finish, with a "for trade" badge. */
 export function collectionCardItem(
   r: JoinedEntry,
-  opts: { moverFlags?: MoverFlags; placements?: PlacementIndex; onClick?: () => void; highlight?: boolean },
+  opts: { moverFlags?: MoverFlags; placements?: PlacementIndex; onClick?: () => void },
 ): CardItem {
   // Per copy: the badge belongs on the card that's actually filed away, not on
   // every edition — nor on your English copy when it's the Spanish one that's in
@@ -40,7 +40,6 @@ export function collectionCardItem(
     mana: r.oracle?.manaCost,
     foil: r.entry.finish !== 'nonfoil',
     count: r.entry.quantity,
-    highlight: opts.highlight,
     // Tradelist glyph + how many copies are up for grabs, same shape as the
     // "filed" badge next to it.
     badge:

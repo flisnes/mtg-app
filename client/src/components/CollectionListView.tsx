@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { ContainerKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
@@ -8,7 +8,7 @@ import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
 import { removeCollectionEntriesBulk, setQuantityForTradeBulk } from '../db/dataAccess.js';
 import { useFiling } from '../deck/useFiling.js';
 import { CardSheet } from './CardSheet.js';
-import { CardItems, ViewToggle, useViewMode, cardItemDomId } from './CardViews.js';
+import { CardItems, ViewToggle, useViewMode } from './CardViews.js';
 import { collectionCardItem } from './cardRows.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { LoadMoreSentinel } from './LoadMoreSentinel.js';
@@ -71,25 +71,6 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // Deliberately not persisted: a filter that hides cards shouldn't outlive the
   // visit that set it, or you come back tomorrow to a collection with holes.
   const [placeFilter, setPlaceFilter] = useState<PlaceFilter>('all');
-
-  // Deep link from another sheet's "In your collection" badge: ?entry=<id> opens
-  // that entry's sheet here, and the row itself flashes once it's scrolled into
-  // view below (see the highlightId effect). One-shot — the param is dropped as
-  // soon as it's been honored, so closing the sheet (or a reload) doesn't reopen it.
-  const [params, setParams] = useSearchParams();
-  const wantedEntry = params.get('entry');
-  const [highlightId, setHighlightId] = useState<string | null>(null);
-  useEffect(() => {
-    if (!wantedEntry || !rows) return;
-    const row = rows.find((r) => r.entry.id === wantedEntry);
-    if (row) {
-      setEditing(row);
-      setHighlightId(wantedEntry);
-    }
-    const next = new URLSearchParams(params);
-    next.delete('entry');
-    setParams(next, { replace: true });
-  }, [wantedEntry, rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // scryfallId → recorded price change; only loaded while a change sort is
   // active (the histories table is the biggest user-data table).
@@ -165,27 +146,8 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // thousands of entries, so rendering all of them (each a tile with images and
   // badges) janks on phones. Reset to page one when the sort or search changes.
   const filterSig = JSON.stringify({ onlyTrade, sort, query, placeFilter });
-  const { limit, showMore, ensure } = usePagedLimit(filterSig, 60);
+  const { limit, showMore } = usePagedLimit(filterSig, 60);
   const visible = filtered.slice(0, limit);
-
-  // Scroll the deep-linked row into view once it's actually rendered, paging
-  // it in first if it falls past the current page (the ensure() call below
-  // re-runs this effect with a bigger limit before we try to find the node).
-  useEffect(() => {
-    if (!highlightId) return;
-    const idx = filtered.findIndex((r) => r.entry.id === highlightId);
-    if (idx === -1) return;
-    if (idx >= limit) {
-      ensure(idx + 1);
-      return;
-    }
-    requestAnimationFrame(() =>
-      document.getElementById(cardItemDomId(highlightId))?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
-    );
-    const timer = setTimeout(() => setHighlightId(null), 1600);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightId, filtered, limit]);
 
   // Selected keys (= entry ids) resolved back to their rows for bulk actions.
   const selectedRows = filtered.filter((r) => sel.selected.has(r.entry.id));
@@ -347,14 +309,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           selectable={sel.active}
           selectedKeys={sel.selected}
           onToggleSelect={sel.toggle}
-          items={visible.map((r) =>
-            collectionCardItem(r, {
-              moverFlags,
-              placements,
-              onClick: () => setEditing(r),
-              highlight: r.entry.id === highlightId,
-            }),
-          )}
+          items={visible.map((r) => collectionCardItem(r, { moverFlags, placements, onClick: () => setEditing(r) }))}
         />
       )}
       {!pileMode && (

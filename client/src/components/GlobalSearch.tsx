@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { matchPath, useLocation } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { CONTAINER_KINDS, type Color, type DeckBoard, type DeckFormat, type OracleCard, type Priced, type Printing } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
@@ -101,6 +101,9 @@ interface SearchCtx {
   /** The one list the search is narrowed to, or null for the whole database. */
   scope: Scope | null;
   setScope: (s: Scope | null) => void;
+  /** Scope+query to apply on the next pathname-change reset, instead of the
+   *  usual blank slate — see `useOpenCollectionSearch`. */
+  queuePending: (p: { scope: Scope; query: string }) => void;
 }
 
 const Ctx = createContext<SearchCtx | null>(null);
@@ -130,6 +133,31 @@ export function useListFilter(scope: Scope): string {
   return ctx.query;
 }
 
+/**
+ * Jump to the Collection screen with search open, scoped to Collection, and
+ * the given card name as an exact quoted query — the "In your collection"
+ * badge's one-tap route to every copy of that card. Navigating changes the
+ * pathname, which would otherwise reset search to a blank slate (see the
+ * effect below), so the intent is queued and consumed by that same reset.
+ */
+export function useOpenCollectionSearch(): (cardName: string) => void {
+  const ctx = useContext(Ctx);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  return (cardName: string) => {
+    const query = `"${cardName}"`;
+    if (pathname === '/' || pathname === '/collection') {
+      // Already there — the pathname-change reset won't fire, so set directly.
+      ctx?.setScope('collection');
+      ctx?.setQuery(query);
+      ctx?.setOpen(true);
+    } else {
+      ctx?.queuePending({ scope: 'collection', query });
+      navigate('/collection');
+    }
+  };
+}
+
 export function GlobalSearchProvider({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
@@ -139,25 +167,33 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
   // filtering the wishlist.
   const [scope, setScope] = useState<Scope | null>(() => listScopeFor(pathname));
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const pendingRef = useRef<{ scope: Scope; query: string } | null>(null);
+  const queuePending = (p: { scope: Scope; query: string }) => {
+    pendingRef.current = p;
+  };
 
   // Navigating away (the tab bar stays tappable under the overlay) closes
   // search and drops the query, filters and scope, so reopening it on the new
   // page doesn't resurrect the old one's search. The query goes to the recent
-  // list on the way out, which is what makes the round trip survivable.
+  // list on the way out, which is what makes the round trip survivable. A
+  // queued pending scope+query (useOpenCollectionSearch) overrides that blank
+  // slate for this one reset.
   const prevPath = useRef(pathname);
   useEffect(() => {
     if (prevPath.current === pathname) return;
     prevPath.current = pathname;
     recordSearch(query);
-    setQuery('');
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    setQuery(pending?.query ?? '');
     setFilters({});
-    setScope(listScopeFor(pathname));
-    setOpen(false);
-    inputRef.current?.blur();
+    setScope(pending?.scope ?? listScopeFor(pathname));
+    setOpen(!!pending);
+    if (!pending) inputRef.current?.blur();
   }, [pathname, query]);
 
   const value = useMemo(
-    () => ({ open, setOpen, inputRef, query, setQuery, filters, setFilters, scope, setScope }),
+    () => ({ open, setOpen, inputRef, query, setQuery, filters, setFilters, scope, setScope, queuePending }),
     [open, query, filters, scope],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

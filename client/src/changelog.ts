@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.110.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Deck folders: simpler "Add deck"/"Add folder" buttons with the name ready to type, a per-deck menu that actually moves/deletes instead of a dropdown that bumped you into the deck, an options menu that no longer gets clipped, and a mobile layout that gives decks the full width.',
+      },
+    ],
+  },
+  {
     version: '0.110.0',
     changes: [
       {

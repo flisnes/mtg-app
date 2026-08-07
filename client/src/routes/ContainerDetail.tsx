@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   DECK_FORMATS,
   type Color,
@@ -142,7 +142,9 @@ function tokenLabel(o: {
 export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   const account = useAccount();
   const [favDeckIds, setFavDeckIds] = useState<Set<string> | null>(null);
   const [showImport, setShowImport] = useState(false);
@@ -228,6 +230,22 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       cancelled = true;
     };
   }, [account.enabled, account.session?.token, account.session?.username]);
+
+  // Arriving straight from "Add deck"/"Add binder"/"Add box" (Containers.tsx):
+  // the name field is the first thing worth typing into, so focus and select
+  // its placeholder text ("Untitled deck") instead of making that a separate
+  // click. The name input only exists once `data.deck` has loaded off the
+  // liveQuery above (the first render or two show a loading/redirect state
+  // instead), so this can't just run once on mount — it waits for the deck to
+  // show up, then consumes the flag via a replace-navigation so navigating
+  // back here later (browser back/forward) doesn't steal focus again.
+  useEffect(() => {
+    if (!data?.deck) return;
+    if (!(location.state as { focusName?: boolean } | null)?.focusName) return;
+    nameInputRef.current?.focus();
+    nameInputRef.current?.select();
+    navigate(location.pathname, { replace: true, state: null });
+  }, [data?.deck, location.state, location.pathname, navigate]);
 
   const summary = useMemo(() => {
     // Tokens never count toward "cards" — they're a separate, uncounted list.
@@ -547,6 +565,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       </div>
 
       <input
+        ref={nameInputRef}
         className="deck-name-input"
         value={nameDraft ?? deck.name}
         onChange={(e) => setNameDraft(e.target.value)}

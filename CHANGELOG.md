@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.110.1
+
+- **Deck folder fixes.** The Decks screen's create fields are gone — tap "Add deck" or "Add folder" instead, and the name field is ready to type into as soon as you land. Each deck now has its own `⋯` menu (move to a folder, create one on the spot, or delete the deck) instead of a dropdown that used to bump you into the deck by mistake. A folder's own `⋯` menu no longer gets clipped when the folder list is short. On phones, folders now sit above the deck list at full width instead of squeezing it into a strip.
+
 ## 0.110.0
 
 - **Sort and filter your decks.** The Decks screen now has a filter row: search by name, narrow to a format or a color, and sort by name, format, colors or owned value (with an ascending/descending toggle). Once you've made folders, an "All decks" checkbox flattens the list back to everything at once, ignoring which folder each deck is in.

@@ -690,7 +690,6 @@ button.danger-outline {
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
-  overflow: hidden;
 }
 .menu-item {
   display: flex;
@@ -702,8 +701,18 @@ button.danger-outline {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
+/* Rounded corners used to come from `.menu-list { overflow: hidden }`, which
+   also clipped anything that legitimately overflows a row — an OptionsMenu
+   popup opened from the first (or only) row in a short list had nowhere to
+   render and got cut off. Round the end rows themselves instead. */
+.menu-list li:first-child .menu-item {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
 .menu-list li:last-child .menu-item {
   border-bottom: none;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
 }
 .deck-line {
   display: flex;
@@ -737,27 +746,28 @@ button.danger-outline {
   color: var(--text-dim);
   font-size: 1.3rem;
 }
-.deck-folder-pick select {
-  font-size: 0.78rem;
-  padding: 0.1rem 0.3rem;
-  max-width: 9rem;
+.deck-folder-badge {
+  color: var(--text-dim);
 }
 
 /* ---- Deck folders ---- */
-/* Single column until a folder exists, then a 3:1 split — the folder
-   sidebar earns its place only once there's something to put in it. */
+/* Phone-first: one column, folders (once any exist) stacked above the deck
+   list — it's a "pick where you are" nav, so it reads better first than
+   buried under however many decks are unorganized. The side-by-side 3:1
+   split only earns the room it needs once the screen is wide enough that
+   a deck row isn't squeezed for it (see the wide-screens media query). */
 .deck-board {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
   align-items: start;
 }
-.deck-board-split {
-  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
-}
 .deck-col-list,
 .deck-col-folders {
   min-width: 0;
+}
+.deck-board-split .deck-col-folders {
+  order: -1;
 }
 .deck-folders-title {
   margin: 0 0 0.5rem;
@@ -3262,6 +3272,12 @@ button.chip[aria-pressed='true'] {
   }
   .picker-scroll {
     max-height: 420px;
+  }
+  .deck-board-split {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+  }
+  .deck-board-split .deck-col-folders {
+    order: 0;
   }
 }
 @media (min-width: 1500px) {

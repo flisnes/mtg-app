@@ -15,6 +15,7 @@ import { db } from '../db/schema.js';
 import {
   createContainer,
   createDeckFolder,
+  deleteDeck,
   deleteDeckFolder,
   renameDeckFolder,
   setDeckFolder,
@@ -26,6 +27,7 @@ import { Icon } from '../components/icons.js';
 import { ManaCost } from '../components/ManaCost.js';
 import { HeaderValue, missingValue, useContainersValue, valueText, type ContainerValue } from '../components/ValueSummary.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
+import { DeckFolderPickerSheet } from '../components/DeckFolderPickerSheet.js';
 import { useToast } from '../components/Toast.js';
 import { convertToDisplay } from '../price/rates.js';
 import { COLOR_NAMES } from '../components/CardSorting.js';
@@ -96,12 +98,10 @@ function ownedValueNumber(value: ContainerValue | undefined): number {
 export function Containers({ kind }: { kind: ContainerKind }) {
   const navigate = useNavigate();
   const toast = useToast();
-  const [name, setName] = useState('');
-  const [format, setFormat] = useState<DeckFormat>('casual');
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
-  const [folderName, setFolderName] = useState('');
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [movingDeck, setMovingDeck] = useState<{ id: string; name: string; folderId?: string } | null>(null);
   const [query, setQuery] = useState('');
   const [filterFormat, setFilterFormat] = useState<DeckFormat | ''>('');
   const [filterColor, setFilterColor] = useState<Color | ''>('');
@@ -124,6 +124,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
     () => (isDeck ? db.deckFolders.orderBy('name').toArray() : Promise.resolve<DeckFolder[]>([])),
     [isDeck],
   );
+  const folderNameById = useMemo(() => new Map((folders ?? []).map((f) => [f.id, f.name])), [folders]);
   const hasFolders = isDeck && !!folders && folders.length > 0;
   const openFolder = isDeck ? folders?.find((f) => f.id === openFolderId) : undefined;
 
@@ -205,14 +206,16 @@ export function Containers({ kind }: { kind: ContainerKind }) {
   const missingTotal = value ? valueText(missingValue(value.total)) : undefined;
 
   async function create() {
-    const id = await createContainer(name, kind, format, openFolderId ?? undefined);
-    setName('');
-    navigate(`${meta.path}/${id}`);
+    const id = await createContainer('', kind, 'casual', openFolderId ?? undefined);
+    // The name/format are edited on the container's own page (works great
+    // there), so land straight on it with the name field ready to type into.
+    navigate(`${meta.path}/${id}`, { state: { focusName: true } });
   }
 
   async function createFolder() {
-    await createDeckFolder(folderName);
-    setFolderName('');
+    const id = await createDeckFolder('');
+    setRenamingFolderId(id);
+    setRenameValue('Untitled folder');
   }
 
   function startRenameFolder(folder: DeckFolder) {
@@ -232,24 +235,20 @@ export function Containers({ kind }: { kind: ContainerKind }) {
     toast(`Deleted folder “${folder.name}”`);
   }
 
-  // Creating the very first folder has no sidebar to live in yet (that only
-  // shows up once one exists), so the same toolbar renders inline under the
-  // deck list until then, and moves into the sidebar once it has a home.
-  const folderCreateToolbar = isDeck && (
-    <div className="list-toolbar deck-folder-toolbar">
-      <input
-        className="search-input grow"
-        placeholder="New folder name…"
-        value={folderName}
-        onChange={(e) => setFolderName(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && createFolder()}
-        aria-label="New folder name"
-      />
-      <button className="primary" onClick={createFolder}>
-        New folder
-      </button>
-    </div>
-  );
+  async function removeDeck(deck: { id: string; name: string }) {
+    if (!window.confirm(`Delete “${deck.name}”? This can’t be undone.`)) return;
+    await deleteDeck(deck.id);
+    toast(`Deleted “${deck.name}”`);
+  }
+
+  // Swallow the click before it bubbles to the enclosing <Link> — stopping
+  // propagation alone doesn't cancel the anchor's own navigation, so this also
+  // needs preventDefault (bit us once already, with the folder-picker <select>
+  // this replaced: opening it still navigated to the deck).
+  function swallow(e: { preventDefault(): void; stopPropagation(): void }) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
 
   return (
     <Page
@@ -284,26 +283,10 @@ export function Containers({ kind }: { kind: ContainerKind }) {
       </div>
 
       <div className="list-toolbar">
-        <input
-          className="search-input grow"
-          placeholder={`New ${meta.noun} name…`}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && create()}
-          aria-label={`New ${meta.noun} name`}
-        />
-        {isDeck && (
-          <select value={format} onChange={(e) => setFormat(e.target.value as DeckFormat)} aria-label="Format">
-            {DECK_FORMATS.map((f) => (
-              <option key={f} value={f}>
-                {formatLabel(f)}
-              </option>
-            ))}
-          </select>
-        )}
         <button className="primary" onClick={create}>
-          Create
+          Add {meta.noun}
         </button>
+        {isDeck && <button onClick={createFolder}>Add folder</button>}
       </div>
 
       {isDeck && (
@@ -369,7 +352,6 @@ export function Containers({ kind }: { kind: ContainerKind }) {
 
       <div className={hasFolders ? 'deck-board deck-board-split' : 'deck-board'}>
         <div className="deck-col-list">
-          {!hasFolders && folderCreateToolbar}
           {visibleRows === undefined ? (
             <p className="search-meta">Loading…</p>
           ) : visibleRows.length === 0 ? (
@@ -383,8 +365,8 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                   </p>
                   <p className="empty-phase">
                     {isDeck
-                      ? 'Name one above and hit Create.'
-                      : `Name one above and hit Create, then file cards into it from your collection.`}
+                      ? `Tap “Add deck” above to make one.`
+                      : `Tap “Add ${meta.noun}” above, then file cards into it from your collection.`}
                   </p>
                 </>
               )}
@@ -395,6 +377,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                 const own = value?.byId.get(deck.id);
                 const ownText = own && valueText(own.owned);
                 const missText = own && valueText(missingValue(own));
+                const folderName = showAllDecks && deck.folderId ? folderNameById.get(deck.folderId) : undefined;
                 return (
                 <li key={deck.id}>
                   <Link className="menu-item" to={`${meta.path}/${deck.id}`}>
@@ -431,26 +414,30 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                             {ownText}
                           </span>
                         )}
-                        {hasFolders && (
-                          <span className="deck-folder-pick" onClick={(e) => e.stopPropagation()}>
-                            <select
-                              value={deck.folderId ?? ''}
-                              onChange={(e) => void setDeckFolder(deck.id, e.target.value || undefined)}
-                              aria-label={`Move “${deck.name}” to a folder`}
-                            >
-                              <option value="">No folder</option>
-                              {folders!.map((f) => (
-                                <option key={f.id} value={f.id}>
-                                  {f.name}
-                                </option>
-                              ))}
-                            </select>
-                          </span>
-                        )}
+                        {folderName && <span className="badge deck-folder-badge">{folderName}</span>}
                       </span>
                     </span>
-                    <span className="menu-chevron" aria-hidden>
-                      ›
+                    <span onClick={swallow}>
+                      <OptionsMenu
+                        label={`${deck.name} options`}
+                        actions={[
+                          ...(isDeck
+                            ? [
+                                {
+                                  label: 'Move to folder',
+                                  icon: 'folder' as const,
+                                  onClick: () => setMovingDeck({ id: deck.id, name: deck.name, folderId: deck.folderId }),
+                                },
+                              ]
+                            : []),
+                          {
+                            label: `Delete ${meta.noun}`,
+                            icon: 'trash',
+                            danger: true,
+                            onClick: () => void removeDeck(deck),
+                          },
+                        ]}
+                      />
                     </span>
                   </Link>
                 </li>
@@ -463,7 +450,6 @@ export function Containers({ kind }: { kind: ContainerKind }) {
         {hasFolders && (
           <div className="deck-col-folders">
             <h2 className="deck-folders-title">Folders</h2>
-            {folderCreateToolbar}
             <ul className="menu-list">
               {folders!.map((folder) => (
                 <li key={folder.id}>
@@ -476,6 +462,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                         className="search-input grow"
                         value={renameValue}
                         autoFocus
+                        onFocus={(e) => e.currentTarget.select()}
                         onChange={(e) => setRenameValue(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') void commitRenameFolder();
@@ -519,6 +506,18 @@ export function Containers({ kind }: { kind: ContainerKind }) {
           </div>
         )}
       </div>
+
+      {movingDeck && (
+        <DeckFolderPickerSheet
+          deckName={movingDeck.name}
+          currentFolderId={movingDeck.folderId}
+          onClose={() => setMovingDeck(null)}
+          onPick={(folderId) => {
+            void setDeckFolder(movingDeck.id, folderId);
+            setMovingDeck(null);
+          }}
+        />
+      )}
     </Page>
   );
 }

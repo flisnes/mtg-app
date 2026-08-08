@@ -16,6 +16,11 @@ import { FORMATS, normalizeColors, type Color, type Finish, type Format, type Or
 //   f:modern          legal in format (restricted counts as legal)
 //   is:transform  is:reserved  is:foil   see IS_KEYWORDS below for the full list
 //
+// Terms combine like they do on Scryfall: whitespace means AND, `or` means OR
+// (`and` may be spelled out too), parentheses group, and `-` negates either a
+// single term or a whole group. AND binds tighter than OR, so
+// `t:goblin or t:elf mv<=2` reads as `t:goblin or (t:elf and mv<=2)`.
+//
 // Unknown or malformed terms fall back to plain name text so a typo narrows
 // the search visibly instead of being silently dropped.
 
@@ -35,11 +40,21 @@ export type QueryTerm = { negate: boolean } & (
   | { kind: 'is'; test: (entry: SearchableEntry) => boolean }
 );
 
+/** A term, or a boolean combination of them. */
+export type QueryNode =
+  | { kind: 'and'; children: QueryNode[] }
+  | { kind: 'or'; children: QueryNode[] }
+  | { kind: 'not'; child: QueryNode }
+  | QueryTerm;
+
 export interface ParsedQuery {
-  terms: QueryTerm[];
-  /** Non-negated name terms joined for ranking (exact/prefix beats scattered words). */
-  namePhrase: string;
-  hasNameTerms: boolean;
+  /** The parsed expression; null when nothing in the query filters anything out. */
+  root: QueryNode | null;
+  /**
+   * Non-negated name text for ranking (exact/prefix beats scattered words), one
+   * entry per OR branch: `bolt or shock` ranks against either.
+   */
+  namePhrases: string[];
 }
 
 /** The pre-computed per-card strings a query term matches against. */
@@ -148,36 +163,187 @@ const RARITY_ALIASES: Record<string, Rarity> = { c: 'common', u: 'uncommon', r: 
 
 const FORMAT_ALIASES: Record<string, Format> = { edh: 'commander' };
 
-// token = [-]  [field  op]  quoted-or-bare-value
-const TOKEN = /(-)?(?:([a-zA-Z]+)(!=|>=|<=|>|<|:|=))?("([^"]*)"|[^\s"]+)/g;
+// ---- Lexing ----
+
+type LexToken = { t: 'lparen' | 'rparen' | 'and' | 'or' | 'not' } | { t: 'term'; term: QueryTerm };
+
+// token = [-]  [field  op]  quoted-or-bare-value. A bare value stops at quotes
+// and parens as well as whitespace, so `(t:goblin or t:elf)` lexes as a group
+// rather than one term with brackets glued on.
+const TOKEN = /^(-)?(?:([a-zA-Z]+)(!=|>=|<=|>|<|:|=))?("([^"]*)"|[^\s"()]+)/;
+const HALF_TYPED_FIELD = /^([a-zA-Z]+)(!=|>=|<=|>|<|:|=)$/;
+
+function lex(source: string): LexToken[] {
+  const out: LexToken[] = [];
+  let i = 0;
+  while (i < source.length) {
+    const ch = source[i]!;
+    if (/\s/.test(ch)) {
+      i++;
+      continue;
+    }
+    if (ch === '(' || ch === ')') {
+      out.push({ t: ch === '(' ? 'lparen' : 'rparen' });
+      i++;
+      continue;
+    }
+    // `-` only negates a group here; a leading `-` on a term is part of the term.
+    if (ch === '-' && source[i + 1] === '(') {
+      out.push({ t: 'not' });
+      i++;
+      continue;
+    }
+    const m = TOKEN.exec(source.slice(i));
+    if (!m) {
+      i++; // a lone `-` or other stray punctuation with no value after it
+      continue;
+    }
+    i += m[0].length;
+
+    const negate = !!m[1];
+    const field = m[2]?.toLowerCase();
+    const op = m[3];
+    const quoted = m[5] !== undefined;
+    const value = m[5] ?? m[4]!;
+
+    if (!quoted) {
+      // Bare `or` / `and` are operators; quote them to search for the words.
+      const word = value.toLowerCase();
+      if (!field && !negate && (word === 'or' || word === 'and')) {
+        out.push({ t: word });
+        continue;
+      }
+      // A known field with the value still unwritten ("o:", "mv>=") matches
+      // everything rather than becoming name text mid-keystroke.
+      const half = !field && HALF_TYPED_FIELD.exec(value);
+      if (half && KNOWN_FIELDS.has(half[1]!.toLowerCase())) continue;
+    }
+
+    const term = field && op ? fieldTerm(field, op, value, negate) : null;
+    if (term) out.push({ t: 'term', term });
+    else if (!field) out.push({ t: 'term', term: { kind: 'name', value: normalize(value), negate } });
+    else
+      out.push({
+        t: 'term',
+        term: { kind: 'name', value: normalize(m[0]!.replace(/^-/, '').replaceAll('"', '')), negate },
+      });
+  }
+  return out;
+}
+
+// ---- Parsing ----
+//
+// expr := and ( 'or' and )*      and := unary+      unary := '-'? ( '(' expr ')' | term )
+//
+// Every rule tolerates half-typed input, because this runs on each keystroke: a
+// dangling `or`, an unclosed `(`, a stray `)` and an empty group are all just
+// dropped instead of failing the parse.
+
+interface Cursor {
+  toks: LexToken[];
+  i: number;
+}
+
+const peek = (c: Cursor): LexToken | undefined => c.toks[c.i];
+
+function parseOr(c: Cursor): QueryNode | null {
+  const branches: QueryNode[] = [];
+  const first = parseAnd(c);
+  if (first) branches.push(first);
+  while (peek(c)?.t === 'or') {
+    c.i++;
+    // A branch that filters nothing (`bolt or `, mid-typing) is dropped rather
+    // than widening the whole query back to every card.
+    const next = parseAnd(c);
+    if (next) branches.push(next);
+  }
+  if (branches.length <= 1) return branches[0] ?? null;
+  return { kind: 'or', children: branches };
+}
+
+function parseAnd(c: Cursor): QueryNode | null {
+  const children: QueryNode[] = [];
+  for (;;) {
+    const t = peek(c);
+    if (!t || t.t === 'or' || t.t === 'rparen') break;
+    if (t.t === 'and') {
+      c.i++; // explicit `and` is just a separator; whitespace already means AND
+      continue;
+    }
+    const node = parseUnary(c);
+    if (node) children.push(node);
+  }
+  if (children.length <= 1) return children[0] ?? null;
+  return { kind: 'and', children };
+}
+
+/** Always consumes at least one token, so the AND loop can't spin. */
+function parseUnary(c: Cursor): QueryNode | null {
+  const t = c.toks[c.i]!;
+  if (t.t === 'not') {
+    c.i++;
+    const child = parseUnary(c);
+    return child ? { kind: 'not', child } : null;
+  }
+  if (t.t === 'lparen') {
+    c.i++;
+    const inner = parseOr(c);
+    if (peek(c)?.t === 'rparen') c.i++; // an unclosed group just runs to the end
+    return inner;
+  }
+  c.i++;
+  return t.t === 'term' ? t.term : null;
+}
 
 export function parseSearchQuery(raw: string): ParsedQuery {
   // Close an unfinished quote so a half-typed phrase parses as that phrase.
   let source = raw;
   if ((raw.match(/"/g)?.length ?? 0) % 2 === 1) source += '"';
 
-  const terms: QueryTerm[] = [];
-  for (const m of source.matchAll(TOKEN)) {
-    const negate = !!m[1];
-    const field = m[2]?.toLowerCase();
-    const op = m[3];
-    const value = m[5] ?? m[4]!;
-
-    // A known field with the value still unwritten ("o:", "mv>=") matches
-    // everything rather than becoming name text mid-keystroke.
-    if (!field) {
-      const half = /^([a-zA-Z]+)(!=|>=|<=|>|<|:|=)$/.exec(value);
-      if (half && KNOWN_FIELDS.has(half[1]!.toLowerCase())) continue;
-    }
-
-    const term = field && op ? fieldTerm(field, op, value, negate) : null;
-    if (term) terms.push(term);
-    else if (!field) terms.push({ kind: 'name', value: normalize(value), negate });
-    else terms.push({ kind: 'name', value: normalize(m[0]!.replace(/^-/, '').replaceAll('"', '')), negate });
+  const c: Cursor = { toks: lex(source), i: 0 };
+  const parts: QueryNode[] = [];
+  while (c.i < c.toks.length) {
+    const before = c.i;
+    const node = parseOr(c);
+    if (node) parts.push(node);
+    // Only a stray `)` can stop parseOr short; skip it and keep reading.
+    if (c.i < c.toks.length && (c.i === before || peek(c)!.t === 'rparen')) c.i++;
   }
 
-  const nameValues = terms.filter((t) => t.kind === 'name' && !t.negate).map((t) => (t as { value: string }).value);
-  return { terms, namePhrase: nameValues.join(' '), hasNameTerms: nameValues.length > 0 };
+  const root: QueryNode | null = parts.length <= 1 ? (parts[0] ?? null) : { kind: 'and', children: parts };
+  return { root, namePhrases: namePhrasesOf(root).filter(Boolean) };
+}
+
+/** Cap on the OR branches we rank against; ranking degrades, matching doesn't. */
+const MAX_NAME_PHRASES = 8;
+
+/**
+ * The name text of each OR branch, joined in query order ('' when a branch has
+ * none). Negated terms and anything inside a `-(…)` group don't rank.
+ */
+function namePhrasesOf(node: QueryNode | null): string[] {
+  if (!node) return [''];
+  switch (node.kind) {
+    case 'not':
+      return [''];
+    case 'or': {
+      const alts = new Set<string>();
+      for (const child of node.children) for (const phrase of namePhrasesOf(child)) if (phrase) alts.add(phrase);
+      return alts.size ? [...alts].slice(0, MAX_NAME_PHRASES) : [''];
+    }
+    case 'and': {
+      let alts = [''];
+      for (const child of node.children) {
+        const childAlts = namePhrasesOf(child);
+        const next = new Set<string>();
+        for (const a of alts) for (const b of childAlts) next.add(a && b ? `${a} ${b}` : a || b);
+        alts = [...next].slice(0, MAX_NAME_PHRASES);
+      }
+      return alts;
+    }
+    default:
+      return [node.kind === 'name' && !node.negate ? node.value : ''];
+  }
 }
 
 function fieldTerm(field: string, op: string, value: string, negate: boolean): QueryTerm | null {
@@ -431,14 +597,24 @@ const IS_KEYWORDS: Record<string, (e: SearchableEntry) => boolean> = {
  */
 export function compileCardQuery(query: string): { isEmpty: boolean; matches: (entry: SearchableEntry) => boolean } {
   const parsed = parseSearchQuery(query.trim());
-  return { isEmpty: parsed.terms.length === 0, matches: (entry) => matchesQuery(entry, parsed) };
+  return { isEmpty: parsed.root === null, matches: (entry) => matchesQuery(entry, parsed) };
 }
 
 export function matchesQuery(entry: SearchableEntry, q: ParsedQuery): boolean {
-  for (const t of q.terms) {
-    if (termMatches(entry, t) === t.negate) return false;
+  return q.root === null || nodeMatches(entry, q.root);
+}
+
+function nodeMatches(entry: SearchableEntry, node: QueryNode): boolean {
+  switch (node.kind) {
+    case 'and':
+      return node.children.every((child) => nodeMatches(entry, child));
+    case 'or':
+      return node.children.some((child) => nodeMatches(entry, child));
+    case 'not':
+      return !nodeMatches(entry, node.child);
+    default:
+      return termMatches(entry, node) !== node.negate;
   }
-  return true;
 }
 
 function termMatches(entry: SearchableEntry, t: QueryTerm): boolean {

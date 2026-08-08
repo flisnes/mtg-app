@@ -3054,6 +3054,23 @@ button.chip[aria-pressed='true'] {
   gap: 0.5rem;
   padding-top: 0.6rem;
 }
+/* Dock notes above the trade bar: price refresh status, unpriced-card warning. */
+.trade-note {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 0 0.5rem;
+}
+.trade-note-warn {
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: 10px;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
 .trade-bar {
   display: flex;
   align-items: center;

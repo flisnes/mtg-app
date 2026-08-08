@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.112.0
+
+- **Trades now start on today's prices.** Both sides of a trade price the cards from their own device, so an app that had been open for a week could quietly value the deal differently from the person across the table. Opening a trade now pulls the day's prices first (just the prices, not the whole card database). If a card still can't be priced on your device, the trade bar says so and warns that your partner's total may not match, rather than silently counting that card as zero.
+
 ## 0.111.0
 
 - **`or` and parentheses in search.** Search terms still AND together by default, but you can now write `t:goblin or t:elf` to get either, group with parentheses (`(t:goblin or t:elf) mv<=2`), and negate a whole group with a minus (`-(t:goblin or t:elf)`). `and` can be spelled out too, and AND binds tighter than OR, just like on Scryfall: `t:goblin or t:elf mv<=2` reads as "goblins, or elves that cost 2 or less". Works everywhere search does, including the filters on your collection, decks and wishlist. To search for the literal word "or", quote it: `"or"`.

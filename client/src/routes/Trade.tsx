@@ -23,6 +23,7 @@ import { ScanSheet, clearTradeScanSessions } from '../components/ScanSheet.js';
 import { TradeQr } from '../components/TradeQr.js';
 import { useDismiss } from '../components/useDismiss.js';
 import { TRADE_ENABLED } from '../trade/config.js';
+import { useTradePriceRefresh } from '../trade/usePriceRefresh.js';
 import {
   clearPersistedSoloTrade,
   clearPersistedTrade,
@@ -369,6 +370,11 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const theirOffer = offers[peer];
   const editable = snap.state !== 'completed' && snap.state !== 'cancelled';
 
+  // Both sides price the offer from their own local shards, so an app that has
+  // been open for a week quietly disagrees with its partner about what the trade
+  // is worth. Opening a live session pulls today's prices.
+  const { refreshing: pricesRefreshing, epoch: priceEpoch } = useTradePriceRefresh(editable);
+
   // Once the trade lands, check whether any card we gave away is still stuck
   // in a filing conflict — a copy filed in two places at once, so the app
   // couldn't tell which one just left. Everything else resolves itself.
@@ -432,9 +438,9 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   }
 
   // Printings (images + prices) and oracle cards for both offers.
-  const { printMap, oracleMap } = useCardMaps([...myOffer, ...theirOffer]);
-  const totalOf = (lines: TradeLine[]) =>
-    lines.reduce((sum, l) => sum + (pricedForFinish(printMap?.get(l.scryfallId), l.finish)?.priceEur ?? 0) * l.quantity, 0);
+  const { printMap, oracleMap } = useCardMaps([...myOffer, ...theirOffer], priceEpoch);
+  const eurOf = (l: TradeLine) => pricedForFinish(printMap?.get(l.scryfallId), l.finish)?.priceEur ?? 0;
+  const totalOf = (lines: TradeLine[]) => lines.reduce((sum, l) => sum + eurOf(l) * l.quantity, 0);
   const openInfo: OpenInfo = (oracle, scryfallId, ctx) => setInfo({ oracle, scryfallId, ctx });
 
   // Editions "the relevant person" has, for the info sheet's edition dropdown:
@@ -509,6 +515,14 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const myTotal = totalOf(myOffer);
   const theirTotal = totalOf(theirOffer);
   const diff = myTotal - theirTotal;
+
+  // Cards this device can't put a number on: a printing missing from an
+  // out-of-date card DB, or one with no EUR price. They count as zero in the
+  // totals above, which is how two partners end up disagreeing about a trade
+  // neither of them mispriced on purpose. The session-open price refresh fixes
+  // most of it; this is the backstop for when that couldn't run (offline, or
+  // card data the user hasn't taken yet).
+  const unpricedCount = printMap ? [...myOffer, ...theirOffer].filter((l) => eurOf(l) === 0).length : 0;
 
   const iAccepted = snap.accepted[seat];
   const peerAccepted = snap.accepted[peer];
@@ -656,6 +670,18 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
       </div>
 
       <div className="trade-dock">
+        {pricesRefreshing ? (
+          <div className="trade-note">Checking for today’s prices…</div>
+        ) : (
+          unpricedCount > 0 && (
+            <div className="trade-note trade-note-warn">
+              {unpricedCount === 1
+                ? '1 card has no price on this device and counts as zero.'
+                : `${unpricedCount} cards have no price on this device and count as zero.`}{' '}
+              Your partner’s total may differ.
+            </div>
+          )
+        )}
         <div className="trade-bar">
           <button
             className={`trade-diff ${Math.abs(diff) < BALANCE_EPSILON ? 'diff-even' : 'diff-off'}`}

@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.112.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Opening a trade now fetches the day\'s prices first, so both sides value the cards the same. Any card your device still can\'t price is called out above the trade bar instead of quietly counting as zero.',
+      },
+    ],
+  },
+  {
     version: '0.111.0',
     changes: [
       {

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.111.0
+
+- **`or` and parentheses in search.** Search terms still AND together by default, but you can now write `t:goblin or t:elf` to get either, group with parentheses (`(t:goblin or t:elf) mv<=2`), and negate a whole group with a minus (`-(t:goblin or t:elf)`). `and` can be spelled out too, and AND binds tighter than OR, just like on Scryfall: `t:goblin or t:elf mv<=2` reads as "goblins, or elves that cost 2 or less". Works everywhere search does, including the filters on your collection, decks and wishlist. To search for the literal word "or", quote it: `"or"`.
+
 ## 0.110.1
 
 - **Deck folder fixes.** The Decks screen's create fields are gone — tap "Add deck" or "Add folder" instead, and the name field is ready to type into as soon as you land. Each deck now has its own `⋯` menu (move to a folder, create one on the spot, or delete the deck) instead of a dropdown that used to bump you into the deck by mistake. A folder's own `⋯` menu no longer gets clipped when the folder list is short. On phones, folders now sit above the deck list at full width instead of squeezing it into a strip.

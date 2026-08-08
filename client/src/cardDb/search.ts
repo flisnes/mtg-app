@@ -16,8 +16,9 @@ import {
 // ever gets slow, the plan's escape hatch is MiniSearch — not needed at 37k.
 //
 // Queries support Scryfall-style syntax (o:/t:/c:/id:/r:/mv:/f:/mana:/set:/is:,
-// negation with `-`) — see querySyntax.ts. Bare words still match names, so
-// plain queries from the import and trade pickers behave as before.
+// negation with `-`, `or` and parentheses) — see querySyntax.ts. Bare words
+// still match names, so plain queries from the import and trade pickers behave
+// as before.
 
 export interface SearchFilters {
   color?: Color | '';
@@ -178,16 +179,20 @@ export async function searchCards(
     if (!matchesQuery(entry, parsed)) continue;
 
     // Rank: exact > prefix > word-start > substring > scattered words. Terms
-    // other than name text don't affect ranking, only membership.
+    // other than name text don't affect ranking, only membership; an OR query
+    // ranks by its best-matching branch.
     let score = 0;
-    if (parsed.hasNameTerms) {
+    for (const phrase of parsed.namePhrases) {
       const name = entry.normName;
-      const idx = name.indexOf(parsed.namePhrase);
-      if (idx === -1) score = 1;
-      else if (name === parsed.namePhrase) score = 5;
-      else if (idx === 0) score = 4;
-      else if (name[idx - 1] === ' ') score = 3;
-      else score = 2;
+      const idx = name.indexOf(phrase);
+      let phraseScore = 1;
+      if (idx !== -1) {
+        if (name === phrase) phraseScore = 5;
+        else if (idx === 0) phraseScore = 4;
+        else if (name[idx - 1] === ' ') phraseScore = 3;
+        else phraseScore = 2;
+      }
+      score = Math.max(score, phraseScore);
     }
     matches.push({ card: entry.card, score });
   }

@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.111.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Search now understands `or` and parentheses: `t:goblin or t:elf`, `(t:goblin or t:elf) mv<=2`, and `-(...)` to rule a whole group out. Spaces still mean "and", which binds tighter than "or".',
+      },
+    ],
+  },
+  {
     version: '0.110.1',
     changes: [
       {

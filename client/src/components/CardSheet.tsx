@@ -38,6 +38,7 @@ import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
+import { TagField } from './TagField.js';
 import { Sparkline } from './Sparkline.js';
 import { useDismiss } from './useDismiss.js';
 
@@ -163,6 +164,8 @@ export function CardSheet({
     condition?: Condition;
     finish?: Finish;
     lang?: string;
+    /** The slot's own labels within this container (see DeckCard.tags). */
+    tags?: string[];
     board?: DeckBoard;
     /** The deck this slot lives in, so the sheet can read its command zone. */
     deckId?: string;
@@ -316,6 +319,8 @@ export function CardSheet({
     entry?.quantity ?? wishEntry?.quantity ?? wishView?.quantity ?? deckCard?.quantity ?? sessionCard?.quantity ?? 1,
   );
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
+  // Slot tags ride along with Save/Cancel like every other field on the sheet.
+  const [tags, setTags] = useState<string[]>(deckCard?.tags ?? []);
   const [busy, setBusy] = useState(false);
   const [trend, setTrend] = useState<HistoryChange | null>(null);
   const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(null);
@@ -505,7 +510,7 @@ export function CardSheet({
     } else if (wishEntry) {
       await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, ...wishPrefs, quantity });
     } else if (deckCard) {
-      await updateDeckCard(deckCard.id, { quantity, scryfallId, anyBasic: anyBasicPicked, wants: wishPrefs });
+      await updateDeckCard(deckCard.id, { quantity, scryfallId, anyBasic: anyBasicPicked, wants: wishPrefs, tags });
     } else if (editing && entry) {
       await updateCollectionEntry(entry.id, {
         scryfallId,
@@ -852,6 +857,12 @@ export function CardSheet({
             </label>
           )}
         </div>
+        )}
+
+        {/* Slot tags: your own labels on this card in this list ("Ramp",
+            "Turn-3 play"), which the group-by-tag view reads. */}
+        {mode === 'deck' && deckCard?.deckId && (
+          <TagField deckId={deckCard.deckId} tags={tags} onChange={setTags} />
         )}
 
         {/* File-into-your-lists affordance. In your own deck both lists lead as

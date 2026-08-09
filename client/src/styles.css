@@ -1015,6 +1015,100 @@ button.danger-outline {
   letter-spacing: 0.04em;
 }
 
+/* ---- Card tags ---- */
+/* The user's own labels on a slot: chips on the card's sub-line, larger chips
+   with a remove button inside the card sheet's tag field. */
+.tag-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  vertical-align: middle;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.tag-chip-x {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+}
+.tag-chip-x:hover {
+  color: var(--danger);
+}
+.tag-field .tag-chip {
+  font-size: 0.82rem;
+  padding: 0.2rem 0.5rem;
+}
+.tag-add-row {
+  display: flex;
+  gap: 0.4rem;
+}
+.tag-add-row .grow {
+  min-width: 0;
+}
+
+/* Tag sheet: a togglable tag per row, with rename/delete revealed by "Manage". */
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: var(--surface);
+}
+.tag-row .menu-item-btn {
+  flex: 1;
+  min-width: 0;
+}
+.tag-row .badge {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.tag-row-edit {
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+.tag-manage-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.35rem;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+}
+.tag-manage-btn:hover {
+  color: var(--text);
+}
+.tag-manage-danger:hover {
+  color: var(--danger);
+}
+/* Some (not all) of the selection carries this tag. */
+.select-box.partial {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  position: relative;
+}
+.select-box.partial::after {
+  content: '';
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: #fff;
+}
+
 /* ---- View toggle + card grid ---- */
 .view-toggle {
   display: inline-flex;

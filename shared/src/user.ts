@@ -135,7 +135,54 @@ export interface DeckCard {
    * scryfallId; display falls back to the card's default printing.
    */
   anyBasic?: boolean;
+  /**
+   * User-defined labels for this slot — "Ramp", "Turn-3 play", "Wincon". They
+   * live on the slot rather than in a table of their own, so a tag belongs to
+   * the container it was written in, travels with it through sync, and cannot
+   * leak into another list. The set of tags a deck has is simply the set its
+   * slots carry (no orphans to garbage-collect). Always stored through
+   * normalizeCardTags; absent = untagged.
+   */
+  tags?: string[];
   updatedAt: number;
+}
+
+/** Longest a card tag can be; anything longer is truncated, not rejected. */
+export const MAX_CARD_TAG_LENGTH = 30;
+/** Most tags one slot can carry — a guard rail, not a design target. */
+export const MAX_CARD_TAGS = 12;
+
+/** Case-insensitive tag order, used for storage and for group headings alike. */
+export function compareCardTags(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { sensitivity: 'base' }) || a.localeCompare(b);
+}
+
+/**
+ * Clean tags into the shape that gets stored: trimmed, inner whitespace
+ * collapsed, truncated, deduped case-insensitively (first spelling wins),
+ * sorted and capped. Sorting matters for sync — two devices that tagged the
+ * same slot in a different order should end up with the same row rather than
+ * fighting over it. Nothing left → undefined, so an untagged slot carries no
+ * field at all.
+ */
+export function normalizeCardTags(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Map<string, string>();
+  for (const v of raw) {
+    if (typeof v !== 'string') continue;
+    const tag = v.replace(/\s+/g, ' ').trim().slice(0, MAX_CARD_TAG_LENGTH).trim();
+    if (!tag) continue;
+    const key = tag.toLocaleLowerCase();
+    if (!seen.has(key)) seen.set(key, tag);
+  }
+  if (seen.size === 0) return undefined;
+  return [...seen.values()].sort(compareCardTags).slice(0, MAX_CARD_TAGS);
+}
+
+/** Whether two normalized tag lists are the same (no write needed). */
+export function sameCardTags(a: string[] | undefined, b: string[] | undefined): boolean {
+  if ((a?.length ?? 0) !== (b?.length ?? 0)) return false;
+  return (a ?? []).every((t, i) => t === b![i]);
 }
 
 /**

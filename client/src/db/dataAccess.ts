@@ -1,4 +1,4 @@
-import { prefsCompatible } from '@mtg/shared';
+import { normalizeCardTags, prefsCompatible, sameCardTags } from '@mtg/shared';
 import type {
   CollectionEntry,
   Condition,
@@ -1314,7 +1314,14 @@ export async function moveDeckCard(id: string, board: DeckBoard): Promise<void> 
       .and((c) => c.oracleId === card.oracleId && !!c.anyBasic === !!card.anyBasic)
       .first();
     if (existing) {
-      const merged: DeckCard = { ...existing, quantity: existing.quantity + card.quantity, updatedAt: now };
+      // Two slots becoming one: the tags of both come along, or moving a tagged
+      // card to the sideboard would quietly strip what you labelled it.
+      const merged: DeckCard = {
+        ...existing,
+        quantity: existing.quantity + card.quantity,
+        tags: normalizeCardTags([...(existing.tags ?? []), ...(card.tags ?? [])]),
+        updatedAt: now,
+      };
       await db.deckCards.put(merged);
       await db.deckCards.delete(id);
       await stagePut('deckCards', merged);
@@ -1345,7 +1352,7 @@ export async function moveDeckCard(id: string, board: DeckBoard): Promise<void> 
  */
 async function patchDeckCard(
   id: string,
-  patch: { quantity?: number; scryfallId?: string; anyBasic?: boolean; wants?: SlotWants },
+  patch: { quantity?: number; scryfallId?: string; anyBasic?: boolean; wants?: SlotWants; tags?: string[] },
 ): Promise<void> {
   await db.transaction('rw', DECK_TABLES, async () => {
     const card = await db.deckCards.get(id);
@@ -1375,6 +1382,9 @@ async function patchDeckCard(
               ...('scryfallId' in patch ? { scryfallId: patch.scryfallId || undefined } : {}),
               ...wants,
             }),
+        // Tags survive every other kind of edit; only a patch that names them
+        // rewrites them (an empty list clears the slot back to untagged).
+        ...('tags' in patch ? { tags: normalizeCardTags(patch.tags) } : {}),
         updatedAt: now,
       };
       await db.deckCards.put(next);
@@ -1407,9 +1417,88 @@ export async function setDeckCardQuantity(id: string, quantity: number): Promise
  *  An empty `scryfallId` means "any edition"; omitted wants mean "any". */
 export async function updateDeckCard(
   id: string,
-  patch: { quantity: number; scryfallId: string; anyBasic?: boolean; wants?: SlotWants },
+  patch: { quantity: number; scryfallId: string; anyBasic?: boolean; wants?: SlotWants; tags?: string[] },
 ): Promise<void> {
   await patchDeckCard(id, patch);
+}
+
+// ---- Card tags -------------------------------------------------------------
+// A container's tags are derived: they exist because slots carry them, so there
+// is no registry to keep in step, no orphan rows, and nothing extra to sync —
+// a tag rides along in the slot's own row like its quantity or its finish.
+// Tag edits deliberately emit no history event: nothing was added or removed
+// from the container, so there is nothing to undo a card into.
+
+/**
+ * Add and/or remove tags across a set of slots — the multi-select "Tag…" action
+ * lands here. Slots already in the wanted state aren't rewritten, so re-applying
+ * a tag doesn't churn the sync outbox. Returns how many slots changed.
+ */
+export async function tagDeckCards(ids: string[], change: { add?: string[]; remove?: string[] }): Promise<number> {
+  const add = normalizeCardTags(change.add ?? []) ?? [];
+  const remove = new Set((normalizeCardTags(change.remove ?? []) ?? []).map((t) => t.toLocaleLowerCase()));
+  if (ids.length === 0 || (add.length === 0 && remove.size === 0)) return 0;
+  let changed = 0;
+  await db.transaction('rw', DECK_TABLES, async () => {
+    const now = Date.now();
+    const slots = (await db.deckCards.bulkGet(ids)).filter((c): c is DeckCard => !!c);
+    const writes: DeckCard[] = [];
+    for (const s of slots) {
+      const kept = (s.tags ?? []).filter((t) => !remove.has(t.toLocaleLowerCase()));
+      const next = normalizeCardTags([...kept, ...add]);
+      if (sameCardTags(s.tags, next)) continue;
+      writes.push({ ...s, tags: next, updatedAt: now });
+    }
+    if (writes.length === 0) return;
+    changed = writes.length;
+    await db.deckCards.bulkPut(writes);
+    await stagePutMany('deckCards', writes);
+    // Selection lives on one screen, but touch each named container anyway.
+    for (const deckId of new Set(writes.map((w) => w.deckId))) await touchDeck(deckId, now);
+  });
+  return changed;
+}
+
+/** Replace one slot's tags outright (the card sheet's tag field). */
+export async function setDeckCardTags(id: string, tags: string[]): Promise<void> {
+  await patchDeckCard(id, { tags });
+}
+
+/**
+ * Rename a tag everywhere it appears in one container. Because tags are derived
+ * from the slots carrying them, renaming *is* rewriting those slots; renaming
+ * onto a tag that already exists merges the two.
+ */
+export async function renameDeckCardTag(deckId: string, from: string, to: string): Promise<number> {
+  const target = normalizeCardTags([to])?.[0];
+  const key = from.toLocaleLowerCase();
+  if (!target || key === target.toLocaleLowerCase()) return 0;
+  let changed = 0;
+  await db.transaction('rw', DECK_TABLES, async () => {
+    const now = Date.now();
+    const slots = await db.deckCards.where('deckId').equals(deckId).toArray();
+    const writes: DeckCard[] = [];
+    for (const s of slots) {
+      if (!s.tags?.some((t) => t.toLocaleLowerCase() === key)) continue;
+      const next = normalizeCardTags(s.tags.map((t) => (t.toLocaleLowerCase() === key ? target : t)));
+      if (sameCardTags(s.tags, next)) continue;
+      writes.push({ ...s, tags: next, updatedAt: now });
+    }
+    if (writes.length === 0) return;
+    changed = writes.length;
+    await db.deckCards.bulkPut(writes);
+    await stagePutMany('deckCards', writes);
+    await touchDeck(deckId, now);
+  });
+  return changed;
+}
+
+/** Drop a tag from every slot in one container — the tag then stops existing. */
+export async function deleteDeckCardTag(deckId: string, tag: string): Promise<number> {
+  const key = tag.toLocaleLowerCase();
+  const slots = await db.deckCards.where('deckId').equals(deckId).toArray();
+  const ids = slots.filter((s) => s.tags?.some((t) => t.toLocaleLowerCase() === key)).map((s) => s.id);
+  return tagDeckCards(ids, { remove: [tag] });
 }
 
 export async function removeDeckCard(id: string): Promise<void> {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { normalizeColors, type Color, type Finish, type OracleCard } from '@mtg/shared';
+import { compareCardTags, normalizeColors, type Color, type Finish, type OracleCard } from '@mtg/shared';
 import { priceForFinish } from '../cardDb/prices.js';
+import { UNTAGGED } from '../deck/tags.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
 import { convertToDisplay, fmtConverted, fmtMoney } from '../price/rates.js';
 
@@ -12,7 +13,7 @@ import { convertToDisplay, fmtConverted, fmtMoney } from '../price/rates.js';
 
 export type SortKey = 'name' | 'cmc' | 'price' | 'change' | 'changePct' | 'added' | 'updated';
 export type SortDir = 'asc' | 'desc';
-export type GroupKey = 'none' | 'type' | 'color';
+export type GroupKey = 'none' | 'type' | 'color' | 'tag';
 
 export interface CardSortPrefs {
   key: SortKey;
@@ -217,12 +218,44 @@ function colorGroup(card: GroupableCard | undefined): string {
   return card.typeLine.split('//')[0]!.includes('Land') ? 'Land' : 'Colorless';
 }
 
+/**
+ * Group by the slot's own tags. A card wearing three tags shows up under all
+ * three: a tag is a set the card is genuinely a member of (which is exactly
+ * what the hypergeometric sample sizes will read), so hiding it from two of
+ * them would lie about the deck. The consequence is that group counts add up to
+ * more than the list when tags overlap — the boards say so out loud rather than
+ * quietly reconciling it. Untagged cards land in one heading at the bottom.
+ */
+function groupByTag<T>(items: T[], getTags?: (t: T) => string[] | undefined): { label: string; items: T[] }[] {
+  const buckets = new Map<string, { label: string; items: T[] }>();
+  const untagged: T[] = [];
+  for (const it of items) {
+    const tags = getTags?.(it) ?? [];
+    if (tags.length === 0) {
+      untagged.push(it);
+      continue;
+    }
+    for (const t of tags) {
+      const key = t.toLocaleLowerCase();
+      const bucket = buckets.get(key);
+      if (bucket) bucket.items.push(it);
+      else buckets.set(key, { label: t, items: [it] });
+    }
+  }
+  const groups = [...buckets.values()].sort((a, b) => compareCardTags(a.label, b.label));
+  if (untagged.length) groups.push({ label: UNTAGGED, items: untagged });
+  return groups;
+}
+
 /** Partition into labelled groups in canonical order; empty groups are omitted. */
 export function groupCards<T>(
   items: T[],
   getCard: (t: T) => GroupableCard | undefined,
   group: Exclude<GroupKey, 'none'>,
+  /** Slot tags, required for group === 'tag' (views without tags never offer it). */
+  getTags?: (t: T) => string[] | undefined,
 ): { label: string; items: T[] }[] {
+  if (group === 'tag') return groupByTag(items, getTags);
   const order = group === 'type' ? TYPE_GROUP_ORDER : COLOR_GROUP_ORDER;
   const labelOf = group === 'type' ? (t: T) => typeGroup(getCard(t)?.typeLine) : (t: T) => colorGroup(getCard(t));
   const buckets = new Map<string, T[]>();
@@ -257,11 +290,14 @@ const GROUP_OPTIONS: [GroupKey, string][] = [
   ['type', 'Group: Card type'],
   ['color', 'Group: Color'],
 ];
+// Only where the rows carry slot tags (your own containers — not a shared deck).
+const TAG_GROUP_OPTION: [GroupKey, string] = ['tag', 'Group: Tag'];
 
 export function SortControls({
   prefs,
   onChange,
   groups = false,
+  tagGroups = false,
   withChange = false,
   withDates = false,
 }: {
@@ -269,6 +305,8 @@ export function SortControls({
   onChange: (p: CardSortPrefs) => void;
   /** Show the group-by select (deck views). */
   groups?: boolean;
+  /** Also offer group-by-tag (views that hand groupCards a getTags accessor). */
+  tagGroups?: boolean;
   /** Offer price-change sorts (views that supply SortFields.change). */
   withChange?: boolean;
   /** Offer date-added / last-edited sorts (views that supply SortFields.added/updated). */
@@ -276,11 +314,12 @@ export function SortControls({
 }) {
   const asc = prefs.dir === 'asc';
   const sortOptions = [...SORT_OPTIONS, ...(withChange ? CHANGE_OPTIONS : []), ...(withDates ? DATE_OPTIONS : [])];
+  const groupOptions = tagGroups ? [...GROUP_OPTIONS, TAG_GROUP_OPTION] : GROUP_OPTIONS;
   return (
     <div className="sort-controls" role="group" aria-label="Sort and group">
       {groups && (
         <select value={prefs.group} onChange={(e) => onChange({ ...prefs, group: e.target.value as GroupKey })} aria-label="Group by">
-          {GROUP_OPTIONS.map(([value, label]) => (
+          {groupOptions.map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>

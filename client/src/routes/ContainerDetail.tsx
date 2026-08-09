@@ -67,6 +67,7 @@ import { Sheet } from '../components/Sheet.js';
 import { DeckHistory, HISTORY_ANCHOR } from '../components/DeckHistory.js';
 import { BulkActionBar, type BulkAction } from '../components/BulkActionBar.js';
 import { ContainerPickerSheet } from '../components/ContainerPickerSheet.js';
+import { TagSheet } from '../components/TagSheet.js';
 import { useMultiSelect, type MultiSelect } from '../components/useMultiSelect.js';
 import { usePlacementIndex, type PlacementIndex } from '../db/usePlacements.js';
 import { Icon } from '../components/icons.js';
@@ -83,6 +84,8 @@ interface Row {
   condition?: Condition;
   finish?: Finish;
   lang?: string;
+  /** The user's own labels on this slot, for group-by-tag and the row chips. */
+  tags?: string[];
   oracle?: Priced<OracleCard>;
   printing?: Priced<Printing>;
   owned: number;
@@ -97,6 +100,7 @@ interface DeckCardEdit {
   condition?: Condition;
   finish?: Finish;
   lang?: string;
+  tags?: string[];
   board: DeckBoard;
   deckId: string;
   commanderDeck: boolean;
@@ -163,6 +167,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // 'file' picks somewhere to *also* put the selection, 'unfile' picks somewhere
   // to take it out of — the two halves of sorting out a card promised twice.
   const [picking, setPicking] = useState<'file' | 'unfile' | null>(null);
+  // The multi-select "Tag…" sheet, frozen on the slots that were selected.
+  const [tagging, setTagging] = useState<string[] | null>(null);
   // The "assemble from my collection" walkthrough, frozen at the moment it opens.
   const [assembling, setAssembling] = useState<AssembleItem[] | null>(null);
   const placements = usePlacementIndex();
@@ -187,6 +193,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       condition: c.condition,
       finish: c.finish,
       lang: c.lang,
+      tags: c.tags,
       oracle: oracleMap.get(c.oracleId),
       printing: c.scryfallId ? printMap.get(c.scryfallId) : undefined,
       owned: owned.get(c.oracleId) ?? 0,
@@ -452,6 +459,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   }
 
   const bulkActions: BulkAction[] = [
+    { label: 'Tag…', icon: 'tags', onClick: () => setTagging(selectedRows.map((r) => r.id)) },
     { label: 'Add to tradelist', icon: 'tradelist', onClick: () => void bulkTrade(true) },
     { label: 'Remove from tradelist', icon: 'close', onClick: () => void bulkTrade(false) },
     { label: 'File away…', icon: 'decks', onClick: () => setPicking('file') },
@@ -622,7 +630,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
             <Icon name="check" size={15} /> Select
           </button>
         )}
-        <SortControls prefs={sort} onChange={setSort} groups />
+        <SortControls prefs={sort} onChange={setSort} groups tagGroups />
         <ViewToggle mode={view} onChange={setView} />
       </div>
 
@@ -687,6 +695,17 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           onToggleAll={() => sel.toggleAll(allKeys)}
           onCancel={sel.exit}
           actions={bulkActions}
+        />
+      )}
+
+      {tagging && (
+        <TagSheet
+          deckId={id}
+          slotIds={tagging}
+          onClose={() => {
+            setTagging(null);
+            sel.exit();
+          }}
         />
       )}
 
@@ -914,6 +933,15 @@ function Board({
           {r.anyBasic ? 'any printing' : `owned ${r.owned}`}
           {wants && ` · ${wants}`}
           {issue && <span className="badge badge-illegal-chip">{issue}</span>}
+          {r.tags?.length ? (
+            <span className="tag-chips">
+              {r.tags.map((t) => (
+                <span key={t} className="tag-chip">
+                  {t}
+                </span>
+              ))}
+            </span>
+          ) : null}
         </>
       ),
       onClick: r.oracle
@@ -928,6 +956,7 @@ function Board({
                 condition: r.condition,
                 finish: r.finish,
                 lang: r.lang,
+                tags: r.tags,
                 board: r.board,
                 deckId,
                 commanderDeck,
@@ -936,13 +965,23 @@ function Board({
         : undefined,
     };
   };
-  const groups = group === 'none' ? null : groupCards(rows, (r) => r.oracle, group);
+  const groups = group === 'none' ? null : groupCards(rows, (r) => r.oracle, group, (r) => r.tags);
+  // Grouping by tag lists a multi-tagged card under each of its tags, so the
+  // headings can add up to more than the board. Say so rather than let the
+  // arithmetic look broken.
+  const multiTagged = group === 'tag' ? rows.filter((r) => (r.tags?.length ?? 0) > 1).length : 0;
   const selProps = { selectable: sel?.active, selectedKeys: sel?.selected, onToggleSelect: sel?.toggle };
   return (
     <div className="about-section">
       <h2>
         {title} <span className="badge">{count}</span>
       </h2>
+      {multiTagged > 0 && (
+        <p className="fine-print">
+          {multiTagged} card{multiTagged === 1 ? '' : 's'} carr{multiTagged === 1 ? 'ies' : 'y'} more than one tag, so
+          {multiTagged === 1 ? ' it shows' : ' they show'} up under each of them.
+        </p>
+      )}
       {rows.length === 0 ? (
         <p className="fine-print">{emptyHint ?? 'Empty.'}</p>
       ) : groups ? (

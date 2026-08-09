@@ -7,6 +7,7 @@ import {
   REMOVAL_REASONS,
   USERNAME_RE,
   USER_EVENT_KINDS,
+  normalizeCardTags,
   type CollectionEntry,
   type Condition,
   type ContainerKind,
@@ -254,11 +255,15 @@ export function sanitizeDeckCardRow(raw: unknown): DeckCard | null {
     ...(FINS.has(r.finish as string) ? { finish: r.finish as Finish } : {}),
     ...(typeof r.lang === 'string' && r.lang ? { lang: r.lang.slice(0, 10) } : {}),
   };
+  // Tags are orthogonal to the printing/wants question — a lands-box basic can
+  // still be tagged "Mana base" — so they sit outside that branch.
+  const tags = normalizeCardTags(r.tags);
   return {
     id: slotId,
     deckId,
     oracleId,
     ...(anyBasic ? { anyBasic } : { ...(scryfallId ? { scryfallId } : {}), ...wants }),
+    ...(tags ? { tags } : {}),
     quantity: qty(r.quantity),
     board: (BOARDS.has(r.board as string) ? r.board : 'main') as DeckBoard,
     updatedAt: ts(r.updatedAt),

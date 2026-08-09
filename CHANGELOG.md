@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.113.0
+
+- **Tag the cards in a deck.** Give any card in a deck, binder or box your own labels: "Ramp", "Removal", "Turn-3 play", whatever you brew by. Open a card and add tags in its sheet, or hit "Select", pick a pile of cards and use "Tag…" to label them all at once — that sheet also renames or deletes a tag everywhere it's used. A new "Group: Tag" option in the sort row then breaks the list into one heading per tag, with everything else under "Untagged". A card can wear several tags, and it shows up under each of them (so those headings can add up to more than the deck — the board says as much when they do). Tags belong to the list they're written in and sync to your other devices along with it.
+
 ## 0.112.0
 
 - **Trades now start on today's prices.** Both sides of a trade price the cards from their own device, so an app that had been open for a week could quietly value the deal differently from the person across the table. Opening a trade now pulls the day's prices first (just the prices, not the whole card database). If a card still can't be priced on your device, the trade bar says so and warns that your partner's total may not match, rather than silently counting that card as zero.

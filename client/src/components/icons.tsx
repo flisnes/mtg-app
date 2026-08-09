@@ -14,6 +14,7 @@ export type IconName =
   | 'folder'
   | 'trade'
   | 'tradelist'
+  | 'tags'
   | 'wishlist'
   | 'prices'
   | 'pricesDown'
@@ -100,6 +101,15 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
       <circle cx="7" cy="7" r="1.2" />
+    </>
+  ),
+  // Two stacked tags — the labels a user puts on cards in a deck. Deliberately
+  // a *pair*, so it reads apart from the single tag the tradelist wears.
+  tags: (
+    <>
+      <path d="M17.6 14.2l-5.5 5.5a1.9 1.9 0 0 1-2.68 0L2 12.3V4.6h7.7l7.9 7.9a1.9 1.9 0 0 1 0 2.7z" />
+      <circle cx="6.2" cy="8.8" r="1.1" />
+      <path d="M8.4 2h5.9l7.7 7.7a1.9 1.9 0 0 1 0 2.68l-1 1" />
     </>
   ),
   // Star — the wishlist.

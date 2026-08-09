@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.113.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Tag the cards in a deck, binder or box with your own labels. Add them on a card, or select several and use "Tag…" to do the lot. "Group: Tag" then splits the list by tag, with the rest under "Untagged". Tags sync with the list they live in.',
+      },
+    ],
+  },
+  {
     version: '0.112.0',
     changes: [
       {

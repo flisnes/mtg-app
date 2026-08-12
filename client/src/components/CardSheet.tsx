@@ -34,6 +34,7 @@ import { EventSheet } from './EventSheet.js';
 import { useOpenCollectionSearch } from './GlobalSearch.js';
 import { Icon, type IconName } from './icons.js';
 import { OptionsMenu } from './OptionsMenu.js';
+import { PriceChartSheet } from './PriceChart.js';
 import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
@@ -327,6 +328,8 @@ export function CardSheet({
   const [tab, setTab] = useState<'details' | 'history'>(initialTab ?? 'details');
   // Visual "view all editions" grid, layered over the sheet.
   const [allEditions, setAllEditions] = useState(false);
+  // The sparkline blown up: full price chart with axes and event markers.
+  const [chartOpen, setChartOpen] = useState(false);
   // "Pick one from my collection" (container slots): the owned-copies overlay.
   const [pickingCopy, setPickingCopy] = useState(false);
   // Filter the (often very long) Edition dropdown by set name or set code.
@@ -672,7 +675,7 @@ export function CardSheet({
             )}
             <div className="result-sub">{oracleCard.typeLine}</div>
             <div className="result-price">{cardPrice}</div>
-            {trend && trend.points > 1 && <PriceTrend trend={trend} />}
+            {trend && trend.points > 1 && <PriceTrend trend={trend} onOpen={() => setChartOpen(true)} />}
           </div>
         </div>
 
@@ -1007,6 +1010,20 @@ export function CardSheet({
           onClose={() => setZoomed(false)}
         />
       )}
+      {chartOpen && priceHistory && (
+        <PriceChartSheet
+          name={oracleCard.name}
+          subtitle={printing ? `${printing.setName} · #${printing.collectorNumber}` : undefined}
+          oracleId={oracleCard.oracleId}
+          scryfallId={shownId}
+          history={priceHistory}
+          onEventClick={(e) => {
+            setChartOpen(false);
+            setEventEntry({ kind: 'single', id: e.id, ts: e.ts, event: e });
+          }}
+          onClose={() => setChartOpen(false)}
+        />
+      )}
       {allEditions && (
         <EditionPicker
           printings={highlighted.length > 0 ? [...highlighted, ...otherPrintings] : otherPrintings}
@@ -1301,17 +1318,19 @@ export function EditionPicker({
   );
 }
 
-/** Recorded price movement of the shown printing: sparkline + change since tracking began. */
-function PriceTrend({ trend }: { trend: HistoryChange }) {
+/** Recorded price movement of the shown printing: sparkline + change since
+ *  tracking began. Tapping it opens the full chart. */
+function PriceTrend({ trend, onOpen }: { trend: HistoryChange; onOpen: () => void }) {
   const dir = trend.delta > 0.001 ? 'up' : trend.delta < -0.001 ? 'down' : 'flat';
   return (
-    <div className="sheet-price-trend">
+    <button type="button" className="sheet-price-trend" onClick={onOpen} title="Open the full price chart">
       <Sparkline values={trend.series} />
       <div className={`price-change price-${dir}`}>
         {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·'} {fmtPriceIn(Math.abs(trend.delta), trend.cur)}
         {trend.pct != null && ` (${trend.pct >= 0 ? '+' : '−'}${Math.abs(trend.pct).toFixed(1)}%)`}
         <span className="fine-print"> · {trend.points} pts</span>
       </div>
-    </div>
+      <Icon name="expand" size={14} />
+    </button>
   );
 }

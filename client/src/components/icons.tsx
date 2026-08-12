@@ -49,7 +49,8 @@ export type IconName =
   | 'search'
   | 'chevronLeft'
   | 'chevronRight'
-  | 'chevronDown';
+  | 'chevronDown'
+  | 'expand';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -358,6 +359,15 @@ const PATHS: Record<IconName, ReactElement> = {
   chevronRight: <polyline points="9 6 15 12 9 18" />,
   // Downward chevron — a control that opens a dropdown.
   chevronDown: <polyline points="6 9 12 15 18 9" />,
+  // Arrows to opposite corners — blow something small up to full size.
+  expand: (
+    <>
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <path d="M21 3l-7 7" />
+      <path d="M3 21l7-7" />
+    </>
+  ),
 };
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

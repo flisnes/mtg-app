@@ -2401,11 +2401,26 @@ button.primary {
 }
 
 /* ---- Price history (card sheet) ---- */
+/* The sparkline is a button: it opens the full chart. Strip the button chrome
+   so it still reads as the quiet trend line it always was. */
 .sheet-price-trend {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 4px;
+  padding: 2px 4px 2px 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  border-radius: 8px;
+}
+.sheet-price-trend:hover {
+  background: var(--surface-2);
+}
+.sheet-price-trend > svg:last-child {
+  color: var(--text-dim);
+  flex-shrink: 0;
 }
 .price-change {
   font-size: 0.8rem;
@@ -2419,6 +2434,163 @@ button.primary {
 }
 .price-flat {
   color: var(--text-dim);
+}
+
+/* ---- Full price chart (layered over the card sheet) ---- */
+.price-chart-sheet {
+  max-width: 620px;
+}
+.price-chart-titles {
+  flex: 1;
+  min-width: 0;
+}
+.price-chart-titles h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.price-chart-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.price-chart-now {
+  font-size: 1.7rem;
+  font-weight: 600;
+}
+/* The plot box owns the tooltip's coordinates; the SVG is measured to fit it. */
+.price-chart-plot {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+.price-chart-svg {
+  display: block;
+  /* Vertical drags still scroll the sheet; horizontal ones scrub the chart. */
+  touch-action: pan-y;
+  outline: none;
+}
+.price-chart-svg:focus-visible {
+  outline: 2px solid var(--accent);
+  border-radius: 8px;
+}
+.pc-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.pc-tick {
+  fill: var(--text-dim);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.pc-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+/* Dashed on purpose: this one is a threshold (what you paid), not a gridline. */
+.pc-basis {
+  stroke: var(--text-dim);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+.pc-basis-label {
+  fill: var(--text-dim);
+  font-size: 10px;
+}
+.pc-end {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.pc-cursor line {
+  stroke: var(--text-dim);
+  stroke-width: 1;
+}
+.pc-cursor circle {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+/* Invisible, oversized hit areas — a 5px dot is not a touch target. */
+.pc-hit {
+  fill: transparent;
+  stroke: none;
+}
+.pc-mark,
+.pc-rug {
+  cursor: pointer;
+}
+.pc-mark circle:last-child {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.pc-mark-in circle:last-child {
+  fill: var(--ok);
+}
+.pc-mark-out circle:last-child {
+  fill: var(--danger);
+}
+.pc-rug line {
+  stroke: var(--text-dim);
+  stroke-width: 2;
+}
+.pc-tooltip {
+  position: absolute;
+  pointer-events: none;
+  min-width: 132px;
+  max-width: 180px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pc-tooltip-price {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.pc-tooltip-event {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.pc-tooltip-event span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.price-chart-readout {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+.price-chart-readout > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.price-chart-readout strong {
+  font-variant-numeric: tabular-nums;
+}
+.price-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.price-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 /* ---- Card history tab (card sheet) ---- */

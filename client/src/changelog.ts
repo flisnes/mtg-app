@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.114.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Tap the price sparkline on a card to open a full chart with real axes, marked with where you bought, sold and filed the card, and what you paid per copy.',
+      },
+    ],
+  },
+  {
     version: '0.113.1',
     changes: [
       {

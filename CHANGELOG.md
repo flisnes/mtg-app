@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.114.0
+
+- **Tap the price line for the whole story.** The little sparkline on a card is now a button. It opens a full chart of that printing's recorded price, with money on one axis and dates on the other, and your own history drawn onto it: a green dot where you picked copies up, a red one where you sold or traded them away, and a small tick under the plot for the quieter stuff (filed into a deck, wished for, marked for trade). A dashed line shows what you paid per copy, so you can see at a glance whether the card is above or below your buy-in. Drag across the chart (or use the arrow keys) to read any day's price, and tap a dot to open that event. Anything that happened before price tracking began is counted under the chart rather than pretending to sit on it.
+
 ## 0.113.1
 
 - **Match notifications stop crying wolf.** If you wish for one particular printing of a card, the server was still counting every other printing of it as a match, so a notification could tell you someone wanted a card they'd never asked for. Notifications now use the same printing rule the Community page has always shown, so the two finally agree.

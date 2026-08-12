@@ -38,9 +38,14 @@ const PAGE_SIZE = 60;
 // One trade/wishlist line paired with how it relates to the viewer:
 //  match — trade: they have a card I want; wish: I have a card they want.
 //  own   — wish only: I own the card but haven't listed it for trade yet.
-//  hi    — a deep-linked notification hit, pinned above everything.
+//  hi    — this match is one the notification named, pinned above the rest. It
+//          only ever decorates a row that already matches, so the badges read
+//          the same whether you arrived from the bell or from the user list.
 type TradeEntry = { line: TradeLine; match: boolean; own: false; hi: boolean };
 type WishEntry = { line: WishLine; match: boolean; own: boolean; hi: boolean };
+
+/** Notification-named oracleIds, kept apart per list so neither leaks into the other. */
+type Highlight = { trade: Set<string>; wish: Set<string> };
 
 // Matches float to the top of a Community list (hi > match > own), keeping the
 // chosen sort order within each tier (Array.prototype.sort is stable).
@@ -117,14 +122,20 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
   const [users, setUsers] = useState<PublicUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Selection lives in the URL (/community/:username) so notifications can
-  // deep-link straight to a user, with ?highlight=oracleId,… for the matches.
+  // deep-link straight to a user. The matched oracleIds come in per direction —
+  // ?hiTrade=… for their tradelist, ?hiWish=… for their wishlist.
   const { username: selected } = useParams<{ username?: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const highlight = useMemo(() => {
-    const raw = searchParams.get('highlight') ?? '';
-    return new Set(raw.split(',').filter(Boolean));
-  }, [searchParams]);
+  const hiTrade = searchParams.get('hiTrade') ?? '';
+  const hiWish = searchParams.get('hiWish') ?? '';
+  const highlight = useMemo<Highlight>(
+    () => ({
+      trade: new Set(hiTrade.split(',').filter(Boolean)),
+      wish: new Set(hiWish.split(',').filter(Boolean)),
+    }),
+    [hiTrade, hiWish],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -180,7 +191,9 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
                   {u.username === me && <span className="badge own-yes"> you</span>}
                 </span>
                 <span className="community-meta">
-                  ⇄ {u.tradelistCount} · ★ {u.wishlistCount} · {fmtDate(u.updatedAt)}
+                  <Icon name="trade" size={12} className="mark-trade" /> {u.tradelistCount} ·{' '}
+                  <Icon name="wishlist" size={12} className="mark-wish" /> {u.wishlistCount} ·{' '}
+                  {fmtDate(u.updatedAt)}
                 </span>
                 <span className="menu-chevron" aria-hidden>
                   ›
@@ -227,8 +240,8 @@ function UserLists({
 }: {
   token: string;
   username: string;
-  /** oracleIds to emphasise (the cards a notification matched on). */
-  highlight?: Set<string>;
+  /** oracleIds to emphasise (the cards a notification matched on), per list. */
+  highlight?: Highlight;
   onBack: () => void;
 }) {
   const navigate = useNavigate();
@@ -251,12 +264,10 @@ function UserLists({
   // and the See-all view apply their own order).
   const tradeBase = useMemo<TradeEntry[]>(
     () =>
-      (lists?.tradelist ?? []).map((l) => ({
-        line: l,
-        match: iWant(l),
-        own: false,
-        hi: highlight?.has(l.oracleId) ?? false,
-      })),
+      (lists?.tradelist ?? []).map((l) => {
+        const match = iWant(l);
+        return { line: l, match, own: false, hi: match && (highlight?.trade.has(l.oracleId) ?? false) };
+      }),
     [lists, iWant, highlight],
   );
   const wishBase = useMemo<WishEntry[]>(
@@ -264,9 +275,9 @@ function UserLists({
       (lists?.wishlist ?? []).map((l) => {
         const match = iHave(l);
         // "own": a card of theirs I have but haven't listed for trade. If it's
-        // already for trade the ⇄ match badge says so — don't double-flag.
+        // already for trade the trade match badge says so — don't double-flag.
         const own = !match && iOwn(l);
-        return { line: l, match, own, hi: highlight?.has(l.oracleId) ?? false };
+        return { line: l, match, own, hi: match && (highlight?.wish.has(l.oracleId) ?? false) };
       }),
     [lists, iHave, iOwn, highlight],
   );
@@ -369,9 +380,24 @@ function UserLists({
           <div className="meta-row">
             {tradeMatches > 0 || wishMatches > 0 || wishOwned > 0 ? (
               <p className="fine-print match-summary">
-                {tradeMatches > 0 && <>⭐ {tradeMatches} of their trades match your wishlist.</>}{' '}
-                {wishMatches > 0 && <>⇄ {wishMatches} of their wishes match your tradelist.</>}{' '}
-                {wishOwned > 0 && <>✓ You own {wishOwned} more of their wishes (not yet on your tradelist).</>}
+                {tradeMatches > 0 && (
+                  <>
+                    <Icon name="wishlist" size={12} className="mark-wish" /> {tradeMatches} of their trades match
+                    your wishlist.
+                  </>
+                )}{' '}
+                {wishMatches > 0 && (
+                  <>
+                    <Icon name="trade" size={12} className="mark-trade" /> {wishMatches} of their wishes match your
+                    tradelist.
+                  </>
+                )}{' '}
+                {wishOwned > 0 && (
+                  <>
+                    <Icon name="check" size={12} className="mark-own" /> You own {wishOwned} more of their wishes
+                    (not yet on your tradelist).
+                  </>
+                )}
               </p>
             ) : (
               <span />

@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.113.1
+
+- **Match notifications stop crying wolf.** If you wish for one particular printing of a card, the server was still counting every other printing of it as a match, so a notification could tell you someone wanted a card they'd never asked for. Notifications now use the same printing rule the Community page has always shown, so the two finally agree.
+- **The same marks wherever you came from.** A user's trade and want lists used to swap their match symbols depending on whether you arrived from the bell or from the Community list, and a notification lit up matching cards in *both* their lists rather than the one the match was actually in. The marks are now the wishlist star, the trade arrows and the owned checkmark everywhere, and only the card the notification named is emphasized.
+
 ## 0.113.0
 
 - **Tag the cards in a deck.** Give any card in a deck, binder or box your own labels: "Ramp", "Removal", "Turn-3 play", whatever you brew by. Open a card and add tags in its sheet, or hit "Select", pick a pile of cards and use "Tag…" to label them all at once — that sheet also renames or deletes a tag everywhere it's used. A new "Group: Tag" option in the sort row then breaks the list into one heading per tag, with everything else under "Untagged". A card can wear several tags, and it shows up under each of them (so those headings can add up to more than the deck — the board says as much when they do). Tags belong to the list they're written in and sync to your other devices along with it.

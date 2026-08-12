@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
-  wishPrefsMet,
+  wishMatchesCopy,
   type OracleCard,
   type Priced,
   type Printing,
@@ -11,6 +11,7 @@ import {
 import { ApiError, getUserLists } from '../account/api.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { Icon } from '../components/icons.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { sanitizePublicTradelist, sanitizePublicWishlist } from '../trade/validate.js';
 import type { CardItem } from '../components/CardViews.js';
@@ -110,10 +111,7 @@ export function useMyWants(): (line: TradeLine) => boolean {
       list.push(w);
       byOracle.set(w.oracleId, list);
     }
-    return (line: TradeLine) =>
-      (byOracle.get(line.oracleId) ?? []).some(
-        (w) => (w.scryfallId === null || w.scryfallId === line.scryfallId) && wishPrefsMet(w, line),
-      );
+    return (line: TradeLine) => (byOracle.get(line.oracleId) ?? []).some((w) => wishMatchesCopy(w, line));
   }, [wishes]);
 }
 
@@ -135,10 +133,7 @@ export function useMyCollection(): { have: HaveFn; own: HaveFn } {
         list.push(e);
         byOracle.set(e.oracleId, list);
       }
-      return (wish) =>
-        (byOracle.get(wish.oracleId) ?? []).some(
-          (e) => (wish.scryfallId === null || wish.scryfallId === e.scryfallId) && wishPrefsMet(wish, e),
-        );
+      return (wish) => (byOracle.get(wish.oracleId) ?? []).some((e) => wishMatchesCopy(wish, e));
     };
     return { have: matcher(entries.filter((e) => e.quantityForTrade > 0)), own: matcher(entries) };
   }, [entries]);
@@ -166,8 +161,12 @@ export function tradeLineItem(
         {lineDetail(line)}
       </>
     ),
-    badge: flags.hi ? '🔔 you want this' : flags.match ? '⭐ you want this' : undefined,
-    badgeClass: flags.hi ? 'badge-match' : 'own-trade',
+    badge: flags.match ? (
+      <>
+        <Icon name="wishlist" size={11} /> you want this
+      </>
+    ) : undefined,
+    badgeClass: `match-badge ${flags.hi ? 'badge-match' : 'own-trade'}`,
     badgeTitle: 'On your wishlist',
     onClick: oracle && onOpen ? () => onOpen(oracle) : undefined,
   };
@@ -209,8 +208,16 @@ export function wishLineItem(
     ) : (
       printingSub
     ),
-    badge: flags.hi ? '🔔 you have this' : flags.match ? '⇄ you have this' : flags.own ? '✓ you own this' : undefined,
-    badgeClass: flags.hi ? 'badge-match' : flags.match ? 'own-trade' : 'own-yes',
+    badge: flags.match ? (
+      <>
+        <Icon name="trade" size={11} /> you have this
+      </>
+    ) : flags.own ? (
+      <>
+        <Icon name="check" size={11} /> you own this
+      </>
+    ) : undefined,
+    badgeClass: `match-badge ${flags.hi ? 'badge-match' : flags.match ? 'own-trade' : 'own-yes'}`,
     badgeTitle: flags.match
       ? 'In your tradelist'
       : flags.own

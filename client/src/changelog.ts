@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.113.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'A match notification no longer claims someone wants a card when they only wished for a different printing of it.',
+      },
+      {
+        kind: 'changed',
+        text: 'Community match marks are the same star, trade arrows and checkmark whether you arrive from the bell or the user list, and a notification now only lights up the list its match was actually in.',
+      },
+    ],
+  },
+  {
     version: '0.113.0',
     changes: [
       {

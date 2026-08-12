@@ -3297,6 +3297,17 @@ button.chip[aria-pressed='true'] {
 .tile-badge.badge-wish {
   color: #eac54f;
 }
+/* Community match badges: glyph + text on one baseline. The glyph says which
+   list the card came from and never changes with how you got to the page. */
+.badge.match-badge,
+.tile-badge.match-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+.match-badge svg {
+  flex: none;
+}
 /* A card a notification matched on — stronger than the plain match badge. */
 .badge.badge-match {
   background: var(--accent);
@@ -3511,6 +3522,21 @@ a.seg {
 }
 .match-summary {
   margin-top: 0;
+}
+/* Inline glyphs in the summary and the user-list counts sit on the text line,
+   colored by what they stand for: wishlist gold, tradelist accent, owned green. */
+.match-summary svg,
+.community-meta svg {
+  vertical-align: -0.12em;
+}
+.mark-wish {
+  color: #eac54f;
+}
+.mark-trade {
+  color: var(--accent);
+}
+.mark-own {
+  color: var(--ok);
 }
 
 /* ---- Scan test harness (dev, #/scan-test) ---- */

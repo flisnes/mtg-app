@@ -15,7 +15,7 @@ import {
   sanitizeProfile,
   sanitizeTradeLines,
   sanitizeWishLines,
-  wishPrefsMet,
+  wishMatchesCopy,
   type ApiErrorBody,
   type AuthResponse,
   type MatchCard,
@@ -440,9 +440,11 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
       if (other.userId === user.id) continue;
 
       // They want a card I have for trade / I want a card they have for trade —
-      // a have only counts when it meets the wish's finish/condition/lang prefs.
-      const theyWant = dedupeMatches(mine.haves.filter((h) => other.wants.some((w) => w.oracleId === h.oracleId && wishPrefsMet(w, h))));
-      const iWant = dedupeMatches(other.haves.filter((h) => mine.wants.some((w) => w.oracleId === h.oracleId && wishPrefsMet(w, h))));
+      // wishMatchesCopy is the same rule the Community page paints its badges
+      // with (printing pin included), so a notification never promises a match
+      // the page then refuses to show.
+      const theyWant = dedupeMatches(mine.haves.filter((h) => other.wants.some((w) => wishMatchesCopy(w, h))));
+      const iWant = dedupeMatches(other.haves.filter((h) => mine.wants.some((w) => wishMatchesCopy(w, h))));
 
       if (theyWant.length === 0 && iWant.length === 0) continue;
       matches.push({

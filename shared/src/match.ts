@@ -43,3 +43,31 @@ export function wishPrefsMet(
 ): boolean {
   return prefsCompatible(want, have);
 }
+
+/** A wish, as far as matching cares: the card, the printing it pinned, the prefs. */
+export interface WishTarget extends CopyPrefs {
+  oracleId: string;
+  /** A specific printing, or null/undefined for "any printing of this card". */
+  scryfallId?: string | null;
+}
+
+/** A concrete copy someone has: a tradelist line or a collection entry. */
+export interface HeldCopy {
+  oracleId: string;
+  scryfallId?: string | null;
+  condition: Condition;
+  finish: Finish;
+  lang: string;
+}
+
+/**
+ * The whole wish-meets-copy rule in one place: same card, the printing the wish
+ * pinned (unset = any printing of it), and the wish's finish/condition/language
+ * preferences met. Leaving the printing out of this is how a "I want *that* Preordain"
+ * wish used to light up every other Preordain in someone's binder.
+ */
+export function wishMatchesCopy(want: WishTarget, have: HeldCopy): boolean {
+  if (want.oracleId !== have.oracleId) return false;
+  if (want.scryfallId && want.scryfallId !== have.scryfallId) return false;
+  return wishPrefsMet(want, have);
+}

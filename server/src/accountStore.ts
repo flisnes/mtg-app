@@ -540,15 +540,18 @@ export class AccountStore {
 /** A concrete tradelist card, for matching against wishlist preferences. */
 export interface HaveLine {
   oracleId: string;
+  scryfallId: string | null;
   name: string;
   condition: Condition;
   finish: Finish;
   lang: string;
 }
 
-/** A wishlist card with its (optional) finish/condition/language preferences. */
+/** A wishlist card with its printing pin and (optional) finish/condition/language preferences. */
 export interface WantLine {
   oracleId: string;
+  /** null = any printing of the card. */
+  scryfallId: string | null;
   condition?: Condition;
   finish?: Finish;
   lang?: string;
@@ -582,6 +585,7 @@ function parseHaveLines(json: string): HaveLine[] {
     if (typeof l.oracleId !== 'string') continue;
     out.push({
       oracleId: l.oracleId,
+      scryfallId: typeof l.scryfallId === 'string' ? l.scryfallId : null,
       name: typeof l.name === 'string' ? l.name : '(unknown card)',
       // Stored lines are already sanitized concrete TradeLines; fall back defensively.
       condition: COND_SET.has(l.condition as string) ? (l.condition as Condition) : 'NM',
@@ -598,6 +602,7 @@ function parseWantLines(json: string): WantLine[] {
     if (typeof l.oracleId !== 'string') continue;
     out.push({
       oracleId: l.oracleId,
+      scryfallId: typeof l.scryfallId === 'string' ? l.scryfallId : null,
       ...(COND_SET.has(l.condition as string) ? { condition: l.condition as Condition } : {}),
       ...(FIN_SET.has(l.finish as string) ? { finish: l.finish as Finish } : {}),
       ...(typeof l.lang === 'string' && l.lang ? { lang: l.lang } : {}),

@@ -65,11 +65,17 @@ export function NotificationBell({ signedIn }: { signedIn: boolean }) {
     };
   }, [open]);
 
+  // Each direction highlights its own list: cards they have that I want belong
+  // in their "Has for trade", cards I have that they want belong in their
+  // "Wants". One merged set would light up both, which is how a card you were
+  // only ever offered ended up looking like a card you'd asked for.
   function openMatch(username: string, theyWant: MatchCard[], iWant: MatchCard[]) {
-    const oracleIds = [...theyWant, ...iWant].map((c) => c.oracleId);
     setOpen(false);
-    const query = oracleIds.length ? `?highlight=${encodeURIComponent(oracleIds.join(','))}` : '';
-    navigate(`/community/${encodeURIComponent(username)}${query}`);
+    const params = new URLSearchParams();
+    if (iWant.length) params.set('hiTrade', iWant.map((c) => c.oracleId).join(','));
+    if (theyWant.length) params.set('hiWish', theyWant.map((c) => c.oracleId).join(','));
+    const query = params.toString();
+    navigate(`/community/${encodeURIComponent(username)}${query ? `?${query}` : ''}`);
   }
 
   // Nothing to say and nowhere to say it from: signed out with a tidy collection

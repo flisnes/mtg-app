@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.114.1',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Tap "Total value" on the Collection page for a chart of what your collection has been worth, day by day. A second tab shows only what your cards have gained since you got them, and picking a day lists what came in and out.',
+      },
+    ],
+  },
+  {
     version: '0.114.0',
     changes: [
       {

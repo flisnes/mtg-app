@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.114.1
+
+- **The same chart, for the whole collection.** Tap "Total value" at the top of the Collection page and you get your pile's worth drawn out day by day. A card only counts from the day you actually got it, so a card you wished for all spring doesn't retroactively pad last month's total, and the line steps up when you buy and down when you sell. The second tab, "Since acquisition", drops the market noise and shows only what your cards have gained or lost since you got them, measured against what you paid — buying costs nothing on that line, so what's left is whether the cards you keep are earning their place. Pick any day on either chart and the list underneath fills with what came in and out that day; green and red dots mark the days worth picking. Printings you sell now keep their recorded price days instead of being forgotten, so the chart stops losing its own past.
+
 ## 0.114.0
 
 - **Tap the price line for the whole story.** The little sparkline on a card is now a button. It opens a full chart of that printing's recorded price, with money on one axis and dates on the other, and your own history drawn onto it: a green dot where you picked copies up, a red one where you sold or traded them away, and a small tick under the plot for the quieter stuff (filed into a deck, wished for, marked for trade). A dashed line shows what you paid per copy, so you can see at a glance whether the card is above or below your buy-in. Drag across the chart (or use the arrow keys) to read any day's price, and tap a dot to open that event. Anything that happened before price tracking began is counted under the chart rather than pretending to sit on it.

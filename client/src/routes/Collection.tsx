@@ -6,17 +6,25 @@ import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { AddSealedProductSheet } from '../components/AddSealedProductSheet.js';
 import { HeaderValue, headerValue, useCollectionValue } from '../components/ValueSummary.js';
+import { CollectionValueChartSheet } from '../components/CollectionValueChart.js';
 
 export function Collection() {
   const navigate = useNavigate();
   const [scanning, setScanning] = useState(false);
   const [addingSealed, setAddingSealed] = useState(false);
+  const [chartOpen, setChartOpen] = useState(false);
   const value = useCollectionValue();
   return (
     <Page
       title="Collection"
       subtitle="Everything you own. Search above to filter it."
-      aside={<HeaderValue value={headerValue(value)} />}
+      aside={
+        <HeaderValue
+          value={headerValue(value)}
+          onClick={() => setChartOpen(true)}
+          title="Open the collection value chart"
+        />
+      }
       menu={
         <OptionsMenu
           label="Collection options"
@@ -32,6 +40,7 @@ export function Collection() {
       <CollectionListView />
       {scanning && <ScanSheet target={{ kind: 'collection' }} onClose={() => setScanning(false)} />}
       {addingSealed && <AddSealedProductSheet onClose={() => setAddingSealed(false)} />}
+      {chartOpen && <CollectionValueChartSheet onClose={() => setChartOpen(false)} />}
     </Page>
   );
 }

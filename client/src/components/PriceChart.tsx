@@ -49,7 +49,7 @@ interface Marker {
 }
 
 /** Round tick values covering [min, max] — at most `count`+1 of them. */
-function niceTicks(min: number, max: number, count: number): number[] {
+export function niceTicks(min: number, max: number, count: number): number[] {
   const span = max - min;
   if (!(span > 0)) return [min];
   const mag = Math.pow(10, Math.floor(Math.log10(span / count)));

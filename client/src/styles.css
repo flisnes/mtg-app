@@ -2593,6 +2593,26 @@ button.primary {
   gap: 5px;
 }
 
+/* ---- Collection value chart ---- */
+/* The header total is a button that opens the chart; it still has to read as
+   the quiet readout it was, so only the hover state gives it away. */
+.header-value-button {
+  border: none;
+  background: none;
+  padding: 0.15rem 0.3rem;
+  margin-right: -0.3rem;
+  border-radius: 10px;
+  color: inherit;
+  cursor: pointer;
+}
+.header-value-button:hover {
+  background: var(--surface-2);
+}
+.collection-chart-day h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+}
+
 /* ---- Card history tab (card sheet) ---- */
 .sheet-tabs {
   margin: 0.6rem 0;

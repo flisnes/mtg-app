@@ -12,18 +12,37 @@ export function HeaderValue({
   label = 'Total value',
   value,
   note,
+  onClick,
+  title,
 }: {
   label?: string;
   value: string | undefined;
   /** Second line under the amount, for context the amount leaves out. */
   note?: string;
+  /** Makes the readout a button — e.g. the collection's value chart. */
+  onClick?: () => void;
+  /** Hover text; defaults to spelling the readout out. */
+  title?: string;
 }) {
-  return (
-    <div className="header-value" title={value ? `${label}: ${value}${note ? ` (${note})` : ''}` : undefined}>
+  const hint = title ?? (value ? `${label}: ${value}${note ? ` (${note})` : ''}` : undefined);
+  const body = (
+    <>
       <span className="header-value-label">{label}</span>
       <span className="header-value-amount">{value ?? '…'}</span>
       {note && <span className="header-value-note">{note}</span>}
-    </div>
+    </>
+  );
+  if (!onClick) {
+    return (
+      <div className="header-value" title={hint}>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <button type="button" className="header-value header-value-button" title={hint} onClick={onClick}>
+      {body}
+    </button>
   );
 }
 

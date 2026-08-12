@@ -31,7 +31,16 @@ export async function recordCollectionPrices(): Promise<number> {
     if (o) tracked.add(o.defaultScryfallId);
   }
 
-  const stale = (await db.priceHistories.toCollection().primaryKeys()).filter((k) => !tracked.has(k));
+  // A printing you once owned keeps its history even after the last copy goes:
+  // no new readings accrue for it (only `tracked` ids are recorded below), but
+  // the days you did hold it still count on the collection value chart. Drop a
+  // history only when nothing in the log ever put that printing in the
+  // collection — a wishlist card you gave up on, say.
+  const owned = new Set<string>();
+  for (const e of await db.events.where('kind').anyOf('collection.add', 'collection.remove').toArray()) {
+    if (e.scryfallId) owned.add(e.scryfallId);
+  }
+  const stale = (await db.priceHistories.toCollection().primaryKeys()).filter((k) => !tracked.has(k) && !owned.has(k));
   if (stale.length) await db.priceHistories.bulkDelete(stale);
   if (!tracked.size) return 0;
 

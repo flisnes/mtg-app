@@ -59,7 +59,6 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const goblin = useGoblinMode();
   const pileMode = goblin && !onlyTrade;
   const [view, setView] = useViewMode();
-  const [info, setInfo] = useState<JoinedEntry | null>(null);
   const [cardBack, setCardBack] = useState(false);
   const [sort, setSort] = useCardSort(onlyTrade ? 'tradelist' : 'collection');
   const openSearch = useOpenSearch();
@@ -167,8 +166,11 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           onLongPress: (faceDown) => {
             // Face-down single-faced card: only the generic back is showing, so
             // we tell them about the back, not the front.
+            // Otherwise the same sheet a list or grid row opens: it still reads
+            // as a look at the card (the entry opens read-only), but the way in
+            // to fixing the copy is there when the pile is what you're staring at.
             if (faceDown && !back) setCardBack(true);
-            else setInfo(r);
+            else setEditing(r);
           },
         };
       }),
@@ -349,7 +351,6 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       {filingSheet}
 
       {editing?.oracle && <CardSheet oracleCard={editing.oracle} entry={editing.entry} onClose={() => setEditing(null)} />}
-      {info?.oracle && <CardSheet oracleCard={info.oracle} initialScryfallId={info.entry.scryfallId} readOnly onClose={() => setInfo(null)} />}
       {cardBack && <CardBackSheet onClose={() => setCardBack(false)} />}
     </>
   );

@@ -25,7 +25,9 @@ import { ownedBadge, type OwnedBadgeSpec } from './OwnedBadge.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
 import { useDismiss } from './useDismiss.js';
+import { TAP_GUARD_MS, useTapGuard } from './useTapGuard.js';
 import { useFiling } from '../deck/useFiling.js';
+import { logError } from '../errorLog.js';
 import type { FilingCopy } from '../deck/filing.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
@@ -497,6 +499,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // scan that names an exact copy already filed elsewhere asks (or, unattended,
   // moves it) instead of leaving a stale claim behind.
   const { file, sheet: filingSheet } = useFiling();
+  // The duplicates sheet is rendered inline by this component, so its guard
+  // clock has to start when the step appears, not when the scanner opened.
+  const conflictTapGuard = useTapGuard(TAP_GUARD_MS, conflictStep);
 
   const total = session.reduce((n, e) => n + e.qty, 0);
 
@@ -1097,7 +1102,11 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         );
       } else {
         const mode = await file(target.deckId, scanCopies(session), { source: 'scan' });
-        if (mode === null) return; // backed out of the "already filed elsewhere" prompt — leave the review up
+        if (mode === null) {
+          // Backed out of the prompt: leave the review up, but say so.
+          toast('Nothing added: filing was cancelled');
+          return;
+        }
       }
       const toAdd = r.unowned.filter((e) => rescanPicked.has(entryKey(e)));
       if (toAdd.length) {
@@ -1116,6 +1125,21 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       finishScan();
     } finally {
       setCommitting(false);
+    }
+  };
+
+  /**
+   * Every commit is fired and forgotten by a sheet's onClick, so a throw used to
+   * land in the void: no toast, no retry, the button simply looked dead. Say what
+   * went wrong and keep it in the diagnostics log.
+   */
+  const runCommit = async (run: () => Promise<void>): Promise<void> => {
+    try {
+      await run();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logError('scan-commit', message, err instanceof Error ? err.stack : undefined);
+      toast(`Couldn't save the scan: ${message}`);
     }
   };
 
@@ -1185,7 +1209,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           // through the filing engine, which asks (or moves it) if that same
           // copy is already claimed somewhere else.
           const mode = await file(target.deckId, scanCopies(session), { source: 'scan' });
-          if (mode === null) return; // backed out of the "already filed elsewhere" prompt
+          if (mode === null) {
+            // Backed out of the "already filed elsewhere" prompt. Silence here
+            // reads as a dead button, so name what didn't happen.
+            toast('Nothing added: filing was cancelled');
+            return;
+          }
           break;
         }
         case 'trade':
@@ -1543,7 +1572,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           total={total}
           busy={committing}
           onChange={setSession}
-          onComplete={() => void complete()}
+          onComplete={() => void runCommit(complete)}
           onClose={closeList}
         />
       )}
@@ -1555,7 +1584,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           const otherCount = conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0);
           const toTradelist = target.kind === 'tradelist';
           return (
-            <div className="sheet-backdrop" onClick={() => setConflictStep(null)}>
+            <div className="sheet-backdrop" onClick={() => setConflictStep(null)} {...conflictTapGuard}>
               <div className="sheet" role="dialog" aria-label="Resolve duplicates" onClick={(e) => e.stopPropagation()}>
                 <ImportConflicts
                   conflicts={conflictStep.conflicts}
@@ -1605,7 +1634,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
                     )
                   }
                   confirmLabel={(n) => (n === 0 ? 'Nothing to add' : `Add ${n} card${n === 1 ? '' : 's'} to ${targetLabel(target)}`)}
-                  onConfirm={(choices) => commitLines(conflictStep.lines, choices, conflictStep.conflicts)}
+                  onConfirm={(choices) => runCommit(() => commitLines(conflictStep.lines, choices, conflictStep.conflicts))}
                   onBack={() => setConflictStep(null)}
                 />
               </div>
@@ -1627,7 +1656,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
                 const nextIdx = replaceFlow.idx + 1;
                 if (nextIdx >= replaceFlow.queue.length) {
                   setReplaceFlow(null);
-                  void commitCollection(replaceFlow.lines, replaceFlow.choices, removals, replaceFlow.noSource);
+                  void runCommit(() => commitCollection(replaceFlow.lines, replaceFlow.choices, removals, replaceFlow.noSource));
                 } else {
                   setReplaceFlow({ ...replaceFlow, removals, idx: nextIdx });
                 }
@@ -1644,7 +1673,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           showBoards={deckBoards(target).length > 1}
           busy={committing}
           nextLabel={rescanStep.unowned.length > 0 ? 'Next' : `Apply ${rescanStep.changes.length} change${rescanStep.changes.length === 1 ? '' : 's'}`}
-          onNext={() => (rescanStep.unowned.length > 0 ? setRescanPhase('collection') : void applyRescan())}
+          onNext={() => (rescanStep.unowned.length > 0 ? setRescanPhase('collection') : void runCommit(applyRescan))}
           onBack={() => setRescanStep(null)}
         />
       )}
@@ -1669,7 +1698,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             )
           }
           onBack={() => (rescanStep.changes.length > 0 ? setRescanPhase('changes') : setRescanStep(null))}
-          onConfirm={() => void applyRescan()}
+          onConfirm={() => void runCommit(applyRescan)}
         />
       )}
 
@@ -1703,8 +1732,9 @@ function RescanChangesSheet({
   const removed = changes.filter((c) => c.kind === 'remove');
   const rows = [...added, ...changed, ...removed];
   useDismiss(busy ? null : onBack);
+  const tapGuard = useTapGuard();
   return (
-    <div className="sheet-backdrop" onClick={onBack}>
+    <div className="sheet-backdrop" onClick={onBack} {...tapGuard}>
       <div className="sheet scan-list-sheet" role="dialog" aria-label="Re-scan changes" onClick={(e) => e.stopPropagation()}>
         <div className="scan-sheet-head">
           <h2>Re-scan changes</h2>
@@ -1775,8 +1805,9 @@ function RescanCollectionSheet({
   const chosen = entries.filter((e) => picked.has(entryKey(e)));
   const chosenQty = chosen.reduce((n, e) => n + e.qty, 0);
   useDismiss(busy ? null : onBack);
+  const tapGuard = useTapGuard();
   return (
-    <div className="sheet-backdrop" onClick={onBack}>
+    <div className="sheet-backdrop" onClick={onBack} {...tapGuard}>
       <div className="sheet scan-list-sheet" role="dialog" aria-label="Add scanned cards to collection" onClick={(e) => e.stopPropagation()}>
         <div className="scan-sheet-head">
           <h2>Add to collection?</h2>
@@ -1869,9 +1900,10 @@ function ReplaceCopySheet({
   };
   const scanned = plan.conflict.incoming.map((l) => describe(l)).join(', ');
   useDismiss(busy ? null : onBack);
+  const tapGuard = useTapGuard();
 
   return (
-    <div className="sheet-backdrop" onClick={onBack}>
+    <div className="sheet-backdrop" onClick={onBack} {...tapGuard}>
       <div className="sheet scan-list-sheet" role="dialog" aria-label="Which copy to replace" onClick={(e) => e.stopPropagation()}>
         <div className="scan-sheet-head">
           <h2>Which copy to replace?</h2>
@@ -2036,9 +2068,10 @@ function SessionSheet({
 
   // The per-line card sheet stacks above this one and dismisses first.
   useDismiss(busy ? null : onClose);
+  const tapGuard = useTapGuard();
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={onClose} {...tapGuard}>
       <div className="sheet scan-list-sheet" role="dialog" aria-label="Scanned cards" onClick={(e) => e.stopPropagation()}>
         <div className="scan-sheet-head">
           <h2>Scanned cards</h2>

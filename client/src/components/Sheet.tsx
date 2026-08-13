@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { useDismiss } from './useDismiss.js';
+import { useTapGuard } from './useTapGuard.js';
 
 // The one bottom-sheet shell, so every sheet behaves identically: a portal to
 // <body> (the tab bar's stacking context can otherwise cover the sheet's own
@@ -24,8 +25,10 @@ export function Sheet({
   children: ReactNode;
 }) {
   useDismiss(onClose);
+  // A sheet that opens under the finger that opened it mustn't act on that tap.
+  const tapGuard = useTapGuard();
   return createPortal(
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={onClose} {...tapGuard}>
       <div
         className={className ? `sheet ${className}` : 'sheet'}
         onClick={(e) => e.stopPropagation()}

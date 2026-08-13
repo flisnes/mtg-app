@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.114.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Adding a scanned pile to a binder or box could silently do nothing. The "already filed somewhere else?" question opened with its Cancel button right under the button you just pressed, so a second tap cancelled the scan. Sheets now ignore taps for a moment after they open, and a cancelled or failed save tells you what happened.',
+      },
+    ],
+  },
+  {
     version: '0.114.1',
     changes: [
       {

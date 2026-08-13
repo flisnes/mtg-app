@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.114.2
+
+- **A sheet that opens under your thumb no longer answers for you.** Filing a scanned pile into a binder or box asks "already filed somewhere else?" when some of those cards are registered in another list, and that question put its Cancel button exactly where the "Add N cards to ..." button you had just pressed was. Press that button twice, the way anyone does when a press doesn't seem to register, and the second tap cancelled the whole scan without a word: nothing added, nothing said, and it happened again every time you tried. Sheets now ignore taps for a moment after they open, so a button that appears under your finger can't be worked by a tap aimed at something else. Backing out of that filing question now says nothing was added, and a scan that genuinely fails to save says so too, instead of leaving you pressing a button that looks dead.
+
 ## 0.114.1
 
 - **The same chart, for the whole collection.** Tap "Total value" at the top of the Collection page and you get your pile's worth drawn out day by day. A card only counts from the day you actually got it, so a card you wished for all spring doesn't retroactively pad last month's total, and the line steps up when you buy and down when you sell. The second tab, "Since acquisition", drops the market noise and shows only what your cards have gained or lost since you got them, measured against what you paid — buying costs nothing on that line, so what's left is whether the cards you keep are earning their place. Pick any day on either chart and the list underneath fills with what came in and out that day; green and red dots mark the days worth picking. Printings you sell now keep their recorded price days instead of being forgotten, so the chart stops losing its own past.

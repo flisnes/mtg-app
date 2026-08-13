@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.114.3',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Goblin mode is far lighter on phones. The pile now builds only the cards near your view and adds more as you scroll, with art sized for the cards it draws and cheaper shadows. Cards you shove or flip stay that way when you scroll back to them.',
+      },
+    ],
+  },
+  {
     version: '0.114.2',
     changes: [
       {

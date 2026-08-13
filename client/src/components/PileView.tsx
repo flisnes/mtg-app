@@ -17,6 +17,15 @@ import { useDismiss } from './useDismiss.js';
 // The scatter is deterministic (seeded by each copy's key) so the pile keeps
 // its shape across re-renders and app restarts; drags live only in component
 // state, so leaving the page shakes the box.
+//
+// Only the cards near the viewport are mounted. Every copy's spot is computed
+// up front (it's arithmetic, not DOM), so the heap's full height is known from
+// the start and the scrollbar never lies — but a 3000-card collection would be
+// 3000 rotated, shadowed, layer-promoted nodes, which Chrome composites about
+// as gracefully as a goblin handles a Timetwister. Scrolling mounts the band it
+// reaches. Positions, flips and z-bumps therefore have to be remembered *above*
+// the card component, or scrolling past a card you shoved would shake it back
+// into place.
 
 export interface PileEntry {
   key: string;
@@ -36,6 +45,8 @@ export interface PileEntry {
 
 /** Scryfall's scan of the standard Magic card back (the "Deckmaster" design). */
 export const CARD_BACK_URL = 'https://backs.scryfall.io/normal/0/a/0aeebaf5-8c7d-4636-9e82-8c27447861f7.jpg';
+/** The same back at pile size: 9 KB against 80 KB, for a face 96px wide. */
+const CARD_BACK_SMALL_URL = 'https://backs.scryfall.io/small/0/a/0aeebaf5-8c7d-4636-9e82-8c27447861f7.jpg';
 
 const CARD_W = 96;
 const CARD_H = 134;
@@ -45,6 +56,11 @@ const OVERSIZED_SCALE = 1.4;
 const MAX_COPIES = 4;
 /** Average card-area overlap; higher = denser, thicker pile. */
 const COVERAGE = 1.9;
+
+/** Kept mounted above and below the viewport, so a card is ready well before it's seen. */
+const WINDOW_BLEED = 420;
+/** The mounted band snaps to this grid: one re-render per BAND scrolled, not per pixel. */
+const BAND = 200;
 
 const LONG_PRESS_MS = 500;
 /** Touch: hold this long before a move becomes a drag instead of a scroll. */
@@ -85,6 +101,18 @@ interface Spot {
   /** Per-copy footprint — oversized cards are larger than the standard CARD_W/H. */
   w: number;
   h: number;
+}
+
+/**
+ * What one copy has had done to it, held by the pile rather than the card so it
+ * survives the card being unmounted when it scrolls out of the window. Absent
+ * fields mean "still as dealt".
+ */
+interface CardMemo {
+  x?: number;
+  y?: number;
+  z?: number;
+  faceDown?: boolean;
 }
 
 export function PileView({ items }: { items: PileEntry[] }) {
@@ -142,23 +170,85 @@ export function PileView({ items }: { items: PileEntry[] }) {
   }, [copies.length]);
   const nextZ = useCallback(() => ++zRef.current, []);
 
+  // What the user has done to each copy, kept here so unmounting a card that
+  // scrolled away doesn't undo it.
+  const memos = useRef(new Map<string, CardMemo>());
+  const memoFor = useCallback((key: string): CardMemo => {
+    let m = memos.current.get(key);
+    if (!m) {
+      m = {};
+      memos.current.set(key, m);
+    }
+    return m;
+  }, []);
+  // A width change re-scatters the whole heap, so remembered drags stop meaning
+  // anything (flips still do — that's about the card, not where it landed).
+  useEffect(() => {
+    memos.current.forEach((m) => {
+      delete m.x;
+      delete m.y;
+    });
+  }, [width]);
+
+  // The slice of the pile worth mounting, in the pile's own coordinates. Snapped
+  // to BAND so a flick of the thumb doesn't re-render on every frame.
+  const [band, setBand] = useState<{ top: number; bottom: number } | null>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const r = el.getBoundingClientRect();
+      const top = Math.floor((-r.top - WINDOW_BLEED) / BAND) * BAND;
+      const bottom = Math.ceil((-r.top + window.innerHeight + WINDOW_BLEED) / BAND) * BAND;
+      setBand((prev) => (prev && prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    measure();
+    // Capture, because the app scrolls an inner container (.app-main) and scroll
+    // events don't bubble out of it.
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
+  const shown = useMemo(() => {
+    if (!width || !band) return [];
+    return copies.filter((c) => {
+      const s = spots.get(c.copyKey);
+      if (!s) return false;
+      // A card the user dragged sits where they left it, not where it was dealt.
+      const y = memos.current.get(c.copyKey)?.y ?? s.y;
+      // Rotation paints outside the w×h box; half the diagonal covers the worst case.
+      const bleed = Math.hypot(s.w, s.h) / 2;
+      return y + s.h + bleed > band.top && y - bleed < band.bottom;
+    });
+  }, [copies, spots, band, width]);
+
   return (
     <>
       <p className="pile-hint">
         Time to rummage. Double-tap to flip a card over, press and hold for details.
       </p>
       <div className="pile" ref={containerRef} style={{ height }}>
-        {width > 0 &&
-          copies.map((c) => (
-            <PileCard
-              key={c.copyKey}
-              entry={c.entry}
-              spot={spots.get(c.copyKey)!}
-              boundsW={width}
-              boundsH={height}
-              nextZ={nextZ}
-            />
-          ))}
+        {shown.map((c) => (
+          <PileCard
+            key={c.copyKey}
+            entry={c.entry}
+            spot={spots.get(c.copyKey)!}
+            memo={memoFor(c.copyKey)}
+            boundsW={width}
+            boundsH={height}
+            nextZ={nextZ}
+          />
+        ))}
       </div>
     </>
   );
@@ -195,30 +285,55 @@ function suppressNextClick(): void {
 function PileCard({
   entry,
   spot,
+  memo,
   boundsW,
   boundsH,
   nextZ,
 }: {
   entry: PileEntry;
   spot: Spot;
+  /** This copy's remembered state, owned by the pile (see CardMemo). */
+  memo: CardMemo;
   boundsW: number;
   boundsH: number;
   nextZ: () => number;
 }) {
   const el = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ x: spot.x, y: spot.y });
-  const [z, setZ] = useState(spot.z);
-  const [faceDown, setFaceDown] = useState(spot.faceDown);
+  // Remembered state wins over the deal: this card may have been mounted,
+  // shoved around, scrolled away from and mounted again.
+  const [pos, setPos] = useState({ x: memo.x ?? spot.x, y: memo.y ?? spot.y });
+  const [z, setZ] = useState(memo.z ?? spot.z);
+  const [faceDown, setFaceDown] = useState(memo.faceDown ?? spot.faceDown);
+  // The back face is only built once this card has one to show.
+  const [hasBackFace, setHasBackFace] = useState(memo.faceDown ?? spot.faceDown);
   const [dragging, setDragging] = useState(false);
   const g = useRef<Gesture | null>(null);
   const lastTap = useRef(0);
   const blockScroll = useRef<(() => void) | null>(null);
 
-  // Re-scatter only when the layout genuinely moved this copy (width change);
-  // by-value deps keep user drags alive across unrelated re-renders.
+  // Re-scatter only when the layout genuinely moved this copy (width change).
+  // Compared by value, so mounting with a remembered drag doesn't snap it back
+  // and an unrelated re-render doesn't either.
+  const dealt = useRef({ x: spot.x, y: spot.y });
   useEffect(() => {
+    if (dealt.current.x === spot.x && dealt.current.y === spot.y) return;
+    dealt.current = { x: spot.x, y: spot.y };
     setPos({ x: spot.x, y: spot.y });
   }, [spot.x, spot.y]);
+
+  /** Move a card to where the user let go of it, and remember it. */
+  function place(x: number, y: number): void {
+    memo.x = x;
+    memo.y = y;
+    setPos({ x, y });
+  }
+
+  /** Raise this card to the top of the heap. */
+  function raise(): void {
+    const next = nextZ();
+    memo.z = next;
+    setZ(next);
+  }
 
   // The transform is applied imperatively (not via the style prop) so React
   // re-renders mid-drag (z bump etc.) can't snap the card back a frame.
@@ -234,8 +349,12 @@ function PileCard({
   const clampY = (y: number) => Math.min(Math.max(y, -spot.h / 2), boundsH - spot.h / 2);
 
   function flip(): void {
-    setFaceDown((f) => !f);
-    setZ(nextZ());
+    setHasBackFace(true);
+    setFaceDown((f) => {
+      memo.faceDown = !f;
+      return !f;
+    });
+    raise();
   }
 
   function stopScrollBlocker(): void {
@@ -311,7 +430,7 @@ function PileCard({
         clearTimeout(cur.longTimer);
         clearTimeout(cur.armTimer);
         setDragging(true);
-        setZ(nextZ());
+        raise();
       } else if (!cur.armed && cur.dist > SCROLL_SLOP) {
         // Mostly-vertical swipe before the hold armed: it's a page scroll.
         endGesture(cur);
@@ -332,7 +451,7 @@ function PileCard({
     endGesture(cur);
     if (wasDrag) {
       setDragging(false);
-      setPos({ x: cur.curX, y: cur.curY });
+      place(cur.curX, cur.curY);
       suppressNextClick();
     } else if (cur.dist <= TAP_SLOP) {
       if (e.timeStamp - lastTap.current < DOUBLE_TAP_MS) {
@@ -351,7 +470,7 @@ function PileCard({
     endGesture(cur);
     if (wasDrag) {
       setDragging(false);
-      setPos({ x: cur.curX, y: cur.curY });
+      place(cur.curX, cur.curY);
     }
   }
 
@@ -394,9 +513,13 @@ function PileCard({
               A real Magic card back is never foil, so dropping it face-down is correct. */}
           {entry.foil && entry.image && !faceDown && <span className="foil-sheen" aria-hidden />}
         </div>
-        <div className="pile-face pile-back">
-          <img src={entry.imageBack ?? CARD_BACK_URL} alt="" loading="lazy" draggable={false} />
-        </div>
+        {/* At four nodes and two images a card, the heap is heavy enough without a
+            hidden back on every copy that never gets turned over. */}
+        {hasBackFace && (
+          <div className="pile-face pile-back">
+            <img src={entry.imageBack ?? CARD_BACK_SMALL_URL} alt="" loading="lazy" draggable={false} />
+          </div>
+        )}
       </div>
     </div>
   );

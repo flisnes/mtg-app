@@ -1338,9 +1338,11 @@ body:has(.bulk-bar) .app-main {
   left: 0;
   cursor: grab;
   border-radius: 6px;
-  /* Seat the card on the pile with a soft drop shadow. */
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
-  will-change: transform;
+  /* Seat the card on the pile with a soft drop shadow. box-shadow, not
+     filter: drop-shadow — the card is a plain rounded rectangle, so the two
+     look alike, but a filter costs its own render surface and blur per card,
+     and a heap is hundreds of cards. */
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.55);
   outline: none;
   /* pan-y (not none): a vertical swipe scrolls the pile natively even when it
      starts on a card; we cancel that scroll (non-passive touchmove) only once
@@ -1351,9 +1353,13 @@ body:has(.bulk-bar) .app-main {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* will-change only while a card is actually moving: on every card it would
+   promote the whole heap to its own composited layer each, which is what made
+   goblin mode crawl on Android. */
 .pile-dragging {
   cursor: grabbing;
-  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.6));
+  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.6);
+  will-change: transform;
 }
 .pile-card-inner {
   position: relative;

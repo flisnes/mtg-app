@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.114.3
+
+- **Goblin mode stops bringing your phone to its knees.** The pile used to build every card in your collection at once, each one asking for full-size art, a blurred drop shadow and a graphics layer of its own. On Android that left thousands of cards fighting over memory and scrolling turned to treacle, while the same heap ran fine in Firefox. The pile now builds only the cards near what you are looking at and adds more as you scroll, using art sized for the small cards it actually draws, a cheaper shadow, and a back face only on the cards that have been turned over. The heap keeps its size and its shape, so your scroll position still means what it did, and cards you shove stay shoved and cards you flip stay flipped even after you scroll well past them and come back.
+
 ## 0.114.2
 
 - **A sheet that opens under your thumb no longer answers for you.** Filing a scanned pile into a binder or box asks "already filed somewhere else?" when some of those cards are registered in another list, and that question put its Cancel button exactly where the "Add N cards to ..." button you had just pressed was. Press that button twice, the way anyone does when a press doesn't seem to register, and the second tap cancelled the whole scan without a word: nothing added, nothing said, and it happened again every time you tried. Sheets now ignore taps for a moment after they open, so a button that appears under your finger can't be worked by a tap aimed at something else. Backing out of that filing question now says nothing was added, and a scan that genuinely fails to save says so too, instead of leaving you pressing a button that looks dead.

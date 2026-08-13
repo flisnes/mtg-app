@@ -142,6 +142,39 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
 
   const totalQty = filtered.reduce((s, r) => s + r.entry.quantity, 0);
 
+  // The heap's cards. Memoized because PileView recomputes every copy's spot
+  // whenever this array changes identity, and a fresh array on every render (a
+  // card sheet opening, a price landing) would redo that for the whole
+  // collection. Small art on purpose: a pile card is 96px wide, and `normal`
+  // decodes to ~1.3 MB against ~120 KB, which is what buried Chrome.
+  const pileItems = useMemo(
+    () =>
+      matching.map((r): PileEntry => {
+        const back =
+          r.printing?.imageBackSmall ??
+          r.oracle?.imageBackSmall ??
+          r.printing?.imageBackNormal ??
+          r.oracle?.imageBackNormal ??
+          null;
+        return {
+          key: r.entry.id,
+          name: r.oracle?.name ?? '(unknown card)',
+          image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? r.printing?.imageNormal ?? r.oracle?.imageNormal ?? null,
+          imageBack: back,
+          foil: r.entry.finish !== 'nonfoil',
+          oversized: /oversized/i.test(r.printing?.setName ?? ''),
+          count: r.entry.quantity,
+          onLongPress: (faceDown) => {
+            // Face-down single-faced card: only the generic back is showing, so
+            // we tell them about the back, not the front.
+            if (faceDown && !back) setCardBack(true);
+            else setInfo(r);
+          },
+        };
+      }),
+    [matching],
+  );
+
   // Page the rendered list — the collection is the one list guaranteed to reach
   // thousands of entries, so rendering all of them (each a tile with images and
   // badges) janks on phones. Reset to page one when the sort or search changes.
@@ -280,26 +313,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         matching.length === 0 ? (
           emptyState
         ) : (
-          <PileView
-            items={matching.map(
-              (r): PileEntry => ({
-                key: r.entry.id,
-                name: r.oracle?.name ?? '(unknown card)',
-                image: r.printing?.imageNormal ?? r.oracle?.imageNormal ?? r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
-                imageBack: r.printing?.imageBackNormal ?? r.oracle?.imageBackNormal ?? r.printing?.imageBackSmall ?? r.oracle?.imageBackSmall ?? null,
-                foil: r.entry.finish !== 'nonfoil',
-                oversized: /oversized/i.test(r.printing?.setName ?? ''),
-                count: r.entry.quantity,
-                onLongPress: (faceDown) => {
-                  // Face-down single-faced card: only the generic back is
-                  // showing, so we tell them about the back, not the front.
-                  const hasBack = !!(r.printing?.imageBackNormal ?? r.oracle?.imageBackNormal ?? r.printing?.imageBackSmall ?? r.oracle?.imageBackSmall);
-                  if (faceDown && !hasBack) setCardBack(true);
-                  else setInfo(r);
-                },
-              }),
-            )}
-          />
+          <PileView items={pileItems} />
         )
       ) : filtered.length === 0 ? (
         emptyState

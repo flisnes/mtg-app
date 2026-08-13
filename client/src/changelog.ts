@@ -20,6 +20,27 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.115.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The card sheet now offers the same things wherever you open it: flip through editions on any card, fix a recorded price from the History tab anywhere, add to your collection or wishlist while searching inside a deck, and file a copy you own into a deck, binder or box straight from its sheet.',
+      },
+      {
+        kind: 'changed',
+        text: '"Add to collection" opens the real form instead of quietly filing a Near Mint, nonfoil, English copy. Back returns you to the card.',
+      },
+      {
+        kind: 'changed',
+        text: 'The sheet holds its shape: art, price and where copies are filed at the top, buttons always in the same place, and rules text or history scrolling inside their own boxes. A copy you own reads as one line until you press Edit.',
+      },
+      {
+        kind: 'fixed',
+        text: 'Picking a card out of the collection value chart offered to add another copy instead of showing the one you own.',
+      },
+    ],
+  },
+  {
     version: '0.114.3',
     changes: [
       {

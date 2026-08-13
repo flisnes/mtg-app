@@ -18,7 +18,7 @@ import {
 import { getPrintingsForOracle } from '../db/queries.js';
 import { canJoinCommandZone, isBasicLand, isNonDeckCard } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
-import { claimKeyOf } from '../deck/filing.js';
+import { claimKeyOf, type FilingCopy } from '../deck/filing.js';
 import { useFiling } from '../deck/useFiling.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { PlacementPills } from './PlacementBadge.js';
@@ -29,12 +29,13 @@ import { historyChange, type HistoryChange } from '../price/history.js';
 import { fmtPriceIn } from '../price/rates.js';
 import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { CardHistory } from './CardHistory.js';
+import { ContainerPickerSheet } from './ContainerPickerSheet.js';
 import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
 import { EventSheet } from './EventSheet.js';
 import { useOpenCollectionSearch } from './GlobalSearch.js';
 import { Icon, type IconName } from './icons.js';
-import { OptionsMenu } from './OptionsMenu.js';
 import { PriceChartSheet } from './PriceChart.js';
+import { useToast } from './Toast.js';
 import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
@@ -54,6 +55,11 @@ import { useDismiss } from './useDismiss.js';
 //  - session (sessionCard): edit a scan-session line in memory — Apply reports
 //    the values through onApply instead of writing to Dexie
 //  - info (readOnly): app-wide card info — image, printings, price + history
+//
+// Any mode can step sideways into add mode ("Add to your collection" from a card
+// you're only viewing, "Got it" on a wish): `addFlow` names the list and the
+// sheet turns into the real add form for it, so nothing about the copy is
+// guessed on the user's behalf. Cancel steps back to where they were.
 
 /** Where add mode sends the card (mirrors the context-sensitive search).
  *  'default' is search from a context-free page: the collection form, with
@@ -140,7 +146,6 @@ export function CardSheet({
   initialTab,
   addTarget,
   readOnly = false,
-  onEditionChange,
   highlightPrintings,
   onClose,
 }: {
@@ -189,12 +194,6 @@ export function CardSheet({
   /** Info-only: show the card and its printings, no collection editing. */
   readOnly?: boolean;
   /**
-   * When set, the Edition dropdown stays editable even in info mode and every
-   * change is reported here — the trade board uses this to re-print an offer
-   * line in place without leaving the sheet.
-   */
-  onEditionChange?: (scryfallId: string) => void;
-  /**
    * Printings to group first in the Edition dropdown, each with a short note
    * (e.g. "×2, 1 for trade") — the trade board uses this to surface the
    * editions the relevant person actually has.
@@ -202,15 +201,22 @@ export function CardSheet({
   highlightPrintings?: { label: string; notes: Map<string, string> };
   onClose: () => void;
 }) {
-  const mode = wishEntry ? 'wish' : deckCard ? 'deck' : entry ? 'edit' : sessionCard ? 'session' : readOnly ? 'info' : 'add';
+  // Stepping sideways into an add form from another mode (see the note above):
+  // the list being added to, or null for "the sheet as its caller opened it".
+  const [addFlow, setAddFlow] = useState<ListKind | null>(null);
+  const baseMode = wishEntry ? 'wish' : deckCard ? 'deck' : entry ? 'edit' : sessionCard ? 'session' : readOnly ? 'info' : 'add';
+  const mode = addFlow ? 'add' : baseMode;
   const editing = mode === 'edit';
   const openCollectionSearch = useOpenCollectionSearch();
+  const toast = useToast();
   // An owned collection entry opens read-only with an Edit toggle; add/wish/
   // deck/session are always a form; info is never editable.
   const [editMode, setEditMode] = useState(false);
   const canToggleEdit = mode === 'edit';
   const formEditable = mode === 'add' || mode === 'wish' || mode === 'deck' || mode === 'session' || (mode === 'edit' && editMode);
-  const addTo: AddTarget = (mode === 'add' && addTarget) || { kind: 'collection' };
+  /** An owned copy being looked at, not edited: it reads as a line, not a form. */
+  const readOnlyEntry = mode === 'edit' && !editMode;
+  const addTo: AddTarget = addFlow ? { kind: addFlow } : (mode === 'add' && addTarget) || { kind: 'collection' };
   // Wishlist adds default to "any printing"; deck slots don't store an edition
   // at all, so those variants drop the collection-specific fields below.
   const wishAdd = mode === 'add' && addTo.kind === 'wishlist';
@@ -332,6 +338,12 @@ export function CardSheet({
   const [chartOpen, setChartOpen] = useState(false);
   // "Pick one from my collection" (container slots): the owned-copies overlay.
   const [pickingCopy, setPickingCopy] = useState(false);
+  // "File this copy": the deck/binder/box picker, from a card you own.
+  const [pickingContainer, setPickingContainer] = useState(false);
+  // History rows expand into their inline price editor. Its own toggle, not the
+  // form's: correcting what you paid is reading-your-own-history work, and every
+  // mode's History tab shows your own events.
+  const [historyEdit, setHistoryEdit] = useState(false);
   // Filter the (often very long) Edition dropdown by set name or set code.
   const [editionQuery, setEditionQuery] = useState('');
   // Event info modal opened from the History tab (out of edit mode), plus a
@@ -453,7 +465,13 @@ export function CardSheet({
     p.set.toLowerCase().includes(editionQ);
   const visibleHighlighted = highlighted.filter(matchesQuery);
   const visibleOther = otherPrintings.filter(matchesQuery);
-  const showEditionSearch = (formEditable || !!onEditionChange) && printings.length > 6;
+  // Picking an edition is not editing: in info mode it only changes which
+  // printing you're looking at (art, price, history, placement pills all
+  // follow), and info mode writes nothing. So every mode gets the dropdown, the
+  // filter and the visual grid — except a wish you're only reading, where the
+  // edition is that person's answer, not yours to flip through.
+  const editionPickable = formEditable || (mode === 'info' && !wishInfo);
+  const showEditionSearch = editionPickable && printings.length > 6;
   // A wish can want any finish (esp. an "any printing" wish, where no single
   // printing constrains the choice); a collection entry is limited to what the
   // selected printing actually comes in. A slot follows its edition where it pins
@@ -508,7 +526,14 @@ export function CardSheet({
    *  follows the sheet's own scope (collection for a context-free search). */
   async function save(board: DeckBoard = 'main', dest?: ListKind) {
     setBusy(true);
-    if (sessionCard) {
+    // Add mode first: the sheet may have stepped into it from a wish, a deck
+    // slot or a card it's only showing, and those props are all still set.
+    if (mode === 'add') {
+      if (!(await saveAdd(board, dest))) {
+        setBusy(false);
+        return;
+      }
+    } else if (sessionCard) {
       onApply?.(sessionValues(quantity));
     } else if (wishEntry) {
       await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, ...wishPrefs, quantity });
@@ -521,28 +546,22 @@ export function CardSheet({
         quantity,
         quantityForTrade: clampedForTrade,
       });
-    } else if (addTo.kind === 'deck') {
+    }
+    onClose();
+  }
+
+  /** The add half of `save`. Returns false when the user backed out of the
+   *  filing prompt, so the sheet stays open on the form they were filling. */
+  async function saveAdd(board: DeckBoard, dest?: ListKind): Promise<boolean> {
+    if (addTo.kind === 'deck') {
       // A slot naming a real copy of yours (edition + all three traits) is
       // cardboard being filed, so it goes through the filing flow and may offer
       // to take the card out of wherever it was. Anything vaguer is a brew line
       // that claims no copy — straight in, merging by card and board as ever.
       const claims = !anyBasicPicked && !!claimKeyOf({ ...wishPrefs, scryfallId });
       if (claims) {
-        const mode = await file(addTo.deckId, [
-          {
-            oracleId: oracleCard.oracleId,
-            scryfallId,
-            quantity,
-            board,
-            wants: wishPrefs,
-            label: oracleCard.name,
-            sub: [printing?.setName, condition, finish, lang !== 'en' ? lang : null].filter(Boolean).join(' · '),
-          },
-        ]);
-        if (mode === null) {
-          setBusy(false);
-          return;
-        }
+        const filed = await file(addTo.deckId, [filingCopy(board)]);
+        if (filed === null) return false;
       } else {
         await addDeckCard({
           deckId: addTo.deckId,
@@ -552,27 +571,40 @@ export function CardSheet({
           quantity,
         });
       }
-    } else {
-      // Add mode into one of the three personal lists. An explicit button
-      // (dest) wins; otherwise the sheet's own scope decides, and a
-      // context-free ('default') search files to the collection.
-      const where: ListKind = dest ?? (addTo.kind === 'wishlist' || addTo.kind === 'tradelist' ? addTo.kind : 'collection');
-      if (where === 'wishlist') {
-        await addToWishlist({ oracleId: oracleCard.oracleId, scryfallId: scryfallId || null, ...wishPrefs, quantity });
-      } else {
-        // Collection and tradelist both write a collection entry (the latter
-        // starts with copies marked for trade). A wishlist-origin sheet can
-        // sit on "any printing", so fall back to a concrete edition here.
-        await addToCollection({
-          oracleId: oracleCard.oracleId,
-          scryfallId: scryfallId || oracleCard.defaultScryfallId,
-          ...concrete,
-          quantity,
-          quantityForTrade: where === 'tradelist' ? clampedForTrade || 1 : clampedForTrade,
-        });
-      }
+      return true;
     }
-    onClose();
+    // Add mode into one of the three personal lists. An explicit button
+    // (dest) wins; otherwise the sheet's own scope decides, and a
+    // context-free ('default') search files to the collection.
+    const where: ListKind = dest ?? (addTo.kind === 'wishlist' || addTo.kind === 'tradelist' ? addTo.kind : 'collection');
+    if (where === 'wishlist') {
+      await addToWishlist({ oracleId: oracleCard.oracleId, scryfallId: scryfallId || null, ...wishPrefs, quantity });
+    } else {
+      // Collection and tradelist both write a collection entry (the latter
+      // starts with copies marked for trade). A wishlist-origin sheet can
+      // sit on "any printing", so fall back to a concrete edition here.
+      await addToCollection({
+        oracleId: oracleCard.oracleId,
+        scryfallId: scryfallId || oracleCard.defaultScryfallId,
+        ...concrete,
+        quantity,
+        quantityForTrade: where === 'tradelist' ? clampedForTrade || 1 : clampedForTrade,
+      });
+    }
+    return true;
+  }
+
+  /** This sheet's card as cardboard being filed somewhere, for the prompt. */
+  function filingCopy(board: DeckBoard = 'main'): FilingCopy {
+    return {
+      oracleId: oracleCard.oracleId,
+      scryfallId,
+      quantity,
+      board,
+      wants: wishPrefs,
+      label: oracleCard.name,
+      sub: [printing?.setName, condition, finish, lang !== 'en' ? lang : null].filter(Boolean).join(' · '),
+    };
   }
 
   /** Enter in a quantity field commits the sheet, like a form submit. */
@@ -591,25 +623,39 @@ export function CardSheet({
     onClose();
   }
 
-  /** File a card into the user's own collection/wishlist from a sheet that
-   *  otherwise offers no such action — a deck slot (own deck), a wishlist line
-   *  ("got it"), or any card you're only viewing (info mode). One tap:
-   *  collection takes the shown printing (NM/nonfoil/en); a wish stays "any
-   *  printing" like the normal wishlist add. */
-  async function quickAdd(dest: 'collection' | 'wishlist') {
-    setBusy(true);
-    if (dest === 'collection') {
-      await addToCollection({
-        oracleId: oracleCard.oracleId,
-        scryfallId: scryfallId || oracleCard.defaultScryfallId,
-        condition: 'NM',
-        finish: 'nonfoil',
-        lang: 'en',
-        quantity: 1,
-      });
-    } else {
-      await addToWishlist({ oracleId: oracleCard.oracleId, quantity: 1 });
+  /**
+   * Add this card to one of your own lists from a sheet that isn't about them —
+   * a deck slot, a wish you just got hold of, or a card you're only viewing.
+   * It turns the sheet into that list's real add form rather than filing a
+   * guessed copy, so condition, finish, language and quantity are answered by
+   * the person who knows them. Fields carrying an "any" (a slot's or a wish's
+   * preference) land on the collection's defaults, since a copy you own is a
+   * specific piece of cardboard.
+   */
+  function startAdd(dest: ListKind) {
+    if (!scryfallId && dest !== 'wishlist') setScryfallId(oracleCard.defaultScryfallId);
+    if (dest !== 'wishlist') {
+      if (!condition) setCondition('NM');
+      if (!finish) setFinish('nonfoil');
+      if (!lang) setLang('en');
     }
+    setForTrade(dest === 'tradelist' ? Math.max(1, forTrade) : 0);
+    setAddFlow(dest);
+  }
+
+  /** Put this copy in a deck, binder or box, straight from the entry that owns
+   *  it — the same filing flow (and move-or-both question) the collection's
+   *  bulk "File away" runs, for the one card in front of you. */
+  async function fileHere(containerId: string, kind: ContainerKind) {
+    setPickingContainer(false);
+    setBusy(true);
+    const filed = await file(containerId, [filingCopy()]);
+    if (filed === null) {
+      setBusy(false);
+      return;
+    }
+    const noun = CONTAINER_META[kind].noun;
+    toast(filed === 'move' ? `Moved to ${noun}` : `Filed in ${noun}`);
     onClose();
   }
 
@@ -618,7 +664,7 @@ export function CardSheet({
   return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div
-        className="sheet"
+        className="sheet card-sheet"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label={mode === 'info' ? oracleCard.name : `${mode === 'add' ? 'Add' : 'Edit'} ${oracleCard.name}`}
@@ -651,8 +697,16 @@ export function CardSheet({
           ) : (
             <div className="sheet-card sheet-card-ph">{oracleCard.name}</div>
           )}
+          {/* Everything that describes the card rides in the column beside the
+              art — name, cost, type, what you own, what it's worth and where
+              your copies are filed. That column is as tall as the card, and the
+              form below it starts at a fixed place on every card. */}
           <div className="sheet-info">
             <div className="sheet-name">{oracleCard.name}</div>
+            <div className="result-sub sheet-typeline">
+              {oracleCard.manaCost && <ManaCost cost={oracleCard.manaCost} />}
+              <span>{oracleCard.typeLine}</span>
+            </div>
             {mode !== 'edit' && ownedQty > 0 && (
               <OwnedHere
                 qty={ownedQty}
@@ -668,25 +722,18 @@ export function CardSheet({
                 }
               />
             )}
-            {oracleCard.manaCost && (
-              <div className="result-sub">
-                <ManaCost cost={oracleCard.manaCost} />
-              </div>
-            )}
-            <div className="result-sub">{oracleCard.typeLine}</div>
             <div className="result-price">{cardPrice}</div>
             {trend && trend.points > 1 && <PriceTrend trend={trend} onOpen={() => setChartOpen(true)} />}
+            {/* Where the copies live. A binder name can be long, so the pills
+                scroll on their own rather than pushing the form down. */}
+            {placement && placement.places.length > 0 && (
+              <div className="sheet-places">
+                <span className="sheet-places-label">Filed in</span>
+                <PlacementPills info={placement} onNavigate={onClose} />
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Where the copies live. Full width under the head, since a binder or
-            box name is longer than the info column beside the art. */}
-        {placement && placement.places.length > 0 && (
-          <div className="sheet-places">
-            <span className="sheet-places-label">Filed in</span>
-            <PlacementPills info={placement} onNavigate={onClose} />
-          </div>
-        )}
 
         <div className="seg-row sheet-tabs" role="tablist" aria-label="Card view">
           <button
@@ -707,29 +754,24 @@ export function CardSheet({
           </button>
         </div>
 
+        {/* The one part of the sheet that scrolls. Head, tabs and the action row
+            stay put, so the buttons are always in the same place no matter how
+            much rules text or history the card carries. */}
+        <div className={tab === 'history' ? 'sheet-body sheet-body-history' : 'sheet-body'}>
         {tab === 'history' ? (
-          <>
-            <CardHistory
-              oracleCard={oracleCard}
-              scryfallId={shownId}
-              printings={printings}
-              priceHistory={priceHistory}
-              editMode={editMode}
-              onEventClick={(e: UserEvent) => setEventEntry({ kind: 'single', id: e.id, ts: e.ts, event: e })}
-            />
-            <div className="sheet-actions">
-              {canToggleEdit && (
-                <button onClick={() => setEditMode((v) => !v)}>{editMode ? 'Done' : 'Edit'}</button>
-              )}
-              <button className="primary" onClick={onClose}>
-                Close
-              </button>
-            </div>
-          </>
+          <CardHistory
+            oracleCard={oracleCard}
+            scryfallId={shownId}
+            printings={printings}
+            priceHistory={priceHistory}
+            editMode={historyEdit}
+            onToggleEdit={() => setHistoryEdit((v) => !v)}
+            onEventClick={(e: UserEvent) => setEventEntry({ kind: 'single', id: e.id, ts: e.ts, event: e })}
+          />
         ) : (
         <>
         {oracleCard.oracleText && (
-          <SymbolText className="oracle-text" text={oracleCard.oracleText} />
+          <SymbolText className="oracle-text sheet-oracle" text={oracleCard.oracleText} />
         )}
 
         <label className="field">
@@ -749,11 +791,8 @@ export function CardSheet({
               {printing && <SetSymbol set={printing.set} className="edition-symbol" title={printing.setName} />}
               <select
                 value={scryfallId}
-                onChange={(e) => {
-                  setScryfallId(e.target.value);
-                  onEditionChange?.(e.target.value);
-                }}
-                disabled={!formEditable && !onEditionChange}
+                onChange={(e) => setScryfallId(e.target.value)}
+                disabled={!editionPickable}
               >
                 {/* A basic in a container spends its "any" on the lands box (the
                     slot is detached from the collection entirely); everything
@@ -779,7 +818,7 @@ export function CardSheet({
                 )}
               </select>
             </div>
-            {(formEditable || !!onEditionChange) && printings.length > 0 && (
+            {editionPickable && printings.length > 0 && (
               <button
                 type="button"
                 className="edition-grid-btn"
@@ -802,8 +841,23 @@ export function CardSheet({
           </button>
         )}
 
+        {/* Looking at a copy you own: three greyed-out dropdowns and two dead
+            steppers say the same thing as one line, and cost the sheet the room
+            the card art wants. The form itself is one tap away. */}
+        {readOnlyEntry && (
+          <div className="sheet-copy-summary">
+            <span>{condition}</span>
+            <span>{FINISH_LABELS[(finish || 'nonfoil') as Finish]}</span>
+            <span>{(lang || 'en').toUpperCase()}</span>
+            <span className="sheet-copy-qty">
+              ×{quantity}
+              {clampedForTrade > 0 ? ` · ${clampedForTrade} for trade` : ''}
+            </span>
+          </div>
+        )}
+
         {/* A lands-box basic never claims a copy of yours, so it prefers nothing. */}
-        {(showCondition || showFinish || showLang) && !anyBasicPicked && (
+        {!readOnlyEntry && (showCondition || showFinish || showLang) && !anyBasicPicked && (
         <div className="field-grid">
           {showCondition && (
           <label className="field">
@@ -847,7 +901,7 @@ export function CardSheet({
         </div>
         )}
 
-        {(mode !== 'info' || wishInfo) && (
+        {(mode !== 'info' || wishInfo) && !readOnlyEntry && (
         <div className="field-grid">
           <label className="field">
             <span>Quantity</span>
@@ -868,18 +922,22 @@ export function CardSheet({
           <TagField deckId={deckCard.deckId} tags={tags} onChange={setTags} />
         )}
 
-        {/* File-into-your-lists affordance. In your own deck both lists lead as
-            buttons; on your own wishlist "got it" → collection leads; everywhere
-            you're only viewing a card (info mode) it tucks into a ⋯ menu so the
-            sheet stays uncluttered. */}
-        {mode === 'deck' && (
+        </>
+        )}
+        </div>
+
+        {/* File-into-your-lists affordance, for the modes that aren't about your
+            lists: a container slot (yours or not), a wish you just got hold of,
+            or any card you're only viewing. Each opens that list's real add
+            form — the copy is yours to describe, not ours to guess. */}
+        {(mode === 'deck' || deckAdd || mode === 'info') && (
           <div className="sheet-quickadd">
             <span className="sheet-quickadd-label">Add to your</span>
             <div className="sheet-quickadd-btns">
-              <button onClick={() => quickAdd('collection')} disabled={busy} title="Add to collection">
+              <button onClick={() => startAdd('collection')} disabled={busy} title="Add to collection">
                 <Icon name="collection" size={16} /> Collection
               </button>
-              <button onClick={() => quickAdd('wishlist')} disabled={busy} title="Add to wishlist">
+              <button onClick={() => startAdd('wishlist')} disabled={busy} title="Add to wishlist">
                 <Icon name="wishlist" size={16} /> Wishlist
               </button>
             </div>
@@ -889,24 +947,21 @@ export function CardSheet({
           <div className="sheet-quickadd">
             <span className="sheet-quickadd-label">Got it?</span>
             <div className="sheet-quickadd-btns">
-              <button onClick={() => quickAdd('collection')} disabled={busy} title="Add to collection">
+              <button onClick={() => startAdd('collection')} disabled={busy} title="Add to collection">
                 <Icon name="collection" size={16} /> Add to collection
               </button>
             </div>
           </div>
         )}
-        {mode === 'info' && (
+        {/* Cardboard you own, on its way somewhere: same filing flow as the
+            collection's bulk "File away", for the one copy in front of you. */}
+        {mode === 'edit' && !editMode && (
           <div className="sheet-quickadd">
-            <span className="sheet-quickadd-label">Add to your lists</span>
+            <span className="sheet-quickadd-label">File this copy</span>
             <div className="sheet-quickadd-btns">
-              <OptionsMenu
-                openUp
-                label="Add to your lists"
-                actions={[
-                  { label: 'Add to collection', icon: 'collection', onClick: () => quickAdd('collection') },
-                  { label: 'Add to wishlist', icon: 'wishlist', onClick: () => quickAdd('wishlist') },
-                ]}
-              />
+              <button onClick={() => setPickingContainer(true)} disabled={busy} title="File into a deck, binder or box">
+                <Icon name="binder" size={16} /> Into a deck, binder or box
+              </button>
             </div>
           </div>
         )}
@@ -931,8 +986,10 @@ export function CardSheet({
                 Remove
               </button>
             )}
-            <button onClick={onClose} disabled={busy}>
-              Cancel
+            {/* Stepped into this form from another mode: back out to the sheet
+                they were reading, not out of the card entirely. */}
+            <button onClick={addFlow ? () => setAddFlow(null) : onClose} disabled={busy}>
+              {addFlow ? 'Back' : 'Cancel'}
             </button>
             {deckCard?.commanderDeck &&
               (deckCard.board === 'commander' ? (
@@ -996,8 +1053,6 @@ export function CardSheet({
             )}
           </div>
         )}
-        </>
-        )}
       </div>
 
       {zoomed && cardImage && (
@@ -1034,7 +1089,6 @@ export function CardSheet({
           ownedForTradeIds={ownedForTradeIds}
           onSelect={(id) => {
             setScryfallId(id);
-            onEditionChange?.(id);
             setAllEditions(false);
           }}
           onClose={() => setAllEditions(false)}
@@ -1053,6 +1107,14 @@ export function CardSheet({
             setPickingCopy(false);
           }}
           onClose={() => setPickingCopy(false)}
+        />
+      )}
+      {pickingContainer && (
+        <ContainerPickerSheet
+          title="File this copy"
+          label={`Where does your ${oracleCard.name} live?`}
+          onPick={(id, kind) => void fileHere(id, kind)}
+          onClose={() => setPickingContainer(false)}
         />
       )}
       {eventEntry && (
@@ -1324,7 +1386,7 @@ function PriceTrend({ trend, onOpen }: { trend: HistoryChange; onOpen: () => voi
   const dir = trend.delta > 0.001 ? 'up' : trend.delta < -0.001 ? 'down' : 'flat';
   return (
     <button type="button" className="sheet-price-trend" onClick={onOpen} title="Open the full price chart">
-      <Sparkline values={trend.series} />
+      <Sparkline values={trend.series} width={64} />
       <div className={`price-change price-${dir}`}>
         {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·'} {fmtPriceIn(Math.abs(trend.delta), trend.cur)}
         {trend.pct != null && ` (${trend.pct >= 0 ? '+' : '−'}${Math.abs(trend.pct).toFixed(1)}%)`}

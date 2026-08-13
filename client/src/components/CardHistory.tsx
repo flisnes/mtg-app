@@ -22,6 +22,7 @@ export function CardHistory({
   printings,
   priceHistory,
   editMode = false,
+  onToggleEdit,
   onEventClick,
 }: {
   oracleCard: Priced<OracleCard>;
@@ -33,6 +34,10 @@ export function CardHistory({
   priceHistory?: PriceHistory | null;
   /** When true, editable rows expand into the inline price/reason editor. */
   editMode?: boolean;
+  /** When set, the panel offers its own "Fix prices" toggle for `editMode`.
+   *  These are the user's own events wherever the card is being shown, so the
+   *  timeline is correctable from any sheet that renders it. */
+  onToggleEdit?: () => void;
   /** When set (and not editing), clicking a row opens that event's info modal. */
   onEventClick?: (e: UserEvent) => void;
 }) {
@@ -96,22 +101,35 @@ export function CardHistory({
     return <p className="fine-print">Nothing recorded yet. History starts when you add, trade or wish for this card.</p>;
   }
 
+  // Only acquisitions and removals carry an editable price, so the toggle only
+  // shows when the timeline actually has one to fix.
+  const hasEditable = sorted.some((e) => e.kind === 'collection.add' || e.kind === 'collection.remove');
+
   return (
     <div className="card-history">
-      {summary && (
-        <p className="history-summary">
-          Owned since {fmtDate(summary.since)}
-          {summary.delta != null && (
-            <>
-              {' · '}
-              <span className={summary.delta > 0 ? 'price-up' : summary.delta < 0 ? 'price-down' : ''}>
-                {summary.delta >= 0 ? '+' : '−'}
-                {fmtCents(Math.abs(summary.delta))} since acquisition
-              </span>
-            </>
-          )}
-        </p>
-      )}
+      <div className="history-head">
+        {summary ? (
+          <p className="history-summary">
+            Owned since {fmtDate(summary.since)}
+            {summary.delta != null && (
+              <>
+                {' · '}
+                <span className={summary.delta > 0 ? 'price-up' : summary.delta < 0 ? 'price-down' : ''}>
+                  {summary.delta >= 0 ? '+' : '−'}
+                  {fmtCents(Math.abs(summary.delta))} since acquisition
+                </span>
+              </>
+            )}
+          </p>
+        ) : (
+          <span />
+        )}
+        {onToggleEdit && hasEditable && (
+          <button className="linklike history-edit-toggle" onClick={onToggleEdit}>
+            {editMode ? 'Done' : 'Fix prices'}
+          </button>
+        )}
+      </div>
       <ul className="history-list">
         {sorted.map((e) => (
           <HistoryRow

@@ -1965,6 +1965,88 @@ body:has(.bulk-bar) .app-main {
   overflow: hidden;
   align-self: flex-start;
 }
+
+/* ---- Card sheet: a fixed frame, one scrolling middle ----
+   Head, tabs and the action row hold still; only the body between them moves.
+   A card with three paragraphs of rules text and a card with none put their
+   buttons in the same place, which on a phone is the difference between tapping
+   Save and tapping whatever scrolled under your thumb. */
+.card-sheet {
+  overflow: hidden;
+  gap: 0.6rem;
+  padding-inline: 0.85rem;
+}
+.card-sheet .sheet-head,
+.card-sheet .sheet-quickadd,
+.card-sheet .sheet-actions {
+  flex-shrink: 0;
+}
+.card-sheet .sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+/* Fields keep their size; if the tab really is taller than the frame the body
+   scrolls, rather than every box in it getting squeezed a little. The rules text
+   is the exception — it gives up its room first, down to a couple of lines, and
+   scrolls inside itself. That's what keeps the form on one screen. */
+.card-sheet .sheet-body > * {
+  flex-shrink: 0;
+}
+.card-sheet .sheet-oracle {
+  flex: 0 1 auto;
+  min-height: 3.25rem;
+}
+/* The history tab hands its own scrolling to the timeline, so the summary and
+   the "Fix prices" toggle stay put above it. */
+.card-sheet .sheet-body-history {
+  overflow: hidden;
+}
+/* The art sets the height of the head, and it follows the viewport: a short
+   phone in landscape gets a smaller card rather than a sheet with no room left
+   for the form. */
+.card-sheet .sheet-card-wrap,
+.card-sheet .sheet-card-ph {
+  width: min(42%, calc(clamp(120px, 23dvh, 220px) * 488 / 680));
+  max-width: 210px;
+  aspect-ratio: 488 / 680;
+  height: auto;
+}
+/* Mana cost and type line share a row — two short facts that were costing two.
+   Beside the art there's no room to clip a type line to one line, so it wraps. */
+.sheet-typeline {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  white-space: normal;
+  overflow: visible;
+}
+/* The copy you own, as one line: NM · Foil · EN · ×3. */
+.sheet-copy-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 0.85rem;
+}
+.sheet-copy-summary > span + span:not(.sheet-copy-qty)::before {
+  content: '·';
+  margin-right: 0.5rem;
+  color: var(--text-dim);
+}
+.sheet-copy-qty {
+  margin-left: auto;
+  font-weight: 600;
+}
 .sheet-card-wrap .sheet-card {
   width: 100%;
   max-width: none;
@@ -2317,6 +2399,15 @@ body:has(.bulk-bar) .app-main {
   margin: 0 0.05em;
   vertical-align: -0.05em;
 }
+/* Rules text is the one part of the details tab with no upper bound, so in the
+   card sheet it gets its own scroll instead of pushing the fields off. */
+.card-sheet .sheet-oracle {
+  margin-top: 0;
+  max-height: 7rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.25rem;
+}
 .sheet-actions {
   display: flex;
   gap: 0.5rem;
@@ -2423,6 +2514,12 @@ button.primary {
 }
 .sheet-price-trend:hover {
   background: var(--surface-2);
+}
+/* In the column beside the art there's no room for sparkline, change and chevron
+   on one line — let the change drop under the line it belongs to. */
+.card-sheet .sheet-price-trend {
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .sheet-price-trend > svg:last-child {
   color: var(--text-dim);
@@ -2621,7 +2718,7 @@ button.primary {
 
 /* ---- Card history tab (card sheet) ---- */
 .sheet-tabs {
-  margin: 0.6rem 0;
+  margin: 0.35rem 0 0;
   /* .seg-row's overflow:hidden zeroes its min flex size, and .sheet is a
      max-height column flexbox — without this the row gets crushed to ~2px. */
   flex-shrink: 0;
@@ -2631,6 +2728,25 @@ button.primary {
   color: var(--text-dim);
   margin: 0.2rem 0 0.6rem;
 }
+/* Summary on the left, the price-fixing toggle on the right; both stay put while
+   the timeline under them scrolls. */
+.history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+.history-edit-toggle {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+}
+.card-history {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
 .history-list {
   list-style: none;
   margin: 0;
@@ -2638,6 +2754,13 @@ button.primary {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+/* Inside the card sheet the timeline is the scroller, so a card with a hundred
+   events doesn't move the buttons. */
+.card-sheet .history-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .history-row {
   display: flex;
@@ -4812,6 +4935,15 @@ a.seg {
   gap: 0.4rem;
   flex-wrap: wrap;
   margin: 0.5rem 0 0;
+}
+/* Beside the art, "Filed in" is the one thing here that can name four binders.
+   Cap it and let it scroll so the head keeps the card's height. */
+.sheet-info .sheet-places {
+  margin-top: auto;
+  padding-top: 0.4rem;
+  max-height: 5rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .sheet-places-label {
   font-size: 0.75rem;

@@ -492,7 +492,7 @@ export interface AddToWishlistInput {
 /** Identity of a wish line: printing + desired condition/finish/lang (undefined
  *  = "any"). Two wishes that differ on any of these are distinct lines, exactly
  *  as collection entries are unique on (scryfallId, condition, finish, lang). */
-function wishKey(w: { scryfallId: string | null; condition?: Condition; finish?: Finish; lang?: string }): string {
+export function wishKey(w: { scryfallId: string | null; condition?: Condition; finish?: Finish; lang?: string }): string {
   return `${w.scryfallId ?? ''}|${w.condition ?? ''}|${w.finish ?? ''}|${w.lang ?? ''}`;
 }
 
@@ -674,21 +674,16 @@ export interface ImportLine {
  * entries on (scryfallId, condition, finish, lang). Same invariants as
  * addToCollection, but bulk (fast enough for a 1000+ card import).
  *
- * `replaceOracleIds` lists cards whose import conflict was resolved as
- * "replace": every owned entry of those cards (any printing) is removed
- * before the lines are added, in the same batch, so one undo restores them.
- *
- * `removals` is the surgical alternative used by the scan "Update" flow: remove
- * exactly N copies from specific existing entries (by id) before adding the new
- * lines, so a scanned printing swaps in for a chosen owned copy without wiping
- * the rest. Both happen in the same batch as the adds — one undo restores all.
+ * `removals` is how "Update" is applied (import and scan alike): remove exactly
+ * N copies from specific existing entries (by id) before adding the new lines,
+ * so an incoming printing swaps in for a chosen owned copy without wiping the
+ * rest. It happens in the same batch as the adds — one undo restores all.
  */
 export async function applyImport(
   lines: ImportLine[],
   meta: {
     source?: 'import' | 'sealed' | 'scan';
     label?: string;
-    replaceOracleIds?: string[];
     removals?: { id: string; qty: number }[];
   } = {},
 ): Promise<{ entries: number; cards: number }> {
@@ -700,7 +695,6 @@ export async function applyImport(
   const batchExtra = { source, batchId, ...(meta.label ? { batchLabel: meta.label } : {}) };
   // One bulk price lookup for the acquisition price on every line's event.
   const prices = await getPricesByIds(lines.map((l) => l.scryfallId));
-  const replace = new Set(meta.replaceOracleIds ?? []);
   const removals = meta.removals ?? [];
   await db.transaction('rw', COLLECTION_TABLES, async () => {
     const existing = await db.collection.toArray();
@@ -711,29 +705,6 @@ export async function applyImport(
     const touched = new Set<CollectionEntry>();
     const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
     const wishesByOracle = groupByOracle(await db.wishlist.toArray());
-
-    if (replace.size > 0) {
-      const doomed = existing.filter((e) => replace.has(e.oracleId));
-      const exitPrices = await getPricesByIds(doomed.map((e) => e.scryfallId));
-      for (const e of doomed) {
-        map.delete(collectionKey(e));
-        await db.collection.delete(e.id);
-        await stageDelete('collection', e.id);
-        events.push({
-          ts: now,
-          kind: 'collection.remove',
-          oracleId: e.oracleId,
-          scryfallId: e.scryfallId,
-          qty: e.quantity,
-          condition: e.condition,
-          finish: e.finish,
-          lang: e.lang,
-          priceEurCents: toCents(priceForFinish(exitPrices.get(e.scryfallId), e.finish).eur),
-          reason: 'other',
-          ...batchExtra,
-        });
-      }
-    }
 
     if (removals.length > 0) {
       const byId = new Map(existing.map((e) => [e.id, e]));

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Finish, SealedProduct } from '@mtg/shared';
+import { CONDITIONS, type Condition, type Finish, type SealedProduct } from '@mtg/shared';
 import { applyImport, type ImportLine } from '../db/dataAccess.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { loadSealedProducts } from '../sealed/store.js';
+import { useFileThese } from '../deck/useFileThese.js';
+import { LANGS } from './CardSheet.js';
 import { useToast } from './Toast.js';
 import { useDismiss } from './useDismiss.js';
 
@@ -51,7 +53,14 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [copies, setCopies] = useState(1);
   const [adding, setAdding] = useState(false);
+  // A product isn't always a mint English one: reprints turn up played, and
+  // plenty of precons are bought in Japanese.
+  const [condition, setCondition] = useState<Condition>('NM');
+  const [lang, setLang] = useState('en');
   const toast = useToast();
+  // A precon lives in a box on the shelf far more often than loose in a
+  // collection, so the add ends with the same question every other intake asks.
+  const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
 
   // Back / Escape steps out of a chosen product first (mirroring the ‹ Back
   // button), then closes the sheet.
@@ -120,14 +129,29 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
       const lines: ImportLine[] = detail.rows.map((r) => ({
         oracleId: r.oracleId,
         scryfallId: r.scryfallId,
-        condition: 'NM',
+        condition,
         finish: r.finish,
-        lang: 'en',
+        lang,
         quantity: r.qty * copies,
         quantityForTrade: 0,
       }));
       const { cards } = await applyImport(lines, { source: 'sealed', label: selected.name });
       toast(`Added ${cards} card${cards === 1 ? '' : 's'} from ${selected.name}`);
+      setAdding(false);
+      await offerFiling(
+        lines.map((l) => {
+          const row = detail.rows.find((r) => r.scryfallId === l.scryfallId);
+          return {
+            oracleId: l.oracleId,
+            scryfallId: l.scryfallId,
+            quantity: l.quantity,
+            board: 'main' as const,
+            wants: { condition: l.condition, finish: l.finish, lang: l.lang },
+            ...(row ? { label: row.name, sub: `${row.set.toUpperCase()} #${row.collectorNumber}` } : {}),
+          };
+        }),
+        cards,
+      );
       onClose();
     } catch (e) {
       toast(`Couldn't add product: ${(e as Error).message}`);
@@ -158,12 +182,17 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
             detail={detail}
             copies={copies}
             setCopies={setCopies}
+            condition={condition}
+            setCondition={setCondition}
+            lang={lang}
+            setLang={setLang}
             totalCards={totalCards}
             adding={adding}
             onAdd={() => void add()}
           />
         )}
       </div>
+      {fileTheseSheet}
     </div>,
     document.body,
   );
@@ -228,6 +257,10 @@ function DetailView({
   detail,
   copies,
   setCopies,
+  condition,
+  setCondition,
+  lang,
+  setLang,
   totalCards,
   adding,
   onAdd,
@@ -236,6 +269,10 @@ function DetailView({
   detail: Detail | null;
   copies: number;
   setCopies: (n: number) => void;
+  condition: Condition;
+  setCondition: (c: Condition) => void;
+  lang: string;
+  setLang: (l: string) => void;
   totalCards: number;
   adding: boolean;
   onAdd: () => void;
@@ -277,6 +314,31 @@ function DetailView({
             <button onClick={() => setCopies(Math.min(99, copies + 1))} aria-label="More copies" disabled={copies >= 99}>
               +
             </button>
+          </div>
+
+          {/* Finish comes from the product itself; condition and language don't,
+              and a Japanese precon shouldn't have to be corrected card by card. */}
+          <div className="chips" role="group" aria-label="Details for these cards">
+            <label className="chip">
+              Condition:{' '}
+              <select value={condition} onChange={(e) => setCondition(e.target.value as Condition)} aria-label="Condition">
+                {CONDITIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="chip">
+              Language:{' '}
+              <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Language">
+                {LANGS.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <ul className="sealed-cardlist">

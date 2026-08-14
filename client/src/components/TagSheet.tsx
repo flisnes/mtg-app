@@ -6,6 +6,7 @@ import { deleteDeckCardTag, renameDeckCardTag, tagDeckCards } from '../db/dataAc
 import { deckTags, hasTag } from '../deck/tags.js';
 import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
+import { useConfirm } from './ConfirmSheet.js';
 
 /**
  * Tag the selected cards. Every tag this container already uses is listed with
@@ -32,6 +33,7 @@ export function TagSheet({
   const [managing, setManaging] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  const { confirm, sheet: confirmSheet } = useConfirm();
   const rows = useLiveQuery(() => db.deckCards.where('deckId').equals(deckId).toArray(), [deckId]);
 
   const picked = useMemo(() => new Set(slotIds), [slotIds]);
@@ -59,7 +61,13 @@ export function TagSheet({
 
   async function remove(tag: string) {
     const held = all.filter((r) => hasTag(r, tag)).length;
-    if (!window.confirm(`Remove the tag “${tag}” from ${held} card${held === 1 ? '' : 's'}?`)) return;
+    const ok = await confirm({
+      title: `Delete the tag “${tag}”?`,
+      body: `It comes off ${held} card${held === 1 ? '' : 's'} in this list. The cards themselves stay put.`,
+      confirmLabel: 'Delete tag',
+      danger: true,
+    });
+    if (!ok) return;
     await deleteDeckCardTag(deckId, tag);
   }
 
@@ -170,6 +178,7 @@ export function TagSheet({
           Done
         </button>
       </div>
+      {confirmSheet}
     </Sheet>
   );
 }

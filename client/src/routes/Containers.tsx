@@ -29,6 +29,7 @@ import { HeaderValue, missingValue, useContainersValue, valueText, type Containe
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { DeckFolderPickerSheet } from '../components/DeckFolderPickerSheet.js';
 import { useToast } from '../components/Toast.js';
+import { useConfirm } from '../components/ConfirmSheet.js';
 import { convertToDisplay } from '../price/rates.js';
 import { COLOR_NAMES } from '../components/CardSorting.js';
 
@@ -98,6 +99,7 @@ function ownedValueNumber(value: ContainerValue | undefined): number {
 export function Containers({ kind }: { kind: ContainerKind }) {
   const navigate = useNavigate();
   const toast = useToast();
+  const { confirm, sheet: confirmSheet } = useConfirm();
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -229,14 +231,26 @@ export function Containers({ kind }: { kind: ContainerKind }) {
   }
 
   async function removeFolder(folder: DeckFolder) {
-    if (!window.confirm(`Delete folder “${folder.name}”? Its decks move back to the unorganized list.`)) return;
+    const ok = await confirm({
+      title: `Delete folder “${folder.name}”?`,
+      body: 'The decks inside it move back to the unorganized list. Nothing else is lost.',
+      confirmLabel: 'Delete folder',
+      danger: true,
+    });
+    if (!ok) return;
     if (openFolderId === folder.id) setOpenFolderId(null);
     await deleteDeckFolder(folder.id);
     toast(`Deleted folder “${folder.name}”`);
   }
 
   async function removeDeck(deck: { id: string; name: string }) {
-    if (!window.confirm(`Delete “${deck.name}”? This can’t be undone.`)) return;
+    const ok = await confirm({
+      title: `Delete “${deck.name}”?`,
+      body: 'Everything filed in it goes with it. Cards you own stay in your collection. This can’t be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     await deleteDeck(deck.id);
     toast(`Deleted “${deck.name}”`);
   }
@@ -518,6 +532,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
           }}
         />
       )}
+      {confirmSheet}
     </Page>
   );
 }

@@ -32,7 +32,7 @@ import {
   setDeckCardsForTrade,
   setDeckFormat,
 } from '../db/dataAccess.js';
-import { addToWishlistBulk } from '../db/dataAccess.js';
+import { addToWishlistBulk, applyImport } from '../db/dataAccess.js';
 import { checkDeckLegality, formatLabel, isBasicLand, type LegalityReport } from '../deck/legality.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { useFiling } from '../deck/useFiling.js';
@@ -43,7 +43,10 @@ import { useAccount } from '../account/useAccount.js';
 import { downloadText } from '../import/export.js';
 import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
-import type { ResolvedLine, UnmatchedLine } from '../import/types.js';
+import { ImportDefaultsRow, IMPORT_DEFAULTS, OverlapChoice, applyOverlap, type OverlapMode } from '../import/ImportExtras.js';
+import { UnownedPromptSheet, type UnownedCard } from '../components/UnownedPromptSheet.js';
+import { useConfirm } from '../components/ConfirmSheet.js';
+import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/types.js';
 import { useToast } from '../components/Toast.js';
 import { CardSheet, FINISH_LABELS } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
@@ -173,6 +176,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const [assembling, setAssembling] = useState<AssembleItem[] | null>(null);
   const placements = usePlacementIndex();
   const { file, sheet: filingSheet } = useFiling();
+  const { confirm, sheet: confirmSheet } = useConfirm();
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -388,7 +392,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
 
   async function bulkRemove() {
     const n = selectedRows.length;
-    if (!window.confirm(`Remove ${n} card${plural(n)} from “${deck.name}”?`)) return;
+    const ok = await confirm({
+      title: `Remove ${n} card${plural(n)}?`,
+      body: `${n === 1 ? 'It leaves' : 'They leave'} “${deck.name}”. Copies you own stay in your collection.`,
+      confirmLabel: `Remove from ${meta.noun}`,
+      danger: true,
+    });
+    if (!ok) return;
     const copies = await removeDeckCardsBulk(selectedRows.map((r) => r.id));
     toast(`Removed ${copies} card${plural(copies)} from the ${meta.noun}`);
     sel.exit();
@@ -563,7 +573,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               icon: 'trash',
               danger: true,
               onClick: async () => {
-                if (!window.confirm(`Delete “${deck.name}”? This can’t be undone.`)) return;
+                const ok = await confirm({
+                  title: `Delete “${deck.name}”?`,
+                  body: `The ${meta.noun} and everything filed in it goes. Cards you own stay in your collection. This can’t be undone.`,
+                  confirmLabel: `Delete ${meta.noun}`,
+                  danger: true,
+                });
+                if (!ok) return;
                 await deleteDeck(id);
                 navigate(meta.path);
               },
@@ -637,10 +653,11 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       {showImport && (
         <ImportPanel
           deckId={id}
+          noun={meta.noun}
           basicsAnyPrinting={isDeck}
           onDone={(added) => {
             setShowImport(false);
-            toast(`Added ${added} cards to the ${meta.noun}`);
+            if (added > 0) toast(`Added ${added} cards to the ${meta.noun}`);
           }}
         />
       )}
@@ -733,6 +750,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         />
       )}
       {filingSheet}
+      {confirmSheet}
 
       {assembling && (
         <AssembleSheet
@@ -1055,16 +1073,36 @@ function TokenSuggestions({ deckId, view, tokens }: { deckId: string; view: View
 
 function ImportPanel({
   deckId,
+  noun,
   basicsAnyPrinting,
   onDone,
 }: {
   deckId: string;
+  /** "deck" / "binder" / "box", for the wording. */
+  noun: string;
   /** Decks pull their basics from the lands box; a binder or box holds real cards. */
   basicsAnyPrinting: boolean;
   onDone: (added: number) => void;
 }) {
   const [text, setText] = useState('');
+  const [defaults, setDefaults] = useState<ImportDefaults>(IMPORT_DEFAULTS);
+  const [overlap, setOverlap] = useState<OverlapMode>('add');
   const { status, analyze, reset } = useImportAnalysis();
+  // The written lines, waiting on the "you don't own these" tick-list.
+  const [unowned, setUnowned] = useState<{ cards: UnownedCard[]; lines: ResolvedLine[]; added: number } | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  // What's already filed here, so a second paste of the same list can say so
+  // instead of quietly doubling the deck.
+  const slots = useLiveQuery(async () => db.deckCards.where('deckId').equals(deckId).toArray(), [deckId]);
+  const slotKey = (l: { oracleId: string; board?: DeckBoard }) => `${l.oracleId}|${l.board ?? 'main'}`;
+  const have = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of slots ?? []) map.set(slotKey(s), (map.get(slotKey(s)) ?? 0) + s.quantity);
+    return map;
+  }, [slots]);
 
   // A deck slot keys on oracle + board; keep the resolved printing so the deck
   // remembers which edition the list used (like a hand-picked printing).
@@ -1074,41 +1112,134 @@ function ImportPanel({
     name: card.name,
     quantity: u.quantity,
     quantityForTrade: 0,
-    condition: 'NM',
-    finish: 'nonfoil',
-    lang: 'en',
+    condition: defaults.condition,
+    finish: u.finish ?? defaults.finish,
+    lang: defaults.lang,
     board: u.board ?? 'main',
   });
 
   async function confirm(lines: ResolvedLine[]) {
+    const wanted = applyOverlap(lines, overlap, have, slotKey);
+    if (wanted.length === 0) {
+      toast(`Nothing added: every card was already in the ${noun}`);
+      onDone(0);
+      return;
+    }
     // A pasted list's basics are the ones you'd fetch from the lands box, not
     // copies the list expects you to own — same default as adding them by hand.
-    const oracles = basicsAnyPrinting ? await getOracleCardsByIds(lines.map((l) => l.oracleId)) : null;
+    const oracles = basicsAnyPrinting ? await getOracleCardsByIds(wanted.map((l) => l.oracleId)) : null;
     const isAny = (l: ResolvedLine) => {
       const oracle = oracles?.get(l.oracleId);
       return !!oracle && isBasicLand(oracle);
     };
     await addDeckCardsBulk(
       deckId,
-      lines.map((l) => ({
+      wanted.map((l) => ({
         oracleId: l.oracleId,
         quantity: l.quantity,
         board: l.board ?? 'main',
         ...(isAny(l) ? { anyBasic: true } : { scryfallId: l.scryfallId }),
       })),
     );
-    onDone(lines.reduce((s, l) => s + l.quantity, 0));
+    const added = wanted.reduce((s, l) => s + l.quantity, 0);
+
+    // Scanning a pile into a container has always offered to also register it
+    // as owned; pasting the same list left the collection none the wiser and
+    // the container full of "you don't own this" badges. Same question now.
+    const real = wanted.filter((l) => !isAny(l));
+    const owned = await db.collection.where('scryfallId').anyOf(real.map((l) => l.scryfallId)).toArray();
+    const ownedIds = new Set(owned.filter((e) => e.quantity > 0).map((e) => e.scryfallId));
+    const missing = real.filter((l) => !ownedIds.has(l.scryfallId));
+    if (missing.length === 0) {
+      onDone(added);
+      return;
+    }
+    const printings = await getPrintingsByIds(missing.map((l) => l.scryfallId));
+    const cards: UnownedCard[] = missing.map((l) => {
+      const p = printings.get(l.scryfallId);
+      return {
+        key: `${l.scryfallId}|${l.board ?? 'main'}`,
+        name: l.name,
+        ...(p?.imageSmall ? { image: p.imageSmall } : {}),
+        sub: [p ? `${p.set.toUpperCase()} #${p.collectorNumber}` : null, l.lang, l.quantity > 1 ? `×${l.quantity}` : null]
+          .filter(Boolean)
+          .join(' · '),
+        qty: l.quantity,
+      };
+    });
+    setPicked(new Set(cards.map((c) => c.key)));
+    setUnowned({ cards, lines: missing, added });
+  }
+
+  async function applyUnowned() {
+    if (!unowned) return;
+    setBusy(true);
+    try {
+      const chosen = unowned.lines.filter((l) => picked.has(`${l.scryfallId}|${l.board ?? 'main'}`));
+      if (chosen.length) {
+        await applyImport(chosen, { source: 'import', label: `Filled ${noun}` });
+        const n = chosen.reduce((s, l) => s + l.quantity, 0);
+        toast(`Added ${n} card${n === 1 ? '' : 's'} to your collection`);
+      }
+      const added = unowned.added;
+      setUnowned(null);
+      onDone(added);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (unowned) {
+    return (
+      <div className="about-section">
+        <UnownedPromptSheet
+          cards={unowned.cards}
+          picked={picked}
+          busy={busy}
+          intro={
+            <>
+              {unowned.cards.length} card{unowned.cards.length === 1 ? '' : 's'} in this list {' '}
+              {unowned.cards.length === 1 ? "isn't" : "aren't"} in your collection. If the {noun} is real cardboard on
+              your shelf, add {unowned.cards.length === 1 ? 'it' : 'them'} too:
+            </>
+          }
+          confirmLabel={(q) => (q > 0 ? `Add ${q} to collection` : 'Not now')}
+          backLabel="Skip"
+          onToggle={(key) =>
+            setPicked((prev) => {
+              const next = new Set(prev);
+              if (next.has(key)) next.delete(key);
+              else next.add(key);
+              return next;
+            })
+          }
+          onToggleAll={() =>
+            setPicked((prev) =>
+              prev.size === unowned.cards.length ? new Set() : new Set(unowned.cards.map((c) => c.key)),
+            )
+          }
+          onBack={() => {
+            const added = unowned.added;
+            setUnowned(null);
+            onDone(added);
+          }}
+          onConfirm={() => void applyUnowned()}
+        />
+      </div>
+    );
   }
 
   if (status.kind === 'review') {
+    const already = status.result.resolved.filter((l) => (have.get(slotKey(l)) ?? 0) > 0).length;
     return (
       <div className="about-section">
+        {already > 0 && <OverlapChoice count={already} where={`in this ${noun}`} value={overlap} onChange={setOverlap} />}
         <ImportReview
           result={status.result}
           makeResolved={makeResolved}
           onConfirm={confirm}
           onCancel={reset}
-          confirmLabel={(n) => `Add ${n} entries to deck`}
+          confirmLabel={(n) => `Add ${n} entries to ${noun}`}
         />
       </div>
     );
@@ -1135,7 +1266,8 @@ function ImportPanel({
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
-      <button className="primary" onClick={() => analyze(text)} disabled={!text.trim()}>
+      <ImportDefaultsRow value={defaults} onChange={setDefaults} />
+      <button className="primary" onClick={() => analyze(text, { defaults })} disabled={!text.trim()}>
         Analyze
       </button>
     </div>

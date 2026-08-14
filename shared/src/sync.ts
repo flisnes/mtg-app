@@ -10,6 +10,7 @@ import type { TradeLine, WishLine } from './user.js';
 
 export const SYNC_TABLES = [
   'collection',
+  'sealedItems',
   'wishlist',
   'decks',
   'deckCards',

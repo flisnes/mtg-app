@@ -6,6 +6,7 @@ import { Icon, type IconName } from '../components/icons.js';
 const LINKS: { to: string; label: string; icon: IconName }[] = [
   { to: '/wishlist', label: 'Wishlist', icon: 'wishlist' },
   { to: '/tradelist', label: 'Tradelist', icon: 'tradelist' },
+  { to: '/sealed', label: 'Sealed products', icon: 'sealed' },
   { to: '/movers', label: 'Price movers', icon: 'prices' },
   { to: '/spoilers', label: 'Spoilers & reprints', icon: 'spoilers' },
   { to: '/community', label: 'Community', icon: 'community' },

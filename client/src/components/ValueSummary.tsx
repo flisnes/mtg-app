@@ -4,6 +4,8 @@ import { db } from '../db/schema.js';
 import { containerKind } from '../deck/containers.js';
 import { getOracleCardsByIds, getOwnedCountsFor, getPrintingsByIds } from '../db/queries.js';
 import { addToTotal, formatTotal, pricedForFinish, type PriceTotal } from './CardSorting.js';
+import { loadSealedProducts } from '../sealed/store.js';
+import { sealedPrice } from '../sealed/product.js';
 
 // Compact "total value" readout for page headers. It sits in the empty space
 // beside a page's options menu, so it costs no extra vertical room.
@@ -62,6 +64,38 @@ export function useCollectionValue(onlyTrade = false): PriceTotal | undefined {
     }
     return total;
   }, [onlyTrade]);
+}
+
+/**
+ * Value of the unopened sealed products on the shelf, in USD.
+ *
+ * USD and not a PriceTotal because there is no EUR quote to have: sealed prices
+ * come from TCGplayer (via TCGCSV), and no keyless European sealed feed exists
+ * that we can use — Cardmarket's dump has no CORS header and unread
+ * redistribution terms, MTGJSON prices singles only, Scryfall has no sealed
+ * products at all. Callers that fold this into a mixed total put it in the
+ * `usd` bucket, which converts to the display currency like any USD-only card.
+ *
+ * `unpriced` counts boxes with no market price, so a total can admit what it
+ * left out instead of quietly under-reporting.
+ */
+export function useSealedValue(): { usd: number; unpriced: number; boxes: number } | undefined {
+  return useLiveQuery(async () => {
+    const items = await db.sealedItems.toArray();
+    if (items.length === 0) return { usd: 0, unpriced: 0, boxes: 0 };
+    const load = await loadSealedProducts();
+    const prices = load.kind === 'ready' ? load.prices : {};
+    let usd = 0;
+    let unpriced = 0;
+    let boxes = 0;
+    for (const item of items) {
+      boxes += item.quantity;
+      const price = sealedPrice(prices, item.tcgplayerId);
+      if (price == null) unpriced += item.quantity;
+      else usd += price * item.quantity;
+    }
+    return { usd, unpriced, boxes };
+  }, []);
 }
 
 // ---- Deck / binder / box value ----

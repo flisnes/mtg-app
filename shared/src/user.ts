@@ -32,6 +32,32 @@ export interface CollectionEntry {
   updatedAt: number;
 }
 
+/**
+ * An unopened sealed product you own: a booster box still in shrink, a precon
+ * nobody has cracked, a bundle on the shelf. Deliberately NOT a CollectionEntry
+ * — it has no oracleId or scryfallId, and every card join, sort, price history
+ * and mover flag in the app assumes those exist. It lives in its own table and
+ * its own view, and contributes to collection value as a separate line.
+ *
+ * The display fields are denormalized on purpose: the sealed catalog is a
+ * lazily-fetched artifact that may be absent, stale, or drop a product between
+ * builds, and "you own a box" should survive all three.
+ */
+export interface SealedItem {
+  id: string;
+  /** MTGJSON product uuid — joins to SealedProduct when the catalog is loaded. */
+  productId: string;
+  name: string;
+  /** Lowercased set code, for the subtitle when the catalog isn't loaded. */
+  set: string;
+  setName?: string;
+  /** TCGplayer product id: the box shot and the USD price key. */
+  tcgplayerId?: string;
+  quantity: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface WishlistEntry {
   id: string;
   oracleId: string;

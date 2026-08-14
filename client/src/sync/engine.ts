@@ -20,6 +20,7 @@ import {
   sanitizeDeckFolderRow,
   sanitizeDeckRow,
   sanitizeEventRow,
+  sanitizeSealedItemRow,
   sanitizeTradeRow,
   sanitizeWishlistRow,
 } from '../transfer/payload.js';
@@ -97,6 +98,7 @@ export function subscribeSyncStatus(cb: () => void): () => void {
 
 const TABLES = {
   collection: db.collection,
+  sealedItems: db.sealedItems,
   wishlist: db.wishlist,
   decks: db.decks,
   deckCards: db.deckCards,
@@ -107,6 +109,7 @@ const TABLES = {
 
 const SANITIZERS: Record<SyncTable, (raw: unknown) => { id: string } | null> = {
   collection: sanitizeCollectionRow,
+  sealedItems: sanitizeSealedItemRow,
   wishlist: sanitizeWishlistRow,
   decks: sanitizeDeckRow,
   deckCards: sanitizeDeckCardRow,

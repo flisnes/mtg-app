@@ -13,6 +13,7 @@ import { GlobalSearchBar, GlobalSearchProvider } from './components/GlobalSearch
 import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
 import { Tradelist } from './routes/Tradelist.js';
+import { SealedProducts } from './routes/SealedProducts.js';
 import { Containers } from './routes/Containers.js';
 import { ContainerDetail } from './routes/ContainerDetail.js';
 import { Trade } from './routes/Trade.js';
@@ -178,6 +179,7 @@ function AppShell() {
           <Route path="/collection" element={<Collection />} />
           <Route path="/wishlist" element={<Wishlist />} />
           <Route path="/tradelist" element={<Tradelist />} />
+          <Route path="/sealed" element={<SealedProducts />} />
           <Route path="/import" element={<Import />} />
           <Route path="/export" element={<Export />} />
           {/* Decks, binders and boxes: one screen, three segments (they're all

@@ -21,7 +21,7 @@ const { pick } = PickMod;
 const { streamObject } = streamObjectMod;
 
 const ALL_PRINTINGS_URL = 'https://mtgjson.com/api/v5/AllPrintings.json.gz';
-const USER_AGENT = 'mtg-pwa-minimal/0.1 (collection & trading beta)';
+export const USER_AGENT = 'mtg-pwa-minimal/0.1 (collection & trading beta)';
 
 /** A card as MTGJSON serialises it (only the fields we read). */
 export interface MtgjsonCard {
@@ -68,6 +68,16 @@ export interface MtgjsonSealedProduct {
   releaseDate?: string;
   cardCount?: number;
   contents?: MtgjsonSealedContents;
+  /**
+   * Marketplace ids. Sparse and inconsistent — a bundle may carry eight, a case
+   * two. `tcgplayerProductId` is the one that's nearly always there, which is
+   * why the box shot and the USD price both hang off it.
+   */
+  identifiers?: {
+    tcgplayerProductId?: string;
+    cardKingdomId?: string;
+    mcmId?: string;
+  };
 }
 
 export interface MtgjsonSet {

@@ -42,6 +42,22 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          // Sealed box shots come from TCGplayer's product CDN — the only
+          // public source of sealed product imagery (Scryfall and MTGJSON have
+          // none). Far fewer of these than card images, so a smaller bound.
+          // Note a missing product answers 403, which must not be cached.
+          {
+            urlPattern: ({ url }) => url.hostname === 'tcgplayer-cdn.tcgplayer.com',
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'sealed-images',
+              expiration: {
+                maxEntries: 500,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
       },
       manifest: {

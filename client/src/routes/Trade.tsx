@@ -829,7 +829,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
               addMany(
                 scanFor,
                 cards.map((c) => ({
-                  line: { oracleId: c.oracleId, scryfallId: c.scryfallId, name: c.name, quantity: c.quantity, condition: 'NM', finish: c.finish, lang: c.lang },
+                  line: { oracleId: c.oracleId, scryfallId: c.scryfallId, name: c.name, quantity: c.quantity, condition: c.condition, finish: c.finish, lang: c.lang },
                   count: c.quantity,
                   max: 999,
                 })),

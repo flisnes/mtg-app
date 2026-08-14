@@ -32,9 +32,12 @@ function editDistance(a: string, b: string): number {
   return prev[b.length]!;
 }
 
-function pickFinish(line: ParsedLine, printing: Printing): Finish {
-  const wanted = line.finish;
-  if (wanted && printing.finishes.includes(wanted)) return wanted;
+function pickFinish(line: ParsedLine, printing: Printing, fallback: Finish): Finish {
+  // What the line says, then the whole-list default, then whatever this
+  // printing actually comes in — a nonfoil-only card never lands as a foil.
+  for (const wanted of [line.finish, fallback]) {
+    if (wanted && printing.finishes.includes(wanted)) return wanted;
+  }
   if (printing.finishes.includes('nonfoil')) return 'nonfoil';
   return printing.finishes[0] ?? 'nonfoil';
 }
@@ -96,7 +99,7 @@ function resolvePrinting(
 
 self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
   try {
-    const { text, tradelistMode = 'none', printingPrefs } = e.data;
+    const { text, tradelistMode = 'none', printingPrefs, defaults } = e.data;
 
     post({ type: 'progress', label: 'Parsing…', fraction: 0.05 });
     const { format, lines } = parseImport(text);
@@ -194,10 +197,13 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
         name: oracle.name,
         quantity: line.quantity,
         quantityForTrade,
-        condition: line.condition ?? 'NM',
-        finish: pickFinish(line, printing),
-        lang: line.lang ?? 'en',
+        condition: line.condition ?? defaults?.condition ?? 'NM',
+        finish: pickFinish(line, printing, defaults?.finish ?? 'nonfoil'),
+        lang: line.lang ?? defaults?.lang ?? 'en',
         board: line.board,
+        // The file picked this edition itself, rather than the printing
+        // preference picking one for it.
+        pinnedPrinting: !!(line.scryfallId || line.setCode),
       });
     }
 

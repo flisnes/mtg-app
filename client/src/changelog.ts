@@ -20,6 +20,35 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.116.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Scanning, importing or adding a sealed product now ends with "Where do these live?" — file the pile in a deck, binder or box while you have it in your hands, or leave it unfiled.',
+      },
+      {
+        kind: 'changed',
+        text: 'An import\'s "Replace" deleted every copy of the card you owned, in any printing. It is now "Update" and swaps a single copy for the imported printing, keeping your total the same, asking which copy when you own several.',
+      },
+      {
+        kind: 'changed',
+        text: 'Importing into a binder or box offers to register the cards as owned, importing to the tradelist can mark copies you already have, and pasting the same list twice offers to skip or top up instead of quietly doubling it.',
+      },
+      {
+        kind: 'added',
+        text: 'Import screens carry the scanner\'s pile pins: set condition, finish and language once for the whole list. A wishlist import now keeps an edition the list actually named.',
+      },
+      {
+        kind: 'added',
+        text: 'The tradelist gets File away and Unfile, the collection gets Unfile, the wishlist gets "I bought these", and Select now works in goblin mode and on search results.',
+      },
+      {
+        kind: 'changed',
+        text: 'Every "are you sure" is an in-app sheet that says what will happen, instead of a browser popup. Re-scanning a deck now asks the same "already filed elsewhere" question scanning into one does, and a trade scan keeps the condition you picked.',
+      },
+    ],
+  },
+  {
     version: '0.115.0',
     changes: [
       {

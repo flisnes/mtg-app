@@ -81,6 +81,16 @@ export function useFiling() {
     [decide],
   );
 
+  /**
+   * Settle the question without writing anything: the deck re-scan reconciles
+   * its slots itself, so it needs the answer (and the clashes to act on) rather
+   * than a filing.
+   */
+  const ask = useCallback(
+    (targetId: string, copies: FilingCopy[]) => decide(targetId, copies),
+    [decide],
+  );
+
   const sheet = pending ? (
     <FilingChoiceSheet
       clashes={pending.clashes}
@@ -91,5 +101,5 @@ export function useFiling() {
     />
   ) : null;
 
-  return { file, pin, sheet };
+  return { file, pin, ask, sheet };
 }

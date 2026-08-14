@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import type { OracleCard, Priced, Printing, Rarity } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { useCardSearch } from '../cardDb/useCardSearch.js';
@@ -6,6 +6,8 @@ import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { formatPrice } from './CardSorting.js';
+import { Icon } from './icons.js';
+import type { MultiSelect } from './useMultiSelect.js';
 
 // The reusable body of the card-search experience: an optional search input,
 // the color/type/rarity filter row, a result-count + list/grid toggle, the
@@ -45,6 +47,7 @@ export function CardSearchView({
   badgeFor,
   actionsFor,
   listOnlyActions = false,
+  selection,
   onCardClick,
 }: {
   query: string;
@@ -68,6 +71,13 @@ export function CardSearchView({
   /** Show quick actions only in list view; grid tiles stay clean and the card
    *  sheet (opened by tapping a tile) carries the add actions instead. */
   listOnlyActions?: boolean;
+  /**
+   * Multi-select over the results, keyed by oracleId. Supplied by the caller so
+   * it owns both the state and the bulk bar — search results are cards, not
+   * copies you own, so what a selection of them can do is the caller's call.
+   * `onKeys` reports every result currently listed, for "select all".
+   */
+  selection?: { sel: MultiSelect; onKeys: (keys: string[]) => void };
   onCardClick: (card: Priced<OracleCard>, printing?: Priced<Printing>) => void;
 }) {
   const [view, setView] = useViewMode();
@@ -87,6 +97,14 @@ export function CardSearchView({
 
   const setFilter = (key: keyof SearchFilters, value: string) =>
     setFilters((f) => ({ ...f, [key]: value || undefined }));
+
+  // Keep the caller's "select all" pointed at what's actually listed, which
+  // changes as you type and as you page.
+  const onKeys = selection?.onKeys;
+  const resultKeys = results.map((c) => c.oracleId).join('|');
+  useEffect(() => {
+    onKeys?.(resultKeys ? resultKeys.split('|') : []);
+  }, [onKeys, resultKeys]);
 
   return (
     <>
@@ -148,11 +166,21 @@ export function CardSearchView({
                 ? 'Searching…'
                 : `${total} result${total === 1 ? '' : 's'}${total > results.length ? ` (showing ${results.length})` : ''}`}
             </p>
-            <ViewToggle mode={view} onChange={setView} />
+            <div className="meta-actions">
+              {selection && !selection.sel.active && results.length > 0 && (
+                <button className="select-toggle" onClick={selection.sel.enter} title="Select multiple cards">
+                  <Icon name="check" size={15} /> Select
+                </button>
+              )}
+              <ViewToggle mode={view} onChange={setView} />
+            </div>
           </div>
 
           <CardItems
             view={view}
+            selectable={selection?.sel.active}
+            selectedKeys={selection?.sel.selected}
+            onToggleSelect={selection?.sel.toggle}
             items={results.map((card): CardItem => {
               const printing = shown.get(card.oracleId);
               const b = badgeFor?.(card, printing);

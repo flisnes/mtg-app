@@ -13,7 +13,7 @@ import type { ConflictChoice, ImportConflict } from './conflicts.js';
 const CHOICES: { value: ConflictChoice; label: string }[] = [
   { value: 'skip', label: 'Skip' },
   { value: 'add', label: 'Add' },
-  { value: 'replace', label: 'Replace' },
+  { value: 'replace', label: 'Update' },
 ];
 
 export function ImportConflicts({
@@ -77,8 +77,9 @@ export function ImportConflicts({
   const defaultIntro = (
     <>
       {conflicts.length} card{conflicts.length === 1 ? '' : 's'} in this import {conflicts.length === 1 ? 'is' : 'are'}{' '}
-      already in your collection (any printing counts). Per card: <strong>Skip</strong> leaves your collection as is,{' '}
-      <strong>Add</strong> adds the import on top, <strong>Replace</strong> swaps what you own for the import&rsquo;s copies.
+      already in your collection (any printing counts). Per card: <strong>Add</strong> adds the import&rsquo;s copies on
+      top, <strong>Update</strong> swaps one copy you already own for the imported printing (your total stays the same
+      &mdash; you&rsquo;ll pick which copy if you own more than one version), <strong>Skip</strong> changes nothing.
       {otherCount > 0 && <> The other {otherCount} line{otherCount === 1 ? '' : 's'} import{otherCount === 1 ? 's' : ''} either way.</>}
     </>
   );

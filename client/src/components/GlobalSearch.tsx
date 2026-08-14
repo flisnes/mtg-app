@@ -12,11 +12,13 @@ import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { CONTAINER_KINDS, type Color, type DeckBoard, type DeckFormat, type OracleCard, type Priced, type Printing } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
-import { addDeckCard, addToCollection, addToWishlist } from '../db/dataAccess.js';
+import { addDeckCard, addToCollection, addToWishlist, addToWishlistBulk } from '../db/dataAccess.js';
 import { formatLabel, isBackground, isBasicLand, isValidCommanderPair } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
+import { BulkActionBar } from './BulkActionBar.js';
+import { useMultiSelect } from './useMultiSelect.js';
 import { RecentSearches, recordSearch } from './RecentSearches.js';
 import { ScopedResults, type Scope } from './ScopedResults.js';
 import { ProfileScopedResults } from './ProfileScopedResults.js';
@@ -313,6 +315,24 @@ function SearchOverlay() {
   // scope; it never assumes it the way listScopeFor does for your own lists.
   const [containerOn, setContainerOn] = useState(false);
 
+  // Multi-select over the results. A search result is a card, not a copy you
+  // own, so the only thing a selection of them can honestly do is go on the
+  // wishlist — adding to the collection needs an edition, a condition and a
+  // language per card, which is exactly what the card sheet is for.
+  const sel = useMultiSelect();
+  const [resultKeys, setResultKeys] = useState<string[]>([]);
+
+  async function bulkWish() {
+    const ids = [...sel.selected];
+    if (ids.length === 0) return;
+    const res = await addToWishlistBulk(
+      ids.map((oracleId) => ({ oracleId, scryfallId: null, quantity: 1 })),
+      { source: 'manual', label: 'From search' },
+    );
+    toast(`Added ${res.cards} card${res.cards === 1 ? '' : 's'} to wishlist`);
+    sel.exit();
+  }
+
   // Wording for the container being searched from (a deck, binder or box).
   const containerMeta = CONTAINER_META[(target.kind === 'deck' && target.containerKind) || 'deck'];
 
@@ -605,7 +625,18 @@ function SearchOverlay() {
             badgeFor={(card, printing) => ownedBadge(ownership?.lookup(card.oracleId, shownId(card, printing)))}
             actionsFor={actionsFor}
             listOnlyActions
+            selection={{ sel, onKeys: setResultKeys }}
             onCardClick={(card, printing) => setSheetCard({ card, scryfallId: printing?.scryfallId })}
+          />
+        )}
+
+        {sel.active && (
+          <BulkActionBar
+            count={sel.count}
+            allSelected={resultKeys.length > 0 && resultKeys.every((k) => sel.selected.has(k))}
+            onToggleAll={() => sel.toggleAll(resultKeys)}
+            onCancel={sel.exit}
+            actions={[{ label: 'Add to wishlist', icon: 'wishlist', onClick: () => void bulkWish() }]}
           />
         )}
 

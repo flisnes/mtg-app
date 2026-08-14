@@ -140,7 +140,7 @@ export async function applyFiling(
   clashes: FilingClash[] = [],
   meta: { source?: EventSource } = {},
 ): Promise<void> {
-  if (mode === 'move') await unfileElsewhere(clashes);
+  if (mode === 'move') await unfileClashes(clashes);
 
   await addDeckCardsBulk(
     targetId,
@@ -160,8 +160,11 @@ export async function applyFiling(
  * Take the clashing copies out of wherever they were, oldest claim first and
  * only up to the number being filed: pull one Island out of a box of four and
  * the other three stay put.
+ *
+ * Exported for the deck re-scan, which writes its slots through `reconcileDeck`
+ * rather than by adding, and so has to settle the same question by hand.
  */
-async function unfileElsewhere(clashes: FilingClash[]): Promise<void> {
+export async function unfileClashes(clashes: FilingClash[]): Promise<void> {
   if (clashes.length === 0) return;
   const bySource = new Map<string, { oracleId: string; scryfallId?: string; quantity: number; wants?: SlotWants }[]>();
   for (const clash of clashes) {
@@ -210,7 +213,7 @@ export async function applyPinning(
   mode: FilingMode,
   clashes: FilingClash[] = [],
 ): Promise<void> {
-  if (mode === 'move') await unfileElsewhere(clashes);
+  if (mode === 'move') await unfileClashes(clashes);
   const take = Math.min(copy.quantity, slot.quantity);
   if (take >= slot.quantity) {
     await updateDeckCard(slot.id, {

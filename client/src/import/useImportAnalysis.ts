@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getPrefs } from '../prefs.js';
-import type { ResolveRequest, ResolveResponse, ResolveResult, TradelistMode } from './types.js';
+import type { ImportDefaults, ResolveRequest, ResolveResponse, ResolveResult, TradelistMode } from './types.js';
 
 // Shared import driver (beta plan §5). Owns the resolve worker's lifecycle so
 // both the collection Import route and the deck ImportPanel can reuse the same
@@ -19,7 +19,7 @@ export function useImportAnalysis() {
   // Kill any in-flight analysis when leaving the screen (or re-analyzing).
   useEffect(() => () => workerRef.current?.terminate(), []);
 
-  function analyze(text: string, opts: { tradelistMode?: TradelistMode } = {}) {
+  function analyze(text: string, opts: { tradelistMode?: TradelistMode; defaults?: ImportDefaults } = {}) {
     if (!text.trim()) return;
     setStatus({ kind: 'working', label: 'Starting…', fraction: 0 });
     workerRef.current?.terminate();
@@ -47,6 +47,7 @@ export function useImportAnalysis() {
       text,
       tradelistMode: opts.tradelistMode ?? 'none',
       printingPrefs: { printing, preferOwnedPrinting, baseCurrency },
+      ...(opts.defaults ? { defaults: opts.defaults } : {}),
     } satisfies ResolveRequest);
   }
 

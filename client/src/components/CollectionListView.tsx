@@ -5,9 +5,10 @@ import type { ContainerKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
-import { removeCollectionEntriesBulk, setQuantityForTradeBulk } from '../db/dataAccess.js';
+import { removeCollectionEntriesBulk, removeDeckCardsMatching, setQuantityForTradeBulk } from '../db/dataAccess.js';
 import { useFiling } from '../deck/useFiling.js';
 import { CardSheet } from './CardSheet.js';
+import { useConfirm } from './ConfirmSheet.js';
 import { CardItems, ViewToggle, useViewMode } from './CardViews.js';
 import { collectionCardItem } from './cardRows.js';
 import { usePagedLimit } from './usePagedLimit.js';
@@ -67,6 +68,8 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const sel = useMultiSelect();
   const placements = usePlacementIndex();
   const [pickingContainer, setPickingContainer] = useState(false);
+  const [unfiling, setUnfiling] = useState(false);
+  const { confirm, sheet: confirmSheet } = useConfirm();
   // Deliberately not persisted: a filter that hides cards shouldn't outlive the
   // visit that set it, or you come back tomorrow to a collection with holes.
   const [placeFilter, setPlaceFilter] = useState<PlaceFilter>('all');
@@ -203,9 +206,41 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   }
   async function bulkDelete() {
     const n = selectedRows.length;
-    if (!window.confirm(`Delete ${n} ${n === 1 ? 'entry' : 'entries'} from your collection?`)) return;
+    const ok = await confirm({
+      title: `Delete ${n} ${n === 1 ? 'entry' : 'entries'}?`,
+      body: `${n === 1 ? 'This copy' : 'These copies'} leave your collection, and any deck, binder or box holding ${n === 1 ? 'it' : 'them'} is left asking for a card you no longer have.`,
+      confirmLabel: 'Delete from collection',
+      danger: true,
+    });
+    if (!ok) return;
     await removeCollectionEntriesBulk(selectedRows.map((r) => r.entry.id));
     toast(`Deleted ${n} ${n === 1 ? 'entry' : 'entries'}`);
+    sel.exit();
+  }
+
+  /**
+   * Take the selection back out of a container. This lived only inside a
+   * container, which meant the screen that *tells* you a card is double-filed
+   * (the pills, the "in too many places" filter) was the one screen that
+   * couldn't do anything about it.
+   */
+  async function bulkUnfile(containerId: string, kind: ContainerKind) {
+    setUnfiling(false);
+    const removed = await removeDeckCardsMatching(
+      containerId,
+      selectedRows.map((r) => ({
+        oracleId: r.entry.oracleId,
+        scryfallId: r.entry.scryfallId,
+        quantity: r.entry.quantity,
+        wants: { condition: r.entry.condition, finish: r.entry.finish, lang: r.entry.lang },
+      })),
+    );
+    const noun = CONTAINER_META[kind].noun;
+    toast(
+      removed === 0
+        ? `Nothing matched in that ${noun}`
+        : `Took ${removed} card${plural(removed)} out of that ${noun}`,
+    );
     sel.exit();
   }
   /**
@@ -242,17 +277,30 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     sel.exit();
   }
 
-  const bulkActions: BulkAction[] = onlyTrade
-    ? [
-        { label: 'Remove from tradelist', icon: 'tradelist', onClick: bulkRemoveTradelist },
-        { label: 'Delete', icon: 'trash', danger: true, onClick: bulkDelete },
-      ]
-    : [
-        { label: 'Add to tradelist', icon: 'tradelist', onClick: bulkAddTradelist },
-        { label: 'Remove from tradelist', icon: 'close', onClick: bulkRemoveTradelist },
-        { label: 'File away', icon: 'decks', onClick: () => setPickingContainer(true) },
-        { label: 'Delete', icon: 'trash', danger: true, onClick: bulkDelete },
-      ];
+  // Where the selection is filed right now, so "Unfile…" can offer the places
+  // that actually hold some of it (and grey itself out when none do).
+  const elsewhere = new Map<string, number>();
+  for (const r of selectedRows) {
+    const wants = { condition: r.entry.condition, finish: r.entry.finish, lang: r.entry.lang };
+    for (const p of placements?.lookup(r.entry.oracleId, r.entry.scryfallId, wants).places ?? []) {
+      elsewhere.set(p.containerId, (elsewhere.get(p.containerId) ?? 0) + 1);
+    }
+  }
+
+  // The tradelist is the collection with one prop flipped and holds the same
+  // cardboard, so it gets the same verbs. Only "add to tradelist" is dropped:
+  // everything here is already on it.
+  const bulkActions: BulkAction[] = [
+    ...(onlyTrade
+      ? [{ label: 'Remove from tradelist', icon: 'tradelist' as const, onClick: bulkRemoveTradelist }]
+      : [
+          { label: 'Add to tradelist', icon: 'tradelist' as const, onClick: bulkAddTradelist },
+          { label: 'Remove from tradelist', icon: 'close' as const, onClick: bulkRemoveTradelist },
+        ]),
+    { label: 'File away…', icon: 'decks', onClick: () => setPickingContainer(true) },
+    { label: 'Unfile…', icon: 'minus', disabled: elsewhere.size === 0, onClick: () => setUnfiling(true) },
+    { label: 'Delete', icon: 'trash', danger: true, onClick: () => void bulkDelete() },
+  ];
 
   if (rows === undefined) return <p className="search-meta">Loading…</p>;
 
@@ -286,7 +334,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
               <Icon name="balance" size={15} /> Sort them out
             </button>
           )}
-          {!pileMode && !sel.active && filtered.length > 0 && (
+          {!sel.active && filtered.length > 0 && (
             <button className="select-toggle" onClick={sel.enter} title="Select multiple cards">
               <Icon name="check" size={15} /> Select
             </button>
@@ -311,7 +359,15 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         </div>
       </div>
 
-      {pileMode ? (
+      {/* Goblin mode has no Select of its own: ticking cards out of a shuffled
+          heap fights the shove-and-flip gestures that are the whole point of
+          it. Tapping Select lays the pile out as a list for as long as you're
+          picking, and Cancel drops you back into the mess. */}
+      {sel.active && pileMode && (
+        <p className="search-meta">Picking cards — the pile comes back when you're done.</p>
+      )}
+
+      {pileMode && !sel.active ? (
         matching.length === 0 ? (
           emptyState
         ) : (
@@ -328,7 +384,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           items={visible.map((r) => collectionCardItem(r, { moverFlags, placements, onClick: () => setEditing(r) }))}
         />
       )}
-      {!pileMode && (
+      {(!pileMode || sel.active) && (
         <LoadMoreSentinel
           hasMore={filtered.length > visible.length}
           onLoadMore={showMore}
@@ -348,7 +404,19 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       {pickingContainer && (
         <ContainerPickerSheet onPick={bulkAddContainer} onClose={() => setPickingContainer(false)} />
       )}
+      {unfiling && (
+        <ContainerPickerSheet
+          title="Take out of"
+          label="Choose where to remove these from"
+          only={new Set(elsewhere.keys())}
+          noteFor={(cid) => `holds ${elsewhere.get(cid) ?? 0} of these`}
+          emptyText="None of the selected cards are filed anywhere."
+          onPick={(id, kind) => void bulkUnfile(id, kind)}
+          onClose={() => setUnfiling(false)}
+        />
+      )}
       {filingSheet}
+      {confirmSheet}
 
       {editing?.oracle && <CardSheet oracleCard={editing.oracle} entry={editing.entry} onClose={() => setEditing(null)} />}
       {cardBack && <CardBackSheet onClose={() => setCardBack(false)} />}

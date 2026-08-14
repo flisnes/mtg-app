@@ -2,21 +2,29 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
-import { applyImport } from '../db/dataAccess.js';
 import { useToast } from '../components/Toast.js';
+import { useFileThese } from '../deck/useFileThese.js';
 import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
 import { ImportConflicts } from '../import/ImportConflicts.js';
+import { ImportDefaultsRow, IMPORT_DEFAULTS } from '../import/ImportExtras.js';
+import { commitResolvedLines, filingCopiesFor } from '../import/commit.js';
+import { useReplaceFlow } from '../import/useReplaceFlow.js';
 import { findImportConflicts, type ConflictChoice, type ImportConflict } from '../import/conflicts.js';
-import type { ResolvedLine, TradelistMode, UnmatchedLine } from '../import/types.js';
+import type { ImportDefaults, ResolvedLine, TradelistMode, UnmatchedLine } from '../import/types.js';
 
 export function Import() {
   const [text, setText] = useState('');
   const [tradelistMode, setTradelistMode] = useState<TradelistMode>('none');
+  // What lines that don't say for themselves are taken to be — the scanner's
+  // pile pins, for a pasted list.
+  const [defaults, setDefaults] = useState<ImportDefaults>(IMPORT_DEFAULTS);
   const { status, analyze, reset } = useImportAnalysis();
   // Set when review found cards already in the collection: the conflict-
   // resolution step replaces the review until resolved or backed out of.
   const [conflictStep, setConflictStep] = useState<{ lines: ResolvedLine[]; conflicts: ImportConflict[] } | null>(null);
+  const { resolveReplacements, sheet: replaceSheet } = useReplaceFlow();
+  const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -25,7 +33,7 @@ export function Import() {
     if (!file) return;
     const content = await file.text();
     setText(content);
-    analyze(content, { tradelistMode });
+    analyze(content, { tradelistMode, defaults });
   }
 
   async function confirmImport(lines: ResolvedLine[]) {
@@ -34,20 +42,28 @@ export function Import() {
       setConflictStep({ lines, conflicts });
       return;
     }
-    await commit(lines, new Map());
+    await commit(lines, new Map(), []);
   }
 
-  async function commit(lines: ResolvedLine[], choices: Map<string, ConflictChoice>) {
-    const kept = lines.filter((l) => choices.get(l.oracleId) !== 'skip');
-    const replaceOracleIds = [...choices].filter(([, c]) => c === 'replace').map(([id]) => id);
-    const skipped = lines.length - kept.length;
-    if (kept.length === 0) {
+  async function commit(lines: ResolvedLine[], choices: Map<string, ConflictChoice>, conflicts: ImportConflict[]) {
+    // "Update" swaps one owned copy for the incoming printing and asks which
+    // one when you own several — the same surgical swap the scanner does,
+    // rather than deleting every copy of the card you own.
+    const outcome = await resolveReplacements(conflicts, choices);
+    if (!outcome) return; // backed out of a pick — nothing written
+
+    const res = await commitResolvedLines(lines, choices, outcome, { source: 'import' });
+    const skipped = lines.length - res.written.length;
+    if (res.written.length === 0) {
       toast('Nothing imported: every card was skipped');
       navigate('/collection');
       return;
     }
-    const res = await applyImport(kept, { source: 'import', replaceOracleIds });
-    toast(`Imported ${res.cards} cards (${res.entries} entries${skipped > 0 ? `, ${skipped} skipped` : ''})`);
+    toast(`Imported ${res.added} cards (${res.entries} entries${skipped > 0 ? `, ${skipped} skipped` : ''})`);
+    await offerFiling(
+      filingCopiesFor(res.written),
+      res.written.reduce((n, l) => n + l.quantity, 0),
+    );
     navigate('/collection');
   }
 
@@ -57,9 +73,9 @@ export function Import() {
     name: card.name,
     quantity: u.quantity,
     quantityForTrade: tradelistMode === 'all' ? u.quantity : 0,
-    condition: 'NM',
-    finish: u.finish ?? 'nonfoil',
-    lang: 'en',
+    condition: defaults.condition,
+    finish: u.finish ?? defaults.finish,
+    lang: defaults.lang,
   });
 
   return (
@@ -82,8 +98,9 @@ export function Import() {
               <option value="all">mark all imported cards for trade</option>
             </select>
           </label>
+          <ImportDefaultsRow value={defaults} onChange={setDefaults} />
           <div className="list-toolbar">
-            <button className="primary" onClick={() => analyze(text, { tradelistMode })} disabled={!text.trim()}>
+            <button className="primary" onClick={() => analyze(text, { tradelistMode, defaults })} disabled={!text.trim()}>
               Analyze
             </button>
             <input type="file" accept=".csv,.txt,text/*" onChange={onFile} />
@@ -102,7 +119,7 @@ export function Import() {
           otherCount={
             conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0)
           }
-          onConfirm={(choices) => commit(conflictStep.lines, choices)}
+          onConfirm={(choices) => commit(conflictStep.lines, choices, conflictStep.conflicts)}
           onBack={() => setConflictStep(null)}
         />
       ) : (
@@ -122,6 +139,8 @@ export function Import() {
           }}
         />
       )}
+      {replaceSheet}
+      {fileTheseSheet}
     </Page>
   );
 }

@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { CollectionEntry, Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
+import type { Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
-import { addToWishlistBulk, applyImport, collectionKey, markOwnedForTrade, reconcileDeck } from '../db/dataAccess.js';
+import { addToWishlistBulk, applyImport, reconcileDeck } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
 import { getOracleCard, getOracleCardsByIds, getPrinting, getPrintingsByIds } from '../db/queries.js';
 import { ImportConflicts } from '../import/ImportConflicts.js';
 import { findImportConflicts, type ConflictChoice, type ImportConflict } from '../import/conflicts.js';
+import { commitResolvedLines, filingCopiesFor } from '../import/commit.js';
+import { useReplaceFlow } from '../import/useReplaceFlow.js';
+import { UnownedPromptSheet, type UnownedCard } from './UnownedPromptSheet.js';
+import { useFileThese } from '../deck/useFileThese.js';
 import type { ResolvedLine } from '../import/types.js';
 import { CardSheet, FINISH_LABELS, LANGS, type SessionCardValues } from './CardSheet.js';
 import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
@@ -25,10 +29,11 @@ import { ownedBadge, type OwnedBadgeSpec } from './OwnedBadge.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
 import { useDismiss } from './useDismiss.js';
+import { useConfirm } from './ConfirmSheet.js';
 import { TAP_GUARD_MS, useTapGuard } from './useTapGuard.js';
 import { useFiling } from '../deck/useFiling.js';
 import { logError } from '../errorLog.js';
-import type { FilingCopy } from '../deck/filing.js';
+import { unfileClashes, type FilingCopy } from '../deck/filing.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
 // camera fills the top of the screen and never pauses; each lock (S3 consensus
@@ -54,6 +59,8 @@ export interface ScannedCard {
   name: string;
   /** From the picker bar (deck slots store no finish, so they ignore it). */
   finish: Finish;
+  /** From the picker bar. A trade offer prices by condition, so it carries. */
+  condition: Condition;
   /** From the picker bar: what OCR read, or the pinned pile language. */
   lang: string;
   quantity: number;
@@ -198,48 +205,6 @@ interface RescanReview {
   unowned: SessionEntry[];
 }
 
-/** One 'Update' conflict: the scanned card, the owned versions it could replace, and how many copies to swap. */
-interface ReplacePlan {
-  conflict: ImportConflict;
-  /** Owned variants eligible to be the copy swapped out (excludes any exact match of the scanned printing). */
-  candidates: CollectionEntry[];
-  /** Copies to convert = min(scanned qty, owned candidate qty). */
-  need: number;
-}
-
-/** In-progress 'Update' resolution: removals decided so far, plus the queue of ambiguous picks left. */
-interface ReplaceFlow {
-  lines: ResolvedLine[];
-  choices: Map<string, ConflictChoice>;
-  /** 'Update' conflicts with nothing distinct to replace — their scanned lines are dropped (no-op). */
-  noSource: Set<string>;
-  removals: { id: string; qty: number }[];
-  queue: ReplacePlan[];
-  idx: number;
-}
-
-/**
- * Which owned copies a swap draws from: the chosen version first, then the rest
- * (so a scan of N copies still nets out even if the picked version holds fewer).
- */
-function planRemovals(plan: ReplacePlan, chosenId?: string): { id: string; qty: number }[] {
-  const order = [
-    ...plan.candidates.filter((e) => e.id === chosenId),
-    ...plan.candidates.filter((e) => e.id !== chosenId),
-  ];
-  let need = plan.need;
-  const out: { id: string; qty: number }[] = [];
-  for (const e of order) {
-    if (need <= 0) break;
-    const take = Math.min(need, e.quantity);
-    if (take > 0) {
-      out.push({ id: e.id, qty: take });
-      need -= take;
-    }
-  }
-  return out;
-}
-
 /** What the picker bar decides: applied to every +1, and to this lock's adds when changed. */
 interface PickValues {
   finish: Finish;
@@ -252,6 +217,23 @@ interface PickValues {
 // into whichever one landed first.
 const entryKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'condition' | 'lang' | 'board'>) =>
   `${e.scryfallId}|${e.finish}|${e.condition}|${e.lang}|${e.board}`;
+
+/** A scanned line, described for the "add these to your collection too?" tick-list. */
+const unownedCard = (e: SessionEntry): UnownedCard => ({
+  key: entryKey(e),
+  name: e.name,
+  ...(e.image ? { image: e.image } : {}),
+  sub: [
+    `${e.set.toUpperCase()} #${e.collectorNumber}`,
+    e.lang,
+    e.finish !== 'nonfoil' ? FINISH_LABELS[e.finish] : null,
+    e.condition !== 'NM' ? e.condition : null,
+    e.qty > 1 ? `×${e.qty}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · '),
+  qty: e.qty,
+});
 
 /** Session entries as filing-engine copies: a scan names every trait, so each one claims the exact physical copy it saw. */
 function scanCopies(entries: SessionEntry[]): FilingCopy[] {
@@ -460,10 +442,6 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // Set when a collection/tradelist commit finds cards already owned: the
   // skip/add/replace resolution screen (reused from import) shows until resolved.
   const [conflictStep, setConflictStep] = useState<{ lines: ResolvedLine[]; conflicts: ImportConflict[] } | null>(null);
-  // Set when one or more 'Update' choices are ambiguous (you own the card in
-  // more than one version): the "which copy to replace?" picks run one at a
-  // time (with a counter) before the collection commit fires.
-  const [replaceFlow, setReplaceFlow] = useState<ReplaceFlow | null>(null);
   // Deck re-scan review: the computed diff + which of the two review phases
   // ('changes' → 'collection') is showing, plus the ticked unowned cards.
   const [rescanStep, setRescanStep] = useState<RescanReview | null>(null);
@@ -498,7 +476,14 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // route the write through the same filing engine "File away" uses, so a
   // scan that names an exact copy already filed elsewhere asks (or, unattended,
   // moves it) instead of leaving a stale claim behind.
-  const { file, sheet: filingSheet } = useFiling();
+  const { file, ask, sheet: filingSheet } = useFiling();
+  // "Update" (swap a copy you own for the scanned printing) is the same
+  // question an import asks, so it comes from the same place.
+  const { resolveReplacements, sheet: replaceSheet } = useReplaceFlow();
+  // Cards you own but haven't filed are cards you'll have to file by hand
+  // later, so a collection scan ends by offering to put the pile somewhere.
+  const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
+  const { confirm, sheet: confirmSheet } = useConfirm();
   // The duplicates sheet is rendered inline by this component, so its guard
   // clock has to start when the step appears, not when the scanner opened.
   const conflictTapGuard = useTapGuard(TAP_GUARD_MS, conflictStep);
@@ -977,66 +962,33 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
 
   /**
    * Commit the collection/tradelist lines, honoring the conflict screen's
-   * per-card choices. 'trade' (tradelist only) flags copies already owned for
-   * trade without adding any; 'skip' drops the line. 'add' stacks a new copy.
-   * 'replace' ("Update") swaps one owned copy for the scanned printing without
-   * changing your count: unambiguous swaps resolve here; when you own the card
-   * in more than one version, the pick is deferred to the ReplaceCopySheet
-   * queue and the commit runs once every pick is in.
+   * per-card choices — the same write an import does, through the same code.
+   * A queued "which copy does this replace?" pick resolves first; backing out
+   * of it leaves the scan untouched. Whatever lands is then offered a home.
    */
   const commitLines = async (
     lines: ResolvedLine[],
     choices: Map<string, ConflictChoice>,
     conflicts: ImportConflict[] = [],
   ) => {
-    const plans: ReplacePlan[] = conflicts
-      .filter((c) => choices.get(c.oracleId) === 'replace')
-      .map((c) => {
-        // A version identical to what was scanned isn't something to swap out.
-        const scannedKeys = new Set(c.incoming.map((l) => collectionKey(l)));
-        const candidates = c.existing.filter((e) => e.quantity > 0 && !scannedKeys.has(collectionKey(e)));
-        const scanQty = c.incoming.reduce((s, l) => s + l.quantity, 0);
-        const ownedQty = candidates.reduce((s, e) => s + e.quantity, 0);
-        return { conflict: c, candidates, need: Math.min(scanQty, ownedQty) };
-      });
-    // Nothing distinct to replace → "Update" is a no-op; don't add the scan either.
-    const noSource = new Set(plans.filter((p) => p.need === 0).map((p) => p.conflict.oracleId));
-    const autoRemovals = plans
-      .filter((p) => p.need > 0 && p.candidates.length === 1)
-      .flatMap((p) => planRemovals(p, p.candidates[0]!.id));
-    const queue = plans.filter((p) => p.need > 0 && p.candidates.length >= 2);
+    const outcome = await resolveReplacements(conflicts, choices);
+    if (!outcome) return; // backed out of a pick — the session is still there
 
-    if (queue.length === 0) {
-      await commitCollection(lines, choices, autoRemovals, noSource);
-      return;
+    setCommitting(true);
+    let written: ResolvedLine[] = [];
+    try {
+      const res = await commitResolvedLines(lines, choices, outcome, { source: 'scan' });
+      written = res.written;
+      const n = res.added + res.flagged;
+      toast(
+        n === 0 ? 'Nothing added: every card was skipped' : `Added ${n} card${n === 1 ? '' : 's'} to ${targetLabel(target)}`,
+      );
+    } finally {
+      setCommitting(false);
     }
-    setReplaceFlow({ lines, choices, noSource, removals: autoRemovals, queue, idx: 0 });
-  };
-
-  /** Final write for a collection/tradelist scan once every 'Update' pick is resolved. */
-  const commitCollection = async (
-    lines: ResolvedLine[],
-    choices: Map<string, ConflictChoice>,
-    removals: { id: string; qty: number }[],
-    noSource: Set<string>,
-  ) => {
-    const tradeReqs = lines.filter((l) => choices.get(l.oracleId) === 'trade');
-    const importLines = lines.filter((l) => {
-      const c = choices.get(l.oracleId);
-      if (c === 'skip' || c === 'trade') return false;
-      return !noSource.has(l.oracleId);
-    });
-
-    const flagged = tradeReqs.length
-      ? await markOwnedForTrade(
-          tradeReqs.map((l) => ({ oracleId: l.oracleId, scryfallId: l.scryfallId, condition: l.condition, finish: l.finish, lang: l.lang, quantity: l.quantity })),
-          { source: 'scan' },
-        )
-      : 0;
-    const added = importLines.length ? (await applyImport(importLines, { source: 'scan', removals })).cards : 0;
-
-    const n = added + flagged;
-    toast(n === 0 ? 'Nothing added: every card was skipped' : `Added ${n} card${n === 1 ? '' : 's'} to ${targetLabel(target)}`);
+    // You're holding the pile right now — this is the cheapest moment to say
+    // where it goes, and the only one that doesn't mean re-selecting all of it.
+    await offerFiling(filingCopiesFor(written), written.reduce((n, l) => n + l.quantity, 0));
     finishScan();
   };
 
@@ -1095,6 +1047,16 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     try {
       const r = rescanStep;
       if (target.rescan) {
+        // "This is what's in the deck now" means any of these copies claimed by
+        // another deck has physically left it. The add path has always asked;
+        // re-scan reconciles its own slots, so it settles the same question by
+        // hand rather than skipping it and leaving stale claims behind.
+        const decided = await ask(target.deckId, scanCopies(session));
+        if (decided === null) {
+          toast('Nothing changed: filing was cancelled');
+          return;
+        }
+        if (decided.mode === 'move') await unfileClashes(decided.clashes);
         await reconcileDeck(
           target.deckId,
           r.slots.map((s) => ({ oracleId: s.oracleId, board: s.board, quantity: s.quantity, scryfallId: s.scryfallId })),
@@ -1219,7 +1181,18 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         }
         case 'trade':
           target.onAdd(
-            session.map((e) => ({ oracleId: e.oracleId, scryfallId: e.scryfallId, name: e.name, finish: e.finish, lang: e.lang, quantity: e.qty })),
+            session.map((e) => ({
+              oracleId: e.oracleId,
+              scryfallId: e.scryfallId,
+              name: e.name,
+              finish: e.finish,
+              // A trade values what's actually being handed over, and the
+              // picker bar is right there through the whole scan — so a played
+              // copy no longer enters the offer claiming to be Near Mint.
+              condition: e.condition,
+              lang: e.lang,
+              quantity: e.qty,
+            })),
           );
           break;
       }
@@ -1230,12 +1203,22 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     }
   };
 
-  const close = () => {
-    if (total > 0 && !window.confirm(`Discard ${total} scanned card${total === 1 ? '' : 's'}?`)) return;
-    clearStored();
-    cameraRef.current?.stop();
-    onClose();
-  };
+  const close = () =>
+    void (async () => {
+      if (total > 0) {
+        const ok = await confirm({
+          title: `Discard ${total} scanned card${total === 1 ? '' : 's'}?`,
+          body: 'Nothing has been written yet, so the whole scan goes.',
+          confirmLabel: 'Discard the scan',
+          cancelLabel: 'Keep scanning',
+          danger: true,
+        });
+        if (!ok) return;
+      }
+      clearStored();
+      cameraRef.current?.stop();
+      onClose();
+    })();
 
   // Back / Escape peels the scanner's own layers before leaving the scan. The
   // sheets that live in their own components (session list, replace picker,
@@ -1578,7 +1561,6 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       )}
 
       {conflictStep &&
-        !replaceFlow &&
         (() => {
           const nConflicts = conflictStep.conflicts.length;
           const otherCount = conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0);
@@ -1642,29 +1624,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           );
         })()}
 
-      {replaceFlow &&
-        (() => {
-          const plan = replaceFlow.queue[replaceFlow.idx]!;
-          return (
-            <ReplaceCopySheet
-              plan={plan}
-              index={replaceFlow.idx}
-              total={replaceFlow.queue.length}
-              busy={committing}
-              onPick={(entryId) => {
-                const removals = [...replaceFlow.removals, ...planRemovals(plan, entryId)];
-                const nextIdx = replaceFlow.idx + 1;
-                if (nextIdx >= replaceFlow.queue.length) {
-                  setReplaceFlow(null);
-                  void runCommit(() => commitCollection(replaceFlow.lines, replaceFlow.choices, removals, replaceFlow.noSource));
-                } else {
-                  setReplaceFlow({ ...replaceFlow, removals, idx: nextIdx });
-                }
-              }}
-              onBack={() => setReplaceFlow(null)}
-            />
-          );
-        })()}
+      {replaceSheet}
 
       {rescanStep && target.kind === 'deck' && rescanPhase === 'changes' && (
         <RescanChangesSheet
@@ -1679,11 +1639,18 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       )}
 
       {rescanStep && target.kind === 'deck' && rescanPhase === 'collection' && (
-        <RescanCollectionSheet
-          entries={rescanStep.unowned}
+        <UnownedPromptSheet
+          cards={rescanStep.unowned.map(unownedCard)}
           picked={rescanPicked}
           busy={committing}
-          hasChanges={rescanStep.changes.length > 0}
+          intro={
+            <>
+              You scanned {rescanStep.unowned.length} card{rescanStep.unowned.length === 1 ? '' : 's'} you don’t own
+              yet. Pick which to also add to your collection:
+            </>
+          }
+          confirmLabel={(q) => (q > 0 ? `Apply · add ${q} to collection` : 'Apply without adding')}
+          backLabel={rescanStep.changes.length > 0 ? 'Back' : 'Cancel'}
           onToggle={(key) =>
             setRescanPicked((prev) => {
               const next = new Set(prev);
@@ -1703,6 +1670,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       )}
 
       {filingSheet}
+      {fileTheseSheet}
+      {confirmSheet}
     </div>,
     document.body,
   );
@@ -1774,172 +1743,6 @@ function RescanChangesSheet({
           </button>
           <button onClick={onBack} disabled={busy}>
             Keep scanning
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Deck re-scan step 2: offer to also add scanned cards you don't own to the collection. */
-function RescanCollectionSheet({
-  entries,
-  picked,
-  busy,
-  hasChanges,
-  onToggle,
-  onToggleAll,
-  onBack,
-  onConfirm,
-}: {
-  entries: SessionEntry[];
-  picked: Set<string>;
-  busy: boolean;
-  hasChanges: boolean;
-  onToggle: (key: string) => void;
-  onToggleAll: () => void;
-  onBack: () => void;
-  onConfirm: () => void;
-}) {
-  const allPicked = picked.size === entries.length;
-  const chosen = entries.filter((e) => picked.has(entryKey(e)));
-  const chosenQty = chosen.reduce((n, e) => n + e.qty, 0);
-  useDismiss(busy ? null : onBack);
-  const tapGuard = useTapGuard();
-  return (
-    <div className="sheet-backdrop" onClick={onBack} {...tapGuard}>
-      <div className="sheet scan-list-sheet" role="dialog" aria-label="Add scanned cards to collection" onClick={(e) => e.stopPropagation()}>
-        <div className="scan-sheet-head">
-          <h2>Add to collection?</h2>
-          <button className="scan-close" onClick={onBack} aria-label={hasChanges ? 'Back' : 'Close'}>
-            <Icon name="close" size={18} />
-          </button>
-        </div>
-        <p className="fine-print">
-          You scanned {entries.length} card{entries.length === 1 ? '' : 's'} you don’t own yet. Pick which to also add to your
-          collection:
-        </p>
-        <div className="list-toolbar">
-          <label className="chip" style={{ alignSelf: 'flex-start' }}>
-            <input type="checkbox" checked={allPicked} onChange={onToggleAll} /> {allPicked ? 'Unselect all' : 'Select all'}
-          </label>
-          <span className="search-meta grow">
-            {chosen.length} of {entries.length} selected
-          </span>
-        </div>
-        <ul className="scan-list">
-          {entries.map((e) => (
-            <li key={entryKey(e)} className="scan-list-row">
-              <label className="scan-list-main" style={{ cursor: 'pointer' }}>
-                <input type="checkbox" checked={picked.has(entryKey(e))} onChange={() => onToggle(entryKey(e))} />
-                {e.image ? <img className="scan-list-thumb" src={e.image} alt="" /> : <span className="scan-list-thumb" />}
-                <span className="scan-list-info">
-                  <strong>{e.name}</strong>
-                  <span className="scan-printing">
-                    {e.set.toUpperCase()} #{e.collectorNumber} · {e.lang}
-                    {e.finish !== 'nonfoil' ? ` · ${FINISH_LABELS[e.finish]}` : ''}
-                    {e.condition !== 'NM' ? ` · ${e.condition}` : ''}
-                    {e.qty > 1 ? ` · ×${e.qty}` : ''}
-                  </span>
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-        <div className="scan-confirm-actions">
-          <button className="primary" disabled={busy} onClick={onConfirm}>
-            {busy ? 'Applying…' : chosenQty > 0 ? `Apply · add ${chosenQty} to collection` : 'Apply without adding'}
-          </button>
-          <button onClick={onBack} disabled={busy}>
-            {hasChanges ? 'Back' : 'Cancel'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * "Update" follow-up: when you own the scanned card in more than one version,
- * pick which owned copy the scanned printing swaps in for. One card at a time,
- * with a counter when several are queued. The total for the card never changes.
- */
-function ReplaceCopySheet({
-  plan,
-  index,
-  total,
-  busy,
-  onPick,
-  onBack,
-}: {
-  plan: ReplacePlan;
-  index: number;
-  total: number;
-  busy: boolean;
-  onPick: (entryId: string) => void;
-  onBack: () => void;
-}) {
-  const [picked, setPicked] = useState<string>('');
-  const [printings, setPrintings] = useState<Map<string, Priced<Printing>>>(new Map());
-
-  // Fresh default selection (and label lookup) whenever the queue advances.
-  useEffect(() => {
-    setPicked(plan.candidates[0]?.id ?? '');
-    const ids = [...plan.candidates.map((e) => e.scryfallId), ...plan.conflict.incoming.map((l) => l.scryfallId)];
-    void getPrintingsByIds(ids).then(setPrintings);
-  }, [plan]);
-
-  const describe = (v: { scryfallId: string; condition: Condition; finish: Finish; lang: string }) => {
-    const p = printings.get(v.scryfallId);
-    const parts: string[] = [];
-    if (p) parts.push(`${p.set.toUpperCase()} #${p.collectorNumber}`);
-    parts.push(v.condition);
-    if (v.finish !== 'nonfoil') parts.push(v.finish);
-    if (v.lang && v.lang !== 'en') parts.push(v.lang);
-    return parts.join(' · ');
-  };
-  const scanned = plan.conflict.incoming.map((l) => describe(l)).join(', ');
-  useDismiss(busy ? null : onBack);
-  const tapGuard = useTapGuard();
-
-  return (
-    <div className="sheet-backdrop" onClick={onBack} {...tapGuard}>
-      <div className="sheet scan-list-sheet" role="dialog" aria-label="Which copy to replace" onClick={(e) => e.stopPropagation()}>
-        <div className="scan-sheet-head">
-          <h2>Which copy to replace?</h2>
-          {total > 1 && (
-            <span className="scan-target">
-              {index + 1} / {total}
-            </span>
-          )}
-          <button className="scan-close" onClick={onBack} aria-label="Cancel">
-            <Icon name="close" size={18} />
-          </button>
-        </div>
-        <p className="fine-print">
-          You own <strong>{plan.conflict.name}</strong> in more than one version. Pick the copy the scanned{' '}
-          {scanned ? <em>{scanned}</em> : 'printing'} should replace — one copy is swapped out, so your total for this card
-          stays the same.
-        </p>
-        <ul className="scan-list">
-          {plan.candidates.map((e) => (
-            <li key={e.id} className="scan-list-row">
-              <label className="scan-list-main" style={{ cursor: 'pointer' }}>
-                <input type="radio" name="replace-copy" checked={picked === e.id} onChange={() => setPicked(e.id)} />
-                <span className="scan-list-info">
-                  <strong>{describe(e)}</strong>
-                  <span className="scan-printing">You own ×{e.quantity}</span>
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-        <div className="scan-confirm-actions">
-          <button className="primary" disabled={busy || !picked} onClick={() => onPick(picked)}>
-            {index + 1 < total ? 'Next' : 'Replace'}
-          </button>
-          <button onClick={onBack} disabled={busy}>
-            Cancel
           </button>
         </div>
       </div>

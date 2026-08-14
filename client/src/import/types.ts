@@ -34,6 +34,23 @@ export interface ResolvedLine {
   lang: string;
   /** Set for deck imports so the slot lands on the right board. */
   board?: DeckBoard;
+  /**
+   * The list named this edition itself (a Scryfall id, or a set code) instead of
+   * falling through to the printing preference. The wishlist wishes for a
+   * printing only when it was actually asked for one.
+   */
+  pinnedPrinting?: boolean;
+}
+
+/**
+ * What a line takes when it doesn't say for itself — the scanner's pile pins,
+ * for a pasted list. Set on the import screen before analyzing; a CSV's own
+ * condition/finish/language columns still win, line by line.
+ */
+export interface ImportDefaults {
+  condition: Condition;
+  finish: Finish;
+  lang: string;
 }
 
 export interface UnmatchedLine {
@@ -67,6 +84,8 @@ export type TradelistMode = 'none' | 'file' | 'all';
 export interface ResolveRequest {
   text: string;
   tradelistMode?: TradelistMode;
+  /** Condition/finish/language for lines that don't state their own. */
+  defaults?: ImportDefaults;
   /**
    * The printing preferences, snapshotted by the caller. Workers can't read
    * localStorage, so a line that names no set gets the user's preferred printing

@@ -20,6 +20,27 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.117.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Keep sealed products sealed. Booster boxes, displays and packs are in "Add sealed product" now, and picking any product asks whether to keep it unopened or open it for the cards. Your unopened ones live under More → Sealed products, with box shots and prices.',
+      },
+      {
+        kind: 'added',
+        text: 'Card sheet ⋯ → "Find sealed products with this card" answers which precon or Secret Lair a card came in.',
+      },
+      {
+        kind: 'changed',
+        text: 'Collection value now includes your sealed products. Sealed prices are TCGplayer market prices in US dollars, labelled as such.',
+      },
+      {
+        kind: 'fixed',
+        text: 'Transferring your data to another device no longer loses which folder each deck was in.',
+      },
+    ],
+  },
+  {
     version: '0.116.0',
     changes: [
       {

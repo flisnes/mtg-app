@@ -34,6 +34,8 @@ import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
 import { EventSheet } from './EventSheet.js';
 import { useOpenCollectionSearch } from './GlobalSearch.js';
 import { Icon, type IconName } from './icons.js';
+import { OptionsMenu } from './OptionsMenu.js';
+import { SealedWithCardSheet } from '../sealed/SealedWithCardSheet.js';
 import { PriceChartSheet } from './PriceChart.js';
 import { useToast } from './Toast.js';
 import type { HistoryEntry } from '../history/useHistoryEntries.js';
@@ -336,6 +338,7 @@ export function CardSheet({
   const [allEditions, setAllEditions] = useState(false);
   // The sparkline blown up: full price chart with axes and event markers.
   const [chartOpen, setChartOpen] = useState(false);
+  const [sealedOpen, setSealedOpen] = useState(false);
   // "Pick one from my collection" (container slots): the owned-copies overlay.
   const [pickingCopy, setPickingCopy] = useState(false);
   // "File this copy": the deck/binder/box picker, from a card you own.
@@ -702,7 +705,19 @@ export function CardSheet({
               your copies are filed. That column is as tall as the card, and the
               form below it starts at a fixed place on every card. */}
           <div className="sheet-info">
-            <div className="sheet-name">{oracleCard.name}</div>
+            <div className="sheet-name-row">
+              <div className="sheet-name">{oracleCard.name}</div>
+              <OptionsMenu
+                label="Card options"
+                actions={[
+                  {
+                    label: 'Find sealed products with this card',
+                    icon: 'sealed',
+                    onClick: () => setSealedOpen(true),
+                  },
+                ]}
+              />
+            </div>
             <div className="result-sub sheet-typeline">
               {oracleCard.manaCost && <ManaCost cost={oracleCard.manaCost} />}
               <span>{oracleCard.typeLine}</span>
@@ -1077,6 +1092,13 @@ export function CardSheet({
             setEventEntry({ kind: 'single', id: e.id, ts: e.ts, event: e });
           }}
           onClose={() => setChartOpen(false)}
+        />
+      )}
+      {sealedOpen && (
+        <SealedWithCardSheet
+          cardName={oracleCard.name}
+          scryfallIds={printings.map((p) => p.scryfallId)}
+          onClose={() => setSealedOpen(false)}
         />
       )}
       {allEditions && (

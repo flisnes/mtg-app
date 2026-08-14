@@ -15,11 +15,13 @@ import type {
   PriceMap,
   PriceTuple,
   Printing,
+  SealedPriceMap,
   SetTypeMap,
 } from '@mtg/shared';
 import { getBulkEntry, getSetTypes, openBulkStream } from './scryfall.js';
 import { slimCard, type RawCard, type SlimResult } from './slimCard.js';
 import { buildSealedProducts } from './sealed.js';
+import { fetchSealedUsdPrices } from './sealedPrices.js';
 
 // Nightly card-DB pipeline (beta plan §3). Downloads Scryfall `default_cards`,
 // slims each card to ~18 fields, and emits:
@@ -162,7 +164,7 @@ function emitChunks<T>(name: string, rows: T[], idOf: (row: T) => string): CardD
 function referenced(m: CardDbManifest | null): Set<string> {
   const out = new Set<string>();
   if (!m) return out;
-  for (const a of [m.artifacts?.oracle, m.artifacts?.printings, m.v2?.prices, m.v2?.sealed, m.v2?.sets]) {
+  for (const a of [m.artifacts?.oracle, m.artifacts?.printings, m.v2?.prices, m.v2?.sealed, m.v2?.sealedPrices, m.v2?.sets]) {
     if (a) out.add(a.url);
   }
   for (const c of [...(m.v2?.chunks.oracle ?? []), ...(m.v2?.chunks.printings ?? [])]) out.add(c.url);
@@ -289,6 +291,7 @@ async function main(): Promise<void> {
   // nightly card-DB build, and a partial-data dry run (oracle_cards / MAX_CARDS)
   // can't resolve cards, so skip it there. Set SKIP_SEALED=1 to opt out.
   let sealedArtifact: Artifact | undefined;
+  let sealedPricesArtifact: Artifact | undefined;
   const wantSealed =
     !process.env.SKIP_SEALED && (process.env.ALLPRINTINGS_FILE || (BULK_TYPE === 'default_cards' && MAX_CARDS === Infinity));
   if (wantSealed) {
@@ -298,8 +301,31 @@ async function main(): Promise<void> {
       sealedArtifact = emitHashed('sealed', products, products.length);
       console.log(
         `[pipeline]   sealed: ${stats.productsEmitted}/${stats.productsSeen} products from ${stats.setsSeen} sets ` +
-          `(${stats.cardsUnavailable} card refs unavailable)`,
+          `(${stats.productsRandomOnly} unopened-only, ${stats.cardsUnavailable} card refs unavailable)`,
       );
+
+      // USD prices for those products. Separately best-effort *inside* the
+      // sealed block: a TCGCSV outage costs the prices, not the catalog.
+      // SKIP_SEALED_PRICES=1 opts out (it's ~900 HTTP calls and a couple of
+      // minutes, which a local fixture build doesn't want).
+      if (!process.env.SKIP_SEALED_PRICES) {
+        try {
+          const wanted = new Set(products.map((p) => p.identifiers?.tcgplayer).filter((v): v is string => !!v));
+          const { prices, stats: priceStats } = await fetchSealedUsdPrices(wanted);
+          if (priceStats.priced > 0) {
+            const sorted: SealedPriceMap = Object.fromEntries(
+              Object.entries(prices).sort(([a], [b]) => (a < b ? -1 : 1)),
+            );
+            sealedPricesArtifact = emitHashed('sealed-prices', sorted, priceStats.priced);
+          }
+          console.log(
+            `[pipeline]   sealed prices: ${priceStats.priced}/${priceStats.wanted} products priced ` +
+              `(${priceStats.groups - priceStats.groupsFailed}/${priceStats.groups} groups)`,
+          );
+        } catch (err) {
+          console.warn('[pipeline] sealed price fetch failed; shipping catalog without prices:', (err as Error).message);
+        }
+      }
     } catch (err) {
       console.warn('[pipeline] sealed-product build failed; shipping without it:', (err as Error).message);
     }
@@ -329,6 +355,7 @@ async function main(): Promise<void> {
       chunks: { oracle: oracleChunks, printings: printingsChunks },
       prices: meta(pricesArtifact),
       ...(sealedArtifact ? { sealed: meta(sealedArtifact) } : {}),
+      ...(sealedPricesArtifact ? { sealedPrices: meta(sealedPricesArtifact) } : {}),
       ...(setsArtifact ? { sets: meta(setsArtifact) } : {}),
     },
   };

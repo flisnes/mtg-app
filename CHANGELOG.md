@@ -2,6 +2,15 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.117.0
+
+- **You can own a sealed booster box now.** "Add sealed product" was only ever a shortcut for the cards inside a precon, so anything with random contents — booster boxes, displays, collector boosters, a single pack — wasn't even in the list. Every sealed product Magic has ever had is in there now, and picking one asks what you actually mean: keep it sealed, or open it and put the cards in your collection. Products whose contents are random only offer the first, because nobody knows what's in an unopened pack.
+- **Sealed products have pictures.** Box shots come from TCGplayer's product photos, so the shelf looks like a shelf. Products with no photo fall back to a box symbol.
+- **A "Sealed products" screen, under More.** Everything you're keeping sealed, with a count you can nudge up and down as boxes come and go. It's a separate screen on purpose: a booster box isn't a card, and it has no edition, condition or language to sort by.
+- **Sealed products are worth something.** Each one shows its TCGplayer market price, the screen totals them, and the collection's total value counts them too. Prices are in US dollars for now and labelled as such — there's no European sealed price feed we can use yet, and quietly converting a US price into euros would be worse than showing the dollar figure. Products with no market price are left out of the total and the screen says how many.
+- **"Which precon was this card in?"** Open any card, tap ⋯, and "Find sealed products with this card" lists every fixed-content product that contains it — any printing of it, not just the one on screen. Cards that only ever came out of booster packs say so, since a random pack isn't an answer.
+- **Fixed: a device transfer used to unfile every deck.** Deck folders were packed up and sent, then thrown away on arrival, so decks landed on the new device with their folders gone.
+
 ## 0.116.0
 
 - **Everything that puts cards in your collection now asks where they live.** Scan a shoebox, paste a CSV, add a precon: all of them used to leave the cards floating in your collection, filed nowhere, and the only way to fix that was to walk back to the list, tap Select, tick every row again and use "File away". Each of those now ends with "Where do these live?" — pick a deck, binder or box (or make one on the spot), and it goes through the same "this copy is already somewhere else" question that filing has always asked. Or say "leave them unfiled" and nothing changes.

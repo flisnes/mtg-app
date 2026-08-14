@@ -1,24 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CONDITIONS, type Condition, type Finish, type SealedProduct } from '@mtg/shared';
-import { applyImport, type ImportLine } from '../db/dataAccess.js';
+import { CONDITIONS, type Condition, type Finish, type SealedPriceMap, type SealedProduct } from '@mtg/shared';
+import { addSealedItem, applyImport, type ImportLine } from '../db/dataAccess.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { loadSealedProducts } from '../sealed/store.js';
+import { SealedImage } from '../sealed/SealedImage.js';
+import { cardCount, fmtSealedPrice, isRandomOnly, productImage, sealedPrice, subtitle } from '../sealed/product.js';
 import { useFileThese } from '../deck/useFileThese.js';
 import { LANGS } from './CardSheet.js';
 import { useToast } from './Toast.js';
 import { useDismiss } from './useDismiss.js';
 
-// "Add sealed product" (see sealed-products feature). Search a named,
-// non-randomized product (precon deck, Secret Lair, gift box…) and add every
-// card it contains to the collection in one go. Contents are expanded
-// server-side (MTGJSON → Scryfall printings); randomised parts like booster
-// packs are omitted and flagged here rather than silently dropped.
+// "Add sealed product" (see sealed-products feature). Search any sealed product
+// MTGJSON knows, then choose what owning it means: keep the box sealed, or open
+// it and put its cards in the collection. Products whose contents are entirely
+// random — booster boxes, displays, loose packs — only offer the first, because
+// nobody can say what's inside an unopened pack.
 
 type Load =
   | { kind: 'loading' }
   | { kind: 'unavailable' }
-  | { kind: 'ready'; products: SealedProduct[] };
+  | { kind: 'ready'; products: SealedProduct[]; prices: SealedPriceMap };
+
+/** What the user intends to do with the product they picked. */
+type Outcome = 'unopened' | 'cards';
 
 /** A product's cards joined with the installed card DB for display + add. */
 interface DetailRow {
@@ -29,7 +34,6 @@ interface DetailRow {
   collectorNumber: string;
   qty: number;
   finish: Finish;
-  imageSmall: string | null;
 }
 interface Detail {
   rows: DetailRow[];
@@ -40,17 +44,12 @@ interface Detail {
 const MAX_RESULTS = 60;
 const finishTag = (f: Finish) => (f === 'foil' ? ' · foil' : f === 'etched' ? ' · etched' : '');
 
-function subtitle(p: SealedProduct): string {
-  const bits = [p.setName ?? p.set.toUpperCase()];
-  if (p.releaseDate) bits.push(p.releaseDate.slice(0, 4));
-  return bits.join(' · ');
-}
-
 export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<SealedProduct | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
+  const [outcome, setOutcome] = useState<Outcome>('unopened');
   const [copies, setCopies] = useState(1);
   const [adding, setAdding] = useState(false);
   // A product isn't always a mint English one: reprints turn up played, and
@@ -70,7 +69,7 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
     let cancelled = false;
     void loadSealedProducts().then((r) => {
       if (cancelled) return;
-      setLoad(r.kind === 'ready' ? { kind: 'ready', products: r.products } : { kind: 'unavailable' });
+      setLoad(r.kind === 'ready' ? { kind: 'ready', products: r.products, prices: r.prices } : { kind: 'unavailable' });
     });
     return () => {
       cancelled = true;
@@ -95,6 +94,9 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
     setSelected(p);
     setDetail(null);
     setCopies(1);
+    // A box of boosters can only be owned unopened; anything with a known
+    // decklist defaults to the reason that feature was built — adding the cards.
+    setOutcome(isRandomOnly(p) ? 'unopened' : 'cards');
     const printings = await getPrintingsByIds(p.cards.map((c) => c.scryfallId));
     const oracles = await getOracleCardsByIds([...printings.values()].map((pr) => pr.oracleId));
     const rows: DetailRow[] = [];
@@ -113,46 +115,63 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
         collectorNumber: pr.collectorNumber,
         qty: c.qty,
         finish: c.finish,
-        imageSmall: pr.imageSmall,
       });
     }
     rows.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     setDetail({ rows, missingLocally });
   };
 
-  const totalCards = detail ? detail.rows.reduce((s, r) => s + r.qty, 0) * copies : 0;
+  const addUnopened = async (product: SealedProduct) => {
+    await addSealedItem(
+      {
+        productId: product.id,
+        name: product.name,
+        set: product.set,
+        ...(product.setName ? { setName: product.setName } : {}),
+        ...(product.identifiers?.tcgplayer ? { tcgplayerId: product.identifiers.tcgplayer } : {}),
+      },
+      copies,
+    );
+    toast(`Added ${copies} unopened ${product.name}`);
+    onClose();
+  };
+
+  const addCards = async (product: SealedProduct, d: Detail) => {
+    const lines: ImportLine[] = d.rows.map((r) => ({
+      oracleId: r.oracleId,
+      scryfallId: r.scryfallId,
+      condition,
+      finish: r.finish,
+      lang,
+      quantity: r.qty * copies,
+      quantityForTrade: 0,
+    }));
+    const { cards } = await applyImport(lines, { source: 'sealed', label: product.name });
+    toast(`Added ${cards} card${cards === 1 ? '' : 's'} from ${product.name}`);
+    setAdding(false);
+    await offerFiling(
+      lines.map((l) => {
+        const row = d.rows.find((r) => r.scryfallId === l.scryfallId);
+        return {
+          oracleId: l.oracleId,
+          scryfallId: l.scryfallId,
+          quantity: l.quantity,
+          board: 'main' as const,
+          wants: { condition: l.condition, finish: l.finish, lang: l.lang },
+          ...(row ? { label: row.name, sub: `${row.set.toUpperCase()} #${row.collectorNumber}` } : {}),
+        };
+      }),
+      cards,
+    );
+    onClose();
+  };
 
   const add = async () => {
-    if (!selected || !detail || adding) return;
+    if (!selected || adding) return;
     setAdding(true);
     try {
-      const lines: ImportLine[] = detail.rows.map((r) => ({
-        oracleId: r.oracleId,
-        scryfallId: r.scryfallId,
-        condition,
-        finish: r.finish,
-        lang,
-        quantity: r.qty * copies,
-        quantityForTrade: 0,
-      }));
-      const { cards } = await applyImport(lines, { source: 'sealed', label: selected.name });
-      toast(`Added ${cards} card${cards === 1 ? '' : 's'} from ${selected.name}`);
-      setAdding(false);
-      await offerFiling(
-        lines.map((l) => {
-          const row = detail.rows.find((r) => r.scryfallId === l.scryfallId);
-          return {
-            oracleId: l.oracleId,
-            scryfallId: l.scryfallId,
-            quantity: l.quantity,
-            board: 'main' as const,
-            wants: { condition: l.condition, finish: l.finish, lang: l.lang },
-            ...(row ? { label: row.name, sub: `${row.set.toUpperCase()} #${row.collectorNumber}` } : {}),
-          };
-        }),
-        cards,
-      );
-      onClose();
+      if (outcome === 'unopened') await addUnopened(selected);
+      else if (detail) await addCards(selected, detail);
     } catch (e) {
       toast(`Couldn't add product: ${(e as Error).message}`);
       setAdding(false);
@@ -180,13 +199,15 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
           <DetailView
             product={selected}
             detail={detail}
+            prices={load.kind === 'ready' ? load.prices : {}}
+            outcome={outcome}
+            setOutcome={setOutcome}
             copies={copies}
             setCopies={setCopies}
             condition={condition}
             setCondition={setCondition}
             lang={lang}
             setLang={setLang}
-            totalCards={totalCards}
             adding={adding}
             onAdd={() => void add()}
           />
@@ -221,25 +242,31 @@ function SearchView({
         className="sealed-search"
         type="search"
         autoFocus
-        placeholder="Search products (e.g. a Commander deck or Secret Lair)…"
+        placeholder="Search products (a booster box, Commander deck, Secret Lair…)"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
       {query.trim() === '' ? (
-        <p className="sealed-msg">Search {load.products.length.toLocaleString()} preconstructed decks, Secret Lairs and other fixed-content products.</p>
+        <p className="sealed-msg">
+          Search {load.products.length.toLocaleString()} sealed products. Keep one unopened, or open it and add its cards.
+        </p>
       ) : results.length === 0 ? (
         <p className="sealed-msg">No products match “{query.trim()}”.</p>
       ) : (
         <ul className="sealed-results">
           {results.slice(0, MAX_RESULTS).map((p) => {
-            const count = p.cards.reduce((s, c) => s + c.qty, 0);
+            const count = cardCount(p);
             return (
               <li key={p.id}>
                 <button className="sealed-result" onClick={() => onPick(p)}>
-                  <span className="sealed-result-name">{p.name}</span>
-                  <span className="sealed-result-sub">
-                    {subtitle(p)} · {count} cards
-                    {p.omittedRandom ? ' +packs' : ''}
+                  <SealedImage url={productImage(p, 'thumb')} alt="" className="sealed-shot-sm" />
+                  <span className="sealed-result-text">
+                    <span className="sealed-result-name">{p.name}</span>
+                    <span className="sealed-result-sub">
+                      {subtitle(p)}
+                      {count > 0 ? ` · ${count} cards` : ''}
+                      {p.omittedRandom ? ` · ${p.omittedRandom} random pack${p.omittedRandom === 1 ? '' : 's'}` : ''}
+                    </span>
                   </span>
                 </button>
               </li>
@@ -255,67 +282,118 @@ function SearchView({
 function DetailView({
   product,
   detail,
+  prices,
+  outcome,
+  setOutcome,
   copies,
   setCopies,
   condition,
   setCondition,
   lang,
   setLang,
-  totalCards,
   adding,
   onAdd,
 }: {
   product: SealedProduct;
   detail: Detail | null;
+  prices: SealedPriceMap;
+  outcome: Outcome;
+  setOutcome: (o: Outcome) => void;
   copies: number;
   setCopies: (n: number) => void;
   condition: Condition;
   setCondition: (c: Condition) => void;
   lang: string;
   setLang: (l: string) => void;
-  totalCards: number;
   adding: boolean;
   onAdd: () => void;
 }) {
-  if (!detail) return <p className="sealed-msg">Loading contents…</p>;
-
-  const foils = detail.rows.filter((r) => r.finish !== 'nonfoil').reduce((s, r) => s + r.qty, 0);
-  const perCopy = detail.rows.reduce((s, r) => s + r.qty, 0);
+  const randomOnly = isRandomOnly(product);
+  const perCopy = detail ? detail.rows.reduce((s, r) => s + r.qty, 0) : 0;
+  const foils = detail ? detail.rows.filter((r) => r.finish !== 'nonfoil').reduce((s, r) => s + r.qty, 0) : 0;
+  const price = sealedPrice(prices, product.identifiers?.tcgplayer);
+  const showCards = outcome === 'cards' && !randomOnly;
 
   return (
     <>
       <div className="sealed-detail-head">
-        <strong className="sealed-result-name">{product.name}</strong>
-        <span className="sealed-result-sub">{subtitle(product)}</span>
+        <SealedImage url={productImage(product, 'full')} alt={product.name} className="sealed-shot-lg" />
+        <div className="sealed-detail-text">
+          <strong className="sealed-result-name">{product.name}</strong>
+          <span className="sealed-result-sub">{subtitle(product)}</span>
+          {price != null && (
+            <span className="sealed-price">
+              {fmtSealedPrice(price)} <span className="sealed-price-src">TCGplayer market</span>
+            </span>
+          )}
+        </div>
       </div>
 
-      <p className="sealed-summary">
-        {perCopy} cards{foils > 0 ? ` (${foils} foil/etched)` : ''}
-      </p>
+      {/* The whole point of the outcome picker: a box on the shelf and a box
+          you cracked are different things, and only you know which this is. */}
+      <div className="sealed-outcome" role="radiogroup" aria-label="What are you adding?">
+        <label className={outcome === 'unopened' ? 'sealed-outcome-opt sealed-outcome-on' : 'sealed-outcome-opt'}>
+          <input
+            type="radio"
+            name="sealed-outcome"
+            checked={outcome === 'unopened'}
+            onChange={() => setOutcome('unopened')}
+          />
+          <span className="sealed-outcome-label">Add as unopened</span>
+          <span className="sealed-outcome-note">Keeps the sealed product itself, cards stay inside.</span>
+        </label>
+        <label
+          className={
+            randomOnly
+              ? 'sealed-outcome-opt sealed-outcome-off'
+              : showCards
+                ? 'sealed-outcome-opt sealed-outcome-on'
+                : 'sealed-outcome-opt'
+          }
+        >
+          <input
+            type="radio"
+            name="sealed-outcome"
+            checked={showCards}
+            disabled={randomOnly}
+            onChange={() => setOutcome('cards')}
+          />
+          <span className="sealed-outcome-label">Open it, add the cards</span>
+          <span className="sealed-outcome-note">
+            {randomOnly
+              ? 'Contents are random, so there’s no card list to add.'
+              : detail
+                ? `${perCopy} card${perCopy === 1 ? '' : 's'}${foils > 0 ? ` (${foils} foil/etched)` : ''}`
+                : 'Loading contents…'}
+          </span>
+        </label>
+      </div>
 
-      {product.omittedRandom ? (
-        <p className="sealed-note">⚠ Also contains {product.omittedRandom} random pack{product.omittedRandom === 1 ? '' : 's'}, not added (contents unknown).</p>
+      {product.omittedRandom && showCards ? (
+        <p className="sealed-note">
+          ⚠ Also contains {product.omittedRandom} random pack{product.omittedRandom === 1 ? '' : 's'}, not added (contents unknown).
+        </p>
       ) : null}
-      {product.unresolved ? <p className="sealed-note">{product.unresolved} card(s) in this product couldn’t be identified and were skipped.</p> : null}
-      {detail.missingLocally > 0 ? (
+      {product.unresolved && showCards ? (
+        <p className="sealed-note">{product.unresolved} card(s) in this product couldn’t be identified and were skipped.</p>
+      ) : null}
+      {detail && detail.missingLocally > 0 && showCards ? (
         <p className="sealed-note">{detail.missingLocally} card(s) aren’t in your installed card data. Update your card database to include them.</p>
       ) : null}
 
-      {perCopy === 0 ? (
-        <p className="sealed-msg">None of this product’s cards are available to add.</p>
-      ) : (
-        <>
-          <div className="sealed-copies">
-            <span>Copies</span>
-            <button onClick={() => setCopies(Math.max(1, copies - 1))} aria-label="Fewer copies" disabled={copies <= 1}>
-              −
-            </button>
-            <span className="sealed-copies-n">{copies}</span>
-            <button onClick={() => setCopies(Math.min(99, copies + 1))} aria-label="More copies" disabled={copies >= 99}>
-              +
-            </button>
-          </div>
+      <div className="sealed-copies">
+        <span>Copies</span>
+        <button onClick={() => setCopies(Math.max(1, copies - 1))} aria-label="Fewer copies" disabled={copies <= 1}>
+          −
+        </button>
+        <span className="sealed-copies-n">{copies}</span>
+        <button onClick={() => setCopies(Math.min(99, copies + 1))} aria-label="More copies" disabled={copies >= 99}>
+          +
+        </button>
+      </div>
 
+      {showCards && (
+        <>
           {/* Finish comes from the product itself; condition and language don't,
               and a Japanese precon shouldn't have to be corrected card by card. */}
           <div className="chips" role="group" aria-label="Details for these cards">
@@ -341,29 +419,38 @@ function DetailView({
             </label>
           </div>
 
-          <ul className="sealed-cardlist">
-            {detail.rows.map((r) => (
-              <li key={`${r.scryfallId}|${r.finish}`}>
-                <span className="sealed-card-qty">{r.qty * copies}×</span>
-                <span className="sealed-card-name">
-                  {r.name}
-                  <span className="sealed-card-set">
-                    {' '}
-                    {r.set.toUpperCase()} #{r.collectorNumber}
-                    {finishTag(r.finish)}
+          {detail ? (
+            <ul className="sealed-cardlist">
+              {detail.rows.map((r) => (
+                <li key={`${r.scryfallId}|${r.finish}`}>
+                  <span className="sealed-card-qty">{r.qty * copies}×</span>
+                  <span className="sealed-card-name">
+                    {r.name}
+                    <span className="sealed-card-set">
+                      {' '}
+                      {r.set.toUpperCase()} #{r.collectorNumber}
+                      {finishTag(r.finish)}
+                    </span>
                   </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-
-          <div className="scan-confirm-actions">
-            <button className="primary" disabled={adding} onClick={onAdd}>
-              {adding ? 'Adding…' : `Add ${totalCards} cards to collection`}
-            </button>
-          </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="sealed-msg">Loading contents…</p>
+          )}
         </>
       )}
+
+      <div className="scan-confirm-actions">
+        <button className="primary" disabled={adding || (showCards && (!detail || perCopy === 0))} onClick={onAdd}>
+          {adding
+            ? 'Adding…'
+            : showCards
+              ? `Add ${perCopy * copies} cards to collection`
+              : `Add ${copies} unopened to collection`}
+        </button>
+      </div>
+      {showCards && detail && perCopy === 0 && <p className="sealed-msg">None of this product’s cards are available to add.</p>}
     </>
   );
 }

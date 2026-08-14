@@ -192,6 +192,12 @@ export interface CardDbManifest {
      */
     sealed?: CardDbArtifactMeta;
     /**
+     * USD market prices for the sealed products above, keyed by product id.
+     * Split out because it churns daily while the catalog doesn't. Absent when
+     * the TCGplayer price fetch fails — the catalog still works, just priceless.
+     */
+    sealedPrices?: CardDbArtifactMeta;
+    /**
      * Set code → Scryfall set type, for telling a normal set apart from a promo
      * product, Secret Lair, token sheet or memorabilia set. Tiny (~4 KB gzipped
      * for every set ever printed) and fetched lazily like `sealed`. Absent on
@@ -239,11 +245,13 @@ export interface CardDbChunkMeta extends CardDbArtifactMeta {
 }
 
 // --- Sealed products (see sealed-products feature) -------------------------
-// A named, non-randomized sealed product (precon deck, Secret Lair, gift box…)
-// expanded server-side from MTGJSON into concrete Scryfall printings, so the
-// client can add "one of everything in this product" to a collection. Shipped
-// as a separate lazily-fetched artifact keyed off the card-DB `dataVersion`
-// (the scryfallIds only make sense against the printings from that build).
+// Every sealed product MTGJSON knows: precon decks, Secret Lairs and gift boxes
+// (whose contents are fixed, so the client can add "one of everything in this
+// product" to a collection) *and* booster boxes, displays and packs (whose
+// contents are random, so all the client can do is record that you own the
+// unopened box). Shipped as a lazily-fetched artifact keyed off the card-DB
+// `dataVersion` — the scryfallIds only make sense against that build's
+// printings. Prices ride in a separate artifact; see SealedPriceMap.
 
 /** One resolved card slot in a sealed product. */
 export interface SealedCardRef {
@@ -252,7 +260,20 @@ export interface SealedCardRef {
   finish: Finish;
 }
 
-/** A sealed product expanded to its deterministic card contents. */
+/**
+ * Marketplace ids for a sealed product, straight from MTGJSON. `tcgplayer` is
+ * both the box shot (their CDN serves product photos off it, keylessly) and the
+ * USD price key; the others are kept for future price sources. Coverage is
+ * uneven — cases and oddities often carry only one or two.
+ */
+export interface SealedIdentifiers {
+  tcgplayer?: string;
+  cardKingdom?: string;
+  /** Cardmarket. */
+  mcm?: string;
+}
+
+/** A sealed product and whatever of its contents we can pin down. */
 export interface SealedProduct {
   /** MTGJSON product uuid — stable id for caching/selection. */
   id: string;
@@ -266,13 +287,28 @@ export interface SealedProduct {
   setName?: string;
   /** ISO release date, when known. */
   releaseDate?: string;
-  /** Deterministic cards this product contains (deduped by scryfallId+finish). */
+  /**
+   * Deterministic cards this product contains (deduped by scryfallId+finish).
+   * Empty for a pure booster box or pack — everything in it is random, so the
+   * only thing the client can offer is adding it unopened.
+   */
   cards: SealedCardRef[];
   /** Count of random components (booster packs / variable) omitted from `cards`. */
   omittedRandom?: number;
   /** Count of referenced cards that could not be matched to a printing in this build. */
   unresolved?: number;
+  /** Marketplace ids; absent when MTGJSON lists none. */
+  identifiers?: SealedIdentifiers;
 }
+
+/**
+ * Sealed product id → current market price in USD. Shipped separately from the
+ * catalog for the same reason card prices are: prices churn daily while the
+ * product list barely moves, and a combined artifact would re-download in full
+ * every night. Sourced from TCGplayer (via TCGCSV) — MTGJSON prices singles
+ * only, and Scryfall has no concept of a sealed product at all.
+ */
+export type SealedPriceMap = Record<string, number>;
 
 export interface CardDbArtifactMeta {
   url: string;

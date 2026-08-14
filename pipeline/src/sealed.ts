@@ -1,12 +1,19 @@
 // Expand MTGJSON sealed products into concrete Scryfall printings (see
-// sealed-products feature). We keep only *deterministic* products — precon
-// decks, Secret Lairs, gift boxes — where every card is known. Randomised
-// components (booster packs, "variable" choose-N) are omitted and counted so
-// the UI can say "also contains N booster pack(s), not added", rather than
-// dropping the whole product (a Commander deck bundled with a booster still
-// contributes its full, known decklist).
+// sealed-products feature). Deterministic products — precon decks, Secret
+// Lairs, gift boxes — resolve to every card they contain. Randomised
+// components (booster packs, "variable" choose-N) can't be expanded, so they
+// are counted into `omittedRandom` and the UI says "also contains N booster
+// pack(s), not added" rather than dropping the whole product (a Commander deck
+// bundled with a booster still contributes its full, known decklist).
+//
+// Products with NO deterministic contents at all — a plain booster box, a
+// display, a single pack — used to be dropped here. They are kept now: you
+// can't add their cards, but you can own the unopened box, and that's the
+// whole point of the sealed collection. They arrive with `cards: []` and a
+// non-zero `omittedRandom`, which is exactly how the client tells the two
+// kinds apart.
 
-import type { Finish, Printing, SealedCardRef, SealedProduct } from '@mtg/shared';
+import type { Finish, Printing, SealedCardRef, SealedIdentifiers, SealedProduct } from '@mtg/shared';
 import {
   streamSets,
   type MtgjsonDeck,
@@ -38,14 +45,16 @@ export interface SealedStats {
   setsSeen: number;
   productsSeen: number;
   productsEmitted: number;
+  /** Of those emitted, how many are pure-random (unopened-only). */
+  productsRandomOnly: number;
   cardsUnavailable: number;
 }
 
 /**
  * Stream AllPrintings, then expand each sealed product against `printingsById`
  * (the Scryfall-built printings the pipeline already holds) to validate cards
- * exist in this build and to pick a real finish. Returns only products with at
- * least one resolvable card.
+ * exist in this build and to pick a real finish. Returns every product with
+ * something to offer: resolvable cards, random contents, or both.
  */
 export async function buildSealedProducts(
   printingsById: Map<string, Printing>,
@@ -57,7 +66,13 @@ export async function buildSealedProducts(
     deckByKey: new Map(),
     setNameByProduct: new Map(),
   };
-  const stats: SealedStats = { setsSeen: 0, productsSeen: 0, productsEmitted: 0, cardsUnavailable: 0 };
+  const stats: SealedStats = {
+    setsSeen: 0,
+    productsSeen: 0,
+    productsEmitted: 0,
+    productsRandomOnly: 0,
+    cardsUnavailable: 0,
+  };
 
   await streamSets((code, set) => {
     stats.setsSeen++;
@@ -81,11 +96,12 @@ export async function buildSealedProducts(
     stats.productsSeen++;
     const built = expandProduct(raw, acc, printingsById);
     stats.cardsUnavailable += built.unresolved ?? 0;
-    // Keep only products with something deterministic to add.
-    if (built.cards.length > 0) {
-      products.push(built);
-      stats.productsEmitted++;
-    }
+    // Everything MTGJSON lists is a real product somebody can own, so nothing
+    // is filtered out here. What varies is which of the two add paths the
+    // client can offer, and `cards.length` answers that.
+    products.push(built);
+    stats.productsEmitted++;
+    if (built.cards.length === 0) stats.productsRandomOnly++;
   }
 
   products.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -175,5 +191,18 @@ function expandProduct(
   if (raw.releaseDate) product.releaseDate = raw.releaseDate;
   if (omittedRandom > 0) product.omittedRandom = omittedRandom;
   if (unresolved > 0) product.unresolved = unresolved;
+  const identifiers = pickIdentifiers(raw);
+  if (identifiers) product.identifiers = identifiers;
   return product;
+}
+
+/** Keep the three marketplace ids we can actually use; drop the other half-dozen. */
+function pickIdentifiers(raw: MtgjsonSealedProduct): SealedIdentifiers | undefined {
+  const src = raw.identifiers;
+  if (!src) return undefined;
+  const out: SealedIdentifiers = {};
+  if (src.tcgplayerProductId) out.tcgplayer = String(src.tcgplayerProductId);
+  if (src.cardKingdomId) out.cardKingdom = String(src.cardKingdomId);
+  if (src.mcmId) out.mcm = String(src.mcmId);
+  return Object.keys(out).length ? out : undefined;
 }

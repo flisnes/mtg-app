@@ -4634,8 +4634,8 @@ a.seg {
   width: 100%;
   text-align: left;
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  align-items: center;
+  gap: 0.6rem;
   padding: 0.55rem 0.65rem;
   border-radius: 10px;
   background: var(--surface-2);
@@ -4643,6 +4643,16 @@ a.seg {
 }
 .sealed-result:hover {
   border-color: var(--accent);
+}
+/* The same row without the button affordance (reverse lookup: informational). */
+.sealed-result-static:hover {
+  border-color: transparent;
+}
+.sealed-result-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
 }
 .sealed-result-name {
   font-weight: 600;
@@ -4653,8 +4663,126 @@ a.seg {
 }
 .sealed-detail-head {
   display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.sealed-detail-text {
+  display: flex;
   flex-direction: column;
   gap: 0.2rem;
+  min-width: 0;
+}
+
+/* Box shots (TCGplayer product CDN). Products are photographed at wildly
+   different aspect ratios — a booster pack is tall, a display is square — so
+   the frame is fixed and the image is contained inside it rather than cropped. */
+.sealed-shot {
+  flex: none;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.sealed-shot-empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+}
+.sealed-shot-sm {
+  width: 44px;
+  height: 44px;
+}
+.sealed-shot-lg {
+  width: 108px;
+  height: 108px;
+}
+.sealed-price {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.sealed-price-src {
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+/* Outcome picker: keep the box sealed, or open it and take the cards. */
+.sealed-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.6rem 0;
+}
+.sealed-outcome-opt {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.55rem;
+  align-items: center;
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.sealed-outcome-on {
+  border-color: var(--accent);
+}
+.sealed-outcome-off {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.sealed-outcome-label {
+  font-weight: 600;
+}
+.sealed-outcome-note {
+  grid-column: 2;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+/* Owned unopened products (the Sealed products page). */
+.sealed-owned {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.sealed-owned-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.sealed-owned-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+.sealed-owned-qty {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.sealed-owned-qty button {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+}
+.sealed-owned-remove {
+  font-size: 0.82rem;
+}
+
+/* Card sheet: name and its options menu share a row. */
+.sheet-name-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 .sealed-summary {
   margin: 0;

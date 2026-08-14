@@ -20,6 +20,7 @@ import {
   type Finish,
   type PriceHistory,
   type RemovalReason,
+  type SealedItem,
   type Trade,
   type UserEvent,
   type UserEventKind,
@@ -44,6 +45,8 @@ export const PAYLOAD_VERSION = 1;
 export interface TransferPayload {
   version: typeof PAYLOAD_VERSION;
   collection: CollectionEntry[];
+  /** Unopened sealed products. Absent from senders older than the feature → []. */
+  sealedItems: SealedItem[];
   wishlist: WishlistEntry[];
   decks: Deck[];
   deckCards: DeckCard[];
@@ -71,6 +74,7 @@ export async function exportUserData(): Promise<TransferPayload> {
     async () => ({
       version: PAYLOAD_VERSION,
       collection: await db.collection.toArray(),
+      sealedItems: await db.sealedItems.toArray(),
       wishlist: await db.wishlist.toArray(),
       decks: await db.decks.toArray(),
       deckCards: await db.deckCards.toArray(),
@@ -109,6 +113,7 @@ const MAX_QTY = 9999;
 // payload to ~30 MB, these keep any single table from hogging it.
 const CAPS = {
   collection: 200_000,
+  sealedItems: 20_000,
   wishlist: 20_000,
   decks: 2_000,
   deckCards: 200_000,
@@ -172,6 +177,33 @@ export function sanitizeCollectionRow(raw: unknown): CollectionEntry | null {
     lang: typeof r.lang === 'string' && r.lang ? r.lang.slice(0, 10) : 'en',
     quantity,
     quantityForTrade: Math.min(qty(r.quantityForTrade, 0), quantity),
+    createdAt: ts(r.createdAt),
+    updatedAt: ts(r.updatedAt),
+  };
+}
+
+/**
+ * An unopened sealed product. Unlike a collection row this has no oracleId or
+ * scryfallId to require — a booster box isn't a card — so the only hard
+ * requirements are the row id and the product id it was added from. The name
+ * and set are denormalized copies kept so an item stays readable when the
+ * sealed catalog is absent or has dropped the product; a sender that omits
+ * them gets a placeholder rather than a discarded row.
+ */
+export function sanitizeSealedItemRow(raw: unknown): SealedItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const itemId = id(r.id);
+  const productId = id(r.productId);
+  if (!itemId || !productId) return null;
+  return {
+    id: itemId,
+    productId,
+    name: typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, 200) : 'Sealed product',
+    set: typeof r.set === 'string' && r.set ? r.set.slice(0, 20).toLowerCase() : '',
+    ...(typeof r.setName === 'string' && r.setName ? { setName: r.setName.slice(0, 200) } : {}),
+    ...(id(r.tcgplayerId) ? { tcgplayerId: id(r.tcgplayerId)! } : {}),
+    quantity: qty(r.quantity),
     createdAt: ts(r.createdAt),
     updatedAt: ts(r.updatedAt),
   };
@@ -352,6 +384,21 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
   }
   const collection = [...byKey.values()];
 
+  // Unopened sealed products: unique on id and on productId — owning "two
+  // Bloomburrow booster boxes" is one row with quantity 2, not two rows, the
+  // same invariant addSealedItem keeps locally.
+  const sealedIds = new Set<string>();
+  const sealedByProduct = new Map<string, SealedItem>();
+  for (const r of rows(p.sealedItems, CAPS.sealedItems)) {
+    const item = sanitizeSealedItemRow(r);
+    if (!item || sealedIds.has(item.id)) continue;
+    sealedIds.add(item.id);
+    const ex = sealedByProduct.get(item.productId);
+    if (ex) ex.quantity = Math.min(MAX_QTY, ex.quantity + item.quantity);
+    else sealedByProduct.set(item.productId, item);
+  }
+  const sealedItems = [...sealedByProduct.values()];
+
   // Wishlist: unique on id and (oracleId, scryfallId); key collisions merge
   // quantities, same policy as the collection above (previously they were
   // silently dropped, losing copies).
@@ -478,5 +525,5 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
     events.push(ev);
   }
 
-  return { version: PAYLOAD_VERSION, collection, wishlist, decks, deckCards, deckFolders, trades, priceHistories, events };
+  return { version: PAYLOAD_VERSION, collection, sealedItems, wishlist, decks, deckCards, deckFolders, trades, priceHistories, events };
 }

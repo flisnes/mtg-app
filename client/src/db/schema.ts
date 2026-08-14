@@ -11,6 +11,7 @@ import type {
   Setting,
   PriceHistory,
   PriceShard,
+  SealedItem,
   SyncChange,
   UserEvent,
 } from '@mtg/shared';
@@ -29,6 +30,8 @@ export class MtgDatabase extends Dexie {
   oracleCards!: Table<OracleCard, string>;
   printings!: Table<Printing, string>;
   collection!: Table<CollectionEntry, string>;
+  /** Unopened sealed products (booster boxes, precons still in shrink). */
+  sealedItems!: Table<SealedItem, string>;
   wishlist!: Table<WishlistEntry, string>;
   decks!: Table<Deck, string>;
   deckCards!: Table<DeckCard, string>;
@@ -40,7 +43,8 @@ export class MtgDatabase extends Dexie {
   events!: Table<UserEvent, string>;
   outbox!: Table<SyncChange, [string, string]>;
   scanData!: Table<import('../scan/store.js').ScanDataRow, string>;
-  sealed!: Table<import('../sealed/store.js').SealedStoreRow, string>;
+  /** Lazily-fetched sealed catalog and its price map (rows 'current' and 'prices'). */
+  sealed!: Table<import('../sealed/store.js').SealedRow, string>;
   setTypes!: Table<import('../cardDb/setTypes.js').SetTypesRow, string>;
 
   constructor() {
@@ -210,6 +214,13 @@ export class MtgDatabase extends Dexie {
       decks: 'id, name, updatedAt, folderId',
       deckFolders: 'id, name, updatedAt',
     });
+
+    // v14 (unopened sealed products): a booster box you own has no oracleId and
+    // no scryfallId, so it cannot be a collection row — every card join, sort,
+    // price history and mover flag in the app assumes those exist. It gets its
+    // own table instead, synced like any other user data. Indexed by productId
+    // so "how many of this box do I own?" is a lookup, not a scan.
+    this.version(14).stores({ sealedItems: 'id, productId, updatedAt' });
   }
 }
 
@@ -223,6 +234,7 @@ export const db = new MtgDatabase();
  */
 export const USER_DATA_TABLES = [
   db.collection,
+  db.sealedItems,
   db.wishlist,
   db.decks,
   db.deckCards,

@@ -5,7 +5,15 @@ import { addSealedItem, applyImport, type ImportLine } from '../db/dataAccess.js
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { loadSealedProducts } from '../sealed/store.js';
 import { SealedImage } from '../sealed/SealedImage.js';
-import { cardCount, fmtSealedPrice, isRandomOnly, productImage, sealedPrice, subtitle } from '../sealed/product.js';
+import {
+  cardCount,
+  fmtSealedPrice,
+  isRandomOnly,
+  productImage,
+  sealedPriceOf,
+  sealedPriceSourceLabel,
+  subtitle,
+} from '../sealed/product.js';
 import { useFileThese } from '../deck/useFileThese.js';
 import { LANGS } from './CardSheet.js';
 import { useToast } from './Toast.js';
@@ -311,7 +319,8 @@ function DetailView({
   const randomOnly = isRandomOnly(product);
   const perCopy = detail ? detail.rows.reduce((s, r) => s + r.qty, 0) : 0;
   const foils = detail ? detail.rows.filter((r) => r.finish !== 'nonfoil').reduce((s, r) => s + r.qty, 0) : 0;
-  const price = sealedPrice(prices, product.identifiers?.tcgplayer);
+  const price = sealedPriceOf(prices, product.id);
+  const priceText = fmtSealedPrice(price);
   const showCards = outcome === 'cards' && !randomOnly;
 
   return (
@@ -321,9 +330,9 @@ function DetailView({
         <div className="sealed-detail-text">
           <strong className="sealed-result-name">{product.name}</strong>
           <span className="sealed-result-sub">{subtitle(product)}</span>
-          {price != null && (
+          {priceText && (
             <span className="sealed-price">
-              {fmtSealedPrice(price)} <span className="sealed-price-src">TCGplayer market</span>
+              {priceText} <span className="sealed-price-src">{sealedPriceSourceLabel(price)} market</span>
             </span>
           )}
         </div>

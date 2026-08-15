@@ -15,11 +15,12 @@ export function Collection() {
   const [chartOpen, setChartOpen] = useState(false);
   const value = useCollectionValue();
   const sealed = useSealedValue();
-  // Unopened boxes count toward what the collection is worth. Their prices are
-  // USD-quoted (TCGplayer), so they ride in the usd bucket and convert to the
-  // display currency exactly like a card Scryfall only prices in dollars.
+  // Unopened boxes count toward what the collection is worth. Both currencies
+  // add bucket-wise, so the combined figure converts exactly like a card's.
   const withSealed =
-    value && sealed && sealed.usd > 0 ? { eur: value.eur, usd: value.usd + sealed.usd } : value;
+    value && sealed
+      ? { eur: value.eur + sealed.total.eur, usd: value.usd + sealed.total.usd }
+      : value;
   return (
     <Page
       title="Collection"

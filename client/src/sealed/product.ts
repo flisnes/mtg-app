@@ -1,5 +1,6 @@
 import type { SealedItem, SealedPriceMap, SealedProduct } from '@mtg/shared';
-import { fmtMoney } from '../price/rates.js';
+import { formatPrice } from '../components/CardSorting.js';
+import { getPrefs } from '../prefs.js';
 
 // Shared helpers for sealed products: box shots, prices, labels, and the
 // "which products contain this card?" lookup.
@@ -53,21 +54,45 @@ export function subtitle(p: SealedProduct): string {
 }
 
 // --- Prices ----------------------------------------------------------------
-// Sealed prices are USD-only for now: TCGplayer market via TCGCSV. Cardmarket
-// publishes a keyless EUR dump but sends no CORS header and its redistribution
-// terms are unread, so there is no EUR quote to fall back to. Rather than
-// convert a US market price into the user's currency and let it pass for a
-// local one, sealed prices are shown as USD and labelled.
+// Sealed products are priced in both currencies — TCGplayer market for USD,
+// Cardmarket's price guide for EUR — so they go through the same machinery as
+// cards: prefer the user's base currency, fall back to the other, then convert
+// to whatever they display in. The two markets genuinely disagree on sealed
+// (a Bloomburrow collector box is ~$1173 but ~€783), so picking the right side
+// matters more here than it does for singles.
 
-export function sealedPrice(prices: SealedPriceMap, tcgplayerId: string | undefined): number | null {
-  if (!tcgplayerId) return null;
-  const v = prices[tcgplayerId];
-  return typeof v === 'number' ? v : null;
+/** A sealed price in the shape the shared price helpers expect. */
+export interface SealedPriceSource {
+  priceUsd: number | null;
+  priceEur: number | null;
 }
 
-/** Format a sealed price. Always USD — see the note above. */
-export function fmtSealedPrice(usd: number): string {
-  return fmtMoney(usd, 'USD');
+/** This product's prices, or undefined when neither market quotes it. */
+export function sealedPriceOf(prices: SealedPriceMap, productId: string | undefined): SealedPriceSource | undefined {
+  if (!productId) return undefined;
+  const tuple = prices[productId];
+  if (!tuple) return undefined;
+  return { priceUsd: tuple[0] ?? null, priceEur: tuple[1] ?? null };
+}
+
+/** Formatted for display, in the user's currency. Undefined when unpriced. */
+export function fmtSealedPrice(src: SealedPriceSource | undefined): string | undefined {
+  return formatPrice(src);
+}
+
+/**
+ * Which market a shown price came from, for the label beside it. The price
+ * helpers prefer the base currency and fall back, so this has to reproduce that
+ * choice rather than assume one source.
+ */
+export function sealedPriceSourceLabel(src: SealedPriceSource | undefined): string | undefined {
+  if (!src) return undefined;
+  const base = getPrefs().baseCurrency;
+  const first = base === 'EUR' ? src.priceEur : src.priceUsd;
+  if (first != null) return base === 'EUR' ? 'Cardmarket' : 'TCGplayer';
+  const other = base === 'EUR' ? src.priceUsd : src.priceEur;
+  if (other != null) return base === 'EUR' ? 'TCGplayer' : 'Cardmarket';
+  return undefined;
 }
 
 // --- Reverse lookup --------------------------------------------------------

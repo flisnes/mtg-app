@@ -5,7 +5,7 @@ import { containerKind } from '../deck/containers.js';
 import { getOracleCardsByIds, getOwnedCountsFor, getPrintingsByIds } from '../db/queries.js';
 import { addToTotal, formatTotal, pricedForFinish, type PriceTotal } from './CardSorting.js';
 import { loadSealedProducts } from '../sealed/store.js';
-import { sealedPrice } from '../sealed/product.js';
+import { sealedPriceOf } from '../sealed/product.js';
 
 // Compact "total value" readout for page headers. It sits in the empty space
 // beside a page's options menu, so it costs no extra vertical room.
@@ -67,34 +67,29 @@ export function useCollectionValue(onlyTrade = false): PriceTotal | undefined {
 }
 
 /**
- * Value of the unopened sealed products on the shelf, in USD.
+ * Value of the unopened sealed products on the shelf. A PriceTotal like every
+ * other value in the app: TCGplayer quotes the USD side, Cardmarket the EUR
+ * side, and formatTotal converts both into whatever the user displays in.
  *
- * USD and not a PriceTotal because there is no EUR quote to have: sealed prices
- * come from TCGplayer (via TCGCSV), and no keyless European sealed feed exists
- * that we can use — Cardmarket's dump has no CORS header and unread
- * redistribution terms, MTGJSON prices singles only, Scryfall has no sealed
- * products at all. Callers that fold this into a mixed total put it in the
- * `usd` bucket, which converts to the display currency like any USD-only card.
- *
- * `unpriced` counts boxes with no market price, so a total can admit what it
+ * `unpriced` counts boxes neither market quotes, so a total can admit what it
  * left out instead of quietly under-reporting.
  */
-export function useSealedValue(): { usd: number; unpriced: number; boxes: number } | undefined {
+export function useSealedValue(): { total: PriceTotal; unpriced: number; boxes: number } | undefined {
   return useLiveQuery(async () => {
+    const total: PriceTotal = { eur: 0, usd: 0 };
     const items = await db.sealedItems.toArray();
-    if (items.length === 0) return { usd: 0, unpriced: 0, boxes: 0 };
+    if (items.length === 0) return { total, unpriced: 0, boxes: 0 };
     const load = await loadSealedProducts();
     const prices = load.kind === 'ready' ? load.prices : {};
-    let usd = 0;
     let unpriced = 0;
     let boxes = 0;
     for (const item of items) {
       boxes += item.quantity;
-      const price = sealedPrice(prices, item.tcgplayerId);
-      if (price == null) unpriced += item.quantity;
-      else usd += price * item.quantity;
+      const price = sealedPriceOf(prices, item.productId);
+      if (!price) unpriced += item.quantity;
+      else addToTotal(total, item.quantity, price);
     }
-    return { usd, unpriced, boxes };
+    return { total, unpriced, boxes };
   }, []);
 }
 

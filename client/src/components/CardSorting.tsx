@@ -23,26 +23,48 @@ export interface CardSortPrefs {
 
 const DEFAULT_PREFS: CardSortPrefs = { key: 'name', dir: 'asc', group: 'none' };
 
-export function useCardSort(storageKey: string, defaults?: Partial<CardSortPrefs>): [CardSortPrefs, (p: CardSortPrefs) => void] {
-  const full = `cardSort:${storageKey}`;
-  const [prefs, setPrefs] = useState<CardSortPrefs>(() => {
+/** Read-through localStorage state; a stored partial is merged over the initial. */
+function usePersisted<T extends object>(full: string, initial: T): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(() => {
     try {
       const raw = localStorage.getItem(full);
-      if (raw) return { ...DEFAULT_PREFS, ...defaults, ...(JSON.parse(raw) as Partial<CardSortPrefs>) };
+      if (raw) return { ...initial, ...(JSON.parse(raw) as Partial<T>) };
     } catch {
       /* ignore */
     }
-    return { ...DEFAULT_PREFS, ...defaults };
+    return initial;
   });
-  const set = (p: CardSortPrefs) => {
-    setPrefs(p);
+  const set = (v: T) => {
+    setValue(v);
     try {
-      localStorage.setItem(full, JSON.stringify(p));
+      localStorage.setItem(full, JSON.stringify(v));
     } catch {
       /* ignore */
     }
   };
-  return [prefs, set];
+  return [value, set];
+}
+
+export function useCardSort(storageKey: string, defaults?: Partial<CardSortPrefs>): [CardSortPrefs, (p: CardSortPrefs) => void] {
+  return usePersisted(`cardSort:${storageKey}`, { ...DEFAULT_PREFS, ...defaults });
+}
+
+// ---- Lists that aren't cards ----
+// Sealed products and price movers sort by things no card row has (copies,
+// release date, how notable a move is) and by nothing a card row does (mana
+// value). They get their own key set and their own select rather than bending
+// SortKey out of shape, but share the persistence and the direction button.
+
+export interface ListSortPrefs<K extends string> {
+  key: K;
+  dir: SortDir;
+}
+
+export function useListSort<K extends string>(
+  storageKey: string,
+  defaults: ListSortPrefs<K>,
+): [ListSortPrefs<K>, (p: ListSortPrefs<K>) => void] {
+  return usePersisted(`listSort:${storageKey}`, defaults);
 }
 
 // ---- Sorting ----
@@ -182,7 +204,7 @@ export function sortCards<T>(items: T[], get: (t: T) => SortFields, prefs: Pick<
 }
 
 // Missing values sort last regardless of direction.
-function compareNullable(a: number | null | undefined, b: number | null | undefined, mul: number): number {
+export function compareNullable(a: number | null | undefined, b: number | null | undefined, mul: number): number {
   if (a == null && b == null) return 0;
   if (a == null) return 1;
   if (b == null) return -1;
@@ -312,7 +334,6 @@ export function SortControls({
   /** Offer date-added / last-edited sorts (views that supply SortFields.added/updated). */
   withDates?: boolean;
 }) {
-  const asc = prefs.dir === 'asc';
   const sortOptions = [...SORT_OPTIONS, ...(withChange ? CHANGE_OPTIONS : []), ...(withDates ? DATE_OPTIONS : [])];
   const groupOptions = tagGroups ? [...GROUP_OPTIONS, TAG_GROUP_OPTION] : GROUP_OPTIONS;
   return (
@@ -333,14 +354,45 @@ export function SortControls({
           </option>
         ))}
       </select>
-      <button
-        className="sort-dir"
-        onClick={() => onChange({ ...prefs, dir: asc ? 'desc' : 'asc' })}
-        title={asc ? 'Ascending' : 'Descending'}
-        aria-label={asc ? 'Sort ascending' : 'Sort descending'}
-      >
-        {asc ? '↑' : '↓'}
-      </button>
+      <SortDirButton dir={prefs.dir} onChange={(dir) => onChange({ ...prefs, dir })} />
     </div>
+  );
+}
+
+/** The same sort select + direction button, for a list with its own key set. */
+export function ListSortControls<K extends string>({
+  prefs,
+  onChange,
+  options,
+}: {
+  prefs: ListSortPrefs<K>;
+  onChange: (p: ListSortPrefs<K>) => void;
+  options: [K, string][];
+}) {
+  return (
+    <div className="sort-controls" role="group" aria-label="Sort">
+      <select value={prefs.key} onChange={(e) => onChange({ ...prefs, key: e.target.value as K })} aria-label="Sort by">
+        {options.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <SortDirButton dir={prefs.dir} onChange={(dir) => onChange({ ...prefs, dir })} />
+    </div>
+  );
+}
+
+function SortDirButton({ dir, onChange }: { dir: SortDir; onChange: (d: SortDir) => void }) {
+  const asc = dir === 'asc';
+  return (
+    <button
+      className="sort-dir"
+      onClick={() => onChange(asc ? 'desc' : 'asc')}
+      title={asc ? 'Ascending' : 'Descending'}
+      aria-label={asc ? 'Sort ascending' : 'Sort descending'}
+    >
+      {asc ? '↑' : '↓'}
+    </button>
   );
 }

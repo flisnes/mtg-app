@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.119.0
+
+- **Price movers can be narrowed down.** Four sections of cards was a lot to read through when you only wanted one of them. There's now a "Show" picker for a single section, a "List" filter for cards in your collection, on your tradelist or on your wishlist, and a minimum-price filter so the 40-cent commons stop crowding out the cards actually worth watching. The alongside-it time window is unchanged.
+- **Price movers can be sorted.** Every section starts on "Most notable", which is what it always did, and you can switch to change, change %, price or name, ascending or descending. The choice sticks between visits; the filters deliberately don't, so you never come back to a list with holes in it.
+- **Search now filters price movers in place.** Tapping the search bar on the movers screen offers a "Price movers" chip, on by default, exactly like the collection, tradelist and wishlist chips. Typing narrows the four sections instead of covering them, and full Scryfall syntax works: `t:land`, `c:r`, `o:"draw a card"`. Turn the chip off to search the whole database instead.
+- **Sealed products can be filtered and sorted.** Filter by name, set, product type (booster box, bundle, deck, and so on) or whether a market price is known, and sort by name, price each, total value, copies, set, release date or date added. Each row now names its product type too, so the type filter has something to point at.
+
 ## 0.118.0
 
 - **Sealed products are priced in euros too.** Last release could only quote them in US dollars, because the American market was the only sealed price we could get at. Cardmarket publishes its own daily price guide and permits open use of it, so European prices are in now: every sealed product carries both, and they follow the same "Show prices in" and base-currency settings as everything else. Sealed products no longer sit apart from the rest of your collection's value in a currency you don't shop in.

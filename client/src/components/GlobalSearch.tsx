@@ -60,15 +60,32 @@ function useSearchTarget(): AddTarget {
     if (id) return { kind: 'deck', deckId: id, containerKind: kind };
   }
   const scope = listScopeFor(pathname);
-  return scope ? { kind: scope } : { kind: 'default' };
+  // Price movers is read-only — there's no "add a card to your movers".
+  return scope && scope !== 'movers' ? { kind: scope } : { kind: 'default' };
 }
 
-/** The list a page *is*, if it's one of the three that render their own rows.
+/**
+ * A page whose own rows the search can narrow in place. A superset of `Scope`:
+ * ScopedResults can render your collection/tradelist/wishlist from anywhere,
+ * but price movers only exist on their own page, so 'movers' is never a scope
+ * you can carry off it.
+ */
+export type PageScope = Scope | 'movers';
+
+const SCOPE_NOUN: Record<PageScope, string> = {
+  collection: 'collection',
+  tradelist: 'tradelist',
+  wishlist: 'wishlist',
+  movers: 'price movers',
+};
+
+/** The list a page *is*, if it's one that renders its own rows.
  *  Scoping search to this page's own list filters it in place. */
-function listScopeFor(pathname: string): Scope | null {
+function listScopeFor(pathname: string): PageScope | null {
   if (pathname === '/' || pathname === '/collection') return 'collection';
   if (pathname === '/wishlist') return 'wishlist';
   if (pathname === '/tradelist') return 'tradelist';
+  if (pathname === '/movers') return 'movers';
   return null;
 }
 
@@ -102,8 +119,8 @@ interface SearchCtx {
   filters: SearchFilters;
   setFilters: React.Dispatch<React.SetStateAction<SearchFilters>>;
   /** The one list the search is narrowed to, or null for the whole database. */
-  scope: Scope | null;
-  setScope: (s: Scope | null) => void;
+  scope: PageScope | null;
+  setScope: (s: PageScope | null) => void;
   /** Scope+query to apply on the next pathname-change reset, instead of the
    *  usual blank slate — see `useOpenCollectionSearch`. */
   queuePending: (p: { scope: Scope; query: string }) => void;
@@ -129,7 +146,7 @@ export function useOpenSearch(): () => void {
  * rows with it, which is what keeps sorting, multi-select and bulk actions
  * working on a searched-down list.
  */
-export function useListFilter(scope: Scope): string {
+export function useListFilter(scope: PageScope): string {
   const ctx = useContext(Ctx);
   const { pathname } = useLocation();
   if (!ctx?.open || ctx.scope !== scope || listScopeFor(pathname) !== scope) return '';
@@ -168,7 +185,7 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
   const [filters, setFilters] = useState<SearchFilters>({});
   // Pre-pick the list you're standing on, so search on /wishlist starts by
   // filtering the wishlist.
-  const [scope, setScope] = useState<Scope | null>(() => listScopeFor(pathname));
+  const [scope, setScope] = useState<PageScope | null>(() => listScopeFor(pathname));
   const inputRef = useRef<HTMLInputElement | null>(null);
   const pendingRef = useRef<{ scope: Scope; query: string } | null>(null);
   const queuePending = (p: { scope: Scope; query: string }) => {
@@ -339,8 +356,15 @@ function SearchOverlay() {
   // The full set of pills for this context: your own three everywhere, this
   // container's one wherever you're standing on a deck/binder/box, plus the
   // viewed user's two on their community page.
+  // The movers pill only exists on the movers page: nothing off it can render
+  // that list, so carrying the scope away would have nothing to show.
+  const pageScopes: { key: PageScope; label: string; icon: IconName }[] =
+    listScopeFor(pathname) === 'movers'
+      ? [...SCOPES, { key: 'movers', label: 'Price movers', icon: 'prices' }]
+      : SCOPES;
+
   const pills: { key: string; label: string; icon: IconName; title: string; on: boolean; toggle: () => void }[] = [
-    ...SCOPES.map((s) => ({
+    ...pageScopes.map((s) => ({
       key: s.key,
       label: s.label,
       icon: s.icon,
@@ -458,7 +482,7 @@ function SearchOverlay() {
           {!query && (
             <>
               <p className="search-meta">
-                Filtering your {scope}. Turn the chip off to search every card instead.
+                Filtering your {SCOPE_NOUN[scope]}. Turn the chip off to search every card instead.
               </p>
               <RecentSearches onPick={setQuery} />
             </>
@@ -599,7 +623,7 @@ function SearchOverlay() {
             {/* An empty scoped query lists everything in scope, so there's no
                 empty state to hang these off — they go above the list. */}
             {!query && <RecentSearches onPick={setQuery} />}
-            {scope && <ScopedResults scope={scope} query={query} />}
+            {scope && scope !== 'movers' && <ScopedResults scope={scope} query={query} />}
             {containerOn && target.kind === 'deck' && (
               <ContainerScopedResults deckId={target.deckId} kind={containerMeta.kind} format={deckCtx?.format} query={query} />
             )}

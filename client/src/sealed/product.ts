@@ -47,6 +47,12 @@ export function cardCount(p: SealedProduct): number {
   return p.cards.reduce((s, c) => s + c.qty, 0);
 }
 
+/** MTGJSON ships snake_case categories ('booster_box', 'limited_aid_tool'). */
+export function categoryLabel(category: string): string {
+  const words = category.replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function subtitle(p: SealedProduct): string {
   const bits = [p.setName ?? p.set.toUpperCase()];
   if (p.releaseDate) bits.push(p.releaseDate.slice(0, 4));

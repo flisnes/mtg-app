@@ -2923,6 +2923,45 @@ button.primary {
   vertical-align: middle;
 }
 
+/* ---- Price-mover tuning sheet ---- */
+.tuning-group {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+.tuning-group h4 {
+  margin: 0 0 0.15rem;
+  font-size: 0.95rem;
+}
+.tuning-group > .fine-print {
+  margin: 0 0 0.6rem;
+}
+.tuning-dial {
+  margin-bottom: 0.75rem;
+}
+.tuning-dial:last-child {
+  margin-bottom: 0;
+}
+.tuning-dial .fine-print {
+  margin: 0.1rem 0 0;
+}
+.tuning-dial input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+  margin: 0;
+}
+.tuning-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+.tuning-value {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* ---- Toast ---- */
 .toast-stack {
   position: fixed;

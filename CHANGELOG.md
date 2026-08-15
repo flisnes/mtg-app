@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.121.0
+
+- **Price movers takes tuning now.** The thresholds behind the four sections were baked in: a card had to move about €5 or about 25% before anything said so. The ⋯ menu on the Price movers screen opens "Tune the formula", where ten sliders decide what counts as news for you. Drop them if you want to hear about every 60-cent wobble, raise them if you only care when a card moves real money.
+- What you can set: the cash and percentage moves that qualify on their own, the floor under which a move is just noise, how straight a line has to be (and how far it has to travel) before it reads as a steady trend, and how close to the ends of its range a card must sit to count as a dip or a spike. The readings and days of history each section needs are dials too, so you can see something during your first week of tracking instead of waiting it out.
+- The settings stick on the device and the header says "custom formula" while they're off the defaults, with one tap back to how it shipped. The up/down arrows on cards elsewhere in the app follow your thresholds too, so the badges and the movers screen never disagree.
+
 ## 0.120.1
 
 - **Tokens no longer colour your deck.** A mono-white commander deck that makes a white-and-black cleric was showing up as Orzhov in the deck list. Tokens are left out of the colour identity now, so the pips match what the deck actually plays.

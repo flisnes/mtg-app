@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.120.0
+
+- **Suggested tokens now suggests the rest of the cardboard too.** A deck's suggestions used to stop at tokens it puts onto the battlefield, so everything else a game asks you to keep track of was left to memory and a pile of dice. Emblems, Poison Counter, Energy Reserve, Experience, The Monarch, Day // Night, The Ring // The Ring Tempts You, On an Adventure, Plot, Radiation, Start Your Engines! // Max Speed, and the face-down helpers for morph, manifest, disguise and cloak all show up now, as does Foretell for the cards you exile face down.
+- **Dungeon decks get the right dungeons.** Venture cards suggest Dungeon of the Mad Mage, Lost Mine of Phandelver and Tomb of Annihilation; cards that take the initiative suggest Undercity // The Initiative. You only get the ones your deck can actually use.
+- These are real printed cards, so they come with the same "do I own one?" badge as everything else, and one tap still files them into the deck's token board without counting toward deck size.
+
 ## 0.119.0
 
 - **Price movers can be narrowed down.** Four sections of cards was a lot to read through when you only wanted one of them. There's now a "Show" picker for a single section, a "List" filter for cards in your collection, on your tradelist or on your wishlist, and a minimum-price filter so the 40-cent commons stop crowding out the cards actually worth watching. The alongside-it time window is unchanged.

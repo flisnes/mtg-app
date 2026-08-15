@@ -66,10 +66,12 @@ export interface OracleCard {
   power?: string | null;
   toughness?: string | null;
   /**
-   * Oracle ids of tokens this card is known to create (Scryfall's `all_parts`,
-   * component `token`), deduplicated. Absent/empty when the card creates none,
-   * or on card DBs built before this field existed. Drives the deck view's
-   * "tokens you'll need" suggestions.
+   * Oracle ids of the extra cardboard this card needs, deduplicated: tokens it
+   * creates (Scryfall's `all_parts`, component `token`) plus the marker cards it
+   * references (component `combo_piece` — emblems, Poison Counter, The Monarch,
+   * dungeons, Day // Night, …; see isMarkerCard). Absent/empty when the card
+   * needs none, or on card DBs built before this field existed. Drives the deck
+   * view's "tokens you'll need" suggestions.
    */
   tokenOracleIds?: string[];
   /**
@@ -82,6 +84,29 @@ export interface OracleCard {
   reserved?: boolean;
   /** A Commander Game Changer (per the Commander Rules Committee list). Omitted when not one. */
   gameChanger?: boolean;
+}
+
+/**
+ * A "marker" card: the printed reminder cardboard a mechanic asks you to keep
+ * next to the battlefield rather than a token you put onto it — Poison Counter,
+ * Energy Reserve, Experience, The Monarch, Undercity // The Initiative, the AFR
+ * dungeons, planeswalker emblems, Day // Night, The Ring // The Ring Tempts You,
+ * On an Adventure, Plot, Radiation, Start Your Engines! // Max Speed, and the
+ * face-down helpers (Morph, Manifest, A Mysterious Creature).
+ *
+ * Scryfall links every one of these off the cards that use them, but as
+ * `all_parts` component `combo_piece` — the same component it uses for a card's
+ * self-reference, its Alchemy rebalance and its meld partners. Those are all
+ * real cards, and no real card's type line is bare "Card", "Emblem", "Dungeon"
+ * or "Creature", so the type line is what tells them apart. Checklist and
+ * substitute cards clear that bar too (every DFC links one), but they're a
+ * sleeving aid, not part of the deck — hence the name check.
+ */
+export function isMarkerCard(name: string, typeLine: string): boolean {
+  if (/\b(Checklist|Substitute Card)\b/i.test(name)) return false;
+  const faces = typeLine.split('//').map((f) => f.trim()).filter(Boolean);
+  if (faces.length === 0) return false;
+  return faces.every((f) => f === 'Card' || f === 'Creature' || /^(Emblem|Dungeon)\b/.test(f));
 }
 
 /** One physical printing (one Scryfall card id). Drives the edition picker + collection editing. */

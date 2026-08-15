@@ -18,6 +18,7 @@ import type {
   SealedPriceMap,
   SetTypeMap,
 } from '@mtg/shared';
+import { isMarkerCard } from '@mtg/shared';
 import { getBulkEntry, getSetTypes, openBulkStream } from './scryfall.js';
 import { slimCard, type RawCard, type SlimResult } from './slimCard.js';
 import { buildSealedProducts } from './sealed.js';
@@ -262,18 +263,32 @@ async function main(): Promise<void> {
   console.log(`[pipeline] parsed ${seen} cards, kept ${kept} paper printings, ${reps.size} oracle cards`);
   if (duplicates > 0) console.warn(`[pipeline] dropped ${duplicates} duplicate printings (same scryfallId seen twice in bulk data)`);
 
-  // Resolve each representative's all_parts token references (scryfall ids) to
-  // oracle ids, so the client can look up "the tokens this card creates" by
-  // oracle card like any other card DB lookup.
+  // Resolve each representative's all_parts references (scryfall ids) to oracle
+  // ids, so the client can look up "the extra cardboard this card needs" by
+  // oracle card like any other card DB lookup. Two components feed it: `token`
+  // (what the card puts onto the battlefield) and `combo_piece` filtered down to
+  // marker cards (Poison Counter, emblems, dungeons, Day // Night, …), since
+  // `combo_piece` also carries self-references, Alchemy rebalances and meld
+  // partners — all real cards isMarkerCard rejects.
   const scryfallToOracle = new Map(printings.map((p) => [p.scryfallId, p.oracleId]));
+  let markerLinks = 0;
   const oracleCards: OracleCard[] = [...reps.values()].map((rep) => {
     const tokenIds = new Set<string>();
     for (const tokenScryfallId of rep.tokenPartIds) {
       const oracleId = scryfallToOracle.get(tokenScryfallId);
       if (oracleId && oracleId !== rep.printing.oracleId) tokenIds.add(oracleId);
     }
+    for (const comboScryfallId of rep.comboPartIds) {
+      const oracleId = scryfallToOracle.get(comboScryfallId);
+      if (!oracleId || oracleId === rep.printing.oracleId || tokenIds.has(oracleId)) continue;
+      const part = reps.get(oracleId);
+      if (!part || !isMarkerCard(part.oracle.name, part.oracle.typeLine)) continue;
+      tokenIds.add(oracleId);
+      markerLinks++;
+    }
     return toOracleCard(rep, [...tokenIds].sort());
   });
+  console.log(`[pipeline] linked ${markerLinks} marker-card references (emblems, counters, dungeons, …)`);
 
   // Chunked price-less artifacts (primary path).
   const oracleChunks = emitChunks('oracle-slim', oracleCards, (c) => c.oracleId);

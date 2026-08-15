@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.120.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Suggested tokens now covers marker cards too: emblems, Poison Counter, Energy Reserve, Experience, The Monarch, Day // Night, The Ring, On an Adventure, Plot, Radiation, Max Speed and the face-down helpers for morph, manifest and disguise.',
+      },
+      {
+        kind: 'added',
+        text: 'Venture decks get suggested the dungeons they can actually enter, and initiative cards suggest Undercity.',
+      },
+    ],
+  },
+  {
     version: '0.119.0',
     changes: [
       {

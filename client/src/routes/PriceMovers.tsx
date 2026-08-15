@@ -5,6 +5,9 @@ import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { moverStats, swingStats, type MoverStats, type SwingStats } from '../price/movers.js';
+import { isTuned, useMoverTuning } from '../price/moverTuning.js';
+import { MoverTuningSheet } from '../components/MoverTuningSheet.js';
+import { OptionsMenu } from '../components/OptionsMenu.js';
 import { convertToDisplay, currencySymbol, fmtPriceIn } from '../price/rates.js';
 import { getPrefs } from '../prefs.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
@@ -79,6 +82,10 @@ export function PriceMovers() {
   const [sort, setSort] = useListSort<MoverSort>('movers', { key: 'notable', dir: 'desc' });
   // Header search scoped to this page narrows the sections in place.
   const query = useListFilter('movers');
+  // The thresholds behind every section, tweakable from the ⋯ menu. Unlike the
+  // filters these do persist: they're a standing "this is what I call news".
+  const tuning = useMoverTuning();
+  const [tuningOpen, setTuningOpen] = useState(false);
 
   const data = useLiveQuery(async () => {
     const [histories, entries, wishes] = await Promise.all([
@@ -88,8 +95,8 @@ export function PriceMovers() {
     ]);
     const movers: { scryfallId: string; stats: MoverStats | null; swing: SwingStats | null }[] = [];
     for (const h of histories) {
-      const stats = moverStats(h, windowDays);
-      const swing = swingStats(h);
+      const stats = moverStats(h, windowDays, tuning);
+      const swing = swingStats(h, tuning);
       if (stats || swing) movers.push({ scryfallId: h.scryfallId, stats, swing });
     }
     const printMap = await getPrintingsByIds(movers.map((m) => m.scryfallId));
@@ -119,7 +126,7 @@ export function PriceMovers() {
       tracked: histories.filter((h) => owned.has(h.scryfallId) || wishedIds.has(h.scryfallId)).length,
       movers: shown,
     };
-  }, [windowDays]);
+  }, [windowDays, tuning]);
 
   // Scryfall-syntax filtering over the same rows, so `t:goblin` or `c:r` works
   // here exactly as it does on the collection.
@@ -156,7 +163,17 @@ export function PriceMovers() {
   const showing = (k: SectionKey) => section === 'all' || section === k;
 
   return (
-    <Page title="Price movers" subtitle="Notable price changes among the cards you own or wish for.">
+    <Page
+      title="Price movers"
+      subtitle="Notable price changes among the cards you own or wish for."
+      menu={
+        <OptionsMenu
+          actions={[
+            { label: 'Tune the formula…', icon: 'settings', onClick: () => setTuningOpen(true) },
+          ]}
+        />
+      }
+    >
       {data === undefined ? (
         <p className="search-meta">Loading…</p>
       ) : data.movers.length === 0 ? (
@@ -219,6 +236,16 @@ export function PriceMovers() {
           <div className="meta-row">
             <p className="search-meta">
               {count} card{count === 1 ? '' : 's'}
+              {/* Thresholds persist, so say so — otherwise a list tuned weeks
+                  ago reads as the app being quiet or noisy on its own. */}
+              {isTuned(tuning) && (
+                <>
+                  {' · '}
+                  <button className="linklike" onClick={() => setTuningOpen(true)}>
+                    custom formula
+                  </button>
+                </>
+              )}
             </p>
             <div className="meta-actions">
               <ListSortControls prefs={sort} onChange={setSort} options={SORT_OPTIONS} />
@@ -264,6 +291,7 @@ export function PriceMovers() {
       {info?.oracle && (
         <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
       )}
+      {tuningOpen && <MoverTuningSheet onClose={() => setTuningOpen(false)} />}
     </Page>
   );
 }

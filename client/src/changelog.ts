@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.121.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The ⋯ menu on Price movers opens "Tune the formula": sliders for how big a move has to be, how straight a steady trend must run, and how much history a dip or spike needs. Kept on this device, with one tap back to the defaults.',
+      },
+    ],
+  },
+  {
     version: '0.120.1',
     changes: [
       {

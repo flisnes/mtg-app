@@ -414,8 +414,12 @@ function FavoriteDeckPickerSheet({
         const cards = await db.deckCards.where('deckId').equals(deck.id).toArray();
         const main = cards.filter((c) => c.board !== 'side' && c.board !== 'token').reduce((s, c) => s + c.quantity, 0);
         const oracles = await getOracleCardsByIds(cards.map((c) => c.oracleId));
+        // Tokens don't vote toward the deck's colours.
         const present = new Set<Color>();
-        for (const card of oracles.values()) for (const c of card.colorIdentity) present.add(c);
+        for (const card of cards) {
+          if (card.board === 'token') continue;
+          for (const c of oracles.get(card.oracleId)?.colorIdentity ?? []) present.add(c);
+        }
         return { deck, main, colors: COLOR_ORDER.filter((c) => present.has(c)) };
       }),
     );

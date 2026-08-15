@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.120.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: "A deck's colour pips ignore its tokens now, so a mono-white deck making a white-and-black cleric stays mono-white.",
+      },
+    ],
+  },
+  {
     version: '0.120.0',
     changes: [
       {

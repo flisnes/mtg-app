@@ -164,8 +164,13 @@ export function Containers({ kind }: { kind: ContainerKind }) {
         const oracles = await getOracleCardsByIds(cards.map((c) => c.oracleId));
         let colors: Color[];
         if (isDeck) {
+          // Tokens don't vote: a mono-white deck making a black-and-white cleric
+          // is still mono-white.
           const present = new Set<Color>();
-          for (const card of oracles.values()) for (const c of card.colorIdentity) present.add(c);
+          for (const card of cards) {
+            if (card.board === 'token') continue;
+            for (const c of oracles.get(card.oracleId)?.colorIdentity ?? []) present.add(c);
+          }
           colors = COLOR_ORDER.filter((c) => present.has(c));
         } else {
           colors = dominantColors(cards, oracles);

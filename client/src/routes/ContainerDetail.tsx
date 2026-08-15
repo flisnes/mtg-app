@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   DECK_FORMATS,
+  isMarkerCard,
   type Color,
   type Condition,
   type ContainerKind,
@@ -124,8 +125,9 @@ const COLOR_WORDS: Record<Color, string> = { W: 'White', U: 'Blue', B: 'Black', 
  * Tokens are named tersely by Scryfall ("Plant", "Zombie") — this rebuilds the
  * fuller description players actually use ("0/1 Green Plant Creature Token"),
  * out of fields every card already carries. Non-creature tokens (Treasure,
- * Clue, an emblem…) already have a self-describing name, so they just get
- * " Token" appended.
+ * Clue…) already have a self-describing name, so they just get " Token"
+ * appended. Marker cards (Poison Counter, an emblem, Day // Night, Morph) are
+ * not tokens at all and keep their printed name verbatim.
  */
 function tokenLabel(o: {
   name: string;
@@ -134,6 +136,7 @@ function tokenLabel(o: {
   power?: string | null;
   toughness?: string | null;
 }): string {
+  if (isMarkerCard(o.name, o.typeLine)) return o.name;
   if (!/\bCreature\b/i.test(o.typeLine)) return `${o.name} Token`;
   const pt = o.power != null && o.toughness != null ? `${o.power}/${o.toughness} ` : '';
   const colorWord = o.colors.length ? `${o.colors.map((c) => COLOR_WORDS[c]).join('/')} ` : '';
@@ -202,8 +205,9 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       printing: c.scryfallId ? printMap.get(c.scryfallId) : undefined,
       owned: owned.get(c.oracleId) ?? 0,
     }));
-    // Tokens the deck's own cards create, minus whatever's already sitting in
-    // the token board — the "you'll need these" suggestions.
+    // Tokens the deck's own cards create and marker cards they reference, minus
+    // whatever's already sitting in the token board — the "you'll need these"
+    // suggestions. Tokens sort first; markers are the rarer ask.
     const haveToken = new Set(rows.filter((r) => r.board === 'token').map((r) => r.oracleId));
     const neededTokenIds = new Set<string>();
     for (const r of rows) {
@@ -213,7 +217,10 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       }
     }
     const suggestedMap = neededTokenIds.size ? await getOracleCardsByIds(neededTokenIds) : new Map<string, Priced<OracleCard>>();
-    const suggestedTokens = [...suggestedMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+    const suggestedTokens = [...suggestedMap.values()].sort((a, b) => {
+      const rank = (c: OracleCard) => (isMarkerCard(c.name, c.typeLine) ? 1 : 0);
+      return rank(a) - rank(b) || a.name.localeCompare(b.name);
+    });
     return { deck, rows, suggestedTokens };
   }, [id]);
 
@@ -1019,10 +1026,12 @@ function Board({
 }
 
 /**
- * Tokens the deck's own cards make (Scryfall's `all_parts`) that aren't in the
- * token board yet — e.g. The Necrobloom suggesting its Plant and Zombie. One
- * tap files it into the token board at quantity 1; the badge shows whether a
- * copy is already sitting in the collection, same as any other card.
+ * Extra cardboard the deck's own cards call for (Scryfall's `all_parts`) that
+ * isn't in the token board yet: tokens they make — The Necrobloom suggesting its
+ * Plant and Zombie — plus the marker cards they reference, so a Skithiryx deck
+ * gets its Poison Counter and a Sefris deck the three dungeons it can venture
+ * into. One tap files it into the token board at quantity 1; the badge shows
+ * whether a copy is already sitting in the collection, same as any other card.
  */
 function TokenSuggestions({ deckId, view, tokens }: { deckId: string; view: ViewMode; tokens: Priced<OracleCard>[] }) {
   const ownership = useOwnershipIndex();
@@ -1034,9 +1043,11 @@ function TokenSuggestions({ deckId, view, tokens }: { deckId: string; view: View
   }
 
   const items: CardItem[] = tokens.map((o) => {
+    const marker = isMarkerCard(o.name, o.typeLine);
+    const noun = marker ? 'card' : 'token';
     const own = ownedBadge(ownership?.lookup(o.oracleId), 13, {
-      yes: 'you own a copy of this token',
-      no: "you don't own this token yet",
+      yes: `you own a copy of this ${noun}`,
+      no: `you don't own this ${noun} yet`,
     });
     return {
       key: o.oracleId,
@@ -1045,7 +1056,7 @@ function TokenSuggestions({ deckId, view, tokens }: { deckId: string; view: View
       badge: own?.icon,
       badgeClass: own?.cls,
       badgeTitle: own?.title,
-      sub: 'made by a card in this deck',
+      sub: marker ? 'needed by a card in this deck' : 'made by a card in this deck',
       actions: (
         <button
           className="ghost icon-only"
@@ -1065,7 +1076,7 @@ function TokenSuggestions({ deckId, view, tokens }: { deckId: string; view: View
       <h2>
         Suggested tokens <span className="badge">{tokens.length}</span>
       </h2>
-      <p className="fine-print">Made by cards in this deck. Doesn’t count toward your deck size.</p>
+      <p className="fine-print">Made or needed by cards in this deck. Doesn’t count toward your deck size.</p>
       <CardItems view={view} items={items} />
     </div>
   );

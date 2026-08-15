@@ -170,6 +170,12 @@ export interface SlimResult {
   };
   /** Scryfall ids of tokens this printing's `all_parts` says the card creates. */
   tokenPartIds: string[];
+  /**
+   * Scryfall ids of this printing's `combo_piece` parts. Mostly real cards (the
+   * self-reference, Alchemy rebalances, meld partners) — slim.ts keeps only the
+   * ones that resolve to a marker card (see isMarkerCard).
+   */
+  comboPartIds: string[];
 }
 
 /** Returns null for cards we deliberately drop (no oracle_id, non-paper, digital-only). */
@@ -204,6 +210,9 @@ export function slimCard(card: RawCard): SlimResult | null {
   const tokenPartIds = (card.all_parts ?? [])
     .filter((p) => p.component === 'token' && p.id !== card.id)
     .map((p) => p.id);
+  const comboPartIds = (card.all_parts ?? [])
+    .filter((p) => p.component === 'combo_piece' && p.id !== card.id)
+    .map((p) => p.id);
 
   return {
     printing,
@@ -231,5 +240,6 @@ export function slimCard(card: RawCard): SlimResult | null {
       ...(card.game_changer ? { gameChanger: true } : {}),
     },
     tokenPartIds,
+    comboPartIds,
   };
 }

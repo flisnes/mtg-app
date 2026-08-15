@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.120.1
+
+- **Tokens no longer colour your deck.** A mono-white commander deck that makes a white-and-black cleric was showing up as Orzhov in the deck list. Tokens are left out of the colour identity now, so the pips match what the deck actually plays.
+
 ## 0.120.0
 
 - **Suggested tokens now suggests the rest of the cardboard too.** A deck's suggestions used to stop at tokens it puts onto the battlefield, so everything else a game asks you to keep track of was left to memory and a pile of dice. Emblems, Poison Counter, Energy Reserve, Experience, The Monarch, Day // Night, The Ring // The Ring Tempts You, On an Adventure, Plot, Radiation, Start Your Engines! // Max Speed, and the face-down helpers for morph, manifest, disguise and cloak all show up now, as does Foretell for the cards you exile face down.

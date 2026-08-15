@@ -48,15 +48,17 @@ const SECTION_OPTIONS: [SectionKey | 'all', string][] = [
 ];
 
 // A 30% move on a bulk rare is still pocket change; this is the "only tell me
-// about cards worth watching" dial.
-const MIN_PRICES = [0, 1, 5, 20, 50];
+// about cards worth watching" dial. Measured across every copy you own, so a
+// spec pile isn't filtered out by the unit price of one card in it.
+const MIN_VALUES = [0, 1, 5, 20, 50];
 
-type MoverSort = 'notable' | 'change' | 'changePct' | 'price' | 'name';
+type MoverSort = 'notable' | 'change' | 'changePct' | 'price' | 'position' | 'name';
 const SORT_OPTIONS: [MoverSort, string][] = [
   ['notable', 'Sort: Most notable'],
   ['change', 'Sort: Change'],
   ['changePct', 'Sort: Change %'],
   ['price', 'Sort: Price'],
+  ['position', 'Sort: Value held'],
   ['name', 'Sort: Name'],
 ];
 
@@ -66,6 +68,8 @@ interface Mover {
   swing: SwingStats | null;
   printing?: Priced<Printing>;
   oracle?: Priced<OracleCard>;
+  /** Copies you hold, across conditions and finishes. 0 for a wishlist-only card. */
+  qty: number;
   inCollection: boolean;
   onTradelist: boolean;
   onWishlist: boolean;
@@ -78,7 +82,7 @@ export function PriceMovers() {
   // filter that hides rows shouldn't outlive the visit that set it.
   const [listFilter, setListFilter] = useState<ListFilter>('all');
   const [section, setSection] = useState<SectionKey | 'all'>('all');
-  const [minPrice, setMinPrice] = useState(0);
+  const [minValue, setMinValue] = useState(0);
   const [sort, setSort] = useListSort<MoverSort>('movers', { key: 'notable', dir: 'desc' });
   // Header search scoped to this page narrows the sections in place.
   const query = useListFilter('movers');
@@ -93,11 +97,18 @@ export function PriceMovers() {
       db.collection.toArray(),
       db.wishlist.toArray(),
     ]);
-    const movers: { scryfallId: string; stats: MoverStats | null; swing: SwingStats | null }[] = [];
+    // Copies held per printing, summed across conditions, finishes and
+    // languages: a spec pile is usually all one row, but four nonfoil plus a
+    // foil is still five copies riding the same price history.
+    const qtyById = new Map<string, number>();
+    for (const e of entries) qtyById.set(e.scryfallId, (qtyById.get(e.scryfallId) ?? 0) + e.quantity);
+
+    const movers: { scryfallId: string; stats: MoverStats | null; swing: SwingStats | null; qty: number }[] = [];
     for (const h of histories) {
-      const stats = moverStats(h, windowDays, tuning);
-      const swing = swingStats(h, tuning);
-      if (stats || swing) movers.push({ scryfallId: h.scryfallId, stats, swing });
+      const qty = qtyById.get(h.scryfallId) ?? 0;
+      const stats = moverStats(h, windowDays, tuning, qty);
+      const swing = swingStats(h, tuning, qty);
+      if (stats || swing) movers.push({ scryfallId: h.scryfallId, stats, swing, qty });
     }
     const printMap = await getPrintingsByIds(movers.map((m) => m.scryfallId));
     const oracleMap = await getOracleCardsByIds([...printMap.values()].map((p) => p.oracleId));
@@ -142,7 +153,7 @@ export function PriceMovers() {
       if (listFilter === 'collection' && !m.inCollection) return false;
       if (listFilter === 'tradelist' && !m.onTradelist) return false;
       if (listFilter === 'wishlist' && !m.onWishlist) return false;
-      return minPrice === 0 || (currentPrice(m) ?? 0) >= minPrice;
+      return minValue === 0 || (positionValue(m) ?? 0) >= minValue;
     });
     const big = all.filter((m) => m.stats?.substantial);
     const byScore = (m: Mover) => m.stats?.score ?? null;
@@ -157,7 +168,7 @@ export function PriceMovers() {
     const visible = (Object.keys(sections) as SectionKey[]).filter((k) => section === 'all' || section === k);
     const ids = new Set(visible.flatMap((k) => sections[k].map((m) => m.scryfallId)));
     return { ...sections, count: ids.size };
-  }, [data, matchesQuery, listFilter, minPrice, section, sort]);
+  }, [data, matchesQuery, listFilter, minValue, section, sort]);
 
   const symbol = currencySymbol(getPrefs().displayCurrency);
   const showing = (k: SectionKey) => section === 'all' || section === k;
@@ -219,15 +230,15 @@ export function PriceMovers() {
               ))}
             </select>
             <select
-              className={minPrice === 0 ? '' : 'filter-on'}
-              value={String(minPrice)}
-              onChange={(e) => setMinPrice(Number(e.target.value))}
-              aria-label="Minimum card price"
-              title="Hide cards cheaper than this, whichever way they moved"
+              className={minValue === 0 ? '' : 'filter-on'}
+              value={String(minValue)}
+              onChange={(e) => setMinValue(Number(e.target.value))}
+              aria-label="Minimum value held"
+              title="Hide cards whose copies are worth less than this together, whichever way they moved"
             >
-              {MIN_PRICES.map((p) => (
+              {MIN_VALUES.map((p) => (
                 <option key={p} value={String(p)}>
-                  {p === 0 ? 'Price: Any' : `Price: ${symbol}${p}+`}
+                  {p === 0 ? 'Value: Any' : `Value: ${symbol}${p}+`}
                 </option>
               ))}
             </select>
@@ -254,7 +265,7 @@ export function PriceMovers() {
 
           {/* A section's own "no big risers in this window" would misread as a
               statement about the market when it's really the filters talking. */}
-          {count === 0 && (query.trim() !== '' || listFilter !== 'all' || minPrice > 0) ? (
+          {count === 0 && (query.trim() !== '' || listFilter !== 'all' || minValue > 0) ? (
             <p className="search-meta">Nothing here matches.</p>
           ) : (
             <>
@@ -369,8 +380,21 @@ function MoverSub({ m }: { m: Mover }) {
         {s.pct != null && ` (${s.pct >= 0 ? '+' : '−'}${Math.abs(s.pct).toFixed(1)}%)`}
       </span>{' '}
       in {s.spanDays} day{s.spanDays === 1 ? '' : 's'}
+      {/* A 15-cent move on its own reads as a rounding error. Across the pile
+          it's what put the card here, so the pile says its own number. */}
+      <Stack qty={m.qty} cur={s.cur} total={Math.abs(s.delta) * m.qty} />
       {s.trend && <span className="badge">{s.trend === 'rising' ? '↗ steady' : '↘ steady'}</span>}
       <Sparkline values={s.series} width={64} height={18} />
+    </span>
+  );
+}
+
+/** "×30 = €4,50" for the cards you hold more than one of; nothing for singles. */
+function Stack({ qty, cur, total }: { qty: number; cur: 'eur' | 'usd'; total: number }) {
+  if (qty < 2) return null;
+  return (
+    <span className="mover-stack" title={`${qty} copies, ${formatMoney(cur, total)} across all of them`}>
+      ×{qty} = {formatMoney(cur, total)}
     </span>
   );
 }
@@ -389,6 +413,7 @@ function SwingSub({ m }: { m: Mover }) {
         {s.kind === 'dip' ? '▼ At a dip' : '▲ At a spike'}
       </span>{' '}
       · swings {formatMoney(s.cur, s.low)}–{formatMoney(s.cur, s.high)} over {s.spanDays} days
+      <Stack qty={m.qty} cur={s.cur} total={(s.high - s.low) * m.qty} />
       <Sparkline values={s.series} width={64} height={18} />
     </span>
   );
@@ -415,11 +440,21 @@ function currentPrice(m: Mover): number | null {
 }
 
 /**
+ * What your copies are worth together. A wishlist card you own none of is
+ * counted once: the price still means something to you, it's just not held.
+ */
+function positionValue(m: Mover): number | null {
+  const price = currentPrice(m);
+  return price == null ? null : price * Math.max(1, m.qty);
+}
+
+/**
  * The value a sort key reads off a mover. Change is compared by magnitude: the
  * section a card sits in already carries the sign, so "biggest change" in
  * Fallers means the deepest drop, not the shallowest.
  */
 function sortField(m: Mover, key: MoverSort, swing: boolean): number | null {
+  if (key === 'position') return positionValue(m);
   if (swing) return key === 'price' && m.swing ? inDisplay(m.swing.cur, m.swing.current) : null;
   const s = m.stats;
   if (!s) return null;

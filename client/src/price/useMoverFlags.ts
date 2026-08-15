@@ -12,9 +12,14 @@ import { useMoverTuning } from './moverTuning.js';
 export function useMoverFlags(): Map<string, 'up' | 'down'> | undefined {
   const tuning = useMoverTuning();
   return useLiveQuery(async () => {
+    const [histories, entries] = await Promise.all([db.priceHistories.toArray(), db.collection.toArray()]);
+    // Copies held decide whether a cheap card's move is pocket change or a
+    // real position (see the position term in movers.ts).
+    const qtyById = new Map<string, number>();
+    for (const e of entries) qtyById.set(e.scryfallId, (qtyById.get(e.scryfallId) ?? 0) + e.quantity);
     const m = new Map<string, 'up' | 'down'>();
-    for (const h of await db.priceHistories.toArray()) {
-      const f = moverFlag(h, tuning);
+    for (const h of histories) {
+      const f = moverFlag(h, tuning, qtyById.get(h.scryfallId) ?? 0);
       if (f) m.set(h.scryfallId, f);
     }
     return m;

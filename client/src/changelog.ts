@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.122.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Price movers counts every copy you own, so a pile of thirty cheap specs moving 15 cents each is reported as the €4.50 it is. Rows show "×30 = €4,50", and there is a slider for it in Tune the formula.',
+      },
+      {
+        kind: 'changed',
+        text: 'The movers price filter is now a value filter: it asks what your copies are worth together, not what one costs. New "Sort: Value held" alongside it.',
+      },
+    ],
+  },
+  {
     version: '0.121.0',
     changes: [
       {

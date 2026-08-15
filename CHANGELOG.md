@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.122.0
+
+- **Speculating on cheap cards in bulk finally registers.** Thirty copies of a 40-cent card creeping to 55 cents is €4.50 of your money moving, and Price movers used to say nothing at all: the move passed the percentage test and then got thrown out as noise, because "noise" was measured one copy at a time. Both the noise floor and the formula now count every copy you own, so a spec pile that moves gets reported like the position it is.
+- **A new dial for it: "Move across all your copies", default €10.** It only applies to cards you own more than one of, so a collection of singles behaves exactly as it did before. Playsets benefit too: four copies of a €20 card going to €22 is €8, which now counts even though €2 on its own wouldn't.
+- **Rows say what the stack did.** A card you own multiples of shows `×30 = €4,50` next to the per-copy change, so a 15-cent move never reads as a rounding error.
+- **The price filter is now a value filter.** It asks what your copies are worth together, not what one costs, so setting "Value: €5+" no longer hides the pile you bought precisely because each card was cheap. New "Sort: Value held" to go with it.
+- The up and down arrows on cards elsewhere in the app follow the same rule, so a spec pile that's moving is marked in your collection list too.
+
 ## 0.121.0
 
 - **Price movers takes tuning now.** The thresholds behind the four sections were baked in: a card had to move about €5 or about 25% before anything said so. The ⋯ menu on the Price movers screen opens "Tune the formula", where ten sliders decide what counts as news for you. Drop them if you want to hear about every 60-cent wobble, raise them if you only care when a card moves real money.

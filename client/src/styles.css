@@ -2922,6 +2922,13 @@ button.primary {
   display: inline-block;
   vertical-align: middle;
 }
+/* What the whole stack did, for the cards you hold multiples of. Reads as an
+   aside to the per-copy change it follows, not as a second headline. */
+.mover-stack {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 /* ---- Price-mover tuning sheet ---- */
 .tuning-group {

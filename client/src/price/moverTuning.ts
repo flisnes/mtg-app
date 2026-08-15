@@ -28,7 +28,7 @@ export const TUNING_GROUPS: TuningGroup[] = [
   {
     title: 'Risers and fallers',
     blurb:
-      'A move counts when its size, as a share of these two thresholds, adds up to 1. Either one alone qualifies, and half of each together does too.',
+      'A move counts when its size, as a share of these thresholds, adds up to 1. Any one alone qualifies, and half of two of them together does too.',
     fields: [
       {
         key: 'absRef',
@@ -49,9 +49,18 @@ export const TUNING_GROUPS: TuningGroup[] = [
         unit: 'percent',
       },
       {
+        key: 'positionRef',
+        label: 'Move across all your copies',
+        hint: 'Speculating on cheap cards in bulk? Thirty copies moving 15 cents each is this much. Only applies to cards you own more than one of.',
+        min: 1,
+        max: 50,
+        step: 0.5,
+        unit: 'money',
+      },
+      {
         key: 'noiseFloor',
         label: 'Ignore moves under',
-        hint: 'Keeps a bulk common doubling from ten to twenty cents out of the list.',
+        hint: 'Measured across your whole stack, so a pile of cheap cards is not written off as a blip.',
         min: 0,
         max: 5,
         step: 0.05,

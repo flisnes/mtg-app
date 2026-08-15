@@ -14,11 +14,21 @@ import type { PriceHistory } from '@mtg/shared';
  * percentage move, an expensive card only a big absolute one, and mid-range
  * cards can combine the two. A move is substantial when
  *
- *   |Δ| / absRef + |Δ%| / pctRef ≥ 1
+ *   |Δ| / absRef + |Δ%| / pctRef + |Δ|·qty / positionRef ≥ 1
  *
  * i.e. ±absRef alone qualifies, ±pctRef% alone qualifies, and e.g. half of
- * each together also qualifies. noiseFloor kills the penny cards whose ±100%
- * is a 10-cent blip. The same left-hand sum doubles as the ranking score.
+ * each together also qualifies. The same left-hand sum doubles as the ranking
+ * score.
+ *
+ * The third term is the spec pile: thirty copies of a 40-cent card that goes
+ * to 55 cents is €4.50 of your money moving, which the per-copy terms can't
+ * see. It only applies to cards you hold more than one of, so a collection of
+ * singles behaves exactly as it did before positionRef existed.
+ *
+ * noiseFloor kills the penny cards whose ±100% is a 10-cent blip — and it too
+ * is measured against the whole stack, because that same blip across a pile is
+ * real money. This is what used to silence bulk specs: the percentage test
+ * passed and the floor threw the card out anyway.
  *
  * A trend is "steady" when the day-by-day readings correlate strongly with
  * time (Pearson r on day-index vs price), not just when the endpoints differ —
@@ -29,7 +39,9 @@ export interface MoverTuning {
   absRef: number;
   /** Percentage change that counts on its own. */
   pctRef: number;
-  /** |Δ| below this never qualifies, whatever the %. */
+  /** Change across every copy you own that counts on its own; multiples only. */
+  positionRef: number;
+  /** |Δ| (per copy or across the stack) below this never qualifies. */
   noiseFloor: number;
   trendMinPoints: number;
   trendMinSpanDays: number;
@@ -46,6 +58,7 @@ export interface MoverTuning {
 export const DEFAULT_TUNING: MoverTuning = {
   absRef: 5, // currency units (≈€5 counts by itself)
   pctRef: 25, // percent (±25% counts by itself)
+  positionRef: 10, // ≈€10 across the stack counts by itself
   noiseFloor: 0.25,
   trendMinPoints: 5,
   trendMinSpanDays: 5,
@@ -55,6 +68,24 @@ export const DEFAULT_TUNING: MoverTuning = {
   swingMinSpanDays: 10,
   swingEdgeBand: 0.2, // within 20% of the range's height from an edge
 };
+
+/**
+ * The substantiality sum for a change of `delta` (currency units) on a card
+ * priced `base`, held `qty` times. `pct` is passed in rather than derived
+ * because window moves measure it against the baseline reading and swings
+ * against the range's low.
+ */
+function scoreMove(delta: number, pct: number | null, qty: number, t: MoverTuning): number {
+  // Singles score exactly as they did before the position term existed: one
+  // copy IS the per-copy move, and counting it twice would just lower absRef.
+  const position = qty > 1 ? (Math.abs(delta) * qty) / t.positionRef : 0;
+  return Math.abs(delta) / t.absRef + (pct != null ? Math.abs(pct) / t.pctRef : 0) + position;
+}
+
+/** Above the noise floor per copy, or across the stack. */
+function aboveFloor(delta: number, qty: number, t: MoverTuning): boolean {
+  return Math.abs(delta) >= t.noiseFloor || Math.abs(delta) * Math.max(1, qty) >= t.noiseFloor;
+}
 
 export interface MoverStats {
   cur: 'eur' | 'usd';
@@ -109,7 +140,11 @@ export interface SwingStats {
  * is too short, doesn't oscillate, the range is trivial, or the current price
  * sits in the middle of it.
  */
-export function swingStats(h: PriceHistory, tuning: MoverTuning = DEFAULT_TUNING): SwingStats | null {
+export function swingStats(
+  h: PriceHistory,
+  tuning: MoverTuning = DEFAULT_TUNING,
+  qty = 1,
+): SwingStats | null {
   const cur = pickCurrency(h);
   if (!cur) return null;
   const pts = points(h, cur);
@@ -126,8 +161,8 @@ export function swingStats(h: PriceHistory, tuning: MoverTuning = DEFAULT_TUNING
   }
   const range = high - low;
   const rangePct = low > 0 ? (range / low) * 100 : null;
-  const score = range / tuning.absRef + (rangePct != null ? rangePct / tuning.pctRef : 0);
-  if (range < tuning.noiseFloor || score < 1) return null;
+  const score = scoreMove(range, rangePct, qty, tuning);
+  if (!aboveFloor(range, qty, tuning) || score < 1) return null;
 
   const mid = (low + high) / 2;
   let side = 0; // -1 below the midline, 1 above
@@ -163,8 +198,12 @@ export const BADGE_WINDOW_DAYS = 7;
  * Direction for the corner badge in card lists: a substantial move within the
  * last BADGE_WINDOW_DAYS wins, else a steady long-term drift, else nothing.
  */
-export function moverFlag(h: PriceHistory, tuning: MoverTuning = DEFAULT_TUNING): 'up' | 'down' | null {
-  const s = moverStats(h, BADGE_WINDOW_DAYS, tuning);
+export function moverFlag(
+  h: PriceHistory,
+  tuning: MoverTuning = DEFAULT_TUNING,
+  qty = 1,
+): 'up' | 'down' | null {
+  const s = moverStats(h, BADGE_WINDOW_DAYS, tuning, qty);
   if (!s) return null;
   if (s.substantial) return s.delta > 0 ? 'up' : 'down';
   if (s.trend) return s.trend === 'rising' ? 'up' : 'down';
@@ -224,6 +263,7 @@ export function moverStats(
   h: PriceHistory,
   windowDays: number,
   tuning: MoverTuning = DEFAULT_TUNING,
+  qty = 1,
 ): MoverStats | null {
   const cur = pickCurrency(h);
   if (!cur) return null;
@@ -242,8 +282,8 @@ export function moverStats(
 
   const delta = current - baseline;
   const pct = baseline ? (delta / baseline) * 100 : null;
-  const score = Math.abs(delta) / tuning.absRef + (pct != null ? Math.abs(pct) / tuning.pctRef : 0);
-  const substantial = Math.abs(delta) >= tuning.noiseFloor && score >= 1;
+  const score = scoreMove(delta, pct, qty, tuning);
+  const substantial = aboveFloor(delta, qty, tuning) && score >= 1;
 
   // Steady trend over everything recorded, not just the window.
   let trend: MoverStats['trend'] = null;
@@ -254,11 +294,7 @@ export function moverStats(
     const r = pearson(pts);
     if (r != null) {
       trendR = Math.abs(r);
-      if (
-        trendR >= tuning.trendMinR &&
-        Math.abs(current - first) >= tuning.noiseFloor &&
-        totalPct >= tuning.trendMinPct
-      ) {
+      if (trendR >= tuning.trendMinR && aboveFloor(current - first, qty, tuning) && totalPct >= tuning.trendMinPct) {
         trend = r > 0 ? 'rising' : 'falling';
       }
     }

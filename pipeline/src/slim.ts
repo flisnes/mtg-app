@@ -22,6 +22,7 @@ import { getBulkEntry, getSetTypes, openBulkStream } from './scryfall.js';
 import { slimCard, type RawCard, type SlimResult } from './slimCard.js';
 import { buildSealedProducts } from './sealed.js';
 import { fetchSealedUsdPrices } from './sealedPrices.js';
+import { fetchSealedEurPrices } from './cardmarketPrices.js';
 
 // Nightly card-DB pipeline (beta plan §3). Downloads Scryfall `default_cards`,
 // slims each card to ~18 fields, and emits:
@@ -304,27 +305,58 @@ async function main(): Promise<void> {
           `(${stats.productsRandomOnly} unopened-only, ${stats.cardsUnavailable} card refs unavailable)`,
       );
 
-      // USD prices for those products. Separately best-effort *inside* the
-      // sealed block: a TCGCSV outage costs the prices, not the catalog.
-      // SKIP_SEALED_PRICES=1 opts out (it's ~900 HTTP calls and a couple of
-      // minutes, which a local fixture build doesn't want).
+      // Prices for those products, from two sources because no single one
+      // covers both markets: TCGplayer (via TCGCSV) for USD, Cardmarket's
+      // published price guide for EUR. Each is independently best-effort
+      // *inside* the sealed block, so one going down costs half the prices
+      // rather than the catalog. SKIP_SEALED_PRICES=1 opts out of both (they're
+      // a couple of minutes and ~30 MB, which a local fixture build doesn't
+      // want).
       if (!process.env.SKIP_SEALED_PRICES) {
+        const usdByTcg: Record<string, number> = {};
+        const eurByMcm: Record<string, number> = {};
+
         try {
           const wanted = new Set(products.map((p) => p.identifiers?.tcgplayer).filter((v): v is string => !!v));
-          const { prices, stats: priceStats } = await fetchSealedUsdPrices(wanted);
-          if (priceStats.priced > 0) {
-            const sorted: SealedPriceMap = Object.fromEntries(
-              Object.entries(prices).sort(([a], [b]) => (a < b ? -1 : 1)),
-            );
-            sealedPricesArtifact = emitHashed('sealed-prices', sorted, priceStats.priced);
-          }
+          const { prices, stats: s } = await fetchSealedUsdPrices(wanted);
+          Object.assign(usdByTcg, prices);
           console.log(
-            `[pipeline]   sealed prices: ${priceStats.priced}/${priceStats.wanted} products priced ` +
-              `(${priceStats.groups - priceStats.groupsFailed}/${priceStats.groups} groups)`,
+            `[pipeline]   sealed USD: ${s.priced}/${s.wanted} products priced ` +
+              `(${s.groups - s.groupsFailed}/${s.groups} TCGCSV groups)`,
           );
         } catch (err) {
-          console.warn('[pipeline] sealed price fetch failed; shipping catalog without prices:', (err as Error).message);
+          console.warn('[pipeline] sealed USD price fetch failed:', (err as Error).message);
         }
+
+        try {
+          const wanted = new Set(products.map((p) => p.identifiers?.mcm).filter((v): v is string => !!v));
+          const { prices, stats: s } = await fetchSealedEurPrices(wanted);
+          Object.assign(eurByMcm, prices);
+          console.log(
+            `[pipeline]   sealed EUR: ${s.priced}/${s.wanted} products priced ` +
+              `(Cardmarket guide of ${s.rows} rows, ${s.createdAt ?? 'undated'})`,
+          );
+        } catch (err) {
+          console.warn('[pipeline] sealed EUR price fetch failed:', (err as Error).message);
+        }
+
+        // One map keyed by the product's own id, so the client needs no
+        // marketplace ids to price what it owns. Trailing nulls trimmed.
+        const merged: SealedPriceMap = {};
+        for (const p of products) {
+          const usd = p.identifiers?.tcgplayer ? (usdByTcg[p.identifiers.tcgplayer] ?? null) : null;
+          const eur = p.identifiers?.mcm ? (eurByMcm[p.identifiers.mcm] ?? null) : null;
+          if (usd == null && eur == null) continue;
+          merged[p.id] = eur == null ? [usd] : [usd, eur];
+        }
+        const count = Object.keys(merged).length;
+        if (count > 0) {
+          const sorted: SealedPriceMap = Object.fromEntries(
+            Object.entries(merged).sort(([a], [b]) => (a < b ? -1 : 1)),
+          );
+          sealedPricesArtifact = emitHashed('sealed-prices', sorted, count);
+        }
+        console.log(`[pipeline]   sealed prices: ${count}/${products.length} products have a price`);
       }
     } catch (err) {
       console.warn('[pipeline] sealed-product build failed; shipping without it:', (err as Error).message);

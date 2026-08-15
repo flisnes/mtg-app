@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.118.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Sealed products now have European prices from Cardmarket, alongside the American ones from TCGplayer. They follow your currency settings like every other price, and the source is named beside the figure.',
+      },
+      {
+        kind: 'changed',
+        text: 'Sealed value is no longer stuck in US dollars, so your collection total is finally all in one currency.',
+      },
+    ],
+  },
+  {
     version: '0.117.0',
     changes: [
       {

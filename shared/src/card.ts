@@ -302,13 +302,24 @@ export interface SealedProduct {
 }
 
 /**
- * Sealed product id → current market price in USD. Shipped separately from the
- * catalog for the same reason card prices are: prices churn daily while the
- * product list barely moves, and a combined artifact would re-download in full
- * every night. Sourced from TCGplayer (via TCGCSV) — MTGJSON prices singles
- * only, and Scryfall has no concept of a sealed product at all.
+ * `[usd, eur]` for one sealed product; a trailing null is trimmed, so a
+ * USD-only product is just `[usd]`. Mirrors PriceTuple's shape and reason.
  */
-export type SealedPriceMap = Record<string, number>;
+export type SealedPriceTuple = [number | null] | [number | null, number | null];
+
+/**
+ * Sealed product id (the MTGJSON uuid, i.e. `SealedProduct.id`) → its prices.
+ * Shipped separately from the catalog for the same reason card prices are:
+ * prices churn daily while the product list barely moves, and a combined
+ * artifact would re-download in full every night.
+ *
+ * Two sources, because no single one covers both markets: TCGplayer market
+ * prices via TCGCSV for USD, and Cardmarket's own published price guide for
+ * EUR. Neither MTGJSON nor Scryfall prices sealed product at all — MTGJSON's
+ * feed is singles-only and Scryfall has no sealed object. A product may have
+ * one, both or neither, so consumers must handle a missing side.
+ */
+export type SealedPriceMap = Record<string, SealedPriceTuple>;
 
 export interface CardDbArtifactMeta {
   url: string;

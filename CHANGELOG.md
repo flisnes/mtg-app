@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.118.0
+
+- **Sealed products are priced in euros too.** Last release could only quote them in US dollars, because the American market was the only sealed price we could get at. Cardmarket publishes its own daily price guide and permits open use of it, so European prices are in now: every sealed product carries both, and they follow the same "Show prices in" and base-currency settings as everything else. Sealed products no longer sit apart from the rest of your collection's value in a currency you don't shop in.
+- **The two markets disagree, and now you can see it.** A Bloomburrow collector booster box trends around €783 on Cardmarket and around $1,173 on TCGplayer. Whichever your base currency is, that's the market you're quoted, with the source named beside the price. If a product is only listed on one of them, the other one fills in rather than showing nothing.
+- Coverage is close to total: every sealed product Cardmarket lists has a price.
+
 ## 0.117.0
 
 - **You can own a sealed booster box now.** "Add sealed product" was only ever a shortcut for the cards inside a precon, so anything with random contents — booster boxes, displays, collector boosters, a single pack — wasn't even in the list. Every sealed product Magic has ever had is in there now, and picking one asks what you actually mean: keep it sealed, or open it and put the cards in your collection. Products whose contents are random only offer the first, because nobody knows what's in an unopened pack.

@@ -13,7 +13,6 @@
 // build. Every failure is counted and skipped, and a completely empty result
 // simply means the manifest ships without a sealedPrices artifact.
 
-import type { SealedPriceMap } from '@mtg/shared';
 import { USER_AGENT } from './mtgjson.js';
 
 /** Category 1 is Magic; groups are its sets. */
@@ -60,8 +59,8 @@ async function getJson<T>(url: string): Promise<T> {
  */
 export async function fetchSealedUsdPrices(
   wanted: Set<string>,
-): Promise<{ prices: SealedPriceMap; stats: SealedPriceStats }> {
-  const prices: SealedPriceMap = {};
+): Promise<{ prices: Record<string, number>; stats: SealedPriceStats }> {
+  const prices: Record<string, number> = {};
   const stats: SealedPriceStats = { groups: 0, groupsFailed: 0, priced: 0, wanted: wanted.size };
   if (wanted.size === 0) return { prices, stats };
 

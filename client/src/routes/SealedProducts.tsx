@@ -5,10 +5,11 @@ import { db } from '../db/schema.js';
 import { removeSealedItem, setSealedItemQuantity } from '../db/dataAccess.js';
 import { loadSealedProducts } from '../sealed/store.js';
 import { SealedImage } from '../sealed/SealedImage.js';
-import { fmtSealedPrice, itemImage, sealedPrice } from '../sealed/product.js';
+import { fmtSealedPrice, itemImage, sealedPriceOf } from '../sealed/product.js';
 import { AddSealedProductSheet } from '../components/AddSealedProductSheet.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
-import { HeaderValue } from '../components/ValueSummary.js';
+import { addToTotal, type PriceTotal } from '../components/CardSorting.js';
+import { HeaderValue, headerValue } from '../components/ValueSummary.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { EmptyState, Page } from './Page.js';
 
@@ -39,12 +40,12 @@ export function SealedProducts() {
     ? [...items].sort((a, b) => a.name.localeCompare(b.name))
     : undefined;
 
-  let total = 0;
+  const total: PriceTotal = { eur: 0, usd: 0 };
   let unpriced = 0;
   for (const item of sorted ?? []) {
-    const price = sealedPrice(prices, item.tcgplayerId);
-    if (price == null) unpriced += item.quantity;
-    else total += price * item.quantity;
+    const price = sealedPriceOf(prices, item.productId);
+    if (!price) unpriced += item.quantity;
+    else addToTotal(total, item.quantity, price);
   }
   const boxes = (sorted ?? []).reduce((s, i) => s + i.quantity, 0);
 
@@ -65,9 +66,9 @@ export function SealedProducts() {
       aside={
         <HeaderValue
           label="Sealed value"
-          value={total > 0 ? fmtSealedPrice(total) : undefined}
+          value={headerValue(total)}
           note={unpriced > 0 ? `${unpriced} unpriced` : undefined}
-          title="TCGplayer market price, in USD"
+          title="Market prices: TCGplayer in USD, Cardmarket in EUR"
         />
       }
       menu={
@@ -96,7 +97,7 @@ export function SealedProducts() {
           </div>
           <ul className="sealed-owned">
             {sorted.map((item) => {
-              const price = sealedPrice(prices, item.tcgplayerId);
+              const priceText = fmtSealedPrice(sealedPriceOf(prices, item.productId));
               return (
                 <li key={item.id} className="sealed-owned-row">
                   <SealedImage url={itemImage(item, 'thumb')} alt="" className="sealed-shot-sm" />
@@ -104,7 +105,7 @@ export function SealedProducts() {
                     <span className="sealed-result-name">{item.name}</span>
                     <span className="sealed-result-sub">
                       {item.setName ?? item.set.toUpperCase()}
-                      {price != null ? ` · ${fmtSealedPrice(price)} each` : ''}
+                      {priceText ? ` · ${priceText} each` : ''}
                     </span>
                   </div>
                   <div className="sealed-owned-qty">
@@ -133,8 +134,8 @@ export function SealedProducts() {
           {unpriced > 0 && (
             <p className="fine-print">
               {unpriced === 1
-                ? '1 product has no TCGplayer market price and isn’t counted in the total.'
-                : `${unpriced} products have no TCGplayer market price and aren’t counted in the total.`}
+                ? '1 product has no market price and isn’t counted in the total.'
+                : `${unpriced} products have no market price and aren’t counted in the total.`}
             </p>
           )}
         </>

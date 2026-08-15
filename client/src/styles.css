@@ -1729,7 +1729,8 @@ body:has(.bulk-bar) .app-main {
   gap: 0.5rem;
   margin-top: 0.75rem;
 }
-.filter-row select {
+.filter-row select,
+.filter-row input[type='search'] {
   flex: 1;
   min-width: 110px;
   padding: 0.5rem 0.6rem;
@@ -1738,6 +1739,16 @@ body:has(.bulk-bar) .app-main {
   background: var(--surface);
   color: var(--text);
   font: inherit;
+}
+/* The free-text filter earns more of the row than the selects beside it. */
+.filter-row input[type='search'] {
+  flex: 2;
+  min-width: 150px;
+}
+/* A select that's actively hiding rows says so, wherever it lives. */
+.filter-row select.filter-on {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .deck-filter-toggle {
   display: inline-flex;

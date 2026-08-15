@@ -20,6 +20,23 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.119.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Price movers gained filters (one section at a time, which list a card is on, a minimum price) and sorting by change, change %, price or name.',
+      },
+      {
+        kind: 'added',
+        text: 'Tapping search on the price movers screen now offers a "Price movers" chip that filters the sections in place, full Scryfall syntax included.',
+      },
+      {
+        kind: 'added',
+        text: 'Sealed products can be filtered by name, set, product type or whether they have a price, and sorted by price, total value, copies, set, release date or date added.',
+      },
+    ],
+  },
+  {
     version: '0.118.0',
     changes: [
       {

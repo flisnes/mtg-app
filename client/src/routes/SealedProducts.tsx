@@ -1,14 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { SealedItem, SealedPriceMap } from '@mtg/shared';
+import type { SealedItem, SealedPriceMap, SealedProduct } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { removeSealedItem, setSealedItemQuantity } from '../db/dataAccess.js';
 import { loadSealedProducts } from '../sealed/store.js';
 import { SealedImage } from '../sealed/SealedImage.js';
-import { fmtSealedPrice, itemImage, sealedPriceOf } from '../sealed/product.js';
+import { categoryLabel, fmtSealedPrice, itemImage, sealedPriceOf } from '../sealed/product.js';
 import { AddSealedProductSheet } from '../components/AddSealedProductSheet.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
-import { addToTotal, type PriceTotal } from '../components/CardSorting.js';
+import {
+  ListSortControls,
+  addToTotal,
+  compareNullable,
+  priceValue,
+  useListSort,
+  type PriceTotal,
+} from '../components/CardSorting.js';
 import { HeaderValue, headerValue } from '../components/ValueSummary.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { EmptyState, Page } from './Page.js';
@@ -18,36 +25,92 @@ import { EmptyState, Page } from './Page.js';
 // oracleId, so none of the collection's search, sorting, price history or
 // mover machinery applies to them.
 
+type SealedSort = 'name' | 'price' | 'value' | 'copies' | 'set' | 'released' | 'added';
+const SORT_OPTIONS: [SealedSort, string][] = [
+  ['name', 'Sort: Name'],
+  ['price', 'Sort: Price each'],
+  ['value', 'Sort: Total value'],
+  ['copies', 'Sort: Copies'],
+  ['set', 'Sort: Set'],
+  ['released', 'Sort: Release date'],
+  ['added', 'Sort: Date added'],
+];
+
+type PriceFilter = 'all' | 'priced' | 'unpriced';
+const PRICE_OPTIONS: [PriceFilter, string][] = [
+  ['all', 'Price: Any'],
+  ['priced', 'Price: Priced'],
+  ['unpriced', 'Price: Unpriced'],
+];
+
 export function SealedProducts() {
   const items = useLiveQuery(() => db.sealedItems.toArray(), []);
   const [prices, setPrices] = useState<SealedPriceMap>({});
+  // Catalog rows for what you own, keyed by product id: category and release
+  // date live there, not on the owned row.
+  const [catalog, setCatalog] = useState<Map<string, SealedProduct>>(new Map());
   const [adding, setAdding] = useState(false);
   const { confirm, sheet: confirmSheet } = useConfirm();
+  const [sort, setSort] = useListSort<SealedSort>('sealed', { key: 'name', dir: 'asc' });
+  const [nameFilter, setNameFilter] = useState('');
+  const [setFilter, setSetFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [priceFilter, setPriceFilter] = useState<PriceFilter>('all');
 
   // Prices ride with the sealed catalog artifact; owning an item doesn't
   // require the catalog to be installed, so this is best-effort decoration.
   useEffect(() => {
     let cancelled = false;
     void loadSealedProducts().then((r) => {
-      if (!cancelled && r.kind === 'ready') setPrices(r.prices);
+      if (cancelled || r.kind !== 'ready') return;
+      setPrices(r.prices);
+      setCatalog(new Map(r.products.map((p) => [p.id, p])));
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const sorted = items
-    ? [...items].sort((a, b) => a.name.localeCompare(b.name))
-    : undefined;
-
   const total: PriceTotal = { eur: 0, usd: 0 };
   let unpriced = 0;
-  for (const item of sorted ?? []) {
+  for (const item of items ?? []) {
     const price = sealedPriceOf(prices, item.productId);
     if (!price) unpriced += item.quantity;
     else addToTotal(total, item.quantity, price);
   }
+
+  // Only what's actually on the shelf gets an option — a set list of every
+  // Magic set would be a scroll, and every entry but a handful would be empty.
+  const { sets, categories } = useMemo(() => {
+    const sets = new Map<string, string>();
+    const categories = new Set<string>();
+    for (const item of items ?? []) {
+      sets.set(item.set, item.setName ?? item.set.toUpperCase());
+      const category = catalog.get(item.productId)?.category;
+      if (category) categories.add(category);
+    }
+    return {
+      sets: [...sets].sort((a, b) => a[1].localeCompare(b[1])),
+      categories: [...categories].sort((a, b) => categoryLabel(a).localeCompare(categoryLabel(b))),
+    };
+  }, [items, catalog]);
+
+  const sorted = useMemo(() => {
+    if (!items) return undefined;
+    const needle = nameFilter.trim().toLowerCase();
+    const kept = items.filter((item) => {
+      if (needle && !item.name.toLowerCase().includes(needle)) return false;
+      if (setFilter !== 'all' && item.set !== setFilter) return false;
+      if (categoryFilter !== 'all' && catalog.get(item.productId)?.category !== categoryFilter) return false;
+      if (priceFilter === 'all') return true;
+      const priced = !!sealedPriceOf(prices, item.productId);
+      return priceFilter === 'priced' ? priced : !priced;
+    });
+    return sortSealed(kept, sort, prices, catalog);
+  }, [items, nameFilter, setFilter, categoryFilter, priceFilter, sort, prices, catalog]);
+
   const boxes = (sorted ?? []).reduce((s, i) => s + i.quantity, 0);
+  const filtering = !!nameFilter.trim() || setFilter !== 'all' || categoryFilter !== 'all' || priceFilter !== 'all';
 
   const onRemove = async (item: SealedItem) => {
     const ok = await confirm({
@@ -78,9 +141,9 @@ export function SealedProducts() {
         />
       }
     >
-      {sorted === undefined ? (
+      {sorted === undefined || items === undefined ? (
         <p className="search-meta">Loading…</p>
-      ) : sorted.length === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState hint="Booster boxes, displays, bundles and precons still in shrink live here.">
           Nothing sealed yet.{' '}
           <button className="linklike" onClick={() => setAdding(true)}>
@@ -90,14 +153,72 @@ export function SealedProducts() {
         </EmptyState>
       ) : (
         <>
+          <div className="filter-row">
+            <input
+              type="search"
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              placeholder="Filter by name…"
+              aria-label="Filter sealed products by name"
+            />
+            {sets.length > 1 && (
+              <select
+                className={setFilter === 'all' ? '' : 'filter-on'}
+                value={setFilter}
+                onChange={(e) => setSetFilter(e.target.value)}
+                aria-label="Filter by set"
+              >
+                <option value="all">Set: Any</option>
+                {sets.map(([code, name]) => (
+                  <option key={code} value={code}>
+                    Set: {name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {categories.length > 1 && (
+              <select
+                className={categoryFilter === 'all' ? '' : 'filter-on'}
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                aria-label="Filter by product type"
+              >
+                <option value="all">Type: Any</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    Type: {categoryLabel(c)}
+                  </option>
+                ))}
+              </select>
+            )}
+            <select
+              className={priceFilter === 'all' ? '' : 'filter-on'}
+              value={priceFilter}
+              onChange={(e) => setPriceFilter(e.target.value as PriceFilter)}
+              aria-label="Filter by whether a market price is known"
+            >
+              {PRICE_OPTIONS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="meta-row">
             <p className="search-meta">
-              {boxes} product{boxes === 1 ? '' : 's'} across {sorted.length} line{sorted.length === 1 ? '' : 's'}
+              {boxes} product{boxes === 1 ? '' : 's'} across {filtering ? `${sorted.length} of ${items.length}` : sorted.length}{' '}
+              line{(filtering ? items.length : sorted.length) === 1 ? '' : 's'}
             </p>
+            <div className="meta-actions">
+              <ListSortControls prefs={sort} onChange={setSort} options={SORT_OPTIONS} />
+            </div>
           </div>
+          {sorted.length === 0 && <p className="search-meta">Nothing here matches.</p>}
           <ul className="sealed-owned">
             {sorted.map((item) => {
               const priceText = fmtSealedPrice(sealedPriceOf(prices, item.productId));
+              const category = catalog.get(item.productId)?.category;
               return (
                 <li key={item.id} className="sealed-owned-row">
                   <SealedImage url={itemImage(item, 'thumb')} alt="" className="sealed-shot-sm" />
@@ -105,6 +226,7 @@ export function SealedProducts() {
                     <span className="sealed-result-name">{item.name}</span>
                     <span className="sealed-result-sub">
                       {item.setName ?? item.set.toUpperCase()}
+                      {category ? ` · ${categoryLabel(category)}` : ''}
                       {priceText ? ` · ${priceText} each` : ''}
                     </span>
                   </div>
@@ -145,4 +267,57 @@ export function SealedProducts() {
       {confirmSheet}
     </Page>
   );
+}
+
+/**
+ * Sort the shelf. Money is normalised into the display currency (the two
+ * markets disagree on sealed, and half the shelf may only be quoted in one of
+ * them), and anything the catalog can't answer for — a release date for a
+ * product that isn't installed — sorts last rather than first.
+ */
+function sortSealed(
+  items: SealedItem[],
+  prefs: { key: SealedSort; dir: 'asc' | 'desc' },
+  prices: SealedPriceMap,
+  catalog: Map<string, SealedProduct>,
+): SealedItem[] {
+  const mul = prefs.dir === 'desc' ? -1 : 1;
+  const each = (i: SealedItem) => priceValue(sealedPriceOf(prices, i.productId));
+  const value = (i: SealedItem): number | null => {
+    switch (prefs.key) {
+      case 'price':
+        return each(i);
+      case 'value': {
+        const p = each(i);
+        return p == null ? null : p * i.quantity;
+      }
+      case 'copies':
+        return i.quantity;
+      case 'added':
+        return i.createdAt;
+      default:
+        return null;
+    }
+  };
+  const text = (i: SealedItem): string | null => {
+    if (prefs.key === 'set') return i.setName ?? i.set;
+    if (prefs.key === 'released') return catalog.get(i.productId)?.releaseDate ?? null;
+    return null;
+  };
+  return [...items].sort((a, b) => {
+    let cmp = 0;
+    if (prefs.key === 'set' || prefs.key === 'released') {
+      const ta = text(a);
+      const tb = text(b);
+      // Same missing-last rule as the numeric keys.
+      cmp = ta == null || tb == null ? (ta == null ? (tb == null ? 0 : 1) : -1) : ta.localeCompare(tb) * mul;
+    } else if (prefs.key !== 'name') {
+      cmp = compareNullable(value(a), value(b), mul);
+    }
+    if (cmp === 0) {
+      cmp = a.name.localeCompare(b.name);
+      if (prefs.key === 'name') cmp *= mul;
+    }
+    return cmp;
+  });
 }

@@ -24,7 +24,7 @@ import { formatLabel } from '../deck/legality.js';
 import { containerKind } from '../deck/containers.js';
 import { Avatar } from '../components/Avatar.js';
 import { AvatarEditorSheet, CardSearch } from '../components/AvatarEditorSheet.js';
-import { CardSheet, EditionPicker } from '../components/CardSheet.js';
+import { CardSheet, EditionGrid } from '../components/CardSheet.js';
 import { Icon } from '../components/icons.js';
 import { ManaCost } from '../components/ManaCost.js';
 import { useCardArtist } from '../components/useCardArtist.js';
@@ -376,7 +376,7 @@ function FavoriteCardPickerSheet({
         />
       </div>
       {pending && (
-        <EditionPicker
+        <EditionGrid
           printings={pending.printings}
           selected={pending.card.defaultScryfallId}
           onSelect={(scryfallId) =>

@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.123.0
+
+- **The Edition picker is one line now.** It used to be two: a filter box that was empty most of the time, stacked on a dropdown. Closed, it shows the printing you're looking at and nothing else. Tap it and that same line becomes the search box while the list of editions unfolds below it, the edition you're on sitting at the top.
+- **Every edition in the list wears its set symbol.** Recognising Ravnica by its skyline beats reading forty set names, and a native dropdown could never show one.
+- The list still groups a trade partner's printings first, still leads with editions you own, and the grid button beside it still opens the full picture-by-picture view. Arrow keys and Enter work in the list; Escape closes the picker without closing the card.
+
 ## 0.122.0
 
 - **Speculating on cheap cards in bulk finally registers.** Thirty copies of a 40-cent card creeping to 55 cents is €4.50 of your money moving, and Price movers used to say nothing at all: the move passed the percentage test and then got thrown out as noise, because "noise" was measured one copy at a time. Both the noise floor and the formula now count every copy you own, so a spec pile that moves gets reported like the position it is.

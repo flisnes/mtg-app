@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.123.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The Edition picker on a card is one line instead of two. Tap it and that line becomes the search box while the editions unfold below, the one you are on first.',
+      },
+      {
+        kind: 'added',
+        text: 'Every edition in the list now shows its set symbol next to the set name.',
+      },
+    ],
+  },
+  {
     version: '0.122.0',
     changes: [
       {

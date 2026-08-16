@@ -2179,44 +2179,134 @@ body:has(.bulk-bar) .app-main {
   grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
 }
-/* Edition picker: keep the native <select>, overlay the selected printing's
-   set symbol on its left edge. */
-.edition-select {
+/* Edition picker: one line closed (set symbol + the printing you're looking at),
+   and that same line becomes the search box when it opens. The list unfolds in
+   flow rather than floating — the card sheet's body is a scroll container, and a
+   floating panel would be clipped by it. */
+.edition-picker {
   position: relative;
-}
-.edition-select select {
-  width: 100%;
-}
-.edition-select.with-symbol select {
-  padding-left: 2.1rem;
-}
-.edition-symbol {
-  position: absolute;
-  left: 0.7rem;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 1.2rem;
-  color: var(--text);
-  pointer-events: none;
-}
-/* Filter box above the Edition dropdown (set name / set code). */
-.edition-search {
-  width: 100%;
-  margin-bottom: 0.4rem;
-}
-/* The select plus the "view all editions" grid button beside it. */
-.edition-row {
-  display: flex;
-  gap: 0.5rem;
-}
-.edition-row .edition-select {
   flex: 1;
   min-width: 0;
 }
+.edition-picker-trigger,
+.edition-picker-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+.edition-picker-trigger {
+  cursor: pointer;
+}
+.edition-picker-trigger:disabled {
+  cursor: default;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+.edition-picker-trigger > svg {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--text-dim);
+}
+.edition-picker.open .edition-picker-input {
+  border-color: var(--accent);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+/* Line 1 through N. Capped so the rest of the form stays reachable; the sheet
+   body scrolls to bring the whole list into view. */
+.edition-picker-list {
+  max-height: min(36dvh, 264px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--accent);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: var(--surface);
+  padding: 0.25rem;
+}
+.edition-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.edition-picker-row.active {
+  background: var(--surface-2);
+}
+.edition-picker-row.selected {
+  font-weight: 600;
+}
+/* The set symbol column: a fixed width so every set name starts in the same
+   place, including the rows that have no symbol ("Any printing"). */
+.edition-picker-symbol {
+  flex-shrink: 0;
+  width: 1.3rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  text-align: center;
+  color: var(--text);
+}
+.edition-picker-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.edition-picker-meta {
+  flex-shrink: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+.edition-picker-check {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.edition-picker-group {
+  padding: 0.5rem 0.5rem 0.25rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.edition-picker-empty {
+  margin: 0;
+  padding: 0.6rem 0.5rem;
+  color: var(--text-dim);
+}
+/* The picker plus the "view all editions" grid button beside it. */
+.edition-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+/* Aligned to the picker's first line, so an open list doesn't stretch it. */
 .edition-grid-btn {
   display: grid;
   place-items: center;
-  padding: 0 0.7rem;
+  padding: 0.55rem 0.7rem;
+  align-self: flex-start;
 }
 /* "Pick one from my collection": sits right under the Edition field, so the
    shortcut is next to the thing it fills in. */

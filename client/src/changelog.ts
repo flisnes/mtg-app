@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.124.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Opening a card no longer flashes the wrong edition first. The art waits until we know which printing to show, and the foil sheen waits for the art instead of shimmering over an empty frame.',
+      },
+    ],
+  },
+  {
     version: '0.124.0',
     changes: [
       {

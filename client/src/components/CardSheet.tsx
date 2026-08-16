@@ -285,6 +285,14 @@ export function CardSheet({
   // A printing this card is already tied to: the copy in the collection, the
   // deck's recorded edition, a scanned card, or the one the caller was showing.
   const recordedId = entry?.scryfallId ?? deckCard?.scryfallId ?? sessionCard?.scryfallId ?? initialScryfallId;
+  // Which edition the art should show isn't known at first paint: the printings
+  // are a Dexie read away, and with nothing recorded the preferred-printing
+  // lookup may still move us off the card DB's default. Painting before both
+  // settle flashes the wrong edition for a frame, so the frame stays empty
+  // until they do.
+  const [printingsLoaded, setPrintingsLoaded] = useState(false);
+  const [preferredSettled, setPreferredSettled] = useState(!!recordedId || wishMode || mode === 'deck');
+  const editionResolved = printingsLoaded && preferredSettled;
   // In wish mode (and for a lands-box basic) the empty string means "any
   // printing" — no specific edition.
   const [scryfallId, setScryfallId] = useState(
@@ -345,7 +353,19 @@ export function CardSheet({
   useDismiss(busy ? null : onClose);
 
   useEffect(() => {
-    void getPrintingsForOracle(oracleCard.oracleId).then(setPrintings);
+    let live = true;
+    void getPrintingsForOracle(oracleCard.oracleId)
+      .then((ps) => {
+        if (live) setPrintings(ps);
+      })
+      // Even a failed read has to release the art: an empty frame forever is
+      // worse than the oracle's default image.
+      .finally(() => {
+        if (live) setPrintingsLoaded(true);
+      });
+    return () => {
+      live = false;
+    };
   }, [oracleCard.oracleId]);
 
   // Nothing tied this sheet to an edition (adding a card the caller didn't
@@ -356,12 +376,16 @@ export function CardSheet({
   useEffect(() => {
     if (recordedId || wishMode || mode === 'deck') return;
     let live = true;
-    void preferredScryfallId(oracleCard).then((id) => {
-      // Don't stomp a choice the user made in the edition picker meanwhile.
-      if (live && id !== oracleCard.defaultScryfallId) {
-        setScryfallId((cur) => (cur === oracleCard.defaultScryfallId ? id : cur));
-      }
-    });
+    void preferredScryfallId(oracleCard)
+      .then((id) => {
+        // Don't stomp a choice the user made in the edition picker meanwhile.
+        if (live && id !== oracleCard.defaultScryfallId) {
+          setScryfallId((cur) => (cur === oracleCard.defaultScryfallId ? id : cur));
+        }
+      })
+      .finally(() => {
+        if (live) setPreferredSettled(true);
+      });
     return () => {
       live = false;
     };
@@ -474,6 +498,17 @@ export function CardSheet({
   const shownImage = flipped && cardBackImage ? cardBackImage : cardImage;
   // Tap the art to read it: the card alone, as large as the screen allows.
   const [zoomed, setZoomed] = useState(false);
+  // The first paint of the art waits for the browser to actually decode it —
+  // the foil sheen has nothing to shimmer over until then. A latch, not a
+  // per-image flag: once the sheet has shown a card, switching editions swaps
+  // the art in place instead of blanking the frame.
+  const [artShown, setArtShown] = useState(false);
+  // The right printing's image didn't load: fall back to the card's default art
+  // rather than an empty frame (a wrong edition beats no card at all).
+  const [artFailed, setArtFailed] = useState(false);
+  useEffect(() => setArtFailed(false), [shownImage]);
+  const fallbackImage = oracleCard.imageNormal ?? oracleCard.imageSmall ?? null;
+  const artSrc = (artFailed && fallbackImage) || shownImage || cardImage;
 
   // Keep a concrete finish valid for the chosen printing (skip the "Any"
   // sentinel and wish mode, where the finish is a preference, not a real copy).
@@ -651,19 +686,32 @@ export function CardSheet({
         aria-label={mode === 'info' ? oracleCard.name : `${mode === 'add' ? 'Add' : 'Edit'} ${oracleCard.name}`}
       >
         <div className="sheet-head">
-          {cardImage ? (
+          {cardImage || !editionResolved ? (
+            // The wrap holds the card's space from the first frame; what goes in
+            // it waits until we know the edition and the image has decoded.
             <div className="sheet-card-wrap">
-              <button
-                type="button"
-                className="sheet-card-zoom"
-                onClick={() => setZoomed(true)}
-                aria-label={`Enlarge ${oracleCard.name}`}
-                title="Enlarge"
-              >
-                <img className="sheet-card" src={shownImage ?? cardImage} alt={oracleCard.name} />
-              </button>
-              {finish && finish !== 'nonfoil' && <span className="foil-sheen" aria-hidden />}
-              {cardBackImage && (
+              {editionResolved && artSrc && (
+                <button
+                  type="button"
+                  className="sheet-card-zoom"
+                  onClick={() => artShown && setZoomed(true)}
+                  aria-label={`Enlarge ${oracleCard.name}`}
+                  title="Enlarge"
+                >
+                  <img
+                    className={artShown ? 'sheet-card' : 'sheet-card sheet-card-loading'}
+                    src={artSrc}
+                    alt={oracleCard.name}
+                    onLoad={() => setArtShown(true)}
+                    onError={() => {
+                      if (!artFailed && fallbackImage && fallbackImage !== artSrc) setArtFailed(true);
+                      else setArtShown(true);
+                    }}
+                  />
+                </button>
+              )}
+              {artShown && finish && finish !== 'nonfoil' && <span className="foil-sheen" aria-hidden />}
+              {artShown && cardBackImage && (
                 <button
                   type="button"
                   className="sheet-flip"

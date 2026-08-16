@@ -1975,6 +1975,20 @@ body:has(.bulk-bar) .app-main {
   border-radius: 10px;
   overflow: hidden;
   align-self: flex-start;
+  /* Card-shaped and empty until the right edition's art has decoded, so the
+     sheet never flashes the wrong printing (or a sheen over nothing). */
+  background: var(--surface-2);
+}
+.sheet-card-loading {
+  opacity: 0;
+}
+.sheet-card {
+  transition: opacity 0.12s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-card {
+    transition: none;
+  }
 }
 
 /* ---- Card sheet: a fixed frame, one scrolling middle ----

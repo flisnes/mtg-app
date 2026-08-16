@@ -42,6 +42,7 @@ import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
+import { EditionPicker } from './EditionPicker.js';
 import { TagField } from './TagField.js';
 import { Sparkline } from './Sparkline.js';
 import { useDismiss } from './useDismiss.js';
@@ -123,16 +124,6 @@ const ANY_PRINTING = '';
 // every other caller reaches for it through the card sheet.
 export { FINISH_LABELS };
 export const LANGS =['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht'];
-
-/** One Edition dropdown entry, optionally annotated (e.g. "×2, 1 for trade"). */
-function printingOption(p: Priced<Printing>, note?: string) {
-  return (
-    <option key={p.scryfallId} value={p.scryfallId}>
-      {p.setName} · #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
-      {note ? ` · ${note}` : ''}
-    </option>
-  );
-}
 
 export function CardSheet({
   oracleCard,
@@ -347,8 +338,6 @@ export function CardSheet({
   // form's: correcting what you paid is reading-your-own-history work, and every
   // mode's History tab shows your own events.
   const [historyEdit, setHistoryEdit] = useState(false);
-  // Filter the (often very long) Edition dropdown by set name or set code.
-  const [editionQuery, setEditionQuery] = useState('');
   // Event info modal opened from the History tab (out of edit mode), plus a
   // nested card sheet when the user drills from that event into another card.
   const [eventEntry, setEventEntry] = useState<HistoryEntry | null>(null);
@@ -458,23 +447,12 @@ export function CardSheet({
     highlighted.length > 0 ? printings.filter((p) => !highlightPrintings!.notes.has(p.scryfallId)) : printings,
     ownedIds,
   );
-  // Dropdown filter: match set name or set code. Always keep the current
-  // selection visible so the native <select> displays the right value.
-  const editionQ = editionQuery.trim().toLowerCase();
-  const matchesQuery = (p: Priced<Printing>) =>
-    p.scryfallId === scryfallId ||
-    !editionQ ||
-    p.setName.toLowerCase().includes(editionQ) ||
-    p.set.toLowerCase().includes(editionQ);
-  const visibleHighlighted = highlighted.filter(matchesQuery);
-  const visibleOther = otherPrintings.filter(matchesQuery);
   // Picking an edition is not editing: in info mode it only changes which
   // printing you're looking at (art, price, history, placement pills all
-  // follow), and info mode writes nothing. So every mode gets the dropdown, the
-  // filter and the visual grid — except a wish you're only reading, where the
+  // follow), and info mode writes nothing. So every mode gets the picker and the
+  // visual grid — except a wish you're only reading, where the
   // edition is that person's answer, not yours to flip through.
   const editionPickable = formEditable || (mode === 'info' && !wishInfo);
-  const showEditionSearch = editionPickable && printings.length > 6;
   // A wish can want any finish (esp. an "any printing" wish, where no single
   // printing constrains the choice); a collection entry is limited to what the
   // selected printing actually comes in. A slot follows its edition where it pins
@@ -789,50 +767,24 @@ export function CardSheet({
           <SymbolText className="oracle-text sheet-oracle" text={oracleCard.oracleText} />
         )}
 
-        <label className="field">
+        {/* Not a <label>: the picker is a button until it's opened, and a label
+            wrapping a button turns its own text into a second trigger. */}
+        <div className="field">
           <span>Edition</span>
-          {showEditionSearch && (
-            <input
-              type="text"
-              className="edition-search"
-              value={editionQuery}
-              onChange={(e) => setEditionQuery(e.target.value)}
-              placeholder="Filter by set name or code (e.g. MH2)"
-              aria-label="Filter editions by set name or code"
-            />
-          )}
           <div className="edition-row">
-            <div className={`edition-select${printing ? ' with-symbol' : ''}`}>
-              {printing && <SetSymbol set={printing.set} className="edition-symbol" title={printing.setName} />}
-              <select
-                value={scryfallId}
-                onChange={(e) => setScryfallId(e.target.value)}
-                disabled={!editionPickable}
-              >
-                {/* A basic in a container spends its "any" on the lands box (the
-                    slot is detached from the collection entirely); everything
-                    else means "any edition of this card that I own". */}
-                {basicAny ? (
-                  <option value={ANY_PRINTING}>Any printing (from your lands box)</option>
-                ) : (
-                  anyPrefs && <option value={ANY_PRINTING}>Any printing</option>
-                )}
-                {highlighted.length > 0 ? (
-                  <>
-                    {visibleHighlighted.length > 0 && (
-                      <optgroup label={highlightPrintings!.label}>
-                        {visibleHighlighted.map((p) => printingOption(p, highlightPrintings!.notes.get(p.scryfallId)))}
-                      </optgroup>
-                    )}
-                    {visibleOther.length > 0 && (
-                      <optgroup label="Other printings">{visibleOther.map((p) => printingOption(p))}</optgroup>
-                    )}
-                  </>
-                ) : (
-                  visibleOther.map((p) => printingOption(p))
-                )}
-              </select>
-            </div>
+            <EditionPicker
+              printings={otherPrintings}
+              highlighted={highlighted}
+              highlightLabel={highlightPrintings?.label}
+              notes={highlightPrintings?.notes}
+              selected={scryfallId}
+              // A basic in a container spends its "any" on the lands box (the
+              // slot is detached from the collection entirely); everything else
+              // means "any edition of this card that I own".
+              anyLabel={basicAny ? 'Any printing (from your lands box)' : anyPrefs ? 'Any printing' : undefined}
+              disabled={!editionPickable}
+              onSelect={setScryfallId}
+            />
             {editionPickable && printings.length > 0 && (
               <button
                 type="button"
@@ -845,7 +797,7 @@ export function CardSheet({
               </button>
             )}
           </div>
-        </label>
+        </div>
 
         {/* The shortcut that makes a slot concrete: point it at a copy you
             actually have and the edition, finish, condition and language all come
@@ -1102,7 +1054,7 @@ export function CardSheet({
         />
       )}
       {allEditions && (
-        <EditionPicker
+        <EditionGrid
           printings={highlighted.length > 0 ? [...highlighted, ...otherPrintings] : otherPrintings}
           selected={scryfallId}
           anyOption={anyPrefs || basicAny}
@@ -1320,7 +1272,7 @@ function CardZoom({
 }
 
 /** Every printing as an image tile — pick an edition by looking at it. */
-export function EditionPicker({
+export function EditionGrid({
   printings,
   selected,
   anyOption,

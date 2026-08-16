@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.124.1
+
+- **A card sheet no longer flashes the wrong edition.** Opening one used to paint whatever printing the card database calls representative, then swap to the right one a moment later: the copy you own, the edition your deck records, or the one your printing preference picks. The art now waits until we know which edition to show, then fades in.
+- **The foil sheen waits for the card.** It used to shimmer over an empty frame while the image was still downloading. It appears with the art now.
+- If the right edition's image can't be fetched, the card's default art still fills in rather than leaving you an empty frame.
+
 ## 0.124.0
 
 - **"Newest normal printing" now means normal.** It already skipped promos, prerelease stamps and Secret Lairs, but a modern set prints the same card four or five ways, and the borderless one, the showcase one, the extended-art one and the surge-foil one all count as the same ordinary set. So the setting kept landing on a card you'd never pull from a pack. All of those are now recognised and skipped: borderless, showcase frames, extended art, retro frames, foil-etched, serialized, and every chase foiling Wizards has invented (surge, galaxy, halo, ripple, textured and friends).

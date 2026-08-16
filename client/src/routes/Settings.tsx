@@ -425,9 +425,13 @@ const PRINTING_OPTIONS: { value: PrintingPref; label: string; hint: string }[] =
   {
     value: 'latestNonPromo',
     label: 'Newest normal printing',
-    hint: 'The most recent edition from an ordinary set — skipping promos, prerelease stamps, Secret Lairs and the like.',
+    hint: 'The most recent plain version: no promos, prerelease stamps or Secret Lairs, and none of the borderless, showcase, extended-art, retro-frame or special-foil variants a set prints alongside it.',
   },
-  { value: 'first', label: 'First printing', hint: 'The oldest edition — the card as it originally appeared.' },
+  {
+    value: 'first',
+    label: 'First printing',
+    hint: 'The oldest plain version — the card as it originally appeared, skipping the same promos and variants.',
+  },
   { value: 'cheapest', label: 'Cheapest printing', hint: 'The least expensive edition with a known price.' },
 ];
 

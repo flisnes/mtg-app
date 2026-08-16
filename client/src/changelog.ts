@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.124.0',
+    changes: [
+      {
+        kind: 'fixed',
+        text: '"Newest normal printing" and "First printing" now skip the variants a set prints alongside a card: borderless, showcase, extended art, retro frames, serialized and chase foils like surge and galaxy. You get the version you would actually pull from a pack.',
+      },
+      {
+        kind: 'added',
+        text: 'Search keywords for them: is:borderless, is:showcase, is:extendedart, is:retro, is:serialized, is:specialfoil, is:textless, is:boosterfun, and is:variant for any of them.',
+      },
+    ],
+  },
+  {
     version: '0.123.0',
     changes: [
       {

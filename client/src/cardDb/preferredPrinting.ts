@@ -1,4 +1,5 @@
 import type { Priced, Printing, SetTypeMap } from '@mtg/shared';
+import { isVariantPrinting } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import type { OwnershipIndex } from '../db/useOwnership.js';
 import { getPrefs, type Prefs, type PrintingPref } from '../prefs.js';
@@ -44,6 +45,28 @@ export function needsPrintingLookup(pref: PrintingPref, preferOwned: boolean): b
   return pref !== 'latest' || preferOwned;
 }
 
+/** True when this preference wants "the ordinary version", so it needs set types. */
+function wantsOrdinary(pref: PrintingPref): boolean {
+  return pref === 'latestNonPromo' || pref === 'first';
+}
+
+/**
+ * The printings a "normal printing" rule should choose between: no promos, and
+ * none of the cosmetic variants a modern set stacks on top of a card
+ * (borderless, showcase, extended art, retro frames, chase foils, serialized).
+ *
+ * Gives up one criterion at a time rather than all at once, so a card that only
+ * ever appeared as a showcase still avoids the prerelease stamp, and a Secret
+ * Lair exclusive still resolves to something instead of nothing.
+ */
+function ordinaryPrintings(pool: Printing[], setTypes: SetTypeMap | null): Printing[] {
+  const nonPromo = pool.filter((p) => !isPromoPrinting(p, setTypes));
+  const plain = nonPromo.filter((p) => !isVariantPrinting(p));
+  if (plain.length) return plain;
+  if (nonPromo.length) return nonPromo;
+  return pool;
+}
+
 interface ResolveOptions {
   pref: PrintingPref;
   /** Printings the collection holds, or null when the preference doesn't care. */
@@ -65,14 +88,15 @@ function pickOne(candidates: Printing[], opts: ResolveOptions): Printing | undef
   }
 
   switch (opts.pref) {
+    // Both of these mean "the ordinary version of the card", so both skip
+    // promos and variants — they only disagree on which end of history to take.
+    // Without that, "first printing" of a card from a modern set was decided by
+    // a UUID comparison between the prerelease foil, the showcase and the plain
+    // one, all of which share a release date.
     case 'first':
-      return [...pool].sort(byOldest)[0];
-    case 'latestNonPromo': {
-      const normal = pool.filter((p) => !isPromoPrinting(p, opts.setTypes));
-      // Cards that only ever appeared as promos (many Secret Lair exclusives)
-      // would otherwise resolve to nothing — fall back to the plain latest.
-      return [...(normal.length ? normal : pool)].sort(byNewest)[0];
-    }
+      return [...ordinaryPrintings(pool, opts.setTypes)].sort(byOldest)[0];
+    case 'latestNonPromo':
+      return [...ordinaryPrintings(pool, opts.setTypes)].sort(byNewest)[0];
     case 'cheapest': {
       const priced = pool
         .map((p) => ({ p, price: opts.priceOf?.(p.scryfallId) ?? null }))
@@ -123,9 +147,9 @@ export async function resolveDisplayPrintings(
 
   const [rows, setTypes, ownedByOracle] = await Promise.all([
     db.printings.where('oracleId').anyOf(ids).toArray(),
-    // Only the non-promo rule needs set types; don't fetch an artifact for the
-    // preferences that can't use it.
-    pref === 'latestNonPromo' ? loadSetTypes() : Promise.resolve(null),
+    // Only the "ordinary version" rules need set types; don't fetch an artifact
+    // for the preferences that can't use it.
+    wantsOrdinary(pref) ? loadSetTypes() : Promise.resolve(null),
     preferOwned ? ownedPrintingsFor(ids, owned) : Promise.resolve(null),
   ]);
 

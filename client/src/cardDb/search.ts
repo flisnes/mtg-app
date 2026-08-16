@@ -1,4 +1,4 @@
-import type { Color, DeckFormat, Finish, Format, OracleCard, Priced, Rarity } from '@mtg/shared';
+import type { Color, DeckFormat, Finish, Format, OracleCard, Priced, PrintingVariant, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { withPrices } from './prices.js';
 import {
@@ -47,6 +47,7 @@ interface PrintingAgg {
   sets: string[];
   finishes: Set<Finish>;
   hasPromo: boolean;
+  variants: Set<PrintingVariant>;
   count: number;
 }
 
@@ -58,12 +59,13 @@ async function getIndex(): Promise<Indexed[]> {
   for (const p of printings) {
     let agg = byOracle.get(p.oracleId);
     if (!agg) {
-      agg = { sets: [], finishes: new Set(), hasPromo: false, count: 0 };
+      agg = { sets: [], finishes: new Set(), hasPromo: false, variants: new Set(), count: 0 };
       byOracle.set(p.oracleId, agg);
     }
     agg.sets.push(p.set);
     for (const f of p.finishes) agg.finishes.add(f);
     if (p.promo) agg.hasPromo = true;
+    for (const v of p.variants ?? []) agg.variants.add(v);
     agg.count++;
   }
   cache = cards.map((c) => {
@@ -72,6 +74,7 @@ async function getIndex(): Promise<Indexed[]> {
       sets: agg.sets,
       finishes: agg.finishes,
       hasPromo: agg.hasPromo,
+      variants: agg.variants,
       reprint: agg.count > 1,
     };
     return toSearchableEntry(c, summary);

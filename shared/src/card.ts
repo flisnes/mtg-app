@@ -109,6 +109,68 @@ export function isMarkerCard(name: string, typeLine: string): boolean {
   return faces.every((f) => f === 'Card' || f === 'Creature' || /^(Emblem|Dungeon)\b/.test(f));
 }
 
+/**
+ * A cosmetic treatment that makes a printing a *variant* of a set's plain
+ * version rather than the card you'd pull from an ordinary pack. Modern sets
+ * print the same card four or five ways, and "the newest printing" is useless
+ * if it lands on a serialized borderless surge-foil showcase.
+ *
+ * Derived in the pipeline from Scryfall's `frame_effects`, `border_color`,
+ * `frame` and `promo_types`:
+ *
+ *   borderless   art runs to the card edge (border_color: borderless)
+ *   showcase     the set's alternate art-style frame
+ *   extendedart  normal frame, art extended into the side borders
+ *   inverted     inverted-colour frame treatment
+ *   etched       foil-etched treatment
+ *   retro        an old frame in a set released after the 2015 frame — the
+ *                retro treatment, and also the faithful old-frame reprints in
+ *                The List, which "the normal printing" shouldn't land on either
+ *   serialized   numbered 1/500 and the like
+ *   specialfoil  chase foiling: surge, galaxy, halo, ripple, textured, …
+ *   textless     printed without its rules text
+ *   boosterfun   Wizards' own "this is a Booster Fun variant" flag, which
+ *                catches treatments the list above doesn't name yet
+ */
+export type PrintingVariant =
+  | 'borderless'
+  | 'showcase'
+  | 'extendedart'
+  | 'inverted'
+  | 'etched'
+  | 'retro'
+  | 'serialized'
+  | 'specialfoil'
+  | 'textless'
+  | 'boosterfun';
+
+/**
+ * Canonical order for `Printing.variants`. The pipeline emits tags in this
+ * order so a printing's row — and therefore its chunk's content hash — doesn't
+ * churn just because Scryfall reordered an array.
+ */
+export const PRINTING_VARIANTS: readonly PrintingVariant[] = [
+  'borderless',
+  'showcase',
+  'extendedart',
+  'inverted',
+  'etched',
+  'retro',
+  'serialized',
+  'specialfoil',
+  'textless',
+  'boosterfun',
+];
+
+/**
+ * Is this printing a variant rather than a set's plain version? False for card
+ * DBs built before `variants` existed, which is the safe failure: the user
+ * still gets a real printing until the next nightly card-data update.
+ */
+export function isVariantPrinting(p: { variants?: readonly PrintingVariant[] }): boolean {
+  return !!p.variants?.length;
+}
+
 /** One physical printing (one Scryfall card id). Drives the edition picker + collection editing. */
 export interface Printing {
   scryfallId: string;
@@ -129,6 +191,13 @@ export interface Printing {
    * that live inside an ordinary set's own numbering.
    */
   promo?: boolean;
+  /**
+   * Cosmetic treatments this printing carries, in PRINTING_VARIANTS order.
+   * Omitted (not empty) for the plain version of a card — same sparse
+   * convention as `promo`. Absent on card DBs built before this field, so
+   * treat missing as "not known to be a variant"; see isVariantPrinting.
+   */
+  variants?: PrintingVariant[];
   imageSmall: string | null;
   imageNormal: string | null;
   /** Back-face images for double-faced cards (absent for single-faced ones and on card DBs built before this field). */

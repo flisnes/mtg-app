@@ -1,4 +1,13 @@
-import { FORMATS, normalizeColors, type Color, type Finish, type Format, type OracleCard, type Rarity } from '@mtg/shared';
+import {
+  FORMATS,
+  normalizeColors,
+  type Color,
+  type Finish,
+  type Format,
+  type OracleCard,
+  type PrintingVariant,
+  type Rarity,
+} from '@mtg/shared';
 
 // Scryfall-style search syntax. A query is whitespace-separated terms, ANDed
 // together; `-` prefixes negate a term. Bare words (or quoted phrases) match
@@ -14,7 +23,7 @@ import { FORMATS, normalizeColors, type Color, type Finish, type Format, type Or
 //   mana>={2}  m:uu   mana cost symbols (: means "at least", like colors)
 //   set:znr  s:znr    printed in this set (any printing, not just the default one)
 //   f:modern          legal in format (restricted counts as legal)
-//   is:transform  is:reserved  is:foil   see IS_KEYWORDS below for the full list
+//   is:transform  is:reserved  is:foil  is:borderless   see IS_KEYWORDS below
 //
 // Terms combine like they do on Scryfall: whitespace means AND, `or` means OR
 // (`and` may be spelled out too), parentheses group, and `-` negates either a
@@ -71,6 +80,8 @@ export interface SearchableEntry {
   finishes: ReadonlySet<Finish>;
   /** Any printing is a promo (Scryfall's per-printing `promo` flag). */
   hasPromo: boolean;
+  /** Cosmetic treatments available across every printing (union). Drives is:borderless, is:showcase, … */
+  variants: ReadonlySet<PrintingVariant>;
   /** Has more than one printing. */
   reprint: boolean;
 }
@@ -91,6 +102,7 @@ export interface PrintingSummary {
   sets?: Iterable<string>;
   finishes?: Iterable<Finish>;
   hasPromo?: boolean;
+  variants?: Iterable<PrintingVariant>;
   reprint?: boolean;
 }
 
@@ -115,6 +127,7 @@ export function toSearchableEntry(card: OracleCard, printings: PrintingSummary =
     sets,
     finishes: new Set(printings.finishes ?? []),
     hasPromo: !!printings.hasPromo,
+    variants: new Set(printings.variants ?? []),
     reprint: !!printings.reprint,
   };
 }
@@ -483,10 +496,10 @@ function manaSymbolsOf(card: OracleCard): string[] {
 // Deliberately not implemented: is:newinpauper (needs historical banlist-change
 // data we don't have), is:frenchvanilla (would need a parameterized
 // keyword-ability parser to avoid misfiring constantly), and the printing
-// cosmetics Scryfall tracks per-card (is:full, is:hires, is:glossy, is:default,
-// is:atypical, is:textless, is:oversized, is:universesbeyond) — none of that
-// frame/border metadata is in the pipeline, and it's not useful for a
-// collection/trading app.
+// cosmetics that say nothing about which copy you'd want to own (is:hires,
+// is:default, is:atypical, is:oversized, is:universesbeyond). The ones that do
+// — borderless, showcase, extended art, retro frames, chase foils — ride on
+// Printing.variants; see the variant block at the end of IS_KEYWORDS.
 
 const BASIC_LAND_TYPES = ['plains', 'island', 'swamp', 'mountain', 'forest'];
 
@@ -584,6 +597,22 @@ const IS_KEYWORDS: Record<string, (e: SearchableEntry) => boolean> = {
   etched: (e) => e.finishes.has('etched'),
   promo: (e) => e.hasPromo,
   reprint: (e) => e.reprint,
+
+  // Variant treatments — likewise "any printing of this card is one". See
+  // PrintingVariant for what each tag means and how the pipeline derives it.
+  // `is:variant` is the catch-all, so `-is:variant` asks for cards that only
+  // ever came in the plain version.
+  variant: (e) => e.variants.size > 0,
+  borderless: (e) => e.variants.has('borderless'),
+  showcase: (e) => e.variants.has('showcase'),
+  extendedart: (e) => e.variants.has('extendedart'),
+  extended: (e) => e.variants.has('extendedart'),
+  inverted: (e) => e.variants.has('inverted'),
+  retro: (e) => e.variants.has('retro'),
+  serialized: (e) => e.variants.has('serialized'),
+  specialfoil: (e) => e.variants.has('specialfoil'),
+  textless: (e) => e.variants.has('textless'),
+  boosterfun: (e) => e.variants.has('boosterfun'),
 };
 
 // ---- Matching ----

@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.124.0
+
+- **"Newest normal printing" now means normal.** It already skipped promos, prerelease stamps and Secret Lairs, but a modern set prints the same card four or five ways, and the borderless one, the showcase one, the extended-art one and the surge-foil one all count as the same ordinary set. So the setting kept landing on a card you'd never pull from a pack. All of those are now recognised and skipped: borderless, showcase frames, extended art, retro frames, foil-etched, serialized, and every chase foiling Wizards has invented (surge, galaxy, halo, ripple, textured and friends).
+- **"First printing" was worse, and is fixed the same way.** Every variant in a set shares one release date, so which one you got was decided by a UUID comparison. Fable of the Mirror-Breaker showed as its Kamigawa showcase; Sheoldred showed as her prerelease promo. Both now show the plain version they debuted as.
+- **"Newest printing" picks the plain one too**, when a set released several versions of a card on the same day. It still means the most recent edition, it's just no longer arbitrary about which of that day's versions you get.
+- **Search knows about all of this.** New keywords: `is:borderless`, `is:showcase`, `is:extendedart`, `is:retro`, `is:serialized`, `is:specialfoil`, `is:inverted`, `is:textless`, `is:boosterfun`, and `is:variant` for any of them. They work the way `is:foil` does, matching if *any* printing of the card qualifies, so `is:serialized` finds cards that exist as a numbered copy and `-is:variant` finds the ones that only ever came one way.
+- Takes effect after the next daily card-data update, which is where the new printing details come from.
+
 ## 0.123.0
 
 - **The Edition picker is one line now.** It used to be two: a filter box that was empty most of the time, stacked on a dropdown. Closed, it shows the printing you're looking at and nothing else. Tap it and that same line becomes the search box while the list of editions unfolds below it, the edition you're on sitting at the top.

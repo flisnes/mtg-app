@@ -1,5 +1,5 @@
-import type { Color, Finish, Format, LegalityStatus, Printing, Rarity } from '@mtg/shared';
-import { FORMATS, normalizeColors } from '@mtg/shared';
+import type { Color, Finish, Format, LegalityStatus, Printing, PrintingVariant, Rarity } from '@mtg/shared';
+import { FORMATS, PRINTING_VARIANTS, normalizeColors } from '@mtg/shared';
 
 // Map a raw Scryfall card object down to our slim Printing, tolerating unknown
 // and added fields (beta plan handoff note). Also carries the oracle-invariant
@@ -16,6 +16,15 @@ export interface RawCard {
   set_name: string;
   collector_number: string;
   promo?: boolean;
+  /** Cosmetic frame treatments *and* functional frames, mixed together — see VARIANT_FRAME_EFFECTS. */
+  frame_effects?: string[];
+  /** 'black' | 'white' | 'borderless' | 'silver' | 'gold'. */
+  border_color?: string;
+  /** Frame generation: '1993' | '1997' | '2003' | '2015' | 'future'. */
+  frame?: string;
+  /** 'boosterfun', 'surgefoil', 'serialized', 'prerelease', … — see variantsOf. */
+  promo_types?: string[];
+  textless?: boolean;
   layout?: string;
   reserved?: boolean;
   game_changer?: boolean;
@@ -63,6 +72,68 @@ function finishes(values: string[] | undefined): Finish[] {
 
 function rarity(value: string): Rarity {
   return (VALID_RARITIES.has(value) ? value : 'common') as Rarity;
+}
+
+// ---- Variant treatments (see PrintingVariant) ----
+//
+// Most of `frame_effects` describes a frame the card was *always* going to
+// have — every Nyx enchantment is `enchantment`, every legend `legendary`,
+// every Spree card `spree`. Only these four are a cosmetic alternative to the
+// same card's plain version in the same set. Anything else Wizards dreams up
+// (shattered glass, borderless-profile, …) still gets caught: those are all
+// sold as Booster Fun, which carries its own promo type.
+const VARIANT_FRAME_EFFECTS: Record<string, PrintingVariant> = {
+  showcase: 'showcase',
+  extendedart: 'extendedart',
+  inverted: 'inverted',
+  etched: 'etched',
+};
+
+/**
+ * Chase foiling sold inside an otherwise ordinary set. Wizards names a new one
+ * nearly every release (surge, galaxy, halo, ripple, fracture, mana, …), so
+ * match the `…foil` suffix rather than listing them, plus the handful whose
+ * name doesn't say "foil".
+ */
+const UNSUFFIXED_SPECIAL_FOILS = new Set([
+  'oilslick',
+  'neonink',
+  'invisibleink',
+  'textured',
+  'doubleexposure',
+  'doublerainbow',
+  'stepandcompleat',
+  'gilded',
+]);
+
+/**
+ * Frames that stopped being current when the 2015 frame arrived with Magic
+ * Origins. A set released after that printing a card in one of them is doing it
+ * on purpose — the retro-frame treatment.
+ */
+const SUPERSEDED_FRAMES = new Set(['1993', '1997', '2003']);
+const MODERN_FRAME_SINCE = '2015-07-17';
+
+/** Cosmetic treatments this printing carries, in PRINTING_VARIANTS order (stable hashes). */
+function variantsOf(card: RawCard): PrintingVariant[] {
+  const found = new Set<PrintingVariant>();
+
+  if (card.border_color === 'borderless') found.add('borderless');
+  for (const effect of card.frame_effects ?? []) {
+    const tag = VARIANT_FRAME_EFFECTS[effect];
+    if (tag) found.add(tag);
+  }
+  if (card.frame && SUPERSEDED_FRAMES.has(card.frame) && card.released_at >= MODERN_FRAME_SINCE) {
+    found.add('retro');
+  }
+  for (const type of card.promo_types ?? []) {
+    if (type === 'serialized') found.add('serialized');
+    else if (type === 'boosterfun') found.add('boosterfun');
+    else if (type.endsWith('foil') || UNSUFFIXED_SPECIAL_FOILS.has(type)) found.add('specialfoil');
+  }
+  if (card.textless) found.add('textless');
+
+  return PRINTING_VARIANTS.filter((v) => found.has(v));
 }
 
 function price(value: string | null | undefined): number | null {
@@ -188,6 +259,7 @@ export function slimCard(card: RawCard): SlimResult | null {
   const img = images(card);
   const back = backImages(card);
   const of = oracleFields(card);
+  const variants = variantsOf(card);
 
   const printing: Printing = {
     scryfallId: card.id,
@@ -201,6 +273,9 @@ export function slimCard(card: RawCard): SlimResult | null {
     // Omitted (not false) when it's a normal printing — that's the vast
     // majority, and the flag would otherwise cost bytes on every row.
     ...(card.promo ? { promo: true } : {}),
+    // Same sparse convention: ~85% of printings are the plain version and carry
+    // no tags at all, so an empty array on every one of them is pure weight.
+    ...(variants.length ? { variants } : {}),
     imageSmall: img.small,
     imageNormal: img.normal,
     // Omitted (not null) for single-faced cards to keep the artifacts slim.

@@ -18,7 +18,7 @@ import type {
   SealedPriceMap,
   SetTypeMap,
 } from '@mtg/shared';
-import { isMarkerCard } from '@mtg/shared';
+import { isMarkerCard, isVariantPrinting } from '@mtg/shared';
 import { getBulkEntry, getSetTypes, openBulkStream } from './scryfall.js';
 import { slimCard, type RawCard, type SlimResult } from './slimCard.js';
 import { buildSealedProducts } from './sealed.js';
@@ -89,7 +89,13 @@ function clientVersion(): string {
   }
 }
 
-/** Prefer English, then a printing that has an image, then the most recent (id as a deterministic tiebreak). */
+/**
+ * Prefer English, then a printing that has an image, then the most recent —
+ * and among printings that landed the same day, the plain version over a
+ * borderless/showcase/foil-etched sibling. A modern set prints the same card
+ * four or five ways on one release date, so without that tiebreak "the newest
+ * printing" was whichever variant happened to win a UUID comparison.
+ */
 function betterRepresentative(a: SlimResult, b: SlimResult): SlimResult {
   const aEn = a.printing.lang === 'en' ? 1 : 0;
   const bEn = b.printing.lang === 'en' ? 1 : 0;
@@ -100,6 +106,9 @@ function betterRepresentative(a: SlimResult, b: SlimResult): SlimResult {
   if (a.printing.releasedAt !== b.printing.releasedAt) {
     return a.printing.releasedAt > b.printing.releasedAt ? a : b;
   }
+  const aPlain = isVariantPrinting(a.printing) ? 0 : 1;
+  const bPlain = isVariantPrinting(b.printing) ? 0 : 1;
+  if (aPlain !== bPlain) return aPlain > bPlain ? a : b;
   return a.printing.scryfallId <= b.printing.scryfallId ? a : b;
 }
 
@@ -261,6 +270,8 @@ async function main(): Promise<void> {
   });
 
   console.log(`[pipeline] parsed ${seen} cards, kept ${kept} paper printings, ${reps.size} oracle cards`);
+  const variantCount = printings.filter(isVariantPrinting).length;
+  console.log(`[pipeline]   ${variantCount} printings tagged as variants (borderless, showcase, extended art, chase foils, …)`);
   if (duplicates > 0) console.warn(`[pipeline] dropped ${duplicates} duplicate printings (same scryfallId seen twice in bulk data)`);
 
   // Resolve each representative's all_parts references (scryfall ids) to oracle

@@ -28,6 +28,11 @@ jobs:
 
       - run: npm ci
 
+      # esbuild strips types without checking them, so a type error would ship
+      # straight to production. Gate the bundle on tsc first.
+      - name: Typecheck server
+        run: npm run typecheck --workspace server
+
       - name: Build server bundle
         run: npm run build --workspace server
 

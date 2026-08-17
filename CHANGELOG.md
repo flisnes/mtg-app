@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.125.1
+
+- Internal: the server deploy now typechecks before it builds. The bundler stripped types without checking them, so a type error in the server could reach production and only be caught by the health check. Nothing changes in the app.
+
 ## 0.125.0
 
 - **The emergency card-database download works again.** If our server is unreachable the very first time you open the app, it falls back to fetching cards straight from Scryfall. Scryfall changed the format of that download last month and the fallback was never updated, so it failed instead of rescuing you. It now reads the new format, and unpacks the file as it arrives rather than holding all of it in memory at once, so it works on a phone too. A single damaged line is skipped instead of costing you the whole download.

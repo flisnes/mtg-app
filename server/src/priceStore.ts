@@ -9,6 +9,10 @@ import { dayOffset, type PriceMap, type PricesResponse } from '@mtg/shared';
 // with no reading. ~4 bytes per currency per card-day keeps 3 years of every
 // Scryfall printing around 300 MB/yr. Lives in its own SQLite file (prices.db)
 // so the far smaller accounts.db stays easy to back up on its own.
+//
+// Two writers: `appendDay` extends every row forward by a day (the hourly
+// archiver), and `spliceHistory` fills days in and around what a row already
+// holds, the only path that can move `start_day` earlier (the MTGJSON backfill).
 
 /** No-reading sentinel inside the blobs (a real price of ~€42M is safely absurd). */
 const NULL_CENTS = 0xffffffff;
@@ -24,6 +28,15 @@ const DAY_MS = 86_400_000;
 function addDays(day: string, n: number): string {
   return new Date(Date.parse(day) + n * DAY_MS).toISOString().slice(0, 10);
 }
+
+const minDay = (a: string, b: string) => (a < b ? a : b);
+const maxDay = (a: string, b: string) => (a > b ? a : b);
+
+/**
+ * One historical reading for a printing: `[day, eur, usd]` in currency units
+ * (Scryfall-style floats), null where that currency had no price that day.
+ */
+export type HistoricalReading = [day: string, eur: number | null, usd: number | null];
 
 /** Currency units (Scryfall floats) → integer cents, or the null sentinel. */
 function toCells(v: number | null): number {
@@ -47,6 +60,19 @@ function padTo(prev: Buffer, gapDays: number, value: number): Buffer {
   const tail = Buffer.alloc((gapDays + 1) * 4, 0xff);
   tail.writeUInt32LE(value, gapDays * 4);
   return Buffer.concat([prev, tail]);
+}
+
+/**
+ * Copy `src` cells into `dest` starting at cell `at`, dropping whatever falls
+ * off either end (a leading `at < 0` means retention trimmed those days away).
+ */
+function copyClipped(dest: Buffer, src: Uint8Array, at: number): void {
+  const skip = at < 0 ? -at : 0;
+  const from = skip * 4;
+  if (from >= src.byteLength) return;
+  const room = dest.byteLength - Math.max(at, 0) * 4;
+  const bytes = Math.min(src.byteLength - from, room);
+  if (bytes > 0) dest.set(src.subarray(from, from + bytes), Math.max(at, 0) * 4);
 }
 
 interface PriceRow {
@@ -77,12 +103,21 @@ export class PriceStore {
     `);
   }
 
-  /** Last day successfully archived ('' = never). */
-  lastDay(): string {
-    const row = this.db.prepare("SELECT value FROM meta WHERE key = 'last_day'").get() as
+  /** Read a `meta` row ('' = unset). */
+  getMeta(key: string): string {
+    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
       | { value: string }
       | undefined;
     return row?.value ?? '';
+  }
+
+  setMeta(key: string, value: string): void {
+    this.db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)').run(key, value);
+  }
+
+  /** Last day successfully archived ('' = never). */
+  lastDay(): string {
+    return this.getMeta('last_day');
   }
 
   /**
@@ -151,6 +186,89 @@ export class PriceStore {
       .prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES ('last_day', ?)`)
       .run(day);
     return { appended };
+  }
+
+  /**
+   * Splice historical readings into one printing's row, growing the day window
+   * in *either* direction — the daily appender only ever extends forward, so
+   * this is the path a backfill takes to reach days older than `start_day`.
+   *
+   * Readings never overwrite a day that already holds a value: what the
+   * archiver recorded from our own published shard is the authoritative series,
+   * and a backfill only fills the holes around it (older days, plus any day the
+   * archiver missed). Returns true if the row was written.
+   */
+  spliceHistory(scryfallId: string, readings: HistoricalReading[]): boolean {
+    return this.spliceHistories([[scryfallId, readings]]) > 0;
+  }
+
+  /** `spliceHistory` for many printings inside one transaction. Returns rows written. */
+  spliceHistories(entries: Iterable<[string, HistoricalReading[]]>): number {
+    const get = this.db.prepare(
+      'SELECT start_day, eur, usd FROM price_history WHERE scryfall_id = ?',
+    );
+    const put = this.db.prepare(
+      `INSERT OR REPLACE INTO price_history (scryfall_id, start_day, last_day, eur, usd)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    let written = 0;
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const [scryfallId, readings] of entries) {
+        // Drop readings with nothing to say, so an all-null series can't widen
+        // a row's window with empty days.
+        const cells = readings
+          .map(([day, eur, usd]) => [day, toCells(eur), toCells(usd)] as const)
+          .filter(([, eur, usd]) => eur !== NULL_CENTS || usd !== NULL_CENTS)
+          .sort(([a], [b]) => (a < b ? -1 : 1));
+        if (cells.length === 0) continue;
+
+        const row = get.get(scryfallId) as PriceRow | undefined;
+        const haveLen = row ? row.eur.byteLength >> 2 : 0;
+        const first = cells[0]![0];
+        const newest = cells[cells.length - 1]![0];
+        // Trust the blob length over last_day for where the row currently ends;
+        // they agree by construction, and the blob is what we're editing.
+        let start = row ? minDay(row.start_day, first) : first;
+        let last = row ? maxDay(addDays(row.start_day, haveLen - 1), newest) : newest;
+        let len = dayOffset(start, last) + 1;
+        if (len > RETENTION_DAYS) {
+          start = addDays(last, -(RETENTION_DAYS - 1));
+          len = RETENTION_DAYS;
+        }
+
+        const eurBuf = Buffer.alloc(len * 4, 0xff);
+        const usdBuf = Buffer.alloc(len * 4, 0xff);
+        if (row) {
+          // Where the existing window lands in the new one; negative only if a
+          // retention trim cut into its leading days.
+          const at = dayOffset(start, row.start_day);
+          copyClipped(eurBuf, row.eur, at);
+          copyClipped(usdBuf, row.usd, at);
+        }
+        let filled = 0;
+        for (const [day, eur, usd] of cells) {
+          const i = dayOffset(start, day);
+          if (i < 0 || i >= len) continue; // trimmed out of the window
+          if (eur !== NULL_CENTS && eurBuf.readUInt32LE(i * 4) === NULL_CENTS) {
+            eurBuf.writeUInt32LE(eur, i * 4);
+            filled++;
+          }
+          if (usd !== NULL_CENTS && usdBuf.readUInt32LE(i * 4) === NULL_CENTS) {
+            usdBuf.writeUInt32LE(usd, i * 4);
+            filled++;
+          }
+        }
+        if (filled === 0) continue; // every reading was already covered
+        put.run(scryfallId, start, last, eurBuf, usdBuf);
+        written++;
+      }
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+    return written;
   }
 
   getHistory(scryfallId: string): PricesResponse | null {

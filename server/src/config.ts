@@ -45,4 +45,13 @@ export const config = {
   /** How often the archiver checks for a new price day, and the boot-time head start. */
   priceArchiveIntervalMs: num('PRICE_ARCHIVE_INTERVAL_MS', 60 * 60 * 1000),
   priceArchiveDelayMs: num('PRICE_ARCHIVE_DELAY_MS', 15 * 1000),
+  /**
+   * Where the one-shot price backfill reads MTGJSON's rolling 90-day history
+   * from (no trailing slash). PRICE_BACKFILL=0 skips it; PRICE_BACKFILL_FORCE=1
+   * re-runs it even though a previous run finished.
+   */
+  mtgjsonUrl: (process.env.MTGJSON_URL ?? 'https://mtgjson.com/api/v5').replace(/\/+$/, ''),
+  priceBackfill: (process.env.PRICE_BACKFILL ?? '1') !== '0',
+  priceBackfillForce: process.env.PRICE_BACKFILL_FORCE === '1',
+  priceBackfillDelayMs: num('PRICE_BACKFILL_DELAY_MS', 60 * 1000),
 } as const;

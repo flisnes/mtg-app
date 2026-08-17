@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.125.0',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The emergency "fetch cards straight from Scryfall" fallback works again. Scryfall changed that download\'s format and we had not caught up, so it failed instead of rescuing a first launch that could not reach our server. It also unpacks the file as it downloads now, so a phone can handle it.',
+      },
+    ],
+  },
+  {
     version: '0.124.2',
     changes: [
       {

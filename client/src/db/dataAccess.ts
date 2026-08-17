@@ -2262,6 +2262,7 @@ export async function replaceAllUserData(data: Omit<TransferPayload, 'version'>)
       db.deckFolders.bulkAdd(data.deckFolders),
       db.trades.bulkAdd(data.trades),
       db.priceHistories.bulkAdd(data.priceHistories),
+      db.sealedPriceHistories.bulkAdd(data.sealedPriceHistories),
       db.events.bulkAdd(data.events),
     ]);
   });

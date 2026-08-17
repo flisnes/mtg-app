@@ -1,10 +1,18 @@
-import { dayOffset, type PriceHistory } from '@mtg/shared';
+import { dayOffset, type DayReadings, type PriceHistory } from '@mtg/shared';
 
-// Pure helpers for the compact PriceHistory format (see shared/src/user.ts).
+// Pure helpers for the compact daily-readings format (see shared/src/user.ts).
+// Everything that doesn't need the row's identity takes a bare DayReadings, so
+// card printings and sealed products share one implementation.
+//
 // No db imports — also used by the Dexie v4 upgrade in db/schema.ts and by
 // transfer-payload sanitization, both of which must not depend on tracking.ts.
 
 export { dayOffset };
+
+/** Today's day key, in the UTC "YYYY-MM-DD" form readings are stamped with. */
+export function todayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 /** Currency units → integer cents (the storage format). */
 export function toCents(v: number | null | undefined): number | null {
@@ -16,7 +24,7 @@ export function toCents(v: number | null | undefined): number | null {
  * days. No-op (returns false) if that day is already covered or precedes
  * startDay.
  */
-export function recordDay(h: PriceHistory, day: string, eur: number | null, usd: number | null): boolean {
+export function recordDay(h: DayReadings, day: string, eur: number | null, usd: number | null): boolean {
   const idx = dayOffset(h.startDay, day);
   if (idx < 0 || idx < h.eur.length) return false;
   while (h.eur.length < idx) {
@@ -60,7 +68,7 @@ export function mergeHistories(a: PriceHistory, b: PriceHistory): PriceHistory {
  * (prices move slowly; a reading from a few days before is a fine estimate).
  * Null when the history doesn't cover that day.
  */
-export function centsAround(h: PriceHistory, day: string, lookback = 7): number | null {
+export function centsAround(h: DayReadings, day: string, lookback = 7): number | null {
   const idx = dayOffset(h.startDay, day);
   if (idx < 0) return null;
   for (let i = Math.min(idx, h.eur.length - 1); i >= 0 && idx - i <= lookback; i--) {
@@ -85,10 +93,10 @@ export interface HistoryChange {
 }
 
 /**
- * Change since tracking began, in the card's display currency (whatever the
+ * Change since tracking began, in the row's display currency (whatever the
  * latest reading has, EUR preferred). Null when nothing was ever recorded.
  */
-export function historyChange(h: PriceHistory): HistoryChange | null {
+export function historyChange(h: DayReadings): HistoryChange | null {
   let cur: 'eur' | 'usd' | null = null;
   for (let i = h.eur.length - 1; i >= 0 && !cur; i--) {
     if (h.eur[i] != null) cur = 'eur';

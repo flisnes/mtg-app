@@ -21,6 +21,7 @@ import {
   type PriceHistory,
   type RemovalReason,
   type SealedItem,
+  type SealedPriceHistory,
   type Trade,
   type UserEvent,
   type UserEventKind,
@@ -53,6 +54,8 @@ export interface TransferPayload {
   deckFolders: DeckFolder[];
   trades: Trade[];
   priceHistories: PriceHistory[];
+  /** Sealed-shelf price readings. Absent from senders older than the feature → []. */
+  sealedPriceHistories: SealedPriceHistory[];
   /** Card history (sync plan). Absent from pre-v0.11 senders → sanitized to []. */
   events: UserEvent[];
 }
@@ -81,6 +84,7 @@ export async function exportUserData(): Promise<TransferPayload> {
       deckFolders: await db.deckFolders.toArray(),
       trades: await db.trades.toArray(),
       priceHistories: await db.priceHistories.toArray(),
+      sealedPriceHistories: await db.sealedPriceHistories.toArray(),
       events: await db.events.toArray(),
     }),
   );
@@ -120,6 +124,7 @@ const CAPS = {
   deckFolders: 500,
   trades: 10_000,
   priceHistories: 100_000,
+  sealedPriceHistories: 20_000,
   priceSnapshots: 500_000, // legacy row-per-day senders only
   events: 500_000,
 } as const;
@@ -484,6 +489,26 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
     });
   }
 
+  // The same, for the sealed shelf — keyed by product id instead of printing.
+  const sealedPriceHistories: SealedPriceHistory[] = [];
+  const sealedHistIds = new Set<string>();
+  for (const r of rows(p.sealedPriceHistories, CAPS.sealedPriceHistories)) {
+    const productId = id(r.productId);
+    const startDay = typeof r.startDay === 'string' && DAY_RE.test(r.startDay) ? r.startDay : null;
+    if (!productId || !startDay || sealedHistIds.has(productId)) continue;
+    const eurRaw = Array.isArray(r.eur) ? r.eur.slice(0, MAX_HISTORY_DAYS) : [];
+    const usdRaw = Array.isArray(r.usd) ? r.usd.slice(0, MAX_HISTORY_DAYS) : [];
+    const len = Math.max(eurRaw.length, usdRaw.length);
+    if (!len) continue;
+    sealedHistIds.add(productId);
+    sealedPriceHistories.push({
+      productId,
+      startDay,
+      eur: Array.from({ length: len }, (_, i) => cents(eurRaw[i])),
+      usd: Array.from({ length: len }, (_, i) => cents(usdRaw[i])),
+    });
+  }
+
   // Legacy senders (pre-compact history) ship row-per-day priceSnapshots
   // instead; fold them into histories so upgrading via transfer loses nothing.
   if (!priceHistories.length && Array.isArray(p.priceSnapshots)) {
@@ -525,5 +550,17 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
     events.push(ev);
   }
 
-  return { version: PAYLOAD_VERSION, collection, sealedItems, wishlist, decks, deckCards, deckFolders, trades, priceHistories, events };
+  return {
+    version: PAYLOAD_VERSION,
+    collection,
+    sealedItems,
+    wishlist,
+    decks,
+    deckCards,
+    deckFolders,
+    trades,
+    priceHistories,
+    sealedPriceHistories,
+    events,
+  };
 }

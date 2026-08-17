@@ -355,16 +355,33 @@ export interface UserEvent {
 }
 
 /**
- * Compact price history for one collection printing (every printing in the
- * collection is tracked automatically): one row per card, not one per
- * card-day. `eur[i]`/`usd[i]` are integer cents for the day `startDay + i`
- * (UTC); days with no reading (app not opened, no price) are null. A few bytes
- * per card per day, so tracking a whole collection stays ~20 MB/year instead
- * of ~1 GB with row-per-day snapshot objects.
+ * A run of daily price readings, whatever they're readings of. `eur[i]`/`usd[i]`
+ * are integer cents for the day `startDay + i` (UTC); days with no reading (app
+ * not opened, no price) are null, and the two arrays are the same length. The
+ * pure helpers in price/history.ts work on this shape alone, so cards and sealed
+ * products share them.
  */
-export interface PriceHistory {
-  scryfallId: string;
+export interface DayReadings {
   startDay: string; // YYYY-MM-DD (UTC) of index 0
   eur: (number | null)[]; // integer cents per day
   usd: (number | null)[]; // integer cents per day; same length as eur
+}
+
+/**
+ * Compact price history for one collection printing (every printing in the
+ * collection is tracked automatically): one row per card, not one per
+ * card-day. A few bytes per card per day, so tracking a whole collection stays
+ * ~20 MB/year instead of ~1 GB with row-per-day snapshot objects.
+ */
+export interface PriceHistory extends DayReadings {
+  scryfallId: string;
+}
+
+/**
+ * The same, for one unopened sealed product on the shelf. Keyed by the MTGJSON
+ * product uuid (`SealedItem.productId`), because that's what the sealed price
+ * map is keyed by — a box has no scryfallId to hang a history on.
+ */
+export interface SealedPriceHistory extends DayReadings {
+  productId: string;
 }

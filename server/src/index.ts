@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { AccountStore } from './accountStore.js';
 import { registerAccountRoutes } from './accounts.js';
 import { startPriceArchiver } from './priceArchive.js';
+import { startPriceBackfill } from './priceBackfill.js';
 import { PriceStore } from './priceStore.js';
 import { registerPriceRoutes } from './prices.js';
 import { registerTradeRelay } from './relay.js';
@@ -42,8 +43,12 @@ async function main() {
   // Daily price archive (Phase E): its own SQLite file, appended in-process.
   const priceStore = new PriceStore(config.dataDir);
   const stopArchiver = startPriceArchiver(priceStore, app.log);
+  // One-shot: pull MTGJSON's rolling 90-day window in to cover the days before
+  // the archiver existed. Self-guarding, so this is a no-op on later boots.
+  const stopBackfill = startPriceBackfill(priceStore, app.log);
   app.addHook('onClose', () => {
     stopArchiver();
+    stopBackfill();
     store.close();
     priceStore.close();
   });

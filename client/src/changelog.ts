@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.124.2',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Price history now goes back to mid-May instead of starting the day our archive did. Card trends, the "then" hints in a card\'s history and "Since tracking began" in Price Movers all gained about two months.',
+      },
+    ],
+  },
+  {
     version: '0.124.1',
     changes: [
       {

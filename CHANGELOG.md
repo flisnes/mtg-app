@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.124.2
+
+- **Price history now reaches back to mid-May, not just to the day we started recording.** The server only knew prices from the day its archive went live, so every chart began there. It has now pulled in MTGJSON's rolling 90-day window of the same two series we track (Cardmarket in euro, TCGplayer in dollar), which backdates every printing to 2026-05-18. Card sheet trends, the "≈ €x/ea then" hints in a card's history, and "Since tracking began" in Price Movers all see roughly two extra months.
+- Days the archive missed while the server was down are filled in from the same source. Readings we recorded ourselves always win, so nothing you already saw changes value.
+
 ## 0.124.1
 
 - **A card sheet no longer flashes the wrong edition.** Opening one used to paint whatever printing the card database calls representative, then swap to the right one a moment later: the copy you own, the edition your deck records, or the one your printing preference picks. The art now waits until we know which edition to show, then fades in.

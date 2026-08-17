@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.125.0
+
+- **The emergency card-database download works again.** If our server is unreachable the very first time you open the app, it falls back to fetching cards straight from Scryfall. Scryfall changed the format of that download last month and the fallback was never updated, so it failed instead of rescuing you. It now reads the new format, and unpacks the file as it arrives rather than holding all of it in memory at once, so it works on a phone too. A single damaged line is skipped instead of costing you the whole download.
+- This only ever runs when you have no card data yet and our server can't be reached. If you already have cards, nothing about your app changes.
+
 ## 0.124.2
 
 - **Price history now reaches back to mid-May, not just to the day we started recording.** The server only knew prices from the day its archive went live, so every chart began there. It has now pulled in MTGJSON's rolling 90-day window of the same two series we track (Cardmarket in euro, TCGplayer in dollar), which backdates every printing to 2026-05-18. Card sheet trends, the "≈ €x/ea then" hints in a card's history, and "Since tracking began" in Price Movers all see roughly two extra months.

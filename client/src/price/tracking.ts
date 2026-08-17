@@ -1,7 +1,7 @@
 import type { PriceHistory } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPrintingsByIds } from '../db/queries.js';
-import { recordDay, toCents } from './history.js';
+import { recordDay, toCents, todayKey } from './history.js';
 
 // Price tracking (client-only). Every distinct printing in the collection or
 // on the wishlist is tracked automatically: whenever the app opens, the
@@ -10,10 +10,6 @@ import { recordDay, toCents } from './history.js';
 // a daily price history without any per-card API traffic. Each card's history
 // is one compact PriceHistory row (cents indexed by day), so a whole
 // collection stays small.
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 /**
  * Record today's price for every tracked printing that doesn't have one yet,
@@ -44,7 +40,7 @@ export async function recordCollectionPrices(): Promise<number> {
   if (stale.length) await db.priceHistories.bulkDelete(stale);
   if (!tracked.size) return 0;
 
-  const day = today();
+  const day = todayKey();
   const ids = [...tracked];
   const [printings, histories] = await Promise.all([getPrintingsByIds(ids), db.priceHistories.bulkGet(ids)]);
 

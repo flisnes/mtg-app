@@ -4917,12 +4917,92 @@ a.seg {
   border-radius: 10px;
   background: var(--surface-2);
 }
+/* Box shot + text open the product's own sheet; the stepper beside them stays a
+   one-tap affordance, so the row has two targets rather than one. */
+.sealed-owned-open {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
 .sealed-owned-text {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
   flex: 1;
   min-width: 0;
+}
+.sealed-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  margin-left: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  vertical-align: -1px;
+}
+/* Owned-product sheet: copies and worth, side by side. */
+.sealed-owned-stats {
+  display: flex;
+  gap: 1.2rem;
+  margin: 0.6rem 0 0.2rem;
+}
+.sealed-owned-stats > div {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Grid view of the shelf. Box shots are photographed at every aspect ratio
+   going, so the tile is a fixed square with the shot contained inside it —
+   a card grid's 488/680 frame would letterbox a display and crop a pack. */
+.sealed-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 0.6rem;
+}
+.sealed-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.sealed-tile-img {
+  position: relative;
+  padding: 0;
+  border: none;
+  background: var(--surface-2);
+  border-radius: 8px;
+  overflow: hidden;
+  aspect-ratio: 1;
+  width: 100%;
+  cursor: pointer;
+  display: block;
+}
+.sealed-tile-img .sealed-shot {
+  width: 100%;
+  height: 100%;
+}
+.sealed-tile-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.sealed-tile-sub {
+  font-size: 0.78rem;
+  color: var(--text-dim);
 }
 .sealed-owned-qty {
   display: flex;

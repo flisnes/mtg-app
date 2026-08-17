@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { DAY_MS, type PriceHistory, type UserEvent, type UserEventKind } from '@mtg/shared';
+import { DAY_MS, type DayReadings, type UserEvent, type UserEventKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
 import { convertToDisplay, fmtMoney } from '../price/rates.js';
@@ -19,6 +19,10 @@ import { useDismiss } from './useDismiss.js';
 // Everything is drawn in the display currency: readings are stored per day in
 // EUR/USD cents (price/history.ts) and acquisition prices in EUR cents, so both
 // go through convertToDisplay before they ever share an axis.
+//
+// Without a card (`oracleId` omitted) the same chart draws a bare price line —
+// that's the sealed shelf's use, where a box has no oracleId, no event log and
+// so nothing to mark on it.
 
 /** Events that moved money, and so earn a marker on the line itself. */
 const MAJOR: ReadonlySet<UserEventKind> = new Set<UserEventKind>(['collection.add', 'collection.remove']);
@@ -72,10 +76,11 @@ export function PriceChartSheet({
   name: string;
   /** Which printing this is — set name, collector number, that sort of thing. */
   subtitle?: string;
-  oracleId: string;
+  /** Omit for a line with no history to mark on it (a sealed product). */
+  oracleId?: string;
   /** The shown printing; the timeline scopes to it plus printing-agnostic events. */
-  scryfallId: string;
-  history: PriceHistory;
+  scryfallId?: string;
+  history: DayReadings;
   /** Tapping a marker opens that event (the card sheet's own event modal). */
   onEventClick?: (e: UserEvent) => void;
   onClose: () => void;
@@ -97,7 +102,10 @@ export function PriceChartSheet({
     return () => ro.disconnect();
   }, []);
 
-  const events = useLiveQuery(() => db.events.where('oracleId').equals(oracleId).toArray(), [oracleId]);
+  const events = useLiveQuery(
+    async () => (oracleId ? db.events.where('oracleId').equals(oracleId).toArray() : []),
+    [oracleId],
+  );
 
   // The series, in display-currency units. Whichever currency the *latest*
   // reading has wins the whole line (same rule as the sparkline's).
@@ -451,26 +459,30 @@ export function PriceChartSheet({
           </div>
         )}
 
-        <div className="price-chart-legend">
-          <span>
-            <svg width="10" height="10" aria-hidden>
-              <circle cx="5" cy="5" r="4" fill="var(--ok)" />
-            </svg>
-            Acquired
-          </span>
-          <span>
-            <svg width="10" height="10" aria-hidden>
-              <circle cx="5" cy="5" r="4" fill="var(--danger)" />
-            </svg>
-            Sold or traded
-          </span>
-          <span>
-            <svg width="10" height="10" aria-hidden>
-              <rect x="4" y="0" width="2" height="10" fill="var(--text-dim)" />
-            </svg>
-            Decks, wishlist, tradelist
-          </span>
-        </div>
+        {/* Nothing to explain when there are no marks: a sealed product has no
+            event log, so the line is the whole chart. */}
+        {oracleId && (
+          <div className="price-chart-legend">
+            <span>
+              <svg width="10" height="10" aria-hidden>
+                <circle cx="5" cy="5" r="4" fill="var(--ok)" />
+              </svg>
+              Acquired
+            </span>
+            <span>
+              <svg width="10" height="10" aria-hidden>
+                <circle cx="5" cy="5" r="4" fill="var(--danger)" />
+              </svg>
+              Sold or traded
+            </span>
+            <span>
+              <svg width="10" height="10" aria-hidden>
+                <rect x="4" y="0" width="2" height="10" fill="var(--text-dim)" />
+              </svg>
+              Decks, wishlist, tradelist
+            </span>
+          </div>
+        )}
 
         {marks.earlier > 0 && (
           <p className="fine-print">

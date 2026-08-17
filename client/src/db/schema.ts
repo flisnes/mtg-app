@@ -12,6 +12,7 @@ import type {
   PriceHistory,
   PriceShard,
   SealedItem,
+  SealedPriceHistory,
   SyncChange,
   UserEvent,
 } from '@mtg/shared';
@@ -39,6 +40,8 @@ export class MtgDatabase extends Dexie {
   trades!: Table<Trade, string>;
   settings!: Table<Setting, string>;
   priceHistories!: Table<PriceHistory, string>;
+  /** Daily price readings for the unopened products on the shelf, by productId. */
+  sealedPriceHistories!: Table<SealedPriceHistory, string>;
   priceShards!: Table<PriceShard, string>;
   events!: Table<UserEvent, string>;
   outbox!: Table<SyncChange, [string, string]>;
@@ -221,6 +224,13 @@ export class MtgDatabase extends Dexie {
     // own table instead, synced like any other user data. Indexed by productId
     // so "how many of this box do I own?" is a lookup, not a scan.
     this.version(14).stores({ sealedItems: 'id, productId, updatedAt' });
+
+    // v15 (sealed value tracking): a box gains and loses value like a card, so
+    // it gets the same compact daily readings — keyed by productId, because the
+    // sealed price map is, and a box has no scryfallId. Separate from
+    // priceHistories rather than sharing it: every reader of that table joins
+    // its key against the card DB.
+    this.version(15).stores({ sealedPriceHistories: 'productId' });
   }
 }
 
@@ -241,5 +251,6 @@ export const USER_DATA_TABLES = [
   db.deckFolders,
   db.trades,
   db.priceHistories,
+  db.sealedPriceHistories,
   db.events,
 ];

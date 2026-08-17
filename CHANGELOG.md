@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.126.0
+
+- **Sealed products are tracked like cards now.** The app records what every unopened box, display and precon on your shelf is quoted at, once a day when you open it, and the "Sealed value" figure on the Sealed products page opens a chart of what the whole shelf has been worth. Dots on the line are the days something arrived; tap one to see what it was. A box counts from the day you added it, so the line steps up when you buy rather than pretending you always owned it.
+- **Tap a product to open its own sheet:** box shot, price each, what your copies add up to, a sparkline of its recorded price, and the full chart behind it. Copies and Remove live there too.
+- **Grid view on the Sealed products page.** The list/grid toggle is the same one the collection uses, and box shots sit in square frames rather than card-shaped ones (a display is square, a pack is tall).
+- **Two new sorts: price change and price change %,** alongside the existing price and total value. Rows and tiles also carry a small green or red movement marker.
+- Products neither TCGplayer nor Cardmarket quotes are counted out loud rather than quietly left out, and a product you sell off has its readings dropped on the next launch.
+
 ## 0.125.1
 
 - Internal: the server deploy now typechecks before it builds. The bundler stripped types without checking them, so a type error in the server could reach production and only be caught by the health check. Nothing changes in the app.

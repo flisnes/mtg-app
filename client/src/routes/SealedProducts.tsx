@@ -5,6 +5,8 @@ import { db } from '../db/schema.js';
 import { removeSealedItem, setSealedItemQuantity } from '../db/dataAccess.js';
 import { loadSealedProducts } from '../sealed/store.js';
 import { SealedImage } from '../sealed/SealedImage.js';
+import { SealedItemSheet } from '../sealed/SealedItemSheet.js';
+import { SealedValueChartSheet } from '../sealed/SealedValueChart.js';
 import { categoryLabel, fmtSealedPrice, itemImage, sealedPriceOf } from '../sealed/product.js';
 import { AddSealedProductSheet } from '../components/AddSealedProductSheet.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
@@ -16,20 +18,30 @@ import {
   useListSort,
   type PriceTotal,
 } from '../components/CardSorting.js';
+import { ViewToggle, useViewMode, type ViewMode } from '../components/CardViews.js';
+import { Icon } from '../components/icons.js';
 import { HeaderValue, headerValue } from '../components/ValueSummary.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
+import { historyChange } from '../price/history.js';
+import { useSealedHistories } from '../price/sealedValue.js';
 import { EmptyState, Page } from './Page.js';
 
 // The sealed shelf: unopened boxes, displays, packs and precons. Deliberately
 // its own view rather than a section of the collection — these rows have no
 // oracleId, so none of the collection's search, sorting, price history or
 // mover machinery applies to them.
+//
+// Value tracking is the shelf's own (price/sealedTracking.ts): daily readings
+// per product id, which is what the change sorts, the trend marks and the value
+// chart behind the header total all read.
 
-type SealedSort = 'name' | 'price' | 'value' | 'copies' | 'set' | 'released' | 'added';
+type SealedSort = 'name' | 'price' | 'value' | 'change' | 'changePct' | 'copies' | 'set' | 'released' | 'added';
 const SORT_OPTIONS: [SealedSort, string][] = [
   ['name', 'Sort: Name'],
   ['price', 'Sort: Price each'],
   ['value', 'Sort: Total value'],
+  ['change', 'Sort: Price change'],
+  ['changePct', 'Sort: Price change %'],
   ['copies', 'Sort: Copies'],
   ['set', 'Sort: Set'],
   ['released', 'Sort: Release date'],
@@ -43,6 +55,12 @@ const PRICE_OPTIONS: [PriceFilter, string][] = [
   ['unpriced', 'Price: Unpriced'],
 ];
 
+/** Recorded movement of one product, in its own quoted currency. */
+interface Change {
+  delta: number;
+  pct: number | null;
+}
+
 export function SealedProducts() {
   const items = useLiveQuery(() => db.sealedItems.toArray(), []);
   const [prices, setPrices] = useState<SealedPriceMap>({});
@@ -50,8 +68,11 @@ export function SealedProducts() {
   // date live there, not on the owned row.
   const [catalog, setCatalog] = useState<Map<string, SealedProduct>>(new Map());
   const [adding, setAdding] = useState(false);
+  const [chartOpen, setChartOpen] = useState(false);
+  const [openItem, setOpenItem] = useState<string | null>(null);
   const { confirm, sheet: confirmSheet } = useConfirm();
   const [sort, setSort] = useListSort<SealedSort>('sealed', { key: 'name', dir: 'asc' });
+  const [view, setView] = useViewMode();
   const [nameFilter, setNameFilter] = useState('');
   const [setFilter, setSetFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -70,6 +91,19 @@ export function SealedProducts() {
       cancelled = true;
     };
   }, []);
+
+  // One row per product, so unlike the collection's histories this table is
+  // small enough to read whether or not a change sort is active — the trend
+  // marks want it either way.
+  const histories = useSealedHistories();
+  const changes = useMemo(() => {
+    const m = new Map<string, Change>();
+    for (const [productId, h] of histories ?? []) {
+      const c = historyChange(h);
+      if (c) m.set(productId, { delta: c.delta, pct: c.pct });
+    }
+    return m;
+  }, [histories]);
 
   const total: PriceTotal = { eur: 0, usd: 0 };
   let unpriced = 0;
@@ -106,11 +140,14 @@ export function SealedProducts() {
       const priced = !!sealedPriceOf(prices, item.productId);
       return priceFilter === 'priced' ? priced : !priced;
     });
-    return sortSealed(kept, sort, prices, catalog);
-  }, [items, nameFilter, setFilter, categoryFilter, priceFilter, sort, prices, catalog]);
+    return sortSealed(kept, sort, prices, catalog, changes);
+  }, [items, nameFilter, setFilter, categoryFilter, priceFilter, sort, prices, catalog, changes]);
 
   const boxes = (sorted ?? []).reduce((s, i) => s + i.quantity, 0);
   const filtering = !!nameFilter.trim() || setFilter !== 'all' || categoryFilter !== 'all' || priceFilter !== 'all';
+  // From the unfiltered rows on purpose: narrowing the list while a product's
+  // sheet is open shouldn't yank it out from under the reader.
+  const shown = openItem ? (items ?? []).find((i) => i.id === openItem) : undefined;
 
   const onRemove = async (item: SealedItem) => {
     const ok = await confirm({
@@ -119,7 +156,10 @@ export function SealedProducts() {
       confirmLabel: 'Remove',
       danger: true,
     });
-    if (ok) await removeSealedItem(item.id);
+    if (ok) {
+      setOpenItem(null);
+      await removeSealedItem(item.id);
+    }
   };
 
   return (
@@ -131,7 +171,8 @@ export function SealedProducts() {
           label="Sealed value"
           value={headerValue(total)}
           note={unpriced > 0 ? `${unpriced} unpriced` : undefined}
-          title="Market prices: TCGplayer in USD, Cardmarket in EUR"
+          onClick={() => setChartOpen(true)}
+          title="Open the sealed value chart"
         />
       }
       menu={
@@ -212,47 +253,19 @@ export function SealedProducts() {
             </p>
             <div className="meta-actions">
               <ListSortControls prefs={sort} onChange={setSort} options={SORT_OPTIONS} />
+              <ViewToggle mode={view} onChange={setView} />
             </div>
           </div>
           {sorted.length === 0 && <p className="search-meta">Nothing here matches.</p>}
-          <ul className="sealed-owned">
-            {sorted.map((item) => {
-              const priceText = fmtSealedPrice(sealedPriceOf(prices, item.productId));
-              const category = catalog.get(item.productId)?.category;
-              return (
-                <li key={item.id} className="sealed-owned-row">
-                  <SealedImage url={itemImage(item, 'thumb')} alt="" className="sealed-shot-sm" />
-                  <div className="sealed-owned-text">
-                    <span className="sealed-result-name">{item.name}</span>
-                    <span className="sealed-result-sub">
-                      {item.setName ?? item.set.toUpperCase()}
-                      {category ? ` · ${categoryLabel(category)}` : ''}
-                      {priceText ? ` · ${priceText} each` : ''}
-                    </span>
-                  </div>
-                  <div className="sealed-owned-qty">
-                    <button
-                      onClick={() => void setSealedItemQuantity(item.id, item.quantity - 1)}
-                      aria-label={`One fewer ${item.name}`}
-                    >
-                      −
-                    </button>
-                    <span className="sealed-copies-n">{item.quantity}</span>
-                    <button
-                      onClick={() => void setSealedItemQuantity(item.id, item.quantity + 1)}
-                      aria-label={`One more ${item.name}`}
-                      disabled={item.quantity >= 9999}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <button className="linklike sealed-owned-remove" onClick={() => void onRemove(item)}>
-                    Remove
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <SealedShelf
+            items={sorted}
+            view={view}
+            prices={prices}
+            catalog={catalog}
+            changes={changes}
+            onOpen={(item) => setOpenItem(item.id)}
+            onRemove={(item) => void onRemove(item)}
+          />
           {unpriced > 0 && (
             <p className="fine-print">
               {unpriced === 1
@@ -264,8 +277,118 @@ export function SealedProducts() {
       )}
 
       {adding && <AddSealedProductSheet onClose={() => setAdding(false)} />}
+      {chartOpen && <SealedValueChartSheet onClose={() => setChartOpen(false)} />}
+      {shown && (
+        <SealedItemSheet
+          item={shown}
+          product={catalog.get(shown.productId)}
+          price={sealedPriceOf(prices, shown.productId)}
+          onRemove={() => void onRemove(shown)}
+          onClose={() => setOpenItem(null)}
+        />
+      )}
       {confirmSheet}
     </Page>
+  );
+}
+
+/** Green rising / red falling glyph for a product whose recorded price moved. */
+function TrendMark({ change }: { change: Change | undefined }) {
+  if (!change || Math.abs(change.delta) < 0.005) return null;
+  const dir = change.delta > 0 ? 'up' : 'down';
+  return (
+    <span className={`sealed-trend trend-${dir}`} title={dir === 'up' ? 'Price rising' : 'Price falling'}>
+      <Icon name={dir === 'up' ? 'prices' : 'pricesDown'} size={12} />
+      {change.pct != null && ` ${change.pct >= 0 ? '+' : '−'}${Math.abs(change.pct).toFixed(1)}%`}
+    </span>
+  );
+}
+
+/** The shelf itself, as rows or as box shots. */
+function SealedShelf({
+  items,
+  view,
+  prices,
+  catalog,
+  changes,
+  onOpen,
+  onRemove,
+}: {
+  items: SealedItem[];
+  view: ViewMode;
+  prices: SealedPriceMap;
+  catalog: Map<string, SealedProduct>;
+  changes: Map<string, Change>;
+  onOpen: (item: SealedItem) => void;
+  onRemove: (item: SealedItem) => void;
+}) {
+  if (view === 'grid') {
+    return (
+      <ul className="sealed-grid">
+        {items.map((item) => {
+          const priceText = fmtSealedPrice(sealedPriceOf(prices, item.productId));
+          return (
+            <li key={item.id} className="sealed-tile">
+              <button className="sealed-tile-img" onClick={() => onOpen(item)} aria-label={item.name}>
+                <SealedImage url={itemImage(item, 'thumb')} alt="" />
+                {item.quantity !== 1 && <span className="tile-count">×{item.quantity}</span>}
+              </button>
+              <span className="sealed-tile-name" title={item.name}>
+                {item.name}
+              </span>
+              <span className="sealed-tile-sub">
+                {priceText ?? '—'}
+                <TrendMark change={changes.get(item.productId)} />
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  return (
+    <ul className="sealed-owned">
+      {items.map((item) => {
+        const priceText = fmtSealedPrice(sealedPriceOf(prices, item.productId));
+        const category = catalog.get(item.productId)?.category;
+        return (
+          <li key={item.id} className="sealed-owned-row">
+            <button className="sealed-owned-open" onClick={() => onOpen(item)} aria-label={item.name}>
+              <SealedImage url={itemImage(item, 'thumb')} alt="" className="sealed-shot-sm" />
+              <span className="sealed-owned-text">
+                <span className="sealed-result-name">{item.name}</span>
+                <span className="sealed-result-sub">
+                  {item.setName ?? item.set.toUpperCase()}
+                  {category ? ` · ${categoryLabel(category)}` : ''}
+                  {priceText ? ` · ${priceText} each` : ''}
+                  <TrendMark change={changes.get(item.productId)} />
+                </span>
+              </span>
+            </button>
+            <div className="sealed-owned-qty">
+              <button
+                onClick={() => void setSealedItemQuantity(item.id, item.quantity - 1)}
+                aria-label={`One fewer ${item.name}`}
+              >
+                −
+              </button>
+              <span className="sealed-copies-n">{item.quantity}</span>
+              <button
+                onClick={() => void setSealedItemQuantity(item.id, item.quantity + 1)}
+                aria-label={`One more ${item.name}`}
+                disabled={item.quantity >= 9999}
+              >
+                +
+              </button>
+            </div>
+            <button className="linklike sealed-owned-remove" onClick={() => onRemove(item)}>
+              Remove
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -273,13 +396,15 @@ export function SealedProducts() {
  * Sort the shelf. Money is normalised into the display currency (the two
  * markets disagree on sealed, and half the shelf may only be quoted in one of
  * them), and anything the catalog can't answer for — a release date for a
- * product that isn't installed — sorts last rather than first.
+ * product that isn't installed, a change for one tracked since yesterday —
+ * sorts last rather than first.
  */
 function sortSealed(
   items: SealedItem[],
   prefs: { key: SealedSort; dir: 'asc' | 'desc' },
   prices: SealedPriceMap,
   catalog: Map<string, SealedProduct>,
+  changes: Map<string, Change>,
 ): SealedItem[] {
   const mul = prefs.dir === 'desc' ? -1 : 1;
   const each = (i: SealedItem) => priceValue(sealedPriceOf(prices, i.productId));
@@ -291,6 +416,10 @@ function sortSealed(
         const p = each(i);
         return p == null ? null : p * i.quantity;
       }
+      case 'change':
+        return changes.get(i.productId)?.delta ?? null;
+      case 'changePct':
+        return changes.get(i.productId)?.pct ?? null;
       case 'copies':
         return i.quantity;
       case 'added':

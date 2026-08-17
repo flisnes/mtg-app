@@ -70,6 +70,44 @@ async function getPricesRow(): Promise<SealedPricesRow | undefined> {
 }
 
 /**
+ * Bring the cached price map up to the manifest's hash and return the best
+ * prices we have. Never throws: prices are decoration on the catalog and the
+ * whole point of the daily value reading is that a stale one still beats none.
+ */
+async function syncPrices(v2: CardDbManifest['v2']): Promise<SealedPriceMap> {
+  const cached = await getPricesRow();
+  try {
+    const meta = v2?.sealedPrices;
+    if (meta && cached?.sha256 !== meta.sha256) {
+      const parsed = JSON.parse(await fetchVerified(meta)) as SealedPriceMap;
+      await db.sealed.put({ key: 'prices', sha256: meta.sha256, count: Object.keys(parsed).length, prices: parsed });
+      return parsed;
+    }
+  } catch {
+    /* keep whatever prices are cached */
+  }
+  return cached?.prices ?? {};
+}
+
+/**
+ * Just the prices, refreshed. The daily value reading (price/sealedTracking.ts)
+ * runs at startup and must not drag the multi-megabyte catalog down with it —
+ * the price artifact is small, and owning a box already means the catalog was
+ * installed at some point. Falls back to the cached map when offline.
+ */
+export async function refreshSealedPrices(): Promise<SealedPriceMap> {
+  const cached = await getPricesRow();
+  if (CARD_DB_BASE && (!cached || getPrefs().cardDbPolicy !== 'never')) {
+    try {
+      return await syncPrices((await fetchManifest()).v2);
+    } catch {
+      /* offline / no manifest → whatever is cached */
+    }
+  }
+  return cached?.prices ?? {};
+}
+
+/**
  * Load the sealed-product catalog for the UI. Refreshes from the manifest when
  * online and the hash has moved, otherwise serves the cached copy. Any
  * network/parse error falls back to whatever is cached; only a total absence of
@@ -98,23 +136,8 @@ export async function loadSealedProducts(): Promise<SealedLoad> {
       }
       if (!meta && !installed) return { kind: 'unavailable' };
 
-      // Prices, in their own try: they must not take the catalog down with them.
-      try {
-        const priceMeta = v2?.sealedPrices;
-        const cached = await getPricesRow();
-        if (priceMeta && cached?.sha256 !== priceMeta.sha256) {
-          const text = await fetchVerified(priceMeta);
-          const parsed = JSON.parse(text) as SealedPriceMap;
-          await db.sealed.put({
-            key: 'prices',
-            sha256: priceMeta.sha256,
-            count: Object.keys(parsed).length,
-            prices: parsed,
-          });
-        }
-      } catch {
-        /* keep whatever prices are cached */
-      }
+      // Prices swallow their own failures, so they can't take the catalog down.
+      await syncPrices(v2);
     } catch {
       // Offline / manifest or download failure → fall through to cached copy.
     }

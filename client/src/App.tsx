@@ -34,6 +34,7 @@ import { ScanTest } from './routes/ScanTest.js';
 import { maybeFetchMatches } from './account/notifications.js';
 import { initSyncEngine } from './sync/engine.js';
 import { recordCollectionPrices } from './price/tracking.js';
+import { recordSealedPrices } from './price/sealedTracking.js';
 import { ensureRates } from './price/rates.js';
 import { Icon, type IconName } from './components/icons.js';
 
@@ -49,8 +50,10 @@ export function App() {
 
   useEffect(() => {
     void getSetting<boolean>('onboardingComplete').then((v) => setOnboarded(!!v));
-    // Record today's price for every card in the collection (deduped per day).
+    // Record today's price for every card in the collection (deduped per day),
+    // and the same for every unopened product on the sealed shelf.
     void recordCollectionPrices();
+    void recordSealedPrices();
     // Top up today's exchange rates if the display currency needs any (no-op
     // when prices are shown in the currency Scryfall already quotes).
     void ensureRates();

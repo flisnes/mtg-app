@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.126.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Sealed products are tracked like cards: a daily price reading each, and the "Sealed value" total opens a chart of what your shelf has been worth. Tap a product for its own sheet, with price each, what your copies are worth and its price chart.',
+      },
+      {
+        kind: 'added',
+        text: 'Grid view on the Sealed products page, plus sorting by price change and price change %.',
+      },
+    ],
+  },
+  {
     version: '0.125.0',
     changes: [
       {

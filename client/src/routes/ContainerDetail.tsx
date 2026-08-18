@@ -58,6 +58,8 @@ import { containerValue, missingValue, valueText } from '../components/ValueSumm
 import {
   SortControls,
   groupCards,
+  GroupCountBadge,
+  extraLands,
   priceValue,
   pricedForFinish,
   sortCards,
@@ -1038,6 +1040,8 @@ function Board({
     };
   };
   const groups = group === 'none' ? null : groupCards(rows, (r) => r.oracle, group, (r) => r.tags);
+  // Land drops the Land heading would otherwise miss: MDFC backs, Dryad Arbor.
+  const landSources = group === 'type' ? extraLands(rows, (r) => r.oracle, (r) => r.quantity) : [];
   // Grouping by tag lists a multi-tagged card under each of its tags, so the
   // headings can add up to more than the board. Say so rather than let the
   // arithmetic look broken.
@@ -1060,7 +1064,11 @@ function Board({
         groups.map((g) => (
           <div key={g.label} className="card-group">
             <h3 className="card-group-title">
-              {g.label} <span className="badge">{g.items.reduce((s, r) => s + r.quantity, 0)}</span>
+              {g.label}{' '}
+              <GroupCountBadge
+                quantity={g.items.reduce((s, r) => s + r.quantity, 0)}
+                extras={g.label === 'Land' && group === 'type' ? landSources : undefined}
+              />
             </h3>
             <CardItems view={view} items={g.items.map(toItem)} {...selProps} />
           </div>

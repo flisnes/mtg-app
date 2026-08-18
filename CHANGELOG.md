@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.127.2
+
+- **The Land heading counts your sneaky lands too.** Grouping a deck by card type now shows the Land pile's count and, behind it, the total that also counts the land halves of modal double-faced cards and lands that moonlight as something else (Dryad Arbor). Tap the (i) to see exactly which cards were added. Transforming cards whose back is a land are left out: you can't play those as a land.
+
 ## 0.127.1
 
 - **The multi-select bar starts as one line.** Selecting cards used to pop up a bar with every action laid out, which on a phone covered a good chunk of the list you were picking from. Now it shows just the count, "Select all" and a chevron; tap the chevron when you want the actions.

@@ -6,8 +6,8 @@ import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { formatPrice } from './CardSorting.js';
-import { Icon } from './icons.js';
 import type { MultiSelect } from './useMultiSelect.js';
+import { SelectToggle } from './SelectToggle.js';
 
 // The reusable body of the card-search experience: an optional search input,
 // the color/type/rarity filter row, a result-count + list/grid toggle, the
@@ -168,9 +168,7 @@ export function CardSearchView({
             </p>
             <div className="meta-actions">
               {selection && !selection.sel.active && results.length > 0 && (
-                <button className="select-toggle" onClick={selection.sel.enter} title="Select multiple cards">
-                  <Icon name="check" size={15} /> Select
-                </button>
+                <SelectToggle onEnter={selection.sel.enter} />
               )}
               <ViewToggle mode={view} onChange={setView} />
             </div>

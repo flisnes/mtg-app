@@ -1143,6 +1143,35 @@ button.danger-outline {
   white-space: nowrap;
 }
 
+/* The same button, floating, once the toolbar's copy has scrolled off (see
+   components/SelectToggle.tsx). Sits above the tab bar on the right, clear of
+   the bulk bar's spot (which only appears once selection is on, by which point
+   this is gone). Painted on the raised surface so it reads as floating rather
+   than as part of the list underneath. */
+.select-float {
+  position: fixed;
+  right: 0.9rem;
+  bottom: calc(var(--tab-h) + var(--safe-bottom) + 0.7rem);
+  z-index: 26; /* over the search overlay (15) and tab bar (20), under sheets */
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  animation: select-float-in 0.16s ease;
+}
+@keyframes select-float-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .select-float {
+    animation: none;
+  }
+}
+
 /* Check indicators pop in when selection mode starts and pulse when toggled. */
 @keyframes select-in {
   from {
@@ -3926,6 +3955,67 @@ button.ghost.icon-only {
   color: var(--text);
   font-weight: 600;
 }
+/* The card sheet's Zone field: one segment per zone of the deck. Narrower text
+   than the sheet's tabs and up to four of them, so the labels shrink rather than
+   the row overflowing, and a refused zone greys out in place. */
+.zone-row {
+  margin-bottom: 0;
+}
+.zone-row .seg {
+  padding: 0.45rem 0.3rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.zone-row .seg:disabled {
+  opacity: 0.45;
+}
+/* The picked zone is a value, not a tab, so it's tinted rather than merely
+   raised — at a glance the field has to read as "this card is here". */
+.zone-row .seg-active {
+  background: color-mix(in srgb, var(--accent) 26%, var(--surface));
+  color: var(--text);
+}
+.zone-note {
+  margin: 0.35rem 0 0;
+}
+
+/* Multi-select "Move to…": the deck's zones as a list of rows. */
+.zone-list {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.zone-option {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.6rem;
+  align-items: center;
+  text-align: left;
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.zone-option:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.zone-option:disabled {
+  opacity: 0.55;
+}
+.zone-option-label {
+  font-weight: 600;
+}
+.zone-option-why {
+  grid-column: 2;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  white-space: normal;
+}
+
 /* A segment that is real navigation (the Decks / Binders / Boxes switch) is an
    anchor, so it needs the padding and centring a <button> gets for free. */
 a.seg {

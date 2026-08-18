@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.127.0
+
+- **Cards can be moved between a deck's zones.** Tap a card in a deck and its sheet now has a **Zone** field: mainboard, sideboard, command zone, tokens. Pick another one, hit Save, and the card moves — no more removing it from one zone and adding it again to the other. A zone the card can't go to is greyed out and says why, so "this can't be your commander" is answered where you asked it.
+- **Multi-select can move a whole selection at once.** Select, then "Move to…", then pick the zone. Cards already in that zone are left where they are, and a card meeting its own copy on the far side merges with it rather than splitting into two lines.
+- Either way it's one entry in the edit history ("Moved to sideboard"), undoable in a single tap, and a move no longer counts as cards coming in or going out of the deck.
+- **The Select button follows you down the page.** It used to sit in the toolbar at the top, which is nowhere near where you are when you decide you want to select things. Once the toolbar scrolls off, the button reappears floating above the tab bar; tapping either one does the same thing. Nothing else in the layout moved.
+- The command-zone buttons that used to live in the card sheet's action row are gone, replaced by the Zone field above.
+
 ## 0.126.0
 
 - **Sealed products are tracked like cards now.** The app records what every unopened box, display and precon on your shelf is quoted at, once a day when you open it, and the "Sealed value" figure on the Sealed products page opens a chart of what the whole shelf has been worth. Dots on the line are the days something arrived; tap one to see what it was. A box counts from the day you added it, so the line steps up when you buy rather than pretending you always owned it.

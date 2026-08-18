@@ -9,7 +9,7 @@ import { CardSheet } from '../components/CardSheet.js';
 import { EventSheet } from '../components/EventSheet.js';
 import { Icon } from '../components/icons.js';
 import { useToast } from '../components/Toast.js';
-import { describeBatch, describeEvent, qtyBadge, FILTER_CATEGORIES } from '../history/eventRegistry.js';
+import { batchCount, describeBatch, describeEvent, qtyBadge, FILTER_CATEGORIES } from '../history/eventRegistry.js';
 import { entryEvents, useHistoryEntries, type HistoryEntry } from '../history/useHistoryEntries.js';
 import { fmtDate } from '../util/format.js';
 
@@ -84,8 +84,8 @@ export function EditHistory() {
 
   function itemFor(entry: HistoryEntry): CardItem {
     if (entry.kind === 'batch') {
-      const display = describeBatch(entry.source, entry.label, entry.events[0]?.kind, entry.events[0]?.deckKind);
-      const count = entry.events.reduce((s, e) => s + (e.qty ?? 0), 0);
+      const display = describeBatch(entry.source, entry.label, entry.events);
+      const count = batchCount(entry.events);
       const imgs: string[] = [];
       for (const e of entry.events) {
         const img = imgOf(e.oracleId, e.scryfallId);

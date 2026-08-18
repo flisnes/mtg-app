@@ -1,4 +1,4 @@
-import type { ContainerKind, DeckBoard, EventSource, RemovalReason, UserEvent, UserEventKind } from '@mtg/shared';
+import type { ContainerKind, DeckBoard, EventSource, RemovalReason, UserEvent } from '@mtg/shared';
 import type { IconName } from '../components/icons.js';
 import { CONTAINER_META } from '../deck/containers.js';
 
@@ -82,20 +82,49 @@ export function describeEvent(e: UserEvent): EventDisplay {
   }
 }
 
+const BOARD_NOUN: Record<DeckBoard, string> = {
+  main: 'mainboard',
+  side: 'sideboard',
+  commander: 'command zone',
+  token: 'tokens',
+};
+
 /**
- * How to render a grouped batch entry (import / sealed / scan / trade). `kind`
- * is a representative event of the batch: deck and wishlist batches are named
- * for their destination (a scan into a deck still reads "Added to <deck>"),
- * everything else by how the batch was made. `deckKind` (that same event's) is
- * only set for storage, so a batch without it keeps the deck icon it always had.
+ * A batch that both takes deck slots out and puts them back in is a move
+ * between zones: the same cards, described twice. Both halves are needed (undo
+ * replays them backwards), but anything counting cards must not count both.
  */
-export function describeBatch(
-  source: EventSource,
-  label?: string,
-  kind?: UserEventKind,
-  deckKind?: ContainerKind,
-): EventDisplay {
+export function isMoveBatch(events: readonly UserEvent[]): boolean {
+  return events.some((e) => e.kind === 'deck.add') && events.some((e) => e.kind === 'deck.remove');
+}
+
+/** How many cards a batch touched — a move's pairs counted once. */
+export function batchCount(events: readonly UserEvent[]): number {
+  const counted = isMoveBatch(events) ? events.filter((e) => e.kind === 'deck.add') : events;
+  return counted.reduce((sum, e) => sum + (e.qty ?? 0), 0);
+}
+
+/**
+ * How to render a grouped batch entry (import / sealed / scan / trade / a
+ * multi-select operation). Deck and wishlist batches are named for their
+ * destination (a scan into a deck still reads "Added to <deck>"), everything
+ * else by how the batch was made. A batch that both removes and adds deck slots
+ * is a move between zones, and says so rather than reading as a removal.
+ */
+export function describeBatch(source: EventSource, label?: string, events: readonly UserEvent[] = []): EventDisplay {
+  const kind = events[0]?.kind;
+  // Only storage sets deckKind, so a batch without it keeps the deck icon it
+  // always had.
+  const deckKind = events[0]?.deckKind;
   const containerIcon = CONTAINER_META[deckKind ?? 'deck'].icon;
+  if (isMoveBatch(events)) {
+    const to = events.find((e) => e.kind === 'deck.add')?.board;
+    return {
+      verb: to ? `Moved to ${BOARD_NOUN[to]}` : 'Moved between zones',
+      icon: 'moveTo',
+      direction: 'neutral',
+    };
+  }
   if (kind === 'deck.add') return { verb: `Added to ${label ?? 'a deck'}`, icon: containerIcon, direction: 'in' };
   // A bulk removal from a deck, binder or box (multi-select "remove these").
   if (kind === 'deck.remove') {
@@ -112,13 +141,6 @@ export function describeBatch(
   if (source === 'trade') return { verb: 'Trade', icon: 'trade', direction: 'neutral' };
   return { verb: 'Imported', icon: 'import', direction: 'in' };
 }
-
-const BOARD_NOUN: Record<DeckBoard, string> = {
-  main: 'mainboard',
-  side: 'sideboard',
-  commander: 'command zone',
-  token: 'tokens',
-};
 
 /**
  * Wording for a slot event seen from *inside* its own container's history,

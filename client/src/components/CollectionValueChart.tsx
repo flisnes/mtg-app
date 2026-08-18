@@ -4,7 +4,7 @@ import { DAY_MS, type OracleCard, type Priced, type UserEvent } from '@mtg/share
 import { fmtMoney } from '../price/rates.js';
 import { useCollectionValueSeries, type CollectionValuePoint } from '../price/collectionValue.js';
 import { groupEntries, type HistoryEntry } from '../history/useHistoryEntries.js';
-import { describeBatch, describeEvent, qtyBadge } from '../history/eventRegistry.js';
+import { batchCount, describeBatch, describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { useCardMaps } from '../db/useCardMaps.js';
 import { fmtDate } from '../util/format.js';
 import { CardList, StackedThumb, type CardItem } from './CardViews.js';
@@ -422,8 +422,8 @@ function DayEvents({
 
   const items = entries.map((entry): CardItem => {
     if (entry.kind === 'batch') {
-      const display = describeBatch(entry.source, entry.label, entry.events[0]?.kind, entry.events[0]?.deckKind);
-      const count = entry.events.reduce((s, e) => s + (e.qty ?? 0), 0);
+      const display = describeBatch(entry.source, entry.label, entry.events);
+      const count = batchCount(entry.events);
       const imgs: string[] = [];
       for (const e of entry.events) {
         const img = imgOf(e.oracleId, e.scryfallId);

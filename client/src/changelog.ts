@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.127.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Move cards between a deck’s zones. A card’s sheet has a Zone field (mainboard, sideboard, command zone, tokens), and multi-select has "Move to…" for a whole selection. No more removing a card from one zone to add it to another.',
+      },
+      {
+        kind: 'changed',
+        text: 'The Select button now follows you down a long list: once the toolbar scrolls off, it reappears floating above the tab bar.',
+      },
+    ],
+  },
+  {
     version: '0.126.0',
     changes: [
       {

@@ -80,6 +80,7 @@ export function ContainerScopedResults({
             board: editing.entry.board,
             deckId: editing.entry.deckId,
             commanderDeck: format === 'commander',
+            containerKind: kind,
           }}
           onClose={() => setEditing(null)}
         />

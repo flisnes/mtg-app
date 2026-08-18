@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema.js';
 import { entryEvents, groupEntries, type HistoryEntry } from './useHistoryEntries.js';
+import { isMoveBatch } from './eventRegistry.js';
 
 // One container's slice of the event log, for the history panel on the deck /
 // binder / box page. Same rows and the same batch grouping as the global edit
@@ -93,6 +94,9 @@ export function useDeckHistory(deckId: string, limit: number): DeckHistory {
     let added = 0;
     let removed = 0;
     for (const entry of all ?? []) {
+      // A zone move is the same cards leaving and arriving; counting it would
+      // report cardboard that never came in or went out.
+      if (isMoveBatch(entryEvents(entry))) continue;
       for (const e of entryEvents(entry)) {
         if (e.kind === 'deck.add') added += e.qty ?? 1;
         else if (e.kind === 'deck.remove') removed += e.qty ?? 1;

@@ -50,7 +50,8 @@ export type IconName =
   | 'chevronLeft'
   | 'chevronRight'
   | 'chevronDown'
-  | 'expand';
+  | 'expand'
+  | 'moveTo';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -366,6 +367,14 @@ const PATHS: Record<IconName, ReactElement> = {
       <polyline points="9 21 3 21 3 15" />
       <path d="M21 3l-7 7" />
       <path d="M3 21l7-7" />
+    </>
+  ),
+  // Arrow into a bracket — move this into another zone.
+  moveTo: (
+    <>
+      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+      <polyline points="10 17 15 12 10 7" />
+      <line x1="15" y1="12" x2="3" y2="12" />
     </>
   ),
 };

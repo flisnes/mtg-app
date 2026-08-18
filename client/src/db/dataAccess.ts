@@ -1274,46 +1274,93 @@ export async function reconcileDeck(
   return { added, removed, changed };
 }
 
+/**
+ * Move one slot to another board inside an already-open transaction, merging
+ * into the slot that card already has there. Returns the copies moved (0 when
+ * the slot is gone or already on that board). Events are pushed onto `events`
+ * rather than emitted, so a bulk move can stamp them all with one batchId.
+ */
+async function moveSlotRaw(
+  id: string,
+  board: DeckBoard,
+  now: number,
+  events: Array<Omit<UserEvent, 'id' | 'updatedAt'>>,
+  extra: Partial<Pick<UserEvent, 'source' | 'batchId' | 'batchLabel'>> = {},
+): Promise<number> {
+  const card = await db.deckCards.get(id);
+  if (!card || card.board === board) return 0;
+  const existing = await db.deckCards
+    .where('[deckId+board]')
+    .equals([card.deckId, board])
+    .and((c) => c.oracleId === card.oracleId && !!c.anyBasic === !!card.anyBasic)
+    .first();
+  if (existing) {
+    // Two slots becoming one: the tags of both come along, or moving a tagged
+    // card to the sideboard would quietly strip what you labelled it.
+    const merged: DeckCard = {
+      ...existing,
+      quantity: existing.quantity + card.quantity,
+      tags: normalizeCardTags([...(existing.tags ?? []), ...(card.tags ?? [])]),
+      updatedAt: now,
+    };
+    await db.deckCards.put(merged);
+    await db.deckCards.delete(id);
+    await stagePut('deckCards', merged);
+    await stageDelete('deckCards', id);
+  } else {
+    const moved: DeckCard = { ...card, board, updatedAt: now };
+    await db.deckCards.put(moved);
+    await stagePut('deckCards', moved);
+  }
+  const deck = await touchDeck(card.deckId, now);
+  const base = {
+    oracleId: card.oracleId,
+    ...(card.scryfallId ? { scryfallId: card.scryfallId } : {}),
+    qty: card.quantity,
+    deckId: card.deckId,
+    ...containerRef(deck),
+    ...extra,
+  };
+  // A move is a leave and an arrival: the pair is what the history reads, and
+  // what undo replays backwards to put the card back where it was.
+  events.push({ ts: now, kind: 'deck.remove', ...base, board: card.board });
+  events.push({ ts: now, kind: 'deck.add', ...base, board });
+  return card.quantity;
+}
+
 /** Move a slot to another board, merging into an existing slot for the same card there. */
 export async function moveDeckCard(id: string, board: DeckBoard): Promise<void> {
   await db.transaction('rw', DECK_TABLES, async () => {
-    const card = await db.deckCards.get(id);
-    if (!card || card.board === board) return;
-    const now = Date.now();
-    const existing = await db.deckCards
-      .where('[deckId+board]')
-      .equals([card.deckId, board])
-      .and((c) => c.oracleId === card.oracleId && !!c.anyBasic === !!card.anyBasic)
-      .first();
-    if (existing) {
-      // Two slots becoming one: the tags of both come along, or moving a tagged
-      // card to the sideboard would quietly strip what you labelled it.
-      const merged: DeckCard = {
-        ...existing,
-        quantity: existing.quantity + card.quantity,
-        tags: normalizeCardTags([...(existing.tags ?? []), ...(card.tags ?? [])]),
-        updatedAt: now,
-      };
-      await db.deckCards.put(merged);
-      await db.deckCards.delete(id);
-      await stagePut('deckCards', merged);
-      await stageDelete('deckCards', id);
-    } else {
-      const moved: DeckCard = { ...card, board, updatedAt: now };
-      await db.deckCards.put(moved);
-      await stagePut('deckCards', moved);
-    }
-    const deck = await touchDeck(card.deckId, now);
-    const base = {
-      oracleId: card.oracleId,
-      ...(card.scryfallId ? { scryfallId: card.scryfallId } : {}),
-      qty: card.quantity,
-      deckId: card.deckId,
-      ...containerRef(deck),
-    };
-    await emit({ ts: now, kind: 'deck.remove', ...base, board: card.board });
-    await emit({ ts: now, kind: 'deck.add', ...base, board });
+    const events: Array<Omit<UserEvent, 'id' | 'updatedAt'>> = [];
+    // The leave/arrive pair is one thing the user did, so it shares a batchId
+    // and reads as a single "Moved to …" entry (which undoes in one tap).
+    await moveSlotRaw(id, board, Date.now(), events, { source: 'manual', batchId: newId() });
+    await emitMany(events);
   });
+}
+
+/**
+ * Move whole slots to another board in one go (the multi-select "Move to…").
+ * Every line shares a batchId labelled with the deck, so the edit history shows
+ * one entry the user can undo in a single tap. Slots already on that board are
+ * skipped. Returns how many copies moved.
+ */
+export async function moveDeckCardsBulk(ids: string[], board: DeckBoard): Promise<number> {
+  if (ids.length === 0) return 0;
+  let moved = 0;
+  await db.transaction('rw', DECK_TABLES, async () => {
+    const now = Date.now();
+    const batchId = newId();
+    const events: Array<Omit<UserEvent, 'id' | 'updatedAt'>> = [];
+    const first = await db.deckCards.get(ids[0]!);
+    const deck = first ? await db.decks.get(first.deckId) : undefined;
+    const extra = { source: 'manual' as const, batchId, ...(deck ? { batchLabel: deck.name } : {}) };
+    // One at a time on purpose: two selected slots can target the same slot on
+    // the far side, and each move has to see what the one before it merged.
+    for (const id of ids) moved += await moveSlotRaw(id, board, now, events, extra);
+    await emitMany(events);
+  });
+  return moved;
 }
 
 /**

@@ -4,7 +4,7 @@ import { CardList, type CardItem } from './CardViews.js';
 import { Icon } from './icons.js';
 import { useCardMaps } from '../db/useCardMaps.js';
 import { useDismiss } from './useDismiss.js';
-import { describeBatch, describeEvent, qtyBadge } from '../history/eventRegistry.js';
+import { batchCount, describeBatch, describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { entryEvents, type HistoryEntry } from '../history/useHistoryEntries.js';
 import { fmtCents, fmtDateTime } from '../util/format.js';
 
@@ -29,8 +29,8 @@ export function EventSheet({
   const { printMap, oracleMap } = useCardMaps(events.map((e) => ({ scryfallId: e.scryfallId ?? '', oracleId: e.oracleId })));
   useDismiss(onClose);
 
-  const display = entry.kind === 'batch' ? describeBatch(entry.source, entry.label, entry.events[0]?.kind, entry.events[0]?.deckKind) : describeEvent(entry.event);
-  const totalCards = events.reduce((s, e) => s + (e.qty ?? 0), 0);
+  const display = entry.kind === 'batch' ? describeBatch(entry.source, entry.label, entry.events) : describeEvent(entry.event);
+  const totalCards = batchCount(events);
   const single = entry.kind === 'single' ? entry.event : null;
 
   const items = events.map((e, i): CardItem => {

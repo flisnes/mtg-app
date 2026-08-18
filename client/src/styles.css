@@ -1015,6 +1015,72 @@ button.danger-outline {
   letter-spacing: 0.04em;
 }
 
+/* The Land heading's "counting everything" number: the plain badge is the Land
+   pile, this is that plus the MDFC backs and Dryad Arbors filed under other
+   types. The (i) opens the list of what got added. */
+.land-extra {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.land-extra-info {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: var(--text-dim);
+  font: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+}
+/* Breathing room after the number, but none before the closing paren. */
+.land-extra-info svg {
+  margin: 0 0.05rem 0 0.2rem;
+}
+.land-extra-info:active {
+  color: var(--accent);
+}
+.land-extra-pop {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 11rem;
+  max-width: min(18rem, 70vw);
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.land-extra-pop-title {
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.land-extra-pop-row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: baseline;
+}
+.land-extra-pop-qty {
+  flex: none;
+}
+.land-extra-pop-qty {
+  color: var(--text-dim);
+}
+
 /* ---- Card tags ---- */
 /* The user's own labels on a slot: chips on the card's sub-line, larger chips
    with a remove button inside the card sheet's tag field. */

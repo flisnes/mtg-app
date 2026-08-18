@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { compareCardTags, normalizeColors, type Color, type Finish, type OracleCard } from '@mtg/shared';
 import { priceForFinish } from '../cardDb/prices.js';
+import { Icon } from './icons.js';
 import { UNTAGGED } from '../deck/tags.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
 import { convertToDisplay, fmtConverted, fmtMoney } from '../price/rates.js';
@@ -290,6 +291,55 @@ export function groupCards<T>(
   return order.filter((l) => buckets.has(l)).map((l) => ({ label: l, items: buckets.get(l)! }));
 }
 
+// ---- Land counting ----
+
+/** Enough of a card to tell whether it can make a land drop. */
+type LandishCard = Pick<OracleCard, 'name' | 'typeLine'> & { layout?: string };
+
+/** One extra land source, aggregated by name across the board's rows. */
+export interface ExtraLand {
+  name: string;
+  quantity: number;
+}
+
+/**
+ * A land the type grouping filed somewhere else: Dryad Arbor sitting under
+ * Creature, or the back half of a modal double-faced card (Malakir Mire). Both
+ * still make land drops, so the Land heading counts them in its second number.
+ * Transform backs (Itlimoc, Cradle of the Sun) do not — you cast the front, you
+ * never play those as a land.
+ */
+export function isExtraLand(card: LandishCard | undefined): boolean {
+  if (!card) return false;
+  // Anything the heading already counted isn't extra.
+  if (typeGroup(card.typeLine) === 'Land') return false;
+  const faces = card.typeLine.split('//');
+  if (/\bLand\b/.test(faces[0]!)) return true;
+  // layout is absent on card DBs built before it existed; count the back face
+  // then rather than silently dropping every MDFC land.
+  if (card.layout && card.layout !== 'modal_dfc') return false;
+  return faces.slice(1).some((f) => /\bLand\b/.test(f));
+}
+
+/** The extra land sources among these rows, by name, most copies first. */
+export function extraLands<T>(
+  items: T[],
+  getCard: (t: T) => LandishCard | undefined,
+  getQty: (t: T) => number,
+): ExtraLand[] {
+  const byName = new Map<string, number>();
+  for (const it of items) {
+    const card = getCard(it);
+    if (!isExtraLand(card)) continue;
+    // Full name, both faces — same as the row in the list, and the land face is
+    // the half that earns the card its place here.
+    byName.set(card!.name, (byName.get(card!.name) ?? 0) + getQty(it));
+  }
+  return [...byName]
+    .map(([name, quantity]) => ({ name, quantity }))
+    .sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name));
+}
+
 // ---- UI ----
 
 const SORT_OPTIONS: [SortKey, string][] = [
@@ -394,5 +444,63 @@ function SortDirButton({ dir, onChange }: { dir: SortDir; onChange: (d: SortDir)
     >
       {asc ? '↑' : '↓'}
     </button>
+  );
+}
+
+/**
+ * A group heading's count. The Land heading gets a second number behind it when
+ * the deck has land sources filed under other types — "24 (26)" reads as "24
+ * cards in the Land pile, 26 things that can make a land drop" — and the (i)
+ * names them, so the bigger number isn't magic.
+ */
+export function GroupCountBadge({ quantity, extras }: { quantity: number; extras?: ExtraLand[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const extraQty = (extras ?? []).reduce((s, e) => s + e.quantity, 0);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  if (extraQty === 0) return <span className="badge">{quantity}</span>;
+  return (
+    <>
+      <span className="badge">{quantity}</span>{' '}
+      <span className="land-extra" ref={ref}>
+        <button
+          className="land-extra-info"
+          aria-label="What else counts as a land"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          title="What else counts as a land"
+        >
+          ({quantity + extraQty}
+          <Icon name="about" size={13} />)
+        </button>
+        {open && (
+          <span className="land-extra-pop" role="tooltip">
+            <span className="land-extra-pop-title">Also counted</span>
+            {(extras ?? []).map((e) => (
+              <span key={e.name} className="land-extra-pop-row">
+                {e.quantity > 1 && <span className="land-extra-pop-qty">{e.quantity}×</span>}
+                {e.name}
+              </span>
+            ))}
+          </span>
+        )}
+      </span>
+    </>
   );
 }

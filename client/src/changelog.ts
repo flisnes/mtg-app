@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.127.2',
+    changes: [
+      {
+        kind: 'added',
+        text: 'A deck grouped by card type shows a second land count behind the first: the total including MDFC land halves and lands like Dryad Arbor. Tap the (i) for the list of what got added.',
+      },
+    ],
+  },
+  {
     version: '0.127.1',
     changes: [
       {

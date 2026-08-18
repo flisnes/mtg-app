@@ -15,7 +15,7 @@ import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { formatLabel } from '../deck/legality.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
-import { SortControls, groupCards, priceValue, sortCards, useCardSort } from '../components/CardSorting.js';
+import { extraLands, GroupCountBadge, SortControls, groupCards, priceValue, sortCards, useCardSort } from '../components/CardSorting.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { Icon } from '../components/icons.js';
 import { useToast } from '../components/Toast.js';
@@ -204,7 +204,15 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
                     groups.map((g) => (
                       <div key={g.label} className="card-group">
                         <h3 className="card-group-title">
-                          {g.label} <span className="badge">{g.items.reduce((s, e) => s + e.quantity, 0)}</span>
+                          {g.label}{' '}
+                          <GroupCountBadge
+                            quantity={g.items.reduce((s, e) => s + e.quantity, 0)}
+                            extras={
+                              g.label === 'Land' && sort.group === 'type'
+                                ? extraLands(entries, (e) => e.oracle, (e) => e.quantity)
+                                : undefined
+                            }
+                          />
                         </h3>
                         <CardItems view={view} items={g.items.map((e) => e.item)} />
                       </div>

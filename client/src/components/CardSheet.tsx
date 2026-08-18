@@ -17,6 +17,7 @@ import {
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
 import { canJoinCommandZone, isBasicLand, isNonDeckCard } from '../deck/legality.js';
+import { BOARD_LABEL, boardOptions } from '../deck/boards.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { claimKeyOf, type FilingCopy } from '../deck/filing.js';
 import { useFiling } from '../deck/useFiling.js';
@@ -150,8 +151,9 @@ export function CardSheet({
    *  disabled form. Only meaningful in info mode. */
   wishView?: WishLine;
   /** Edit this deck slot's quantity + printing instead of the collection.
-   *  Commander context (only set from a commander-format deck) adds the
-   *  move-to/from-command-zone action to the sheet. */
+   *  A slot in a deck also gets the Zone field, so a card can be moved between
+   *  mainboard, sideboard, command zone and tokens without being re-added;
+   *  `commanderDeck` is what puts the command zone among the choices. */
   deckCard?: {
     id: string;
     quantity: number;
@@ -168,6 +170,8 @@ export function CardSheet({
     /** The deck this slot lives in, so the sheet can read its command zone. */
     deckId?: string;
     commanderDeck?: boolean;
+    /** Which kind of container holds the slot; only a deck has zones to move between. */
+    containerKind?: ContainerKind;
   };
   /** Edit this scan-session line in memory; Apply reports through onApply. */
   sessionCard?: SessionCardValues;
@@ -245,6 +249,18 @@ export function CardSheet({
   // specific Islands. Binders and boxes hold real cardboard, so they opt in.
   const basicAny = (deckAdd || mode === 'deck') && isBasicLand(oracleCard);
   const basicAnyDefault = basicAny && (deckAddIsDeck || !!deckCard?.anyBasic);
+  // The zones this slot could move to. Only a deck has any (storage is one
+  // pile), and the command zone check must not count the slot being moved as
+  // someone it has to pair with — it's the card doing the moving.
+  const zones =
+    mode === 'deck' && (deckCard?.containerKind ?? 'deck') === 'deck'
+      ? boardOptions({
+          cards: [oracleCard],
+          commanderDeck: !!deckCard?.commanderDeck,
+          commandZone: commandZone.filter((o) => o.oracleId !== oracleCard.oracleId),
+          from: deckCard?.board,
+        })
+      : [];
   // Viewing someone else's wish (Community): the same wish fields, but the
   // sheet is read-only, so nothing here is editable.
   const wishInfo = mode === 'info' && !!wishView;
@@ -328,6 +344,12 @@ export function CardSheet({
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
   // Slot tags ride along with Save/Cancel like every other field on the sheet.
   const [tags, setTags] = useState<string[]>(deckCard?.tags ?? []);
+  // Which zone the slot sits in. Editable like every other field on this form:
+  // picking another one and saving moves the card, rather than making the user
+  // remove it here and add it again over there. Deliberately not called `board`:
+  // save() takes a `board` parameter (the board an *add* targets), and a slot
+  // being moved must not read that.
+  const [zone, setZone] = useState<DeckBoard>(deckCard?.board ?? 'main');
   const [busy, setBusy] = useState(false);
   const [trend, setTrend] = useState<HistoryChange | null>(null);
   const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(null);
@@ -554,6 +576,9 @@ export function CardSheet({
       await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, ...wishPrefs, quantity });
     } else if (deckCard) {
       await updateDeckCard(deckCard.id, { quantity, scryfallId, anyBasic: anyBasicPicked, wants: wishPrefs, tags });
+      // The move goes last so the slot carries this form's quantity and tags
+      // into whatever it merges with on the far side.
+      if (zone !== (deckCard.board ?? 'main')) await moveDeckCard(deckCard.id, zone);
     } else if (editing && entry) {
       await updateCollectionEntry(entry.id, {
         scryfallId,
@@ -930,6 +955,36 @@ export function CardSheet({
         </div>
         )}
 
+        {/* Which zone the card sits in. A deck's zones are the one thing about a
+            slot that used to need a remove and a re-add; now it's a field like
+            any other, applied when the sheet is saved. */}
+        {formEditable && zones.some((z) => !z.refusal && z.board !== zone) && (
+          <div className="field">
+            <span>Zone</span>
+            <div className="seg-row zone-row" role="radiogroup" aria-label="Zone">
+              {zones.map((z) => (
+                <button
+                  key={z.board}
+                  type="button"
+                  role="radio"
+                  aria-checked={zone === z.board}
+                  className={zone === z.board ? 'seg seg-active' : 'seg'}
+                  disabled={!!z.refusal && zone !== z.board}
+                  title={z.refusal}
+                  onClick={() => setZone(z.board)}
+                >
+                  {z.label}
+                </button>
+              ))}
+            </div>
+            {zone !== (deckCard?.board ?? 'main') && (
+              <p className="fine-print zone-note">
+                Moves out of the {BOARD_LABEL[deckCard?.board ?? 'main'].toLowerCase()} when you save.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Slot tags: your own labels on this card in this list ("Ramp",
             "Turn-3 play"), which the group-by-tag view reads. */}
         {mode === 'deck' && deckCard?.deckId && (
@@ -1005,30 +1060,6 @@ export function CardSheet({
             <button onClick={addFlow ? () => setAddFlow(null) : onClose} disabled={busy}>
               {addFlow ? 'Back' : 'Cancel'}
             </button>
-            {deckCard?.commanderDeck &&
-              (deckCard.board === 'commander' ? (
-                <button
-                  onClick={async () => {
-                    setBusy(true);
-                    await moveDeckCard(deckCard.id, 'main');
-                    onClose();
-                  }}
-                  disabled={busy}
-                >
-                  Move to mainboard
-                </button>
-              ) : canJoinCommandZone(oracleCard, commandZone) ? (
-                <button
-                  onClick={async () => {
-                    setBusy(true);
-                    await moveDeckCard(deckCard.id, 'commander');
-                    onClose();
-                  }}
-                  disabled={busy}
-                >
-                  {commandZone.length === 1 ? 'Make second commander' : 'Make commander'}
-                </button>
-              ) : null)}
             {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && !cardIsToken && addTo.format === 'commander' && canJoinCommandZone(oracleCard, commandZone) && (
               <button onClick={() => save('commander')} disabled={busy}>
                 {commandZone.length === 1 ? 'Add as second commander' : 'Add as commander'}

@@ -26,6 +26,7 @@ import {
   addDeckCard,
   addDeckCardsBulk,
   deleteDeck,
+  moveDeckCardsBulk,
   removeDeckCardsBulk,
   removeDeckCardsMatching,
   renameDeck,
@@ -70,9 +71,11 @@ import { ScanSheet } from '../components/ScanSheet.js';
 import { Sheet } from '../components/Sheet.js';
 import { DeckHistory, HISTORY_ANCHOR } from '../components/DeckHistory.js';
 import { BulkActionBar, type BulkAction } from '../components/BulkActionBar.js';
+import { BOARD_LABEL, boardOptions, type BoardOption } from '../deck/boards.js';
 import { ContainerPickerSheet } from '../components/ContainerPickerSheet.js';
 import { TagSheet } from '../components/TagSheet.js';
 import { useMultiSelect, type MultiSelect } from '../components/useMultiSelect.js';
+import { SelectToggle } from '../components/SelectToggle.js';
 import { usePlacementIndex, type PlacementIndex } from '../db/usePlacements.js';
 import { Icon } from '../components/icons.js';
 
@@ -173,6 +176,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // 'file' picks somewhere to *also* put the selection, 'unfile' picks somewhere
   // to take it out of — the two halves of sorting out a card promised twice.
   const [picking, setPicking] = useState<'file' | 'unfile' | null>(null);
+  // The multi-select "Move to…" zone picker.
+  const [moving, setMoving] = useState(false);
   // The multi-select "Tag…" sheet, frozen on the slots that were selected.
   const [tagging, setTagging] = useState<string[] | null>(null);
   // The "assemble from my collection" walkthrough, frozen at the moment it opens.
@@ -475,7 +480,40 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     sel.exit();
   }
 
+  /**
+   * Move the selection into another zone of this deck. A slot already in the
+   * target zone is left alone, and one that meets its card there merges with it,
+   * so moving the same cards twice is not a way to duplicate them.
+   */
+  async function bulkMove(board: DeckBoard) {
+    setMoving(false);
+    const copies = await moveDeckCardsBulk(selectedRows.map((r) => r.id), board);
+    toast(
+      copies === 0
+        ? `Already in the ${BOARD_LABEL[board].toLowerCase()}`
+        : `Moved ${copies} card${plural(copies)} to the ${BOARD_LABEL[board].toLowerCase()}`,
+    );
+    sel.exit();
+  }
+
+  // Which zones the selection may move to. Storage has no zones; the
+  // command-zone check mustn't count a selected commander as its own partner;
+  // and a selection that's all in one zone isn't offered that zone back.
+  const sharedBoard = selectedRows.length > 0 && selectedRows.every((r) => r.board === selectedRows[0]!.board)
+    ? selectedRows[0]!.board
+    : undefined;
+  const moveZones = isDeck
+    ? boardOptions({
+        cards: selectedRows.map((r) => r.oracle),
+        commanderDeck: isCommander,
+        commandZone: commander
+          .filter((r) => !!r.oracle && !selectedRows.some((sr) => sr.oracleId === r.oracleId))
+          .map((r) => r.oracle!),
+      }).filter((z) => z.board !== sharedBoard)
+    : [];
+
   const bulkActions: BulkAction[] = [
+    ...(isDeck ? [{ label: 'Move to…', icon: 'moveTo' as const, onClick: () => setMoving(true) }] : []),
     { label: 'Tag…', icon: 'tags', onClick: () => setTagging(selectedRows.map((r) => r.id)) },
     { label: 'Add to tradelist', icon: 'tradelist', onClick: () => void bulkTrade(true) },
     { label: 'Remove from tradelist', icon: 'close', onClick: () => void bulkTrade(false) },
@@ -649,9 +687,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       <div className="list-toolbar">
         <p className="search-meta grow">Search above to add cards to this {meta.noun}.</p>
         {!sel.active && data.rows.length > 0 && (
-          <button className="select-toggle" onClick={sel.enter} title="Select multiple cards">
-            <Icon name="check" size={15} /> Select
-          </button>
+          <SelectToggle onEnter={sel.enter} />
         )}
         <SortControls prefs={sort} onChange={setSort} groups tagGroups />
         <ViewToggle mode={view} onChange={setView} />
@@ -683,7 +719,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               placements={placements}
               sel={sel}
               commanderDeck={isCommander}
-              emptyHint="No commander yet. Use ♛ on a card below, or the +Cmdr button in search."
+              emptyHint="No commander yet. Tap a card below and set its zone, or use the +Cmdr button in search."
             />
           )}
           <Board title="Mainboard" rows={main} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} />
@@ -719,6 +755,15 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           onToggleAll={() => sel.toggleAll(allKeys)}
           onCancel={sel.exit}
           actions={bulkActions}
+        />
+      )}
+
+      {moving && (
+        <MoveZoneSheet
+          zones={moveZones}
+          count={selectedRows.length}
+          onPick={(board) => void bulkMove(board)}
+          onClose={() => setMoving(false)}
         />
       )}
 
@@ -770,7 +815,9 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
 
       <DeckHistory deckId={id} kind={kind} open={historyOpen} onToggle={() => setHistoryOpen((v) => !v)} />
 
-      {info && <CardSheet oracleCard={info.card} deckCard={info.deckCard} onClose={() => setInfo(null)} />}
+      {info && (
+        <CardSheet oracleCard={info.card} deckCard={{ ...info.deckCard, containerKind: kind }} onClose={() => setInfo(null)} />
+      )}
 
       {scanning && (
         <ScanSheet
@@ -1022,6 +1069,43 @@ function Board({
         <CardItems view={view} items={rows.map(toItem)} {...selProps} />
       )}
     </div>
+  );
+}
+
+/**
+ * "Move to…" for a multi-selection: the deck's zones, with the ones this
+ * selection can't go to greyed out and saying why rather than missing. Deck
+ * brewing is mostly moving cards between these four piles, so it's a list of
+ * plain rows, not a dropdown you have to open first.
+ */
+function MoveZoneSheet({
+  zones,
+  count,
+  onPick,
+  onClose,
+}: {
+  zones: BoardOption[];
+  count: number;
+  onPick: (board: DeckBoard) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet onClose={onClose} title={`Move ${count} card${count === 1 ? '' : 's'} to`} className="zone-sheet">
+      <ul className="zone-list">
+        {zones.map((z) => (
+          <li key={z.board}>
+            <button className="zone-option" onClick={() => onPick(z.board)} disabled={!!z.refusal}>
+              <Icon name="moveTo" size={16} />
+              <span className="zone-option-label">{z.label}</span>
+              {z.refusal && <span className="zone-option-why">{z.refusal}</span>}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="sheet-actions">
+        <button onClick={onClose}>Cancel</button>
+      </div>
+    </Sheet>
   );
 }
 

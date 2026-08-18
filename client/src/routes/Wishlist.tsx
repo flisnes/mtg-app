@@ -13,6 +13,7 @@ import { CardItems, ViewToggle, useViewMode } from '../components/CardViews.js';
 import { wishCardItem } from '../components/cardRows.js';
 import { BulkActionBar } from '../components/BulkActionBar.js';
 import { useMultiSelect } from '../components/useMultiSelect.js';
+import { SelectToggle } from '../components/SelectToggle.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { addToTotal, formatTotal, priceValue, SortControls, sortCards, useCardSort, type PriceTotal } from '../components/CardSorting.js';
@@ -175,9 +176,7 @@ export function Wishlist() {
             <p className="search-meta">{filtered.length} card{filtered.length === 1 ? '' : 's'}</p>
             <div className="meta-actions">
               {!sel.active && filtered.length > 0 && (
-                <button className="select-toggle" onClick={sel.enter} title="Select multiple cards">
-                  <Icon name="check" size={15} /> Select
-                </button>
+                <SelectToggle onEnter={sel.enter} />
               )}
               <SortControls prefs={sort} onChange={setSort} withDates />
               <ViewToggle mode={view} onChange={setView} />

@@ -17,6 +17,7 @@ import { BulkActionBar, type BulkAction } from './BulkActionBar.js';
 import { ContainerPickerSheet } from './ContainerPickerSheet.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { useMultiSelect } from './useMultiSelect.js';
+import { SelectToggle } from './SelectToggle.js';
 import { PileView, CardBackSheet, type PileEntry } from './PileView.js';
 import { SortControls, priceValue, pricedForFinish, sortCards, useCardSort } from './CardSorting.js';
 import { historyChange } from '../price/history.js';
@@ -335,9 +336,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
             </button>
           )}
           {!sel.active && filtered.length > 0 && (
-            <button className="select-toggle" onClick={sel.enter} title="Select multiple cards">
-              <Icon name="check" size={15} /> Select
-            </button>
+            <SelectToggle onEnter={sel.enter} />
           )}
           <div className="sort-controls">
             <select

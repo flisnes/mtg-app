@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.127.1',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The multi-select bar now starts collapsed to a single line, so it stops covering half the list on a phone. Tap the chevron to show the actions.',
+      },
+    ],
+  },
+  {
     version: '0.127.0',
     changes: [
       {

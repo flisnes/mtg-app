@@ -1273,6 +1273,10 @@ button.danger-outline {
   gap: 0.55rem;
   animation: bulk-bar-in 0.2s ease;
 }
+/* Collapsed: just the head line, so a phone screen stays usable. */
+.bulk-bar.collapsed {
+  padding: 0.45rem 0.6rem;
+}
 @keyframes bulk-bar-in {
   from {
     opacity: 0;
@@ -1281,6 +1285,9 @@ button.danger-outline {
 }
 /* Keep the end of the list reachable while the bar covers it. */
 body:has(.bulk-bar) .app-main {
+  padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 4.5rem);
+}
+body:has(.bulk-bar:not(.collapsed)) .app-main {
   padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 11rem);
 }
 .bulk-bar-head {
@@ -1310,6 +1317,27 @@ body:has(.bulk-bar) .app-main {
   margin-left: auto;
   font-size: 0.85rem;
   padding: 0.35rem 0;
+}
+.bulk-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+}
+.bulk-expand svg {
+  transition: transform 0.15s ease;
+}
+.bulk-bar:not(.collapsed) .bulk-expand svg {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bulk-expand svg {
+    transition: none;
+  }
 }
 /* Equal-width action buttons; wraps to a tidy 2-column grid when they
    don't fit on one line. */

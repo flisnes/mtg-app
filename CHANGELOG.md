@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.127.1
+
+- **The multi-select bar starts as one line.** Selecting cards used to pop up a bar with every action laid out, which on a phone covered a good chunk of the list you were picking from. Now it shows just the count, "Select all" and a chevron; tap the chevron when you want the actions.
+
 ## 0.127.0
 
 - **Cards can be moved between a deck's zones.** Tap a card in a deck and its sheet now has a **Zone** field: mainboard, sideboard, command zone, tokens. Pick another one, hit Save, and the card moves — no more removing it from one zone and adding it again to the other. A zone the card can't go to is greyed out and says why, so "this can't be your commander" is answered where you asked it.

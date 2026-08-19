@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.128.0
+
+- **Highlight rules text to find every card that shares it.** Select a phrase in a card's rules text and a "Search rules text for ..." button appears just below it; tapping it searches the whole database for cards whose text contains that phrase. Mana symbols inside the phrase come along, and a selection spanning two abilities searches for both parts. Your phone's own Copy/Share menu still does what it always did; this sits under the text, out of its way.
+
 ## 0.127.2
 
 - **The Land heading counts your sneaky lands too.** Grouping a deck by card type now shows the Land pile's count and, behind it, the total that also counts the land halves of modal double-faced cards and lands that moonlight as something else (Dryad Arbor). Tap the (i) to see exactly which cards were added. Transforming cards whose back is a land are left out: you can't play those as a land.

@@ -178,6 +178,25 @@ export function useOpenCollectionSearch(): (cardName: string) => void {
   };
 }
 
+/**
+ * Open the overlay on a query we wrote ourselves, against the whole database —
+ * the rules-text chip's route out of the card sheet (see OracleSearchChip). No
+ * navigation, so no pathname-change reset to queue behind: scope, filters and
+ * query are set directly. Filters are cleared because a search the user didn't
+ * type shouldn't inherit narrowing they can't see, and the input isn't focused
+ * because the query is already written and the keyboard would just cover the
+ * results.
+ */
+export function useOpenDbSearch(): (query: string) => void {
+  const ctx = useContext(Ctx);
+  return (query: string) => {
+    ctx?.setScope(null);
+    ctx?.setFilters({});
+    ctx?.setQuery(query);
+    ctx?.setOpen(true);
+  };
+}
+
 export function GlobalSearchProvider({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);

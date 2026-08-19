@@ -2646,6 +2646,32 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   overscroll-behavior: contain;
   padding-right: 0.25rem;
 }
+/* Highlight a phrase in the rules text and this offers to search for it. It sits
+   below the text rather than floating at the selection, so the OS's own
+   selection menu (which floats above) has nothing to fight over. Outside the
+   scrolling rules block, or it would scroll out of reach. */
+.oracle-search-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--surface-2);
+  color: var(--accent);
+  font-size: 0.8rem;
+  text-align: left;
+}
+.oracle-search-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oracle-search-chip svg {
+  flex-shrink: 0;
+}
 .sheet-actions {
   display: flex;
   gap: 0.5rem;

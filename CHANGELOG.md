@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.129.1
+
+- **Highlighting a phrase with the card's own name in it now searches for the name-agnostic version.** Select "Whenever Grizzly Bears attacks" and the search runs for `o:"whenever ~ attacks"`, where `~` stands for whatever the card calls itself, so every card with that same trigger comes back instead of just the one you started from.
+
 ## 0.129.0
 
 - **You decide how many card images the device keeps.** Settings has a new **Card images** section with a slider (and a number box, if you'd rather type it) for how many card pictures to cache, from 100 up to 10,000. Underneath it says roughly how much storage that comes to when full, and how many images are cached right now. Hit **Save** to apply it: set it lower than before and the oldest images are pruned on the spot, so the space comes back immediately. Cached pictures load instantly and work offline, so this is the trade between your data plan and your free space.

@@ -207,7 +207,7 @@ export function CardSheet({
   const openCollectionSearch = useOpenCollectionSearch();
   const openDbSearch = useOpenDbSearch();
   // Highlighting a phrase in the rules text offers to search the database for it.
-  const oracleSelection = useOracleSelection(oracleCard.oracleText);
+  const oracleSelection = useOracleSelection(oracleCard.oracleText, oracleCard.name);
   const toast = useToast();
   // An owned collection entry opens read-only with an Edit toggle; add/wish/
   // deck/session are always a form; info is never editable.

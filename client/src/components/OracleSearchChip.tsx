@@ -6,7 +6,10 @@ import { oracleSelectionQuery, type OracleSelection } from './oracleSelection.js
  * Watch for a phrase highlighted inside a rules-text block. Returns the search
  * that phrase would run, or null while nothing useful is selected.
  */
-export function useOracleSelection(oracleText: string | null | undefined): OracleSelection | null {
+export function useOracleSelection(
+  oracleText: string | null | undefined,
+  cardName: string,
+): OracleSelection | null {
   const [sel, setSel] = useState<OracleSelection | null>(null);
   useEffect(() => {
     if (!oracleText) {
@@ -15,7 +18,7 @@ export function useOracleSelection(oracleText: string | null | undefined): Oracl
     }
     let clearing: number | undefined;
     const read = () => {
-      const next = oracleSelectionQuery(oracleText);
+      const next = oracleSelectionQuery(oracleText, cardName);
       if (next) {
         window.clearTimeout(clearing);
         clearing = undefined;
@@ -37,7 +40,7 @@ export function useOracleSelection(oracleText: string | null | undefined): Oracl
       document.removeEventListener('selectionchange', read);
       window.clearTimeout(clearing);
     };
-  }, [oracleText]);
+  }, [oracleText, cardName]);
   return sel;
 }
 

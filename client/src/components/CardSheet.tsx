@@ -32,9 +32,10 @@ import { CardHistory } from './CardHistory.js';
 import { ContainerPickerSheet } from './ContainerPickerSheet.js';
 import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
 import { EventSheet } from './EventSheet.js';
-import { useOpenCollectionSearch } from './GlobalSearch.js';
+import { useOpenCollectionSearch, useOpenDbSearch } from './GlobalSearch.js';
 import { Icon, type IconName } from './icons.js';
 import { OptionsMenu } from './OptionsMenu.js';
+import { OracleSearchChip, useOracleSelection } from './OracleSearchChip.js';
 import { SealedWithCardSheet } from '../sealed/SealedWithCardSheet.js';
 import { PriceChartSheet } from './PriceChart.js';
 import { PriceTrend } from './PriceTrend.js';
@@ -204,6 +205,9 @@ export function CardSheet({
   const mode = addFlow ? 'add' : baseMode;
   const editing = mode === 'edit';
   const openCollectionSearch = useOpenCollectionSearch();
+  const openDbSearch = useOpenDbSearch();
+  // Highlighting a phrase in the rules text offers to search the database for it.
+  const oracleSelection = useOracleSelection(oracleCard.oracleText);
   const toast = useToast();
   // An owned collection entry opens read-only with an Edit toggle; add/wish/
   // deck/session are always a form; info is never editable.
@@ -837,6 +841,15 @@ export function CardSheet({
         <>
         {oracleCard.oracleText && (
           <SymbolText className="oracle-text sheet-oracle" text={oracleCard.oracleText} />
+        )}
+        {oracleSelection && (
+          <OracleSearchChip
+            selection={oracleSelection}
+            onSearch={(query) => {
+              onClose();
+              openDbSearch(query);
+            }}
+          />
         )}
 
         {/* Not a <label>: the picker is a button until it's opened, and a label

@@ -24,7 +24,10 @@ function symbolClass(raw: string): string | null {
   return /^[0-9wubrgcpxyzse]+$/.test(cls) ? cls : null;
 }
 
-type Part = { sym: string; label: string } | { text: string };
+// `at` is the part's start offset in the string handed to tokenize. Text parts
+// carry it into the DOM (data-oracle-off) so a selection can be mapped back to
+// the raw rules text -- see oracleSelection.ts.
+type Part = { sym: string; label: string } | { text: string; at: number };
 
 /** Split a string into brace tokens (mapped to pips) and the plain text between them. */
 function tokenize(text: string): Part[] {
@@ -33,13 +36,13 @@ function tokenize(text: string): Part[] {
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
-    if (m.index > last) out.push({ text: text.slice(last, m.index) });
+    if (m.index > last) out.push({ text: text.slice(last, m.index), at: last });
     const inner = m[1] ?? '';
     const cls = symbolClass(inner);
-    out.push(cls ? { sym: cls, label: inner } : { text: m[0] });
+    out.push(cls ? { sym: cls, label: inner } : { text: m[0], at: m.index });
     last = re.lastIndex;
   }
-  if (last < text.length) out.push({ text: text.slice(last) });
+  if (last < text.length) out.push({ text: text.slice(last), at: last });
   return out;
 }
 
@@ -60,19 +63,31 @@ export function ManaCost({ cost, className }: { cost: string; className?: string
 
 export function SymbolText({ text, className }: { text: string; className?: string }) {
   // Oracle text separates abilities with newlines; render each as its own line.
+  // Each line remembers where it began in `text`, so every text span can stamp
+  // its absolute offset: pips render as empty <i> elements, and a selection read
+  // back as a string would silently drop them ("{T}: Add {G}" -> ": Add "). With
+  // the offsets, a reader slices the original string instead. See
+  // oracleSelection.ts.
+  let lineStart = 0;
   return (
-    <div className={`symbol-text${className ? ` ${className}` : ''}`}>
-      {text.split('\n').map((line, li) => (
-        <p key={li}>
-          {tokenize(line).map((p, i) =>
-            'sym' in p ? (
-              <i key={i} className={`ms ms-${p.sym} ms-cost`} role="img" aria-label={p.label} />
-            ) : (
-              <span key={i}>{p.text}</span>
-            ),
-          )}
-        </p>
-      ))}
+    <div className={`symbol-text${className ? ` ${className}` : ''}`} data-oracle-root="">
+      {text.split('\n').map((line, li) => {
+        const start = lineStart;
+        lineStart += line.length + 1; // + the newline split() ate
+        return (
+          <p key={li}>
+            {tokenize(line).map((p, i) =>
+              'sym' in p ? (
+                <i key={i} className={`ms ms-${p.sym} ms-cost`} role="img" aria-label={p.label} />
+              ) : (
+                <span key={i} data-oracle-off={start + p.at}>
+                  {p.text}
+                </span>
+              ),
+            )}
+          </p>
+        );
+      })}
     </div>
   );
 }

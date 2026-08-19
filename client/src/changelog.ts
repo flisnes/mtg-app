@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.128.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Highlight a phrase in a card’s rules text and a "Search rules text for ..." button appears below it, which finds every card whose text contains that phrase.',
+      },
+    ],
+  },
+  {
     version: '0.127.2',
     changes: [
       {

@@ -391,24 +391,36 @@ export function onSessionChanged(): void {
 const KEY_REPAIRS = 'syncRepairs';
 
 /**
- * v0.75.1: sanitizeDeckRow dropped `kind`, so every binder and box that arrived
- * from the server landed as a plain deck (and every synced history line lost its
- * `deckKind`). Fixing the sanitizer only helps rows sent from now on: the cursor
- * is already past the flattened ones, and the server resends nothing below it.
+ * The repairs this build knows about, oldest first. Every one so far needs the
+ * same medicine, so they share the code below and only the id list grows:
  *
- * So rewind the cursor once. The server still has the correct rows — sync-row
- * content is opaque to it, `kind` was always in the stored JSON — and a re-pull
- * only skips an incoming row when the local copy is STRICTLY newer, so the
- * equal-stamped flattened rows get rewritten while pending local edits still win.
+ * - `containerKinds` (v0.75.1): sanitizeDeckRow dropped `kind`, so every binder
+ *   and box that arrived from the server landed as a plain deck.
+ * - `syncTableAdditions` (v0.129.3): applyServerChanges skips a change whose
+ *   table it doesn't know (`TABLES[c.tbl]` is undefined) but still advances the
+ *   cursor past it. So every device that pulled while running a build older
+ *   than the table silently dropped those rows for good — deckFolders before
+ *   v0.109.0, sealedItems before v0.117.0. Symptom: boxes added on the phone
+ *   never appear on the PC, no matter how often either syncs.
+ *
+ * The medicine: rewind the cursor once so the server re-sends everything it
+ * has. Sync-row content is opaque to the server, so the correct rows were
+ * always in the stored JSON, and a re-pull only skips an incoming row when the
+ * local copy is STRICTLY newer — so dropped rows land while pending local edits
+ * still win. ADD AN ID HERE whenever SYNC_TABLES grows: the devices that need
+ * the re-pull are exactly the ones that can't know they missed anything.
  */
+const REPAIRS = ['containerKinds', 'syncTableAdditions'] as const;
+
 async function runOneTimeRepairs(): Promise<void> {
   const done = (await getSetting<string[]>(KEY_REPAIRS)) ?? [];
-  if (done.includes('containerKinds')) return;
+  const pending = REPAIRS.filter((r) => !done.includes(r));
+  if (pending.length === 0) return;
   const state = await getSyncState();
   if (state && state.cursor > 0) {
     await setSetting(KEY_SYNC_STATE, { ...state, cursor: 0 } satisfies SyncState);
   }
-  await setSetting(KEY_REPAIRS, [...done, 'containerKinds']);
+  await setSetting(KEY_REPAIRS, [...done, ...pending]);
 }
 
 // ---------------------------------------------------------------------------

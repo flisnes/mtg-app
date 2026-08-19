@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.129.3
+
+- **Sealed products now turn up on your other devices.** A device that synced while running a build from before unopened boxes existed skipped those rows and moved its bookmark past them, so boxes added on the phone never reached the PC (and, further back, the same happened to deck folders). Every signed-in device now re-reads its account once and picks up whatever it missed. Nothing to do but open the app on both devices.
+- **The Collection menu lost its "Sealed products" entry.** It was a second door to the same room: the sealed shelf lives under More, and "Add sealed product" is still right there in the menu.
+
 ## 0.129.2
 
 - **The rules-text chip shows the `~` it searches for, and catches a half-highlighted name.** The button now reads back the same phrase it will search, so you can see the card's name has become `~`. You also no longer have to start the drag right on the first letter of the name: highlight "olt deals 3" on Lightning Bolt and the chip still offers "~ deals 3". Highlighting nothing but the name gives no chip, since every card that says its own name would match.

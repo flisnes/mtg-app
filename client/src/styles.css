@@ -471,6 +471,35 @@ button.danger-outline {
   margin: 0.35rem 0 0.5rem;
 }
 
+/* Settings -> Card images: the cache budget, a slider paired with a number box. */
+.image-budget-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
+}
+.image-budget-row input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+  margin: 0;
+}
+.image-budget-number {
+  flex: none;
+  width: 5.5rem;
+  padding: 0.5rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.image-budget-estimate {
+  margin: 0.4rem 0 0.6rem;
+}
+
 /* ---- Pages ---- */
 .page-header {
   display: flex;

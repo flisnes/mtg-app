@@ -53,32 +53,50 @@ function rawRange(container: Element, range: Range): [number, number] | null {
 }
 
 export interface OracleSelection {
-  /** The selected phrase, for the chip's label. */
+  /** The selected phrase with `~` for the card's name, for the chip's label. */
   text: string;
   /** The search query it becomes, e.g. `o:"whenever ~ enters"`. */
   query: string;
 }
 
-/** Selections this short are stray taps, not phrases worth searching. */
+/**
+ * Selections this short are stray taps, not phrases worth searching. Measured
+ * after the name becomes `~`, so a highlight of nothing but (part of) the card's
+ * own name leaves no chip: `o:"~"` is every self-referencing card ever printed.
+ */
 const MIN_CHARS = 3;
 
 /**
- * Swap the card's own name for `~` in a phrase, longest face first so a DFC's
- * "Ajani, Strength of the Pride" isn't half-eaten by an "Ajani" back face.
+ * Rewrite the selected slice of `oracleText` with the card's own name replaced
+ * by `~`, however little of the name the selection actually covers.
  *
- * A plain substring swap, no regex: rules text spells the name exactly as
- * printed. The index stores both forms (normOracle and normOracleTilde in
- * querySyntax.ts), so either would still find this card; `~` is what makes the
- * search find *other* cards with the same ability, which is the point of
- * highlighting it.
+ * Works from the name's position in the full text, not the highlighted string:
+ * dragging from mid-name is the common case (you start the drag on the word you
+ * care about, not on the leading capital), and "olt deals 3" should still read
+ * "~ deals 3". Occurrences are masked over the whole text, then each masked run
+ * inside the selection collapses to one `~`.
+ *
+ * Case-sensitive on purpose. Rules text spells the name as printed, and the
+ * index's tilde form (normOracleTilde in querySyntax.ts) replaces every
+ * casing of it, so a swap we skip still matches and a swap we make still does.
  */
-function tildeName(phrase: string, cardName: string): string {
-  const faces = cardName
-    .split(' // ')
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length);
-  let out = phrase;
-  for (const face of faces) out = out.split(face).join('~');
+function tildeSelection(oracleText: string, start: number, end: number, cardName: string): string {
+  const isName = new Array<boolean>(oracleText.length).fill(false);
+  for (const face of cardName.split(' // ')) {
+    if (!face) continue;
+    for (let at = oracleText.indexOf(face); at !== -1; at = oracleText.indexOf(face, at + 1)) {
+      for (let i = at; i < at + face.length; i++) isName[i] = true;
+    }
+  }
+  let out = '';
+  for (let i = start; i < end; ) {
+    if (!isName[i]) {
+      out += oracleText[i++];
+      continue;
+    }
+    out += '~'; // one pip for the whole run, however much of it was highlighted
+    while (i < end && isName[i]) i++;
+  }
   return out;
 }
 
@@ -97,7 +115,7 @@ export function oracleSelectionQuery(oracleText: string, cardName: string): Orac
 
   const span = rawRange(container, range);
   if (!span) return null;
-  const raw = oracleText.slice(span[0], span[1]);
+  const raw = tildeSelection(oracleText, span[0], span[1], cardName);
 
   // Two characters can't survive inside one quoted term, so the phrase is cut
   // at each of them and the pieces are ANDed (whitespace means AND):
@@ -105,8 +123,8 @@ export function oracleSelectionQuery(oracleText: string, cardName: string): Orac
   //       never match as a single term, and an <input> eats the newline anyway.
   //   "   a quoted term ends at the first quote, and rules text is full of them
   //       ("Artifacts you control have "{2}, Sacrifice this artifact: ..."").
-  // Every piece is still a literal substring of the stored text, which is what
-  // keeps the match honest.
+  // Every piece is still a literal substring of the stored text (or of its
+  // tilde form), which is what keeps the match honest.
   const parts = raw
     .split(/["\n]/)
     .map((part) => part.replace(/\s+/g, ' ').trim())
@@ -114,12 +132,9 @@ export function oracleSelectionQuery(oracleText: string, cardName: string): Orac
   if (!parts.length) return null;
 
   return {
-    // The label reads back what was highlighted, quotes and all; only the query
-    // gets chopped up and tilde'd.
+    // Label and query read the same, `~` and all: the chip is the only warning
+    // that the search is wider than the words under the highlight.
     text: raw.replace(/\s+/g, ' ').trim(),
-    // Highlighting "Whenever Grizzly Bears attacks" searches for
-    // o:"whenever ~ attacks", so every card with that trigger comes back, not
-    // just this one.
-    query: parts.map((part) => `o:"${tildeName(part, cardName)}"`).join(' '),
+    query: parts.map((part) => `o:"${part}"`).join(' '),
   };
 }

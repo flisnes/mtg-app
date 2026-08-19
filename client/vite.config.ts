@@ -28,6 +28,10 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         // Card imagery is hotlinked from Scryfall's CDN; cache it bounded &
         // cache-first so the collection stays browsable offline (beta plan §3).
+        // maxEntries here is the ceiling, not the setting: it is baked in at
+        // build time, while the user's own budget (Settings -> Card images) is
+        // enforced from the app in src/util/imageCache.ts. Keep the 10000 in
+        // step with IMAGE_CACHE_CEILING there.
         runtimeCaching: [
           {
             urlPattern: ({ url }) =>
@@ -36,7 +40,7 @@ export default defineConfig({
             options: {
               cacheName: 'scryfall-images',
               expiration: {
-                maxEntries: 3000,
+                maxEntries: 10000,
                 maxAgeSeconds: 60 * 60 * 24 * 30,
               },
               cacheableResponse: { statuses: [0, 200] },

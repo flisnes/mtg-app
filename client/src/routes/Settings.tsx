@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { MIN_PASSWORD_CHARS, USERNAME_RE } from '@mtg/shared';
 import { ApiError } from '../account/api.js';
@@ -21,6 +21,18 @@ import { fmtDate, fmtDateTime as fmtWhen } from '../util/format.js';
 import { setPrefs, type FilingPolicy, type PrintingPref, type UpdatePolicy } from '../prefs.js';
 import { usePrefs } from '../usePrefs.js';
 import { CURRENCIES, ensureRates, rateSummary } from '../price/rates.js';
+import {
+  clampImageCacheLimit,
+  enforceImageCacheLimit,
+  fmtBytes,
+  IMAGE_CACHE_CEILING,
+  IMAGE_CACHE_MIN,
+  IMAGE_CACHE_STEP,
+  imageCacheStats,
+  projectImageCacheBytes,
+  pruneImageCache,
+  type ImageCacheStats,
+} from '../util/imageCache.js';
 import {
   checkCardDataNow,
   checkPricesNow,
@@ -69,6 +81,7 @@ export function Settings() {
       <PrintingSection />
       <FilingSection />
       <DownloadsSection />
+      <ImageCacheSection />
       <PreferencesSection />
       <DataSection signedIn={!!account.session} />
       <TroubleSection />
@@ -604,6 +617,95 @@ function DownloadsSection() {
           </button>
         </div>
       ))}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card images: how many of Scryfall's pictures this device keeps
+// ---------------------------------------------------------------------------
+
+function ImageCacheSection() {
+  const { imageCacheLimit } = usePrefs();
+  const [text, setText] = useState(String(imageCacheLimit));
+  const [stats, setStats] = useState<ImageCacheStats | null>(null);
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  // Enforce before counting: boot upkeep may still be trimming, and a stale
+  // "images cached right now" is exactly the number people would check here.
+  useEffect(() => {
+    void enforceImageCacheLimit().then(() => imageCacheStats().then(setStats));
+  }, []);
+
+  // The number box is free-typed, so the slider and the estimate read a
+  // clamped value; an empty or nonsense box just means "unchanged".
+  const typed = Number(text);
+  const value = clampImageCacheLimit(text.trim() && Number.isFinite(typed) ? typed : imageCacheLimit);
+  const dirty = value !== imageCacheLimit;
+
+  async function save() {
+    setBusy(true);
+    try {
+      setText(String(value));
+      setPrefs({ imageCacheLimit: value });
+      const pruned = await pruneImageCache(value);
+      setStats(await imageCacheStats());
+      toast(
+        pruned
+          ? `Keeping ${value.toLocaleString()} images. Sent ${pruned.toLocaleString()} of the oldest to the graveyard.`
+          : `Keeping ${value.toLocaleString()} images.`,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="about-section">
+      <h2>Card images</h2>
+      <p className="fine-print">
+        Card pictures are fetched from Scryfall as you browse and kept on this device, so they appear instantly next
+        time and still show up offline. A bigger cache spends less of your data plan; a smaller one leaves more room
+        on the phone. When it is full the oldest images are dropped first, and any card you look at fetches its
+        picture again.
+      </p>
+
+      <label className="field" htmlFor="image-cache-limit">
+        Images to keep cached
+      </label>
+      <div className="image-budget-row">
+        <input
+          id="image-cache-limit"
+          type="range"
+          min={IMAGE_CACHE_MIN}
+          max={IMAGE_CACHE_CEILING}
+          step={IMAGE_CACHE_STEP}
+          value={value}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <input
+          className="image-budget-number"
+          type="number"
+          inputMode="numeric"
+          min={IMAGE_CACHE_MIN}
+          max={IMAGE_CACHE_CEILING}
+          step={IMAGE_CACHE_STEP}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => setText(String(value))}
+          aria-label="Images to keep cached"
+        />
+      </div>
+      <p className="fine-print image-budget-estimate">
+        About {fmtBytes(projectImageCacheBytes(value, stats))} of storage when full.
+        {stats
+          ? ` ${stats.count.toLocaleString()} images cached right now, about ${fmtBytes(stats.bytes)}.`
+          : ''}
+      </p>
+      <button className="primary" onClick={() => void save()} disabled={busy || !dirty}>
+        {busy ? 'Saving…' : 'Save'}
+      </button>
     </section>
   );
 }

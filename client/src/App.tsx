@@ -36,6 +36,7 @@ import { initSyncEngine } from './sync/engine.js';
 import { recordCollectionPrices } from './price/tracking.js';
 import { recordSealedPrices } from './price/sealedTracking.js';
 import { ensureRates } from './price/rates.js';
+import { startImageCacheUpkeep } from './util/imageCache.js';
 import { Icon, type IconName } from './components/icons.js';
 
 const PRIMARY_NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
@@ -61,6 +62,9 @@ export function App() {
     // refresh trade-match notifications (throttled).
     initSyncEngine();
     void maybeFetchMatches();
+    // Trim the card-image cache back to this device's budget (Settings → Card
+    // images); the service worker only enforces the build-time ceiling.
+    startImageCacheUpkeep();
   }, []);
 
   if (onboarded === null) return null; // brief: waiting on the onboarding flag

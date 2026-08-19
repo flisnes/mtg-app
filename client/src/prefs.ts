@@ -41,6 +41,12 @@ export interface Prefs {
   scanDataPolicy: UpdatePolicy;
   /** Filing a copy that's already filed elsewhere: ask, move it, or file both. */
   filingPolicy: FilingPolicy;
+  /**
+   * How many card images the service worker may keep cached (util/imageCache.ts).
+   * Device-shaped like the rest of this file: a phone with 2 GB free wants a
+   * different number than a desktop.
+   */
+  imageCacheLimit: number;
 }
 
 // 'ask' across the board: a fresh install downloads nothing the user didn't
@@ -54,6 +60,9 @@ const DEFAULTS: Prefs = {
   cardDbPolicy: 'ask',
   scanDataPolicy: 'ask',
   filingPolicy: 'ask',
+  // IMAGE_CACHE_DEFAULT in util/imageCache.ts; the literal keeps that module,
+  // which imports this one, out of an import cycle.
+  imageCacheLimit: 3000,
 };
 
 const STORAGE_KEY = 'prefs';

@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.129.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Settings → Card images lets you set how many card pictures this device keeps cached, with an estimate of the storage that takes. Lower it and hit Save and the oldest images are dropped right away.',
+      },
+    ],
+  },
+  {
     version: '0.128.0',
     changes: [
       {

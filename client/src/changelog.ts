@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.129.1',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Highlighting rules text that includes the card’s own name now searches with ~ in its place, so you get every card with that ability, not just this one.',
+      },
+    ],
+  },
+  {
     version: '0.129.0',
     changes: [
       {

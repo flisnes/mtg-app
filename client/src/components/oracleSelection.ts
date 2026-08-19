@@ -63,10 +63,30 @@ export interface OracleSelection {
 const MIN_CHARS = 3;
 
 /**
+ * Swap the card's own name for `~` in a phrase, longest face first so a DFC's
+ * "Ajani, Strength of the Pride" isn't half-eaten by an "Ajani" back face.
+ *
+ * A plain substring swap, no regex: rules text spells the name exactly as
+ * printed. The index stores both forms (normOracle and normOracleTilde in
+ * querySyntax.ts), so either would still find this card; `~` is what makes the
+ * search find *other* cards with the same ability, which is the point of
+ * highlighting it.
+ */
+function tildeName(phrase: string, cardName: string): string {
+  const faces = cardName
+    .split(' // ')
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  let out = phrase;
+  for (const face of faces) out = out.split(face).join('~');
+  return out;
+}
+
+/**
  * Read the current selection as an oracle-text search, or null when there isn't
  * one inside a rules-text block.
  */
-export function oracleSelectionQuery(oracleText: string): OracleSelection | null {
+export function oracleSelectionQuery(oracleText: string, cardName: string): OracleSelection | null {
   const sel = document.getSelection();
   if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
   const range = sel.getRangeAt(0);
@@ -95,11 +115,11 @@ export function oracleSelectionQuery(oracleText: string): OracleSelection | null
 
   return {
     // The label reads back what was highlighted, quotes and all; only the query
-    // gets chopped up.
+    // gets chopped up and tilde'd.
     text: raw.replace(/\s+/g, ' ').trim(),
-    // No ~ substitution needed: `o:` matches the raw text as well as the
-    // self-reference form (see termMatches in querySyntax.ts), so a phrase
-    // holding the card's own name still lands.
-    query: parts.map((part) => `o:"${part}"`).join(' '),
+    // Highlighting "Whenever Grizzly Bears attacks" searches for
+    // o:"whenever ~ attacks", so every card with that trigger comes back, not
+    // just this one.
+    query: parts.map((part) => `o:"${tildeName(part, cardName)}"`).join(' '),
   };
 }

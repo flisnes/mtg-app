@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.129.2
+
+- **The rules-text chip shows the `~` it searches for, and catches a half-highlighted name.** The button now reads back the same phrase it will search, so you can see the card's name has become `~`. You also no longer have to start the drag right on the first letter of the name: highlight "olt deals 3" on Lightning Bolt and the chip still offers "~ deals 3". Highlighting nothing but the name gives no chip, since every card that says its own name would match.
+
 ## 0.129.1
 
 - **Highlighting a phrase with the card's own name in it now searches for the name-agnostic version.** Select "Whenever Grizzly Bears attacks" and the search runs for `o:"whenever ~ attacks"`, where `~` stands for whatever the card calls itself, so every card with that same trigger comes back instead of just the one you started from.

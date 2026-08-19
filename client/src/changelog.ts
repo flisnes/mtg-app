@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.129.2',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The rules-text search button now reads back the ~ it searches for, and it swaps in the ~ even when you only caught part of the card’s name in the highlight.',
+      },
+    ],
+  },
+  {
     version: '0.129.1',
     changes: [
       {

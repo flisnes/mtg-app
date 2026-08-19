@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.129.3',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Unopened sealed products now show up on your other devices. Devices that synced before boxes existed had skipped those rows for good; every signed-in device re-reads its account once and picks up what it missed.',
+      },
+      {
+        kind: 'removed',
+        text: 'The Collection menu no longer has a "Sealed products" shortcut. The sealed shelf is under More; "Add sealed product" stays in the menu.',
+      },
+    ],
+  },
+  {
     version: '0.129.2',
     changes: [
       {

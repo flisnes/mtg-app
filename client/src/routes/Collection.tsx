@@ -39,7 +39,6 @@ export function Collection() {
           actions={[
             { label: 'Scan cards', icon: 'camera', onClick: () => setScanning(true) },
             { label: 'Add sealed product', icon: 'sealed', onClick: () => setAddingSealed(true) },
-            { label: 'Sealed products', icon: 'sealed', onClick: () => navigate('/sealed') },
             { label: 'Import', icon: 'import', onClick: () => navigate('/import') },
             { label: 'Export', icon: 'export', onClick: () => navigate('/export') },
           ]}

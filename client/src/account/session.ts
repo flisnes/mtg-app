@@ -87,8 +87,12 @@ export async function signIn(username: string, password: string): Promise<SignIn
     return 'seeded';
   }
 
+  // Sealed items count as local data too: a device whose only rows are
+  // unopened boxes must not silently pull-and-forget them (initPullSync clears
+  // the outbox, so nothing would ever push them to the account).
   const localRows =
     (await db.collection.count()) +
+    (await db.sealedItems.count()) +
     (await db.wishlist.count()) +
     (await db.decks.count()) +
     (await db.trades.count());

@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.129.5',
+    changes: [
+      {
+        kind: 'fixed',
+        text: "Correcting a card's condition, language or edition keeps it filed where it was. The deck, binder or box holding that copy follows the correction instead of raising a filing conflict.",
+      },
+    ],
+  },
+  {
     version: '0.129.4',
     changes: [
       {

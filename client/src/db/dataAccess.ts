@@ -230,12 +230,76 @@ export async function addToCollection(input: AddToCollectionInput): Promise<stri
   });
 }
 
+/** The one physical copy a slot names, when it names one at all — the collection
+ *  key its own fields spell out. The same rule as claimKeyOf in deck/filing.ts,
+ *  restated here so the mutation layer needn't import from the deck layer. */
+function slotClaimKey(s: DeckCard): string | undefined {
+  if (s.anyBasic || !s.scryfallId || !s.condition || !s.finish || !s.lang) return undefined;
+  return collectionKey({ scryfallId: s.scryfallId, condition: s.condition, finish: s.finish, lang: s.lang });
+}
+
+/**
+ * Editing a copy's printing, condition, finish or language is a correction of
+ * how it was filed in the first place, not a new card walking in: "it's the
+ * Spanish one", "that's LP, not NM". So the deck, binder and box slots holding
+ * this exact copy follow it to its corrected identity. Left behind they would
+ * keep claiming a copy that no longer exists (an amber filing conflict) while
+ * the corrected copy looked like it had never been filed at all.
+ *
+ * A corrected slot can land on one the container already has — fix a NM copy to
+ * LP in a deck that already holds the LP one — and those merge, exactly as
+ * filing the same copy there twice does. No history event either way: nothing
+ * entered or left the container, the label on the sleeve just changed.
+ */
+async function refileEditedCopy(before: CollectionEntry, after: CollectionEntry, now: number): Promise<void> {
+  const from = collectionKey(before);
+  if (from === collectionKey(after)) return;
+  const all = await db.deckCards.where('oracleId').equals(before.oracleId).toArray();
+  const moving = all.filter((s) => slotClaimKey(s) === from);
+  if (moving.length === 0) return;
+
+  const wants: SlotWants = { condition: after.condition, finish: after.finish, lang: after.lang };
+  const identity = (s: DeckCard, scryfallId = s.scryfallId, w: SlotWants = s) =>
+    `${s.deckId}|${exactSlotKey({ ...s, scryfallId }, w)}`;
+  const movingIds = new Set(moving.map((s) => s.id));
+  // Where a corrected slot could land: every other slot of this card, keyed by
+  // the copy it names, so a merge target is found the way a bulk file finds one.
+  const byIdentity = new Map(all.filter((s) => !movingIds.has(s.id)).map((s) => [identity(s), s]));
+
+  const writes = new Map<string, DeckCard>();
+  const merged: string[] = [];
+  for (const slot of moving) {
+    const key = identity(slot, after.scryfallId, wants);
+    const target = byIdentity.get(key);
+    if (target) {
+      const grown: DeckCard = { ...target, quantity: target.quantity + slot.quantity, updatedAt: now };
+      byIdentity.set(key, grown);
+      writes.set(grown.id, grown);
+      merged.push(slot.id);
+    } else {
+      const next: DeckCard = { ...slot, scryfallId: after.scryfallId, ...wants, updatedAt: now };
+      byIdentity.set(key, next);
+      writes.set(next.id, next);
+    }
+  }
+
+  const rows = [...writes.values()];
+  await db.deckCards.bulkPut(rows);
+  await stagePutMany('deckCards', rows);
+  for (const id of merged) {
+    await db.deckCards.delete(id);
+    await stageDelete('deckCards', id);
+  }
+}
+
 /** Patch an entry. quantityForTrade is always clamped to [0, quantity]. */
 export async function updateCollectionEntry(
   id: string,
   patch: Partial<Pick<CollectionEntry, 'quantity' | 'quantityForTrade' | 'condition' | 'finish' | 'lang' | 'scryfallId'>>,
 ): Promise<void> {
-  await db.transaction('rw', COLLECTION_TABLES, async () => {
+  // deckCards is in scope because a re-keying edit takes the copy's filing with
+  // it (refileEditedCopy).
+  await db.transaction('rw', [...COLLECTION_TABLES, db.deckCards], async () => {
     const entry = await db.collection.get(id);
     if (!entry) return;
     const now = Date.now();
@@ -278,6 +342,10 @@ export async function updateCollectionEntry(
       await db.collection.put(next);
       await stagePut('collection', next);
     }
+
+    // The copy's filing is part of the copy: a corrected printing, condition,
+    // finish or language takes its deck/binder/box slots along.
+    await refileEditedCopy(entry, next, now);
 
     // A quantity edit is a real add/remove for history purposes. Removals
     // default to 'sold' (interview decision); the History tab can re-label.

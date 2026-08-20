@@ -3280,6 +3280,23 @@ button.primary {
   flex-wrap: wrap;
   align-items: center;
 }
+
+/* Container picker: the list of decks/binders/boxes is the only part that
+   scrolls. A shelf of thirty decks used to make the whole sheet scroll, taking
+   the kind tabs off the top with it — so binders and boxes looked as if they
+   simply weren't on offer. Everything around the list stays put. */
+.container-picker .sheet-name,
+.container-picker .seg-row,
+.container-picker .list-toolbar,
+.container-picker .sheet-actions {
+  flex-shrink: 0;
+}
+.container-picker-list {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .list-toolbar .grow {
   flex: 1;
   min-width: 140px;

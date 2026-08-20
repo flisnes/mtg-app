@@ -269,10 +269,14 @@ export interface Setting {
 // last-write-wins comparator for those edits.
 // ---------------------------------------------------------------------------
 
-/** Why copies left the collection. Removals default to 'sold'; user-editable. */
-export type RemovalReason = 'sold' | 'traded' | 'lost' | 'other';
+/**
+ * Why copies left the collection. Removals default to 'sold'; user-editable.
+ * 'corrected' is the bookkeeping one: the copies never went anywhere, the entry
+ * describing them was wrong (finish, language, edition) and got fixed.
+ */
+export type RemovalReason = 'sold' | 'traded' | 'lost' | 'corrected' | 'other';
 
-export const REMOVAL_REASONS: readonly RemovalReason[] = ['sold', 'traded', 'lost', 'other'];
+export const REMOVAL_REASONS: readonly RemovalReason[] = ['sold', 'traded', 'lost', 'corrected', 'other'];
 
 export type UserEventKind =
   | 'collection.add'

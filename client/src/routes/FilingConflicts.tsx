@@ -30,6 +30,7 @@ const REASON_LABELS: Record<RemovalReason, string> = {
   sold: 'Sold it',
   traded: 'Traded it away',
   lost: 'Lost it',
+  corrected: 'Fixed incorrect card information',
   other: 'Something else',
 };
 
@@ -301,11 +302,13 @@ export function FilingConflicts() {
             {conflict.owned > 0
               ? `Removes ${conflict.owned} from your collection and takes the card out of all ${conflict.places.length} places it's filed.`
               : `Takes the card out of all ${conflict.places.length} places it's filed. You don't own it, so there's nothing to remove from your collection.`}
+            {reason === 'corrected' &&
+              ' Your history records a correction, not a card that left the collection.'}
           </p>
           <div className="sheet-actions">
             <button onClick={() => setRemoving(false)}>Never mind</button>
             <button className="primary" disabled={busy} onClick={() => void goneForGood(current)}>
-              It’s gone
+              {reason === 'corrected' ? 'Clear it out' : 'It’s gone'}
             </button>
           </div>
         </div>

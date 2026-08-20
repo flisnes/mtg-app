@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.129.6
+
+- **"Fixed incorrect card information" is now one of the reasons a copy can be gone.** Working through a filing conflict and picking "I don't have it any more" asks what happened to it. Since correcting a copy's finish, language or edition is itself a common cause of the conflict, that is now a reason of its own, and your history records it as a correction rather than a sale.
+- **The deck, binder and box tabs stay put in the "File away" picker.** With more decks than fit on screen the whole sheet scrolled, taking the Decks / Binders / Boxes tabs off the top with it, so filing a card into a binder or a box looked impossible. Only the list scrolls now; the tabs, the name field and Cancel stay where they are.
+
 ## 0.129.5
 
 - **Fixing a card's details keeps it where it is filed.** Changing a copy's condition, language or edition is a correction of how it was filed in the first place, not a new card arriving, so the deck, binder or box holding that copy follows it. Before this, the old slot kept claiming a card that no longer existed (an amber filing conflict) while the corrected copy looked like it had never been filed. If the corrected copy lands on one the same container already holds, the two slots merge.

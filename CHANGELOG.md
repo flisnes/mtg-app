@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.129.5
+
+- **Fixing a card's details keeps it where it is filed.** Changing a copy's condition, language or edition is a correction of how it was filed in the first place, not a new card arriving, so the deck, binder or box holding that copy follows it. Before this, the old slot kept claiming a card that no longer existed (an amber filing conflict) while the corrected copy looked like it had never been filed. If the corrected copy lands on one the same container already holds, the two slots merge.
+
 ## 0.129.4
 
 - **A box on the shelf can now be cracked open.** Owned sealed products have gained an **Open it, add the cards** button: pick how many copies you're opening, set the condition and language, and the contents land in your collection while the shelf count drops by what you cracked. Until now the only way in was to add the product a second time as cards and delete the unopened one. Booster boxes and packs say why they can't be opened this way, since nobody knows what's inside. As with every other bulk add, it finishes by asking where the cards live so you can file them in a deck, binder or box straight away.

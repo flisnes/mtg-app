@@ -24,6 +24,7 @@ export const REASON_LABELS: Record<RemovalReason, string> = {
   sold: 'Sold',
   traded: 'Traded away',
   lost: 'Lost',
+  corrected: 'Corrected',
   other: 'Removed',
 };
 

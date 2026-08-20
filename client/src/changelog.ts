@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.129.6',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The Decks / Binders / Boxes tabs no longer scroll away in the filing picker when you have a lot of decks, so a card can be filed into a binder or box again.',
+      },
+      {
+        kind: 'added',
+        text: '"Fixed incorrect card information" is now a reason a copy is gone when you sort out a filing conflict, for when the conflict came from correcting the card yourself.',
+      },
+    ],
+  },
+  {
     version: '0.129.5',
     changes: [
       {

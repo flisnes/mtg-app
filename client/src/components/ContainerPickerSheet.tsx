@@ -61,7 +61,7 @@ export function ContainerPickerSheet({
   }
 
   return (
-    <Sheet onClose={onClose} title={title} label={label}>
+    <Sheet onClose={onClose} title={title} label={label} className="container-picker">
       {!restricted && (
         <div className="seg-row" role="tablist" aria-label="Container kind">
           {CONTAINER_KINDS.map((k) => (
@@ -78,58 +78,63 @@ export function ContainerPickerSheet({
         </div>
       )}
 
-      {shown === undefined ? (
-        <p className="search-meta">Loading…</p>
-      ) : shown.length === 0 ? (
-        restricted ? (
-          <div className="empty-state">
-            <p>{emptyText ?? 'Nowhere else holds these.'}</p>
-          </div>
-        ) : (
-          <div className="empty-state">
-            <p>No {meta.Plural.toLowerCase()} yet.</p>
-            <p className="empty-phase">Name one below, or</p>
-            <p className="empty-phase">
-              <button className="linklike" onClick={() => navigate(meta.path)}>
-                go to {meta.Plural}
-              </button>
-            </p>
-          </div>
-        )
-      ) : (
-        <ul className="menu-list">
-          {shown.map((row) => {
-            const rowMeta = CONTAINER_META[containerKind(row)];
-            const note = noteFor?.(row.id);
-            return (
-              <li key={row.id}>
-                <button
-                  className="menu-item menu-item-btn"
-                  onClick={() => onPick(row.id, containerKind(row))}
-                >
-                  <span className="menu-icon" aria-hidden>
-                    <Icon name={rowMeta.icon} />
-                  </span>
-                  <span className="deck-line">
-                    <span className="deck-name">{row.name}</span>
-                    {(rowMeta.kind === 'deck' || note) && (
-                      <span className="deck-meta">
-                        {rowMeta.kind === 'deck' && (
-                          <span className="deck-format">{formatLabel(row.format ?? 'casual')}</span>
-                        )}
-                        {note && <span className="search-meta">{note}</span>}
-                      </span>
-                    )}
-                  </span>
-                  <span className="menu-chevron" aria-hidden>
-                    ›
-                  </span>
+      {/* Only the list scrolls: a shelf of thirty decks used to push the kind
+          tabs off the top of the sheet, and binders and boxes looked as if they
+          weren't on offer at all. */}
+      <div className="container-picker-list">
+        {shown === undefined ? (
+          <p className="search-meta">Loading…</p>
+        ) : shown.length === 0 ? (
+          restricted ? (
+            <div className="empty-state">
+              <p>{emptyText ?? 'Nowhere else holds these.'}</p>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <p>No {meta.Plural.toLowerCase()} yet.</p>
+              <p className="empty-phase">Name one below, or</p>
+              <p className="empty-phase">
+                <button className="linklike" onClick={() => navigate(meta.path)}>
+                  go to {meta.Plural}
                 </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+              </p>
+            </div>
+          )
+        ) : (
+          <ul className="menu-list">
+            {shown.map((row) => {
+              const rowMeta = CONTAINER_META[containerKind(row)];
+              const note = noteFor?.(row.id);
+              return (
+                <li key={row.id}>
+                  <button
+                    className="menu-item menu-item-btn"
+                    onClick={() => onPick(row.id, containerKind(row))}
+                  >
+                    <span className="menu-icon" aria-hidden>
+                      <Icon name={rowMeta.icon} />
+                    </span>
+                    <span className="deck-line">
+                      <span className="deck-name">{row.name}</span>
+                      {(rowMeta.kind === 'deck' || note) && (
+                        <span className="deck-meta">
+                          {rowMeta.kind === 'deck' && (
+                            <span className="deck-format">{formatLabel(row.format ?? 'casual')}</span>
+                          )}
+                          {note && <span className="search-meta">{note}</span>}
+                        </span>
+                      )}
+                    </span>
+                    <span className="menu-chevron" aria-hidden>
+                      ›
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
 
       {!restricted && (
         <div className="list-toolbar">

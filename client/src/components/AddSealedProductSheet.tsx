@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CONDITIONS, type Condition, type Finish, type SealedPriceMap, type SealedProduct } from '@mtg/shared';
-import { addSealedItem, applyImport, type ImportLine } from '../db/dataAccess.js';
-import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { addSealedItem } from '../db/dataAccess.js';
 import { loadSealedProducts } from '../sealed/store.js';
+import { loadContents, openIntoCollection, perCopyCount, type OpenContents } from '../sealed/open.js';
 import { SealedImage } from '../sealed/SealedImage.js';
 import {
   cardCount,
@@ -33,22 +33,6 @@ type Load =
 /** What the user intends to do with the product they picked. */
 type Outcome = 'unopened' | 'cards';
 
-/** A product's cards joined with the installed card DB for display + add. */
-interface DetailRow {
-  scryfallId: string;
-  oracleId: string;
-  name: string;
-  set: string;
-  collectorNumber: string;
-  qty: number;
-  finish: Finish;
-}
-interface Detail {
-  rows: DetailRow[];
-  /** Cards in the product that aren't in the installed card DB (version skew). */
-  missingLocally: number;
-}
-
 const MAX_RESULTS = 60;
 const finishTag = (f: Finish) => (f === 'foil' ? ' · foil' : f === 'etched' ? ' · etched' : '');
 
@@ -56,7 +40,7 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<SealedProduct | null>(null);
-  const [detail, setDetail] = useState<Detail | null>(null);
+  const [detail, setDetail] = useState<OpenContents | null>(null);
   const [outcome, setOutcome] = useState<Outcome>('unopened');
   const [copies, setCopies] = useState(1);
   const [adding, setAdding] = useState(false);
@@ -105,28 +89,7 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
     // A box of boosters can only be owned unopened; anything with a known
     // decklist defaults to the reason that feature was built — adding the cards.
     setOutcome(isRandomOnly(p) ? 'unopened' : 'cards');
-    const printings = await getPrintingsByIds(p.cards.map((c) => c.scryfallId));
-    const oracles = await getOracleCardsByIds([...printings.values()].map((pr) => pr.oracleId));
-    const rows: DetailRow[] = [];
-    let missingLocally = 0;
-    for (const c of p.cards) {
-      const pr = printings.get(c.scryfallId);
-      if (!pr) {
-        missingLocally += c.qty;
-        continue;
-      }
-      rows.push({
-        scryfallId: c.scryfallId,
-        oracleId: pr.oracleId,
-        name: oracles.get(pr.oracleId)?.name ?? '(unknown card)',
-        set: pr.set,
-        collectorNumber: pr.collectorNumber,
-        qty: c.qty,
-        finish: c.finish,
-      });
-    }
-    rows.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-    setDetail({ rows, missingLocally });
+    setDetail(await loadContents(p));
   };
 
   const addUnopened = async (product: SealedProduct) => {
@@ -144,33 +107,11 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
     onClose();
   };
 
-  const addCards = async (product: SealedProduct, d: Detail) => {
-    const lines: ImportLine[] = d.rows.map((r) => ({
-      oracleId: r.oracleId,
-      scryfallId: r.scryfallId,
-      condition,
-      finish: r.finish,
-      lang,
-      quantity: r.qty * copies,
-      quantityForTrade: 0,
-    }));
-    const { cards } = await applyImport(lines, { source: 'sealed', label: product.name });
+  const addCards = async (product: SealedProduct, d: OpenContents) => {
+    const { cards, filing } = await openIntoCollection(d.rows, { copies, condition, lang, label: product.name });
     toast(`Added ${cards} card${cards === 1 ? '' : 's'} from ${product.name}`);
     setAdding(false);
-    await offerFiling(
-      lines.map((l) => {
-        const row = d.rows.find((r) => r.scryfallId === l.scryfallId);
-        return {
-          oracleId: l.oracleId,
-          scryfallId: l.scryfallId,
-          quantity: l.quantity,
-          board: 'main' as const,
-          wants: { condition: l.condition, finish: l.finish, lang: l.lang },
-          ...(row ? { label: row.name, sub: `${row.set.toUpperCase()} #${row.collectorNumber}` } : {}),
-        };
-      }),
-      cards,
-    );
+    await offerFiling(filing, cards);
     onClose();
   };
 
@@ -303,7 +244,7 @@ function DetailView({
   onAdd,
 }: {
   product: SealedProduct;
-  detail: Detail | null;
+  detail: OpenContents | null;
   prices: SealedPriceMap;
   outcome: Outcome;
   setOutcome: (o: Outcome) => void;
@@ -317,7 +258,7 @@ function DetailView({
   onAdd: () => void;
 }) {
   const randomOnly = isRandomOnly(product);
-  const perCopy = detail ? detail.rows.reduce((s, r) => s + r.qty, 0) : 0;
+  const perCopy = detail ? perCopyCount(detail.rows) : 0;
   const foils = detail ? detail.rows.filter((r) => r.finish !== 'nonfoil').reduce((s, r) => s + r.qty, 0) : 0;
   const price = sealedPriceOf(prices, product.id);
   const priceText = fmtSealedPrice(price);

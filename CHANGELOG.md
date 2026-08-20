@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.129.4
+
+- **A box on the shelf can now be cracked open.** Owned sealed products have gained an **Open it, add the cards** button: pick how many copies you're opening, set the condition and language, and the contents land in your collection while the shelf count drops by what you cracked. Until now the only way in was to add the product a second time as cards and delete the unopened one. Booster boxes and packs say why they can't be opened this way, since nobody knows what's inside. As with every other bulk add, it finishes by asking where the cards live so you can file them in a deck, binder or box straight away.
+
 ## 0.129.3
 
 - **Sealed products now turn up on your other devices.** A device that synced while running a build from before unopened boxes existed skipped those rows and moved its bookmark past them, so boxes added on the phone never reached the PC (and, further back, the same happened to deck folders). Every signed-in device now re-reads its account once and picks up whatever it missed. Nothing to do but open the app on both devices.

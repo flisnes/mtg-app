@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.129.4',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Open a sealed product you already own. Tap a box on the shelf and pick "Open it, add the cards": the contents go into your collection, the shelf count drops, and you get the usual prompt to file them in a deck, binder or box.',
+      },
+    ],
+  },
+  {
     version: '0.129.3',
     changes: [
       {

@@ -6,8 +6,9 @@ import { removeSealedItem, setSealedItemQuantity } from '../db/dataAccess.js';
 import { loadSealedProducts } from '../sealed/store.js';
 import { SealedImage } from '../sealed/SealedImage.js';
 import { SealedItemSheet } from '../sealed/SealedItemSheet.js';
+import { OpenSealedSheet } from '../sealed/OpenSealedSheet.js';
 import { SealedValueChartSheet } from '../sealed/SealedValueChart.js';
-import { categoryLabel, fmtSealedPrice, itemImage, sealedPriceOf } from '../sealed/product.js';
+import { categoryLabel, fmtSealedPrice, isRandomOnly, itemImage, sealedPriceOf } from '../sealed/product.js';
 import { AddSealedProductSheet } from '../components/AddSealedProductSheet.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
 import {
@@ -70,6 +71,10 @@ export function SealedProducts() {
   const [adding, setAdding] = useState(false);
   const [chartOpen, setChartOpen] = useState(false);
   const [openItem, setOpenItem] = useState<string | null>(null);
+  // Cracking a box snapshots the row it started from: the shelf count drops
+  // (and at zero the row is deleted) while the filing prompt is still open, so
+  // this can't be an id looked up in the live list.
+  const [cracking, setCracking] = useState<{ item: SealedItem; product: SealedProduct } | null>(null);
   const { confirm, sheet: confirmSheet } = useConfirm();
   const [sort, setSort] = useListSort<SealedSort>('sealed', { key: 'name', dir: 'asc' });
   const [view, setView] = useViewMode();
@@ -148,6 +153,7 @@ export function SealedProducts() {
   // From the unfiltered rows on purpose: narrowing the list while a product's
   // sheet is open shouldn't yank it out from under the reader.
   const shown = openItem ? (items ?? []).find((i) => i.id === openItem) : undefined;
+  const shownProduct = shown ? catalog.get(shown.productId) : undefined;
 
   const onRemove = async (item: SealedItem) => {
     const ok = await confirm({
@@ -283,9 +289,20 @@ export function SealedProducts() {
           item={shown}
           product={catalog.get(shown.productId)}
           price={sealedPriceOf(prices, shown.productId)}
+          onOpenIt={
+            shownProduct && !isRandomOnly(shownProduct)
+              ? () => {
+                  setCracking({ item: shown, product: shownProduct });
+                  setOpenItem(null);
+                }
+              : null
+          }
           onRemove={() => void onRemove(shown)}
           onClose={() => setOpenItem(null)}
         />
+      )}
+      {cracking && (
+        <OpenSealedSheet item={cracking.item} product={cracking.product} onClose={() => setCracking(null)} />
       )}
       {confirmSheet}
     </Page>

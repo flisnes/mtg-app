@@ -5294,6 +5294,13 @@ a.seg {
   text-align: center;
   font-weight: 600;
 }
+.sealed-open-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+}
 .sealed-cardlist {
   list-style: none;
   margin: 0;

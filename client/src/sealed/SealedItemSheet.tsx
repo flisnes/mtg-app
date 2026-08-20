@@ -9,7 +9,7 @@ import { Sheet } from '../components/Sheet.js';
 import { historyChange } from '../price/history.js';
 import { getSealedPriceHistory } from '../price/sealedTracking.js';
 import { SealedImage } from './SealedImage.js';
-import { categoryLabel, fmtSealedPrice, itemImage, sealedPriceSourceLabel, type SealedPriceSource } from './product.js';
+import { categoryLabel, fmtSealedPrice, isRandomOnly, itemImage, sealedPriceSourceLabel, type SealedPriceSource } from './product.js';
 
 // One unopened product on the shelf: what it's worth, what the copies you own
 // add up to, and how its price has moved since the app started watching it. The
@@ -20,6 +20,7 @@ export function SealedItemSheet({
   item,
   product,
   price,
+  onOpenIt,
   onRemove,
   onClose,
 }: {
@@ -27,6 +28,8 @@ export function SealedItemSheet({
   /** Catalog row for the product, when the catalog is installed. */
   product: SealedProduct | undefined;
   price: SealedPriceSource | undefined;
+  /** Crack a copy open, when the catalog knows what's inside. */
+  onOpenIt: (() => void) | null;
   onRemove: () => void;
   onClose: () => void;
 }) {
@@ -111,13 +114,22 @@ export function SealedItemSheet({
         </button>
       </div>
 
+      {/* A box you own is a box you can crack: same operation the add sheet's
+          "Open it, add the cards" runs, minus re-finding the product. */}
+      {onOpenIt && (
+        <button className="primary sealed-open-btn" onClick={onOpenIt}>
+          <Icon name="box" size={14} /> Open it, add the cards
+        </button>
+      )}
+      {product && isRandomOnly(product) && (
+        <p className="fine-print">Contents are random, so there’s no card list to add when you open this.</p>
+      )}
+
       <div className="sheet-actions">
         <button className="danger" onClick={onRemove}>
           <Icon name="trash" size={14} /> Remove
         </button>
-        <button className="primary" onClick={onClose}>
-          Close
-        </button>
+        <button onClick={onClose}>Close</button>
       </div>
 
       {chartOpen && history && (

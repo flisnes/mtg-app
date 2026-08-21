@@ -74,10 +74,6 @@ export async function loadSetTypes(): Promise<SetTypeMap | null> {
   }
 }
 
-/** The map if it's already in memory, without touching the network or IndexedDB. */
-export function getLoadedSetTypes(): SetTypeMap | null {
-  return cached;
-}
 
 /**
  * Is this printing a promo rather than a normal-set card? Checks the per-card

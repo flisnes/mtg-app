@@ -56,9 +56,6 @@ export const CURRENCIES: { code: string; name: string; locale: string }[] = [
 
 const KNOWN = new Map(CURRENCIES.map((c) => [c.code, c]));
 
-export function isKnownCurrency(code: string): boolean {
-  return KNOWN.has(code);
-}
 
 /** The locale a currency is written in; undefined (= the browser's) if we don't know it. */
 export function localeFor(currency: string): string | undefined {
@@ -95,10 +92,6 @@ function load(): RateCache | null {
   return cache;
 }
 
-/** The cached rates, or null when we've never successfully fetched any. */
-export function getRates(): RateCache | null {
-  return load();
-}
 
 let inFlight: Promise<void> | null = null;
 

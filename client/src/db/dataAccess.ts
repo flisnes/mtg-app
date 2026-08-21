@@ -1546,10 +1546,6 @@ export async function tagDeckCards(ids: string[], change: { add?: string[]; remo
   return changed;
 }
 
-/** Replace one slot's tags outright (the card sheet's tag field). */
-export async function setDeckCardTags(id: string, tags: string[]): Promise<void> {
-  await patchDeckCard(id, { tags });
-}
 
 /**
  * Rename a tag everywhere it appears in one container. Because tags are derived

@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.130.0
+
+- **A big trade now syncs.** Registering a trade of more than about 160 cards saved it locally and then quietly failed to reach your other devices: the server refused any single synced row over 32 KB, and a trade that size is bigger than that. The size allowed per row is now set per kind of row, with trades given room for the largest offer the trade screen can even build.
+- **Your account now has a stated storage limit, and it is a generous one.** Signing in gave the server no real bound on how much one account could store. There is now a size budget as well as an item count, sitting at roughly four times the largest real collection we have measured (20,000 cards, 25 decks, a hundred trades). Deleting things always goes through even at the ceiling, so an account can never wedge itself shut.
+- **Deletions no longer pile up on the server forever.** Removing a card left behind a permanent marker so your other devices would learn it was gone. Those markers are now cleared once every device on the account has seen them, which for a single-device account is immediately. A device that has been offline for months and missed the clear-out refreshes itself from the account instead, so it can't sit there showing cards you deleted long ago. Nothing local is lost when it does: whatever that device had queued up is sent first.
+- **A deck, binder or box name now stops at 200 characters** in the name field. That was already the limit everywhere else, so a longer one silently got cut down the next time it travelled between devices.
+- Removed the old whole-collection backup that sync replaced back in 0.17.0. Nothing has used it since, and the dead copies it left on the server are gone.
+
 ## 0.129.8
 
 - **`set:` now works in your own lists, not just the card search.** Typing `set:znr` (or `s:`, `e:`, `edition:`) while the search is pointed at your collection, tradelist, wishlist, a deck, a binder, a box, the price movers or someone else's published lists matched nothing at all, because those lists were searched without any edition information to match against. They now filter on the printing each row actually is, so `set:znr` in your collection means "the copies I own from Zendikar Rising" rather than "cards that were printed in Zendikar Rising at some point". `is:foil`, `is:promo`, `is:borderless` and the other printing keywords went the same way, and match the copy in front of you: `is:foil` on your collection lists your foils.

@@ -158,6 +158,23 @@ async function applyServerChanges(changes: SyncChange[]): Promise<void> {
   });
 }
 
+/**
+ * Wipe this device's synced tables so the account can be re-pulled from scratch
+ * (server answered `resync`: it pruned tombstones past our cursor, so we may be
+ * holding rows deleted elsewhere and would never hear about it).
+ *
+ * Clears the tables DIRECTLY, never through dataAccess — a staged delete here
+ * would push tombstones for every row and wipe the account itself. The push in
+ * the same call was already applied server-side, so the outbox goes too and
+ * everything comes back on the pull. Price histories are left alone: they are
+ * local derived data and rebuilding them would lose real chart history.
+ */
+async function wipeForResync(): Promise<void> {
+  await db.transaction('rw', [...Object.values(TABLES), db.outbox], async () => {
+    await Promise.all([...Object.values(TABLES), db.outbox].map((t) => t.clear()));
+  });
+}
+
 /** Drop pushed outbox entries — unless a newer local change replaced them mid-flight. */
 async function ackOutbox(pushed: SyncChange[]): Promise<void> {
   if (!pushed.length) return;
@@ -240,6 +257,16 @@ export async function syncNow(): Promise<void> {
         const req: SyncRequest = { clientId: lockedState.clientId, cursor, changes: batch, ...(publish ? { publish } : {}) };
         const res = await api.sync(locked.token, req);
         publishedAnything ||= !!publish;
+
+        if (res.resync) {
+          // Our push was applied, so nothing local is lost by starting over.
+          await wipeForResync();
+          cursor = 0;
+          const reset = await getSyncState();
+          if (!reset || reset.account !== locked.username) return;
+          await setSetting(KEY_SYNC_STATE, { ...reset, cursor } satisfies SyncState);
+          continue;
+        }
 
         await applyServerChanges(res.changes);
         // When the pull was capped the server did NOT apply the push.

@@ -56,13 +56,51 @@ export interface SyncResponse {
   changes: SyncChange[];
   /** Set when the pull was capped; call again with the new cursor. */
   hasMore?: true;
+  /**
+   * This device's cursor sits below the point the server has pruned tombstones
+   * to, so its copy may still hold rows that were deleted on another device.
+   * The push in this same call was applied (nothing local is lost) — the device
+   * must now wipe its user-data tables and re-pull the account from cursor 0.
+   * Never sent for cursor 0, which would make the reseed loop forever.
+   */
+  resync?: true;
 }
 
 /** Max changes per push; clients batch the outbox. */
 export const SYNC_MAX_PUSH = 1000;
 /** Max changes returned per pull before hasMore kicks in. */
 export const SYNC_MAX_PULL = 2000;
-/** Per-row JSON size cap (a trade with ~100 lines is ~15 KB). */
-export const SYNC_MAX_ROW_CHARS = 32_000;
+
+/**
+ * Per-row JSON size cap, in UTF-8 bytes, by table. One cap for every table let
+ * a single row be 32 KB when the measured reality is under 600 bytes for
+ * everything except trades, so the theoretical worst case was rows-cap ×
+ * 32 KB. These are per-shape budgets instead: generous headroom over what the
+ * app can actually write, tight enough that the row count bounds the bytes.
+ *
+ * `trades` is the outlier — the relay allows MAX_OFFER_LINES (500) per side, so
+ * a big trade is ~1000 self-contained lines at ~200 bytes each. It used to
+ * share the 32 KB cap, which silently 413'd any trade over ~160 lines.
+ */
+export const SYNC_MAX_ROW_BYTES: Record<SyncTable, number> = {
+  collection: 4_000,
+  sealedItems: 4_000,
+  wishlist: 4_000,
+  // Carries a user-typed name + description (MAX_DECK_NAME/DESCRIPTION_LENGTH).
+  decks: 16_000,
+  deckCards: 4_000,
+  deckFolders: 4_000,
+  trades: 256_000,
+  events: 4_000,
+};
+
 /** Total stored rows per user (tombstones included). */
 export const SYNC_MAX_ROWS_PER_USER = 500_000;
+/**
+ * Total stored row bytes per user (UTF-8 length of the stored JSON; tombstones
+ * are free). The row cap alone bounded count but not size — at the per-table
+ * caps above, 500k rows could still have been many GB. Roughly 4x the largest
+ * real profile measured (20k cards, 25 decks, 100 trades ≈ 17 MB), and about
+ * 100 MB on disk once SQLite row and index overhead is counted.
+ */
+export const SYNC_MAX_BYTES_PER_USER = 64 * 1024 * 1024;

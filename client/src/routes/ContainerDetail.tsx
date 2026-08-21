@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   DECK_FORMATS,
+  MAX_DECK_NAME_LENGTH,
   isMarkerCard,
   type Color,
   type Condition,
@@ -638,6 +639,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       <input
         ref={nameInputRef}
         className="deck-name-input"
+        maxLength={MAX_DECK_NAME_LENGTH}
         value={nameDraft ?? deck.name}
         onChange={(e) => setNameDraft(e.target.value)}
         onBlur={() => {

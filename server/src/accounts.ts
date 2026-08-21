@@ -5,10 +5,9 @@ import {
   MAX_PASSWORD_CHARS,
   MAX_PROFILE_JSON_CHARS,
   MAX_PUBLIC_LINES,
-  MAX_SNAPSHOT_CHARS,
   MIN_PASSWORD_CHARS,
   SYNC_MAX_PUSH,
-  SYNC_MAX_ROW_CHARS,
+  SYNC_MAX_ROW_BYTES,
   SYNC_TABLES,
   USERNAME_RE,
   sanitizeDeckLines,
@@ -24,9 +23,6 @@ import {
   type MeResponse,
   type ProfilePutResponse,
   type ProfileResponse,
-  type SnapshotCounts,
-  type SnapshotGetResponse,
-  type SnapshotPutResponse,
   type SyncChange,
   type SyncResponse,
   type SyncTable,
@@ -42,14 +38,12 @@ import { SyncCapError, type AccountStore, type AccountUser } from './accountStor
 import type { SyncHub } from './syncHub.js';
 
 // Opt-in accounts (HTTP /api/*, alongside the WS relay). The server stores the
-// user's snapshot as an opaque blob plus their published trade/wishlists;
-// browsing endpoints require a signed-in user, so lists are only visible to
-// other account holders — which is exactly what the signup disclaimer says.
+// user's rows as opaque JSON plus their published trade/wishlists; browsing
+// endpoints require a signed-in user, so lists are only visible to other
+// account holders — which is exactly what the signup disclaimer says.
 
 /** Serialized-JSON cap per published list (~2 MB keeps rows renderable). */
 const MAX_LIST_JSON_CHARS = 2_000_000;
-/** Request-body cap for snapshot uploads: payload cap + lists + slack. */
-const SNAPSHOT_BODY_LIMIT = 36 * 1024 * 1024;
 
 /** Bounds for a whole published list (larger than a single live trade offer). */
 const PUBLIC_LINE_LIMITS = { maxQty: 9999, maxLines: MAX_PUBLIC_LINES };
@@ -74,11 +68,6 @@ function str(v: unknown, max: number): string | null {
   return typeof v === 'string' && v ? v.slice(0, max) : null;
 }
 
-function posInt(v: unknown, max: number): number {
-  const n = Math.floor(Number(v));
-  return Number.isFinite(n) ? Math.min(max, Math.max(0, n)) : 0;
-}
-
 // Server-side normalization of published lines (clients re-sanitize on
 // display); shares the field/enum rules with the trade path via @mtg/shared.
 function normalizeTradeLines(v: unknown): TradeLine[] {
@@ -87,17 +76,6 @@ function normalizeTradeLines(v: unknown): TradeLine[] {
 
 function normalizeWishLines(v: unknown): WishLine[] {
   return sanitizeWishLines(v, PUBLIC_LINE_LIMITS);
-}
-
-function normalizeCounts(v: unknown): SnapshotCounts {
-  const r = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
-  return {
-    cards: posInt(r.cards, 10_000_000),
-    collectionEntries: posInt(r.collectionEntries, 10_000_000),
-    wishlist: posInt(r.wishlist, 10_000_000),
-    decks: posInt(r.decks, 10_000_000),
-    trades: posInt(r.trades, 10_000_000),
-  };
 }
 
 export function registerAccountRoutes(app: FastifyInstance, store: AccountStore, hub: SyncHub): void {
@@ -192,8 +170,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     if (!user) return;
     const res: MeResponse = {
       username: user.username,
-      snapshot: store.snapshotMeta(user.id),
-      sync: { seq: store.syncSeq(user.id) },
+      sync: { seq: store.syncSeq(user.id), usage: store.syncUsage(user.id) },
     };
     return res;
   });
@@ -204,59 +181,6 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     store.deleteUser(user.id);
     app.log.info({ username: user.username }, 'account deleted');
     return { ok: true };
-  });
-
-  // --- Snapshot backup/restore ------------------------------------------------
-
-  app.put('/api/snapshot', { bodyLimit: SNAPSHOT_BODY_LIMIT }, async (req, reply) => {
-    const user = requireUser(req, reply);
-    if (!user) return;
-    const b = (req.body ?? {}) as Record<string, unknown>;
-    const payload = typeof b.payload === 'string' ? b.payload : null;
-    const baseVersion =
-      b.baseVersion === null || b.baseVersion === undefined ? null : Math.floor(Number(b.baseVersion));
-    if (!payload || (baseVersion !== null && !Number.isFinite(baseVersion))) {
-      return fail(reply, 400, { error: 'bad_request', message: 'Malformed snapshot upload.' });
-    }
-    if (payload.length > MAX_SNAPSHOT_CHARS) {
-      return fail(reply, 413, { error: 'too_large', message: 'Your data is too large to back up.' });
-    }
-    const tradelist = normalizeTradeLines(b.tradelist);
-    const wishlist = normalizeWishLines(b.wishlist);
-    const tradelistJson = JSON.stringify(tradelist);
-    const wishlistJson = JSON.stringify(wishlist);
-    if (tradelistJson.length > MAX_LIST_JSON_CHARS || wishlistJson.length > MAX_LIST_JSON_CHARS) {
-      return fail(reply, 413, { error: 'too_large', message: 'Published lists are too large.' });
-    }
-    const result = store.putSnapshot(
-      user.id,
-      baseVersion,
-      payload,
-      normalizeCounts(b.counts),
-      tradelistJson,
-      tradelist.length,
-      wishlistJson,
-      wishlist.length,
-    );
-    if (result.conflict) {
-      return fail(reply, 409, {
-        error: 'version_conflict',
-        message: 'A newer backup exists (from another device?).',
-        version: result.version,
-        updatedAt: result.updatedAt,
-      });
-    }
-    const res: SnapshotPutResponse = { version: result.version, updatedAt: result.updatedAt };
-    return res;
-  });
-
-  app.get('/api/snapshot', async (req, reply) => {
-    const user = requireUser(req, reply);
-    if (!user) return;
-    const snap = store.getSnapshot(user.id);
-    if (!snap) return fail(reply, 404, { error: 'not_found', message: 'No backup stored yet.' });
-    const res: SnapshotGetResponse = snap;
-    return res;
   });
 
   // --- Row-level sync (sync plan, 2026-07-16) ----------------------------------
@@ -294,7 +218,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
       if (r.row === undefined || r.row === null) {
         return fail(reply, 400, { error: 'bad_request', message: 'Sync change is missing its row.' });
       }
-      if (JSON.stringify(r.row).length > SYNC_MAX_ROW_CHARS) {
+      if (Buffer.byteLength(JSON.stringify(r.row)) > SYNC_MAX_ROW_BYTES[tbl]) {
         return fail(reply, 413, { error: 'too_large', message: 'A synced row is too large.' });
       }
       changes.push({ tbl, rowId, updatedAt, row: r.row });
@@ -319,16 +243,20 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
 
     let result;
     try {
-      result = store.syncApply(user.id, cursor, changes, Date.now());
+      result = store.syncApply(user.id, clientId, cursor, changes, Date.now());
     } catch (err) {
       if (err instanceof SyncCapError) {
-        return fail(reply, 413, { error: 'too_large', message: 'This account has hit its sync storage limit.' });
+        const what = err.kind === 'rows' ? 'number of items' : 'storage size';
+        return fail(reply, 413, {
+          error: 'too_large',
+          message: `This account has hit its sync ${what} limit. Remove some cards, or delete old history.`,
+        });
       }
       throw err;
     }
     // Publish only once the client is caught up (a capped pull re-sends), so the
     // published lists always reflect a fully-applied push.
-    if (publish && !result.hasMore) {
+    if (publish && !result.hasMore && !result.resync) {
       store.putPublicLists(user.id, publish.tradelistJson, publish.tradelistCount, publish.wishlistJson, publish.wishlistCount);
     }
     if (result.applied > 0) hub.notify(user.id, result.cursor, clientId);
@@ -336,6 +264,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
       cursor: result.cursor,
       changes: result.changes,
       ...(result.hasMore ? { hasMore: true as const } : {}),
+      ...(result.resync ? { resync: true as const } : {}),
     };
     return res;
   });

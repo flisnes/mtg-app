@@ -38,6 +38,14 @@ export const config = {
   /** Bearer tokens unused for this long are pruned and rejected (sliding on last use). */
   tokenTtlMs: num('TOKEN_TTL_MS', 180 * 24 * 60 * 60 * 1000),
   /**
+   * Tombstone pruning (accountStore.pruneTombstones). A device not seen within
+   * syncDeviceActiveMs stops holding an account's tombstones back, and reseeds
+   * when it returns; no tombstone younger than syncTombstoneMinAgeMs is ever
+   * dropped, so an ordinary stale device is safe regardless of cursors.
+   */
+  syncDeviceActiveMs: num('SYNC_DEVICE_ACTIVE_MS', 60 * 24 * 60 * 60 * 1000),
+  syncTombstoneMinAgeMs: num('SYNC_TOMBSTONE_MIN_AGE_MS', 30 * 24 * 60 * 60 * 1000),
+  /**
    * Published card DB the price archiver reads its daily shard from (no
    * trailing slash). Set CARD_DB_URL='' to disable archiving entirely.
    */

@@ -9,9 +9,6 @@ import type {
   ProfilePutResponse,
   ProfileResponse,
   RegisterRequest,
-  SnapshotGetResponse,
-  SnapshotPutRequest,
-  SnapshotPutResponse,
   SyncRequest,
   SyncResponse,
   UserDeckResponse,
@@ -91,14 +88,6 @@ export function me(token: string): Promise<MeResponse> {
 
 export function deleteAccount(token: string): Promise<{ ok: boolean }> {
   return request('/account', { method: 'DELETE', token });
-}
-
-export function putSnapshot(token: string, body: SnapshotPutRequest): Promise<SnapshotPutResponse> {
-  return request('/snapshot', { method: 'PUT', token, body });
-}
-
-export function getSnapshot(token: string): Promise<SnapshotGetResponse> {
-  return request('/snapshot', { token });
 }
 
 export function sync(token: string, body: SyncRequest): Promise<SyncResponse> {

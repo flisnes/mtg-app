@@ -35,10 +35,14 @@ export function useFiling() {
 
   /** Settle move-or-both for these copies; null means the user backed out. */
   const decide = useCallback(
-    async (targetId: string, copies: FilingCopy[]): Promise<{ mode: FilingMode; clashes: FilingClash[] } | null> => {
+    async (
+      targetId: string,
+      copies: FilingCopy[],
+      opts: { replacing?: boolean } = {},
+    ): Promise<{ mode: FilingMode; clashes: FilingClash[] } | null> => {
       const policy = getPrefs().filingPolicy;
       // 'copy' never touches the old spot, so there's nothing to look up.
-      const clashes = policy === 'copy' ? [] : await findFilingClashes(targetId, copies);
+      const clashes = policy === 'copy' ? [] : await findFilingClashes(targetId, copies, opts);
       if (policy !== 'ask' || clashes.length === 0) {
         return { mode: policy === 'move' ? 'move' : 'copy', clashes };
       }
@@ -84,10 +88,11 @@ export function useFiling() {
   /**
    * Settle the question without writing anything: the deck re-scan reconciles
    * its slots itself, so it needs the answer (and the clashes to act on) rather
-   * than a filing.
+   * than a filing. Its write replaces the container's slots, so pass
+   * `replacing` — see findFilingClashes.
    */
   const ask = useCallback(
-    (targetId: string, copies: FilingCopy[]) => decide(targetId, copies),
+    (targetId: string, copies: FilingCopy[], opts: { replacing?: boolean } = {}) => decide(targetId, copies, opts),
     [decide],
   );
 

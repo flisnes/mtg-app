@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.129.7
+
+- **Filing cards you just opened no longer asks about the copies you already had.** Crack open a precon and file its contents, and every card in it that you also own elsewhere used to raise "already filed somewhere else, did it move?" — a nonsense question, since the box brought its own cardboard along. The filing question now counts copies: it only asks when the decks, binders and boxes would between them hold more of a card than you actually own, which is the same rule the filing-conflict flag has always used. Same for a CSV import, a scan, or filing two of your four Islands into a box while a third sits in a deck. When it does ask, it now names only the copies that are genuinely short.
+
 ## 0.129.6
 
 - **"Fixed incorrect card information" is now one of the reasons a copy can be gone.** Working through a filing conflict and picking "I don't have it any more" asks what happened to it. Since correcting a copy's finish, language or edition is itself a common cause of the conflict, that is now a reason of its own, and your history records it as a correction rather than a sale.

@@ -806,9 +806,6 @@ button.danger-outline {
   text-transform: uppercase;
   color: var(--text-dim);
 }
-.deck-folder-toolbar {
-  margin-bottom: 0.75rem;
-}
 .folder-crumb {
   display: inline-block;
   margin-bottom: 0.25rem;
@@ -992,15 +989,6 @@ button.danger-outline {
      phone-width line — wrap onto a second row rather than run off the edge. */
   flex-wrap: wrap;
   justify-content: flex-end;
-}
-
-.search-syntax-hint code {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0.05rem 0.3rem;
-  font-size: 0.75rem;
-  white-space: nowrap;
 }
 
 /* ---- Sort / group controls ---- */
@@ -1796,10 +1784,6 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   padding: 0.05rem 0.35rem;
   border-radius: 6px;
   line-height: 1.3;
-}
-.tile-badge.badge-owned {
-  background: var(--ok);
-  color: #05230f;
 }
 .tile-badge.badge-trade,
 .tile-badge.badge-ft {
@@ -2828,9 +2812,6 @@ button.primary {
 .price-down {
   color: var(--danger);
 }
-.price-flat {
-  color: var(--text-dim);
-}
 
 /* ---- Full price chart (layered over the card sheet) ---- */
 .price-chart-sheet {
@@ -3570,18 +3551,6 @@ button.primary {
   padding: 0.25rem 0;
   margin-bottom: 0.5rem;
 }
-.owned-check {
-  width: 1.4rem;
-  text-align: center;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-.owned-yes {
-  color: var(--ok);
-}
-.owned-no {
-  color: var(--text-dim);
-}
 .deck-meta {
   display: flex;
   align-items: flex-end;
@@ -3871,12 +3840,6 @@ button.chip[aria-pressed='true'] {
 }
 
 /* Add-cards / peer-tradelist panels: never let a long list stretch the page. */
-.picker-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
 .picker-scroll {
   max-height: 320px;
   overflow-y: auto;
@@ -4968,11 +4931,6 @@ a.seg {
   font-size: 0.75rem;
   color: var(--text-dim);
 }
-.scan-chip-on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
 /* Re-scan diff: the +/-/qty tag on each changed deck row (read-only list). */
 .scan-list-static {
   cursor: default;
@@ -5280,10 +5238,6 @@ a.seg {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
-}
-.sealed-summary {
-  margin: 0;
-  font-size: 0.95rem;
 }
 .sealed-note {
   margin: 0;

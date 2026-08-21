@@ -20,6 +20,27 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.130.0',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'A trade of more than about 160 cards now reaches your other devices. It saved locally but the sync of it failed silently, because the server rejected any single row that large.',
+      },
+      {
+        kind: 'changed',
+        text: 'Deleting a card no longer leaves a permanent marker on the server. The markers clear once every device on your account has seen them. A device left offline for months now refreshes from your account instead of showing cards you deleted, and anything it had queued up is sent first.',
+      },
+      {
+        kind: 'changed',
+        text: 'Accounts now have a stated storage limit, set at roughly four times the largest collection we have measured. Deleting things always works even at the limit.',
+      },
+      {
+        kind: 'changed',
+        text: 'Deck, binder and box names stop at 200 characters, which was already the limit everywhere else.',
+      },
+    ],
+  },
+  {
     version: '0.129.8',
     changes: [
       {

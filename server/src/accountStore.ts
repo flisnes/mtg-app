@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import {
   CONDITIONS,
   FINISHES,
+  SYNC_MAX_BYTES_PER_USER,
   SYNC_MAX_PULL,
   SYNC_MAX_ROWS_PER_USER,
   sanitizeAvatar,
@@ -13,8 +14,6 @@ import {
   type Finish,
   type ProfileAvatar,
   type PublicUser,
-  type SnapshotCounts,
-  type SnapshotMeta,
   type SyncChange,
   type SyncTable,
 } from '@mtg/shared';
@@ -82,13 +81,6 @@ export class AccountStore {
         created_at INTEGER NOT NULL,
         last_used_at INTEGER NOT NULL
       );
-      CREATE TABLE IF NOT EXISTS snapshots (
-        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-        version INTEGER NOT NULL,
-        payload TEXT NOT NULL,
-        counts TEXT,
-        updated_at INTEGER NOT NULL
-      );
       CREATE TABLE IF NOT EXISTS public_lists (
         user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         tradelist TEXT NOT NULL,
@@ -118,18 +110,157 @@ export class AccountStore {
         user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         max_seq INTEGER NOT NULL
       );
+      -- Running row/byte totals per user, so the storage caps cost one indexed
+      -- lookup per push instead of a COUNT(*) over the user's rows. Maintained
+      -- by delta in syncApply; backfilled lazily on first use (see usage()).
+      CREATE TABLE IF NOT EXISTS sync_usage (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        rows INTEGER NOT NULL,
+        bytes INTEGER NOT NULL
+      );
+      -- One row per device that has ever synced, with the cursor it last
+      -- reached. Tombstone pruning needs to know the oldest cursor still in
+      -- play; sync_prune records how far we pruned, so a device that fell
+      -- behind that point can be told to reseed instead of silently keeping
+      -- rows everyone else deleted.
+      CREATE TABLE IF NOT EXISTS sync_devices (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        client_id TEXT NOT NULL,
+        cursor INTEGER NOT NULL,
+        last_seen INTEGER NOT NULL,
+        PRIMARY KEY (user_id, client_id)
+      );
+      -- pruned_below: tombstones up to and including this seq are gone, so a
+      -- device must be at or past it to still have a complete picture.
+      CREATE TABLE IF NOT EXISTS sync_prune (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        pruned_below INTEGER NOT NULL
+      );
     `);
-    // Drop tokens idle past the TTL at boot, then hourly, so the table can't
-    // grow without bound (a token is deleted on logout, but otherwise never).
-    this.pruneStaleTokens();
-    this.pruneTimer = setInterval(() => this.pruneStaleTokens(), 60 * 60 * 1000);
+    this.dropLegacySnapshots();
+    // Housekeeping at boot, then hourly: idle tokens (the table is otherwise
+    // append-only apart from logout) and tombstones every device has seen.
+    this.runMaintenance();
+    this.pruneTimer = setInterval(() => this.runMaintenance(), 60 * 60 * 1000);
     this.pruneTimer.unref?.();
   }
 
   private pruneTimer: ReturnType<typeof setInterval>;
 
+  private runMaintenance(): void {
+    this.pruneStaleTokens();
+    this.pruneTombstones();
+  }
+
   private pruneStaleTokens(): void {
     this.db.prepare('DELETE FROM tokens WHERE last_used_at < ?').run(Date.now() - config.tokenTtlMs);
+  }
+
+  /**
+   * Drop tombstones that every live device has already applied.
+   *
+   * A delete is stored as a row with `row = NULL` and kept forever, so a device
+   * that syncs late still learns the row is gone. Once every device that has
+   * synced recently sits at a cursor past a tombstone, nobody needs it again.
+   *
+   * The floor is the LOWEST cursor among devices seen within
+   * `syncDeviceActiveMs`; a device idle longer than that stops holding the
+   * account back and gets a reseed when it does return (see syncApply). Users
+   * with no recorded device are skipped entirely rather than pruned to the
+   * top — a single-device user on holiday must never come back to a reseed.
+   * `syncTombstoneMinAgeMs` then keeps recent deletes regardless of cursors, so
+   * an ordinary few-weeks-stale device is safe even if device tracking is wrong.
+   */
+  private pruneTombstones(): void {
+    const now = Date.now();
+    const activeSince = now - config.syncDeviceActiveMs;
+    const floors = this.db
+      .prepare(
+        `SELECT user_id, MIN(cursor) AS floor FROM sync_devices
+         WHERE last_seen >= ? GROUP BY user_id`,
+      )
+      .all(activeSince) as unknown as { user_id: number; floor: number }[];
+    if (floors.length === 0) return;
+
+    const del = this.db.prepare(
+      // seq <= floor: a device reporting cursor C has applied everything through
+      // seq C, so C's own tombstone is spent too.
+      'DELETE FROM sync_rows WHERE user_id = ? AND deleted = 1 AND seq <= ? AND updated_at < ?',
+    );
+    const bump = this.db.prepare(
+      `INSERT INTO sync_prune (user_id, pruned_below) VALUES (?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET pruned_below = MAX(pruned_below, excluded.pruned_below)`,
+    );
+    let removed = 0;
+    for (const { user_id: userId, floor } of floors) {
+      if (floor <= 0) continue;
+      this.db.exec('BEGIN IMMEDIATE');
+      try {
+        const res = del.run(userId, floor, now - config.syncTombstoneMinAgeMs);
+        const n = Number(res.changes);
+        if (n > 0) {
+          // Tombstones carry no row bytes, so only the row count moves.
+          this.db.prepare('UPDATE sync_usage SET rows = MAX(0, rows - ?) WHERE user_id = ?').run(n, userId);
+          removed += n;
+        }
+        // Record the floor even when nothing was deleted: it is the point below
+        // which a returning device can no longer be trusted to be complete.
+        bump.run(userId, floor);
+        this.db.exec('COMMIT');
+      } catch {
+        this.db.exec('ROLLBACK');
+      }
+    }
+    if (removed > 0) this.prunedTombstones += removed;
+  }
+
+  /** Total tombstones this process has pruned (for logging/diagnostics). */
+  prunedTombstones = 0;
+
+  /** How far tombstones have been pruned for this user (0 = never pruned). */
+  private prunedBelow(userId: number): number {
+    const row = this.db.prepare('SELECT pruned_below FROM sync_prune WHERE user_id = ?').get(userId) as
+      | { pruned_below: number }
+      | undefined;
+    return row?.pruned_below ?? 0;
+  }
+
+  /** Record where a device got to, so tombstone pruning knows the safe floor. */
+  private touchDevice(userId: number, clientId: string, cursor: number, now: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO sync_devices (user_id, client_id, cursor, last_seen) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, client_id) DO UPDATE SET
+           cursor = MAX(cursor, excluded.cursor), last_seen = excluded.last_seen`,
+      )
+      .run(userId, clientId, cursor, now);
+  }
+
+  /**
+   * The user's running row/byte totals, computed once and maintained by delta
+   * thereafter. The old row cap ran a COUNT(*) over the user's rows on every
+   * push that inserted anything; this is a single primary-key lookup.
+   */
+  private usage(userId: number): { rows: number; bytes: number } {
+    const row = this.db.prepare('SELECT rows, bytes FROM sync_usage WHERE user_id = ?').get(userId) as
+      | { rows: number; bytes: number }
+      | undefined;
+    if (row) return { rows: row.rows, bytes: row.bytes };
+    // First push since this table existed: one scan, then never again. LENGTH of
+    // a BLOB cast is UTF-8 bytes, matching Buffer.byteLength on the write side.
+    const agg = this.db
+      .prepare(
+        `SELECT COUNT(*) AS rows, COALESCE(SUM(LENGTH(CAST(row AS BLOB))), 0) AS bytes
+         FROM sync_rows WHERE user_id = ?`,
+      )
+      .get(userId) as { rows: number; bytes: number };
+    this.db.prepare('INSERT INTO sync_usage (user_id, rows, bytes) VALUES (?, ?, ?)').run(userId, agg.rows, agg.bytes);
+    return { rows: agg.rows, bytes: agg.bytes };
+  }
+
+  /** Current storage use for one user (the account screen / diagnostics). */
+  syncUsage(userId: number): { rows: number; bytes: number } {
+    return this.usage(userId);
   }
 
   /** Returns the new user, or null if the username is taken. */
@@ -192,68 +323,6 @@ export class AccountStore {
     this.db.prepare('DELETE FROM users WHERE id = ?').run(userId);
   }
 
-  snapshotMeta(userId: number): SnapshotMeta | null {
-    const row = this.db
-      .prepare('SELECT version, counts, updated_at FROM snapshots WHERE user_id = ?')
-      .get(userId) as { version: number; counts: string | null; updated_at: number } | undefined;
-    if (!row) return null;
-    return { version: row.version, updatedAt: row.updated_at, counts: parseCounts(row.counts) };
-  }
-
-  getSnapshot(userId: number): { version: number; updatedAt: number; counts: SnapshotCounts | null; payload: string } | null {
-    const row = this.db
-      .prepare('SELECT version, counts, updated_at, payload FROM snapshots WHERE user_id = ?')
-      .get(userId) as
-      | { version: number; counts: string | null; updated_at: number; payload: string }
-      | undefined;
-    if (!row) return null;
-    return { version: row.version, updatedAt: row.updated_at, counts: parseCounts(row.counts), payload: row.payload };
-  }
-
-  /**
-   * Store a snapshot + published lists atomically. Returns the new meta, or
-   * the current one with `conflict: true` when baseVersion doesn't match the
-   * stored version (another device pushed in between).
-   */
-  putSnapshot(
-    userId: number,
-    baseVersion: number | null,
-    payload: string,
-    counts: SnapshotCounts,
-    tradelistJson: string,
-    tradelistCount: number,
-    wishlistJson: string,
-    wishlistCount: number,
-  ): { version: number; updatedAt: number; conflict: boolean } {
-    const now = Date.now();
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
-      const existing = this.db
-        .prepare('SELECT version, updated_at FROM snapshots WHERE user_id = ?')
-        .get(userId) as { version: number; updated_at: number } | undefined;
-      if (existing && existing.version !== baseVersion) {
-        this.db.exec('ROLLBACK');
-        return { version: existing.version, updatedAt: existing.updated_at, conflict: true };
-      }
-      const version = (existing?.version ?? 0) + 1;
-      this.db
-        .prepare(
-          `INSERT INTO snapshots (user_id, version, payload, counts, updated_at)
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(user_id) DO UPDATE SET
-             version = excluded.version, payload = excluded.payload,
-             counts = excluded.counts, updated_at = excluded.updated_at`,
-        )
-        .run(userId, version, payload, JSON.stringify(counts), now);
-      this.upsertPublicLists(userId, tradelistJson, tradelistCount, wishlistJson, wishlistCount, now);
-      this.db.exec('COMMIT');
-      return { version, updatedAt: now, conflict: false };
-    } catch (err) {
-      this.db.exec('ROLLBACK');
-      throw err;
-    }
-  }
-
   private upsertPublicLists(
     userId: number,
     tradelistJson: string,
@@ -306,20 +375,29 @@ export class AccountStore {
    */
   syncApply(
     userId: number,
+    clientId: string,
     cursor: number,
     changes: SyncChange[],
     now: number,
-  ): { cursor: number; changes: SyncChange[]; hasMore: boolean; applied: number } {
+  ): { cursor: number; changes: SyncChange[]; hasMore: boolean; applied: number; resync: boolean } {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       let maxSeq = this.syncSeq(userId);
+      // A cursor below the pruned floor means this device may have missed a
+      // tombstone, so its copy can still hold rows deleted elsewhere. Apply its
+      // push (nothing local is lost) but hand back no changes and ask it to
+      // reseed. Cursor 0 is exempt: that IS a reseed, and answering it with
+      // another reseed would loop forever.
+      const resync = cursor > 0 && cursor < this.prunedBelow(userId);
 
-      const pulled = this.db
-        .prepare(
-          `SELECT tbl, row_id, updated_at, deleted, row, seq FROM sync_rows
-           WHERE user_id = ? AND seq > ? ORDER BY seq LIMIT ?`,
-        )
-        .all(userId, cursor, SYNC_MAX_PULL + 1) as unknown as SyncRowRecord[];
+      const pulled = resync
+        ? []
+        : (this.db
+            .prepare(
+              `SELECT tbl, row_id, updated_at, deleted, row, seq FROM sync_rows
+               WHERE user_id = ? AND seq > ? ORDER BY seq LIMIT ?`,
+            )
+            .all(userId, cursor, SYNC_MAX_PULL + 1) as unknown as SyncRowRecord[]);
       const hasMore = pulled.length > SYNC_MAX_PULL;
       const window = hasMore ? pulled.slice(0, SYNC_MAX_PULL) : pulled;
       const out = window.map(recordToChange);
@@ -337,10 +415,11 @@ export class AccountStore {
           `INSERT OR REPLACE INTO sync_rows (user_id, tbl, row_id, updated_at, deleted, row, seq)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
         );
-        // The row-cap count is a full index scan of the user's rows; most pushes
-        // are edits/deletes of existing rows, so defer it until we actually need
-        // to insert a brand-new row (and then only count once).
-        let totalRows: number | null = null;
+        // Running totals, read once per push and written back at the end. The
+        // LWW lookup below already hands us the stored row, so the byte delta
+        // is free — no scan needed to enforce either cap.
+        const use = this.usage(userId);
+        let { rows: totalRows, bytes: totalBytes } = use;
 
         for (const c of changes) {
           const existing = getStmt.get(userId, c.tbl, c.rowId) as SyncRowRecord | undefined;
@@ -350,25 +429,19 @@ export class AccountStore {
             out.push(recordToChange(existing));
             continue;
           }
-          if (!existing) {
-            if (totalRows === null) {
-              totalRows = (
-                this.db.prepare('SELECT COUNT(*) AS n FROM sync_rows WHERE user_id = ?').get(userId) as { n: number }
-              ).n;
-            }
-            totalRows += 1;
-            if (totalRows > SYNC_MAX_ROWS_PER_USER) throw new SyncCapError();
+          const json = c.deleted ? null : JSON.stringify(c.row ?? null);
+          const newBytes = json === null ? 0 : Buffer.byteLength(json);
+          const oldBytes = existing && existing.row !== null ? Buffer.byteLength(existing.row) : 0;
+          if (!existing && totalRows + 1 > SYNC_MAX_ROWS_PER_USER) throw new SyncCapError('rows');
+          // Deletes and shrinking edits are always allowed through: a user at
+          // the ceiling must still be able to clean up.
+          if (newBytes > oldBytes && totalBytes - oldBytes + newBytes > SYNC_MAX_BYTES_PER_USER) {
+            throw new SyncCapError('bytes');
           }
+          if (!existing) totalRows += 1;
+          totalBytes += newBytes - oldBytes;
           maxSeq += 1;
-          putStmt.run(
-            userId,
-            c.tbl,
-            c.rowId,
-            incomingTs,
-            c.deleted ? 1 : 0,
-            c.deleted ? null : JSON.stringify(c.row ?? null),
-            maxSeq,
-          );
+          putStmt.run(userId, c.tbl, c.rowId, incomingTs, c.deleted ? 1 : 0, json, maxSeq);
           applied += 1;
         }
         if (applied > 0) {
@@ -378,12 +451,18 @@ export class AccountStore {
                ON CONFLICT(user_id) DO UPDATE SET max_seq = excluded.max_seq`,
             )
             .run(userId, maxSeq);
+          this.db
+            .prepare('UPDATE sync_usage SET rows = ?, bytes = ? WHERE user_id = ?')
+            .run(totalRows, Math.max(0, totalBytes), userId);
         }
         newCursor = maxSeq;
       }
 
+      // The device's cursor after this call, for the tombstone-prune floor. On a
+      // resync it is about to restart from 0, so record that instead of the top.
+      this.touchDevice(userId, clientId, resync ? 0 : newCursor, now);
       this.db.exec('COMMIT');
-      return { cursor: newCursor, changes: out, hasMore, applied };
+      return { cursor: resync ? 0 : newCursor, changes: out, hasMore, applied, resync };
     } catch (err) {
       this.db.exec('ROLLBACK');
       throw err;
@@ -531,6 +610,25 @@ export class AccountStore {
     return { username: row.username, updatedAt: row.updated_at, tradelist: row.tradelist, wishlist: row.wishlist };
   }
 
+  /**
+   * Drop the pre-sync `snapshots` table. Whole-account snapshot upload was
+   * replaced by row-level sync in client 0.17.0 and no client has written one
+   * since, but the rows sat there holding up to 30 MB of dead JSON each. VACUUM
+   * is what actually returns the pages to the filesystem, so it runs once and
+   * `user_version` records that it has.
+   */
+  private dropLegacySnapshots(): void {
+    const row = this.db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined;
+    if ((row?.user_version ?? 0) >= 1) return;
+    this.db.exec('DROP TABLE IF EXISTS snapshots');
+    this.db.exec('PRAGMA user_version = 1');
+    this.db.exec('VACUUM');
+    // In WAL mode VACUUM writes the rebuilt database to the log; without a
+    // truncating checkpoint the main file keeps its old size and nothing is
+    // actually handed back to the filesystem.
+    this.db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+  }
+
   close(): void {
     clearInterval(this.pruneTimer);
     this.db.close();
@@ -621,19 +719,10 @@ function avatarFromProfileJson(raw: string | null): ProfileAvatar | null {
   }
 }
 
-function parseCounts(raw: string | null): SnapshotCounts | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as SnapshotCounts;
-  } catch {
-    return null;
-  }
-}
-
-/** Thrown when a user hits SYNC_MAX_ROWS_PER_USER; the route maps it to 413. */
+/** Thrown when a user hits a storage cap; the route maps it to 413. */
 export class SyncCapError extends Error {
-  constructor() {
-    super('sync row cap reached');
+  constructor(readonly kind: 'rows' | 'bytes') {
+    super(`sync ${kind} cap reached`);
   }
 }
 

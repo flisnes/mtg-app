@@ -4,6 +4,8 @@ import {
   DECK_FORMATS,
   EVENT_SOURCES,
   FINISHES,
+  MAX_DECK_DESCRIPTION_LENGTH,
+  MAX_DECK_NAME_LENGTH,
   REMOVAL_REASONS,
   USERNAME_RE,
   USER_EVENT_KINDS,
@@ -250,10 +252,10 @@ export function sanitizeDeckRow(raw: unknown): Deck | null {
   const kind = (CONTAINERS.has(r.kind as string) ? r.kind : 'deck') as ContainerKind;
   return {
     id: deckId,
-    name: typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, 200) : 'Untitled deck',
+    name: typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, MAX_DECK_NAME_LENGTH) : 'Untitled deck',
     kind,
     ...(kind === 'deck' ? { format: (FORMATS.has(r.format as string) ? r.format : 'casual') as DeckFormat } : {}),
-    ...(typeof r.description === 'string' && r.description ? { description: r.description.slice(0, 2000) } : {}),
+    ...(typeof r.description === 'string' && r.description ? { description: r.description.slice(0, MAX_DECK_DESCRIPTION_LENGTH) } : {}),
     // Folders are deck-only; drop a stray folderId on a binder/box row.
     ...(kind === 'deck' && id(r.folderId) ? { folderId: id(r.folderId)! } : {}),
     createdAt: ts(r.createdAt),
@@ -268,7 +270,7 @@ export function sanitizeDeckFolderRow(raw: unknown): DeckFolder | null {
   if (!folderId) return null;
   return {
     id: folderId,
-    name: typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, 200) : 'Untitled folder',
+    name: typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, MAX_DECK_NAME_LENGTH) : 'Untitled folder',
     createdAt: ts(r.createdAt),
     updatedAt: ts(r.updatedAt),
   };

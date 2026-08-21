@@ -173,6 +173,17 @@ export interface DeckCard {
   updatedAt: number;
 }
 
+/**
+ * Longest a deck/binder/box name (deck folders share it). Enforced in three
+ * places that used to disagree: the name input, the row sanitizer on receive,
+ * and — via SYNC_MAX_ROW_BYTES.decks — the server. Nothing capped the write
+ * path before, so a pasted wall of text synced in full and was only truncated
+ * on the way back out.
+ */
+export const MAX_DECK_NAME_LENGTH = 200;
+/** Longest a deck description. Set by import, not typed in the UI today. */
+export const MAX_DECK_DESCRIPTION_LENGTH = 2_000;
+
 /** Longest a card tag can be; anything longer is truncated, not rejected. */
 export const MAX_CARD_TAG_LENGTH = 30;
 /** Most tags one slot can carry — a guard rail, not a design target. */

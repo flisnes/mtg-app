@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.130.3
+
+- Last of the style housekeeping: the ownership badges (owned, marked for trade, filed right here) shed a wrapper class that no longer exists in the app and a fourth "unknown" state nothing has set for a long time. The badges themselves look exactly as they did.
+
 ## 0.130.2
 
 - More housekeeping with nothing on screen to show for it: dropped eight style rules for elements the app no longer renders. Every class name still in use was checked, including the ones built on the fly from a card rarity or a price direction.

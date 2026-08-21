@@ -62,8 +62,7 @@ export type TransferClientMessage =
   | { v: typeof PROTOCOL_VERSION; type: 'transfer_join'; transferCode: string }
   | TransferBegin
   | TransferChunk
-  | TransferAck
-  | { v: typeof PROTOCOL_VERSION; type: 'transfer_cancel'; transferCode: string };
+  | TransferAck;
 
 // ---------------------------------------------------------------------------
 // Server -> client

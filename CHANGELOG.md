@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.130.4
+
+- Device-to-device transfer lost a cancel message the app never sent. Backing out of a transfer has always worked by simply hanging up, which the relay already turns into "the other device disconnected" on the far end. The unused second route through the relay is gone. Cancelling a transfer behaves exactly as before.
+
 ## 0.130.3
 
 - Last of the style housekeeping: the ownership badges (owned, marked for trade, filed right here) shed a wrapper class that no longer exists in the app and a fourth "unknown" state nothing has set for a long time. The badges themselves look exactly as they did.

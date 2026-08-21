@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.129.7',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Filing cards from a sealed product you just opened no longer asks whether copies you already own moved. The question now only comes up when your decks, binders and boxes would hold more of a card than you own.',
+      },
+    ],
+  },
+  {
     version: '0.129.6',
     changes: [
       {

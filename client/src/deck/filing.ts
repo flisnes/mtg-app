@@ -11,7 +11,11 @@ import { db } from '../db/schema.js';
 import { containerKind } from './containers.js';
 
 // Filing a card, with the one rule physical cardboard obeys: a copy can only be
-// in one place at a time.
+// in one place at a time. The rule is about *copies*, not card names: own four
+// Islands and four containers can each hold one without anybody having to give
+// one up. So a filing only clashes when the containers would between them
+// promise more cardboard than you own — the same `claimed > owned` test the
+// filing-conflict flag uses (see db/usePlacements.ts).
 //
 // Every route into a deck, binder or box comes through here — the collection's
 // "File away", a container's "File these somewhere else too", the card sheet, the
@@ -68,7 +72,12 @@ export interface FilingSource {
   updatedAt: number;
 }
 
-/** A copy you're filing that is already filed somewhere else. */
+/**
+ * A copy you're filing that other containers have already promised away, with
+ * `copy.quantity` narrowed to the number that is actually over-promised: file
+ * two of your four Islands into a box while one sits in a deck and nothing
+ * clashes, so no clash is reported at all.
+ */
 export interface FilingClash {
   copy: FilingCopy;
   elsewhere: FilingSource[];
@@ -77,49 +86,97 @@ export interface FilingClash {
 export type FilingMode = 'move' | 'copy';
 
 /**
- * Which of these copies are already filed outside the target — the question the
- * prompt asks. Only copies that name a real card of yours can clash; a brew line
- * with no edition or no traits is nobody's cardboard, so it's never in the way.
+ * Which of these copies the other containers have already promised away — the
+ * question the prompt asks. Only copies that name a real card of yours can
+ * clash; a brew line with no edition or no traits is nobody's cardboard, so it's
+ * never in the way.
+ *
+ * Counting matters. What clashes isn't "this card is filed elsewhere" but "the
+ * containers would hold more of this copy than exist": the target's own slots,
+ * plus what's being filed now, plus what everyone else holds, against the number
+ * in your collection. That's why cracking a box open no longer asks about the
+ * copies you already had filed — the new cardboard came with the box, so there
+ * is enough to go round.
+ *
+ * Copies sharing one physical identity are pooled, so filing the same card into
+ * a deck's main and sideboard weighs on the collection once, not twice.
+ *
+ * `replacing` is for the deck re-scan, whose write is "this is what's in the deck
+ * now" rather than "add these": what the target holds today is on its way out, so
+ * it mustn't be counted against the collection alongside the copies replacing it.
  */
-export async function findFilingClashes(targetId: string, copies: FilingCopy[]): Promise<FilingClash[]> {
-  const keyed: { copy: FilingCopy; key: string }[] = [];
+export async function findFilingClashes(
+  targetId: string,
+  copies: FilingCopy[],
+  opts: { replacing?: boolean } = {},
+): Promise<FilingClash[]> {
+  // Pool by the copy they name, keeping the first line's card details for the
+  // prompt: the removal below spends one shared pile of cardboard.
+  const pooled = new Map<string, FilingCopy>();
   for (const copy of copies) {
     const key = claimKeyOf({ ...copy.wants, scryfallId: copy.scryfallId, anyBasic: copy.anyBasic });
-    if (key) keyed.push({ copy, key });
+    if (!key) continue;
+    const cur = pooled.get(key);
+    if (cur) cur.quantity += copy.quantity;
+    else pooled.set(key, { ...copy });
   }
-  if (keyed.length === 0) return [];
+  if (pooled.size === 0) return [];
 
-  const slots = (
-    await db.deckCards
-      .where('oracleId')
-      .anyOf([...new Set(keyed.map((k) => k.copy.oracleId))])
-      .toArray()
-  ).filter((s) => s.deckId !== targetId && claimKeyOf(s));
+  const oracleIds = [...new Set([...pooled.values()].map((c) => c.oracleId))];
+  const [allSlots, entries] = await Promise.all([
+    db.deckCards.where('oracleId').anyOf(oracleIds).toArray(),
+    db.collection.where('oracleId').anyOf(oracleIds).toArray(),
+  ]);
+  const slots = allSlots.filter((s) => claimKeyOf(s));
   if (slots.length === 0) return [];
+
+  const owned = new Map<string, number>();
+  for (const e of entries) {
+    const k = collectionKey(e);
+    owned.set(k, (owned.get(k) ?? 0) + e.quantity);
+  }
 
   const rows = await db.decks.bulkGet([...new Set(slots.map((s) => s.deckId))]);
   const containers = new Map(rows.filter((d) => !!d).map((d) => [d.id, d]));
 
   const clashes: FilingClash[] = [];
-  for (const { copy, key } of keyed) {
-    const held = new Map<string, { quantity: number; updatedAt: number }>();
+  for (const [key, copy] of pooled) {
+    // What the target already holds counts against you too: filing a third copy
+    // into a box that has two of your two is an over-promise on its own.
+    let held = 0;
+    const elsewhereBy = new Map<string, { quantity: number; updatedAt: number }>();
     for (const s of slots) {
       if (s.oracleId !== copy.oracleId || claimKeyOf(s) !== key) continue;
-      const cur = held.get(s.deckId);
+      if (s.deckId === targetId) {
+        if (!opts.replacing) held += s.quantity;
+        continue;
+      }
+      // An orphan slot (a container delete that hasn't synced) holds nothing.
+      if (!containers.has(s.deckId)) continue;
+      const cur = elsewhereBy.get(s.deckId);
       if (cur) {
         cur.quantity += s.quantity;
         cur.updatedAt = Math.max(cur.updatedAt, s.updatedAt);
-      } else held.set(s.deckId, { quantity: s.quantity, updatedAt: s.updatedAt });
+      } else elsewhereBy.set(s.deckId, { quantity: s.quantity, updatedAt: s.updatedAt });
     }
+
     const elsewhere: FilingSource[] = [];
-    held.forEach((v, containerId) => {
-      const row = containers.get(containerId);
-      // An orphan slot (a container delete that hasn't synced) holds nothing.
-      if (row) elsewhere.push({ containerId, name: row.name, kind: containerKind(row), ...v });
+    let promised = 0;
+    elsewhereBy.forEach((v, containerId) => {
+      const row = containers.get(containerId)!;
+      elsewhere.push({ containerId, name: row.name, kind: containerKind(row), ...v });
+      promised += v.quantity;
     });
+    if (promised === 0) continue;
+
+    // Only the copies that don't exist are in the way, and moving can free at
+    // most what the other containers are holding.
+    const over = Math.min(held + copy.quantity + promised - (owned.get(key) ?? 0), promised);
+    if (over <= 0) continue;
+
     // Oldest claim first: that's the one the card most likely already left.
     elsewhere.sort((a, b) => a.updatedAt - b.updatedAt);
-    if (elsewhere.length > 0) clashes.push({ copy, elsewhere });
+    clashes.push({ copy: { ...copy, quantity: over }, elsewhere });
   }
   return clashes;
 }
@@ -129,9 +186,9 @@ export async function findFilingClashes(targetId: string, copies: FilingCopy[]):
  * printings (or two finishes) stays two lines — a box holds pieces of cardboard,
  * not decklist entries.
  *
- * On 'move' the clashing copies come out of their old homes first, oldest claim
- * first, and only up to the number being filed: pull one Island out of a box of
- * four and the other three stay put.
+ * On 'move' the over-promised copies come out of their old homes first, oldest
+ * claim first, and only as many as the collection is short: pull one Island out
+ * of a box of four and the other three stay put.
  */
 export async function applyFiling(
   targetId: string,
@@ -157,9 +214,9 @@ export async function applyFiling(
 }
 
 /**
- * Take the clashing copies out of wherever they were, oldest claim first and
- * only up to the number being filed: pull one Island out of a box of four and
- * the other three stay put.
+ * Take the over-promised copies out of wherever they were, oldest claim first
+ * and only as many as `findFilingClashes` counted short: pull one Island out of
+ * a box of four and the other three stay put.
  *
  * Exported for the deck re-scan, which writes its slots through `reconcileDeck`
  * rather than by adding, and so has to settle the same question by hand.

@@ -1051,7 +1051,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         // another deck has physically left it. The add path has always asked;
         // re-scan reconciles its own slots, so it settles the same question by
         // hand rather than skipping it and leaving stale claims behind.
-        const decided = await ask(target.deckId, scanCopies(session));
+        const decided = await ask(target.deckId, scanCopies(session), { replacing: true });
         if (decided === null) {
           toast('Nothing changed: filing was cancelled');
           return;

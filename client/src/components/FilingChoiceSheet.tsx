@@ -8,9 +8,9 @@ import { Sheet } from './Sheet.js';
 
 /**
  * "This card is already filed somewhere else." A card can only be in one place at
- * a time, so filing a copy you've already put in a deck, binder or box is a
- * question, not an instruction: did you move it, or are you brewing two lists
- * around the same card?
+ * a time, so filing a copy that's already promised to a deck, binder or box and
+ * that you own no spare of is a question, not an instruction: did you move it, or
+ * are you brewing two lists around the same card?
  *
  * One sheet for the whole batch — filing forty cards out of the collection asks
  * once and applies the answer to all of them, rather than forty modals. Ticking
@@ -41,8 +41,8 @@ export function FilingChoiceSheet({
   return (
     <Sheet onClose={onClose} title="Already filed somewhere else" label="Choose how to file these cards">
       <p className="search-meta">
-        {n === 1 ? 'This card is' : `${n} of these cards are`} filed elsewhere already. A card can only be in
-        one place at a time — did {n === 1 ? 'it' : 'they'} move into {targetName}?
+        {n === 1 ? 'This card is' : `${n} of these cards are`} filed elsewhere already, and you own no spare
+        copy. A card can only be in one place at a time — did {n === 1 ? 'it' : 'they'} move into {targetName}?
       </p>
 
       <ul className="filing-clash-list">

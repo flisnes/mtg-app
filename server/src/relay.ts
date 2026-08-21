@@ -270,14 +270,6 @@ function handleTransfer(socket: WebSocket, ctx: SocketCtx, msg: TransferClientMe
           if (peer) send(peer, { v: PROTOCOL_VERSION, type: 'transfer_ack', transferCode: t.code, seq: msg.seq });
           return;
         }
-
-        case 'transfer_cancel': {
-          // The store's onRemove hook sends transfer_cancelled to both sides.
-          transfers.remove(t.code);
-          ctx.transferCode = undefined;
-          ctx.transferRole = undefined;
-          return;
-        }
       }
     }
   }

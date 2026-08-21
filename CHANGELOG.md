@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.130.2
+
+- More housekeeping with nothing on screen to show for it: dropped eight style rules for elements the app no longer renders. Every class name still in use was checked, including the ones built on the fly from a card rarity or a price direction.
+
 ## 0.130.1
 
 - Housekeeping, nothing to see on screen: removed seven functions that nothing called any more. Leftovers from features that moved on, including a history filter whose one caller is long gone and a card-tag helper the tag field stopped using.

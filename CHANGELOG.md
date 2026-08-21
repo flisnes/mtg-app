@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.130.1
+
+- Housekeeping, nothing to see on screen: removed seven functions that nothing called any more. Leftovers from features that moved on, including a history filter whose one caller is long gone and a card-tag helper the tag field stopped using.
+
 ## 0.130.0
 
 - **A big trade now syncs.** Registering a trade of more than about 160 cards saved it locally and then quietly failed to reach your other devices: the server refused any single synced row over 32 KB, and a trade that size is bigger than that. The size allowed per row is now set per kind of row, with trades given room for the largest offer the trade screen can even build.

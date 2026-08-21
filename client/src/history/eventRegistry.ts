@@ -219,7 +219,3 @@ export const FILTER_CATEGORIES: readonly FilterCategory[] = [
   { value: 'tradelist', label: 'Tradelist', match: (e) => e.kind === 'tradelist.mark' },
 ];
 
-/** Whether an event shows in the edit-history view at all (all do, for now). */
-export function shownInHistory(_e: UserEvent): boolean {
-  return true;
-}

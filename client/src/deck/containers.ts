@@ -65,12 +65,4 @@ export function containerMeta(row: Pick<Deck, 'kind'> | undefined | null): Conta
   return CONTAINER_META[containerKind(row)];
 }
 
-/** Link to a container's detail page ('/boxes/abc123'). */
-export function containerPath(row: Pick<Deck, 'kind' | 'id'>): string {
-  return `${containerMeta(row).path}/${row.id}`;
-}
 
-/** Storage (binder/box) holds copies you own; only decks are brewed lists. */
-export function isStorage(kind: ContainerKind): boolean {
-  return kind !== 'deck';
-}

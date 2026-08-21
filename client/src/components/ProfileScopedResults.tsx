@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import type { OracleCard } from '@mtg/shared';
-import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
+import type { Finish, OracleCard } from '@mtg/shared';
+import { compileCardQuery, rowPrintingSummary, toSearchableEntry } from '../cardDb/querySyntax.js';
 import { CardSheet } from './CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
@@ -43,14 +43,23 @@ export function ProfileScopedResults({
   const items = useMemo(() => {
     if (!lists) return [];
     const q = compileCardQuery(query);
-    const matchesQuery = (oracle: OracleCard | undefined) =>
-      q.isEmpty || (!!oracle && q.matches(toSearchableEntry(oracle)));
+    // Each line names the printing it's about, so `set:` and the printing-level
+    // `is:` keywords filter that copy — same as they do on your own lists.
+    const matchesQuery = (oracle: OracleCard | undefined, line: { scryfallId: string | null; finish?: Finish }) =>
+      q.isEmpty ||
+      (!!oracle &&
+        q.matches(
+          toSearchableEntry(
+            oracle,
+            rowPrintingSummary(line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined, line.finish),
+          ),
+        ));
 
     const out: CardItem[] = [];
     if (showTrade) {
       lists.tradelist.forEach((line, i) => {
         const oracle = cards?.oracles.get(line.oracleId);
-        if (!matchesQuery(oracle)) return;
+        if (!matchesQuery(oracle, line)) return;
         out.push(
           tradeLineItem(line, `t:${line.scryfallId}-${i}`, cards, { match: iWant(line), hi: false }, (o) =>
             setInfo({ oracle: o, scryfallId: line.scryfallId }),
@@ -61,7 +70,7 @@ export function ProfileScopedResults({
     if (showWish) {
       lists.wishlist.forEach((line, i) => {
         const oracle = cards?.oracles.get(line.oracleId);
-        if (!matchesQuery(oracle)) return;
+        if (!matchesQuery(oracle, line)) return;
         const match = iHave(line);
         const own = !match && iOwn(line);
         out.push(

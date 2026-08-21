@@ -21,7 +21,8 @@ import {
 //   mv:2  cmc<=3      mana value
 //   cmc:even          mana value parity (even/odd)
 //   mana>={2}  m:uu   mana cost symbols (: means "at least", like colors)
-//   set:znr  s:znr    printed in this set (any printing, not just the default one)
+//   set:znr  s:znr    printed in this set (in the card search: any printing of
+//                     the card; in a list of copies: the copy's own printing)
 //   f:modern          legal in format (restricted counts as legal)
 //   is:transform  is:reserved  is:foil  is:borderless   see IS_KEYWORDS below
 //
@@ -104,6 +105,37 @@ export interface PrintingSummary {
   hasPromo?: boolean;
   variants?: Iterable<PrintingVariant>;
   reprint?: boolean;
+}
+
+/** The printing fields an owned row carries; a sparse `Printing` is one. */
+export interface RowPrinting {
+  set: string;
+  finishes?: readonly Finish[];
+  promo?: boolean;
+  variants?: readonly PrintingVariant[];
+}
+
+/**
+ * The printing summary for a row of a *list of copies* — collection, tradelist,
+ * wishlist, a deck/binder/box, someone's published list — where the row already
+ * names the printing it's about. `set:znr` there means "this copy is from
+ * Zendikar Rising", not "some printing of this card was in Zendikar Rising",
+ * which is the only reading that makes sense of a list of physical cards.
+ * Likewise `is:foil` matches the finish the row is in, not the finishes the
+ * printing was sold in.
+ *
+ * Rows that pin no printing ("any printing" wishes, unpinned deck slots) can
+ * only offer their finish, so `set:` correctly doesn't match them. `is:reprint`
+ * never matches here either — how many times a card was printed isn't something
+ * a single row knows.
+ */
+export function rowPrintingSummary(printing: RowPrinting | undefined, finish?: Finish): PrintingSummary {
+  return {
+    sets: printing ? [printing.set] : [],
+    finishes: finish ? [finish] : (printing?.finishes ?? []),
+    hasPromo: printing?.promo,
+    variants: printing?.variants,
+  };
 }
 
 export function toSearchableEntry(card: OracleCard, printings: PrintingSummary = {}): SearchableEntry {

@@ -75,6 +75,9 @@ interface Mover {
   onWishlist: boolean;
 }
 
+/** A mover as a row the Scryfall-syntax matcher can filter: one card, one printing. */
+const matchRow = (m: Mover) => ({ entry: { id: m.scryfallId }, oracle: m.oracle, printing: m.printing });
+
 export function PriceMovers() {
   const [windowDays, setWindowDays] = useState(7);
   const [info, setInfo] = useState<Mover | null>(null);
@@ -139,17 +142,14 @@ export function PriceMovers() {
     };
   }, [windowDays, tuning]);
 
-  // Scryfall-syntax filtering over the same rows, so `t:goblin` or `c:r` works
-  // here exactly as it does on the collection.
-  const matchRows = useMemo(
-    () => (data?.movers ?? []).map((m) => ({ entry: { id: m.scryfallId }, oracle: m.oracle })),
-    [data],
-  );
+  // Scryfall-syntax filtering over the same rows, so `t:goblin`, `c:r` or
+  // `set:znr` works here exactly as it does on the collection.
+  const matchRows = useMemo(() => (data?.movers ?? []).map(matchRow), [data]);
   const matchesQuery = useEntryMatcher(matchRows, query);
 
   const { risers, fallers, steady, swings, count } = useMemo(() => {
     const all = (data?.movers ?? []).filter((m) => {
-      if (!matchesQuery({ entry: { id: m.scryfallId }, oracle: m.oracle })) return false;
+      if (!matchesQuery(matchRow(m))) return false;
       if (listFilter === 'collection' && !m.inCollection) return false;
       if (listFilter === 'tradelist' && !m.onTradelist) return false;
       if (listFilter === 'wishlist' && !m.onWishlist) return false;

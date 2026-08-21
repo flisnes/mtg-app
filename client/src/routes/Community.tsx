@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { OracleCard, PublicUser, TradeLine, WishLine } from '@mtg/shared';
+import type { Finish, OracleCard, PublicUser, TradeLine, WishLine } from '@mtg/shared';
 import { ApiError, listUsers } from '../account/api.js';
 import { useAccount } from '../account/useAccount.js';
-import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
+import { compileCardQuery, rowPrintingSummary, toSearchableEntry } from '../cardDb/querySyntax.js';
 import { Avatar } from '../components/Avatar.js';
 import { CardRow } from '../components/CardRow.js';
 import { CardSheet } from '../components/CardSheet.js';
@@ -530,7 +530,14 @@ function ListSection<T extends { hi: boolean; match: boolean; own: boolean }>({
 }
 
 /** Full-screen list with its own search, sort, view toggle and scroll autoload. */
-function UserListAll<T extends { hi: boolean; match: boolean; own: boolean; line: { oracleId: string } }>({
+function UserListAll<
+  T extends {
+    hi: boolean;
+    match: boolean;
+    own: boolean;
+    line: { oracleId: string; scryfallId?: string | null; finish?: Finish };
+  },
+>({
   heading,
   rows,
   cards,
@@ -558,7 +565,10 @@ function UserListAll<T extends { hi: boolean; match: boolean; own: boolean; line
     if (q.isEmpty) return sorted;
     return sorted.filter((r) => {
       const oracle = cards?.oracles.get(r.line.oracleId) as OracleCard | undefined;
-      return !!oracle && q.matches(toSearchableEntry(oracle));
+      // The line names its own printing, so `set:` and the printing-level `is:`
+      // keywords filter that copy rather than every printing of the card.
+      const printing = r.line.scryfallId ? cards?.printings.get(r.line.scryfallId) : undefined;
+      return !!oracle && q.matches(toSearchableEntry(oracle, rowPrintingSummary(printing, r.line.finish)));
     });
   }, [rows, cards, fieldsOf, sort, query]);
 

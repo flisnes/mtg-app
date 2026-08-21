@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.129.8',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Searching your collection, tradelist, wishlist, a deck or a binder with set:znr now finds the copies you own from that set. It only worked in the card search before. is:foil, is:promo and the other printing keywords work there too, and match the copy itself.',
+      },
+    ],
+  },
+  {
     version: '0.129.7',
     changes: [
       {

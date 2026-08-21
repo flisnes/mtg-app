@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.129.8
+
+- **`set:` now works in your own lists, not just the card search.** Typing `set:znr` (or `s:`, `e:`, `edition:`) while the search is pointed at your collection, tradelist, wishlist, a deck, a binder, a box, the price movers or someone else's published lists matched nothing at all, because those lists were searched without any edition information to match against. They now filter on the printing each row actually is, so `set:znr` in your collection means "the copies I own from Zendikar Rising" rather than "cards that were printed in Zendikar Rising at some point". `is:foil`, `is:promo`, `is:borderless` and the other printing keywords went the same way, and match the copy in front of you: `is:foil` on your collection lists your foils.
+
 ## 0.129.7
 
 - **Filing cards you just opened no longer asks about the copies you already had.** Crack open a precon and file its contents, and every card in it that you also own elsewhere used to raise "already filed somewhere else, did it move?" — a nonsense question, since the box brought its own cardboard along. The filing question now counts copies: it only asks when the decks, binders and boxes would between them hold more of a card than you actually own, which is the same rule the filing-conflict flag has always used. Same for a CSV import, a scan, or filing two of your four Islands into a box while a third sits in a deck. When it does ask, it now names only the copies that are genuinely short.

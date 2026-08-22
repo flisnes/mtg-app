@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { sanitizeAvatar, type ProfileAvatar } from '@mtg/shared';
-import { getUserProfile } from './api.js';
+import { sanitizeAvatar, sanitizeProfile, type ProfileAvatar } from '@mtg/shared';
+import { getUserProfile, putProfile } from './api.js';
+import { randomAvatarPreset } from './avatarPresets.js';
 import { getSetting, setSetting } from '../db/settings.js';
 
 // The signed-in user's own profile picture, cached in settings so the header
@@ -34,7 +35,20 @@ export function useOwnAvatar(
     if (!username || !token || refreshedFor === username) return;
     refreshedFor = username;
     getUserProfile(token, username)
-      .then((res) => rememberOwnAvatar(sanitizeAvatar(res.profile?.avatar)))
+      .then(async (res) => {
+        const existing = sanitizeAvatar(res.profile?.avatar);
+        // Never-saved profile (updatedAt 0): deal a starting picture from the
+        // preset list so a new account arrives with a face, not a grey letter.
+        // A saved profile is left alone even when its avatar is null — that
+        // means the user removed the picture on purpose.
+        if (!existing && res.updatedAt === 0) {
+          const avatar = randomAvatarPreset();
+          await putProfile(token, { ...sanitizeProfile(res.profile), avatar });
+          await rememberOwnAvatar(avatar);
+          return;
+        }
+        await rememberOwnAvatar(existing);
+      })
       .catch(() => {
         refreshedFor = null; // offline or server down — try again next launch/sign-in
       });

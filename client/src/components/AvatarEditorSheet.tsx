@@ -91,12 +91,15 @@ export function CardSearch({
 /** Pan/zoom a printing's art inside a round frame; also reused by the deck-emblem picker. */
 export function CropStage({
   card,
+  initial,
   onBack,
   onSave,
   onCancel,
   saveLabel = 'Save picture',
 }: {
   card: Priced<OracleCard>;
+  /** Reopen an existing crop instead of a centered one (the avatar lab edits presets). */
+  initial?: ProfileAvatar;
   onBack: () => void;
   onSave: (avatar: ProfileAvatar) => void;
   onCancel: () => void;
@@ -104,8 +107,13 @@ export function CropStage({
   saveLabel?: string;
 }) {
   const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
-  const [scryfallId, setScryfallId] = useState(card.defaultScryfallId);
-  const [crop, setCrop] = useState({ x: 0.5, y: 0.5, zoom: 1 });
+  const [scryfallId, setScryfallId] = useState(initial?.scryfallId ?? card.defaultScryfallId);
+  const [crop, setCrop] = useState(
+    initial ? { x: initial.x, y: initial.y, zoom: initial.zoom } : { x: 0.5, y: 0.5, zoom: 1 },
+  );
+  // Restoring a crop only applies to the printing it was made from: switching
+  // edition mid-edit re-centers like any fresh pick.
+  const restore = useRef(initial ? { x: initial.x, y: initial.y, zoom: initial.zoom } : null);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
   // Active pointers, for one-finger pan and two-finger pinch.
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -190,7 +198,8 @@ export function CropStage({
               style={layout ? { position: 'absolute', maxWidth: 'none', ...layout } : { visibility: 'hidden' }}
               onLoad={(e) => {
                 setDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
-                setCrop({ x: 0.5, y: 0.5, zoom: 1 });
+                setCrop(restore.current ?? { x: 0.5, y: 0.5, zoom: 1 });
+                restore.current = null;
               }}
             />
           )}

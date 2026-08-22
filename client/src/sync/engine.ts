@@ -429,6 +429,9 @@ const KEY_REPAIRS = 'syncRepairs';
  *   than the table silently dropped those rows for good — deckFolders before
  *   v0.109.0, sealedItems before v0.117.0. Symptom: boxes added on the phone
  *   never appear on the PC, no matter how often either syncs.
+ * - `containerEmblems` (v0.133.0): same shape as containerKinds — a device that
+ *   pulled a deck/binder/box row while running a build without `emblem` dropped
+ *   the emblem, and the cursor moved past it.
  *
  * The medicine: rewind the cursor once so the server re-sends everything it
  * has. Sync-row content is opaque to the server, so the correct rows were
@@ -437,7 +440,7 @@ const KEY_REPAIRS = 'syncRepairs';
  * still win. ADD AN ID HERE whenever SYNC_TABLES grows: the devices that need
  * the re-pull are exactly the ones that can't know they missed anything.
  */
-const REPAIRS = ['containerKinds', 'syncTableAdditions'] as const;
+const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems'] as const;
 
 async function runOneTimeRepairs(): Promise<void> {
   const done = (await getSetting<string[]>(KEY_REPAIRS)) ?? [];

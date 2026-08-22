@@ -10,6 +10,7 @@ import {
   USERNAME_RE,
   USER_EVENT_KINDS,
   normalizeCardTags,
+  sanitizeContainerEmblem,
   type CollectionEntry,
   type Condition,
   type ContainerKind,
@@ -250,6 +251,9 @@ export function sanitizeDeckRow(raw: unknown): Deck | null {
   // existed. Only decks carry a format, so don't invent 'casual' for a binder:
   // that would make the row look like a deck to anything reading format.
   const kind = (CONTAINERS.has(r.kind as string) ? r.kind : 'deck') as ContainerKind;
+  // The list emblem (art crop, Mana symbol or set symbol). Every kind wears
+  // one, so it sits outside the deck-only fields below.
+  const emblem = sanitizeContainerEmblem(r.emblem);
   return {
     id: deckId,
     name: typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, MAX_DECK_NAME_LENGTH) : 'Untitled deck',
@@ -258,6 +262,7 @@ export function sanitizeDeckRow(raw: unknown): Deck | null {
     ...(typeof r.description === 'string' && r.description ? { description: r.description.slice(0, MAX_DECK_DESCRIPTION_LENGTH) } : {}),
     // Folders are deck-only; drop a stray folderId on a binder/box row.
     ...(kind === 'deck' && id(r.folderId) ? { folderId: id(r.folderId)! } : {}),
+    ...(emblem ? { emblem } : {}),
     createdAt: ts(r.createdAt),
     updatedAt: ts(r.updatedAt),
   };

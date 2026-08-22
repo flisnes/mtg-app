@@ -1,7 +1,8 @@
-import { normalizeCardTags, prefsCompatible, sameCardTags } from '@mtg/shared';
+import { normalizeCardTags, prefsCompatible, sameCardTags, sanitizeContainerEmblem } from '@mtg/shared';
 import type {
   CollectionEntry,
   Condition,
+  ContainerEmblem,
   ContainerKind,
   CopyPrefs,
   Deck,
@@ -953,6 +954,24 @@ export async function setDeckFormat(id: string, format: DeckFormat): Promise<voi
     const deck = await db.decks.get(id);
     if (!deck) return;
     deck.format = format;
+    deck.updatedAt = Date.now();
+    await db.decks.put(deck);
+    await stagePut('decks', deck);
+  });
+}
+
+/**
+ * Set (or clear, with undefined) the picture or symbol this container wears in
+ * the list. Sanitized on the way in like a row off the wire — the picker is the
+ * only caller today, but the emblem ends up in a CSS class name.
+ */
+export async function setDeckEmblem(id: string, emblem: ContainerEmblem | undefined): Promise<void> {
+  const clean = emblem && sanitizeContainerEmblem(emblem);
+  await db.transaction('rw', [db.decks, db.outbox], async () => {
+    const deck = await db.decks.get(id);
+    if (!deck) return;
+    if (clean) deck.emblem = clean;
+    else delete deck.emblem;
     deck.updatedAt = Date.now();
     await db.decks.put(deck);
     await stagePut('decks', deck);

@@ -12,6 +12,7 @@
 //    meets those (the double check); otherwise it's the single check.
 
 import type { Finish, Format } from './card.js';
+import { sanitizeAvatar, type ProfileAvatar } from './profile.js';
 
 export type Condition = 'NM' | 'LP' | 'MP' | 'HP' | 'DMG';
 
@@ -94,6 +95,46 @@ export type ContainerKind = 'deck' | 'binder' | 'box';
 
 export const CONTAINER_KINDS: readonly ContainerKind[] = ['deck', 'binder', 'box'];
 
+/**
+ * What a deck, binder or box wears in the list instead of its generic kind
+ * icon: a crop of a card's art (the same recipe a profile picture uses, see
+ * ProfileAvatar), a symbol from the Mana font (a mana pip, the tap symbol, a
+ * guild sigil), or a set symbol from Keyrune. Absent = the kind's icon.
+ *
+ * Stored as ids and a crop recipe, never pixels — the art variant resolves the
+ * printing out of whichever device is looking, exactly like an avatar, so an
+ * emblem costs a hundred-odd bytes in the synced row.
+ */
+export type ContainerEmblem =
+  | { type: 'art'; art: ProfileAvatar }
+  | { type: 'symbol'; symbol: string }
+  | { type: 'set'; set: string };
+
+// Both string variants end up in a CSS class name ("ms-guild-azorius",
+// "ss-sth"), so the charsets are fenced in hard rather than trusted: a row can
+// arrive from the server, a transfer file or an older build.
+const EMBLEM_SYMBOL_RE = /^[a-z0-9-]{1,40}$/;
+const EMBLEM_SET_RE = /^[a-z0-9]{1,10}$/;
+
+/** Clean an emblem into the shape that gets stored; anything odd → undefined (no emblem). */
+export function sanitizeContainerEmblem(raw: unknown): ContainerEmblem | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  if (r.type === 'art') {
+    const art = sanitizeAvatar(r.art);
+    return art ? { type: 'art', art } : undefined;
+  }
+  if (r.type === 'symbol' && typeof r.symbol === 'string') {
+    const symbol = r.symbol.toLowerCase();
+    return EMBLEM_SYMBOL_RE.test(symbol) ? { type: 'symbol', symbol } : undefined;
+  }
+  if (r.type === 'set' && typeof r.set === 'string') {
+    const set = r.set.toLowerCase();
+    return EMBLEM_SET_RE.test(set) ? { type: 'set', set } : undefined;
+  }
+  return undefined;
+}
+
 /** A deck's format; 'casual' means no legality checks. */
 export type DeckFormat = Format | 'casual';
 
@@ -119,6 +160,8 @@ export interface Deck {
   description?: string;
   /** Groups decks into a DeckFolder. Deck-only; unset = not in a folder. */
   folderId?: string;
+  /** The picture or symbol this one wears in the list; unset = the kind icon. */
+  emblem?: ContainerEmblem;
   createdAt: number;
   updatedAt: number;
 }

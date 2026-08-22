@@ -33,6 +33,7 @@ import {
   renameDeck,
   setContainerForTrade,
   setDeckCardsForTrade,
+  setDeckEmblem,
   setDeckFormat,
 } from '../db/dataAccess.js';
 import { addToWishlistBulk, applyImport } from '../db/dataAccess.js';
@@ -69,6 +70,8 @@ import {
   type GroupKey,
 } from '../components/CardSorting.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
+import { Emblem } from '../components/Emblem.js';
+import { EmblemPickerSheet } from '../components/EmblemPickerSheet.js';
 import { AssembleSheet, type AssembleItem } from '../components/AssembleSheet.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { Sheet } from '../components/Sheet.js';
@@ -171,6 +174,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const [wishSheet, setWishSheet] = useState<{ cards: MissingCard[]; leaving: boolean } | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [emblemOpen, setEmblemOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('deck', { group: 'type' });
@@ -596,6 +600,11 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               icon: 'collection',
               onClick: startAssemble,
             },
+            {
+              label: deck.emblem ? 'Change emblem' : 'Choose an emblem',
+              icon: 'emblem',
+              onClick: () => setEmblemOpen(true),
+            },
             { label: 'Scan cards', icon: 'camera', onClick: () => setScanning('add') },
             { label: `Re-scan ${meta.noun}`, icon: 'refresh', onClick: () => setScanning('rescan') },
             { label: 'Import list', icon: 'import', onClick: () => setShowImport((v) => !v) },
@@ -636,22 +645,43 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         />
       </div>
 
-      <input
-        ref={nameInputRef}
-        className="deck-name-input"
-        maxLength={MAX_DECK_NAME_LENGTH}
-        value={nameDraft ?? deck.name}
-        onChange={(e) => setNameDraft(e.target.value)}
-        onBlur={() => {
-          if (nameDraft !== null && nameDraft !== deck.name) void renameDeck(id, nameDraft);
-          setNameDraft(null);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur(); // commits via onBlur
-          else if (e.key === 'Escape') setNameDraft(null); // discard edits
-        }}
-        aria-label={`${meta.Noun} name`}
-      />
+      <div className="deck-name-row">
+        {/* The emblem doubles as the way in to changing it — the same tap target
+            the deck list gives, without hunting through the options menu. */}
+        <button
+          className="deck-emblem-btn"
+          onClick={() => setEmblemOpen(true)}
+          title={deck.emblem ? 'Change emblem' : 'Choose an emblem'}
+          aria-label={deck.emblem ? 'Change emblem' : 'Choose an emblem'}
+        >
+          <Emblem emblem={deck.emblem} kind={kind} size={32} />
+        </button>
+        <input
+          ref={nameInputRef}
+          className="deck-name-input"
+          maxLength={MAX_DECK_NAME_LENGTH}
+          value={nameDraft ?? deck.name}
+          onChange={(e) => setNameDraft(e.target.value)}
+          onBlur={() => {
+            if (nameDraft !== null && nameDraft !== deck.name) void renameDeck(id, nameDraft);
+            setNameDraft(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur(); // commits via onBlur
+            else if (e.key === 'Escape') setNameDraft(null); // discard edits
+          }}
+          aria-label={`${meta.Noun} name`}
+        />
+      </div>
+      {emblemOpen && (
+        <EmblemPickerSheet
+          emblem={deck.emblem}
+          kind={kind}
+          name={deck.name}
+          onSave={(next) => void setDeckEmblem(id, next)}
+          onClose={() => setEmblemOpen(false)}
+        />
+      )}
 
       <div className="deck-meta">
         {isDeck && (

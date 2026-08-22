@@ -5707,3 +5707,102 @@ a.seg {
   flex-direction: column;
   gap: 0.35rem;
 }
+
+/* ---- Container emblems: the picture or symbol a deck/binder/box wears ---- */
+
+/* A square box the glyph or art crop is centred in, so a row's icon column
+   doesn't jump between emblem kinds. */
+.emblem {
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.emblem-art {
+  position: relative;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+/* .menu-icon dims its glyph; a chosen emblem is content, not chrome. */
+.menu-icon > .emblem {
+  color: var(--text);
+}
+.emblem-sheet-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The emblem on a container's own page, left of the name field. */
+.deck-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.deck-name-row .deck-name-input {
+  min-width: 0;
+}
+.deck-emblem-btn {
+  display: grid;
+  place-items: center;
+  padding: 0.3rem;
+  border-radius: 50%;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  flex-shrink: 0;
+  margin-bottom: 0.5rem;
+}
+.deck-emblem-btn:hover,
+.deck-emblem-btn:focus-visible {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* Emblem picker: the symbol grid and the set list both scroll inside the sheet. */
+.emblem-scroll {
+  overflow-y: auto;
+  max-height: 45dvh;
+  min-height: 0;
+}
+.emblem-group-title {
+  margin: 0.6rem 0 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.emblem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 0.3rem;
+}
+.emblem-choice {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  font-size: 1.4rem;
+  padding: 0;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text);
+}
+.emblem-choice:hover,
+.emblem-choice:focus-visible {
+  border-color: var(--accent);
+}
+.emblem-choice-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.emblem-set-icon {
+  font-size: 1.5rem;
+  color: var(--text);
+  width: 32px;
+}
+.emblem-set-selected {
+  box-shadow: inset 2px 0 0 var(--accent);
+}

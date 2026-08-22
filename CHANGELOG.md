@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.131.0
+
+- **Card scanning can now work out the edition of an older card.** Pinning down which printing you are holding leaned on the collector number and the set code in the bottom strip, and both of those are modern inventions: the set code only turns up from Magic 2015 onward, the collector number only from Exodus in 1998. Older cards carry neither, so a 4th Edition Counterspell gave the scanner nothing to read and always dropped through to the manual picker. It now reads the copyright year as well, which every card back to Fallen Empires prints, and on a reprint that year is usually the only thing separating one edition from the next.
+- **The scanner was reading only the left half of the bottom line.** The strip it looked at was measured on a modern card, where the collector number sits in the bottom left corner. On every frame between 1998 and 2014 the number is tacked onto the end of the copyright line instead, out to the right, so it was being sliced in half before the scanner ever saw it. That covers roughly 26,000 printings. It reads the whole line now, stopping short of the power/toughness box so a 1/1 can never be mistaken for a collector number.
+- **When a card genuinely cannot say which printing it is, scanning now says so** rather than picking one and sounding sure. Alpha through Revised print no year, no number and no set code, so nothing down there can tell them apart, and two candidates sharing a year is a coin flip rather than a reading. Those scans skip the strip entirely, which also saves the several seconds it used to spend proving it could not read what was never printed.
+- Measured over 67 scans spanning every frame from Alpha to today: the exact printing was confirmed 27 times, up from 19, and the right printing came out on top in 40 cases instead of 26. Cards from 1995 to 1997 went from none identified to four of five. Modern cards are unchanged, and neither the old nor the new run ever confirmed the wrong printing.
+
 ## 0.130.4
 
 - Device-to-device transfer lost a cancel message the app never sent. Backing out of a transfer has always worked by simply hanging up, which the relay already turns into "the other device disconnected" on the far end. The unused second route through the relay is gone. Cancelling a transfer behaves exactly as before.

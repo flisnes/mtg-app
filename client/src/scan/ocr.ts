@@ -4,9 +4,16 @@ import type { ScanPipelineResult } from './pipeline.js';
 import { stripAttempts } from './pipeline.js';
 
 // OCR disambiguation (handover §S4). Art narrows a scan to one or a few
-// candidate printings; the bottom-left info strip (collector number, set code,
-// language) resolves WHICH printing and language. Tesseract.js, English
-// traineddata only — the strip is digits + uppercase ASCII in every language.
+// candidate printings; the bottom info strip (collector number, set code,
+// copyright year, language) resolves WHICH printing and language. Tesseract.js,
+// English traineddata only — the strip is digits + uppercase ASCII in every
+// language.
+//
+// What is actually printed down there changed twice, and the cross-check has to
+// follow (see PRINTED_SINCE): before Exodus there is no collector number at
+// all, and before Magic 2015 there is no set code. For those eras the copyright
+// year carries the signal instead — it is the only set-level discriminator on a
+// 4th/5th/6th Edition card, and it is the largest text in the strip.
 //
 // Asset hosting: with a scan-data endpoint configured, worker/core/traineddata
 // load from the VM (<scan>/ocr/ — see scanjob/README.md); otherwise (dev)
@@ -20,6 +27,8 @@ export interface ParsedStrip {
   setCode: string | null;
   /** Scryfall-style language code (en, de, ja, …). */
   lang: string | null;
+  /** Copyright year, the print year of the set (1994 onward). */
+  year: number | null;
   raw: string;
 }
 
@@ -28,15 +37,54 @@ export interface OcrCandidate {
   scryfallId: string;
   set: string;
   collectorNumber: string;
+  /** ISO date — decides which of the three signals this card can even carry. */
+  releasedAt: string;
 }
 
 export interface OcrResolution {
-  /** Candidate confirmed by the strip (set code + collector number agree). */
+  /** Candidate confirmed by the strip (two independent signals agree). */
   confirmed: OcrCandidate | null;
-  /** Set-code-only agreement — decent signal, not auto-accept grade. */
+  /** One signal only — decent ordering hint, not auto-accept grade. */
   weak: OcrCandidate | null;
   parsed: ParsedStrip | null;
   attempts: number;
+}
+
+/**
+ * When each printed signal appears on the card, verified against Scryfall
+ * `normal` scans one set at a time across the whole run of frames.
+ *
+ * - `year`: Fallen Empires is the first with a copyright line. Revised and
+ *   earlier print "Illus. © Artist" and no date at all.
+ * - `collectorNumber`: Exodus is the first, at "…Wizards of the Coast, Inc.
+ *   142/143". Stronghold, three months earlier, still has none. Scryfall
+ *   assigns numbers to older sets alphabetically, so for those the number in
+ *   the card DB was never printed on the card — searching for it can only
+ *   produce a false positive.
+ * - `setCode`: the "DOM • EN" line arrives with the 2015 frame, which debuted
+ *   in Magic 2015 (July 2014) — not, despite the frame's name, in 2015.
+ *   Modern retro-frame reprints carry it too, so this is a release-date rule
+ *   rather than a frame rule, which suits us: the client card DB has the date.
+ */
+const PRINTED_SINCE = {
+  year: '1994-11-01', // Fallen Empires
+  collectorNumber: '1998-06-15', // Exodus
+  setCode: '2014-07-18', // Magic 2015
+} as const;
+
+export interface PrintedSignals {
+  setCode: boolean;
+  collectorNumber: boolean;
+  year: boolean;
+}
+
+/** Which of the three cross-check signals this printing physically carries. */
+export function printedSignals(releasedAt: string): PrintedSignals {
+  return {
+    setCode: releasedAt >= PRINTED_SINCE.setCode,
+    collectorNumber: releasedAt >= PRINTED_SINCE.collectorNumber,
+    year: releasedAt >= PRINTED_SINCE.year,
+  };
 }
 
 // Printed language code (physical card) → Scryfall language code.
@@ -70,7 +118,9 @@ export function initOcr(): Promise<Worker> {
       : {};
     const worker = await createWorker('eng', 1, assets);
     await worker.setParameters({
-      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/•*-— ',
+      // The en dash earns its place: the copyright line reads "1993–2001", and
+      // without it Tesseract has to spell the separator as something else.
+      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/•*-–— ',
       preserve_interword_spaces: '1',
       // Without a pinned DPI Tesseract sometimes estimates absurd resolutions
       // for the strip (2000+) and returns nothing.
@@ -215,6 +265,38 @@ export async function recognizeStrip(strip: ImageData, psm: StripPsm = 'block'):
 
 const normalizeCollector = (s: string): string => s.replace(/^0+(?=\d)/, '').toLowerCase();
 
+/**
+ * Print years named by the copyright line, newest interpretation first.
+ *
+ * The line is "©1995", "©1993–1999" or "™ & © 1993–2001": in a range only the
+ * SECOND year is the print year, and blindly grabbing every 4-digit number
+ * would hand 1993 to every card printed after 1998. The separator is optional
+ * because Tesseract drops thin dashes often enough to matter ("19932001").
+ */
+export function printedYears(text: string): number[] {
+  const out: number[] = [];
+  for (const m of text.matchAll(/\b((?:19|20)\d{2})\s*[-–—]?\s*((?:19|20)\d{2})?\b/g)) {
+    const year = Number(m[2] ?? m[1]);
+    if (!out.includes(year)) out.push(year);
+  }
+  return out;
+}
+
+/**
+ * Copyright year agreement. A year either side still counts, because a set that
+ * goes on sale in January was very often printed — and dated — the autumn
+ * before, but it counts for less: neighbouring years are exactly what makes two
+ * different sets look alike, so an exact match has to outrank a near one or a
+ * 1999 printing scores just as well as the 2000 one actually in frame.
+ */
+function findYear(text: string, releasedAt: string): 'exact' | 'near' | null {
+  const year = Number(releasedAt.slice(0, 4));
+  if (!year) return null;
+  const printed = printedYears(text);
+  if (printed.includes(year)) return 'exact';
+  return printed.some((y) => Math.abs(y - year) === 1) ? 'near' : null;
+}
+
 export function parseInfoStrip(raw: string): ParsedStrip {
   const text = raw.toUpperCase();
 
@@ -238,7 +320,7 @@ export function parseInfoStrip(raw: string): ParsedStrip {
     break;
   }
 
-  return { collectorNumber, setCode, lang, raw };
+  return { collectorNumber, setCode, lang, year: printedYears(text)[0] ?? null, raw };
 }
 
 /** Fold OCR-confusable glyphs before comparing (1↔I, 0↔O, 8↔B, 5↔S, 2↔Z). */
@@ -287,11 +369,33 @@ function findCollector(text: string, collectorNumber: string): boolean {
 }
 
 /**
+ * Score one candidate against one OCR read: search the text for the signals
+ * this printing actually carries, rather than blind-parsing the strip.
+ *
+ * Two independent signals (4 points) confirm; one alone (2 points) is a
+ * ranking hint. The era gate is what makes the weights safe to share across
+ * frames — a signal the card cannot carry scores nothing instead of matching
+ * some unrelated digits, which on a pre-Exodus card is the difference between
+ * "no answer" and a confidently wrong one.
+ */
+export function scoreCandidate(text: string, c: OcrCandidate): number {
+  const has = printedSignals(c.releasedAt);
+  const setHit = has.setCode ? findSet(text, c.set) : null;
+  const collHit = has.collectorNumber && findCollector(text, c.collectorNumber);
+  const yearHit = has.year ? findYear(text, c.releasedAt) : null;
+  return (
+    (collHit ? 2 : 0) +
+    (setHit === 'exact' ? 2 : setHit === 'fuzzy' ? 1 : 0) +
+    // The year is a set-level signal, so it corroborates a collector number but
+    // never outranks one: on its own it can only say "some printing from 1997".
+    (yearHit === 'exact' ? 2 : yearHit === 'near' ? 1 : 0)
+  );
+}
+
+/**
  * OCR the strip (retrying with bottom-extended re-warps — the art-optimized
  * quad often cuts the collector line) and cross-check against the art
- * candidates: search the text for each candidate's KNOWN set code + collector
- * number instead of blind-parsing, tolerating one misread character in the
- * set code. Throws only on worker init failure.
+ * candidates. Throws only on worker init failure.
  */
 export async function resolveWithOcr(
   result: ScanPipelineResult,
@@ -300,6 +404,14 @@ export async function resolveWithOcr(
   let weak: OcrCandidate | null = null;
   let parsed: ParsedStrip | null = null;
   let attempts = 0;
+
+  // Nothing to read: every candidate predates the copyright line, so the strip
+  // holds an artist credit and nothing else that could pick between them. Bail
+  // before spinning up the worker rather than spend up to 32 OCR passes and
+  // ~10 s confirming that Alpha and Beta look alike.
+  if (!candidates.some((c) => printedSignals(c.releasedAt).year)) {
+    return { confirmed: null, weak: null, parsed: null, attempts: 0 };
+  }
 
   // With a large index the art stage occasionally picks the 180°-rotated warp
   // of an upright card (some other art matches the rotated crop marginally
@@ -317,18 +429,22 @@ export async function resolveWithOcr(
         if (!parsed || (p.setCode && p.collectorNumber)) parsed = p;
       }
 
-      let bestScore = 0;
-      let best: OcrCandidate | null = null;
-      for (const c of candidates) {
-        const setHit = findSet(text, c.set);
-        const collHit = findCollector(text, c.collectorNumber);
-        const score = (collHit ? 2 : 0) + (setHit === 'exact' ? 2 : setHit === 'fuzzy' ? 1 : 0);
-        if (score > bestScore) {
-          bestScore = score;
-          best = c;
-        }
-      }
-      // Collector + at least a fuzzy set hit = confirmed; one signal alone = weak.
+      const scored = candidates.map((c) => ({ c, score: scoreCandidate(text, c) }));
+      const bestScore = Math.max(0, ...scored.map((s) => s.score));
+      const leaders = scored.filter((s) => s.score === bestScore).map((s) => s.c);
+      const best = leaders[0] ?? null;
+
+      // A tie between genuinely different printings is not an answer, it is a
+      // set of cards the strip cannot tell apart — the year in particular is
+      // shared by every set of its vintage, so a lone year read against a
+      // Llanowar Elves reprinted three times that decade names all three. On a
+      // tie we would be picking the first candidate and calling it a reading.
+      // Foil and nonfoil siblings tie by nature (same set, same number,
+      // different id) and don't count: finish is the user's pick, not ours.
+      const decisive = leaders.every((c) => c.set === best?.set && c.collectorNumber === best?.collectorNumber);
+
+      // Two agreeing signals = confirmed; one alone = a ranking hint only.
+      if (!decisive) continue;
       if (bestScore >= 3) return { confirmed: best, weak: null, parsed: parsed ?? p, attempts };
       if (bestScore === 2 && !weak) weak = best;
     }

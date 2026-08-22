@@ -15,7 +15,14 @@ import type { ResolvedLine } from '../import/types.js';
 import { CardSheet, FINISH_LABELS, LANGS, type SessionCardValues } from './CardSheet.js';
 import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
 import { getScanExcludedIds } from '../scan/exclusions.js';
-import { CameraScan, getPreferredCameraId, listCameras, type CameraOption, type LiveScanState } from '../scan/camera.js';
+import {
+  CameraScan,
+  CONSENSUS_FRAMES,
+  getPreferredCameraId,
+  listCameras,
+  type CameraOption,
+  type LiveScanState,
+} from '../scan/camera.js';
 import type { ScanPipelineResult } from '../scan/pipeline.js';
 import { CANDIDATE_MAX_DISTANCE, distancesForIds } from '../scan/match.js';
 import { resolveWithOcr } from '../scan/ocr.js';
@@ -1268,6 +1275,14 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     autoAdd && tray && live && (live.status !== 'scanning' || live.cardSeen) ? AUTO_ADD_NOTES[autoState] : null;
   /** Countdown ring: 1 right after a lock, 0 once the hold is up or it let go. */
   const holdLeft = lockAt === null ? 0 : Math.max(0, Math.min(1, 1 - (lockNow - lockAt) / LOCK_HOLD_MS));
+  /**
+   * The same ring, before a lock: the agreeing frames banked towards one. Real
+   * progress, not a timer — a blurry or disagreeing frame drops it back to zero.
+   * Only while nothing is held, so a held lock's drain isn't fighting the camera
+   * re-converging on the card that is still in frame.
+   */
+  const arming = lockAt === null && live?.status === 'scanning' ? Math.min(1, live.streak / CONSENSUS_FRAMES) : 0;
+  const ringFill = lockAt === null ? arming : holdLeft;
 
   return createPortal(
     <div className="scan-screen" role="dialog" aria-label="Scan cards">
@@ -1398,22 +1413,26 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           </div>
         )}
 
-        {/* Lock state, bottom-left over the camera: the ring drains through the
-            hold, and a tap lets go at once so the next card (or the next copy of
-            this one) can lock. */}
+        {/* Lock state, bottom-left over the camera. One ring, one meaning: how
+            committed the scanner is to the card in front of it. It fills as the
+            agreeing frames stack up, is full the instant the card locks, then
+            drains through the hold that keeps this same copy from re-locking.
+            A tap at any point after the lock lets go at once. */}
         {stage.kind === 'scanning' && (
           <button
-            className={`scan-lock-badge${lockAt !== null ? ' scan-lock-held' : ''}${holdLeft === 0 && lockAt !== null ? ' scan-lock-stale' : ''}`}
+            className={`scan-lock-badge${lockAt !== null ? ' scan-lock-held' : ''}${holdLeft === 0 && lockAt !== null ? ' scan-lock-stale' : ''}${lockAt === null && arming > 0 ? ' scan-lock-arming' : ''}`}
             onClick={releaseLock}
             disabled={lockAt === null}
             aria-label={lockAt !== null ? 'Release the locked card' : 'No card locked'}
             title={
               lockAt === null
-                ? tray
-                  ? 'Released: show the next card'
-                  : 'Nothing locked yet'
+                ? arming > 0
+                  ? 'Reading the card… hold steady to lock'
+                  : tray
+                    ? 'Released: show the next card'
+                    : 'Nothing locked yet'
                 : holdLeft === 0
-                  ? 'Still locked — it lets go when the card leaves the frame, or tap'
+                  ? 'Ready for the next card — tap to scan this one again'
                   : 'Locked on this card — tap to release'
             }
           >
@@ -1424,7 +1443,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
                 cx="18"
                 cy="18"
                 r="16"
-                strokeDasharray={`${(100.5 * holdLeft).toFixed(1)} 100.5`}
+                pathLength={100}
+                strokeDasharray="100"
+                strokeDashoffset={(100 - 100 * ringFill).toFixed(1)}
+                // An empty ring still renders a hairline at 12 o'clock; hide it
+                // rather than unmount, so the first step still tweens from zero.
+                style={{ opacity: ringFill > 0 ? 1 : 0 }}
               />
             </svg>
             <Icon name={lockAt !== null ? 'lock' : 'unlock'} size={16} />

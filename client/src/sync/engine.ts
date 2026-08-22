@@ -53,6 +53,13 @@ export interface SyncState {
   account: string;
   /** Highest server seq applied locally. */
   cursor: number;
+  /**
+   * Set while this device is pulling the account from scratch (after a reseed
+   * or a repair rewind) and has not caught up yet. Sent to the server so it
+   * serves the next page instead of ordering another reseed, and remembered
+   * across restarts so a reseed interrupted half way doesn't wipe twice.
+   */
+  reseeding?: true;
 }
 
 export function getSyncState(): Promise<SyncState | undefined> {
@@ -246,6 +253,8 @@ export async function syncNow(): Promise<void> {
     setStatus({ ...status, phase: 'syncing' });
     try {
       let cursor = lockedState.cursor;
+      // A capped reseed takes many passes; only the first one wipes.
+      let reseeding = lockedState.reseeding === true;
       let publishedAnything = false;
       // Bounded loop: each pass pushes ≤SYNC_MAX_PUSH and pulls ≤SYNC_MAX_PULL.
       for (let pass = 0; pass < 100; pass++) {
@@ -254,28 +263,41 @@ export async function syncNow(): Promise<void> {
         const publish = touchesLists
           ? { tradelist: await readOwnTradelist(MAX_PUBLIC_LINES), wishlist: await readOwnWishlist(MAX_PUBLIC_LINES) }
           : undefined;
-        const req: SyncRequest = { clientId: lockedState.clientId, cursor, changes: batch, ...(publish ? { publish } : {}) };
+        const req: SyncRequest = {
+          clientId: lockedState.clientId,
+          cursor,
+          changes: batch,
+          ...(publish ? { publish } : {}),
+          ...(reseeding ? { reseeding: true as const } : {}),
+        };
         const res = await api.sync(locked.token, req);
         publishedAnything ||= !!publish;
 
         if (res.resync) {
           // Our push was applied, so nothing local is lost by starting over.
-          await wipeForResync();
+          // Only the first pass wipes: once we are reseeding there is nothing
+          // stale left to drop, and wiping on every pass of a capped reseed is
+          // an endless wipe-and-refill loop that never finishes.
+          if (!reseeding) await wipeForResync();
+          reseeding = true;
           cursor = 0;
           const reset = await getSyncState();
           if (!reset || reset.account !== locked.username) return;
-          await setSetting(KEY_SYNC_STATE, { ...reset, cursor } satisfies SyncState);
+          await setSetting(KEY_SYNC_STATE, { ...reset, cursor, reseeding: true } satisfies SyncState);
           continue;
         }
 
         await applyServerChanges(res.changes);
+        // Caught up: the account is whole again, so stop claiming a reseed.
+        if (!res.hasMore) reseeding = false;
         // When the pull was capped the server did NOT apply the push.
         if (!res.hasMore) await ackOutbox(batch);
         cursor = res.cursor;
         // A sign-out during the request deletes the sync state; don't recreate it.
         const current = await getSyncState();
         if (!current || current.account !== locked.username) return;
-        await setSetting(KEY_SYNC_STATE, { ...current, cursor } satisfies SyncState);
+        const { reseeding: _was, ...rest } = current;
+        await setSetting(KEY_SYNC_STATE, { ...rest, cursor, ...(reseeding ? { reseeding: true as const } : {}) } satisfies SyncState);
 
         if (!res.hasMore && (await db.outbox.count()) === 0) break;
       }
@@ -429,18 +451,22 @@ const KEY_REPAIRS = 'syncRepairs';
  *   than the table silently dropped those rows for good — deckFolders before
  *   v0.109.0, sealedItems before v0.117.0. Symptom: boxes added on the phone
  *   never appear on the PC, no matter how often either syncs.
- * - `containerEmblems` (v0.133.0): same shape as containerKinds — a device that
- *   pulled a deck/binder/box row while running a build without `emblem` dropped
- *   the emblem, and the cursor moved past it.
  *
  * The medicine: rewind the cursor once so the server re-sends everything it
- * has. Sync-row content is opaque to the server, so the correct rows were
- * always in the stored JSON, and a re-pull only skips an incoming row when the
- * local copy is STRICTLY newer — so dropped rows land while pending local edits
- * still win. ADD AN ID HERE whenever SYNC_TABLES grows: the devices that need
- * the re-pull are exactly the ones that can't know they missed anything.
+ * has, flagged as a reseed so the server pages us all the way back up instead
+ * of ordering a wipe half way (v0.133.1 — a rewind on an account with more than
+ * one page of history used to wipe and refill forever). Sync-row content is
+ * opaque to the server, so the correct rows were always in the stored JSON, and
+ * a re-pull only skips an incoming row when the local copy is STRICTLY newer —
+ * so dropped rows land while pending local edits still win.
+ *
+ * ADD AN ID HERE whenever SYNC_TABLES grows: the devices that need the re-pull
+ * are exactly the ones that can't know they missed anything. Do NOT add one for
+ * a new *field* on an existing table in the release that introduces it — no
+ * older build can have dropped a field that did not exist yet, and every device
+ * would re-pull its whole history for nothing.
  */
-const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems'] as const;
+const REPAIRS = ['containerKinds', 'syncTableAdditions'] as const;
 
 async function runOneTimeRepairs(): Promise<void> {
   const done = (await getSetting<string[]>(KEY_REPAIRS)) ?? [];
@@ -448,7 +474,7 @@ async function runOneTimeRepairs(): Promise<void> {
   if (pending.length === 0) return;
   const state = await getSyncState();
   if (state && state.cursor > 0) {
-    await setSetting(KEY_SYNC_STATE, { ...state, cursor: 0 } satisfies SyncState);
+    await setSetting(KEY_SYNC_STATE, { ...state, cursor: 0, reseeding: true } satisfies SyncState);
   }
   await setSetting(KEY_REPAIRS, [...done, ...pending]);
 }

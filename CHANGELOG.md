@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.133.1
+
+- **Fixed: updating to 0.133.0 could leave a signed-in device stuck syncing, with most of the collection, decks and lists missing while cards flickered in and out.** Nothing was lost. The account on the server was never touched; only the copy on the device was, and it comes back on its own once this version has synced.
+
+  What went wrong: 0.133.0 asked every device to re-pull its account from the start, which was never necessary for a brand new field. Worse, re-pulling did not work on an account with more than one page of history. The server hands back 2000 changes at a time, and when the device came back for the second page the server decided it had fallen too far behind and told it to start over from scratch, wiping what it had just received. Second page, start over, wipe, forever. Both halves are fixed: nobody is asked to re-pull for a new field again, and a device that is part-way through re-pulling now says so, so the server hands it the next page instead of sending it back to the start.
+
 ## 0.133.0
 
 - **A deck, binder or box can now wear an emblem in the list instead of the same generic icon as everything else.** Three ways to pick one: a crop of any card's art, framed the same way a profile picture is; a Magic symbol from the bundled font, which covers mana pips, the tap and phyrexian symbols, card types, counters, keywords, the Ravnica guilds, the Tarkir clans, the Strixhaven colleges and a pile of watermarks; or the set symbol of any set the card database knows. Reach it from the ⋯ menu on a row, or by tapping the icon next to the name on the container's own page. The emblem also shows up when you file cards into a container, so the list you are aiming at is recognisable at a glance. It lives on the deck itself, so it travels with your account to your other devices and survives a device-to-device transfer.

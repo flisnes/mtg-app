@@ -197,6 +197,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     const b = (req.body ?? {}) as Record<string, unknown>;
     const clientId = str(b.clientId, 64);
     const cursor = Math.max(0, Math.floor(Number(b.cursor)) || 0);
+    const reseeding = b.reseeding === true;
     const rawChanges = Array.isArray(b.changes) ? b.changes : null;
     if (!clientId || !rawChanges || rawChanges.length > SYNC_MAX_PUSH) {
       return fail(reply, 400, { error: 'bad_request', message: 'Malformed sync request.' });
@@ -243,7 +244,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
 
     let result;
     try {
-      result = store.syncApply(user.id, clientId, cursor, changes, Date.now());
+      result = store.syncApply(user.id, clientId, cursor, changes, Date.now(), reseeding);
     } catch (err) {
       if (err instanceof SyncCapError) {
         const what = err.kind === 'rows' ? 'number of items' : 'storage size';

@@ -44,6 +44,19 @@ export interface SyncRequest {
    * Sent whenever the push touched the tradelist or wishlist.
    */
   publish?: { tradelist: TradeLine[]; wishlist: WishLine[] };
+  /**
+   * "I am part-way through pulling this account from scratch — don't order
+   * another reseed." Set by a device that has already wiped (or deliberately
+   * rewound its cursor to re-pull), for every pass until it is caught up.
+   *
+   * Without it, a big account can never finish a reseed: the pull is capped at
+   * SYNC_MAX_PULL, so the second pass asks from a cursor that is still below
+   * the pruned floor, the server orders another reseed, and the device wipes
+   * and starts over forever. Skipping the check costs the one thing a reseed
+   * protects against (a row deleted elsewhere whose tombstone was pruned), and
+   * a device that just wiped is holding nothing to protect.
+   */
+  reseeding?: true;
 }
 
 export interface SyncResponse {

@@ -9,6 +9,8 @@
 // strike"), so a group is mostly a prefix and a word list; only names that
 // don't read well in English spell their label out.
 
+import type { EmblemColor } from '@mtg/shared';
+
 /** A name, or a [name, label] pair when the derived label won't do. */
 type Entry = string | readonly [name: string, label: string];
 
@@ -335,3 +337,30 @@ export const EMBLEM_SYMBOL_LABELS: Map<string, string> = new Map(
 export const EMBLEM_MANA_PIPS: Set<string> = new Set(
   (EMBLEM_SYMBOL_GROUPS.find((g) => g.title === 'Mana')?.symbols ?? []).map((s) => s.sym),
 );
+
+// ---------------------------------------------------------------------------
+// Emblem colours
+// ---------------------------------------------------------------------------
+
+/**
+ * The palette behind EmblemColor. Mid-tone and saturated on purpose: an emblem
+ * sits on the list's surface in both themes, so a cream "white mana" yellow
+ * would vanish in light mode and a true black in dark mode.
+ */
+export const EMBLEM_COLOR_CSS: Record<EmblemColor, string> = {
+  gold: '#c9971c',
+  red: '#d1432c',
+  orange: '#e07a12',
+  green: '#2f9448',
+  teal: '#109c92',
+  blue: '#2a7fd4',
+  purple: '#8b4ad4',
+  pink: '#d1478f',
+  plum: '#6b5a78',
+  slate: '#7a8694',
+};
+
+/** Title-cased for the swatch's tooltip and accessible name. */
+export function emblemColorLabel(color: EmblemColor): string {
+  return color.slice(0, 1).toUpperCase() + color.slice(1);
+}

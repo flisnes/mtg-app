@@ -107,8 +107,30 @@ export const CONTAINER_KINDS: readonly ContainerKind[] = ['deck', 'binder', 'box
  */
 export type ContainerEmblem =
   | { type: 'art'; art: ProfileAvatar }
-  | { type: 'symbol'; symbol: string }
-  | { type: 'set'; set: string };
+  | { type: 'symbol'; symbol: string; color?: EmblemColor }
+  | { type: 'set'; set: string; color?: EmblemColor };
+
+/**
+ * Optional tint for a symbol or set emblem; absent = the list's own text
+ * colour. A fixed palette rather than a free hex value: the swatches have to
+ * read on both themes, and the stored name goes straight into a style.
+ */
+export const EMBLEM_COLORS = [
+  'gold',
+  'red',
+  'orange',
+  'green',
+  'teal',
+  'blue',
+  'purple',
+  'pink',
+  'plum',
+  'slate',
+] as const;
+
+export type EmblemColor = (typeof EMBLEM_COLORS)[number];
+
+const EMBLEM_COLOR_SET: ReadonlySet<string> = new Set(EMBLEM_COLORS);
 
 // Both string variants end up in a CSS class name ("ms-guild-azorius",
 // "ss-sth"), so the charsets are fenced in hard rather than trusted: a row can
@@ -124,13 +146,14 @@ export function sanitizeContainerEmblem(raw: unknown): ContainerEmblem | undefin
     const art = sanitizeAvatar(r.art);
     return art ? { type: 'art', art } : undefined;
   }
+  const color = EMBLEM_COLOR_SET.has(r.color as string) ? { color: r.color as EmblemColor } : {};
   if (r.type === 'symbol' && typeof r.symbol === 'string') {
     const symbol = r.symbol.toLowerCase();
-    return EMBLEM_SYMBOL_RE.test(symbol) ? { type: 'symbol', symbol } : undefined;
+    return EMBLEM_SYMBOL_RE.test(symbol) ? { type: 'symbol', symbol, ...color } : undefined;
   }
   if (r.type === 'set' && typeof r.set === 'string') {
     const set = r.set.toLowerCase();
-    return EMBLEM_SET_RE.test(set) ? { type: 'set', set } : undefined;
+    return EMBLEM_SET_RE.test(set) ? { type: 'set', set, ...color } : undefined;
   }
   return undefined;
 }

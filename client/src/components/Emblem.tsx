@@ -4,7 +4,7 @@ import type { ContainerEmblem, ContainerKind, ProfileAvatar } from '@mtg/shared'
 import { getPrinting } from '../db/queries.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { CroppedArt, artCropUrl } from './Avatar.js';
-import { EMBLEM_MANA_PIPS, EMBLEM_SYMBOL_LABELS } from './emblemSymbols.js';
+import { EMBLEM_COLOR_CSS, EMBLEM_MANA_PIPS, EMBLEM_SYMBOL_LABELS } from './emblemSymbols.js';
 import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
 
@@ -53,13 +53,23 @@ export function Emblem({
 }) {
   if (emblem?.type === 'art') return <EmblemArt art={emblem.art} kind={kind} size={size} />;
 
+  // A chosen colour, or undefined to inherit the list's own text colour. (The
+  // art case returned above, so what's left can only be a symbol or a set.)
+  const tint = emblem?.color ? EMBLEM_COLOR_CSS[emblem.color] : undefined;
+
   if (emblem?.type === 'symbol' && knownSymbol(emblem.symbol)) {
     // Mana wants the font's coloured pip; everything else is a glyph in the
     // current text colour. The pip is 1.3em wide, so it gets the smaller font
     // size to end up the same box as a plain glyph.
-    const pip = EMBLEM_MANA_PIPS.has(emblem.symbol);
+    //
+    // Asking for a colour opts out of the pip: tinting only the letter inside
+    // leaves a cream circle with a red W in it, which is nobody's intent.
+    const pip = EMBLEM_MANA_PIPS.has(emblem.symbol) && !tint;
     return (
-      <span className="emblem" style={{ width: size, height: size, fontSize: pip ? size * 0.72 : size * 0.95 }}>
+      <span
+        className="emblem"
+        style={{ width: size, height: size, fontSize: pip ? size * 0.72 : size * 0.95, color: tint }}
+      >
         <i className={pip ? `ms ms-${emblem.symbol} ms-cost` : `ms ms-${emblem.symbol}`} aria-hidden />
       </span>
     );
@@ -67,7 +77,7 @@ export function Emblem({
 
   if (emblem?.type === 'set') {
     return (
-      <span className="emblem" style={{ width: size, height: size, fontSize: size * 0.95 }}>
+      <span className="emblem" style={{ width: size, height: size, fontSize: size * 0.95, color: tint }}>
         <SetSymbol set={emblem.set} />
       </span>
     );

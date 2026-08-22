@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.133.2',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Symbol and set-symbol emblems can be tinted: pick one of ten colours above the grid, then pick your symbol. Tap a colour while a symbol is already set and it recolours on the spot.',
+      },
+    ],
+  },
+  {
     version: '0.133.1',
     changes: [
       {

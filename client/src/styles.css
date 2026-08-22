@@ -4502,8 +4502,9 @@ a.seg {
   align-items: flex-end;
   gap: 0.3rem;
 }
-/* Lock state, bottom-left over the camera: a padlock in a ring that drains
-   through the lock's hold. Tap = let go, so the next card can lock. */
+/* Lock state, bottom-left over the camera: a padlock in a ring that fills with
+   the frames agreeing on a card, sits full at the lock, then drains through the
+   hold. Tap = let go, so the next card (or this one again) can lock. */
 .scan-lock-badge {
   position: absolute;
   bottom: 0.6rem;
@@ -4526,6 +4527,14 @@ a.seg {
 .scan-lock-stale {
   color: rgba(255, 255, 255, 0.55);
 }
+/* Frames stacking up towards a lock - dimmer than the locked ring, so the
+   colour flip is the "got it" signal. */
+.scan-lock-arming {
+  color: rgba(255, 255, 255, 0.65);
+}
+.scan-lock-arming .scan-lock-ring-fill {
+  stroke: rgba(255, 255, 255, 0.8);
+}
 .scan-lock-ring {
   position: absolute;
   inset: 0;
@@ -4543,6 +4552,14 @@ a.seg {
   stroke: var(--accent);
   stroke-width: 2.5;
   stroke-linecap: round;
+  /* The drain only ticks a few times a second and the fill moves a third at a
+     time; the tween is what makes either read as a progress bar. */
+  transition: stroke-dashoffset 160ms linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-lock-ring-fill {
+    transition: none;
+  }
 }
 .scan-cam-status {
   position: absolute;

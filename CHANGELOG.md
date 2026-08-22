@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.132.0
+
+- **The padlock ring on the scanner now shows the scanner closing in on a card, not just the countdown after it has.** It fills as the camera banks the frames that agree on what it is looking at, so a wobbly hand or a glared foil visibly knocks it back to empty and you can see why nothing is locking. The instant it comes full the card locks and the ring turns accent-coloured, then drains over the three seconds before the scanner is willing to take a second copy of that same card. Tapping the padlock at any point after the lock lets go immediately, exactly as before.
+
 ## 0.131.0
 
 - **Card scanning can now work out the edition of an older card.** Pinning down which printing you are holding leaned on the collector number and the set code in the bottom strip, and both of those are modern inventions: the set code only turns up from Magic 2015 onward, the collector number only from Exodus in 1998. Older cards carry neither, so a 4th Edition Counterspell gave the scanner nothing to read and always dropped through to the manual picker. It now reads the copyright year as well, which every card back to Fallen Empires prints, and on a reprint that year is usually the only thing separating one edition from the next.

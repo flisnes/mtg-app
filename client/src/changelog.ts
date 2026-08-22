@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.132.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The scanner’s padlock ring now fills as the camera closes in on a card, so you can see how near it is to locking. It comes full at the lock, then drains through the few seconds before the scanner will take a second copy of the same card. Tap it to let go at once.',
+      },
+    ],
+  },
+  {
     version: '0.131.0',
     changes: [
       {

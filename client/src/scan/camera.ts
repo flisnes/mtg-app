@@ -8,12 +8,19 @@ import { runScanPipeline, type ScanPipelineResult } from './pipeline.js';
 
 export type LiveScanState =
   | { status: 'starting' }
-  | { status: 'scanning'; cardSeen: boolean; lastDistance: number | null; frameMs: number }
+  | {
+      status: 'scanning';
+      cardSeen: boolean;
+      lastDistance: number | null;
+      frameMs: number;
+      /** Agreeing frames banked so far, 0…CONSENSUS_FRAMES — the lock's progress bar. */
+      streak: number;
+    }
   | { status: 'locked'; result: ScanPipelineResult }
   | { status: 'error'; message: string };
 
 /** Consecutive agreeing frames required to lock. */
-const CONSENSUS_FRAMES = 3;
+export const CONSENSUS_FRAMES = 3;
 /** Per-frame top-candidate distance must be at most this to count. */
 const CONSENSUS_MAX_DISTANCE = 24;
 /** Working resolution cap (full frame used for warping/hashing). */
@@ -262,6 +269,7 @@ export class CameraScan {
       cardSeen: !!out.quad,
       lastDistance: top?.distance ?? null,
       frameMs,
+      streak: this.streak.length,
     });
     this.schedule();
   }

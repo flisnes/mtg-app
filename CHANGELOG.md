@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.133.2
+
+- **A symbol or set-symbol emblem can now be tinted.** Ten colours plus the default, on their own row above the picker: tap a colour and the whole grid previews in it, then tap the symbol you want. Tapping a colour when the deck already wears a symbol recolours it on the spot and leaves the picker open, so you can try a few against the list behind it. Tinting a mana symbol drops the coloured pip and draws the bare glyph in your colour instead, since a cream circle with a red W in it is nobody's idea of an emblem. Card-art emblems are unaffected, and the colour travels with the deck like the rest of the emblem.
+
 ## 0.133.1
 
 - **Fixed: updating to 0.133.0 could leave a signed-in device stuck syncing, with most of the collection, decks and lists missing while cards flickered in and out.** Nothing was lost. The account on the server was never touched; only the copy on the device was, and it comes back on its own once this version has synced.

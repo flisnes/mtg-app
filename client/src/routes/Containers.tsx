@@ -7,6 +7,7 @@ import {
   normalizeColors,
   type Color,
   type ContainerKind,
+  type Deck,
   type DeckFolder,
   type DeckFormat,
 } from '@mtg/shared';
@@ -18,12 +19,15 @@ import {
   deleteDeck,
   deleteDeckFolder,
   renameDeckFolder,
+  setDeckEmblem,
   setDeckFolder,
 } from '../db/dataAccess.js';
 import { getOracleCardsByIds } from '../db/queries.js';
 import { formatLabel } from '../deck/legality.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { Icon } from '../components/icons.js';
+import { Emblem } from '../components/Emblem.js';
+import { EmblemPickerSheet } from '../components/EmblemPickerSheet.js';
 import { ManaCost } from '../components/ManaCost.js';
 import { HeaderValue, missingValue, useContainersValue, valueText, type ContainerValue } from '../components/ValueSummary.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
@@ -104,6 +108,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [movingDeck, setMovingDeck] = useState<{ id: string; name: string; folderId?: string } | null>(null);
+  const [emblemDeck, setEmblemDeck] = useState<Deck | null>(null);
   const [query, setQuery] = useState('');
   const [filterFormat, setFilterFormat] = useState<DeckFormat | ''>('');
   const [filterColor, setFilterColor] = useState<Color | ''>('');
@@ -401,7 +406,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                 <li key={deck.id}>
                   <Link className="menu-item" to={`${meta.path}/${deck.id}`}>
                     <span className="menu-icon" aria-hidden>
-                      <Icon name={meta.icon} />
+                      <Emblem emblem={deck.emblem} kind={kind} size={28} />
                     </span>
                     <span className="deck-line">
                       <span className="deck-name">{deck.name}</span>
@@ -440,6 +445,11 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                       <OptionsMenu
                         label={`${deck.name} options`}
                         actions={[
+                          {
+                            label: deck.emblem ? 'Change emblem' : 'Choose an emblem',
+                            icon: 'emblem' as const,
+                            onClick: () => setEmblemDeck(deck),
+                          },
                           ...(isDeck
                             ? [
                                 {
@@ -526,6 +536,15 @@ export function Containers({ kind }: { kind: ContainerKind }) {
         )}
       </div>
 
+      {emblemDeck && (
+        <EmblemPickerSheet
+          emblem={emblemDeck.emblem}
+          kind={kind}
+          name={emblemDeck.name}
+          onSave={(next) => void setDeckEmblem(emblemDeck.id, next)}
+          onClose={() => setEmblemDeck(null)}
+        />
+      )}
       {movingDeck && (
         <DeckFolderPickerSheet
           deckName={movingDeck.name}

@@ -6,7 +6,7 @@ import { db } from '../db/schema.js';
 import { formatLabel } from '../deck/legality.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { createContainer } from '../db/dataAccess.js';
-import { Icon } from './icons.js';
+import { Emblem } from './Emblem.js';
 import { Sheet } from './Sheet.js';
 
 /**
@@ -112,7 +112,7 @@ export function ContainerPickerSheet({
                     onClick={() => onPick(row.id, containerKind(row))}
                   >
                     <span className="menu-icon" aria-hidden>
-                      <Icon name={rowMeta.icon} />
+                      <Emblem emblem={row.emblem} kind={rowMeta.kind} size={28} />
                     </span>
                     <span className="deck-line">
                       <span className="deck-name">{row.name}</span>

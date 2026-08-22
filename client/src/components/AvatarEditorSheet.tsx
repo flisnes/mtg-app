@@ -88,16 +88,20 @@ export function CardSearch({
   );
 }
 
-function CropStage({
+/** Pan/zoom a printing's art inside a round frame; also reused by the deck-emblem picker. */
+export function CropStage({
   card,
   onBack,
   onSave,
   onCancel,
+  saveLabel = 'Save picture',
 }: {
   card: Priced<OracleCard>;
   onBack: () => void;
   onSave: (avatar: ProfileAvatar) => void;
   onCancel: () => void;
+  /** Label on the commit button ("Save picture" reads wrong for a deck emblem). */
+  saveLabel?: string;
 }) {
   const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
   const [scryfallId, setScryfallId] = useState(card.defaultScryfallId);
@@ -231,7 +235,7 @@ function CropStage({
           disabled={!dims}
           onClick={() => onSave({ scryfallId: printing?.scryfallId ?? card.defaultScryfallId, ...crop })}
         >
-          Save picture
+          {saveLabel}
         </button>
       </div>
     </>

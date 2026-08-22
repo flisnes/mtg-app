@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.133.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Decks, binders and boxes can wear an emblem in the list: a crop of any card’s art, a mana pip or other Magic symbol, or a set symbol. Open the ⋯ menu on a row, or tap the icon next to the name on its own page. It syncs to your other devices with the rest of the deck.',
+      },
+    ],
+  },
+  {
     version: '0.132.0',
     changes: [
       {

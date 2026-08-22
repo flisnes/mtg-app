@@ -51,7 +51,8 @@ export type IconName =
   | 'chevronRight'
   | 'chevronDown'
   | 'expand'
-  | 'moveTo';
+  | 'moveTo'
+  | 'emblem';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -375,6 +376,13 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
       <polyline points="10 17 15 12 10 7" />
       <line x1="15" y1="12" x2="3" y2="12" />
+    </>
+  ),
+  // Medal on a ribbon — the emblem a deck, binder or box wears in the list.
+  emblem: (
+    <>
+      <circle cx="12" cy="9" r="6" />
+      <polyline points="8.5 14.2 7.5 22 12 19.5 16.5 22 15.5 14.2" />
     </>
   ),
 };

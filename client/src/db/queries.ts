@@ -186,3 +186,40 @@ export async function computeDeckWishlistCandidates(deckId: string): Promise<Mis
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Sets
+// ---------------------------------------------------------------------------
+
+/** One set in the installed card DB, for pickers that offer set symbols. */
+export interface CardSetInfo {
+  /** Lowercase Scryfall set code, e.g. "sth". */
+  set: string;
+  setName: string;
+  /** ISO date of the newest printing seen for the set (its release, near enough). */
+  releasedAt: string;
+}
+
+// The card DB is replaced wholesale on a version bump (and the app reloads for
+// it), so within one session this list can't go stale.
+let setListCache: CardSetInfo[] | null = null;
+
+/**
+ * Every set the installed card DB knows about, newest first.
+ *
+ * Walked off the printings `set` index — one key per set, then one row per set
+ * for its name — rather than read out of the table: 150k printings is not a
+ * list you scan to fill a picker.
+ */
+export async function getSetList(): Promise<CardSetInfo[]> {
+  if (setListCache) return setListCache;
+  const codes: string[] = [];
+  await db.printings.orderBy('set').eachUniqueKey((k) => codes.push(String(k)));
+  const rows = await Promise.all(codes.map((code) => db.printings.where('set').equals(code).first()));
+  const sets = rows
+    .filter((p): p is Printing => !!p)
+    .map((p) => ({ set: p.set, setName: p.setName, releasedAt: p.releasedAt }));
+  sets.sort((a, b) => b.releasedAt.localeCompare(a.releasedAt) || a.setName.localeCompare(b.setName));
+  setListCache = sets;
+  return sets;
+}

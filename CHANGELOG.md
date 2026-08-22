@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.133.0
+
+- **A deck, binder or box can now wear an emblem in the list instead of the same generic icon as everything else.** Three ways to pick one: a crop of any card's art, framed the same way a profile picture is; a Magic symbol from the bundled font, which covers mana pips, the tap and phyrexian symbols, card types, counters, keywords, the Ravnica guilds, the Tarkir clans, the Strixhaven colleges and a pile of watermarks; or the set symbol of any set the card database knows. Reach it from the ⋯ menu on a row, or by tapping the icon next to the name on the container's own page. The emblem also shows up when you file cards into a container, so the list you are aiming at is recognisable at a glance. It lives on the deck itself, so it travels with your account to your other devices and survives a device-to-device transfer.
+
 ## 0.132.0
 
 - **The padlock ring on the scanner now shows the scanner closing in on a card, not just the countdown after it has.** It fills as the camera banks the frames that agree on what it is looking at, so a wobbly hand or a glared foil visibly knocks it back to empty and you can see why nothing is locking. The instant it comes full the card locks and the ring turns accent-coloured, then drains over the three seconds before the scanner is willing to take a second copy of that same card. Tapping the padlock at any point after the lock lets go immediately, exactly as before.

@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.133.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Updating to 0.133.0 could leave a signed-in device stuck syncing, with most of its collection, decks and lists missing and cards flickering in and out. Nothing was lost: your account on the server was never touched, and this version pulls the whole thing back down.',
+      },
+    ],
+  },
+  {
     version: '0.133.0',
     changes: [
       {

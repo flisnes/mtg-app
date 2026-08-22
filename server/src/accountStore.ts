@@ -379,6 +379,7 @@ export class AccountStore {
     cursor: number,
     changes: SyncChange[],
     now: number,
+    reseeding = false,
   ): { cursor: number; changes: SyncChange[]; hasMore: boolean; applied: number; resync: boolean } {
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -387,8 +388,11 @@ export class AccountStore {
       // tombstone, so its copy can still hold rows deleted elsewhere. Apply its
       // push (nothing local is lost) but hand back no changes and ask it to
       // reseed. Cursor 0 is exempt: that IS a reseed, and answering it with
-      // another reseed would loop forever.
-      const resync = cursor > 0 && cursor < this.prunedBelow(userId);
+      // another reseed would loop forever. So is a device that says it is
+      // already reseeding — every pass after the first of a capped reseed asks
+      // from a cursor below the floor, and ordering a fresh wipe each time is
+      // how a large account gets stuck wiping and refilling forever.
+      const resync = !reseeding && cursor > 0 && cursor < this.prunedBelow(userId);
 
       const pulled = resync
         ? []

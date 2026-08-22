@@ -20,6 +20,23 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.131.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Scanning reads the copyright year now, so it can finally tell a 4th Edition card from a 5th Edition one. Cards that old print no set code and no collector number, and the year is often all that separates two reprints.',
+      },
+      {
+        kind: 'fixed',
+        text: 'Scanning was reading only the left half of a card’s bottom line, which is exactly where cards printed between 1998 and 2014 do not keep their collector number. It reads the whole line now.',
+      },
+      {
+        kind: 'changed',
+        text: 'When nothing printed on the card can identify the edition, scanning says so instead of guessing. Alpha through Revised carry no year, number or set code at all.',
+      },
+    ],
+  },
+  {
     version: '0.130.0',
     changes: [
       {

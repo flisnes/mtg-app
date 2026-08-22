@@ -189,6 +189,7 @@ export function ScanTest() {
                 scryfallId: j.cand.scryfallId,
                 set: j.printing!.set,
                 collectorNumber: j.printing!.collectorNumber,
+                releasedAt: j.printing!.releasedAt,
               })),
           );
           setOcr(resolution);

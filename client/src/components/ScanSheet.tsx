@@ -735,7 +735,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         result,
         candidates
           .filter((c) => c.printing)
-          .map((c) => ({ scryfallId: c.scryfallId, set: c.printing!.set, collectorNumber: c.printing!.collectorNumber })),
+          .map((c) => ({
+            scryfallId: c.scryfallId,
+            set: c.printing!.set,
+            collectorNumber: c.printing!.collectorNumber,
+            releasedAt: c.printing!.releasedAt,
+          })),
       );
       const current = trayRef.current;
       if (current?.topId !== topId) return;

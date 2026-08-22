@@ -5838,3 +5838,75 @@ a.seg {
   background: var(--text);
   opacity: 0.55;
 }
+
+/* --- Avatar lab (dev harness at #/avatar-lab) ---------------------------- */
+.lab-pick {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.lab-pick .search-input {
+  flex: 1;
+}
+.lab-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.9rem 0;
+}
+.lab-tile {
+  position: relative;
+  width: 84px;
+  text-align: center;
+}
+.lab-tile-art {
+  background: none;
+  border: 0;
+  padding: 0;
+  line-height: 0;
+  cursor: pointer;
+}
+.lab-tile-missing {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--muted);
+}
+.lab-tile-name {
+  display: block;
+  font-size: 0.62rem;
+  line-height: 1.1;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lab-tile-remove {
+  position: absolute;
+  top: -2px;
+  right: 4px;
+  padding: 1px;
+  line-height: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  opacity: 0.55;
+}
+.lab-tile-remove:hover {
+  opacity: 1;
+}
+.lab-tile-remove svg {
+  width: 14px;
+  height: 14px;
+}
+.lab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.lab-export {
+  width: 100%;
+  margin-top: 0.8rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+}

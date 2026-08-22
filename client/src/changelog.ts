@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.134.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'New accounts arrive with a profile picture: one of 145 card arts, framed on the face and dealt at random. Change it to any card you like from your profile.',
+      },
+    ],
+  },
+  {
     version: '0.133.2',
     changes: [
       {

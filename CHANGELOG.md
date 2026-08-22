@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.134.0
+
+- **New accounts now start with a profile picture instead of a grey letter.** Everyone who signs up is dealt one at random from 145 hand-checked card arts, each already framed on the face, so the Community list looks like a table of players rather than a spreadsheet. It is yours from the moment you create the account: change it to any card in Magic from your profile, or remove it, and it stays that way. Accounts that have already saved a profile are left alone.
+
 ## 0.133.2
 
 - **A symbol or set-symbol emblem can now be tinted.** Ten colours plus the default, on their own row above the picker: tap a colour and the whole grid previews in it, then tap the symbol you want. Tapping a colour when the deck already wears a symbol recolours it on the spot and leaves the picker open, so you can try a few against the list behind it. Tinting a mana symbol drops the coloured pip and draws the bare glyph in your colour instead, since a cream circle with a red W in it is nobody's idea of an emblem. Card-art emblems are unaffected, and the colour travels with the deck like the rest of the emblem.

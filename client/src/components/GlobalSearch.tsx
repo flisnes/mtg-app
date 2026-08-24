@@ -527,11 +527,13 @@ function SearchOverlay() {
     await addToCollection({ oracleId: card.oracleId, scryfallId: shownId(card, printing), condition: 'NM', finish: 'nonfoil', lang: 'en', quantityForTrade: 1 });
     toast(`Added ${card.name} to tradelist`);
   }
-  async function quickDeck(card: OracleCard, deckId: string, board: DeckBoard, noun = 'deck') {
+  async function quickDeck(card: OracleCard, deckId: string, board: DeckBoard, noun = 'deck', printing?: Printing) {
     // A basic land in a deck defaults to "any printing" — whatever's on top of
     // the lands box. Binders and boxes hold real cardboard, so they don't.
     const anyBasic = containerMeta.kind === 'deck' && isBasicLand(card);
-    await addDeckCard({ deckId, oracleId: card.oracleId, board, anyBasic });
+    // The printing the result is showing, like the collection quick-adds: tap +
+    // on an edition tile and that edition is what lands in the container.
+    await addDeckCard({ deckId, oracleId: card.oracleId, board, anyBasic, scryfallId: shownId(card, printing) });
     const suffix = board === 'side' ? ' (sideboard)' : board === 'commander' ? ' (commander)' : '';
     toast(`Added ${card.name}${suffix} to ${noun}${anyBasic ? ' (any printing)' : ''}`);
   }
@@ -544,7 +546,7 @@ function SearchOverlay() {
           return (
             <button
               title={`Add to ${containerMeta.noun}`}
-              onClick={() => quickDeck(card, target.deckId, 'main', containerMeta.noun)}
+              onClick={() => quickDeck(card, target.deckId, 'main', containerMeta.noun, printing)}
             >
               +<Icon name={containerMeta.icon} size={16} />
             </button>
@@ -552,14 +554,14 @@ function SearchOverlay() {
         }
         return (
           <>
-            <button title="Add to mainboard" onClick={() => quickDeck(card, target.deckId, 'main')}>
+            <button title="Add to mainboard" onClick={() => quickDeck(card, target.deckId, 'main', 'deck', printing)}>
               +Main
             </button>
-            <button title="Add to sideboard" onClick={() => quickDeck(card, target.deckId, 'side')}>
+            <button title="Add to sideboard" onClick={() => quickDeck(card, target.deckId, 'side', 'deck', printing)}>
               +SB
             </button>
             {deckCtx?.format === 'commander' && (
-              <button title="Add as commander" onClick={() => quickDeck(card, target.deckId, 'commander')}>
+              <button title="Add as commander" onClick={() => quickDeck(card, target.deckId, 'commander', 'deck', printing)}>
                 +Cmdr
               </button>
             )}

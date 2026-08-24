@@ -1114,20 +1114,36 @@ export interface AddDeckCardInput {
   wants?: SlotWants;
 }
 
-/** Add a slot, merging into an existing (deckId, oracleId, board, anyBasic) slot. */
+/**
+ * Add a slot, merging into the one that already names the same copy — printing,
+ * finish, condition and language, the same `exactSlotKey` a bulk filing uses. A
+ * slot is identified by what it names, so the two Nazgûl arts you picked in the
+ * edition picker stay two lines in the binder, and adding a third of the first
+ * one lands on the line that's already there. A slot that names no printing is
+ * the "any printing" line, and repeat adds pile onto it as ever.
+ *
+ * Folding editions together by name is a *decklist* thing (a pasted list wants
+ * one "4 Lightning Bolt" line however many printings it mentions), and that
+ * lives in `addDeckCardsBulk` without `exact` — not here, where every add came
+ * from a person looking at one card.
+ */
 export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
   const board = input.board ?? 'main';
   const quantity = input.quantity ?? 1;
   const anyBasic = !!input.anyBasic;
+  const wants = wantFields(input.wants);
+  // "Any printing" basics are their own slot: four Islands from the lands box
+  // shouldn't fold into the four foil Islands you actually own.
+  const key = exactSlotKey({ oracleId: input.oracleId, board, anyBasic, scryfallId: input.scryfallId || undefined }, wants);
   await db.transaction('rw', DECK_TABLES, async () => {
     const now = Date.now();
-    // "Any printing" basics are their own slot: four Islands from the lands box
-    // shouldn't fold into the four foil Islands you actually own.
-    const existing = await db.deckCards
+    const candidates = await db.deckCards
       .where('[deckId+board]')
       .equals([input.deckId, board])
-      .and((c) => c.oracleId === input.oracleId && !!c.anyBasic === anyBasic)
-      .first();
+      .and((c) => c.oracleId === input.oracleId)
+      .toArray();
+    // A stored slot carries its wants as plain fields, so it is its own wants.
+    const existing = candidates.find((c) => exactSlotKey(c, c) === key);
     let slot: DeckCard;
     if (existing) {
       slot = { ...existing, quantity: existing.quantity + quantity, updatedAt: now };
@@ -1136,7 +1152,7 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
         id: newId(),
         deckId: input.deckId,
         oracleId: input.oracleId,
-        ...(anyBasic ? { anyBasic: true } : { ...(input.scryfallId ? { scryfallId: input.scryfallId } : {}), ...wantFields(input.wants) }),
+        ...(anyBasic ? { anyBasic: true } : { ...(input.scryfallId ? { scryfallId: input.scryfallId } : {}), ...wants }),
         quantity,
         board,
         updatedAt: now,

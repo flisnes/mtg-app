@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.134.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Two different printings of one card filed into a binder or box no longer collapse into a single line with the second printing thrown away. Same printing twice, or "any printing", still pools onto one line.',
+      },
+    ],
+  },
+  {
     version: '0.134.0',
     changes: [
       {

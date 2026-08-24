@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.134.1
+
+- **Fixed: two different printings of the same card added to a binder or box collapsed into one, and the printing you picked second was thrown away.** Nine Nazgûl arts went in and one came out, quantity ×2. The add was folding everything with the same name onto one line, the way a pasted decklist should, which is wrong for a shelf: the Revised one and the Fourth Edition one are two different pieces of cardboard sitting in there. A line is now identified by what it names — printing, finish, minimum condition and language — so the arts you picked stay separate, while adding another of a printing already filed still lands on the line that's there, and "any printing" adds still pool together. The + button in search results now files the edition you were looking at, too, instead of dropping it.
+
 ## 0.134.0
 
 - **New accounts now start with a profile picture instead of a grey letter.** Everyone who signs up is dealt one at random from 145 hand-checked card arts, each already framed on the face, so the Community list looks like a table of players rather than a spreadsheet. It is yours from the moment you create the account: change it to any card in Magic from your profile, or remove it, and it stays that way. Accounts that have already saved a profile are left alone.

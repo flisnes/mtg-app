@@ -1,11 +1,11 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import type { OracleCard, Priced, Printing, Rarity } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
-import { formatPrice } from './CardSorting.js';
+import { SortControls, formatPrice, useCardSort } from './CardSorting.js';
 import type { MultiSelect } from './useMultiSelect.js';
 import { SelectToggle } from './SelectToggle.js';
 
@@ -43,6 +43,7 @@ export function CardSearchView({
   effectiveFilters,
   filterExtras,
   showFilters = true,
+  sortKey,
   emptyState,
   badgeFor,
   actionsFor,
@@ -62,6 +63,12 @@ export function CardSearchView({
   filterExtras?: ReactNode;
   /** Show the color/type/rarity dropdowns. `filterExtras` still renders when off. */
   showFilters?: boolean;
+  /**
+   * Offer the sort controls, persisting under `cardSort:<sortKey>`. Omit in
+   * pickers where the point is to find one named card and best-match is the
+   * only order that helps.
+   */
+  sortKey?: string;
   /** Shown in place of results when there's nothing to search for yet. */
   emptyState: ReactNode;
   badgeFor?: (card: Priced<OracleCard>, printing?: Priced<Printing>) => ResultBadge | null;
@@ -81,6 +88,10 @@ export function CardSearchView({
   onCardClick: (card: Priced<OracleCard>, printing?: Priced<Printing>) => void;
 }) {
   const [view, setView] = useViewMode();
+  // Best match is the only order the database can rank by itself, so it's the
+  // default; the rest are the same keys every owned list sorts by. The hook
+  // runs either way — an unsorted caller just never shows or sends the prefs.
+  const [sort, setSort] = useCardSort(sortKey ?? 'search', { key: 'relevance', dir: 'desc' });
   const eff = effectiveFilters ?? filters;
   const hasCriteria =
     query.trim().length > 0 || (showFilters && (!!filters.color || !!filters.rarity || !!filters.type));
@@ -88,9 +99,17 @@ export function CardSearchView({
   // New criteria start back at the first page — keyed on a serialized signature
   // so opening/closing a card sheet over the results doesn't reset the count.
   // The debounce in useCardSearch swallows the extra run so only one search fires.
-  const { limit, showMore } = usePagedLimit(`${query}|${JSON.stringify(eff)}`, PAGE_SIZE);
+  // Reordering starts over at page one too: "cheapest first" sorts the whole
+  // match set, so page three of the old order says nothing about the new one.
+  const { limit, showMore } = usePagedLimit(`${query}|${JSON.stringify(eff)}|${sortKey ? `${sort.key}:${sort.dir}` : ''}`, PAGE_SIZE);
 
-  const { results, total, searching } = useCardSearch(query, { filters: eff, limit, enabled: hasCriteria });
+  const searchSort = useMemo(() => ({ key: sort.key, dir: sort.dir }), [sort.key, sort.dir]);
+  const { results, total, searching } = useCardSearch(query, {
+    filters: eff,
+    limit,
+    sort: sortKey ? searchSort : undefined,
+    enabled: hasCriteria,
+  });
   // Which printing each result should appear as. Empty (and free) unless the
   // user has moved off the default "latest printing" preference.
   const shown = useDisplayPrintings(results);
@@ -170,6 +189,7 @@ export function CardSearchView({
               {selection && !selection.sel.active && results.length > 0 && (
                 <SelectToggle onEnter={selection.sel.enter} />
               )}
+              {sortKey && <SortControls prefs={sort} onChange={setSort} withRelevance />}
               <ViewToggle mode={view} onChange={setView} />
             </div>
           </div>

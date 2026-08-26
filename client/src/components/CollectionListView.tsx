@@ -19,9 +19,8 @@ import { usePlacementIndex } from '../db/usePlacements.js';
 import { useMultiSelect } from './useMultiSelect.js';
 import { SelectToggle } from './SelectToggle.js';
 import { PileView, CardBackSheet, type PileEntry } from './PileView.js';
-import { SortControls, priceValue, pricedForFinish, sortCards, useCardSort } from './CardSorting.js';
-import { historyChange } from '../price/history.js';
-import { loadLastEdited, lastEditedFor } from '../history/lastEdited.js';
+import { SortControls, sortCards, useCardSort } from './CardSorting.js';
+import { collectionSortFields, useEntrySortData } from './useEntrySort.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { useGoblinMode } from './useGoblinMode.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
@@ -75,26 +74,9 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // visit that set it, or you come back tomorrow to a collection with holes.
   const [placeFilter, setPlaceFilter] = useState<PlaceFilter>('all');
 
-  // scryfallId → recorded price change; only loaded while a change sort is
-  // active (the histories table is the biggest user-data table).
-  const needChanges = sort.key === 'change' || sort.key === 'changePct';
-  const changes = useLiveQuery(async () => {
-    if (!needChanges) return undefined;
-    const m = new Map<string, { delta: number; pct: number | null }>();
-    for (const h of await db.priceHistories.toArray()) {
-      const c = historyChange(h);
-      if (c) m.set(h.scryfallId, { delta: c.delta, pct: c.pct });
-    }
-    return m;
-  }, [needChanges]);
-
-  // Per-printing "last edited", matching the top row of that printing's History
-  // tab. This is what the sort keys off, NOT collection.updatedAt: updatedAt can
-  // move for reasons that leave no history entry, so the event log is the source
-  // of truth the user actually sees. Loaded only while the sort is active
-  // (events is an append-only table that grows without bound).
-  const needEdited = sort.key === 'updated';
-  const lastEdited = useLiveQuery(async () => (needEdited ? loadLastEdited() : undefined), [needEdited]);
+  // The price-change and last-edited data the heavier sorts need, loaded only
+  // while one of them is active. Shared with the search scoped into this list.
+  const sortData = useEntrySortData(sort);
 
   // "Filed" means exactly what the row's badge means: this copy — printing,
   // finish, condition, language — sits in a deck, binder or box. So "Nowhere"
@@ -128,20 +110,8 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
 
   const filtered = useMemo(() => {
     if (!rows) return [];
-    return sortCards(
-      matching,
-      (r) => ({
-        name: r.oracle?.name,
-        cmc: r.oracle?.cmc,
-        price: priceValue(pricedForFinish(r.printing, r.entry.finish), r.oracle),
-        change: changes?.get(r.entry.scryfallId)?.delta ?? null,
-        changePct: changes?.get(r.entry.scryfallId)?.pct ?? null,
-        added: r.entry.createdAt,
-        updated: (lastEdited && lastEditedFor(lastEdited, r.entry.oracleId, r.entry.scryfallId)) ?? r.entry.updatedAt,
-      }),
-      sort,
-    );
-  }, [rows, matching, sort, changes, lastEdited]);
+    return sortCards(matching, (r) => collectionSortFields(r, sortData), sort);
+  }, [rows, matching, sort, sortData]);
 
   const totalQty = filtered.reduce((s, r) => s + r.entry.quantity, 0);
 

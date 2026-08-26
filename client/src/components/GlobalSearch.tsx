@@ -700,6 +700,7 @@ function SearchOverlay() {
             effectiveFilters={effectiveFilters}
             filterExtras={filterExtras}
             showFilters={false}
+            sortKey="search"
             emptyState={emptyState}
             badgeFor={(card, printing) => ownedBadge(ownership?.lookup(card.oracleId, shownId(card, printing)))}
             actionsFor={actionsFor}

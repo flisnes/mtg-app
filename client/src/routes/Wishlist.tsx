@@ -16,7 +16,8 @@ import { useMultiSelect } from '../components/useMultiSelect.js';
 import { SelectToggle } from '../components/SelectToggle.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
-import { addToTotal, formatTotal, priceValue, SortControls, sortCards, useCardSort, type PriceTotal } from '../components/CardSorting.js';
+import { addToTotal, formatTotal, SortControls, sortCards, useCardSort, type PriceTotal } from '../components/CardSorting.js';
+import { useEntrySortData, wishSortFields } from '../components/useEntrySort.js';
 import { HeaderValue } from '../components/ValueSummary.js';
 import { useListFilter, useOpenSearch } from '../components/GlobalSearch.js';
 import { Icon } from '../components/icons.js';
@@ -24,7 +25,6 @@ import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { useToast } from '../components/Toast.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
-import { loadLastEdited, lastEditedFor } from '../history/lastEdited.js';
 import { buildWishlistText, downloadText } from '../import/export.js';
 import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
@@ -51,26 +51,12 @@ export function Wishlist() {
   const query = useListFilter('wishlist');
   const matchesQuery = useEntryMatcher(rows, query);
 
-  // Per-printing "last edited" (the top of that printing's History tab), not
-  // entry.updatedAt — see CollectionListView. "Any printing" wishes span the
-  // whole oracle; lastEditedFor handles the null scryfallId.
-  const needEdited = sort.key === 'updated';
-  const lastEdited = useLiveQuery(async () => (needEdited ? loadLastEdited() : undefined), [needEdited]);
+  const sortData = useEntrySortData(sort);
 
   const filtered = useMemo(() => {
     if (!rows) return [];
-    return sortCards(
-      rows.filter(matchesQuery),
-      (r) => ({
-        name: r.oracle?.name,
-        cmc: r.oracle?.cmc,
-        price: priceValue(r.printing, r.oracle),
-        added: r.entry.createdAt,
-        updated: (lastEdited && lastEditedFor(lastEdited, r.entry.oracleId, r.entry.scryfallId)) ?? r.entry.updatedAt,
-      }),
-      sort,
-    );
-  }, [rows, matchesQuery, sort, lastEdited]);
+    return sortCards(rows.filter(matchesQuery), (r) => wishSortFields(r, sortData), sort);
+  }, [rows, matchesQuery, sort, sortData]);
 
   // Value covers the whole wishlist, not just the filtered view.
   const value = useMemo(() => {

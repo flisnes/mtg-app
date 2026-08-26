@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.135.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Card search now sorts: best match, name, mana value or price, either direction. Sorting by price ranks every hit, not just the page on screen.',
+      },
+      {
+        kind: 'added',
+        text: "Search scoped into your collection, tradelist, wishlist or a deck offers that list's own sort options, and reordering there reorders the list itself.",
+      },
+    ],
+  },
+  {
     version: '0.134.9',
     changes: [
       {

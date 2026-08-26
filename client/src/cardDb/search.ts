@@ -1,6 +1,7 @@
 import type { Color, DeckFormat, Finish, Format, OracleCard, Priced, PrintingVariant, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
-import { withPrices } from './prices.js';
+import { getPricesByIds, withPrices } from './prices.js';
+import { priceValue, sortCards, type CardSortPrefs } from '../components/cardSort.js';
 import {
   matchesQuery,
   normalize,
@@ -154,10 +155,21 @@ export interface SearchResult {
   total: number;
 }
 
+/**
+ * How the results are ordered. 'relevance' is the default and the only key the
+ * card database can rank by on its own; the rest are the ordinary card sorts.
+ * The sort runs over the whole match set before the page is sliced off, so
+ * "cheapest first" means cheapest of everything that matched, not of page one.
+ */
+export type SearchSort = Pick<CardSortPrefs, 'key' | 'dir'>;
+
+const DEFAULT_SORT: SearchSort = { key: 'relevance', dir: 'desc' };
+
 export async function searchCards(
   query: string,
   filters: SearchFilters = {},
   limit = 60,
+  sort: SearchSort = DEFAULT_SORT,
 ): Promise<SearchResult> {
   const index = await getIndex();
   const parsed = parseSearchQuery(query.trim());
@@ -200,11 +212,45 @@ export async function searchCards(
     matches.push({ card: entry.card, score });
   }
 
-  matches.sort((a, b) => b.score - a.score || a.card.name.localeCompare(b.card.name));
+  const ordered = await orderMatches(matches, sort);
 
   // Prices are joined only for the returned page, not the whole match set.
   return {
-    cards: await withPrices(matches.slice(0, limit).map((m) => m.card), (c) => c.defaultScryfallId),
+    cards: await withPrices(ordered.slice(0, limit).map((m) => m.card), (c) => c.defaultScryfallId),
     total: matches.length,
   };
+}
+
+/**
+ * Order the whole match set. Best-match is its own comparator (relevance isn't
+ * a field on a card), everything else goes through the shared card sort so
+ * search orders results exactly the way the collection orders entries.
+ *
+ * Sorting by price needs a price for every match, not just the page — but
+ * prices live in 16 already-cached shard blobs, so that's a map lookup per
+ * card rather than a second trip to IndexedDB.
+ */
+async function orderMatches(
+  matches: Array<{ card: OracleCard; score: number }>,
+  sort: SearchSort,
+): Promise<Array<{ card: OracleCard; score: number }>> {
+  if (sort.key === 'relevance' || sort.key === 'change' || sort.key === 'changePct' || sort.key === 'added' || sort.key === 'updated') {
+    // The four owned-list keys have no meaning for a card that isn't yours;
+    // a stored preference that leaks in falls back to best-match.
+    const mul = sort.key === 'relevance' && sort.dir === 'asc' ? -1 : 1;
+    return [...matches].sort((a, b) => (b.score - a.score) * mul || a.card.name.localeCompare(b.card.name));
+  }
+  const prices = sort.key === 'price' ? await getPricesByIds(matches.map((m) => m.card.defaultScryfallId)) : null;
+  return sortCards(
+    matches,
+    (m) => {
+      const p = prices?.get(m.card.defaultScryfallId);
+      return {
+        name: m.card.name,
+        cmc: m.card.cmc,
+        price: p ? priceValue({ priceEur: p.eur, priceUsd: p.usd }) : null,
+      };
+    },
+    sort,
+  );
 }

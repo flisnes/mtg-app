@@ -9,11 +9,14 @@ import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.j
 import { usePagedLimit } from './usePagedLimit.js';
 import { LoadMoreSentinel } from './LoadMoreSentinel.js';
 import { deckCardItem } from './cardRows.js';
+import { SortControls, priceValue, sortCards, useCardSort } from './CardSorting.js';
 
 // The global search, scoped into the deck/binder/box you're standing on: it
 // searches that container's own cards instead of the whole database. Mirrors
 // ScopedResults, but the rows come from db.deckCards for one deckId, and
-// tapping one opens the same deck-slot editor the container page itself uses.
+// tapping one opens the same deck-slot editor the container page itself uses —
+// sorting included, off the container page's own preference. Grouping isn't
+// offered: these results are one flat list, not the container's boards.
 export function ContainerScopedResults({
   deckId,
   kind,
@@ -26,6 +29,7 @@ export function ContainerScopedResults({
   query: string;
 }) {
   const [view, setView] = useViewMode();
+  const [sort, setSort] = useCardSort('deck');
   const [editing, setEditing] = useState<JoinedDeckCard | null>(null);
 
   const rows = useLiveQuery<JoinedDeckCard[]>(
@@ -35,16 +39,20 @@ export function ContainerScopedResults({
   const matches = useEntryMatcher(rows, query);
 
   const items = useMemo(() => {
-    const out: CardItem[] = [];
-    for (const r of rows ?? []) {
-      if (!matches(r)) continue;
-      out.push({ ...deckCardItem(r, { kind, onClick: () => setEditing(r) }), key: r.entry.id });
-    }
-    out.sort((a, b) => a.name.localeCompare(b.name));
-    return out;
-  }, [rows, matches, kind]);
+    const matched = (rows ?? []).filter(matches);
+    return sortCards(
+      matched,
+      (r) => ({
+        name: r.oracle?.name,
+        cmc: r.oracle?.cmc,
+        // A lands-box basic costs the container nothing, so it sorts by nothing.
+        price: r.entry.anyBasic ? 0 : priceValue(r.printing, r.oracle),
+      }),
+      sort,
+    ).map((r): CardItem => ({ ...deckCardItem(r, { kind, onClick: () => setEditing(r) }), key: r.entry.id }));
+  }, [rows, matches, kind, sort]);
 
-  const { limit, showMore } = usePagedLimit(`container:${deckId}|${query}`, 60);
+  const { limit, showMore } = usePagedLimit(`container:${deckId}|${query}|${sort.key}:${sort.dir}`, 60);
   const visible = items.slice(0, limit);
   const loading = rows === undefined;
 
@@ -54,7 +62,10 @@ export function ContainerScopedResults({
         <p className="search-meta">
           {loading ? 'Loading…' : `${items.length} result${items.length === 1 ? '' : 's'}`}
         </p>
-        <ViewToggle mode={view} onChange={setView} />
+        <div className="meta-actions">
+          <SortControls prefs={sort} onChange={setSort} />
+          <ViewToggle mode={view} onChange={setView} />
+        </div>
       </div>
 
       {!loading && items.length === 0 ? (

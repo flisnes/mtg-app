@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.0
+
+- **Card search now sorts.** The search overlay gained the same Sort control every list in the app has: best match, name, mana value or price, either direction. Best match is still the default, so nothing changes until you ask it to. Sorting by price ranks the whole result set, not just the page you can see, so "most expensive first" on 2,900 hits really does put the dual land on top.
+- **Search scoped into one of your lists sorts by that list's own options.** Hunt through your collection from a deck screen and you get price change, price change %, date added and last edited alongside the usual three, exactly as the collection page offers them. The same goes for your tradelist, your wishlist, the deck or binder you're standing in, and the lists of anyone you're browsing on Community.
+- **It's the list's own sort, not a second one.** Reorder your collection from inside the search and the collection page has already reordered when you close the overlay. Before this, scoped search was always locked to A-Z with no way to change it.
+
 ## 0.134.9
 
 - **Recent searches now hang off the search bar instead of taking over the screen.** Tap the bar and a small translucent panel drops down over your cards, browser-style: no boxes around the rows, and the collection stays visible behind it. Arrow keys walk the list and Enter takes the highlighted one, so a long Scryfall query is two keystrokes away without reaching for the screen.

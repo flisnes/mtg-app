@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.134.5
+
+- **Fixed: tugging down at the top of a page slid the bottom nav bar half off the screen.** Not the pull-to-refresh kind, just an ordinary short swipe when there was nothing left to scroll. The gesture was escaping the page and landing on the browser itself, which answered by sliding its own chrome back in and shoving the tab bar under the edge of the display. The swipe now stops at the page, so Collection, Decks, Trade and More stay put no matter how hard you pull.
+
 ## 0.134.4
 
 - **The trade tag and the wishlist star now fill in solid when the printing you are looking at is the one on the list.** Same step in certainty the second checkmark makes for your collection: a tinted chip means "this card is on that list somewhere", a solid one means "this exact printing is". The purple tag fills when the copies you have marked for trade are of the edition on screen, and the gold star fills when the wish names that edition, or when it is set to "any printing" and every edition counts. Hover or long-press either one and the tooltip spells out which case you are in.

@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.134.5',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Swiping down at the top of a page no longer slides the bottom nav bar half off the screen. The gesture was reaching the browser instead of stopping at the page.',
+      },
+    ],
+  },
+  {
     version: '0.134.4',
     changes: [
       {

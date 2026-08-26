@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.134.8
+
+- **The app now carries the licences of the open source it is built on, at About -> Open source licenses.** Twenty-eight components, from React and Dexie to the Tesseract engine behind card scanning and the Keyrune and Mana symbol fonts, each with its copyright line and full licence text. MIT, BSD and Apache-2.0 all ask that those notices travel with the app, and they were not there before. The page is generated straight from what actually ships, so it cannot drift, and it loads only when opened.
+- **Added: MTGJSON credited for sealed product data, which its CC BY 4.0 licence requires.** The About screen now also names TCGCSV and Cardmarket for sealed prices, Frankfurter for exchange rates, and Andrew Gioia for the two symbol fonts. Scryfall and the Wizards Fan Content notice were already there.
+- Behind the scenes: the repository now states its own licence, and a comment claiming the Mana font was MIT has been corrected to the SIL Open Font License its authors actually released it under. Nothing about the app changes.
+
 ## 0.134.7
 
 - **Fixed: a deck, binder or box emblem could go missing on your other device and never come back.** Emblems arrived in 0.133.0, and any device still running an older build at the time quietly threw the emblem away as it took the row in, then marked that change as seen. Updating the app afterwards didn't help: as far as it knew, it was already up to date. The app now re-reads your account once on the next open and puts the emblems back. Nothing else is touched, and edits waiting to go out still win.

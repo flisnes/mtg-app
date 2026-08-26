@@ -66,4 +66,18 @@ Phase 0 skeleton → 1 card DB + search → 2 collection/wishlist/tradelist/impo
 
 ## Legal
 
-Card data & imagery via [Scryfall](https://scryfall.com/) (bulk data + image CDN). Unofficial Fan Content permitted under the [Wizards of the Coast Fan Content Policy](https://company.wizards.com/en/legal/fancontentpolicy). Not affiliated with or endorsed by Wizards of the Coast. Attribution is shown in-app on the About screen.
+This repository is proprietary; see [LICENSE](LICENSE). Publishing it here grants no
+open source permissions.
+
+Card data & imagery via [Scryfall](https://scryfall.com/) (bulk data + image CDN). Sealed
+product data via [MTGJSON](https://mtgjson.com) under CC BY 4.0. Unofficial Fan Content
+permitted under the [Wizards of the Coast Fan Content Policy](https://company.wizards.com/en/legal/fancontentpolicy).
+Not affiliated with or endorsed by Wizards of the Coast. Attribution is shown in-app on the
+About screen.
+
+Third-party open source notices ship in the app at **About -> Open source licenses**,
+generated from the client's runtime dependency tree:
+
+```bash
+node client/scripts/gen-licenses.mjs   # after adding or bumping a runtime dependency
+```

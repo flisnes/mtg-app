@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Page } from './Page.js';
 import { APP_VERSION } from '../version.js';
 import { getSetting } from '../db/settings.js';
@@ -56,10 +57,24 @@ export function About() {
           automatically each time you open the app. Tap any card to see its trend.
         </p>
         <p className="fine-print">
+          Sealed product contents come from <a href="https://mtgjson.com">MTGJSON</a>, used under{' '}
+          <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Sealed prices come from the TCGplayer
+          catalogue via <a href="https://tcgcsv.com">TCGCSV</a> and from{' '}
+          <a href="https://www.cardmarket.com">Cardmarket</a>’s published price guide. Exchange rates are European
+          Central Bank reference rates via{' '}
+          <a href="https://frankfurter.dev">Frankfurter</a>.
+        </p>
+        <p className="fine-print">
+          Set and mana symbols are the Keyrune and Mana fonts by Andrew Gioia, used under the SIL Open Font License 1.1.
+        </p>
+        <p className="fine-print">
           Portions of the materials are property of Wizards of the Coast. This is unofficial Fan Content permitted under
           the{' '}
           <a href="https://company.wizards.com/en/legal/fancontentpolicy">Wizards of the Coast Fan Content Policy</a>.
           Not approved or endorsed by Wizards. © Wizards of the Coast LLC.
+        </p>
+        <p className="fine-print">
+          <Link to="/licenses">Open source licenses</Link>
         </p>
       </section>
 

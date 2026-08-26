@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { forceUpdate, initPwa } from './pwa.js';
 import { isUpdateAvailable } from './appUpdate.js';
@@ -38,6 +38,10 @@ import { recordCollectionPrices } from './price/tracking.js';
 import { recordSealedPrices } from './price/sealedTracking.js';
 import { ensureRates } from './price/rates.js';
 import { startImageCacheUpkeep } from './util/imageCache.js';
+
+// Third-party notices carry ~26KB of verbatim licence text. Lazy so that
+// weight lands in its own chunk instead of the bundle everyone downloads.
+const Licenses = lazy(() => import('./routes/Licenses.js').then((m) => ({ default: m.Licenses })));
 import { Icon, type IconName } from './components/icons.js';
 
 const PRIMARY_NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
@@ -182,43 +186,46 @@ function AppShell() {
       )}
 
       <main className="app-main" key={epoch}>
-        <Routes>
-          <Route path="/" element={<Collection />} />
-          <Route path="/collection" element={<Collection />} />
-          <Route path="/wishlist" element={<Wishlist />} />
-          <Route path="/tradelist" element={<Tradelist />} />
-          <Route path="/sealed" element={<SealedProducts />} />
-          <Route path="/import" element={<Import />} />
-          <Route path="/export" element={<Export />} />
-          {/* Decks, binders and boxes: one screen, three segments (they're all
-              rows of the decks table — see deck/containers.ts). */}
-          <Route path="/decks" element={<Containers kind="deck" />} />
-          <Route path="/decks/:id" element={<ContainerDetail kind="deck" />} />
-          <Route path="/binders" element={<Containers kind="binder" />} />
-          <Route path="/binders/:id" element={<ContainerDetail kind="binder" />} />
-          <Route path="/boxes" element={<Containers kind="box" />} />
-          <Route path="/boxes/:id" element={<ContainerDetail kind="box" />} />
-          <Route path="/trade" element={<Trade />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/movers" element={<PriceMovers />} />
-          <Route path="/spoilers" element={<Spoilers />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/settings" element={<Settings />} />
-          {/* /account was the old combined page; Settings absorbed it. */}
-          <Route path="/account" element={<Navigate to="/settings" replace />} />
-          <Route path="/community" element={<Community />} />
-          <Route path="/community/:username" element={<Community />} />
-          <Route path="/profile/:username" element={<Profile />} />
-          <Route path="/profile/:username/deck/:deckId" element={<ProfileDeck />} />
-          <Route path="/more" element={<More />} />
-          <Route path="/edit-history" element={<EditHistory />} />
-          <Route path="/conflicts" element={<FilingConflicts />} />
-          {/* Dev harness for card scanning (S2) — deliberately not in the nav. */}
-          <Route path="/scan-test" element={<ScanTest />} />
-          {/* Curator for the starting-avatar list — also not in the nav. */}
-          <Route path="/avatar-lab" element={<AvatarLab />} />
-          <Route path="*" element={<Collection />} />
-        </Routes>
+        <Suspense fallback={null}>
+          <Routes>
+            <Route path="/" element={<Collection />} />
+            <Route path="/collection" element={<Collection />} />
+            <Route path="/wishlist" element={<Wishlist />} />
+            <Route path="/tradelist" element={<Tradelist />} />
+            <Route path="/sealed" element={<SealedProducts />} />
+            <Route path="/import" element={<Import />} />
+            <Route path="/export" element={<Export />} />
+            {/* Decks, binders and boxes: one screen, three segments (they're all
+                rows of the decks table — see deck/containers.ts). */}
+            <Route path="/decks" element={<Containers kind="deck" />} />
+            <Route path="/decks/:id" element={<ContainerDetail kind="deck" />} />
+            <Route path="/binders" element={<Containers kind="binder" />} />
+            <Route path="/binders/:id" element={<ContainerDetail kind="binder" />} />
+            <Route path="/boxes" element={<Containers kind="box" />} />
+            <Route path="/boxes/:id" element={<ContainerDetail kind="box" />} />
+            <Route path="/trade" element={<Trade />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/movers" element={<PriceMovers />} />
+            <Route path="/spoilers" element={<Spoilers />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/licenses" element={<Licenses />} />
+            <Route path="/settings" element={<Settings />} />
+            {/* /account was the old combined page; Settings absorbed it. */}
+            <Route path="/account" element={<Navigate to="/settings" replace />} />
+            <Route path="/community" element={<Community />} />
+            <Route path="/community/:username" element={<Community />} />
+            <Route path="/profile/:username" element={<Profile />} />
+            <Route path="/profile/:username/deck/:deckId" element={<ProfileDeck />} />
+            <Route path="/more" element={<More />} />
+            <Route path="/edit-history" element={<EditHistory />} />
+            <Route path="/conflicts" element={<FilingConflicts />} />
+            {/* Dev harness for card scanning (S2) — deliberately not in the nav. */}
+            <Route path="/scan-test" element={<ScanTest />} />
+            {/* Curator for the starting-avatar list — also not in the nav. */}
+            <Route path="/avatar-lab" element={<AvatarLab />} />
+            <Route path="*" element={<Collection />} />
+          </Routes>
+        </Suspense>
       </main>
 
       <nav className="tab-bar" aria-label="Primary">

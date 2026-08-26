@@ -1,8 +1,10 @@
 // Generator: extract the symbol -> font-codepoint map from the Mana font's CSS
 // as functional data and emit a clean, self-authored stylesheet that bundles
-// ONLY the woff2 font. The Mana font (by Andrew Gioia) is MIT-licensed, so we
-// could ship its CSS verbatim; we regenerate a trimmed sheet anyway to mirror
-// the Keyrune setup, drop unused icons/formats, and control the pip styling.
+// ONLY the woff2 font. Mana is split-licensed: upstream's README puts the font
+// files under SIL OFL-1.1 and only the CSS/LESS/Sass under MIT (the package's
+// own `license: MIT` field covers the repo, not the font). Either way we could
+// ship its CSS verbatim; we regenerate a trimmed sheet anyway to mirror the
+// Keyrune setup, drop unused icons/formats, and control the pip styling.
 // Run `node scripts/gen-mana.mjs` after updating the `mana-font` dependency.
 // Output: src/vendor/mana/{mana.css,mana.woff2}.
 import { readFileSync, writeFileSync, copyFileSync, mkdirSync } from 'node:fs';
@@ -35,6 +37,7 @@ copyFileSync(join(pkgDir, 'fonts', 'mana.woff2'), join(outDir, 'mana.woff2'));
 
 // Hand-authored styling wrapper. The colour values and hybrid split geometry
 // are lifted from the Mana font's own stylesheet (MIT, Copyright Andrew Gioia).
+// The font binary itself is OFL-1.1; see the header comment.
 const SPLIT = [
   ['wu', 'w', 'u'], ['wb', 'w', 'b'], ['ub', 'u', 'b'], ['ur', 'u', 'r'],
   ['br', 'b', 'r'], ['bg', 'b', 'g'], ['rw', 'r', 'w'], ['rg', 'r', 'g'],
@@ -59,10 +62,13 @@ const phyrexianSel = ['wp', 'up', 'bp', 'rp', 'gp', ...SPLIT.filter((s) => s[0].
 
 const css = `/* Magic mana & ability symbols — the Mana icon font (v${version}).
  *
- * Bundled font: mana.woff2, by Andrew Gioia, MIT-licensed. The symbol ->
+ * Bundled font: mana.woff2, Copyright Andrew Gioia, licensed SIL OFL-1.1 per
+ * the upstream project's README (the npm package's own license field says MIT,
+ * which describes its CSS/LESS/Sass, not the font binaries). The symbol ->
  * glyph-codepoint table below is functional data mechanically extracted from
- * the project; the pip styling is authored here rather than shipping the
- * font's full CSS (unused icons, legacy font formats, the MPlantin text face).
+ * the project's MIT-licensed stylesheet; the pip styling is authored here
+ * rather than shipping that sheet whole (unused icons, legacy font formats,
+ * the MPlantin text face). Full notices: About -> Open source licenses.
  * Regenerate with client/scripts/gen-mana.mjs after updating the dependency.
  * Project: https://mana.andrewgioia.com */
 @font-face {

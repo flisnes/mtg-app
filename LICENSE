@@ -1,0 +1,40 @@
+Copyright (c) 2026 Haakon Flisnes Johansen. All rights reserved.
+
+This software is proprietary. No licence, express or implied, is granted to
+copy, modify, distribute, sublicense, or create derivative works from this
+source code or the compiled application. Publication of this repository does
+not place it in the public domain and does not grant any of the permissions an
+open source licence would.
+
+Permission is granted to view the source for reference and evaluation.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+
+THIRD-PARTY COMPONENTS
+
+This application is built on third-party open source components, each governed
+by its own licence. Those licences apply to those components and are not
+affected by the terms above. The full notices, including every copyright line
+and licence text, are reproduced in the application itself under
+About -> Open source licenses, and are generated from the dependency tree by
+client/scripts/gen-licenses.mjs.
+
+The bundled Keyrune and Mana icon fonts are Copyright Andrew Gioia and are used
+under the SIL Open Font License 1.1 (client/licenses/OFL-1.1.txt).
+
+
+MAGIC: THE GATHERING CONTENT
+
+Magic: The Gathering is a trademark of Wizards of the Coast LLC. Card names,
+card text, card images, mana symbols and set symbols are the property of
+Wizards of the Coast. This application is unofficial Fan Content permitted
+under the Wizards of the Coast Fan Content Policy
+(https://company.wizards.com/en/legal/fancontentpolicy). It is not approved or
+endorsed by Wizards. Portions of the materials used are property of Wizards of
+the Coast. (C) Wizards of the Coast LLC.
+
+Card data and images are provided by Scryfall (https://scryfall.com). Sealed
+product data is provided by MTGJSON (https://mtgjson.com) under CC BY 4.0.

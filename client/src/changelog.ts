@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.134.8',
+    changes: [
+      {
+        kind: 'added',
+        text: 'About now has an "Open source licenses" page listing the 28 components the app is built on, each with its copyright and licence in full. The licences ask to be shipped with the app, and now they are.',
+      },
+      {
+        kind: 'added',
+        text: 'MTGJSON is now credited for sealed product data, as its licence requires, along with TCGCSV and Cardmarket for sealed prices and Andrew Gioia for the set and mana symbol fonts.',
+      },
+    ],
+  },
+  {
     version: '0.134.7',
     changes: [
       {

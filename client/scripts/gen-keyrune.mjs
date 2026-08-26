@@ -37,6 +37,7 @@ const css = `/* Magic set symbols — the Keyrune icon font (v${version}).
  * which "controls all uses and applications" of the prepared font files.
  * The set-code -> glyph-codepoint table below is functional data mechanically
  * extracted from the project; Keyrune's own (GPL-3.0) CSS is NOT redistributed.
+ * Full notices: About -> Open source licenses.
  * Regenerate with client/scripts/gen-keyrune.mjs after updating the dependency.
  * Project: https://keyrune.andrewgioia.com */
 @font-face {

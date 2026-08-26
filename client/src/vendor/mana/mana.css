@@ -1,9 +1,12 @@
 /* Magic mana & ability symbols — the Mana icon font (v1.18.0).
  *
- * Bundled font: mana.woff2, by Andrew Gioia, MIT-licensed. The symbol ->
+ * Bundled font: mana.woff2, Copyright Andrew Gioia, licensed SIL OFL-1.1 per
+ * the upstream project's README (the npm package's own license field says MIT,
+ * which describes its CSS/LESS/Sass, not the font binaries). The symbol ->
  * glyph-codepoint table below is functional data mechanically extracted from
- * the project; the pip styling is authored here rather than shipping the
- * font's full CSS (unused icons, legacy font formats, the MPlantin text face).
+ * the project's MIT-licensed stylesheet; the pip styling is authored here
+ * rather than shipping that sheet whole (unused icons, legacy font formats,
+ * the MPlantin text face). Full notices: About -> Open source licenses.
  * Regenerate with client/scripts/gen-mana.mjs after updating the dependency.
  * Project: https://mana.andrewgioia.com */
 @font-face {

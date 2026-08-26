@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.134.3',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Cards on your wishlist now show a gold star in search results and on deck slots, so you can see what you are already hunting. Your own wishlist stays unstarred.',
+      },
+      {
+        kind: 'changed',
+        text: 'Adding a card to your collection, tradelist or wishlist from its sheet now says which list it went to before the sheet closes.',
+      },
+    ],
+  },
+  {
     version: '0.134.2',
     changes: [
       {

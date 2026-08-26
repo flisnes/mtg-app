@@ -74,9 +74,11 @@ export function wishCardItem(
   opts: { ownership?: Ownership; moverFlags?: MoverFlags; onClick?: () => void },
 ): CardItem {
   // A wish shows a specific printing, or the oracle's default for "any printing".
-  const ownBadge = ownedBadge(
-    opts.ownership?.lookup(r.entry.oracleId, r.entry.scryfallId ?? r.oracle?.defaultScryfallId),
-  );
+  // The wishlist star is zeroed out here: every row on this list is a wish, so
+  // the star would say nothing — same reason the collection doesn't checkmark
+  // itself. What's worth knowing is whether you've since picked the card up.
+  const own = opts.ownership?.lookup(r.entry.oracleId, r.entry.scryfallId ?? r.oracle?.defaultScryfallId);
+  const ownBadge = ownedBadge(own && { ...own, wished: 0 });
   // Any finish/condition/lang the wish pins down (undefined = "any", shown as
   // nothing); condition is a minimum, English is the norm (only shown if not).
   const prefs = [

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { CollectionEntry, Condition, ContainerKind, CopyPrefs, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
@@ -375,7 +375,21 @@ export function CardSheet({
   // nested card sheet when the user drills from that event into another card.
   const [eventEntry, setEventEntry] = useState<HistoryEntry | null>(null);
   const [nestedCard, setNestedCard] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
+  // The card landed on one of your lists: the sheet says so where the button
+  // was, then shows itself out. A toast would fire off-screen behind the sheet,
+  // and the answer belongs on the thing you just pressed.
+  const [added, setAdded] = useState<ListKind | null>(null);
   useDismiss(busy ? null : onClose);
+
+  // onClose is usually a fresh arrow from the caller, so hold it in a ref: the
+  // goodbye timer must not restart every time the parent re-renders.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    if (!added) return;
+    const t = window.setTimeout(() => closeRef.current(), 800);
+    return () => window.clearTimeout(t);
+  }, [added]);
 
   useEffect(() => {
     let live = true;
@@ -574,6 +588,11 @@ export function CardSheet({
         setBusy(false);
         return;
       }
+      // Onto one of the three lists: flash which one, and let the timer close.
+      if (addTo.kind !== 'deck') {
+        setAdded(listDest(dest));
+        return;
+      }
     } else if (sessionCard) {
       onApply?.(sessionValues(quantity));
     } else if (wishEntry) {
@@ -617,10 +636,7 @@ export function CardSheet({
       }
       return true;
     }
-    // Add mode into one of the three personal lists. An explicit button
-    // (dest) wins; otherwise the sheet's own scope decides, and a
-    // context-free ('default') search files to the collection.
-    const where: ListKind = dest ?? (addTo.kind === 'wishlist' || addTo.kind === 'tradelist' ? addTo.kind : 'collection');
+    const where = listDest(dest);
     if (where === 'wishlist') {
       await addToWishlist({ oracleId: oracleCard.oracleId, scryfallId: scryfallId || null, ...wishPrefs, quantity });
     } else {
@@ -636,6 +652,13 @@ export function CardSheet({
       });
     }
     return true;
+  }
+
+  /** Which of the three personal lists an add lands on. An explicit button
+   *  (dest) wins; otherwise the sheet's own scope decides, and a context-free
+   *  ('default') search files to the collection. */
+  function listDest(dest?: ListKind): ListKind {
+    return dest ?? (addTo.kind === 'wishlist' || addTo.kind === 'tradelist' ? addTo.kind : 'collection');
   }
 
   /** This sheet's card as cardboard being filed somewhere, for the prompt. */
@@ -1048,7 +1071,15 @@ export function CardSheet({
           </div>
         )}
 
-        {mode === 'info' ? (
+        {added ? (
+          // Where the +List button was a moment ago: the same shape, answered.
+          <div className="sheet-actions">
+            <p className="sheet-added" role="status">
+              <Icon name="check" size={16} /> Added to {LIST_META[added].label.toLowerCase()}{' '}
+              <Icon name={LIST_META[added].icon} size={16} />
+            </p>
+          </div>
+        ) : mode === 'info' ? (
           <div className="sheet-actions">
             <button className="primary" onClick={onClose}>
               Close

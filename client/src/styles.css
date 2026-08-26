@@ -2743,6 +2743,29 @@ button.primary {
   align-items: center;
   gap: 4px;
 }
+/* "Added to wishlist", standing in the primary button's place for the moment
+   before the sheet closes. Green and popped-in so the eye catches it without a
+   toast sliding in from somewhere else. */
+.sheet-added {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--ok);
+  border-radius: 8px;
+  color: var(--ok);
+  font-weight: 600;
+  animation: check-pop 0.22s ease-out;
+}
+.sheet-added svg {
+  flex: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-added {
+    animation: none;
+  }
+}
 
 /* File-into-your-lists row for sheets that otherwise can't (a card you're only
    viewing, or a deck slot you may not own): sits above the mode's own actions,

@@ -4,10 +4,11 @@ import type { CollectionEntry, Condition, Finish } from '@mtg/shared';
 import { wishPrefsMet } from '@mtg/shared';
 import { db } from './schema.js';
 
-// One shared answer to "do I own this card?" for the ownership checkmark shown
-// on cards everywhere (search, scan, wishlist, decks, trade, the card sheet).
-// A single live query over the whole collection, grouped per oracle, so every
-// render site reads the same source instead of each rolling its own query.
+// One shared answer to "where does this card stand with me?" for the checkmark
+// shown on cards everywhere (search, scan, wishlist, decks, trade, the card
+// sheet). Two live queries — the whole collection and the whole wishlist —
+// grouped per oracle, so every render site reads the same source instead of
+// each rolling its own.
 
 export interface OwnedStatus {
   /** Copies owned across every printing of this oracle card. */
@@ -16,6 +17,8 @@ export interface OwnedStatus {
   forTrade: number;
   /** Do we own the exact printing being shown (not just some other edition)? */
   ownsExact: boolean;
+  /** Copies wished for across every printing of this oracle. */
+  wished: number;
 }
 
 /**
@@ -53,12 +56,13 @@ interface OracleOwn {
   entries: CollectionEntry[];
 }
 
-const NONE: OwnedStatus = { qty: 0, forTrade: 0, ownsExact: false };
+const NONE: OwnedStatus = { qty: 0, forTrade: 0, ownsExact: false, wished: 0 };
 
 export function useOwnershipIndex(): OwnershipIndex | undefined {
   const rows = useLiveQuery(() => db.collection.toArray(), []);
+  const wishes = useLiveQuery(() => db.wishlist.toArray(), []);
   return useMemo(() => {
-    if (!rows) return undefined;
+    if (!rows || !wishes) return undefined;
     const byOracle = new Map<string, OracleOwn>();
     for (const e of rows) {
       let g = byOracle.get(e.oracleId);
@@ -71,22 +75,28 @@ export function useOwnershipIndex(): OwnershipIndex | undefined {
       g.ids.add(e.scryfallId);
       g.entries.push(e);
     }
+    // Wishes are counted per oracle, not per printing: a wish can sit on "any
+    // printing", so "you're after this card" is the only claim it always makes.
+    const wishedByOracle = new Map<string, number>();
+    for (const w of wishes) wishedByOracle.set(w.oracleId, (wishedByOracle.get(w.oracleId) ?? 0) + w.quantity);
     return {
       lookup(oracleId, scryfallId) {
+        const wished = wishedByOracle.get(oracleId) ?? 0;
         const g = byOracle.get(oracleId);
-        if (!g) return NONE;
-        return { qty: g.qty, forTrade: g.forTrade, ownsExact: !!scryfallId && g.ids.has(scryfallId) };
+        if (!g) return wished ? { ...NONE, wished } : NONE;
+        return { qty: g.qty, forTrade: g.forTrade, ownsExact: !!scryfallId && g.ids.has(scryfallId), wished };
       },
       lookupWanted(oracleId, wants) {
+        const wished = wishedByOracle.get(oracleId) ?? 0;
         const g = byOracle.get(oracleId);
-        if (!g) return NONE;
+        if (!g) return wished ? { ...NONE, wished } : NONE;
         // Exact means exact: the slot has to say which printing, finish,
         // condition and language it means before we can claim you have *that*
         // card. Leave anything on "any" and it's the single check.
         const pinned = !!wants.scryfallId && !!wants.finish && !!wants.condition && !!wants.lang;
         const met =
           pinned && g.entries.some((e) => wants.scryfallId === e.scryfallId && wishPrefsMet(wants, e));
-        return { qty: g.qty, forTrade: g.forTrade, ownsExact: met };
+        return { qty: g.qty, forTrade: g.forTrade, ownsExact: met, wished };
       },
       ownedPrintings(oracleId) {
         const g = byOracle.get(oracleId);
@@ -96,5 +106,5 @@ export function useOwnershipIndex(): OwnershipIndex | undefined {
         return byOracle.get(oracleId)?.entries ?? [];
       },
     };
-  }, [rows]);
+  }, [rows, wishes]);
 }

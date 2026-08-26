@@ -86,7 +86,9 @@ function bestPeerLine(lines: TradeLine[] | null, oracleId: string): TradeLine | 
 function ownIndicator(own: Owned | undefined, scryfallId?: string): OwnedBadgeSpec | null {
   if (!own) return null;
   const ownsExact = !!scryfallId && own.entries.some((e) => e.scryfallId === scryfallId);
-  return ownedBadge({ qty: own.qty, forTrade: own.forTrade, ownsExact });
+  // No wishlist rung: this is the "you give" side, so what you're after is
+  // beside the point (the "you get" panel stars its own wishlist matches).
+  return ownedBadge({ qty: own.qty, forTrade: own.forTrade, ownsExact, wished: 0 });
 }
 
 /**

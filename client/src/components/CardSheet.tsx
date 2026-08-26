@@ -139,6 +139,7 @@ export function CardSheet({
   initialScryfallId,
   initialTab,
   addTarget,
+  onAdded,
   readOnly = false,
   highlightPrintings,
   onClose,
@@ -188,6 +189,9 @@ export function CardSheet({
   initialTab?: 'details' | 'history';
   /** Add mode only: where the add goes (defaults to the collection). */
   addTarget?: AddTarget;
+  /** Add mode only: the copy that just landed in the collection, reported so the
+   *  sheet that opened this one can point a slot at it. */
+  onAdded?: (copy: { scryfallId: string; condition: Condition; finish: Finish; lang: string }) => void;
   /** Info-only: show the card and its printings, no collection editing. */
   readOnly?: boolean;
   /**
@@ -365,6 +369,9 @@ export function CardSheet({
   const [sealedOpen, setSealedOpen] = useState(false);
   // "Pick one from my collection" (container slots): the owned-copies overlay.
   const [pickingCopy, setPickingCopy] = useState(false);
+  // The copy they're holding was never added: a nested add form, whose result
+  // becomes this slot's copy.
+  const [addingCopy, setAddingCopy] = useState(false);
   // "File this copy": the deck/binder/box picker, from a card you own.
   const [pickingContainer, setPickingContainer] = useState(false);
   // History rows expand into their inline price editor. Its own toggle, not the
@@ -643,13 +650,15 @@ export function CardSheet({
       // Collection and tradelist both write a collection entry (the latter
       // starts with copies marked for trade). A wishlist-origin sheet can
       // sit on "any printing", so fall back to a concrete edition here.
+      const addedId = scryfallId || oracleCard.defaultScryfallId;
       await addToCollection({
         oracleId: oracleCard.oracleId,
-        scryfallId: scryfallId || oracleCard.defaultScryfallId,
+        scryfallId: addedId,
         ...concrete,
         quantity,
         quantityForTrade: where === 'tradelist' ? clampedForTrade || 1 : clampedForTrade,
       });
+      onAdded?.({ scryfallId: addedId, ...concrete });
     }
     return true;
   }
@@ -1202,7 +1211,28 @@ export function CardSheet({
             setLang(copy.lang);
             setPickingCopy(false);
           }}
+          onAddCopy={() => {
+            setPickingCopy(false);
+            setAddingCopy(true);
+          }}
           onClose={() => setPickingCopy(false)}
+        />
+      )}
+      {/* Add the missing copy without losing the slot behind it: the nested
+          sheet writes the collection entry, hands it back, and this form ends up
+          exactly where picking an existing copy would have left it. */}
+      {addingCopy && (
+        <CardSheet
+          oracleCard={oracleCard}
+          initialScryfallId={scryfallId || oracleCard.defaultScryfallId}
+          addTarget={{ kind: 'collection' }}
+          onAdded={(copy) => {
+            setScryfallId(copy.scryfallId);
+            setCondition(copy.condition);
+            setFinish(copy.finish);
+            setLang(copy.lang);
+          }}
+          onClose={() => setAddingCopy(false)}
         />
       )}
       {pickingContainer && (

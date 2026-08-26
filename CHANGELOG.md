@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.134.6
+
+- **"Pick one from my collection" no longer dead-ends when the edition you are holding was never added.** The copy picker now carries a "Not here? Add a copy" line under the grid. It opens the collection form for that card, and the copy you describe there goes straight into the slot you were filling, edition, condition, finish and language and all. Previously the only way out was to back out of the deck, add the card, and come back.
+
 ## 0.134.5
 
 - **Fixed: tugging down at the top of a page slid the bottom nav bar half off the screen.** Not the pull-to-refresh kind, just an ordinary short swipe when there was nothing left to scroll. The gesture was escaping the page and landing on the browser itself, which answered by sliding its own chrome back in and shoving the tab bar under the edge of the display. The swipe now stops at the page, so Collection, Decks, Trade and More stay put no matter how hard you pull.

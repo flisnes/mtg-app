@@ -2535,6 +2535,19 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
 .edition-picker-head button {
   padding: 0.3rem 0.6rem;
 }
+/* The way out of the copy picker when the edition you're holding was never
+   added: pinned under the grid (which scrolls), so it's there whatever the
+   scroll position. */
+.copy-picker-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex: none;
+  font-size: 0.9rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+}
 .edition-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));

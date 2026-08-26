@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.134.6',
+    changes: [
+      {
+        kind: 'added',
+        text: '"Pick one from my collection" now has a "Not here? Add a copy" line under the grid, for when the edition you are holding never made it into the collection. Add it there and that copy fills the slot you were on.',
+      },
+    ],
+  },
+  {
     version: '0.134.5',
     changes: [
       {

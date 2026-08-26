@@ -143,12 +143,17 @@ export function CopyPicker({
   printings,
   selected,
   onSelect,
+  onAddCopy,
   onClose,
 }: {
   copies: CollectionEntry[];
   printings: Priced<Printing>[];
   selected: CopySelection;
   onSelect: (copy: CollectionEntry) => void;
+  /** The edition they're holding isn't on the grid, because it never made it
+   *  into the collection. Offered as a way out of the picker rather than a dead
+   *  end: add the copy first, then file that one. */
+  onAddCopy?: () => void;
   onClose: () => void;
 }) {
   useDismiss(onClose);
@@ -173,6 +178,16 @@ export function CopyPicker({
           </button>
         </div>
         <CopyGrid copies={copies} printings={printings} selected={selected} onSelect={onSelect} />
+        {onAddCopy && (
+          <button
+            type="button"
+            className="linklike copy-picker-add"
+            onClick={onAddCopy}
+            title="Add the copy to your collection, then file that one"
+          >
+            <Icon name="plus" size={14} /> Not here? Add a copy
+          </button>
+        )}
       </div>
     </div>
   );

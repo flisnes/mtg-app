@@ -19,7 +19,7 @@ import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
 import { BulkActionBar } from './BulkActionBar.js';
 import { useMultiSelect } from './useMultiSelect.js';
-import { RecentSearches, recordSearch } from './RecentSearches.js';
+import { SearchHistoryDropdown, recordSearch, useSearchHistory } from './RecentSearches.js';
 import { ScopedResults, type Scope } from './ScopedResults.js';
 import { ProfileScopedResults } from './ProfileScopedResults.js';
 import { ContainerScopedResults } from './ContainerScopedResults.js';
@@ -278,29 +278,71 @@ export function GlobalSearchBar() {
   // a sheet opened from a search result closes before the search itself does.
   useDismiss(open ? close : null);
 
+  // Past searches hang under the bar the way a browser's address bar does:
+  // open while the input has focus, narrowed by what's typed, walked with the
+  // arrow keys. `active` is -1 until an arrow key moves it, so Enter keeps
+  // meaning "commit what I typed" for anyone who never touches the list.
+  const [histOpen, setHistOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const matches = useSearchHistory(query);
+  const showHistory = histOpen && matches.length > 0;
+  useEffect(() => setActive(-1), [query]);
+
+  // Picking only fills the query — results update live, and the search is
+  // recorded (and so moves to the top) when it ends, like any other.
+  function pickHistory(q: string) {
+    setQuery(q);
+    setHistOpen(false);
+  }
+
   return (
     <>
       <header className="app-header">
-        <input
-          ref={inputRef}
-          className="search-input"
-          type="search"
-          placeholder='Search cards… (bolt, t:goblin, o:"draw a card")'
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => setOpen(true)}
-          // Results update live; Enter just dismisses the (mobile) keyboard
-          // so it stops covering them. The overlay stays open. It does count as
-          // committing the query though, so the recent list gets it now rather
-          // than only if the search is closed cleanly.
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter') return;
-            recordSearch(query);
-            e.currentTarget.blur();
-          }}
-          enterKeyHint="search"
-          aria-label="Search cards"
-        />
+        <div className="search-bar-wrap">
+          <input
+            ref={inputRef}
+            className="search-input"
+            type="search"
+            placeholder='Search cards… (bolt, t:goblin, o:"draw a card")'
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setHistOpen(true);
+            }}
+            onFocus={() => {
+              setOpen(true);
+              setHistOpen(true);
+            }}
+            onBlur={() => setHistOpen(false)}
+            // Results update live; Enter just dismisses the (mobile) keyboard
+            // so it stops covering them. The overlay stays open. It does count as
+            // committing the query though, so the recent list gets it now rather
+            // than only if the search is closed cleanly. With a suggestion
+            // highlighted, Enter takes that instead and the keyboard stays up.
+            onKeyDown={(e) => {
+              if (showHistory && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                e.preventDefault();
+                const step = e.key === 'ArrowDown' ? 1 : -1;
+                setActive((i) => Math.max(-1, Math.min(matches.length - 1, i + step)));
+                return;
+              }
+              if (e.key !== 'Enter') return;
+              if (showHistory && active >= 0) {
+                e.preventDefault();
+                pickHistory(matches[active]!);
+                return;
+              }
+              recordSearch(query);
+              setHistOpen(false);
+              e.currentTarget.blur();
+            }}
+            enterKeyHint="search"
+            aria-label="Search cards"
+          />
+          {showHistory && (
+            <SearchHistoryDropdown list={matches} active={active} onPick={pickHistory} onHover={setActive} />
+          )}
+        </div>
         {open ? (
           <button className="header-close" onClick={close} aria-label="Close search">
             ✕
@@ -329,7 +371,7 @@ export function GlobalSearchBar() {
 }
 
 function SearchOverlay() {
-  const { query, setQuery, filters, setFilters, scope, setScope } = useContext(Ctx)!;
+  const { query, filters, setFilters, scope, setScope } = useContext(Ctx)!;
   const { pathname } = useLocation();
   // The sheet opens on the printing the result was showing, so tapping a tile
   // doesn't silently swap to a different edition than the one you tapped.
@@ -503,7 +545,6 @@ function SearchOverlay() {
               <p className="search-meta">
                 Filtering your {SCOPE_NOUN[scope]}. Turn the chip off to search every card instead.
               </p>
-              <RecentSearches onPick={setQuery} />
             </>
           )}
         </div>
@@ -622,16 +663,12 @@ function SearchOverlay() {
     </label>
   );
 
-  // Nothing typed yet: the recent searches are the offer, with the usual hint
-  // under them. Picking one just fills the query — results update live, and the
-  // keyboard stays down so it doesn't cover them.
+  // Nothing typed yet: recent searches hang off the search bar itself, so all
+  // that's left down here is the hint.
   const emptyState = (
-    <>
-      <RecentSearches onPick={setQuery} />
-      <p className="search-meta">
-        Type a card name to search the whole card database.{targetHint && ` ${targetHint}`}
-      </p>
-    </>
+    <p className="search-meta">
+      Type a card name to search the whole card database.{targetHint && ` ${targetHint}`}
+    </p>
   );
 
   return (
@@ -641,9 +678,6 @@ function SearchOverlay() {
 
         {scoped ? (
           <>
-            {/* An empty scoped query lists everything in scope, so there's no
-                empty state to hang these off — they go above the list. */}
-            {!query && <RecentSearches onPick={setQuery} />}
             {scope && scope !== 'movers' && <ScopedResults scope={scope} query={query} />}
             {containerOn && target.kind === 'deck' && (
               <ContainerScopedResults deckId={target.deckId} kind={containerMeta.kind} format={deckCtx?.format} query={query} />

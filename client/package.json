@@ -1,6 +1,6 @@
 {
   "name": "@mtg/client",
-  "version": "0.134.8",
+  "version": "0.134.9",
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './icons.js';
 
 // Recent card searches, offered the moment the search bar is focused.
@@ -13,8 +13,13 @@ import { Icon } from './icons.js';
 // `settings` table — same pattern as useViewMode (components/CardViews.tsx).
 
 const KEY = 'searchHistory';
-/** Every stored query is shown, so this is also the length of the list. */
-const MAX = 10;
+/**
+ * The list is deep rather than a top-ten: the dropdown filters it against what
+ * you're typing, so a query from three weeks ago is still one substring away.
+ */
+const MAX = 500;
+/** How many matches the dropdown renders. It's a suggestion list, not an archive. */
+const SHOWN = 100;
 /** A single character is a slip of the finger, not a search worth keeping. */
 const MIN_LENGTH = 2;
 
@@ -84,27 +89,65 @@ function useHistory(): string[] {
   return list;
 }
 
-/** The recent-search list. Renders nothing until there's something to offer. */
-export function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
+/**
+ * Past queries worth offering for what's typed so far. Empty input offers the
+ * most recent; anything else narrows by substring, since "goblin" should find
+ * `t:goblin cmc<=3` as readily as it finds itself. What you've already typed is
+ * dropped — suggesting it back is a wasted row.
+ */
+export function useSearchHistory(query: string): string[] {
   const list = useHistory();
-  if (!list.length) return null;
+  return useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return list.slice(0, SHOWN);
+    return list.filter((h) => h.toLowerCase().includes(q) && h.toLowerCase() !== q).slice(0, SHOWN);
+  }, [list, query]);
+}
+
+/**
+ * The history panel that hangs off the search bar. Translucent on purpose: the
+ * collection stays visible underneath, so this reads as a passing suggestion
+ * rather than a page that replaced your cards.
+ *
+ * `active` is the arrow-key highlight (-1 = none, the typed text stands). The
+ * mousedown guard is what keeps the input focused through a click, so keyboard
+ * and mouse can be mixed without the panel closing under the cursor.
+ */
+export function SearchHistoryDropdown({
+  list,
+  active,
+  onPick,
+  onHover,
+}: {
+  list: string[];
+  active: number;
+  onPick: (query: string) => void;
+  onHover: (index: number) => void;
+}) {
+  const listRef = useRef<HTMLUListElement | null>(null);
+  useEffect(() => {
+    if (active < 0) return;
+    listRef.current?.children[active]?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
+
   return (
-    <section className="recent-searches">
-      <div className="recent-searches-head">
-        <h3>Recent searches</h3>
-        <button className="chip" onClick={clearSearchHistory}>
-          Clear
-        </button>
-      </div>
-      <ul className="recent-search-list">
-        {list.map((q) => (
-          <li key={q}>
-            <button className="recent-search" onClick={() => onPick(q)} title={`Search ${q} again`}>
+    <div className="search-history" onMouseDown={(e) => e.preventDefault()}>
+      <ul className="search-history-list" ref={listRef} role="listbox" aria-label="Recent searches">
+        {list.map((q, i) => (
+          <li key={q} className={i === active ? 'is-active' : undefined}>
+            <button
+              className="search-history-item"
+              role="option"
+              aria-selected={i === active}
+              onClick={() => onPick(q)}
+              onMouseEnter={() => onHover(i)}
+              title={`Search ${q} again`}
+            >
               <Icon name="history" size={14} />
-              <span className="recent-search-q">{q}</span>
+              <span className="search-history-q">{q}</span>
             </button>
             <button
-              className="recent-search-forget"
+              className="search-history-forget"
               onClick={() => forgetSearch(q)}
               aria-label={`Forget ${q}`}
               title="Forget this search"
@@ -114,6 +157,9 @@ export function RecentSearches({ onPick }: { onPick: (query: string) => void }) 
           </li>
         ))}
       </ul>
-    </section>
+      <div className="search-history-foot">
+        <button onClick={clearSearchHistory}>Clear history</button>
+      </div>
+    </div>
   );
 }

@@ -113,9 +113,16 @@ button.danger-outline {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
-.app-header .search-input {
+/* The input's own box, so the history panel can hang off it instead of being
+   centred on the viewport (the ✕ button offsets the header's flex row). */
+.search-bar-wrap {
+  flex: 1;
+  min-width: 0;
   max-width: 720px;
   margin: 0 auto;
+  position: relative;
+}
+.app-header .search-input {
   padding: 0.55rem 1rem;
 }
 .header-close {
@@ -307,77 +314,100 @@ button.danger-outline {
   margin: 0;
 }
 
-/* Recent searches: shown in place of results until something is typed, so a
-   long Scryfall query survives a trip back to the deck you're building. */
-.recent-searches {
+/* Recent searches: a history panel hanging off the search bar, browser
+   address-bar style. Translucent so the cards underneath stay visible — it's a
+   suggestion passing over the page, not a page of its own. Rows carry no boxes;
+   the arrow-key/hover highlight is the only chrome they get. */
+.search-history {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  right: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  max-height: min(50vh, 420px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  background: rgba(26, 26, 30, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
 }
-.recent-searches-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-.recent-searches-head h3 {
-  margin: 0;
-  font-size: 0.95rem;
-}
-.recent-search-list {
+.search-history-list {
   list-style: none;
   margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  padding: 0.25rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-.recent-search-list li {
+.search-history-list li {
   display: flex;
   align-items: stretch;
-  gap: 0.25rem;
+  border-radius: 8px;
 }
-.recent-search {
+.search-history-list li:hover,
+.search-history-list li.is-active {
+  background: rgba(255, 255, 255, 0.08);
+}
+.search-history-item {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.55rem 0.7rem;
-  background: var(--surface);
+  padding: 0.5rem 0.6rem;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
   text-align: left;
+  font-size: 0.9rem;
 }
-.recent-search:hover {
-  border-color: var(--accent);
-}
-.recent-search svg {
+.search-history-item svg {
   flex-shrink: 0;
   color: var(--text-dim);
 }
 /* Queries can be long; keep them on one line so the list stays scannable. */
-.recent-search-q {
+.search-history-q {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.9rem;
 }
-.recent-search-forget {
+/* Dim until pointed at, but never hidden: on a phone there is no hover, and
+   forgetting a typo'd search shouldn't need a mouse. */
+.search-history-forget {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   padding: 0 0.6rem;
   background: transparent;
-  border-color: transparent;
+  border: none;
   color: var(--text-dim);
+  opacity: 0.5;
 }
-.recent-search-forget:hover {
+.search-history-list li:hover .search-history-forget,
+.search-history-list li.is-active .search-history-forget {
+  opacity: 1;
+}
+.search-history-forget:hover {
   color: var(--text);
 }
-/* In the slim scope bar the list sits on top of the page it's filtering, so it
-   scrolls instead of shoving the rows you're looking at off screen. */
-.search-scopebar .recent-search-list {
-  max-height: 33vh;
-  overflow-y: auto;
+.search-history-foot {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.search-history-foot button {
+  padding: 0.35rem 0.7rem;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+.search-history-foot button:hover {
+  color: var(--text);
 }
 
 /* Scope chips: narrow the global search to what you already own. */

@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.134.9',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Recent searches now drop down from the search bar as a small see-through panel instead of filling the screen. Arrow keys walk the list, Enter picks one.',
+      },
+      {
+        kind: 'changed',
+        text: 'The search bar remembers 500 past searches, up from 10, and narrows them to whatever you are typing.',
+      },
+    ],
+  },
+  {
     version: '0.134.8',
     changes: [
       {

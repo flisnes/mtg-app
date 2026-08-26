@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.134.9
+
+- **Recent searches now hang off the search bar instead of taking over the screen.** Tap the bar and a small translucent panel drops down over your cards, browser-style: no boxes around the rows, and the collection stays visible behind it. Arrow keys walk the list and Enter takes the highlighted one, so a long Scryfall query is two keystrokes away without reaching for the screen.
+- **The list also filters as you type and remembers 500 searches instead of 10.** Typing "goblin" narrows it to every past query with "goblin" anywhere in it, so an old `t:goblin o:"draw a card" cmc<=3` is findable weeks later. The × on a row still forgets it, and "Clear history" at the foot of the panel wipes the lot.
+
 ## 0.134.8
 
 - **The app now carries the licences of the open source it is built on, at About -> Open source licenses.** Twenty-eight components, from React and Dexie to the Tesseract engine behind card scanning and the Keyrune and Mana symbol fonts, each with its copyright line and full licence text. MIT, BSD and Apache-2.0 all ask that those notices travel with the app, and they were not there before. The page is generated straight from what actually ships, so it cannot drift, and it loads only when opened.

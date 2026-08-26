@@ -58,23 +58,33 @@ export function useWhatsNew(): { entries: ChangelogEntry[]; dismiss: () => void 
   return entries ? { entries, dismiss } : null;
 }
 
+/**
+ * The scrollable version-by-version list. Shared by the after-update popup and
+ * the full history sheet the About page's version box opens.
+ */
+export function ChangelogList({ entries }: { entries: ChangelogEntry[] }) {
+  return (
+    <ul className="whats-new-list">
+      {entries.map((entry) => (
+        <li key={entry.version}>
+          <div className="whats-new-version">{entry.version}</div>
+          <ul className="whats-new-changes">
+            {entry.changes.map((change, i) => (
+              <li key={i}>
+                <strong>{KIND_LABEL[change.kind]}:</strong> {change.text}
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function WhatsNewModal({ entries, onClose }: { entries: ChangelogEntry[]; onClose: () => void }) {
   return (
     <Sheet onClose={onClose} title="What’s changed">
-      <ul className="whats-new-list">
-        {entries.map((entry) => (
-          <li key={entry.version}>
-            <div className="whats-new-version">{entry.version}</div>
-            <ul className="whats-new-changes">
-              {entry.changes.map((change, i) => (
-                <li key={i}>
-                  <strong>{KIND_LABEL[change.kind]}:</strong> {change.text}
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
+      <ChangelogList entries={entries} />
       <div className="sheet-actions">
         <button className="primary" onClick={onClose}>
           Got it

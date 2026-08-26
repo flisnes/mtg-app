@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Page } from './Page.js';
 import { APP_VERSION } from '../version.js';
 import { getSetting } from '../db/settings.js';
+import { CHANGELOG } from '../changelog.js';
+import { ChangelogList } from '../components/WhatsNewModal.js';
+import { Sheet } from '../components/Sheet.js';
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return '—';
@@ -13,6 +16,7 @@ export function About() {
   const [cardDbVersion, setCardDbVersion] = useState<string>();
   const [pricesUpdatedAt, setPricesUpdatedAt] = useState<string>();
   const [counts, setCounts] = useState<{ oracle: number; printings: number }>();
+  const [showChangelog, setShowChangelog] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -28,7 +32,14 @@ export function About() {
     <Page title="About">
       <dl className="kv">
         <dt>App version</dt>
-        <dd>{APP_VERSION}</dd>
+        <dd>
+          {/* The version box doubles as the way into the bundled release notes:
+              the same list the after-update popup shows, all of it. */}
+          <button className="version-box" onClick={() => setShowChangelog(true)}>
+            {APP_VERSION}
+            <span className="fine-print">What’s changed</span>
+          </button>
+        </dd>
         <dt>Card database</dt>
         <dd>{cardDbVersion ? formatDate(cardDbVersion) : 'not loaded'}</dd>
         <dt>Cards</dt>
@@ -51,6 +62,17 @@ export function About() {
           Not approved or endorsed by Wizards. © Wizards of the Coast LLC.
         </p>
       </section>
+
+      {showChangelog && (
+        <Sheet onClose={() => setShowChangelog(false)} title="What’s changed">
+          <ChangelogList entries={CHANGELOG} />
+          <div className="sheet-actions">
+            <button className="primary" onClick={() => setShowChangelog(false)}>
+              Close
+            </button>
+          </div>
+        </Sheet>
+      )}
     </Page>
   );
 }

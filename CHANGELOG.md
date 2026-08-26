@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.134.2
+
+- **The release notes are now readable whenever you want them, not just once.** Every version's notes ship inside the app, but until now they flashed past in the popup after an update and were gone. Tap the app version in About and the whole history opens in a scrollable sheet, newest first, so you can go back and find the change you half-remember.
+
 ## 0.134.1
 
 - **Fixed: two different printings of the same card added to a binder or box collapsed into one, and the printing you picked second was thrown away.** Nine Nazgûl arts went in and one came out, quantity ×2. The add was folding everything with the same name onto one line, the way a pasted decklist should, which is wrong for a shelf: the Revised one and the Fourth Edition one are two different pieces of cardboard sitting in there. A line is now identified by what it names — printing, finish, minimum condition and language — so the arts you picked stay separate, while adding another of a printing already filed still lands on the line that's there, and "any printing" adds still pool together. The + button in search results now files the edition you were looking at, too, instead of dropping it.

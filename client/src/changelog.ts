@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.134.2',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Tap the app version in About to read the full release notes, all versions, scrollable. No more catching them once and losing them.',
+      },
+    ],
+  },
+  {
     version: '0.134.1',
     changes: [
       {

@@ -17,6 +17,12 @@ import type { OwnedStatus } from '../db/useOwnership.js';
 //   star (gold)           — you don't own it, but it's on your wishlist
 //   nothing               — you don't own it and aren't after it
 //
+// The tag and the star also *invert* (solid fill instead of a tinted chip) when
+// the list is talking about the printing on screen: for-trade copies of this
+// exact edition, or a wish that names it (a wish on "any printing" always counts
+// — anything you're shown is the one). Same step the double checkmark makes for
+// the collection, one glance up from "some other edition of this card".
+//
 // "Filed here" outranks everything: you're looking at the deck, binder or box the
 // card lives in, and that's the most specific thing we can say about it. Below
 // that, for-trade wins the icon (matching the card sheet's long-standing
@@ -54,21 +60,27 @@ export function ownedBadge(
     if (status.wished <= 0) return null;
     return {
       icon: <Icon name="wishlist" size={size} />,
-      cls: 'badge-wish',
-      title: `On your wishlist (${status.wished})`,
+      cls: `badge-wish${status.wishesExact ? ' badge-exact' : ''}`,
+      title:
+        `On your wishlist (${status.wished})` +
+        (status.wishesExact ? ' · this printing counts' : ' · you want another printing'),
     };
   }
   const trade = status.forTrade > 0;
   const name = filedHere ? 'collection' : trade ? 'tradelist' : status.ownsExact ? 'checkDouble' : 'check';
   const wish = status.wished > 0 ? ` · ${status.wished} on your wishlist` : '';
+  // Only the tag inverts here: the green rungs already spell exact-vs-other out
+  // with one checkmark or two.
+  const exact = trade && !filedHere && status.tradesExact ? ' badge-exact' : '';
+  const forTrade = `${status.forTrade} for trade${status.tradesExact ? ', this printing among them' : ''}`;
   const title =
     (filedHere
       ? `Your copy is filed here${trade ? ` · ${status.forTrade} of your ${status.qty} are for trade` : ''}`
-      : (trade ? `You have ${status.qty} (${status.forTrade} for trade)` : `You own ${status.qty}`) +
+      : (trade ? `You have ${status.qty} (${forTrade})` : `You own ${status.qty}`) +
         ` · ${status.ownsExact ? terms.yes : terms.no}`) + wish;
   return {
     icon: <Icon name={name} size={size} />,
-    cls: filedHere ? 'own-filed' : trade ? 'own-trade' : 'own-yes',
+    cls: (filedHere ? 'own-filed' : trade ? 'own-trade' : 'own-yes') + exact,
     title,
   };
 }

@@ -3991,6 +3991,19 @@ button.chip[aria-pressed='true'] {
 .tile-badge.own-yes {
   color: var(--ok);
 }
+/* ...unless the list means *this* printing (for-trade copies of this edition, or
+   a wish that covers it), in which case the chip flips to solid: the same step
+   up in certainty the double checkmark makes for the collection. */
+.badge.own-trade.badge-exact,
+.tile-badge.own-trade.badge-exact {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.badge.badge-wish.badge-exact,
+.tile-badge.badge-wish.badge-exact {
+  background: #eac54f;
+  color: #1a1a24;
+}
 
 /* ---- Bottom tab bar ---- */
 .tab-bar {

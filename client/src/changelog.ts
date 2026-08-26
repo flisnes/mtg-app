@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.134.4',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The trade tag and wishlist star now fill in solid when the printing on screen is the one on your list, and stay tinted when it is some other edition. A wish on "any printing" always counts as a match.',
+      },
+    ],
+  },
+  {
     version: '0.134.3',
     changes: [
       {

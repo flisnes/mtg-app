@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.134.4
+
+- **The trade tag and the wishlist star now fill in solid when the printing you are looking at is the one on the list.** Same step in certainty the second checkmark makes for your collection: a tinted chip means "this card is on that list somewhere", a solid one means "this exact printing is". The purple tag fills when the copies you have marked for trade are of the edition on screen, and the gold star fills when the wish names that edition, or when it is set to "any printing" and every edition counts. Hover or long-press either one and the tooltip spells out which case you are in.
+
 ## 0.134.3
 
 - **Cards on your wishlist now wear the star wherever you meet them, and adding a card from its sheet says so before the sheet closes.** Searching the whole database and adding something to your wishlist used to look like nothing happened: the sheet just shut. Now the result gets the same gold star the trade board uses, so you can see at a glance which of these you're already hunting, and it shows up on deck slots you don't own yet too. Your own wishlist doesn't star itself, the same way the collection doesn't checkmark itself; what it shows is whether you've since picked the card up. Adding to your collection, tradelist or wishlist from a card sheet now answers in the button's place ("Added to wishlist") for a moment before the sheet bows out.

@@ -451,6 +451,13 @@ const KEY_REPAIRS = 'syncRepairs';
  *   than the table silently dropped those rows for good — deckFolders before
  *   v0.109.0, sealedItems before v0.117.0. Symptom: boxes added on the phone
  *   never appear on the PC, no matter how often either syncs.
+ * - `containerEmblems2` (v0.134.7): containerKinds all over again, for the
+ *   `emblem` field added in v0.133.0. A device still on an older build pulled
+ *   emblem-bearing deck/binder/box rows, sanitizeDeckRow rebuilt them without
+ *   the field, and the cursor moved on — so updating that device never brought
+ *   the emblem back. (v0.133.0 shipped a `containerEmblems` repair and v0.133.1
+ *   removed it as unnecessary; it wasn't, hence the fresh id — devices that ran
+ *   v0.133.0 have the old id recorded and would skip a re-added one.)
  *
  * The medicine: rewind the cursor once so the server re-sends everything it
  * has, flagged as a reseed so the server pages us all the way back up instead
@@ -460,13 +467,20 @@ const KEY_REPAIRS = 'syncRepairs';
  * a re-pull only skips an incoming row when the local copy is STRICTLY newer —
  * so dropped rows land while pending local edits still win.
  *
- * ADD AN ID HERE whenever SYNC_TABLES grows: the devices that need the re-pull
- * are exactly the ones that can't know they missed anything. Do NOT add one for
- * a new *field* on an existing table in the release that introduces it — no
- * older build can have dropped a field that did not exist yet, and every device
- * would re-pull its whole history for nothing.
+ * ADD AN ID HERE whenever SYNC_TABLES grows — and whenever a synced row grows a
+ * FIELD. Both need it for the same reason: devices update whenever they next
+ * open the app, so an older build is always still out there applying rows
+ * written by a newer one. Every sanitizer REBUILDS the row from the keys it
+ * knows, so a build that predates the field writes it away and advances its
+ * cursor past the only change that carried it. The device that lost the field
+ * is exactly the one that cannot know it did.
+ *
+ * The repair only heals rows the server still holds. If the stale device edits
+ * such a row before it updates, it pushes its stripped copy with a newer stamp
+ * and the field is gone from the account for good — one more reason to add the
+ * id in the same release as the field, not after the reports come in.
  */
-const REPAIRS = ['containerKinds', 'syncTableAdditions'] as const;
+const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems2'] as const;
 
 async function runOneTimeRepairs(): Promise<void> {
   const done = (await getSetting<string[]>(KEY_REPAIRS)) ?? [];

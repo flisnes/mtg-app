@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.134.7',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Deck, binder and box emblems that went missing on another device are back. A device still on an older build when emblems shipped dropped them on the way in and never asked again; it now re-reads your account once and restores them.',
+      },
+    ],
+  },
+  {
     version: '0.134.6',
     changes: [
       {

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.134.7
+
+- **Fixed: a deck, binder or box emblem could go missing on your other device and never come back.** Emblems arrived in 0.133.0, and any device still running an older build at the time quietly threw the emblem away as it took the row in, then marked that change as seen. Updating the app afterwards didn't help: as far as it knew, it was already up to date. The app now re-reads your account once on the next open and puts the emblems back. Nothing else is touched, and edits waiting to go out still win.
+
 ## 0.134.6
 
 - **"Pick one from my collection" no longer dead-ends when the edition you are holding was never added.** The copy picker now carries a "Not here? Add a copy" line under the grid. It opens the collection form for that card, and the copy you describe there goes straight into the slot you were filling, edition, condition, finish and language and all. Previously the only way out was to back out of the deck, add the card, and come back.

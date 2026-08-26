@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.1
+
+- **Fixed: the small print under a deck, binder or box in a list was rendering wrong.** The format, colour pips and card count sat at full text size in normal colour, pushed apart across the width of the row, instead of the small dim line they were meant to be. Two different screens had each defined a style called `.deck-meta`, and the deck detail page's version was quietly winning on every list in the app. The same line on the container picker, the emblem picker, the filing conflicts screen and profile pages was affected. Renamed one of them; the deck detail header is unchanged.
+- **The app downloads about 33 KB less on first open.** The archive of older release notes and the two internal harness screens (`#/scan-test`, `#/avatar-lab`) now load only when something actually asks for them, rather than riding along in the file every device fetches on first load. The full release notes at About -> What's changed still list every version back to 0.98.0.
+- Behind the scenes: two stylesheet rules that had been written out twice were merged, and the release notes are now split between a recent slice and an archive file.
+
 ## 0.135.0
 
 - **Card search now sorts.** The search overlay gained the same Sort control every list in the app has: best match, name, mana value or price, either direction. Best match is still the default, so nothing changes until you ask it to. Sorting by price ranks the whole result set, not just the page you can see, so "most expensive first" on 2,900 hits really does put the dual land on top.

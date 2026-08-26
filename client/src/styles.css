@@ -1146,8 +1146,6 @@ button.danger-outline {
 }
 .land-extra-pop-qty {
   flex: none;
-}
-.land-extra-pop-qty {
   color: var(--text-dim);
 }
 
@@ -3640,7 +3638,10 @@ button.primary {
   padding: 0.25rem 0;
   margin-bottom: 0.5rem;
 }
-.deck-meta {
+/* The header block on a container's own screen (format select + counts). Its
+   own class, not .deck-meta: that one is the dim sub-line on a *list row*, and
+   two unscoped rules of the same name meant this one quietly won everywhere. */
+.deck-detail-meta {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;

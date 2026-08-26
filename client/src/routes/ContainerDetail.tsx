@@ -683,7 +683,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         />
       )}
 
-      <div className="deck-meta">
+      <div className="deck-detail-meta">
         {isDeck && (
           <label className="field" style={{ maxWidth: 160 }}>
             <span>Format</span>

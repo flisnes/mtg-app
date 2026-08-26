@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CHANGELOG, type ChangeKind, type ChangelogEntry } from '../changelog.js';
+import { CHANGELOG_RECENT, loadChangelog, recentCovers, type ChangeKind, type ChangelogEntry } from '../changelog.js';
 import { APP_VERSION } from '../version.js';
 import { isNewer } from '../appUpdate.js';
 import { getSetting, setSetting } from '../db/settings.js';
@@ -29,6 +29,10 @@ const KIND_LABEL: Record<ChangeKind, string> = {
  * The stored version only advances past a non-empty list once `dismiss` is
  * called, so leaving mid-session (closing the tab, say) means the popup is
  * still waiting next launch.
+ *
+ * Normally this reads CHANGELOG_RECENT alone, which is bundled. The archive
+ * chunk is only fetched when the gap reaches past it — a device that skipped a
+ * long stretch of releases, or one with no baseline at all.
  */
 export function useWhatsNew(): { entries: ChangelogEntry[]; dismiss: () => void } | null {
   const [entries, setEntries] = useState<ChangelogEntry[] | null>(null);
@@ -36,12 +40,15 @@ export function useWhatsNew(): { entries: ChangelogEntry[]; dismiss: () => void 
   useEffect(() => {
     void (async () => {
       const seen = await getSetting<string>('lastSeenAppVersion');
-      const missed =
-        seen === undefined
-          ? CHANGELOG.filter((e) => !isNewer(e.version, APP_VERSION))
-          : isNewer(APP_VERSION, seen)
-            ? CHANGELOG.filter((e) => isNewer(e.version, seen) && !isNewer(e.version, APP_VERSION))
-            : [];
+      // Already caught up: nothing to show, and no reason to touch the archive.
+      if (seen !== undefined && !isNewer(APP_VERSION, seen)) {
+        await setSetting('lastSeenAppVersion', APP_VERSION);
+        return;
+      }
+      const all = recentCovers(seen) ? CHANGELOG_RECENT : await loadChangelog();
+      const missed = all.filter(
+        (e) => !isNewer(e.version, APP_VERSION) && (seen === undefined || isNewer(e.version, seen)),
+      );
       if (missed.length > 0) {
         setEntries(missed);
         return;

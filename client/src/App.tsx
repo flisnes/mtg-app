@@ -30,8 +30,6 @@ import { EditHistory } from './routes/EditHistory.js';
 import { FilingConflicts } from './routes/FilingConflicts.js';
 import { Import } from './routes/Import.js';
 import { Export } from './routes/Export.js';
-import { ScanTest } from './routes/ScanTest.js';
-import { AvatarLab } from './routes/AvatarLab.js';
 import { maybeFetchMatches } from './account/notifications.js';
 import { initSyncEngine } from './sync/engine.js';
 import { recordCollectionPrices } from './price/tracking.js';
@@ -42,6 +40,11 @@ import { startImageCacheUpkeep } from './util/imageCache.js';
 // Third-party notices carry ~26KB of verbatim licence text. Lazy so that
 // weight lands in its own chunk instead of the bundle everyone downloads.
 const Licenses = lazy(() => import('./routes/Licenses.js').then((m) => ({ default: m.Licenses })));
+// The two dev harnesses below aren't in the nav and nobody but us opens them,
+// so they have no business in the chunk every phone downloads. Lazy keeps them
+// a URL away without the weight.
+const ScanTest = lazy(() => import('./routes/ScanTest.js').then((m) => ({ default: m.ScanTest })));
+const AvatarLab = lazy(() => import('./routes/AvatarLab.js').then((m) => ({ default: m.AvatarLab })));
 import { Icon, type IconName } from './components/icons.js';
 
 const PRIMARY_NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [

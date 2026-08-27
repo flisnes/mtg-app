@@ -2,6 +2,16 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.137.0
+
+- **Ctrl+Z undoes your last change, Ctrl+Y puts it back.** Cmd+Z and Cmd+Shift+Z on a Mac; Ctrl+Shift+Z redoes too. It only ever reverses something that happened where you are: fumble a card into one deck, wander into another, and pressing undo there will not start quietly unpicking the first one behind your back. Instead it says which deck your last change was in. It also stays out of the way while you're typing, so undo in a deck's name box is still the browser's undo of your typing. Nothing older than the current session is in reach of the key, on purpose: the edit history is where last week's changes get reversed, deliberately and with the entry in front of you.
+- Redo is scoped the same way, and it declines rather than guesses: if you've changed those cards by hand since undoing them, putting the old version back on top would be a surprise, so it says what happened instead. None of this clutters the edit history. Undoing a change removes its entry, redoing writes one fresh entry, and no amount of pressing either key leaves a trail of "added, removed, added" behind.
+- Behind the scenes: the app had picked up half a dozen private keyboard listeners over the years, each re-deciding for itself whether you were busy typing or covered by a sheet. Those questions now have one answer in one place, which is the groundwork for the rest of the deck-building shortcuts.
+
+## 0.136.0
+
+- **Undo is no longer only for the very last thing you did.** It used to be offered on the single newest entry in the edit history and nowhere else, which meant one unrelated change anywhere in the app put the mistake you actually wanted to reverse out of reach. Undo now asks the question that matters instead: has anything newer touched these same copies? If not, it can be reversed, whether it happened five minutes or five weeks ago, and whether or not you have the list filtered down to find it. When something newer *is* in the way, it says so rather than refusing without a reason.
+
 ## 0.135.11
 
 - Behind the scenes: which thing covers which (header over page, tab bar under the search overlay, sheets over both, toasts over everything) was seventeen bare numbers spread across the stylesheet, several carrying a comment explaining which other number they had to beat. That is a ladder whether it's written down or not, so it's written down now, in one named list. Nothing moved: every layer computes to exactly the number it did before.

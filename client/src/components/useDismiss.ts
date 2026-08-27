@@ -114,6 +114,15 @@ function onPopState(): void {
   top.close();
 }
 
+/**
+ * Is any sheet, menu or overlay currently up? The top one owns the keyboard
+ * while it is, which is what keeps a global shortcut from firing at the page
+ * behind it (see components/useShortcuts.ts).
+ */
+export function overlayOpen(): boolean {
+  return stack.length > 0;
+}
+
 /** Close the sheet/dialog on Escape or the back button; pass null to disable. */
 export function useDismiss(onClose: (() => void) | null): void {
   const ref = useRef(onClose);

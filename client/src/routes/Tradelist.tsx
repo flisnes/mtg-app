@@ -7,6 +7,7 @@ import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { clearTradelist } from '../db/dataAccess.js';
 import { useToast } from '../components/Toast.js';
+import { useUndoShortcut } from '../history/useUndoShortcut.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
 import { useFileThese } from '../deck/useFileThese.js';
 import { buildTradelistCsv, downloadText } from '../import/export.js';
@@ -21,6 +22,8 @@ import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/type
 
 export function Tradelist() {
   const toast = useToast();
+  // Marking for trade writes collection rows, so it undoes on that stack.
+  useUndoShortcut({ kind: 'collection' });
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState(false);
   const value = useCollectionValue(true);

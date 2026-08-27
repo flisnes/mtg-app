@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useUndoShortcut } from '../history/useUndoShortcut.js';
 import { Page } from './Page.js';
 import { CollectionListView } from '../components/CollectionListView.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
@@ -10,6 +11,7 @@ import { CollectionValueChartSheet } from '../components/CollectionValueChart.js
 
 export function Collection() {
   const navigate = useNavigate();
+  useUndoShortcut({ kind: 'collection' });
   const [scanning, setScanning] = useState(false);
   const [addingSealed, setAddingSealed] = useState(false);
   const [chartOpen, setChartOpen] = useState(false);

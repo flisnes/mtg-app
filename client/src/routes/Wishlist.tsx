@@ -24,6 +24,7 @@ import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
 import { useToast } from '../components/Toast.js';
+import { useUndoShortcut } from '../history/useUndoShortcut.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { buildWishlistText, downloadText } from '../import/export.js';
 import { useImportAnalysis } from '../import/useImportAnalysis.js';
@@ -34,6 +35,7 @@ import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/type
 
 export function Wishlist() {
   const [view, setView] = useViewMode();
+  useUndoShortcut({ kind: 'wishlist' });
   const [sort, setSort] = useCardSort('wishlist');
   const openSearch = useOpenSearch();
   const [editing, setEditing] = useState<JoinedWish | null>(null);

@@ -3,6 +3,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import type { EventSource, UserEvent } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds } from '../db/queries.js';
+import { undoableIds } from '../db/undoScope.js';
+import type { UndoRef } from '../db/dataAccess.js';
 import { FILTER_CATEGORIES } from './eventRegistry.js';
 
 // The edit-history data layer: reads the whole event log newest-first, groups
@@ -34,6 +36,14 @@ export interface HistoryFilters {
 /** All events of an entry, for enrichment / name matching. */
 export function entryEvents(e: HistoryEntry): UserEvent[] {
   return e.kind === 'batch' ? e.events : [e.event];
+}
+
+/** How undoEntry names this entry. The `b:`/`t:` prefixes are groupEntries'. */
+export function undoRefOf(entry: HistoryEntry): UndoRef {
+  if (entry.kind === 'single') return { type: 'single', id: entry.event.id };
+  return entry.id.startsWith('t:')
+    ? { type: 'trade', tradeId: entry.id.slice(2) }
+    : { type: 'batch', batchId: entry.id.slice(2) };
 }
 
 /**
@@ -84,14 +94,18 @@ function matchesDate(e: HistoryEntry, from?: number, to?: number): boolean {
 /**
  * Grouped, filtered, newest-first history entries, sliced to `limit`.
  * `hasMore` is true when more matching entries exist beyond the slice.
+ * `undoable` holds the ids that can be undone right now, computed over the
+ * whole log rather than the filtered slice: an entry is blocked by a newer
+ * change to the same row whether or not the filters left that change on screen.
  */
 export function useHistoryEntries(
   filters: HistoryFilters,
   limit: number,
-): { entries: HistoryEntry[]; hasMore: boolean; loading: boolean } {
+): { entries: HistoryEntry[]; hasMore: boolean; loading: boolean; undoable: Set<string> } {
   const allEvents = useLiveQuery(() => db.events.orderBy('ts').reverse().toArray(), []);
 
   const grouped = useMemo(() => (allEvents ? groupEntries(allEvents) : []), [allEvents]);
+  const undoable = useMemo(() => undoableIds(grouped.map((e) => ({ id: e.id, events: entryEvents(e) }))), [grouped]);
 
   // Cheap (event-only) filters first; the name filter needs card names, loaded
   // only when a name query is active.
@@ -123,5 +137,5 @@ export function useHistoryEntries(
 
   const loading = allEvents === undefined || matched === null;
   const list = matched ?? [];
-  return { entries: list.slice(0, limit), hasMore: list.length > limit, loading };
+  return { entries: list.slice(0, limit), hasMore: list.length > limit, loading, undoable };
 }

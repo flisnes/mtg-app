@@ -83,6 +83,19 @@ export function describeEvent(e: UserEvent): EventDisplay {
   }
 }
 
+/**
+ * Where a change happened, phrased to sit after "in" or "on" — "Goblins",
+ * "your collection". Used when a change has to be named from somewhere you
+ * can't see it, e.g. undo reporting that the last thing you did was elsewhere.
+ * Named for the container when one is involved, since that's the specific half.
+ */
+export function placeLabel(events: readonly UserEvent[]): string {
+  const slot = events.find((e) => e.kind === 'deck.add' || e.kind === 'deck.remove');
+  if (slot) return slot.deckName ?? containerNoun(slot);
+  if (events.some((e) => e.kind.startsWith('wish.'))) return 'your wishlist';
+  return 'your collection';
+}
+
 const BOARD_NOUN: Record<DeckBoard, string> = {
   main: 'mainboard',
   side: 'sideboard',

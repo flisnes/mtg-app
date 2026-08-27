@@ -85,6 +85,7 @@ import { SelectToggle } from '../components/SelectToggle.js';
 import { usePlacementIndex, type PlacementIndex } from '../db/usePlacements.js';
 import { Icon } from '../components/icons.js';
 import { useAsyncAction } from '../components/useAsyncAction.js';
+import { useUndoShortcut } from '../history/useUndoShortcut.js';
 
 /** One slot of this container, joined to its card and what the collection holds.
  *  Everything the slot itself says comes from SlotShape. */
@@ -148,6 +149,7 @@ function tokenLabel(o: {
  */
 export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const { id = '' } = useParams();
+  useUndoShortcut({ kind: 'container', id });
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();

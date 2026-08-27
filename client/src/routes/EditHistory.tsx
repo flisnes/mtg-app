@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { OracleCard, Priced } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
-import { undoEntry, type UndoRef } from '../db/dataAccess.js';
+import { undoEntry } from '../db/dataAccess.js';
 import { useCardMaps } from '../db/useCardMaps.js';
 import { CardList, StackedThumb, type CardItem } from '../components/CardViews.js';
 import { usePagedLimit } from '../components/usePagedLimit.js';
@@ -10,7 +10,7 @@ import { EventSheet } from '../components/EventSheet.js';
 import { Icon } from '../components/icons.js';
 import { useToast } from '../components/Toast.js';
 import { batchCount, describeBatch, describeEvent, qtyBadge, FILTER_CATEGORIES } from '../history/eventRegistry.js';
-import { entryEvents, useHistoryEntries, type HistoryEntry } from '../history/useHistoryEntries.js';
+import { entryEvents, undoRefOf, useHistoryEntries, type HistoryEntry } from '../history/useHistoryEntries.js';
 import { fmtDate } from '../util/format.js';
 
 const PAGE_SIZE = 100;
@@ -50,13 +50,6 @@ function presetWindow(preset: DatePreset, customFrom: string, customTo: string):
 }
 
 
-function undoRefOf(entry: HistoryEntry): UndoRef {
-  if (entry.kind === 'single') return { type: 'single', id: entry.event.id };
-  return entry.id.startsWith('t:')
-    ? { type: 'trade', tradeId: entry.id.slice(2) }
-    : { type: 'batch', batchId: entry.id.slice(2) };
-}
-
 export function EditHistory() {
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
@@ -69,7 +62,7 @@ export function EditHistory() {
   const noFilters = !name.trim() && !category && from == null && to == null;
 
   const { limit, showMore } = usePagedLimit(JSON.stringify({ name: name.trim(), category, from, to }), PAGE_SIZE);
-  const { entries, hasMore, loading } = useHistoryEntries(filters, limit);
+  const { entries, hasMore, loading, undoable } = useHistoryEntries(filters, limit);
 
   // Enrich the visible entries with images/names for the rows.
   const allEvents = useMemo(() => entries.flatMap(entryEvents), [entries]);
@@ -120,11 +113,13 @@ export function EditHistory() {
   async function doUndo(entry: HistoryEntry) {
     const res = await undoEntry(undoRefOf(entry));
     if (res.undone) toast('Change undone');
-    else toast(res.reason === 'not-latest' ? "Can't undo: there are newer changes" : "Couldn't undo that change");
+    else toast(res.reason === 'conflict' ? "Can't undo: a newer change touched these cards" : "Couldn't undo that change");
     setOpenEntry(null);
   }
 
-  const canUndo = (entry: HistoryEntry): boolean => noFilters && entries.length > 0 && entry.id === entries[0]!.id;
+  // Undo is no longer the privilege of whatever sits at the top of the list:
+  // any entry nothing newer has written over can be reversed, filters and all.
+  const canUndo = (entry: HistoryEntry): boolean => undoable.has(entry.id);
 
   return (
     <Page title="Edit history" subtitle="Every change you've made to your collection, newest first.">

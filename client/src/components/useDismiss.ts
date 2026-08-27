@@ -21,10 +21,25 @@ import { useEffect, useRef } from 'react';
 // tapping a "filed in" pill) leaves its entry buried under the new one, where
 // it costs one back press that looks like it did nothing.
 
+// Every entry we push is stamped, and an overlay only ever spends the entry
+// carrying its own stamp. Matching on the URL instead is not enough: the URL
+// is identical for every entry in the stack, so a lower overlay unregistering
+// while a higher one is up would spend the *higher* one's entry, and the next
+// close would then eat a real page and throw you off the deck you were on.
+// Same story if a pushState is ever dropped (Chrome throttles them) — no
+// stamp, so nothing to spend, instead of a back that leaves the page.
+const STAMP = '__dismissEntry';
+// Per page load: a stamped entry left over from before a reload belongs to a
+// dead run and must not read as ours.
+const RUN = Math.random().toString(36).slice(2);
+let nextToken = 0;
+
 interface Overlay {
   close: () => void;
-  /** The URL we pushed under; if it has moved, our entry is buried. */
-  href: string;
+  /** Stamped into the entry we push, so we only ever spend our own. */
+  token: string;
+  /** False while our pushState is still queued behind an in-flight back(). */
+  pushed: boolean;
 }
 
 const stack: Overlay[] = [];
@@ -51,13 +66,14 @@ function drain(): void {
 /**
  * Push a URL-identical history entry, mirroring what React Router's own push
  * does to `history.state` (it tracks its position there as `idx`) so a later
- * navigate/Link still lines up.
+ * navigate/Link still lines up, plus this overlay's stamp.
  */
-function pushEntry(): void {
+function pushEntry(overlay: Overlay): void {
   historyOp(() => {
     const state = window.history.state as { idx?: number } | null;
     const idx = typeof state?.idx === 'number' ? { idx: state.idx + 1 } : null;
-    window.history.pushState({ ...state, ...idx }, '', window.location.href);
+    window.history.pushState({ ...state, ...idx, [STAMP]: overlay.token }, '', window.location.href);
+    overlay.pushed = true;
   });
 }
 
@@ -66,6 +82,14 @@ function popEntry(): void {
     inFlight += 1;
     window.history.back();
   });
+}
+
+/** Is the entry we're sitting on the one this overlay pushed? */
+function ownsTopEntry(overlay: Overlay): boolean {
+  // Still queued: the push is guaranteed to land before the pop we're about to
+  // queue behind it, so the pair still cancels out.
+  if (!overlay.pushed) return true;
+  return (window.history.state as Record<string, unknown> | null)?.[STAMP] === overlay.token;
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -83,7 +107,10 @@ function onPopState(): void {
   }
   const top = stack[stack.length - 1];
   if (!top) return;
-  pushEntry();
+  // Re-stamped with the top overlay's token: it's that overlay's entry again,
+  // and its cleanup is what spends it.
+  top.pushed = false;
+  pushEntry(top);
   top.close();
 }
 
@@ -94,7 +121,7 @@ export function useDismiss(onClose: (() => void) | null): void {
   const active = onClose !== null;
   useEffect(() => {
     if (!active) return;
-    const overlay: Overlay = { close: () => ref.current?.(), href: window.location.href };
+    const overlay: Overlay = { close: () => ref.current?.(), token: `${RUN}:${(nextToken += 1)}`, pushed: false };
     if (stack.length === 0) document.addEventListener('keydown', onKeydown, true);
     // The popstate listener stays for the life of the page: unbinding it here
     // would drop the pop our own history.back() is about to produce, leaving
@@ -104,11 +131,11 @@ export function useDismiss(onClose: (() => void) | null): void {
       popBound = true;
     }
     stack.push(overlay);
-    pushEntry();
+    pushEntry(overlay);
     return () => {
       stack.splice(stack.indexOf(overlay), 1);
       if (stack.length === 0) document.removeEventListener('keydown', onKeydown, true);
-      if (window.location.href === overlay.href) popEntry();
+      if (ownsTopEntry(overlay)) popEntry();
     };
   }, [active]);
 }

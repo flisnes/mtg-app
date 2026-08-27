@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.4
+
+- **Fixed: back can no longer skip a page when you close the search or a sheet.** Every overlay parks a throwaway history entry so back closes it instead of leaving the page you were on. Which entry belonged to which overlay was matched by URL, and every entry in the stack has the same URL, so an overlay that shut down while another sat on top of it could spend the wrong one. The next close then took a real page with it, and you landed one screen further back than you asked for. Entries are stamped now, and an overlay only ever spends its own.
+
 ## 0.135.3
 
 - **You can now take cards out of the deck you're standing in.** Select cards in a deck, binder or box, tap Unfile and the list you're looking at is the first thing on offer. Before this it only listed the *other* places those copies were filed, which is no help when what you want to say is "these left this deck".

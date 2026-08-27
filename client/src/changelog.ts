@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.135.4',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Back no longer skips a page when you close the search overlay or a card sheet. Each one parks its own history entry now instead of guessing which entry was its own, so back peels off exactly one layer at a time.',
+      },
+    ],
+  },
+  {
     version: '0.135.3',
     changes: [
       {

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.2
+
+- **Fixed: pulling down to refresh works again.** Version 0.134.5 pinned the scroll gesture to the page to stop the bottom nav bar sliding half off the screen. It also took the browser's own pull-to-refresh with it, which was never the intent. Retracing it, the nav bar was already protected twice over: the page body has blocked the gesture reaching the browser since the first build, and since 0.12.1 the app scrolls an inner container so the document itself never moves. The half-hidden nav bar was almost certainly a slight pinch-zoom instead, which parks the fixed bar below the visible area until you pinch back out. Both rules from 0.134.5 are gone.
+
 ## 0.135.1
 
 - **Fixed: the small print under a deck, binder or box in a list was rendering wrong.** The format, colour pips and card count sat at full text size in normal colour, pushed apart across the width of the row, instead of the small dim line they were meant to be. Two different screens had each defined a style called `.deck-meta`, and the deck detail page's version was quietly winning on every list in the app. The same line on the container picker, the emblem picker, the filing conflicts screen and profile pages was affected. Renamed one of them; the deck detail header is unchanged.

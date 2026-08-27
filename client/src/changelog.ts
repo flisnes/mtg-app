@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.135.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Pulling down to refresh works again. A fix in 0.134.5 pinned the gesture to the page and disabled the browser refresh along with it; the problem it was aimed at turned out to be already handled elsewhere.',
+      },
+    ],
+  },
+  {
     version: '0.135.1',
     changes: [
       {

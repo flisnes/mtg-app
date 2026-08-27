@@ -84,10 +84,10 @@ button.danger-outline {
   min-height: 0; /* let the flex child shrink so it, not the shell, scrolls */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  /* Stop the gesture here. Without this, a swipe down at scrollTop 0 chains out
-     to the document, and the browser answers by sliding its own chrome in (or
-     rubber-banding the page), which drags the fixed tab bar half off-screen. */
-  overscroll-behavior-y: contain;
+  /* Deliberately no overscroll-behavior here. It would take the browser's own
+     pull-to-refresh with it, and the chain out of this scroller is already
+     inert: .app-shell cannot scroll, and body sets overscroll-behavior-y:
+     none. */
   /* The scroll container spans the full viewport width so the wheel works
      anywhere on desktop (not just over the content column). The column itself
      stays centered via padding, not max-width — a narrower box would leave
@@ -285,7 +285,6 @@ button.danger-outline {
   right: 0;
   z-index: 15; /* below the tab bar (20): tabs stay tappable and close search */
   overflow-y: auto;
-  overscroll-behavior-y: contain; /* same reason as .app-main */
   background: var(--bg);
   padding: 1rem 1rem calc(var(--tab-h) + var(--safe-bottom) + 1rem);
 }

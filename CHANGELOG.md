@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.11
+
+- Behind the scenes: which thing covers which (header over page, tab bar under the search overlay, sheets over both, toasts over everything) was seventeen bare numbers spread across the stylesheet, several carrying a comment explaining which other number they had to beat. That is a ladder whether it's written down or not, so it's written down now, in one named list. Nothing moved: every layer computes to exactly the number it did before.
+
 ## 0.135.10
 
 - Behind the scenes: the three scoped searches (into your own lists, into the deck or binder you're standing in, and into someone else's lists on Community) each carried their own copy of the same frame: the result count with the sort and view controls, the cards, the "load more as you scroll" sentinel and the "Nothing here matches." line. They now share one, and keep only what is actually different about them. The card-database search still has its own, because it pages by asking for more rather than by revealing more.

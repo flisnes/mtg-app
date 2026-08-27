@@ -15,6 +15,28 @@
   --header-h: 58px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
+
+  /*
+   * The app's stacking order, lowest first. These were bare numbers scattered
+   * over five thousand lines, several of them carrying a comment explaining
+   * which other number they had to beat — which is a ladder whether it is
+   * written down or not, so here it is written down.
+   *
+   * Purely local stacking (cards within the pile, a control inside the scanner)
+   * stays as small bare numbers where it lives: it is nobody else's business.
+   */
+  --z-banner: 10; /* the update banner, under the header it hangs below */
+  --z-search: 15; /* search overlay + its scope bar: under the tab bar, so tabs stay tappable and close it */
+  --z-tab-bar: 20;
+  --z-header: 25;
+  --z-select-float: 26; /* the floating Select pill: over the overlay and tab bar, under everything below */
+  --z-panel: 30; /* notification panel, multi-select bar, set picker */
+  --z-popover: 40; /* options menu, the land-count popover */
+  --z-picker-overlay: 45;
+  --z-sheet: 50; /* every bottom sheet, via .sheet-backdrop */
+  --z-top: 60; /* card zoom, toasts, the scan screen */
+  --z-over-scan: 70; /* a sheet opened from the scan screen, which is itself --z-top */
+
   color-scheme: dark;
 }
 
@@ -104,7 +126,7 @@ button.danger-outline {
 .app-header {
   position: sticky;
   top: 0;
-  z-index: 25;
+  z-index: var(--z-header);
   height: calc(var(--header-h) + var(--safe-top));
   padding: var(--safe-top) 1rem 0;
   display: flex;
@@ -189,7 +211,7 @@ button.danger-outline {
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
-  z-index: 30;
+  z-index: var(--z-panel);
 }
 .notif-head {
   padding: 0.7rem 0.9rem;
@@ -283,7 +305,7 @@ button.danger-outline {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 15; /* below the tab bar (20): tabs stay tappable and close search */
+  z-index: var(--z-search);
   overflow-y: auto;
   background: var(--bg);
   padding: 1rem 1rem calc(var(--tab-h) + var(--safe-bottom) + 1rem);
@@ -301,7 +323,7 @@ button.danger-outline {
 .search-scopebar {
   position: sticky;
   top: calc(var(--header-h) + var(--safe-top));
-  z-index: 15;
+  z-index: var(--z-search);
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   padding: 0.6rem 1rem;
@@ -437,7 +459,7 @@ button.danger-outline {
   color: var(--accent-text);
   position: sticky;
   top: calc(var(--header-h) + var(--safe-top));
-  z-index: 10;
+  z-index: var(--z-banner);
 }
 .banner-update button {
   background: rgba(255, 255, 255, 0.18);
@@ -1115,7 +1137,7 @@ button.danger-outline {
   position: absolute;
   top: calc(100% + 5px);
   left: 0;
-  z-index: 40;
+  z-index: var(--z-popover);
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -1285,7 +1307,7 @@ button.danger-outline {
   position: fixed;
   right: 0.9rem;
   bottom: calc(var(--tab-h) + var(--safe-bottom) + 0.7rem);
-  z-index: 26; /* over the search overlay (15) and tab bar (20), under sheets */
+  z-index: var(--z-select-float);
   background: var(--surface-2);
   color: var(--text);
   padding: 0.55rem 0.85rem;
@@ -1393,7 +1415,7 @@ button.danger-outline {
   left: 0.6rem;
   right: 0.6rem;
   bottom: calc(var(--tab-h) + var(--safe-bottom) + 0.6rem);
-  z-index: 30;
+  z-index: var(--z-panel);
   max-width: 480px;
   margin: 0 auto;
   background: var(--surface);
@@ -2124,7 +2146,7 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  z-index: 50;
+  z-index: var(--z-sheet);
 }
 .sheet {
   background: var(--surface);
@@ -2277,7 +2299,7 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
 .card-zoom-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-top);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3327,7 +3349,7 @@ button.primary {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  z-index: 60;
+  z-index: var(--z-top);
   pointer-events: none;
 }
 .toast {
@@ -3481,7 +3503,7 @@ button.primary {
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
-  z-index: 30;
+  z-index: var(--z-panel);
   padding: 0.25rem;
 }
 .set-picker-row {
@@ -3544,7 +3566,7 @@ button.primary {
   padding: 0.25rem;
   display: flex;
   flex-direction: column;
-  z-index: 40;
+  z-index: var(--z-popover);
 }
 .options-pop-up {
   top: auto;
@@ -3940,7 +3962,7 @@ button.chip[aria-pressed='true'] {
 .picker-overlay {
   position: fixed;
   inset: 0;
-  z-index: 45;
+  z-index: var(--z-picker-overlay);
   background: var(--bg);
   display: flex;
   flex-direction: column;
@@ -4064,7 +4086,7 @@ button.chip[aria-pressed='true'] {
   display: flex;
   background: var(--surface);
   border-top: 1px solid var(--border);
-  z-index: 20;
+  z-index: var(--z-tab-bar);
 }
 .tab {
   flex: 1;
@@ -4435,7 +4457,7 @@ a.seg {
 .scan-screen {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-top);
   display: flex;
   flex-direction: column;
   background: #000;
@@ -5005,9 +5027,10 @@ a.seg {
   color: inherit;
 }
 /* A card sheet opened from inside the scanner portals to <body> after the
-   scan screen (z-index 60) — lift it above the scanner and its session list. */
+   scan screen, which sits at --z-top — lift it above the scanner and its
+   session list. */
 .scan-screen ~ .sheet-backdrop {
-  z-index: 70;
+  z-index: var(--z-over-scan);
 }
 .scan-list-thumb {
   width: 42px;

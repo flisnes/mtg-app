@@ -48,17 +48,17 @@ import { EditionPicker } from './EditionPicker.js';
 import { TagField } from './TagField.js';
 import { useDismiss } from './useDismiss.js';
 
-// Bottom-sheet for a card's details, in six modes:
-//  - add (default): add the card somewhere new — where depends on addTarget
-//    (collection with edition/condition/qty/…, wishlist, tradelist, or a deck)
-//  - edit (entry): edit an existing collection entry — covers the tradelist
-//    via the "for trade" quantity (beta plan §4/§6)
-//  - wish (wishEntry): edit a wishlist line — edition (incl. "any printing")
-//    and quantity
-//  - deck (deckCard): edit a deck slot's quantity
-//  - session (sessionCard): edit a scan-session line in memory — Apply reports
-//    the values through onApply instead of writing to Dexie
-//  - info (readOnly): app-wide card info — image, printings, price + history
+// Bottom-sheet for a card's details, in six modes the caller names outright
+// (see CardSheetProps, which carries what each one needs and nothing else):
+//  - add: add the card somewhere new — where depends on addTarget (collection
+//    with edition/condition/qty/…, wishlist, tradelist, or a deck)
+//  - edit: edit an existing collection entry — covers the tradelist via the
+//    "for trade" quantity (beta plan §4/§6)
+//  - wish: edit a wishlist line — edition (incl. "any printing") and quantity
+//  - deck: edit a deck slot's quantity
+//  - session: edit a scan-session line in memory — Apply reports the values
+//    through onApply instead of writing to Dexie
+//  - info: app-wide card info — image, printings, price + history
 //
 // Any mode can step sideways into add mode ("Add to your collection" from a card
 // you're only viewing, "Got it" on a wish): `addFlow` names the list and the
@@ -126,65 +126,26 @@ const ANY_PRINTING = '';
 export { FINISH_LABELS };
 export const LANGS =['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht'];
 
-export function CardSheet({
-  oracleCard,
-  entry,
-  wishEntry,
-  wishView,
-  deckCard,
-  sessionCard,
-  onApply,
-  applyLabel,
-  hideRemove = false,
-  initialScryfallId,
-  initialTab,
-  addTarget,
-  onAdded,
-  readOnly = false,
-  highlightPrintings,
-  onClose,
-}: {
+/** A deck slot the sheet can edit. The slot's own fields come from SlotShape;
+ *  the rest is the container context the Zone field needs. */
+export type DeckSlotEdit = SlotShape & {
+  id: string;
+  quantity: number;
+  board?: DeckBoard;
+  /** The deck this slot lives in, so the sheet can read its command zone. */
+  deckId?: string;
+  commanderDeck?: boolean;
+  /** Which kind of container holds the slot; only a deck has zones to move between. */
+  containerKind?: ContainerKind;
+};
+
+/** What every mode of the sheet needs. */
+interface CardSheetCommon {
   oracleCard: Priced<OracleCard>;
-  entry?: CollectionEntry;
-  /** Edit this wishlist line (edition + quantity) instead of the collection. */
-  wishEntry?: WishlistEntry;
-  /** Read-only view of someone else's wish (Community): show their edition
-   *  (incl. "any printing"), minimum condition, finish and language as a
-   *  disabled form. Only meaningful in info mode. */
-  wishView?: WishLine;
-  /** Edit this deck slot's quantity + printing instead of the collection.
-   *  A slot in a deck also gets the Zone field, so a card can be moved between
-   *  mainboard, sideboard, command zone and tokens without being re-added;
-   *  `commanderDeck` is what puts the command zone among the choices. */
-  deckCard?: SlotShape & {
-    id: string;
-    quantity: number;
-    board?: DeckBoard;
-    /** The deck this slot lives in, so the sheet can read its command zone. */
-    deckId?: string;
-    commanderDeck?: boolean;
-    /** Which kind of container holds the slot; only a deck has zones to move between. */
-    containerKind?: ContainerKind;
-  };
-  /** Edit this scan-session line in memory; Apply reports through onApply. */
-  sessionCard?: SessionCardValues;
-  /** Session mode: called with the edited values instead of writing to Dexie. */
-  onApply?: (values: SessionCardValues) => void;
-  /** Session mode: label for the primary commit button (defaults to "Apply"). */
-  applyLabel?: string;
-  /** Session mode: hide the Remove button (e.g. when composing a brand-new line). */
-  hideRemove?: boolean;
   /** Preselect a specific printing (e.g. the one named in a trade line). */
   initialScryfallId?: string;
   /** Open on a specific tab (e.g. deep-link to History from the edit history). */
   initialTab?: 'details' | 'history';
-  /** Add mode only: where the add goes (defaults to the collection). */
-  addTarget?: AddTarget;
-  /** Add mode only: the copy that just landed in the collection, reported so the
-   *  sheet that opened this one can point a slot at it. */
-  onAdded?: (copy: { scryfallId: string; condition: Condition; finish: Finish; lang: string }) => void;
-  /** Info-only: show the card and its printings, no collection editing. */
-  readOnly?: boolean;
   /**
    * Printings to group first in the Edition dropdown, each with a short note
    * (e.g. "×2, 1 for trade") — the trade board uses this to surface the
@@ -192,12 +153,83 @@ export function CardSheet({
    */
   highlightPrintings?: { label: string; notes: Map<string, string> };
   onClose: () => void;
-}) {
+}
+
+/**
+ * The six jobs this sheet does, each carrying exactly what it needs.
+ *
+ * The mode used to be *inferred* from which of a pile of optional props the
+ * caller filled in (`wishEntry ? 'wish' : deckCard ? 'deck' : entry ? …`), which
+ * is how a sheet accumulates when it gains one caller at a time. That let every
+ * illegal combination through the type system — a wish entry and a deck slot at
+ * once, a session card with no onApply, an addTarget on a mode that never adds —
+ * and left the reader working out the precedence to know what a call site does.
+ * Naming the mode costs one prop and makes all of that unrepresentable.
+ */
+export type CardSheetProps = CardSheetCommon &
+  (
+    | {
+        /** An owned copy: opens as a line with an Edit toggle. */
+        mode: 'edit';
+        entry: CollectionEntry;
+      }
+    | {
+        /** Edit a wishlist line (edition + quantity) instead of the collection. */
+        mode: 'wish';
+        wishEntry: WishlistEntry;
+      }
+    | {
+        /** Edit a deck slot's quantity + printing, and its zone. */
+        mode: 'deck';
+        deckCard: DeckSlotEdit;
+      }
+    | {
+        /** Edit a scan/trade line held in memory; Apply reports back, nothing is written. */
+        mode: 'session';
+        sessionCard: SessionCardValues;
+        onApply: (values: SessionCardValues) => void;
+        /** Label for the primary commit button (defaults to "Apply"). */
+        applyLabel?: string;
+        /** Hide the Remove button (e.g. when composing a brand-new line). */
+        hideRemove?: boolean;
+      }
+    | {
+        /** A form that puts a new copy on one of your lists. */
+        mode: 'add';
+        /** Where the add goes; defaults to the collection. */
+        addTarget?: AddTarget;
+        /** The copy that just landed, reported so the sheet that opened this one
+         *  can point a slot at it. */
+        onAdded?: (copy: { scryfallId: string; condition: Condition; finish: Finish; lang: string }) => void;
+      }
+    | {
+        /** The card and its printings, no editing. */
+        mode: 'info';
+        /** Someone else's wish (Community): their edition (incl. "any printing"),
+         *  minimum condition, finish and language, as a disabled form. */
+        wishView?: WishLine;
+      }
+  );
+
+export function CardSheet(props: CardSheetProps) {
+  const { oracleCard, initialScryfallId, initialTab, highlightPrintings, onClose } = props;
+  // The current mode's own props, unpacked once. Everything below reads these
+  // rather than narrowing `props` at each of the three dozen sites that ask.
+  const entry = props.mode === 'edit' ? props.entry : undefined;
+  const wishEntry = props.mode === 'wish' ? props.wishEntry : undefined;
+  const wishView = props.mode === 'info' ? props.wishView : undefined;
+  const deckCard = props.mode === 'deck' ? props.deckCard : undefined;
+  const sessionCard = props.mode === 'session' ? props.sessionCard : undefined;
+  const onApply = props.mode === 'session' ? props.onApply : undefined;
+  const applyLabel = props.mode === 'session' ? props.applyLabel : undefined;
+  const hideRemove = props.mode === 'session' ? props.hideRemove === true : false;
+  const addTarget = props.mode === 'add' ? props.addTarget : undefined;
+  const onAdded = props.mode === 'add' ? props.onAdded : undefined;
+
   // Stepping sideways into an add form from another mode (see the note above):
   // the list being added to, or null for "the sheet as its caller opened it".
   const [addFlow, setAddFlow] = useState<ListKind | null>(null);
-  const baseMode = wishEntry ? 'wish' : deckCard ? 'deck' : entry ? 'edit' : sessionCard ? 'session' : readOnly ? 'info' : 'add';
-  const mode = addFlow ? 'add' : baseMode;
+  const mode = addFlow ? 'add' : props.mode;
   const editing = mode === 'edit';
   const openCollectionSearch = useOpenCollectionSearch();
   const openDbSearch = useOpenDbSearch();
@@ -1222,6 +1254,7 @@ export function CardSheet({
           exactly where picking an existing copy would have left it. */}
       {addingCopy && (
         <CardSheet
+          mode="add"
           oracleCard={oracleCard}
           initialScryfallId={scryfallId || oracleCard.defaultScryfallId}
           addTarget={{ kind: 'collection' }}
@@ -1257,10 +1290,10 @@ export function CardSheet({
       )}
       {nestedCard && (
         <CardSheet
+          mode="info"
           oracleCard={nestedCard.oracle}
           initialScryfallId={nestedCard.scryfallId}
           initialTab="history"
-          readOnly
           onClose={() => setNestedCard(null)}
         />
       )}

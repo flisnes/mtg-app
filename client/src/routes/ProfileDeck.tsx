@@ -228,7 +228,7 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
       )}
 
       {info && (
-        <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
+        <CardSheet mode="info" oracleCard={info.oracle} initialScryfallId={info.scryfallId} onClose={() => setInfo(null)} />
       )}
     </Page>
   );

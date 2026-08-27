@@ -757,9 +757,9 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
 
       {info && (
         <CardSheet
+          mode="info"
           oracleCard={info.oracle}
           initialScryfallId={info.scryfallId}
-          readOnly
           highlightPrintings={infoHighlights(info)}
           onClose={() => setInfo(null)}
         />
@@ -767,6 +767,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
 
       {composing && editable && (
         <CardSheet
+          mode="session"
           oracleCard={composing.oracle}
           sessionCard={{
             scryfallId: composing.prefill?.scryfallId ?? composing.oracle.defaultScryfallId,
@@ -803,6 +804,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
 
       {editingLine && editable && (
         <CardSheet
+          mode="session"
           oracleCard={editingLine.oracle}
           sessionCard={{
             scryfallId: editingLine.line.scryfallId,

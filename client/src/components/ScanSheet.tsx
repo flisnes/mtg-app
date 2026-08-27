@@ -1962,6 +1962,7 @@ function SessionSheet({
 
         {editing && entries[editing.index] && (
           <CardSheet
+            mode="session"
             oracleCard={editing.oracle}
             sessionCard={{
               scryfallId: entries[editing.index]!.scryfallId,

@@ -133,10 +133,10 @@ export function ProfileScopedResults({
 
       {info && (
         <CardSheet
+          mode="info"
           oracleCard={info.oracle}
           initialScryfallId={info.scryfallId}
           wishView={info.wish}
-          readOnly
           onClose={() => setInfo(null)}
         />
       )}

@@ -389,7 +389,7 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
       )}
       {/* Read-only, like every other drill-in from a chart or a timeline: you
           came here to see what a card did, not to file another copy of it. */}
-      {card && <CardSheet oracleCard={card.oracle} initialScryfallId={card.scryfallId} readOnly onClose={() => setCard(null)} />}
+      {card && <CardSheet mode="info" oracleCard={card.oracle} initialScryfallId={card.scryfallId} onClose={() => setCard(null)} />}
     </div>,
     document.body,
   );

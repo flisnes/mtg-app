@@ -387,7 +387,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       {filingSheet}
       {confirmSheet}
 
-      {editing?.oracle && <CardSheet oracleCard={editing.oracle} entry={editing.entry} onClose={() => setEditing(null)} />}
+      {editing?.oracle && <CardSheet mode="edit" oracleCard={editing.oracle} entry={editing.entry} onClose={() => setEditing(null)} />}
       {cardBack && <CardBackSheet onClose={() => setCardBack(false)} />}
     </>
   );

@@ -874,7 +874,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       <DeckHistory deckId={id} kind={kind} open={historyOpen} onToggle={() => setHistoryOpen((v) => !v)} />
 
       {info && (
-        <CardSheet oracleCard={info.card} deckCard={{ ...info.deckCard, containerKind: kind }} onClose={() => setInfo(null)} />
+        <CardSheet mode="deck" oracleCard={info.card} deckCard={{ ...info.deckCard, containerKind: kind }} onClose={() => setInfo(null)} />
       )}
 
       {scanning && (

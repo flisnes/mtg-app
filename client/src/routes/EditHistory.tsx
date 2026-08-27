@@ -194,10 +194,10 @@ export function EditHistory() {
       )}
       {card && (
         <CardSheet
+          mode="info"
           oracleCard={card.oracle}
           initialScryfallId={card.scryfallId}
           initialTab="history"
-          readOnly
           onClose={() => setCard(null)}
         />
       )}

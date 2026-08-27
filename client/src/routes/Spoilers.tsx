@@ -339,6 +339,7 @@ export function Spoilers() {
 
       {info && (
         <CardSheet
+          mode="add"
           oracleCard={info.oracle}
           initialScryfallId={info.scryfallId}
           addTarget={{ kind: 'wishlist' }}

@@ -198,7 +198,7 @@ export function Wishlist() {
       )}
 
       {editing?.oracle && (
-        <CardSheet oracleCard={editing.oracle} wishEntry={editing.entry} onClose={() => setEditing(null)} />
+        <CardSheet mode="wish" oracleCard={editing.oracle} wishEntry={editing.entry} onClose={() => setEditing(null)} />
       )}
 
       {scanning && <ScanSheet target={{ kind: 'wishlist' }} onClose={() => setScanning(false)} />}

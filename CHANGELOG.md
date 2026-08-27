@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.7
+
+- Behind the scenes: the card sheet does six jobs (add, edit an owned copy, edit a wish, edit a deck slot, edit a scan or trade line, or just show the card), and it used to work out which one by looking at which of a dozen optional inputs the caller had filled in. Callers now say which job they want. Nothing changes on screen; combinations that never made sense are simply no longer possible to write, and reading a screen's code tells you which sheet it opens.
+
 ## 0.135.6
 
 - Behind the scenes: the fields a deck slot carries (its printing, what it asks of the copy, its tags, whether it's filed) were spelled out by hand in four places, all optional, so leaving one out was nobody's error. That is how 0.135.3's unfiled flag needed a follow-up. There is now one definition, worked out by subtracting a slot's identity from the stored row, and the screens that pass slots around copy them whole instead of field by field. No change to what the app does.

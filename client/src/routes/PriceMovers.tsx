@@ -300,7 +300,7 @@ export function PriceMovers() {
       )}
 
       {info?.oracle && (
-        <CardSheet oracleCard={info.oracle} initialScryfallId={info.scryfallId} readOnly onClose={() => setInfo(null)} />
+        <CardSheet mode="info" oracleCard={info.oracle} initialScryfallId={info.scryfallId} onClose={() => setInfo(null)} />
       )}
       {tuningOpen && <MoverTuningSheet onClose={() => setTuningOpen(false)} />}
     </Page>

@@ -79,6 +79,7 @@ export function ContainerScopedResults({
 
       {editing?.oracle && (
         <CardSheet
+          mode="deck"
           oracleCard={editing.oracle}
           deckCard={{
             id: editing.entry.id,

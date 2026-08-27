@@ -722,6 +722,7 @@ function SearchOverlay() {
 
         {sheetCard && (
           <CardSheet
+            mode="add"
             oracleCard={sheetCard.card}
             initialScryfallId={sheetCard.scryfallId}
             addTarget={target.kind === 'deck' ? { ...target, format: deckCtx?.format } : target}

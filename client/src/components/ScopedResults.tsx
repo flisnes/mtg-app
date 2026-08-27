@@ -109,9 +109,9 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
         </>
       )}
 
-      {editColl?.oracle && <CardSheet oracleCard={editColl.oracle} entry={editColl.entry} onClose={() => setEditColl(null)} />}
+      {editColl?.oracle && <CardSheet mode="edit" oracleCard={editColl.oracle} entry={editColl.entry} onClose={() => setEditColl(null)} />}
       {editWish?.oracle && (
-        <CardSheet oracleCard={editWish.oracle} wishEntry={editWish.entry} onClose={() => setEditWish(null)} />
+        <CardSheet mode="wish" oracleCard={editWish.oracle} wishEntry={editWish.entry} onClose={() => setEditWish(null)} />
       )}
     </>
   );

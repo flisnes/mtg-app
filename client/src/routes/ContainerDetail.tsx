@@ -6,14 +6,13 @@ import {
   MAX_DECK_NAME_LENGTH,
   isMarkerCard,
   type Color,
-  type Condition,
   type ContainerKind,
   type DeckBoard,
   type DeckFormat,
-  type Finish,
   type OracleCard,
   type Priced,
   type Printing,
+  type SlotShape,
 } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import {
@@ -86,39 +85,22 @@ import { SelectToggle } from '../components/SelectToggle.js';
 import { usePlacementIndex, type PlacementIndex } from '../db/usePlacements.js';
 import { Icon } from '../components/icons.js';
 
-interface Row {
+/** One slot of this container, joined to its card and what the collection holds.
+ *  Everything the slot itself says comes from SlotShape. */
+interface Row extends SlotShape {
   id: string;
   oracleId: string;
-  scryfallId?: string;
   quantity: number;
   board: DeckBoard;
-  /** "Any printing" basic land: no edition, no money, always counted as had. */
-  anyBasic?: boolean;
-  /** What the slot wants of the copy filling it; undefined = any. */
-  condition?: Condition;
-  finish?: Finish;
-  lang?: string;
-  /** The user's own labels on this slot, for group-by-tag and the row chips. */
-  tags?: string[];
-  /** The list still wants this copy, the container isn't holding it right now
-   *  (see DeckCard.unfiled). */
-  unfiled?: boolean;
   oracle?: Priced<OracleCard>;
   printing?: Priced<Printing>;
   owned: number;
 }
 
 /** What a card row hands the CardSheet to edit a deck slot (incl. commander context). */
-interface DeckCardEdit {
+interface DeckCardEdit extends SlotShape {
   id: string;
   quantity: number;
-  scryfallId?: string;
-  anyBasic?: boolean;
-  condition?: Condition;
-  finish?: Finish;
-  lang?: string;
-  tags?: string[];
-  unfiled?: boolean;
   board: DeckBoard;
   deckId: string;
   commanderDeck: boolean;
@@ -207,18 +189,10 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       getPrintingsByIds(cards.map((c) => c.scryfallId).filter((s): s is string => !!s)),
       getOwnedCountsFor(cards.map((c) => c.oracleId)),
     ]);
+    // Spread the slot rather than copying it field by field: a field added to
+    // DeckCard reaches the rows (and the card sheet behind them) on its own.
     const rows: Row[] = cards.map((c) => ({
-      id: c.id,
-      oracleId: c.oracleId,
-      scryfallId: c.scryfallId,
-      quantity: c.quantity,
-      board: c.board,
-      anyBasic: c.anyBasic,
-      condition: c.condition,
-      finish: c.finish,
-      lang: c.lang,
-      tags: c.tags,
-      unfiled: c.unfiled,
+      ...c,
       oracle: oracleMap.get(c.oracleId),
       printing: c.scryfallId ? printMap.get(c.scryfallId) : undefined,
       owned: owned.get(c.oracleId) ?? 0,
@@ -1109,20 +1083,9 @@ function Board({
         ? () =>
             onEdit({
               card: r.oracle!,
-              deckCard: {
-                id: r.id,
-                quantity: r.quantity,
-                scryfallId: r.scryfallId,
-                anyBasic: r.anyBasic,
-                condition: r.condition,
-                finish: r.finish,
-                lang: r.lang,
-                tags: r.tags,
-                unfiled: r.unfiled,
-                board: r.board,
-                deckId,
-                commanderDeck,
-              },
+              // Same reason as the row spread above: the slot's own fields come
+              // across whole, and only the deck context is added by hand.
+              deckCard: { ...r, deckId, commanderDeck },
             })
         : undefined,
     };

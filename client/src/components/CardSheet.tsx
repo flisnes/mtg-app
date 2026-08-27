@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { CollectionEntry, Condition, ContainerKind, CopyPrefs, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Condition, ContainerKind, CopyPrefs, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, SlotShape, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
 import {
   addDeckCard,
@@ -156,20 +156,9 @@ export function CardSheet({
    *  A slot in a deck also gets the Zone field, so a card can be moved between
    *  mainboard, sideboard, command zone and tokens without being re-added;
    *  `commanderDeck` is what puts the command zone among the choices. */
-  deckCard?: {
+  deckCard?: SlotShape & {
     id: string;
     quantity: number;
-    scryfallId?: string;
-    /** The slot is an "any printing" basic (see DeckCard.anyBasic). */
-    anyBasic?: boolean;
-    /** What the slot wants of the copy filling it; undefined = any. */
-    condition?: Condition;
-    finish?: Finish;
-    lang?: string;
-    /** The slot's own labels within this container (see DeckCard.tags). */
-    tags?: string[];
-    /** The container has been emptied of this copy (see DeckCard.unfiled). */
-    unfiled?: boolean;
     board?: DeckBoard;
     /** The deck this slot lives in, so the sheet can read its command zone. */
     deckId?: string;

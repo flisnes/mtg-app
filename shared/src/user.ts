@@ -250,6 +250,23 @@ export interface DeckCard {
 }
 
 /**
+ * Everything a slot says about the copy it names, without the row's own
+ * identity (which card, which container, how many, which board). This is the
+ * part every screen that hands a slot around has to carry: the container page's
+ * rows, what those rows hand the card sheet, and the sheet's own editor.
+ *
+ * Defined by SUBTRACTION on purpose. Those shapes each used to list the fields
+ * by hand, all of them optional, so leaving one out was not a type error
+ * anywhere — the field simply stopped arriving at the sheet, which is how
+ * `unfiled` shipped needing a follow-up in v0.135.3. A field added to DeckCard
+ * now lands in all of them at once.
+ *
+ * Not to be confused with SlotWants (dataAccess.ts), which is the narrower
+ * "condition/finish/language it asks for" trio used on the write path.
+ */
+export type SlotShape = Omit<DeckCard, 'id' | 'deckId' | 'oracleId' | 'quantity' | 'board' | 'updatedAt'>;
+
+/**
  * Longest a deck/binder/box name (deck folders share it). Enforced in three
  * places that used to disagree: the name input, the row sanitizer on receive,
  * and — via SYNC_MAX_ROW_BYTES.decks — the server. Nothing capped the write

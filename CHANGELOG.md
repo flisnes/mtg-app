@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.6
+
+- Behind the scenes: the fields a deck slot carries (its printing, what it asks of the copy, its tags, whether it's filed) were spelled out by hand in four places, all optional, so leaving one out was nobody's error. That is how 0.135.3's unfiled flag needed a follow-up. There is now one definition, worked out by subtracting a slot's identity from the stored row, and the screens that pass slots around copy them whole instead of field by field. No change to what the app does.
+
 ## 0.135.5
 
 - **Fixed: a device on an older version no longer strips fields off your own data.** Every device rebuilt each row it pulled from the account out of the fields it knew about, so a phone or PC running a build older than a feature quietly wrote the new field away and moved on. That is what lost container kinds in 0.75.1, emblems in 0.134.7 and unfiled slots in 0.135.3, each needing a full re-download of the account to put right. Fields a device doesn't recognise now travel through it untouched.

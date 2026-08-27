@@ -1,4 +1,4 @@
-import type { Condition, ContainerKind, DeckBoard, EventSource, Finish } from '@mtg/shared';
+import type { ContainerKind, DeckBoard, EventSource, SlotShape } from '@mtg/shared';
 import {
   addDeckCardsBulk,
   collectionKey,
@@ -40,14 +40,7 @@ import { containerKind } from './containers.js';
  * hand (see DeckCard.unfiled): the list still wants the card, the container isn't
  * holding it. So it claims nothing either.
  */
-export function claimKeyOf(s: {
-  scryfallId?: string | null;
-  condition?: Condition;
-  finish?: Finish;
-  lang?: string;
-  anyBasic?: boolean;
-  unfiled?: boolean;
-}): string | undefined {
+export function claimKeyOf(s: SlotShape): string | undefined {
   if (s.anyBasic || s.unfiled || !s.scryfallId || !s.condition || !s.finish || !s.lang) return undefined;
   return collectionKey({ scryfallId: s.scryfallId, condition: s.condition, finish: s.finish, lang: s.lang });
 }

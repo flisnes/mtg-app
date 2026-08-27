@@ -84,6 +84,7 @@ import { useMultiSelect, type MultiSelect } from '../components/useMultiSelect.j
 import { SelectToggle } from '../components/SelectToggle.js';
 import { usePlacementIndex, type PlacementIndex } from '../db/usePlacements.js';
 import { Icon } from '../components/icons.js';
+import { useAsyncAction } from '../components/useAsyncAction.js';
 
 /** One slot of this container, joined to its card and what the collection holds.
  *  Everything the slot itself says comes from SlotShape. */
@@ -1177,6 +1178,7 @@ function MoveZoneSheet({
  * whether a copy is already sitting in the collection, same as any other card.
  */
 function TokenSuggestions({ deckId, view, tokens }: { deckId: string; view: ViewMode; tokens: Priced<OracleCard>[] }) {
+  const action = useAsyncAction();
   const ownership = useOwnershipIndex();
   const [adding, setAdding] = useState<Set<string>>(new Set());
 
@@ -1204,7 +1206,7 @@ function TokenSuggestions({ deckId, view, tokens }: { deckId: string; view: View
         <button
           className="ghost icon-only"
           disabled={adding.has(o.oracleId)}
-          onClick={() => void add(o.oracleId)}
+          onClick={() => action.run('add the card', () => add(o.oracleId))}
           aria-label={`Add ${tokenLabel(o)} to tokens`}
           title="Add to tokens"
         >

@@ -10,6 +10,7 @@ import { historyChange } from '../price/history.js';
 import { getSealedPriceHistory } from '../price/sealedTracking.js';
 import { SealedImage } from './SealedImage.js';
 import { categoryLabel, fmtSealedPrice, isRandomOnly, itemImage, sealedPriceSourceLabel, type SealedPriceSource } from './product.js';
+import { useAsyncAction } from '../components/useAsyncAction.js';
 
 // One unopened product on the shelf: what it's worth, what the copies you own
 // add up to, and how its price has moved since the app started watching it. The
@@ -33,6 +34,7 @@ export function SealedItemSheet({
   onRemove: () => void;
   onClose: () => void;
 }) {
+  const action = useAsyncAction();
   const [history, setHistory] = useState<SealedPriceHistory | null>(null);
   const [chartOpen, setChartOpen] = useState(false);
 
@@ -98,7 +100,7 @@ export function SealedItemSheet({
       <div className="sealed-copies">
         <span>Copies</span>
         <button
-          onClick={() => void setSealedItemQuantity(item.id, item.quantity - 1)}
+          onClick={() => action.run('change the count', () => setSealedItemQuantity(item.id, item.quantity - 1))}
           aria-label={`One fewer ${item.name}`}
           disabled={item.quantity <= 1}
         >
@@ -106,7 +108,7 @@ export function SealedItemSheet({
         </button>
         <span className="sealed-copies-n">{item.quantity}</span>
         <button
-          onClick={() => void setSealedItemQuantity(item.id, item.quantity + 1)}
+          onClick={() => action.run('change the count', () => setSealedItemQuantity(item.id, item.quantity + 1))}
           aria-label={`One more ${item.name}`}
           disabled={item.quantity >= 9999}
         >

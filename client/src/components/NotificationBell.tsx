@@ -5,6 +5,7 @@ import { useNotifications } from '../account/useNotifications.js';
 import { dismissMatch, fetchMatchesNow, markAllSeen } from '../account/notifications.js';
 import { useFilingConflictCount } from '../db/usePlacements.js';
 import { Icon } from './icons.js';
+import { useAsyncAction } from './useAsyncAction.js';
 
 // Bell in the header, next to the account icon. A red dot appears when there's
 // something waiting. Two kinds of thing land here:
@@ -25,6 +26,7 @@ function names(cards: MatchCard[], max = 3): string {
 }
 
 export function NotificationBell({ signedIn }: { signedIn: boolean }) {
+  const action = useAsyncAction();
   const { items, hasNew: newMatches } = useNotifications();
   const conflicts = useFilingConflictCount();
   const navigate = useNavigate();
@@ -160,7 +162,7 @@ export function NotificationBell({ signedIn }: { signedIn: boolean }) {
                       className="notif-dismiss"
                       aria-label={`Dismiss match with ${it.username}`}
                       title="Dismiss"
-                      onClick={() => void dismissMatch(it.username)}
+                      onClick={() => action.run('dismiss the match', () => dismissMatch(it.username))}
                     >
                       ✕
                     </button>

@@ -39,8 +39,8 @@ import { useDismiss } from './useDismiss.js';
 import { useConfirm } from './ConfirmSheet.js';
 import { TAP_GUARD_MS, useTapGuard } from './useTapGuard.js';
 import { useFiling } from '../deck/useFiling.js';
-import { logError } from '../errorLog.js';
 import { unfileClashes, type FilingCopy } from '../deck/filing.js';
+import { useAsyncAction } from './useAsyncAction.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
 // camera fills the top of the screen and never pauses; each lock (S3 consensus
@@ -408,6 +408,7 @@ function orderTrayCandidates(tray: Tray, ownership?: OwnershipIndex): Candidate[
 }
 
 export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target?: ScanTarget; onClose: () => void }) {
+  const commitAction = useAsyncAction();
   const storageKey = sessionStorageKey(target);
   const [stage, setStage] = useState<Stage>({ kind: 'setup', message: 'Checking scan data…' });
   // A newer card-art index is published and the user hasn't said whether we may
@@ -1103,19 +1104,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   };
 
   /**
-   * Every commit is fired and forgotten by a sheet's onClick, so a throw used to
-   * land in the void: no toast, no retry, the button simply looked dead. Say what
-   * went wrong and keep it in the diagnostics log.
+   * Every commit is fired and forgotten by a sheet's onClick, so a throw would
+   * otherwise land in the void: no toast, no retry, the button simply looking
+   * dead. Same wording as before, now off the shared helper every other async
+   * handler in the app uses.
    */
-  const runCommit = async (run: () => Promise<void>): Promise<void> => {
-    try {
-      await run();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logError('scan-commit', message, err instanceof Error ? err.stack : undefined);
-      toast(`Couldn't save the scan: ${message}`);
-    }
-  };
+  const runCommit = (run: () => Promise<void>): void => commitAction.run('save the scan', run);
 
   /** Write the whole session to the target and leave the scanner. */
   const complete = async () => {
@@ -1853,6 +1847,7 @@ function SessionSheet({
   onComplete: () => void;
   onClose: () => void;
 }) {
+  const action = useAsyncAction();
   // Row tap opens the card sheet on that line for full editing (edition,
   // condition, finish, language, quantity); Apply rewrites the line in place.
   const [editing, setEditing] = useState<{ index: number; oracle: Priced<OracleCard> } | null>(null);
@@ -1919,7 +1914,7 @@ function SessionSheet({
           <ul className="scan-list">
             {entries.map((e, i) => (
               <li key={entryKey(e)} className="scan-list-row">
-                <button className="scan-list-main" onClick={() => void openEntry(i)} aria-label={`Edit ${e.name}`}>
+                <button className="scan-list-main" onClick={() => action.run('open that card', () => openEntry(i))} aria-label={`Edit ${e.name}`}>
                   {e.image ? <img className="scan-list-thumb" src={e.image} alt="" /> : <span className="scan-list-thumb" />}
                   <span className="scan-list-info">
                     <strong>{e.name}</strong>

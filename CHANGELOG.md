@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.8
+
+- **Buttons that fail now say so.** Most of the app's buttons hand their work to a background task, and if that task failed, nothing came back: no message, no retry, the button just looked dead. The scanner learned to report this a while ago, but only the scanner. Fifteen more of them now report the failure the same way, and it lands in the diagnostics log at About -> Copy diagnostics with it. Affected: editing a price in a card's history, creating a deck, binder, box or folder from a picker, tagging and renaming tags, dismissing a match, changing how many sealed boxes you own, and adding a suggested token.
+
 ## 0.135.7
 
 - Behind the scenes: the card sheet does six jobs (add, edit an owned copy, edit a wish, edit a deck slot, edit a scan or trade line, or just show the card), and it used to work out which one by looking at which of a dozen optional inputs the caller had filled in. Callers now say which job they want. Nothing changes on screen; combinations that never made sense are simply no longer possible to write, and reading a screen's code tells you which sheet it opens.

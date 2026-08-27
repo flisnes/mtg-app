@@ -8,6 +8,7 @@ import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { createContainer } from '../db/dataAccess.js';
 import { Emblem } from './Emblem.js';
 import { Sheet } from './Sheet.js';
+import { useAsyncAction } from './useAsyncAction.js';
 
 /**
  * Bottom-sheet that lists the user's decks, binders and boxes and reports the
@@ -44,6 +45,7 @@ export function ContainerPickerSheet({
   /** Shown instead of the list when nothing qualifies. */
   emptyText?: string;
 }) {
+  const action = useAsyncAction();
   const navigate = useNavigate();
   const [kind, setKind] = useState<ContainerKind>('deck');
   const [newName, setNewName] = useState('');
@@ -143,10 +145,10 @@ export function ContainerPickerSheet({
             placeholder={`New ${meta.noun} name…`}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && void createAndPick()}
+            onKeyDown={(e) => e.key === 'Enter' && action.run(`create the ${kind}`, createAndPick)}
             aria-label={`New ${meta.noun} name`}
           />
-          <button className="primary" onClick={() => void createAndPick()}>
+          <button className="primary" onClick={() => action.run(`create the ${kind}`, createAndPick)}>
             Create &amp; add
           </button>
         </div>

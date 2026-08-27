@@ -26,6 +26,7 @@ import { OptionsMenu } from '../components/OptionsMenu.js';
 import { historyChange } from '../price/history.js';
 import { useSealedHistories } from '../price/sealedValue.js';
 import { EmptyState, Page } from './Page.js';
+import { useAsyncAction } from '../components/useAsyncAction.js';
 
 // The sealed shelf: unopened boxes, displays, packs and precons. Deliberately
 // its own view rather than a section of the collection — these rows have no
@@ -339,6 +340,7 @@ function SealedShelf({
   onOpen: (item: SealedItem) => void;
   onRemove: (item: SealedItem) => void;
 }) {
+  const action = useAsyncAction();
   if (view === 'grid') {
     return (
       <ul className="sealed-grid">
@@ -385,14 +387,14 @@ function SealedShelf({
             </button>
             <div className="sealed-owned-qty">
               <button
-                onClick={() => void setSealedItemQuantity(item.id, item.quantity - 1)}
+                onClick={() => action.run('change the count', () => setSealedItemQuantity(item.id, item.quantity - 1))}
                 aria-label={`One fewer ${item.name}`}
               >
                 −
               </button>
               <span className="sealed-copies-n">{item.quantity}</span>
               <button
-                onClick={() => void setSealedItemQuantity(item.id, item.quantity + 1)}
+                onClick={() => action.run('change the count', () => setSealedItemQuantity(item.id, item.quantity + 1))}
                 aria-label={`One more ${item.name}`}
                 disabled={item.quantity >= 9999}
               >

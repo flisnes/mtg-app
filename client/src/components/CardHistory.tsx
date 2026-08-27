@@ -8,6 +8,7 @@ import { centsAround } from '../price/history.js';
 import { currencySymbol, moneyInput } from '../price/rates.js';
 import { describeEvent, qtyBadge, REASON_LABELS } from '../history/eventRegistry.js';
 import { fmtCents, fmtDate } from '../util/format.js';
+import { useAsyncAction } from './useAsyncAction.js';
 
 // History tab of the card sheet (sync plan, 2026-07-16): the card's event
 // timeline — acquisitions with the market price at the time, removals with a
@@ -159,6 +160,7 @@ function HistoryRow({
   editMode: boolean;
   onEventClick?: (e: UserEvent) => void;
 }) {
+  const action = useAsyncAction();
   // Only collection add/remove carry an editable price/reason. In edit mode a
   // click on one of those expands the inline editor; otherwise a click opens
   // the event's info modal (when a handler is provided).
@@ -250,7 +252,7 @@ function HistoryRow({
             </label>
           )}
           <div className="confirm-row">
-            <button className="primary" onClick={() => void save()}>
+            <button className="primary" onClick={() => action.run('save the price', save)}>
               Save
             </button>
             <button onClick={() => setEditing(false)}>Cancel</button>

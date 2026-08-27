@@ -4,6 +4,7 @@ import { db } from '../db/schema.js';
 import { createDeckFolder } from '../db/dataAccess.js';
 import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
+import { useAsyncAction } from './useAsyncAction.js';
 
 /**
  * Bottom-sheet that lists deck folders and reports the picked one (or
@@ -22,6 +23,7 @@ export function DeckFolderPickerSheet({
   onPick: (folderId: string | undefined) => void;
   onClose: () => void;
 }) {
+  const action = useAsyncAction();
   const [newName, setNewName] = useState('');
   const folders = useLiveQuery(() => db.deckFolders.orderBy('name').toArray(), []);
 
@@ -73,7 +75,7 @@ export function DeckFolderPickerSheet({
           onKeyDown={(e) => e.key === 'Enter' && void createAndPick()}
           aria-label="New folder name"
         />
-        <button className="primary" onClick={() => void createAndPick()}>
+        <button className="primary" onClick={() => action.run('create the folder', createAndPick)}>
           Create &amp; move
         </button>
       </div>

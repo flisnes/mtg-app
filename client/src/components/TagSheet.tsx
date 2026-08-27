@@ -7,6 +7,7 @@ import { deckTags, hasTag } from '../deck/tags.js';
 import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
 import { useConfirm } from './ConfirmSheet.js';
+import { useAsyncAction } from './useAsyncAction.js';
 
 /**
  * Tag the selected cards. Every tag this container already uses is listed with
@@ -29,6 +30,7 @@ export function TagSheet({
   slotIds: string[];
   onClose: () => void;
 }) {
+  const action = useAsyncAction();
   const [draft, setDraft] = useState('');
   const [managing, setManaging] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export function TagSheet({
                       }}
                       aria-label={`Rename tag ${tag}`}
                     />
-                    <button className="primary" onClick={() => void commitRename(tag)}>
+                    <button className="primary" onClick={() => action.run('rename the tag', () => commitRename(tag))}>
                       Rename
                     </button>
                   </div>
@@ -111,7 +113,7 @@ export function TagSheet({
             return (
               <li key={tag}>
                 <div className="tag-row">
-                  <button className="menu-item menu-item-btn" onClick={() => void toggle(tag, state === 'all')}>
+                  <button className="menu-item menu-item-btn" onClick={() => action.run('change the tag', () => toggle(tag, state === 'all'))}>
                     <span
                       className={`select-box${state === 'all' ? ' checked' : ''}${state === 'some' ? ' partial' : ''}`}
                       aria-hidden
@@ -140,7 +142,7 @@ export function TagSheet({
                         className="tag-manage-btn tag-manage-danger"
                         title={`Delete “${tag}” everywhere`}
                         aria-label={`Delete tag ${tag}`}
-                        onClick={() => void remove(tag)}
+                        onClick={() => action.run('remove the tag', () => remove(tag))}
                       >
                         <Icon name="trash" size={15} />
                       </button>
@@ -163,7 +165,7 @@ export function TagSheet({
           onKeyDown={(e) => e.key === 'Enter' && void addDraft()}
           aria-label="New tag"
         />
-        <button className="primary" disabled={!draft.trim()} onClick={() => void addDraft()}>
+        <button className="primary" disabled={!draft.trim()} onClick={() => action.run('add the tag', addDraft)}>
           Add
         </button>
       </div>

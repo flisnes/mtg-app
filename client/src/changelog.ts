@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.135.8',
+    changes: [
+      {
+        kind: 'fixed',
+        text: "Buttons whose work fails now tell you, instead of looking like they did nothing. Fifteen of them were silent before, from editing a price in a card's history to changing how many sealed boxes you own.",
+      },
+    ],
+  },
+  {
     version: '0.135.5',
     changes: [
       {

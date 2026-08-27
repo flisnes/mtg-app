@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.135.5',
+    changes: [
+      {
+        kind: 'fixed',
+        text: "A device running an older version no longer strips fields off your own synced data, and no longer skips rows it doesn't understand yet. Both used to need a full re-download of the account to repair.",
+      },
+    ],
+  },
+  {
     version: '0.135.4',
     changes: [
       {

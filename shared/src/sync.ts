@@ -30,6 +30,13 @@ export interface SyncChange {
   deleted?: true;
   /** Full row as stored client-side; absent when deleted. */
   row?: unknown;
+  /**
+   * Server → client only: this change's own sequence number, so a client that
+   * cannot apply a change (a table added after its build) can stop its cursor
+   * just short of it instead of advancing past and losing the row for good.
+   * Ignored on a push. Absent from servers older than v0.135.5.
+   */
+  seq?: number;
 }
 
 /** Client → server. Push and pull are one atomic call; a pure pull sends no changes. */

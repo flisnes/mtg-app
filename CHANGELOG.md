@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.5
+
+- **Fixed: a device on an older version no longer strips fields off your own data.** Every device rebuilt each row it pulled from the account out of the fields it knew about, so a phone or PC running a build older than a feature quietly wrote the new field away and moved on. That is what lost container kinds in 0.75.1, emblems in 0.134.7 and unfiled slots in 0.135.3, each needing a full re-download of the account to put right. Fields a device doesn't recognise now travel through it untouched.
+- **Fixed: a new kind of data can no longer be skipped for good.** A device also used to step past rows belonging to a table its version didn't have yet, which is why unopened boxes added on a phone never turned up on a PC still on an older build. It now stops just short of anything it can't apply and picks those rows up after it updates.
+- Behind the scenes: adding a field to synced data now fails the build until it's declared, so this class of bug is caught before release rather than by a tester weeks later.
+
 ## 0.135.4
 
 - **Fixed: back can no longer skip a page when you close the search or a sheet.** Every overlay parks a throwaway history entry so back closes it instead of leaving the page you were on. Which entry belonged to which overlay was matched by URL, and every entry in the stack has the same URL, so an overlay that shut down while another sat on top of it could spend the wrong one. The next close then took a real page with it, and you landed one screen further back than you asked for. Entries are stamped now, and an overlay only ever spends its own.

@@ -14,16 +14,7 @@ import { db } from '../db/schema.js';
 import { readOwnTradelist, readOwnWishlist } from '../db/ownLists.js';
 import { getSetting, setSetting, deleteSetting } from '../db/settings.js';
 import { TRADE_ENABLED, TRADE_WS_URL } from '../trade/config.js';
-import {
-  sanitizeCollectionRow,
-  sanitizeDeckCardRow,
-  sanitizeDeckFolderRow,
-  sanitizeDeckRow,
-  sanitizeEventRow,
-  sanitizeSealedItemRow,
-  sanitizeTradeRow,
-  sanitizeWishlistRow,
-} from '../transfer/payload.js';
+import { sanitizeSyncedRow } from '../transfer/payload.js';
 import { stagePutMany } from './outbox.js';
 
 // The sync engine (sync plan, 2026-07-16). Drains the outbox to POST /api/sync
@@ -114,29 +105,35 @@ const TABLES = {
   events: db.events,
 } as const;
 
-const SANITIZERS: Record<SyncTable, (raw: unknown) => { id: string } | null> = {
-  collection: sanitizeCollectionRow,
-  sealedItems: sanitizeSealedItemRow,
-  wishlist: sanitizeWishlistRow,
-  decks: sanitizeDeckRow,
-  deckCards: sanitizeDeckCardRow,
-  deckFolders: sanitizeDeckFolderRow,
-  trades: sanitizeTradeRow,
-  events: sanitizeEventRow,
-};
-
 /** A row's own LWW stamp (trades are immutable → completedAt). */
 function stampOf(row: Record<string, unknown>): number {
   const v = row.updatedAt ?? row.completedAt ?? row.ts;
   return typeof v === 'number' ? v : 0;
 }
 
-async function applyServerChanges(changes: SyncChange[]): Promise<void> {
-  if (!changes.length) return;
-  await db.transaction('rw', [...Object.values(TABLES), db.outbox], async () => {
+/**
+ * Apply a page of changes. Returns the sequence number of the first change it
+ * could NOT apply (a table added after this build), or null when it applied
+ * everything — the caller keeps its cursor below that seq so the row is still
+ * waiting after the app updates. A server too old to send `seq` reports 0,
+ * which reads as "don't advance at all".
+ *
+ * Before v0.135.5 an unknown table was skipped while the cursor moved on, so
+ * boxes added on a phone could never reach a PC still running an older build
+ * (the `syncTableAdditions` repair). Refusing to advance costs a re-pull of one
+ * page per sync until that device updates, which it does on its next open.
+ */
+async function applyServerChanges(changes: SyncChange[]): Promise<number | null> {
+  if (!changes.length) return null;
+  return db.transaction('rw', [...Object.values(TABLES), db.outbox], async () => {
+    let blockedFrom: number | null = null;
     for (const c of changes) {
       const table = TABLES[c.tbl];
-      if (!table) continue;
+      if (!table) {
+        const seq = typeof c.seq === 'number' ? c.seq : 0;
+        blockedFrom = blockedFrom === null ? seq : Math.min(blockedFrom, seq);
+        continue;
+      }
 
       // A pending local change that is NEWER wins locally and will win on the
       // server too — skip the incoming row. Anything older is superseded.
@@ -154,7 +151,7 @@ async function applyServerChanges(changes: SyncChange[]): Promise<void> {
       } else {
         // Sanitize BEFORE dropping the pending entry: a corrupt/mismatched row
         // is skipped without discarding the valid local change it would lose to.
-        const row = SANITIZERS[c.tbl](c.row);
+        const row = sanitizeSyncedRow(c.tbl, c.row);
         if (!row || row.id !== c.rowId) continue;
         await (table as (typeof TABLES)['collection']).put(row as never);
       }
@@ -162,6 +159,7 @@ async function applyServerChanges(changes: SyncChange[]): Promise<void> {
       // now superseded and can be dropped.
       if (pending) await db.outbox.delete([c.tbl, c.rowId]);
     }
+    return blockedFrom;
   });
 }
 
@@ -287,18 +285,25 @@ export async function syncNow(): Promise<void> {
           continue;
         }
 
-        await applyServerChanges(res.changes);
+        const blockedFrom = await applyServerChanges(res.changes);
         // Caught up: the account is whole again, so stop claiming a reseed.
         if (!res.hasMore) reseeding = false;
         // When the pull was capped the server did NOT apply the push.
         if (!res.hasMore) await ackOutbox(batch);
-        cursor = res.cursor;
+        // Stop just short of anything this build couldn't apply, and never move
+        // backwards (Math.max also absorbs the seq-less case, which is -1).
+        const ceiling = blockedFrom === null ? res.cursor : Math.min(res.cursor, blockedFrom - 1);
+        cursor = Math.max(cursor, ceiling);
         // A sign-out during the request deletes the sync state; don't recreate it.
         const current = await getSyncState();
         if (!current || current.account !== locked.username) return;
         const { reseeding: _was, ...rest } = current;
         await setSetting(KEY_SYNC_STATE, { ...rest, cursor, ...(reseeding ? { reseeding: true as const } : {}) } satisfies SyncState);
 
+        // Nothing past the blocked change can be pulled, so looping would only
+        // re-fetch the same page. The rows wait on the server until this device
+        // updates and knows the table.
+        if (blockedFrom !== null) break;
         if (!res.hasMore && (await db.outbox.count()) === 0) break;
       }
       failures = 0;
@@ -470,18 +475,23 @@ const KEY_REPAIRS = 'syncRepairs';
  * a re-pull only skips an incoming row when the local copy is STRICTLY newer —
  * so dropped rows land while pending local edits still win.
  *
- * ADD AN ID HERE whenever SYNC_TABLES grows — and whenever a synced row grows a
- * FIELD. Both need it for the same reason: devices update whenever they next
- * open the app, so an older build is always still out there applying rows
- * written by a newer one. Every sanitizer REBUILDS the row from the keys it
- * knows, so a build that predates the field writes it away and advances its
- * cursor past the only change that carried it. The device that lost the field
- * is exactly the one that cannot know it did.
+ * THE LIST SHOULD NOT NEED TO GROW AGAIN. Every id above is one release paying
+ * for the same design: the sanitizers rebuilt each row from the keys they knew,
+ * so any build older than a field wrote that field away and moved its cursor
+ * past the only change carrying it. Since v0.135.5 both halves are fixed at the
+ * source instead:
  *
- * The repair only heals rows the server still holds. If the stale device edits
- * such a row before it updates, it pushes its stripped copy with a newer stamp
- * and the field is gone from the account for good — one more reason to add the
- * id in the same release as the field, not after the reports come in.
+ * - A new FIELD survives an older build (sanitizeSyncedRow keeps keys it
+ *   doesn't recognize; adding one to a row type fails the build until
+ *   KNOWN_KEYS in transfer/payload.ts is updated, which is the whole fix).
+ * - A new TABLE no longer moves the cursor past itself (applyServerChanges
+ *   reports the seq it stopped at), so the rows simply wait for the update.
+ *
+ * Both live in code paths the compiler and the protocol enforce, which is why
+ * this is a list of four historical ids rather than a standing ritual. If you
+ * ever do need a fifth, note that a repair only heals rows the server still
+ * holds: a stale device that edits such a row first pushes its stripped copy
+ * with a newer stamp, and then the field is gone from the account for good.
  */
 const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems2', 'deckCardUnfiled'] as const;
 

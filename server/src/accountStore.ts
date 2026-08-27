@@ -740,12 +740,16 @@ interface SyncRowRecord {
 }
 
 function recordToChange(r: SyncRowRecord): SyncChange {
-  if (r.deleted) return { tbl: r.tbl as SyncTable, rowId: r.row_id, updatedAt: r.updated_at, deleted: true };
+  // `seq` rides along so a client can refuse to advance its cursor past a
+  // change it doesn't understand (see SyncChange.seq).
+  if (r.deleted) {
+    return { tbl: r.tbl as SyncTable, rowId: r.row_id, updatedAt: r.updated_at, deleted: true, seq: r.seq };
+  }
   let row: unknown = null;
   try {
     row = r.row === null ? null : JSON.parse(r.row);
   } catch {
     // unreachable for rows this server wrote; a null row is dropped client-side
   }
-  return { tbl: r.tbl as SyncTable, rowId: r.row_id, updatedAt: r.updated_at, row };
+  return { tbl: r.tbl as SyncTable, rowId: r.row_id, updatedAt: r.updated_at, row, seq: r.seq };
 }

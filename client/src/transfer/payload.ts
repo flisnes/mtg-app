@@ -25,6 +25,7 @@ import {
   type RemovalReason,
   type SealedItem,
   type SealedPriceHistory,
+  type SyncTable,
   type Trade,
   type UserEvent,
   type UserEventKind,
@@ -369,6 +370,142 @@ export function sanitizeEventRow(raw: unknown): UserEvent | null {
     ...(typeof r.batchLabel === 'string' && r.batchLabel ? { batchLabel: r.batchLabel.slice(0, 200) } : {}),
     ...(r.reconcile === true ? { reconcile: true } : {}),
   };
+}
+
+// ---------------------------------------------------------------------------
+// The sync receive path: the same sanitizers, one crucial difference
+// ---------------------------------------------------------------------------
+//
+// A transfer peer is a stranger, so rebuilding its rows from the keys we know
+// is exactly right. An incoming *sync* row is the user's own data coming back
+// from their own account, and rebuilding it is not validation but data loss:
+// devices update whenever they next open the app, so an older build is always
+// still out there pulling rows a newer one wrote. It rebuilds them without the
+// field it has never heard of, advances its cursor past the only change that
+// carried it, and cannot know what it dropped. That cost four releases
+// (v0.75.1, v0.129.3, v0.134.7, v0.135.3), each one a full-account re-pull.
+//
+// So on the sync path a field this build doesn't know rides through untouched.
+// The row is still corrected key by key everywhere we DO know better, and the
+// server bounds the whole row (SYNC_MAX_ROW_BYTES), so an unknown key can be
+// junk but never unbounded junk.
+
+/**
+ * Every key of every synced row shape. Exhaustive by construction: the
+ * `satisfies` clauses fail the build the moment a row type grows a field, which
+ * is the moment to think about whether the sanitizer handles it. That inverts
+ * the old failure mode — forgetting used to lose the field silently on every
+ * device that pulled it, and now it doesn't compile.
+ *
+ * Anything NOT listed here is by definition a field this build predates, and
+ * preserveUnknown carries it through.
+ */
+const KNOWN_KEYS: Record<SyncTable, Record<string, true>> = {
+  collection: {
+    id: true, oracleId: true, scryfallId: true, condition: true, finish: true, lang: true,
+    quantity: true, quantityForTrade: true, createdAt: true, updatedAt: true,
+  } satisfies Record<keyof Required<CollectionEntry>, true>,
+  sealedItems: {
+    id: true, productId: true, name: true, set: true, setName: true, tcgplayerId: true,
+    quantity: true, createdAt: true, updatedAt: true,
+  } satisfies Record<keyof Required<SealedItem>, true>,
+  wishlist: {
+    id: true, oracleId: true, scryfallId: true, condition: true, finish: true, lang: true,
+    quantity: true, createdAt: true, updatedAt: true,
+  } satisfies Record<keyof Required<WishlistEntry>, true>,
+  decks: {
+    id: true, name: true, kind: true, format: true, description: true, folderId: true,
+    emblem: true, createdAt: true, updatedAt: true,
+  } satisfies Record<keyof Required<Deck>, true>,
+  deckCards: {
+    id: true, deckId: true, oracleId: true, scryfallId: true, quantity: true, board: true,
+    condition: true, finish: true, lang: true, anyBasic: true, unfiled: true, tags: true,
+    updatedAt: true,
+  } satisfies Record<keyof Required<DeckCard>, true>,
+  deckFolders: {
+    id: true, name: true, createdAt: true, updatedAt: true,
+  } satisfies Record<keyof Required<DeckFolder>, true>,
+  trades: {
+    id: true, completedAt: true, partner: true, given: true, received: true,
+  } satisfies Record<keyof Required<Trade>, true>,
+  events: {
+    id: true, ts: true, updatedAt: true, kind: true, oracleId: true, scryfallId: true, qty: true,
+    condition: true, finish: true, lang: true, priceEurCents: true, reason: true, deckId: true,
+    deckName: true, deckKind: true, board: true, tradeId: true, reconcile: true, source: true,
+    batchId: true, batchLabel: true,
+  } satisfies Record<keyof Required<UserEvent>, true>,
+};
+
+/** Keys that would rewrite the object's prototype rather than sit on it. */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/** Copy over the keys `clean` never mentioned — one level down, where there is
+ *  no key list to consult (a deck's emblem, which grew `color` in v0.133.2). */
+function keepUnmentioned(raw: Record<string, unknown>, clean: Record<string, unknown>): Record<string, unknown> {
+  let out: Record<string, unknown> | undefined;
+  for (const k of Object.keys(raw)) {
+    if (Object.hasOwn(clean, k) || UNSAFE_KEYS.has(k)) continue;
+    (out ??= { ...clean })[k] = raw[k];
+  }
+  return out ?? clean;
+}
+
+/**
+ * The sanitized row, plus any field of the raw one this build has never heard
+ * of. Known keys always take the sanitizer's value, so every deliberate
+ * normalization still holds (a binder keeps losing a stray `format`).
+ *
+ * Two things this deliberately does not cover, both because "the sanitizer
+ * dropped this" and "the sanitizer never knew this" are indistinguishable once
+ * a value is gone:
+ *
+ * - Arrays. A new field on a *trade line* is still dropped: lines can be merged
+ *   or discarded, so a positional merge would pair up the wrong ones. Trades are
+ *   immutable once completed, so it has never cost anything.
+ * - A new *variant* of a nested value, e.g. a fourth ContainerEmblem `type`.
+ *   An older sanitizeContainerEmblem returns undefined for one it can't parse,
+ *   and undefined is exactly what it returns for junk. New fields are safe now;
+ *   a new variant of an existing shape still wants a thought.
+ */
+function preserveUnknown<T extends { id: string }>(raw: unknown, clean: T, known: Record<string, true>): T {
+  if (!isPlainObject(raw)) return clean;
+  const cleanRec = clean as unknown as Record<string, unknown>;
+  let out: Record<string, unknown> | undefined;
+  for (const k of Object.keys(raw)) {
+    if (UNSAFE_KEYS.has(k)) continue;
+    if (Object.hasOwn(known, k)) {
+      const rawVal = raw[k];
+      const cleanVal = cleanRec[k];
+      if (isPlainObject(rawVal) && isPlainObject(cleanVal)) {
+        const merged = keepUnmentioned(rawVal, cleanVal);
+        if (merged !== cleanVal) (out ??= { ...cleanRec })[k] = merged;
+      }
+      continue;
+    }
+    (out ??= { ...cleanRec })[k] = raw[k];
+  }
+  return (out ?? cleanRec) as unknown as T;
+}
+
+const SYNC_SANITIZERS: Record<SyncTable, (raw: unknown) => { id: string } | null> = {
+  collection: sanitizeCollectionRow,
+  sealedItems: sanitizeSealedItemRow,
+  wishlist: sanitizeWishlistRow,
+  decks: sanitizeDeckRow,
+  deckCards: sanitizeDeckCardRow,
+  deckFolders: sanitizeDeckFolderRow,
+  trades: sanitizeTradeRow,
+  events: sanitizeEventRow,
+};
+
+/** Sanitize one row that arrived from the user's own account (sync/engine.ts). */
+export function sanitizeSyncedRow(tbl: SyncTable, raw: unknown): { id: string } | null {
+  const clean = SYNC_SANITIZERS[tbl](raw);
+  return clean && preserveUnknown(raw, clean, KNOWN_KEYS[tbl]);
 }
 
 /**

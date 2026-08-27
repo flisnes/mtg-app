@@ -4,9 +4,8 @@ import { db } from '../db/schema.js';
 import { joinCollectionEntries, joinWishlistEntries, type JoinedEntry, type JoinedWish } from '../db/queries.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { CardSheet } from './CardSheet.js';
-import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
-import { usePagedLimit } from './usePagedLimit.js';
-import { LoadMoreSentinel } from './LoadMoreSentinel.js';
+import type { CardItem } from './CardViews.js';
+import { ResultsList, resultCount } from './ResultsList.js';
 import { collectionCardItem, wishCardItem } from './cardRows.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
@@ -29,7 +28,6 @@ export type Scope = 'collection' | 'wishlist' | 'tradelist';
 // screen and the tradelist page has already changed when you get there.
 
 export function ScopedResults({ scope, query }: { scope: Scope; query: string }) {
-  const [view, setView] = useViewMode();
   // The very preference the list page persists — 'collection' and 'tradelist'
   // are separate lists with separate sorts, same as their two screens.
   const [sort, setSort] = useCardSort(scope);
@@ -78,36 +76,17 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
     );
   }, [collRows, wishRows, collMatches, wishMatches, scope, needWishlist, sort, sortData, moverFlags, ownership, placements]);
 
-  const { limit, showMore } = usePagedLimit(`${query}|${scope}|${sort.key}:${sort.dir}`, 60);
-  const visible = items.slice(0, limit);
-
   const loading = (needCollection && collRows === undefined) || (needWishlist && wishRows === undefined);
 
   return (
     <>
-      <div className="meta-row">
-        <p className="search-meta">
-          {loading ? 'Loading…' : `${items.length} result${items.length === 1 ? '' : 's'}`}
-        </p>
-        <div className="meta-actions">
-          <SortControls
-            prefs={sort}
-            onChange={setSort}
-            withChange={needCollection}
-            withDates
-          />
-          <ViewToggle mode={view} onChange={setView} />
-        </div>
-      </div>
-
-      {!loading && items.length === 0 ? (
-        <p className="search-meta">Nothing here matches.</p>
-      ) : (
-        <>
-          <CardItems view={view} items={visible} />
-          <LoadMoreSentinel hasMore={items.length > visible.length} onLoadMore={showMore} rearmKey={visible.length} />
-        </>
-      )}
+      <ResultsList
+        items={items}
+        pageKey={`${query}|${scope}|${sort.key}:${sort.dir}`}
+        status={loading ? 'Loading…' : resultCount(items.length)}
+        controls={<SortControls prefs={sort} onChange={setSort} withChange={needCollection} withDates />}
+        showEmpty={!loading && items.length === 0}
+      />
 
       {editColl?.oracle && <CardSheet mode="edit" oracleCard={editColl.oracle} entry={editColl.entry} onClose={() => setEditColl(null)} />}
       {editWish?.oracle && (

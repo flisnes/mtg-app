@@ -2,9 +2,8 @@ import { useMemo, useState } from 'react';
 import type { Finish, OracleCard, Priced } from '@mtg/shared';
 import { compileCardQuery, rowPrintingSummary, toSearchableEntry } from '../cardDb/querySyntax.js';
 import { CardSheet } from './CardSheet.js';
-import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
-import { usePagedLimit } from './usePagedLimit.js';
-import { LoadMoreSentinel } from './LoadMoreSentinel.js';
+import type { CardItem } from './CardViews.js';
+import { ResultsList, resultCount } from './ResultsList.js';
 import { SortControls, priceValue, sortCards, useCardSort, type SortFields } from './CardSorting.js';
 import {
   useUserLists,
@@ -43,7 +42,6 @@ export function ProfileScopedResults({
   const cards = useResolvedCards(lists);
   const iWant = useMyWants();
   const { have: iHave, own: iOwn } = useMyCollection();
-  const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('profile');
   const [info, setInfo] = useState<InfoTarget | null>(null);
 
@@ -99,37 +97,17 @@ export function ProfileScopedResults({
     return sortCards(out, (o) => o.fields, sort).map((o) => o.item);
   }, [lists, cards, query, showTrade, showWish, sort, iWant, iHave, iOwn]);
 
-  const { limit, showMore } = usePagedLimit(
-    `profile:${username}|${query}|${showTrade}|${showWish}|${sort.key}:${sort.dir}`,
-    60,
-  );
-  const visible = items.slice(0, limit);
   const loading = !lists && !error;
 
   return (
     <>
-      <div className="meta-row">
-        <p className="search-meta">
-          {error
-            ? error
-            : loading
-              ? 'Loading…'
-              : `${items.length} result${items.length === 1 ? '' : 's'} in ${username}’s lists`}
-        </p>
-        <div className="meta-actions">
-          <SortControls prefs={sort} onChange={setSort} />
-          <ViewToggle mode={view} onChange={setView} />
-        </div>
-      </div>
-
-      {!loading && !error && items.length === 0 ? (
-        <p className="search-meta">Nothing here matches.</p>
-      ) : (
-        <>
-          <CardItems view={view} items={visible} />
-          <LoadMoreSentinel hasMore={items.length > visible.length} onLoadMore={showMore} rearmKey={visible.length} />
-        </>
-      )}
+      <ResultsList
+        items={items}
+        pageKey={`profile:${username}|${query}|${showTrade}|${showWish}|${sort.key}:${sort.dir}`}
+        status={error ? error : loading ? 'Loading…' : `${resultCount(items.length)} in ${username}’s lists`}
+        controls={<SortControls prefs={sort} onChange={setSort} />}
+        showEmpty={!loading && !error && items.length === 0}
+      />
 
       {info && (
         <CardSheet

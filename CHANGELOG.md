@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.10
+
+- Behind the scenes: the three scoped searches (into your own lists, into the deck or binder you're standing in, and into someone else's lists on Community) each carried their own copy of the same frame: the result count with the sort and view controls, the cards, the "load more as you scroll" sentinel and the "Nothing here matches." line. They now share one, and keep only what is actually different about them. The card-database search still has its own, because it pages by asking for more rather than by revealing more.
+
 ## 0.135.9
 
 - Behind the scenes: the list/grid preference could in principle also hold "pile", a leftover from when goblin mode was a third setting rather than its own switch. Nothing could ever produce that value and the code threw it away on the way out, so every screen was handling a case that could not happen. Gone, and a stored leftover from an old install is now tidied up when it's read.

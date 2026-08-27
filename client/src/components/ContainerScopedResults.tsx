@@ -5,9 +5,8 @@ import { db } from '../db/schema.js';
 import { joinDeckCards, type JoinedDeckCard } from '../db/queries.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { CardSheet } from './CardSheet.js';
-import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
-import { usePagedLimit } from './usePagedLimit.js';
-import { LoadMoreSentinel } from './LoadMoreSentinel.js';
+import type { CardItem } from './CardViews.js';
+import { ResultsList, resultCount } from './ResultsList.js';
 import { deckCardItem } from './cardRows.js';
 import { SortControls, priceValue, sortCards, useCardSort } from './CardSorting.js';
 
@@ -28,7 +27,6 @@ export function ContainerScopedResults({
   format: DeckFormat | undefined;
   query: string;
 }) {
-  const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('deck');
   const [editing, setEditing] = useState<JoinedDeckCard | null>(null);
 
@@ -52,30 +50,17 @@ export function ContainerScopedResults({
     ).map((r): CardItem => ({ ...deckCardItem(r, { kind, onClick: () => setEditing(r) }), key: r.entry.id }));
   }, [rows, matches, kind, sort]);
 
-  const { limit, showMore } = usePagedLimit(`container:${deckId}|${query}|${sort.key}:${sort.dir}`, 60);
-  const visible = items.slice(0, limit);
   const loading = rows === undefined;
 
   return (
     <>
-      <div className="meta-row">
-        <p className="search-meta">
-          {loading ? 'Loading…' : `${items.length} result${items.length === 1 ? '' : 's'}`}
-        </p>
-        <div className="meta-actions">
-          <SortControls prefs={sort} onChange={setSort} />
-          <ViewToggle mode={view} onChange={setView} />
-        </div>
-      </div>
-
-      {!loading && items.length === 0 ? (
-        <p className="search-meta">Nothing here matches.</p>
-      ) : (
-        <>
-          <CardItems view={view} items={visible} />
-          <LoadMoreSentinel hasMore={items.length > visible.length} onLoadMore={showMore} rearmKey={visible.length} />
-        </>
-      )}
+      <ResultsList
+        items={items}
+        pageKey={`container:${deckId}|${query}|${sort.key}:${sort.dir}`}
+        status={loading ? 'Loading…' : resultCount(items.length)}
+        controls={<SortControls prefs={sort} onChange={setSort} />}
+        showEmpty={!loading && items.length === 0}
+      />
 
       {editing?.oracle && (
         <CardSheet

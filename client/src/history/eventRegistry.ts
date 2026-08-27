@@ -132,9 +132,19 @@ export function describeBatch(source: EventSource, label?: string, events: reado
   const deckKind = events[0]?.deckKind;
   const containerIcon = CONTAINER_META[deckKind ?? 'deck'].icon;
   if (isMoveBatch(events)) {
-    const to = events.find((e) => e.kind === 'deck.add')?.board;
+    const arrived = events.find((e) => e.kind === 'deck.add');
+    const left = events.find((e) => e.kind === 'deck.remove');
+    // Cut from one container and pasted into another: the zone it landed in
+    // says nothing useful, since the interesting half is which deck it went to.
+    if (arrived && left && arrived.deckId !== left.deckId) {
+      return {
+        verb: `Moved to ${arrived.deckName ?? containerNoun(arrived)}`,
+        icon: 'moveTo',
+        direction: 'neutral',
+      };
+    }
     return {
-      verb: to ? `Moved to ${BOARD_NOUN[to]}` : 'Moved between zones',
+      verb: arrived?.board ? `Moved to ${BOARD_NOUN[arrived.board]}` : 'Moved between zones',
       icon: 'moveTo',
       direction: 'neutral',
     };

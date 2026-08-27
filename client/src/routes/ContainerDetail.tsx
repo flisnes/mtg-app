@@ -27,6 +27,7 @@ import {
   addDeckCardsBulk,
   deleteDeck,
   moveDeckCardsBulk,
+  moveDeckCardsToContainer,
   removeDeckCardsBulk,
   removeDeckCardsMatching,
   renameDeck,
@@ -37,7 +38,7 @@ import {
   setDeckFormat,
 } from '../db/dataAccess.js';
 import { addToWishlistBulk, applyImport } from '../db/dataAccess.js';
-import { checkDeckLegality, formatLabel, isBasicLand, type LegalityReport } from '../deck/legality.js';
+import { checkDeckLegality, formatLabel, isBasicLand, isNonDeckCard, type LegalityReport } from '../deck/legality.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { useFiling } from '../deck/useFiling.js';
 import { buildDeckText } from '../deck/deckText.js';
@@ -86,6 +87,9 @@ import { usePlacementIndex, type PlacementIndex } from '../db/usePlacements.js';
 import { Icon } from '../components/icons.js';
 import { useAsyncAction } from '../components/useAsyncAction.js';
 import { useUndoShortcut } from '../history/useUndoShortcut.js';
+import { clearCut, type ClipboardPayload, type ClipboardSlot } from '../deck/cardClipboard.js';
+import { useCardClipboard, useCutSlots, type ClipboardHandlers } from '../deck/useCardClipboard.js';
+import { useShortcuts } from '../components/useShortcuts.js';
 
 /** One slot of this container, joined to its card and what the collection holds.
  *  Everything the slot itself says comes from SlotShape. */
@@ -157,6 +161,9 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const account = useAccount();
   const [favDeckIds, setFavDeckIds] = useState<Set<string> | null>(null);
   const [showImport, setShowImport] = useState(false);
+  // A pasted decklist: hands ImportPanel its text so it can go straight to the
+  // review rather than making you paste again into its own box.
+  const [pastedText, setPastedText] = useState<string | null>(null);
   const [scanning, setScanning] = useState<'add' | 'rescan' | null>(null);
   // The "add what's missing to your wishlist" sheet. It shows up on the way out
   // of a deck (`leaving`), and on demand from the ⋯ menu — same sheet, but asking
@@ -182,6 +189,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const placements = usePlacementIndex();
   const { file, sheet: filingSheet } = useFiling();
   const { confirm, sheet: confirmSheet } = useConfirm();
+  const action = useAsyncAction();
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -377,6 +385,102 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const allKeys = data.rows.map((r) => r.id);
   const selectedCopies = selectedRows.reduce((s, r) => s + r.quantity, 0);
   const plural = (n: number) => (n === 1 ? '' : 's');
+
+  // ---- Clipboard -------------------------------------------------------
+  // Copy takes the selection, or the whole container when nothing is picked —
+  // "Ctrl+C on a deck" meaning "give me the decklist" is the reading everyone
+  // arrives with. Cut insists on a selection: cutting an entire deck by
+  // reflex is not a thing anyone meant to do.
+  const clipSlot = (r: Row): ClipboardSlot => ({
+    oracleId: r.oracleId,
+    name: r.oracle?.name ?? '(unknown card)',
+    quantity: r.quantity,
+    board: r.board,
+    ...(r.scryfallId ? { scryfallId: r.scryfallId } : {}),
+    ...(r.anyBasic ? { anyBasic: true } : {}),
+    ...(r.finish ? { finish: r.finish } : {}),
+    ...(r.condition ? { condition: r.condition } : {}),
+    ...(r.lang ? { lang: r.lang } : {}),
+    ...(r.tags?.length ? { tags: r.tags } : {}),
+  });
+
+  /** Where a pasted card lands. The zone it came from is kept when this
+   *  container has one to offer, and quietly corrected when it doesn't. */
+  const pasteBoard = (board: DeckBoard, oracle: OracleCard | undefined): DeckBoard => {
+    if (!isDeck) return 'main';
+    if (oracle && isNonDeckCard(oracle)) return 'token';
+    if (board === 'commander' && !isCommander) return 'main';
+    return board;
+  };
+
+  async function pastePayload(payload: ClipboardPayload) {
+    const oracles = await getOracleCardsByIds(payload.slots.map((s) => s.oracleId));
+    const boardOf = new Map(payload.slots.map((s) => [s.oracleId, pasteBoard(s.board, oracles.get(s.oracleId))]));
+    const cut = payload.cut;
+    if (cut) {
+      // The removal the cut deferred, happening now. One batch across both
+      // containers, so it reads as a move and undoes from either end.
+      const moved = await moveDeckCardsToContainer(cut.slotIds, id, (slot) => boardOf.get(slot.oracleId) ?? 'main');
+      clearCut();
+      if (moved === 0) {
+        toast('Those cards have already moved on');
+        return;
+      }
+      toast(`Moved ${moved} card${plural(moved)} into this ${meta.noun}`);
+      return;
+    }
+    await addDeckCardsBulk(
+      id,
+      payload.slots.map((s) => ({
+        oracleId: s.oracleId,
+        quantity: s.quantity,
+        board: boardOf.get(s.oracleId) ?? 'main',
+        ...(s.anyBasic ? { anyBasic: true } : { ...(s.scryfallId ? { scryfallId: s.scryfallId } : {}) }),
+        ...(s.finish || s.condition || s.lang
+          ? { wants: { ...(s.finish ? { finish: s.finish } : {}), ...(s.condition ? { condition: s.condition } : {}), ...(s.lang ? { lang: s.lang } : {}) } }
+          : {}),
+      })),
+      { source: 'manual' },
+    );
+    const n = payload.slots.reduce((sum, s) => sum + s.quantity, 0);
+    toast(`Pasted ${n} card${plural(n)} into this ${meta.noun}`);
+  }
+
+  // These live in a child because ContainerDetail returns early while the
+  // container is still loading, and hooks can't sit behind a return.
+  const clipboard = {
+    onCopy: () => {
+      const rows = selectedRows.length > 0 ? selectedRows : data.rows;
+      if (rows.length === 0) return null;
+      const n = rows.reduce((sum, r) => sum + r.quantity, 0);
+      toast(`Copied ${n} card${plural(n)}`);
+      return rows.map(clipSlot);
+    },
+    onCut: () => {
+      if (selectedRows.length === 0) {
+        toast('Select some cards first, then cut.');
+        return null;
+      }
+      toast(`Cut ${selectedCopies} card${plural(selectedCopies)}. Paste them where they belong.`);
+      sel.exit();
+      return { slots: selectedRows.map(clipSlot), slotIds: selectedRows.map((r) => r.id), containerId: id };
+    },
+    onPastePayload: (payload: ClipboardPayload) => void action.run('paste the cards', () => pastePayload(payload)),
+    onPasteText: (text: string) => {
+      setPastedText(text);
+      setShowImport(true);
+    },
+  };
+
+  // Ctrl+A means select all, every time. The bulk bar's own button is the
+  // toggle; a key that silently deselects everything on the second press is how
+  // you lose a selection you spent a minute building.
+  const selectAll = allKeys.length
+    ? () => {
+        if (!sel.active) sel.enter();
+        if (!allKeys.every((k) => sel.selected.has(k))) sel.toggleAll(allKeys);
+      }
+    : null;
 
   // Which *other* containers hold the selection, and how much of it — the list
   // the "Unfile" picker offers, so resolving a double-promised card is two taps
@@ -753,13 +857,18 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         <ViewToggle mode={view} onChange={setView} />
       </div>
 
+      <ClipboardKeys handlers={clipboard} onSelectAll={selectAll} />
+
       {showImport && (
         <ImportPanel
+          key={pastedText ?? 'manual'}
           deckId={id}
           noun={meta.noun}
           basicsAnyPrinting={isDeck}
+          {...(pastedText ? { initialText: pastedText } : {})}
           onDone={(added) => {
             setShowImport(false);
+            setPastedText(null);
             if (added > 0) toast(`Added ${added} cards to the ${meta.noun}`);
           }}
         />
@@ -984,6 +1093,24 @@ function LegalityPanel({ report, format }: { report: LegalityReport; format: Dec
   );
 }
 
+/**
+ * Ctrl+C / X / V and select-all for a container page. A component rather than a
+ * few lines in ContainerDetail because that page returns early while its
+ * container loads, and hooks may not sit behind a return. Renders nothing.
+ */
+function ClipboardKeys({
+  handlers,
+  onSelectAll,
+}: {
+  handlers: ClipboardHandlers;
+  /** Null when there's nothing to select, which lets the key fall through. */
+  onSelectAll: (() => void) | null;
+}) {
+  useCardClipboard(handlers);
+  useShortcuts({ 'mod+a': onSelectAll });
+  return null;
+}
+
 function Board({
   title,
   rows,
@@ -1014,6 +1141,7 @@ function Board({
   emptyHint?: string;
 }) {
   const ownership = useOwnershipIndex();
+  const cutIds = useCutSlots(deckId);
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
   const toItem = (r: Row): CardItem => {
@@ -1065,6 +1193,8 @@ function Board({
       badgeClass: issue ? 'badge-illegal' : own?.cls,
       badgeTitle: issue ?? own?.title,
       dim: !enough,
+      // Cut but not yet pasted: still here, and still yours if you never paste.
+      cut: cutIds.has(r.id),
       sub: (
         <>
           {r.anyBasic ? 'any printing' : `owned ${r.owned}`}
@@ -1233,6 +1363,7 @@ function ImportPanel({
   deckId,
   noun,
   basicsAnyPrinting,
+  initialText,
   onDone,
 }: {
   deckId: string;
@@ -1240,9 +1371,12 @@ function ImportPanel({
   noun: string;
   /** Decks pull their basics from the lands box; a binder or box holds real cards. */
   basicsAnyPrinting: boolean;
+  /** A list that arrived on the clipboard: filled in and analyzed on sight,
+   *  since pasting a decklist already said what you wanted done with it. */
+  initialText?: string;
   onDone: (added: number) => void;
 }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText ?? '');
   const [defaults, setDefaults] = useState<ImportDefaults>(IMPORT_DEFAULTS);
   const [overlap, setOverlap] = useState<OverlapMode>('add');
   const { status, analyze, reset } = useImportAnalysis();
@@ -1251,6 +1385,21 @@ function ImportPanel({
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+
+  // Mounted with pasted text: straight to the review. The panel is keyed on
+  // that text upstream, so a second paste remounts and runs again.
+  //
+  // Deliberately not guarded by a "did this already" ref. StrictMode mounts,
+  // unmounts and remounts in development, and useImportAnalysis kills its
+  // worker on unmount — a guard would let the first run be terminated and stop
+  // the second from ever starting, leaving the panel stuck on "Starting…".
+  // Running again is harmless: analyze() terminates the previous worker itself.
+  useEffect(() => {
+    if (!initialText?.trim()) return;
+    analyze(initialText, { defaults });
+    // `defaults` is read once, at the moment the paste lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialText]);
 
   // What's already filed here, so a second paste of the same list can say so
   // instead of quietly doubling the deck.

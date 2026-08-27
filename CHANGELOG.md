@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.138.0
+
+- **Copy, cut and paste cards.** On a deck, binder or box: Ctrl+C copies what you've selected, or the whole thing when nothing is selected. Paste it into Discord or a notepad and you get an ordinary decklist. Paste it back into the app and the cards arrive exactly as they left, right down to which printing, finish and condition each slot asked for, rather than a list of names you have to pick editions for all over again.
+- **Ctrl+V on a decklist from anywhere else imports it.** Copy a list off a website, press paste on a deck, and the usual import review opens already filled in. No more finding the import panel and pasting a second time.
+- **Ctrl+X moves cards between decks.** Cut marks the cards with a dashed outline and leaves them where they are; the move happens when you paste. Change your mind and never paste, and nothing was lost. The whole thing lands as a single move in the edit history, and one Ctrl+Z takes it back, from either deck.
+- **Ctrl+A selects every card on the page**, so building a selection to copy isn't sixty clicks. Pressing it twice keeps everything selected rather than throwing the selection away.
+- All four leave your typing alone, and copying text you've highlighted on the page still copies that text.
+
 ## 0.137.0
 
 - **Ctrl+Z undoes your last change, Ctrl+Y puts it back.** Cmd+Z and Cmd+Shift+Z on a Mac; Ctrl+Shift+Z redoes too. It only ever reverses something that happened where you are: fumble a card into one deck, wander into another, and pressing undo there will not start quietly unpicking the first one behind your back. Instead it says which deck your last change was in. It also stays out of the way while you're typing, so undo in a deck's name box is still the browser's undo of your typing. Nothing older than the current session is in reach of the key, on purpose: the edit history is where last week's changes get reversed, deliberately and with the entry in front of you.

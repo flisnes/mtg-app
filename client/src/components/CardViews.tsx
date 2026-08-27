@@ -95,6 +95,8 @@ export interface CardItem {
   place?: { node: ReactNode; cls?: string; title?: string };
   /** Dim the entry (e.g. unowned deck cards). */
   dim?: boolean;
+  /** Marked for a cut: still here, but on its way out as soon as it's pasted. */
+  cut?: boolean;
   /** Iridescent foil sheen over the image (foil / etched finishes). */
   foil?: boolean;
   /** Custom thumbnail (list view only), replacing the default image — e.g. the
@@ -193,7 +195,7 @@ export function CardList({
         return (
           <li
             key={it.key}
-            className={`result-row${it.dim ? ' result-row-dim' : ''}${selected ? ' selected' : ''}`}
+            className={`result-row${it.dim ? ' result-row-dim' : ''}${it.cut ? ' card-cut' : ''}${selected ? ' selected' : ''}`}
           >
             {selectable ? (
               <button
@@ -264,7 +266,7 @@ export function CardGrid({
       {items.map((it) => {
         const selected = selectable && !!selectedKeys?.has(it.key);
         return (
-          <li key={it.key} className={`card-tile${it.dim ? ' card-tile-dim' : ''}${selected ? ' selected' : ''}`}>
+          <li key={it.key} className={`card-tile${it.dim ? ' card-tile-dim' : ''}${it.cut ? ' card-cut' : ''}${selected ? ' selected' : ''}`}>
             <button
               className="card-tile-img"
               onClick={selectable ? () => onToggleSelect?.(it.key) : it.onClick}

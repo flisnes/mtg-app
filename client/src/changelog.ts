@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.138.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Copy, cut and paste cards on a deck, binder or box. Ctrl+C gives you a decklist anywhere else and the exact printings back in the app, Ctrl+X moves cards between decks in one undoable step, and Ctrl+V on a list from any website opens the import review already filled in. Ctrl+A selects the lot.',
+      },
+    ],
+  },
+  {
     version: '0.137.0',
     changes: [
       {

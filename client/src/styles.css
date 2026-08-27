@@ -2113,6 +2113,15 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
 .result-row-dim {
   opacity: 0.55;
 }
+/* Cut, not yet pasted: the card is still here and still counts, so it fades
+   rather than disappears, and the dashes say it's on its way somewhere. The
+   removal only happens on the paste, so a cut you abandon costs nothing. */
+.card-cut {
+  opacity: 0.5;
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
 .quick-actions {
   display: flex;
   border-left: 1px solid var(--border);

@@ -1456,6 +1456,94 @@ export async function moveDeckCard(id: string, board: DeckBoard): Promise<void> 
 }
 
 /**
+ * Move slots out of one container and into another (cut here, paste there).
+ *
+ * The whole thing is one batch, so it reads as a single move in the history and
+ * comes back in one undo — and because that batch names both containers, the
+ * undo is offered at either end. Pasting on the far side is usually the only
+ * end you can see, so this is the one operation that has to be reversible from
+ * somewhere other than where it started.
+ *
+ * `boardFor` picks the arriving slot's zone per card, since the source zone
+ * doesn't always exist over here (a binder has no sideboard, and a commander
+ * pasted into a 60-card deck is just a creature). Returns copies moved.
+ */
+export async function moveDeckCardsToContainer(
+  ids: string[],
+  targetDeckId: string,
+  boardFor: (slot: DeckCard) => DeckBoard,
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  let moved = 0;
+  await db.transaction('rw', DECK_TABLES, async () => {
+    const target = await db.decks.get(targetDeckId);
+    if (!target) return;
+    const now = Date.now();
+    const batchId = newId();
+    const events: Array<Omit<UserEvent, 'id' | 'updatedAt'>> = [];
+    const extra = { source: 'manual' as const, batchId, batchLabel: target.name };
+    const sources = new Map<string, Deck | undefined>();
+    for (const id of ids) {
+      const card = await db.deckCards.get(id);
+      if (!card) continue;
+      const board = boardFor(card);
+      // Same container and same zone: nothing to do. Same container, different
+      // zone: that's an ordinary board move, and moveSlotRaw already knows how.
+      if (card.deckId === targetDeckId) {
+        moved += await moveSlotRaw(id, board, now, events, extra);
+        continue;
+      }
+      // Merge into whatever is already sitting on that zone over here, exactly
+      // as a board move merges, so pasting a second copy doesn't split the slot.
+      const existing = await db.deckCards
+        .where('[deckId+board]')
+        .equals([targetDeckId, board])
+        .and((c) => c.oracleId === card.oracleId && !!c.anyBasic === !!card.anyBasic)
+        .first();
+      if (existing) {
+        const merged: DeckCard = {
+          ...existing,
+          quantity: existing.quantity + card.quantity,
+          tags: normalizeCardTags([...(existing.tags ?? []), ...(card.tags ?? [])]),
+          updatedAt: now,
+        };
+        await db.deckCards.put(merged);
+        await stagePut('deckCards', merged);
+      } else {
+        const arrived: DeckCard = { ...card, id: newId(), deckId: targetDeckId, board, updatedAt: now };
+        await db.deckCards.put(arrived);
+        await stagePut('deckCards', arrived);
+      }
+      await db.deckCards.delete(id);
+      await stageDelete('deckCards', id);
+
+      if (!sources.has(card.deckId)) sources.set(card.deckId, await touchDeck(card.deckId, now));
+      const base = {
+        oracleId: card.oracleId,
+        ...(card.scryfallId ? { scryfallId: card.scryfallId } : {}),
+        qty: card.quantity,
+        ...extra,
+      };
+      // A leave from over there and an arrival over here. Same pair a board
+      // move writes, so isMoveBatch reads it as a move and undo replays it back.
+      events.push({
+        ts: now,
+        kind: 'deck.remove',
+        ...base,
+        deckId: card.deckId,
+        ...containerRef(sources.get(card.deckId)),
+        board: card.board,
+      });
+      events.push({ ts: now, kind: 'deck.add', ...base, deckId: targetDeckId, ...containerRef(target), board });
+      moved += card.quantity;
+    }
+    await touchDeck(targetDeckId, now);
+    await emitMany(events);
+  });
+  return moved;
+}
+
+/**
  * Move whole slots to another board in one go (the multi-select "Move to…").
  * Every line shares a batchId labelled with the deck, so the edit history shows
  * one entry the user can undo in a single tap. Slots already on that board are

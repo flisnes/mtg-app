@@ -458,6 +458,9 @@ const KEY_REPAIRS = 'syncRepairs';
  *   the emblem back. (v0.133.0 shipped a `containerEmblems` repair and v0.133.1
  *   removed it as unnecessary; it wasn't, hence the fresh id — devices that ran
  *   v0.133.0 have the old id recorded and would skip a re-added one.)
+ * - `deckCardUnfiled` (v0.135.3): same again for `unfiled` on a deck slot, added
+ *   in v0.135.3. A build without the field rebuilds the slot as filed, so a card
+ *   you took out of a deck on the phone would look like it was back in it.
  *
  * The medicine: rewind the cursor once so the server re-sends everything it
  * has, flagged as a reseed so the server pages us all the way back up instead
@@ -480,7 +483,7 @@ const KEY_REPAIRS = 'syncRepairs';
  * and the field is gone from the account for good — one more reason to add the
  * id in the same release as the field, not after the reports come in.
  */
-const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems2'] as const;
+const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems2', 'deckCardUnfiled'] as const;
 
 async function runOneTimeRepairs(): Promise<void> {
   const done = (await getSetting<string[]>(KEY_REPAIRS)) ?? [];

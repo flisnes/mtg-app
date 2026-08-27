@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.3
+
+- **You can now take cards out of the deck you're standing in.** Select cards in a deck, binder or box, tap Unfile and the list you're looking at is the first thing on offer. Before this it only listed the *other* places those copies were filed, which is no help when what you want to say is "these left this deck".
+- **Unfiling from here empties the slot without editing the list.** The card stays on the decklist, still asking for exactly the copy it did (printing, finish, condition, language); it just stops holding one. The solid green "filed here" box swaps to the double checkmark, the row says "not filed here", and the copy is free for another deck with no filing conflict raised. That's the deck you pulled apart for parts but haven't given up on.
+- **"File back here" puts them back.** It shows up in the same selection bar as soon as anything you've picked is out of the list. Assembling the deck from your collection, re-scanning it, or saving the card's own sheet also files it back.
+- Taking cards out of another container still takes them off that list, as before. The picker now says which of the two you're about to do.
+
 ## 0.135.2
 
 - **Fixed: pulling down to refresh works again.** Version 0.134.5 pinned the scroll gesture to the page to stop the bottom nav bar sliding half off the screen. It also took the browser's own pull-to-refresh with it, which was never the intent. Retracing it, the nav bar was already protected twice over: the page body has blocked the gesture reaching the browser since the first build, and since 0.12.1 the app scrolls an inner container so the document itself never moves. The half-hidden nav bar was almost certainly a slight pinch-zoom instead, which parks the fixed bar below the visible area until you pinch back out. Both rules from 0.134.5 are gone.

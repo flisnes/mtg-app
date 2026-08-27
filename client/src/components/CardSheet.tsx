@@ -168,6 +168,8 @@ export function CardSheet({
     lang?: string;
     /** The slot's own labels within this container (see DeckCard.tags). */
     tags?: string[];
+    /** The container has been emptied of this copy (see DeckCard.unfiled). */
+    unfiled?: boolean;
     board?: DeckBoard;
     /** The deck this slot lives in, so the sheet can read its command zone. */
     deckId?: string;
@@ -1034,6 +1036,14 @@ export function CardSheet({
             "Turn-3 play"), which the group-by-tag view reads. */}
         {mode === 'deck' && deckCard?.deckId && (
           <TagField deckId={deckCard.deckId} tags={tags} onChange={setTags} />
+        )}
+
+        {/* The slot was emptied out on purpose, and saving names the copy it
+            holds — so say so before it quietly goes back on the shelf. */}
+        {mode === 'deck' && deckCard?.unfiled && (
+          <p className="fine-print">
+            This copy is out of the list right now. Saving files it back in.
+          </p>
         )}
 
         </>

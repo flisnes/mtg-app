@@ -1084,12 +1084,15 @@ export interface SlotWants {
  * cardboard sitting in there. "Any printing" basics stay their own slot as ever.
  */
 const exactSlotKey = (
-  c: { oracleId: string; board: DeckBoard; anyBasic?: boolean; scryfallId?: string },
+  c: { oracleId: string; board: DeckBoard; anyBasic?: boolean; scryfallId?: string; unfiled?: boolean },
   wants: SlotWants | undefined,
 ) =>
   c.anyBasic
     ? slotKey(c)
-    : `${c.oracleId}|${c.board}|${c.scryfallId ?? ''}|${wants?.condition ?? ''}|${wants?.finish ?? ''}|${wants?.lang ?? ''}`;
+    : // An emptied-out slot (DeckCard.unfiled) is its own line: filing the card
+      // back in must land on cardboard that's actually here, not quietly bump
+      // the line that says the deck is missing it.
+      `${c.oracleId}|${c.board}|${c.scryfallId ?? ''}|${wants?.condition ?? ''}|${wants?.finish ?? ''}|${wants?.lang ?? ''}|${c.unfiled ? 'out' : ''}`;
 
 /** The wants worth storing — drops the "any" (undefined) ones. */
 function wantFields(wants: SlotWants | undefined): SlotWants {
@@ -1324,9 +1327,18 @@ export async function reconcileDeck(
       }
       const delta = t.quantity - cur.quantity;
       const scryfallId = cur.scryfallId ?? t.scryfallId;
-      // Write when the quantity moved OR we're adopting a printing the slot lacked.
-      if (delta !== 0 || scryfallId !== cur.scryfallId) {
-        puts.push({ ...cur, quantity: t.quantity, ...(scryfallId ? { scryfallId } : {}), updatedAt: now });
+      // The camera just saw the card in the deck, so an emptied-out slot
+      // (DeckCard.unfiled) is holding its copy again.
+      // Write when the quantity moved OR we're adopting a printing the slot
+      // lacked OR the slot said the card wasn't here.
+      if (delta !== 0 || scryfallId !== cur.scryfallId || cur.unfiled) {
+        puts.push({
+          ...cur,
+          quantity: t.quantity,
+          ...(scryfallId ? { scryfallId } : {}),
+          unfiled: undefined,
+          updatedAt: now,
+        });
       }
       if (delta !== 0) {
         changed++;
@@ -1494,14 +1506,20 @@ async function patchDeckCard(
       // The two are exclusive: a lands-box basic pins no edition (and asks
       // nothing of your copies), and pinning one turns the slot back into a copy
       // you're counting on owning.
+      // Naming the copy a slot holds is saying it holds it: the edit sheet's save
+      // and the assembler both come through here, so either one files an emptied
+      // slot (DeckCard.unfiled) back in. A bare quantity or tag edit leaves the
+      // flag where it was.
+      const refiled = 'scryfallId' in patch || !!patch.wants;
       const next: DeckCard = {
         ...card,
         quantity,
         ...(anyBasic
-          ? { anyBasic: true, scryfallId: undefined, ...clearedWants }
+          ? { anyBasic: true, scryfallId: undefined, unfiled: undefined, ...clearedWants }
           : {
               anyBasic: undefined,
               ...('scryfallId' in patch ? { scryfallId: patch.scryfallId || undefined } : {}),
+              ...(refiled ? { unfiled: undefined } : {}),
               ...wants,
             }),
         // Tags survive every other kind of edit; only a patch that names them
@@ -1542,6 +1560,42 @@ export async function updateDeckCard(
   patch: { quantity: number; scryfallId: string; anyBasic?: boolean; wants?: SlotWants; tags?: string[] },
 ): Promise<void> {
   await patchDeckCard(id, patch);
+}
+
+/**
+ * Take the cardboard out of a container without touching its list, or put it
+ * back — the multi-select "Unfile…" → this deck, and "File back here". The slot
+ * keeps everything it names (printing, finish, condition, language); it just
+ * stops claiming one of your copies, so the copy is free for another deck and
+ * the green collection badge drops to the double checkmark (see
+ * DeckCard.unfiled).
+ *
+ * Only slots that name one physical copy can go either way: a brew line and a
+ * lands-box basic never held cardboard, so there is nothing to take out of them.
+ * Nothing is added or removed from the container, so — like a tag edit — this
+ * emits no history event; there is no card to undo back into place.
+ *
+ * Returns the copies affected.
+ */
+export async function setDeckCardsUnfiled(ids: string[], unfiled: boolean): Promise<number> {
+  if (ids.length === 0) return 0;
+  let copies = 0;
+  await db.transaction('rw', DECK_TABLES, async () => {
+    const now = Date.now();
+    const slots = (await db.deckCards.bulkGet(ids)).filter((c): c is DeckCard => !!c);
+    const writes: DeckCard[] = [];
+    for (const s of slots) {
+      if (s.anyBasic || !s.scryfallId || !s.condition || !s.finish || !s.lang) continue;
+      if (!!s.unfiled === unfiled) continue;
+      writes.push({ ...s, unfiled: unfiled ? true : undefined, updatedAt: now });
+      copies += s.quantity;
+    }
+    if (writes.length === 0) return;
+    await db.deckCards.bulkPut(writes);
+    await stagePutMany('deckCards', writes);
+    for (const deckId of new Set(writes.map((w) => w.deckId))) await touchDeck(deckId, now);
+  });
+  return copies;
 }
 
 // ---- Card tags -------------------------------------------------------------
@@ -1765,7 +1819,10 @@ export async function removeDeckCardsMatching(
  * yours, so it has none to offer). Returns how many copies changed.
  */
 export async function setContainerForTrade(containerId: string, forTrade: boolean): Promise<number> {
-  return setSlotsForTrade(await db.deckCards.where('deckId').equals(containerId).toArray(), forTrade);
+  const slots = await db.deckCards.where('deckId').equals(containerId).toArray();
+  // An emptied-out slot (DeckCard.unfiled) is a line on the list, not a card in
+  // the box, so there's nothing here to put up for grabs.
+  return setSlotsForTrade(slots.filter((s) => !s.unfiled), forTrade);
 }
 
 /**

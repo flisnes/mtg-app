@@ -228,6 +228,16 @@ export interface DeckCard {
    */
   anyBasic?: boolean;
   /**
+   * The slot still wants this copy, but the cardboard isn't in the container
+   * right now — you pulled the card out of the deck and left the list alone.
+   * Everything the slot names (printing, finish, condition, language) stays, it
+   * simply stops *claiming* one of your copies: no green collection badge, no
+   * filing conflict, and the copy is free for another deck. Filing it back
+   * (assemble, a re-scan, or "File back here") clears the flag. Only ever set on
+   * a slot that names one physical copy; an "any printing" basic never has one.
+   */
+  unfiled?: boolean;
+  /**
    * User-defined labels for this slot — "Ramp", "Turn-3 play", "Wincon". They
    * live on the slot rather than in a table of their own, so a tag belongs to
    * the container it was written in, travels with it through sync, and cannot

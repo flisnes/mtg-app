@@ -33,6 +33,7 @@ import {
   renameDeck,
   setContainerForTrade,
   setDeckCardsForTrade,
+  setDeckCardsUnfiled,
   setDeckEmblem,
   setDeckFormat,
 } from '../db/dataAccess.js';
@@ -99,6 +100,9 @@ interface Row {
   lang?: string;
   /** The user's own labels on this slot, for group-by-tag and the row chips. */
   tags?: string[];
+  /** The list still wants this copy, the container isn't holding it right now
+   *  (see DeckCard.unfiled). */
+  unfiled?: boolean;
   oracle?: Priced<OracleCard>;
   printing?: Priced<Printing>;
   owned: number;
@@ -114,6 +118,7 @@ interface DeckCardEdit {
   finish?: Finish;
   lang?: string;
   tags?: string[];
+  unfiled?: boolean;
   board: DeckBoard;
   deckId: string;
   commanderDeck: boolean;
@@ -213,6 +218,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       finish: c.finish,
       lang: c.lang,
       tags: c.tags,
+      unfiled: c.unfiled,
       oracle: oracleMap.get(c.oracleId),
       printing: c.scryfallId ? printMap.get(c.scryfallId) : undefined,
       owned: owned.get(c.oracleId) ?? 0,
@@ -409,6 +415,14 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     }
   }
 
+  // Selected slots this container is holding cardboard for, and the ones it has
+  // been emptied of — the two directions of "the card is (not) in the box".
+  // Only a slot that names one physical copy can go either way; a brew line and
+  // a lands-box basic never held anything (see DeckCard.unfiled).
+  const namesACopy = (r: Row) => !r.anyBasic && !!r.scryfallId && !!r.condition && !!r.finish && !!r.lang;
+  const filedHereRows = selectedRows.filter((r) => namesACopy(r) && !r.unfiled);
+  const unfiledRows = selectedRows.filter((r) => r.unfiled);
+
   async function bulkRemove() {
     const n = selectedRows.length;
     const ok = await confirm({
@@ -467,8 +481,33 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     sel.exit();
   }
 
+  /**
+   * Take the cards out of this container without editing the list: the slots
+   * stay, still naming the copies they want, and hand the cardboard back — the
+   * deck box you emptied into a trade binder. The green collection badge drops to
+   * the double checkmark, and the copies are free for another deck.
+   */
+  async function unfileHere() {
+    setPicking(null);
+    const copies = await setDeckCardsUnfiled(filedHereRows.map((r) => r.id), true);
+    toast(
+      copies === 0
+        ? `Nothing in this selection is filed here`
+        : `Took ${copies} card${plural(copies)} out of the ${meta.noun} · the list is unchanged`,
+    );
+    sel.exit();
+  }
+
+  /** Put the cardboard back in — the other half of `unfileHere`. */
+  async function refileHere() {
+    const copies = await setDeckCardsUnfiled(unfiledRows.map((r) => r.id), false);
+    toast(copies === 0 ? `Those are already filed here` : `Filed ${copies} card${plural(copies)} back here`);
+    sel.exit();
+  }
+
   /** Take the selection back out of another container (the conflict fix). */
   async function bulkUnfile(containerId: string, targetKind: ContainerKind) {
+    if (containerId === id) return void unfileHere();
     setPicking(null);
     const removed = await removeDeckCardsMatching(
       containerId,
@@ -525,8 +564,18 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     { label: 'Add to tradelist', icon: 'tradelist', onClick: () => void bulkTrade(true) },
     { label: 'Remove from tradelist', icon: 'close', onClick: () => void bulkTrade(false) },
     { label: 'File away…', icon: 'decks', onClick: () => setPicking('file') },
-    // Nothing to unfile from unless the selection is filed somewhere else too.
-    { label: 'Unfile…', icon: 'minus', disabled: elsewhere.size === 0, onClick: () => setPicking('unfile') },
+    // Somewhere to take these out of: here (if this container is holding any of
+    // them) or another container promised the same copies.
+    {
+      label: 'Unfile…',
+      icon: 'minus',
+      disabled: elsewhere.size === 0 && filedHereRows.length === 0,
+      onClick: () => setPicking('unfile'),
+    },
+    // Only worth offering once something in the selection has been taken out.
+    ...(unfiledRows.length > 0
+      ? [{ label: 'File back here', icon: 'collection' as const, onClick: () => void refileHere() }]
+      : []),
     { label: `Remove from ${meta.noun}`, icon: 'trash', danger: true, onClick: () => void bulkRemove() },
   ];
 
@@ -824,13 +873,14 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       {picking === 'unfile' && (
         <ContainerPickerSheet
           title="Take out of"
-          label="Choose where to remove these from"
-          only={new Set(elsewhere.keys())}
-          noteFor={(cid) => {
-            const n = elsewhere.get(cid) ?? 0;
-            return `holds ${n} of these`;
-          }}
-          emptyText="None of the selected cards are filed anywhere else."
+          label="Choose where to take these out of"
+          only={new Set([...(filedHereRows.length > 0 ? [id] : []), ...elsewhere.keys()])}
+          noteFor={(cid) =>
+            cid === id
+              ? `holds ${filedHereRows.length} of these · the list stays as it is`
+              : `holds ${elsewhere.get(cid) ?? 0} of these · they leave that list`
+          }
+          emptyText="None of the selected cards are filed anywhere."
           onPick={bulkUnfile}
           onClose={() => setPicking(null)}
         />
@@ -1003,7 +1053,9 @@ function Board({
     //
     // Above that sits the green collection badge: this slot doesn't just match a
     // card you own, it *holds* it. A pinned slot that lost the copy to a newer
-    // filing keeps the double check and shows up in the filing conflicts.
+    // filing keeps the double check and shows up in the filing conflicts — and so
+    // does one you emptied out by hand (DeckCard.unfiled), which claims nothing
+    // and so can never be filed here.
     const pinned = !!r.scryfallId && !!r.finish && !!r.condition && !!r.lang;
     const filedHere = !r.anyBasic && (placements?.allocated(r.id) ?? 0) >= r.quantity;
     const own = r.anyBasic
@@ -1016,9 +1068,11 @@ function Board({
             lang: r.lang,
           }),
           13,
-          pinned
-            ? { yes: 'including the copy this slot names', no: 'but nothing matching this slot' }
-            : { yes: 'including the copy this slot names', no: 'this slot hasn’t picked a copy yet' },
+          r.unfiled
+            ? { yes: 'this copy is out of here right now', no: 'but nothing matching this slot' }
+            : pinned
+              ? { yes: 'including the copy this slot names', no: 'but nothing matching this slot' }
+              : { yes: 'including the copy this slot names', no: 'this slot hasn’t picked a copy yet' },
           filedHere,
         );
     return {
@@ -1038,6 +1092,7 @@ function Board({
         <>
           {r.anyBasic ? 'any printing' : `owned ${r.owned}`}
           {wants && ` · ${wants}`}
+          {r.unfiled && ' · not filed here'}
           {issue && <span className="badge badge-illegal-chip">{issue}</span>}
           {r.tags?.length ? (
             <span className="tag-chips">
@@ -1063,6 +1118,7 @@ function Board({
                 finish: r.finish,
                 lang: r.lang,
                 tags: r.tags,
+                unfiled: r.unfiled,
                 board: r.board,
                 deckId,
                 commanderDeck,

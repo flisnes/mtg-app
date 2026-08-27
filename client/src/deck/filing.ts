@@ -35,6 +35,10 @@ import { containerKind } from './containers.js';
  * all four (which is what filing an owned copy writes); anything vaguer is a brew
  * line that claims no cardboard, so it can never clash with anything. Kept here
  * because both the placement index and the filing prompt have to agree on it.
+ *
+ * An unfiled slot names its copy as precisely as ever but has been emptied out by
+ * hand (see DeckCard.unfiled): the list still wants the card, the container isn't
+ * holding it. So it claims nothing either.
  */
 export function claimKeyOf(s: {
   scryfallId?: string | null;
@@ -42,8 +46,9 @@ export function claimKeyOf(s: {
   finish?: Finish;
   lang?: string;
   anyBasic?: boolean;
+  unfiled?: boolean;
 }): string | undefined {
-  if (s.anyBasic || !s.scryfallId || !s.condition || !s.finish || !s.lang) return undefined;
+  if (s.anyBasic || s.unfiled || !s.scryfallId || !s.condition || !s.finish || !s.lang) return undefined;
   return collectionKey({ scryfallId: s.scryfallId, condition: s.condition, finish: s.finish, lang: s.lang });
 }
 

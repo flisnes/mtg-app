@@ -302,11 +302,14 @@ export function sanitizeDeckCardRow(raw: unknown): DeckCard | null {
   // Tags are orthogonal to the printing/wants question — a lands-box basic can
   // still be tagged "Mana base" — so they sit outside that branch.
   const tags = normalizeCardTags(r.tags);
+  // "The card isn't in the deck right now" (see DeckCard.unfiled) only means
+  // anything on a slot that names a copy, which an "any printing" basic never does.
+  const unfiled = r.unfiled === true;
   return {
     id: slotId,
     deckId,
     oracleId,
-    ...(anyBasic ? { anyBasic } : { ...(scryfallId ? { scryfallId } : {}), ...wants }),
+    ...(anyBasic ? { anyBasic } : { ...(scryfallId ? { scryfallId } : {}), ...wants, ...(unfiled ? { unfiled } : {}) }),
     ...(tags ? { tags } : {}),
     quantity: qty(r.quantity),
     board: (BOARDS.has(r.board as string) ? r.board : 'main') as DeckBoard,

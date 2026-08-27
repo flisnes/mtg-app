@@ -7,7 +7,7 @@ import { compileCardQuery, rowPrintingSummary, toSearchableEntry } from '../card
 import { Avatar } from '../components/Avatar.js';
 import { CardRow } from '../components/CardRow.js';
 import { CardSheet } from '../components/CardSheet.js';
-import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
+import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import {
   SortControls,
   sortCards,
@@ -484,7 +484,7 @@ function ListSection<T extends { hi: boolean; match: boolean; own: boolean }>({
   count: number;
   emptyLabel: string;
   layout: Layout;
-  view: 'list' | 'grid' | 'pile';
+  view: ViewMode;
   sort: CardSortPrefs;
   setSort: (p: CardSortPrefs) => void;
   onSeeAll: () => void;

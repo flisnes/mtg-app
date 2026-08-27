@@ -5,19 +5,23 @@ import { ManaCost } from './ManaCost.js';
 // The one way cards are displayed anywhere in the app: a list of CardItems
 // rendered as rows (CardList) or a tile grid (CardGrid), switched by the
 // shared list⇄grid preference (localStorage, synchronous). Tapping a card
-// opens whatever the caller wires up — usually the CardSheet. The collection
-// additionally supports 'pile' (goblin mode, PileView.tsx), but that isn't a
-// toggle: goblin mode forces the pile and hides list/grid entirely, so this
-// preference only ever holds 'list' or 'grid' (any legacy 'pile' → 'grid').
+// opens whatever the caller wires up — usually the CardSheet.
+//
+// The collection's heap of cardboard (goblin mode, PileView.tsx) is NOT a third
+// value here: goblin mode forces the pile and hides this toggle entirely, so it
+// rides its own flag (CollectionListView's `pileMode`). The union used to carry
+// a 'pile' member anyway, which every consumer then had to handle and none could
+// ever receive — the hook coerced it away on the way out.
 
-export type ViewMode = 'list' | 'grid' | 'pile';
+export type ViewMode = 'list' | 'grid';
 const KEY = 'cardViewMode';
 
 // Shared across every mounted instance: toggling the view in one place (e.g. the
 // search overlay) must update the list behind it, not just until remount.
+// Normalized on the way in, which also retires a stored legacy 'pile'.
 function readMode(): ViewMode {
   try {
-    return (localStorage.getItem(KEY) as ViewMode) || 'grid';
+    return localStorage.getItem(KEY) === 'list' ? 'list' : 'grid';
   } catch {
     return 'grid';
   }
@@ -43,9 +47,7 @@ export function useViewMode(): [ViewMode, (m: ViewMode) => void] {
     }
     viewModeListeners.forEach((cb) => cb(m));
   };
-  // 'pile' is never a stored/toggled preference (goblin mode drives it); coerce
-  // any legacy value to 'grid' so callers only ever see list/grid.
-  return [mode === 'pile' ? 'grid' : mode, set];
+  return [mode, set];
 }
 
 export function ViewToggle({

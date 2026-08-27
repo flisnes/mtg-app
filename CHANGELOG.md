@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.135.9
+
+- Behind the scenes: the list/grid preference could in principle also hold "pile", a leftover from when goblin mode was a third setting rather than its own switch. Nothing could ever produce that value and the code threw it away on the way out, so every screen was handling a case that could not happen. Gone, and a stored leftover from an old install is now tidied up when it's read.
+
 ## 0.135.8
 
 - **Buttons that fail now say so.** Most of the app's buttons hand their work to a background task, and if that task failed, nothing came back: no message, no retry, the button just looked dead. The scanner learned to report this a while ago, but only the scanner. Fifteen more of them now report the failure the same way, and it lands in the diagnostics log at About -> Copy diagnostics with it. Affected: editing a price in a card's history, creating a deck, binder, box or folder from a picker, tagging and renaming tags, dismissing a match, changing how many sealed boxes you own, and adding a suggested token.

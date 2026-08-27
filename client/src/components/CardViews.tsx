@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Icon } from './icons.js';
 import { ManaCost } from './ManaCost.js';
+import { useCardCursorCtx } from './useCardCursor.js';
 
 // The one way cards are displayed anywhere in the app: a list of CardItems
 // rendered as rows (CardList) or a tile grid (CardGrid), switched by the
@@ -149,10 +150,15 @@ export function CardList({
   selectedKeys,
   onToggleSelect,
 }: { items: CardItem[]; className?: string } & SelectProps) {
+  const cursor = useCardCursorCtx();
   return (
-    <ul className={`result-list${className ? ` ${className}` : ''}`}>
+    <ul
+      className={`result-list${className ? ` ${className}` : ''}`}
+      onMouseLeave={cursor ? () => cursor.setActive(null) : undefined}
+    >
       {items.map((it) => {
         const selected = selectable && !!selectedKeys?.has(it.key);
+        const active = cursor?.activeKey === it.key;
         const body = (
           <>
             {selectable && (
@@ -195,7 +201,9 @@ export function CardList({
         return (
           <li
             key={it.key}
-            className={`result-row${it.dim ? ' result-row-dim' : ''}${it.cut ? ' card-cut' : ''}${selected ? ' selected' : ''}`}
+            {...(cursor ? { 'data-card-key': it.key } : {})}
+            onMouseEnter={cursor ? () => cursor.setActive(it.key) : undefined}
+            className={`result-row${it.dim ? ' result-row-dim' : ''}${it.cut ? ' card-cut' : ''}${active ? ' card-active' : ''}${selected ? ' selected' : ''}`}
           >
             {selectable ? (
               <button
@@ -261,12 +269,22 @@ export function CardGrid({
   selectedKeys,
   onToggleSelect,
 }: { items: CardItem[]; className?: string } & SelectProps) {
+  const cursor = useCardCursorCtx();
   return (
-    <ul className={`card-grid${className ? ` ${className}` : ''}`}>
+    <ul
+      className={`card-grid${className ? ` ${className}` : ''}`}
+      onMouseLeave={cursor ? () => cursor.setActive(null) : undefined}
+    >
       {items.map((it) => {
         const selected = selectable && !!selectedKeys?.has(it.key);
+        const active = cursor?.activeKey === it.key;
         return (
-          <li key={it.key} className={`card-tile${it.dim ? ' card-tile-dim' : ''}${it.cut ? ' card-cut' : ''}${selected ? ' selected' : ''}`}>
+          <li
+            key={it.key}
+            {...(cursor ? { 'data-card-key': it.key } : {})}
+            onMouseEnter={cursor ? () => cursor.setActive(it.key) : undefined}
+            className={`card-tile${it.dim ? ' card-tile-dim' : ''}${it.cut ? ' card-cut' : ''}${active ? ' card-active' : ''}${selected ? ' selected' : ''}`}
+          >
             <button
               className="card-tile-img"
               onClick={selectable ? () => onToggleSelect?.(it.key) : it.onClick}

@@ -1573,6 +1573,64 @@ export async function moveDeckCardsBulk(ids: string[], board: DeckBoard): Promis
  * empty string / an all-undefined `wants` clears them back to "any" — so the
  * edit sheet can move a slot from a pinned foil to "any edition, any finish".
  */
+/** How long a run of hand edits to one slot keeps folding into a single entry. */
+const SLOT_COALESCE_MS = 30_000;
+
+/**
+ * Record a hand edit to one slot's quantity, folding it into the last one when
+ * that was the same slot a moment ago.
+ *
+ * Stepping a playset up one card at a time is four presses of `+`, and four
+ * lines in the edit history is not what happened: you added four Bolts. So a
+ * run of edits in the same direction reads as one entry that grows.
+ *
+ * Only the same direction. Letting a removal eat the add before it would be
+ * tidier still, and it would quietly delete the only thing undo had to work
+ * with: delete a card you added a minute ago and both entries vanish, so Ctrl+Z
+ * reaches past it and takes back something else instead. An extra line in the
+ * history is a far smaller price than a deletion nothing can reverse.
+ *
+ * The folded event's timestamp moves to now, so "the last thing you did" stays
+ * the last thing undo reaches for even when you touched something else in
+ * between. Only ungrouped hand edits fold: an import, a scan or a trade already
+ * has a batch of its own and is nobody's idea of clutter.
+ */
+async function emitSlotDelta(card: DeckCard, kind: 'deck.add' | 'deck.remove', qty: number, now: number): Promise<void> {
+  const deck = await db.decks.get(card.deckId);
+  const base = {
+    oracleId: card.oracleId,
+    ...(card.scryfallId ? { scryfallId: card.scryfallId } : {}),
+    deckId: card.deckId,
+    ...containerRef(deck),
+    board: card.board,
+  };
+
+  const recent = await db.events.where('ts').above(now - SLOT_COALESCE_MS).toArray();
+  // The newest ungrouped hand edit to this exact slot. Anything of the other
+  // kind in between ends the run, so +,-,+ stays three honest entries rather
+  // than folding the last press into one from before you changed direction.
+  const last = recent
+    .filter(
+      (e) =>
+        (e.kind === 'deck.add' || e.kind === 'deck.remove') &&
+        e.deckId === card.deckId &&
+        (e.board ?? 'main') === (card.board ?? 'main') &&
+        e.oracleId === card.oracleId &&
+        e.batchId == null &&
+        e.tradeId == null &&
+        e.source == null,
+    )
+    .sort((a, b) => b.ts - a.ts)[0];
+
+  if (last?.kind === kind) {
+    const grown: UserEvent = { ...last, qty: (last.qty ?? 0) + qty, ts: now, updatedAt: now };
+    await db.events.put(grown);
+    await stagePut('events', grown);
+    return;
+  }
+  await emit({ ts: now, kind, qty, ...base });
+}
+
 async function patchDeckCard(
   id: string,
   patch: { quantity?: number; scryfallId?: string; anyBasic?: boolean; wants?: SlotWants; tags?: string[] },
@@ -1622,17 +1680,12 @@ async function patchDeckCard(
 
     const removedAll = quantity <= 0;
     if (delta !== 0 || removedAll) {
-      const deck = await db.decks.get(card.deckId);
-      await emit({
-        ts: now,
-        kind: removedAll || delta < 0 ? 'deck.remove' : 'deck.add',
-        oracleId: card.oracleId,
-        ...(card.scryfallId ? { scryfallId: card.scryfallId } : {}),
-        qty: removedAll ? card.quantity : Math.abs(delta),
-        deckId: card.deckId,
-        ...containerRef(deck),
-        board: card.board,
-      });
+      await emitSlotDelta(
+        card,
+        removedAll || delta < 0 ? 'deck.remove' : 'deck.add',
+        removedAll ? card.quantity : Math.abs(delta),
+        now,
+      );
     }
   });
 }

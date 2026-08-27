@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.139.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Deck building from the keyboard. Point at a card and press + or - to change its copies, Enter to open it, Delete to remove it, and the arrow keys to walk between cards. Ctrl+K jumps to the search box. A run of + presses now folds into one line in the edit history.',
+      },
+    ],
+  },
+  {
     version: '0.138.0',
     changes: [
       {

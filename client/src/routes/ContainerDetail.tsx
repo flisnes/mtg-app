@@ -28,10 +28,12 @@ import {
   deleteDeck,
   moveDeckCardsBulk,
   moveDeckCardsToContainer,
+  removeDeckCard,
   removeDeckCardsBulk,
   removeDeckCardsMatching,
   renameDeck,
   setContainerForTrade,
+  setDeckCardQuantity,
   setDeckCardsForTrade,
   setDeckCardsUnfiled,
   setDeckEmblem,
@@ -90,6 +92,7 @@ import { useUndoShortcut } from '../history/useUndoShortcut.js';
 import { clearCut, type ClipboardPayload, type ClipboardSlot } from '../deck/cardClipboard.js';
 import { useCardClipboard, useCutSlots, type ClipboardHandlers } from '../deck/useCardClipboard.js';
 import { useShortcuts } from '../components/useShortcuts.js';
+import { CardCursorProvider, useCardCursorCtx } from '../components/useCardCursor.js';
 
 /** One slot of this container, joined to its card and what the collection holds.
  *  Everything the slot itself says comes from SlotShape. */
@@ -472,6 +475,35 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     },
   };
 
+  // What the card keys act on: whichever slot the cursor is pointing at.
+  const cardAt = (key: string | null) => (key ? (data.rows.find((r) => r.id === key) ?? null) : null);
+
+  const cardKeys = {
+    /** Step a slot's copies. Down from one takes the slot out; Ctrl+Z is right
+     *  there, which is what makes that safe to do on a keystroke. */
+    step: (key: string | null, by: 1 | -1) => {
+      const row = cardAt(key);
+      if (!row) return;
+      const next = row.quantity + by;
+      void action.run('change the count', async () => {
+        await setDeckCardQuantity(row.id, next);
+        if (next <= 0) toast(`Removed ${row.oracle?.name ?? 'the card'}`);
+      });
+    },
+    remove: (key: string | null) => {
+      const row = cardAt(key);
+      if (!row) return;
+      void action.run('remove the card', async () => {
+        await removeDeckCard(row.id);
+        toast(`Removed ${row.oracle?.name ?? 'the card'}`);
+      });
+    },
+    open: (key: string | null) => {
+      const row = cardAt(key);
+      if (row?.oracle) setInfo({ card: row.oracle, deckCard: { ...row, deckId: id, commanderDeck: isCommander } });
+    },
+  };
+
   // Ctrl+A means select all, every time. The bulk bar's own button is the
   // toggle; a key that silently deselects everything on the second press is how
   // you lose a selection you spent a minute building.
@@ -715,6 +747,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   }
 
   return (
+    <CardCursorProvider>
     <section className="page">
       <div className="deck-head">
         <button className="linklike" onClick={goBack}>
@@ -857,7 +890,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         <ViewToggle mode={view} onChange={setView} />
       </div>
 
-      <ClipboardKeys handlers={clipboard} onSelectAll={selectAll} />
+      <ClipboardKeys handlers={clipboard} onSelectAll={selectAll} cardKeys={cardKeys} />
 
       {showImport && (
         <ImportPanel
@@ -1062,6 +1095,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           );
         })()}
     </section>
+    </CardCursorProvider>
   );
 }
 
@@ -1101,13 +1135,38 @@ function LegalityPanel({ report, format }: { report: LegalityReport; format: Dec
 function ClipboardKeys({
   handlers,
   onSelectAll,
+  cardKeys,
 }: {
   handlers: ClipboardHandlers;
   /** Null when there's nothing to select, which lets the key fall through. */
   onSelectAll: (() => void) | null;
+  cardKeys: {
+    step: (key: string | null, by: 1 | -1) => void;
+    remove: (key: string | null) => void;
+    open: (key: string | null) => void;
+  };
 }) {
+  const cursor = useCardCursorCtx();
+  const at = cursor?.activeKey ?? null;
   useCardClipboard(handlers);
   useShortcuts({ 'mod+a': onSelectAll });
+  // Only live while a card is actually under the cursor, so a stray `-` on an
+  // empty page falls through instead of being swallowed.
+  useShortcuts(
+    at
+      ? {
+          // '+' is Shift+= on a US keyboard and a key of its own on a Nordic
+          // one; '=' catches the people who don't reach for Shift.
+          '+': () => cardKeys.step(at, 1),
+          '=': () => cardKeys.step(at, 1),
+          '-': () => cardKeys.step(at, -1),
+          Enter: () => cardKeys.open(at),
+          Delete: () => cardKeys.remove(at),
+          Backspace: () => cardKeys.remove(at),
+        }
+      : {},
+    { allowRepeat: true },
+  );
   return null;
 }
 

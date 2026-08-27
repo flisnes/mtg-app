@@ -17,6 +17,7 @@ import { formatLabel, isBackground, isBasicLand, isValidCommanderPair } from '..
 import { CONTAINER_META } from '../deck/containers.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView } from './CardSearchView.js';
+import { useShortcuts } from './useShortcuts.js';
 import { BulkActionBar } from './BulkActionBar.js';
 import { useMultiSelect } from './useMultiSelect.js';
 import { SearchHistoryDropdown, recordSearch, useSearchHistory } from './RecentSearches.js';
@@ -127,6 +128,16 @@ interface SearchCtx {
 }
 
 const Ctx = createContext<SearchCtx | null>(null);
+
+/**
+ * Ctrl+K (Cmd+K) puts the cursor in the search box from anywhere in the app.
+ * Its own component so the binding sits inside the provider without giving the
+ * header a hook that re-registers on every keystroke you type into it.
+ */
+function SearchHotkey({ onOpen }: { onOpen: () => void }) {
+  useShortcuts({ 'mod+k': onOpen }, { whileOverlay: true });
+  return null;
+}
 
 /** Open (and focus) the global search from anywhere, e.g. "＋ Add cards" buttons. */
 export function useOpenSearch(): () => void {
@@ -241,7 +252,7 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
 /** The header search bar + results overlay. Render once, inside the provider. */
 export function GlobalSearchBar() {
   const ctx = useContext(Ctx)!;
-  const { open, setOpen, inputRef, query, setQuery, setFilters } = ctx;
+  const { open, setOpen, inputRef, query, setQuery, setFilters, setScope } = ctx;
   const { enabled: accountsEnabled, session, syncReady, pendingChanges, sync } = useAccount();
   const signedIn = !!session;
   const ownAvatar = useOwnAvatar(session);
@@ -298,6 +309,14 @@ export function GlobalSearchBar() {
   return (
     <>
       <header className="app-header">
+        <SearchHotkey
+          onOpen={() => {
+            setScope(null);
+            setOpen(true);
+            inputRef.current?.focus();
+            inputRef.current?.select();
+          }}
+        />
         <div className="search-bar-wrap">
           <input
             ref={inputRef}

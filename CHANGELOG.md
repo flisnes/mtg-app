@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.139.0
+
+- **Deck building from the keyboard.** Point at a card in a deck, binder or box and press `+` or `-` to change how many copies it wants. Down from one takes the card out, which is safe to do on a keystroke now that Ctrl+Z is there to put it back. `Enter` opens the card, `Delete` removes it.
+- **Arrow keys walk the cards**, so you never have to reach for the mouse to get to the next one. They move through the deck the way you read it: across a row of tiles, down to the next one, straight through from mainboard to sideboard. Whichever card you last pointed at, by mouse or by key, is the one the other keys act on, and it wears a thin outline so you can see which that is. Escape lets go of it.
+- **Ctrl+K jumps to the search box** from anywhere in the app.
+- **A run of `+` presses is one line in the edit history, not four.** Taking a card from one copy to four now reads "Storm Crow +4" rather than four separate entries, and one Ctrl+Z takes the whole run back. Presses in the other direction stay separate on purpose, so undo always has something to reverse.
+- None of these fire while you're typing, and none of them exist on a touchscreen, where there's no card to point at.
+
 ## 0.138.0
 
 - **Copy, cut and paste cards.** On a deck, binder or box: Ctrl+C copies what you've selected, or the whole thing when nothing is selected. Paste it into Discord or a notepad and you get an ordinary decklist. Paste it back into the app and the cards arrive exactly as they left, right down to which printing, finish and condition each slot asked for, rather than a list of names you have to pick editions for all over again.

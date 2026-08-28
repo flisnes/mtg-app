@@ -2113,6 +2113,43 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
 .result-row-dim {
   opacity: 0.55;
 }
+/* ---- Keyboard shortcuts sheet ---- */
+.shortcut-group + .shortcut-group {
+  margin-top: 1.1rem;
+}
+.shortcut-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+.shortcut-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding: 0.28rem 0;
+}
+.shortcut-keys {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.2rem;
+  min-width: 6.4rem;
+}
+.shortcut-keys kbd {
+  background: var(--surface-2, rgba(127, 127, 127, 0.16));
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  padding: 0 0.36rem;
+  white-space: nowrap;
+}
+.shortcut-does {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
 /* The card the keyboard is pointing at, whether the mouse put it there or the
    arrow keys did. Deliberately quieter than the selection checkmark: it says
    "this is what + would touch", not "this is picked". */

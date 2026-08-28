@@ -8,6 +8,8 @@ import { usePagedLimit } from './usePagedLimit.js';
 import { SortControls, formatPrice, useCardSort } from './CardSorting.js';
 import type { MultiSelect } from './useMultiSelect.js';
 import { SelectToggle } from './SelectToggle.js';
+import { CardCursorProvider, useCardCursorCtx } from './useCardCursor.js';
+import { useShortcuts } from './useShortcuts.js';
 
 // The reusable body of the card-search experience: an optional search input,
 // the color/type/rarity filter row, a result-count + list/grid toggle, the
@@ -48,6 +50,7 @@ export function CardSearchView({
   badgeFor,
   actionsFor,
   listOnlyActions = false,
+  quickAdd,
   selection,
   onCardClick,
 }: {
@@ -78,6 +81,10 @@ export function CardSearchView({
   /** Show quick actions only in list view; grid tiles stay clean and the card
    *  sheet (opened by tapping a tile) carries the add actions instead. */
   listOnlyActions?: boolean;
+  /** What `+` does to the result under the pointer: the same thing the first
+   *  quick-action button does, without the trip to the mouse. Omit and the key
+   *  is not bound. */
+  quickAdd?: (card: Priced<OracleCard>, printing?: Priced<Printing>) => void;
   /**
    * Multi-select over the results, keyed by oracleId. Supplied by the caller so
    * it owns both the state and the bulk bar — search results are cards, not
@@ -126,7 +133,8 @@ export function CardSearchView({
   }, [onKeys, resultKeys]);
 
   return (
-    <>
+    <CardCursorProvider whileOverlay>
+      {quickAdd && <QuickAddKey results={results} shown={shown} onAdd={quickAdd} />}
       {onQueryChange && (
         <input
           className="search-input"
@@ -235,6 +243,35 @@ export function CardSearchView({
       ) : (
         emptyState
       )}
-    </>
+    </CardCursorProvider>
   );
+}
+
+/**
+ * `+` adds the result under the pointer, so a decklist can be typed and added
+ * without the hand leaving the keyboard between cards.
+ *
+ * Bound while typing, unlike every other single-character shortcut, because in
+ * a search the input always has focus: that's where the query is. Only `+` is
+ * taken, and only while a result is actually under the pointer, so the query
+ * box keeps every other character. `=` is deliberately left alone; it is half
+ * of Scryfall's own syntax (`pow=3`).
+ */
+function QuickAddKey({
+  results,
+  shown,
+  onAdd,
+}: {
+  results: Priced<OracleCard>[];
+  shown: Map<string, Priced<Printing>>;
+  onAdd: (card: Priced<OracleCard>, printing?: Priced<Printing>) => void;
+}) {
+  const cursor = useCardCursorCtx();
+  const at = cursor?.activeKey ?? null;
+  const card = at ? results.find((c) => c.oracleId === at) : undefined;
+  useShortcuts(
+    { '+': card ? () => onAdd(card, shown.get(card.oracleId)) : null },
+    { whileOverlay: true, whileTyping: true, allowRepeat: true },
+  );
+  return null;
 }

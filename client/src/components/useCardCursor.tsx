@@ -29,8 +29,8 @@ export function useCardCursorCtx(): CursorCtx | null {
 
 const canHover = () => typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches;
 
-function cards(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>('[data-card-key]')].filter((el) => el.offsetParent !== null);
+function cards(root: ParentNode): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>('[data-card-key]')].filter((el) => el.offsetParent !== null);
 }
 
 /** Nearest card in a direction: vertical for up/down, document order otherwise. */
@@ -62,8 +62,20 @@ function step(from: HTMLElement, dir: 'up' | 'down' | 'prev' | 'next', all: HTML
  * arrow keys; everything else a page wants to bind (quantity, open, remove) it
  * binds itself against `activeKey`.
  */
-export function CardCursorProvider({ children }: { children: ReactNode }) {
+export function CardCursorProvider({
+  children,
+  whileOverlay = false,
+}: {
+  children: ReactNode;
+  /** For a cursor that lives *in* an overlay (the search results), whose arrow
+   *  keys have to work while that overlay is the thing on top. */
+  whileOverlay?: boolean;
+}) {
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  // Cards are found under this root rather than across the document, so the
+  // search overlay's results and the deck behind them stay separate lists to
+  // walk. display:contents keeps the wrapper out of the layout entirely.
+  const root = useRef<HTMLDivElement>(null);
 
   // Arrowing through a list scrolls it, and a mouse sitting still over that
   // list is suddenly over a different card, which the browser reports as a
@@ -89,7 +101,7 @@ export function CardCursorProvider({ children }: { children: ReactNode }) {
 
   const move = useCallback(
     (dir: 'up' | 'down' | 'prev' | 'next') => {
-      const all = cards();
+      const all = cards(root.current ?? document);
       if (all.length === 0) return;
       const current = activeKey ? all.find((el) => el.dataset.cardKey === activeKey) : undefined;
       const next = current ? step(current, dir, all) : all[0];
@@ -110,9 +122,15 @@ export function CardCursorProvider({ children }: { children: ReactNode }) {
       // Nothing is pointed at any more, so nothing is about to be edited.
       Escape: activeKey ? () => setActiveKey(null) : null,
     },
-    { allowRepeat: true },
+    { allowRepeat: true, whileOverlay },
   );
 
   const value = useMemo(() => ({ activeKey, setActive }), [activeKey, setActive]);
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      <div ref={root} style={{ display: 'contents' }}>
+        {children}
+      </div>
+    </Ctx.Provider>
+  );
 }

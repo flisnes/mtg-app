@@ -9,6 +9,7 @@ import { Onboarding } from './components/Onboarding.js';
 import { ToastProvider, useToast } from './components/Toast.js';
 import { UpdatePrompt } from './components/UpdatePrompt.js';
 import { useWhatsNew, WhatsNewModal } from './components/WhatsNewModal.js';
+import { AppHotkeys } from './components/AppHotkeys.js';
 import { GlobalSearchBar, GlobalSearchProvider } from './components/GlobalSearch.js';
 import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
@@ -187,6 +188,8 @@ function AppShell() {
           Ready to work offline.
         </div>
       )}
+
+      <AppHotkeys />
 
       <main className="app-main" key={epoch}>
         <Suspense fallback={null}>

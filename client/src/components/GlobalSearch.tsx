@@ -136,6 +136,9 @@ const Ctx = createContext<SearchCtx | null>(null);
  */
 function SearchHotkey({ onOpen }: { onOpen: () => void }) {
   useShortcuts({ 'mod+k': onOpen }, { whileOverlay: true });
+  // '/' is a plain character, so unlike Ctrl+K it stays out of the way of
+  // anything already on top and of anywhere you might be typing one.
+  useShortcuts({ '/': onOpen });
   return null;
 }
 
@@ -598,6 +601,23 @@ function SearchOverlay() {
     toast(`Added ${card.name}${suffix} to ${noun}${anyBasic ? ' (any printing)' : ''}`);
   }
 
+  /** What `+` does: whatever the first button in actionsFor would have done. */
+  function quickAdd(card: Priced<OracleCard>, printing?: Priced<Printing>): void {
+    switch (target.kind) {
+      case 'deck':
+        void quickDeck(card, target.deckId, 'main', containerMeta.kind === 'deck' ? 'deck' : containerMeta.noun, printing);
+        return;
+      case 'wishlist':
+        void quickWishlist(card);
+        return;
+      case 'tradelist':
+        void quickTradelist(card, printing);
+        return;
+      default:
+        void quickCollection(card, printing);
+    }
+  }
+
   function actionsFor(card: Priced<OracleCard>, printing?: Priced<Printing>): ReactNode {
     switch (target.kind) {
       case 'deck': {
@@ -723,6 +743,7 @@ function SearchOverlay() {
             emptyState={emptyState}
             badgeFor={(card, printing) => ownedBadge(ownership?.lookup(card.oracleId, shownId(card, printing)))}
             actionsFor={actionsFor}
+            quickAdd={quickAdd}
             listOnlyActions
             selection={{ sel, onKeys: setResultKeys }}
             onCardClick={(card, printing) => setSheetCard({ card, scryfallId: printing?.scryfallId })}

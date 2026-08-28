@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.139.1
+
+- **`?` opens a list of every keyboard shortcut**, which until now were all invisible. Also under More, for anyone who was never going to guess that `?` did something.
+- **`+` in the search results adds the card you're pointing at.** Type a name, point at the result, tap `+` twice for two copies, keep typing. Building a list stops being a trip to the mouse for every card. It adds wherever the search was opened from: the deck you're standing in, your collection, your wishlist.
+- **`/` jumps to the search box**, same as Ctrl+K but one key.
+- **`v` switches between list and grid.**
+- **`x` ticks the card you're pointing at** for a bulk action, turning select mode on if it was off. Point and tap down a list instead of clicking every row.
+
 ## 0.139.0
 
 - **Deck building from the keyboard.** Point at a card in a deck, binder or box and press `+` or `-` to change how many copies it wants. Down from one takes the card out, which is safe to do on a keystroke now that Ctrl+Z is there to put it back. `Enter` opens the card, `Delete` removes it.

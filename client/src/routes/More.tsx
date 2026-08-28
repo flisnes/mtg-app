@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Page } from './Page.js';
 import { useFilingConflictCount } from '../db/usePlacements.js';
 import { Icon, type IconName } from '../components/icons.js';
+import { ShortcutsSheet } from '../components/ShortcutsSheet.js';
 
 const LINKS: { to: string; label: string; icon: IconName }[] = [
   { to: '/wishlist', label: 'Wishlist', icon: 'wishlist' },
@@ -17,6 +19,9 @@ const LINKS: { to: string; label: string; icon: IconName }[] = [
 ];
 
 export function More() {
+  // The keys are otherwise invisible: `?` opens this too, but only if you
+  // already knew to press it.
+  const [shortcuts, setShortcuts] = useState(false);
   // Filing conflicts only earn a row when there are some — an always-present
   // "0 conflicts" link is a chore that never goes away.
   const conflicts = useFilingConflictCount();
@@ -55,7 +60,21 @@ export function More() {
             </Link>
           </li>
         ))}
+        <li>
+          <button className="menu-item" onClick={() => setShortcuts(true)}>
+            <span className="menu-icon" aria-hidden>
+              <Icon name="edit" />
+            </span>
+            <span className="deck-line">
+              <span>Keyboard shortcuts</span>
+            </span>
+            <span className="menu-chevron" aria-hidden>
+              ›
+            </span>
+          </button>
+        </li>
       </ul>
+      {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
     </Page>
   );
 }

@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.139.1',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Press ? for the full list of keyboard shortcuts, which were all invisible until now. Also new: + adds the search result you are pointing at, / jumps to the search box, v switches list and grid, and x ticks a card for a bulk action.',
+      },
+    ],
+  },
+  {
     version: '0.139.0',
     changes: [
       {

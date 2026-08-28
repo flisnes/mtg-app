@@ -502,6 +502,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       const row = cardAt(key);
       if (row?.oracle) setInfo({ card: row.oracle, deckCard: { ...row, deckId: id, commanderDeck: isCommander } });
     },
+    /** Tick the card for a bulk action, turning select mode on if it's off, so
+     *  a selection can be built by pointing rather than by clicking sixty rows. */
+    pick: (key: string | null) => {
+      if (!cardAt(key) || !key) return;
+      if (!sel.active) sel.enter();
+      sel.toggle(key);
+    },
   };
 
   // Ctrl+A means select all, every time. The bulk bar's own button is the
@@ -1144,6 +1151,7 @@ function ClipboardKeys({
     step: (key: string | null, by: 1 | -1) => void;
     remove: (key: string | null) => void;
     open: (key: string | null) => void;
+    pick: (key: string | null) => void;
   };
 }) {
   const cursor = useCardCursorCtx();
@@ -1163,6 +1171,7 @@ function ClipboardKeys({
           Enter: () => cardKeys.open(at),
           Delete: () => cardKeys.remove(at),
           Backspace: () => cardKeys.remove(at),
+          x: () => cardKeys.pick(at),
         }
       : {},
     { allowRepeat: true },

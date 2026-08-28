@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.140.0
+
+- **The scanner's set pin is a proper edition picker now.** It used to be a checkbox that took its set from whatever card happened to be in frame, which on a card with twenty reprints pinned the wrong set about as often as the right one. Pick the set from a list of that card's editions instead, set symbol and year included, with the ones the scan matched at the top and a search box for the other thirty.
+- **A pinned set pinpoints the edition faster.** The reader only has to tell the pinned set's printings apart, and when the pin leaves a single printing standing it doesn't run at all: the green check lands the moment the card locks, and auto-add drops the copy in without waiting. Pin the pile's language too and the reader is skipped entirely.
+
 ## 0.139.1
 
 - **`?` opens a list of every keyboard shortcut**, which until now were all invisible. Also under More, for anyone who was never going to guess that `?` did something.

@@ -4571,6 +4571,11 @@ a.seg {
   right: 0.6rem;
   z-index: 6;
   width: min(19rem, 78vw);
+  /* The set picker unfolds in flow, so the panel has to be allowed to scroll
+     rather than run off the bottom of the camera. */
+  max-height: calc(100dvh - var(--safe-top) - 6rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(0, 0, 0, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
@@ -4634,6 +4639,40 @@ a.seg {
   width: 100%;
   padding: 0.35rem;
   font-size: 0.82rem;
+}
+/* Set pin: the card sheet's edition picker, dressed for the camera overlay.
+   The width/height reset undoes .scan-setting input, which sizes checkboxes. */
+.scan-settings .edition-picker-trigger,
+.scan-settings .edition-picker-input {
+  width: 100%;
+  height: auto;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.82rem;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.scan-settings .edition-picker-list {
+  background: rgba(10, 10, 10, 0.95);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.scan-settings .edition-picker-row {
+  color: #fff;
+  font-size: 0.82rem;
+}
+.scan-settings .edition-picker-row.active {
+  background: rgba(255, 255, 255, 0.14);
+}
+.scan-settings .edition-picker-symbol {
+  color: #fff;
+}
+.scan-settings .edition-picker-meta,
+.scan-settings .edition-picker-group,
+.scan-settings .edition-picker-empty {
+  color: rgba(255, 255, 255, 0.68);
+}
+.scan-settings .edition-picker-trigger > svg {
+  color: rgba(255, 255, 255, 0.68);
 }
 .scan-cam-side {
   position: absolute;

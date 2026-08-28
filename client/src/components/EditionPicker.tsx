@@ -28,6 +28,9 @@ export function EditionPicker({
   notes,
   selected,
   anyLabel,
+  restLabel = 'Other printings',
+  placeholder = 'Choose an edition…',
+  hideCollector = false,
   disabled = false,
   onSelect,
 }: {
@@ -42,6 +45,12 @@ export function EditionPicker({
   selected: string;
   /** Label for the "any printing" row; omit when this card can't have one. */
   anyLabel?: string;
+  /** Header over the un-highlighted rows (only shown when `highlighted` is used). */
+  restLabel?: string;
+  /** Trigger text while nothing is selected. */
+  placeholder?: string;
+  /** Drop the collector number: the scanner picks a *set*, and #123 is noise there. */
+  hideCollector?: boolean;
   disabled?: boolean;
   onSelect: (scryfallId: string) => void;
 }) {
@@ -89,14 +98,14 @@ export function EditionPicker({
         out.push(...hi.map((p) => row(p)));
       }
       if (rest.length > 0) {
-        out.push({ kind: 'header', key: 'h-rest', label: 'Other printings' });
+        out.push({ kind: 'header', key: 'h-rest', label: restLabel });
         out.push(...rest.map((p) => row(p)));
       }
     } else {
       out.push(...rest.map((p) => row(p)));
     }
     return out;
-  }, [q, current, selected, anyLabel, highlighted, highlightLabel, printings, notes]);
+  }, [q, current, selected, anyLabel, highlighted, highlightLabel, restLabel, printings, notes]);
 
   const firstPickable = rows.findIndex((r) => r.kind !== 'header');
 
@@ -165,10 +174,12 @@ export function EditionPicker({
   };
 
   const triggerLabel = current
-    ? `${current.setName} · #${current.collectorNumber} · ${current.releasedAt.slice(0, 4)}`
+    ? [current.setName, hideCollector ? null : `#${current.collectorNumber}`, current.releasedAt.slice(0, 4)]
+        .filter(Boolean)
+        .join(' · ')
     : selected === ANY && anyLabel !== undefined
       ? anyLabel
-      : 'Choose an edition…';
+      : placeholder;
 
   return (
     <div className={open ? 'edition-picker open' : 'edition-picker'} ref={rootRef}>
@@ -224,6 +235,7 @@ export function EditionPicker({
                   row={r}
                   selected={(r.kind === 'any' ? ANY : r.p.scryfallId) === selected}
                   active={i === active}
+                  hideCollector={hideCollector}
                   onHover={() => setActive(i)}
                   onPick={() => choose(r.kind === 'any' ? ANY : r.p.scryfallId)}
                 />
@@ -241,6 +253,7 @@ function EditionRow({
   row,
   selected,
   active,
+  hideCollector,
   onHover,
   onPick,
 }: {
@@ -248,6 +261,7 @@ function EditionRow({
   row: Extract<Row, { kind: 'any' | 'printing' }>;
   selected: boolean;
   active: boolean;
+  hideCollector: boolean;
   onHover: () => void;
   onPick: () => void;
 }) {
@@ -269,7 +283,8 @@ function EditionRow({
       <span className="edition-picker-name">{row.kind === 'any' ? row.label : row.p.setName}</span>
       {row.kind === 'printing' && (
         <span className="edition-picker-meta">
-          #{row.p.collectorNumber} · {row.p.releasedAt.slice(0, 4)}
+          {hideCollector ? '' : `#${row.p.collectorNumber} · `}
+          {row.p.releasedAt.slice(0, 4)}
           {row.note ? ` · ${row.note}` : ''}
         </span>
       )}

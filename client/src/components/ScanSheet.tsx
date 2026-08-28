@@ -4,7 +4,14 @@ import type { Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCar
 import { CONDITIONS, FINISHES } from '@mtg/shared';
 import { addToWishlistBulk, applyImport, reconcileDeck } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
-import { getOracleCard, getOracleCardsByIds, getPrinting, getPrintingsByIds } from '../db/queries.js';
+import {
+  getOracleCard,
+  getOracleCardsByIds,
+  getPrinting,
+  getPrintingForSet,
+  getPrintingsByIds,
+  getPrintingsForOracle,
+} from '../db/queries.js';
 import { ImportConflicts } from '../import/ImportConflicts.js';
 import { findImportConflicts, type ConflictChoice, type ImportConflict } from '../import/conflicts.js';
 import { commitResolvedLines, filingCopiesFor } from '../import/commit.js';
@@ -31,6 +38,7 @@ import { checkScanDataUpdate, downloadScanData, getUsableScanData, type ScanData
 import { getPrefs, setPrefs } from '../prefs.js';
 import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
+import { EditionPicker } from './EditionPicker.js';
 import { useToast } from './Toast.js';
 import { ownedBadge, type OwnedBadgeSpec } from './OwnedBadge.js';
 import { CONTAINER_META } from '../deck/containers.js';
@@ -150,9 +158,10 @@ interface SessionEntry {
 /**
  * "I've prepared a pile" pins, set in the scan settings: every card added takes
  * that value and a new lock can't reset the picker out of it (OCR won't override
- * a pinned language either). `null` = pin off. The set pin holds a set code, or
- * `''` while it waits to take the set from the next card scanned — you're
- * holding the pile, not a set list.
+ * a pinned language either). `null` = pin off. The set pin holds a set code,
+ * chosen from the editions of the card in frame — it used to arm itself from
+ * whatever scanned next, which on a card with twenty reprints pinned the wrong
+ * set more often than the right one.
  */
 interface ScanLocks {
   lang: string | null;
@@ -172,7 +181,9 @@ function loadLocks(): ScanLocks {
     return {
       lang: typeof p.lang === 'string' && LANGS.includes(p.lang) ? p.lang : null,
       finish: FINISHES.includes(p.finish as Finish) ? (p.finish as Finish) : null,
-      set: typeof p.set === 'string' ? p.set : null,
+      // '' was the old "waiting for the next card" state; there is no such
+      // thing now, and a blank pin would filter nothing while showing a chip.
+      set: typeof p.set === 'string' && p.set ? p.set : null,
     };
   } catch {
     return NO_LOCKS;
@@ -285,6 +296,22 @@ function filterBySet(candidates: Candidate[], set: string | null): Candidate[] {
   if (!set) return candidates;
   const hits = candidates.filter((c) => c.printing?.set === set);
   return hits.length ? hits : candidates;
+}
+
+/**
+ * The single printing a candidate list names, or null when it names several —
+ * what a set pin usually leaves standing. Foil and nonfoil siblings are one
+ * printing here (same set, same collector number): which of them you're holding
+ * is the finish picker's business, not the reader's, and the OCR scores them as
+ * a tie for the same reason.
+ */
+function onePrinting(candidates: Candidate[]): Candidate | null {
+  const first = candidates[0];
+  if (!first?.printing) return null;
+  const same = candidates.every(
+    (c) => c.printing?.set === first.printing!.set && c.printing?.collectorNumber === first.printing!.collectorNumber,
+  );
+  return same ? first : null;
 }
 
 const BOARD_LABELS: Record<DeckBoard, string> = {
@@ -434,6 +461,14 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const [lockNow, setLockNow] = useState(0);
   const [board, setBoard] = useState<DeckBoard>('main');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The sets the "set pile" pin can be pinned to: one printing per set of the
+  // card in frame, the sets this scan actually matched first. Picking the set
+  // from a list of the card's own editions is the whole point — arming the pin
+  // from the top candidate pinned the wrong reprint half the time.
+  const [setOptions, setSetOptions] = useState<{ matched: Priced<Printing>[]; others: Priced<Printing>[] }>({
+    matched: [],
+    others: [],
+  });
   // The lenses this device offers, and which one is pinned ('' = let the OS
   // choose). Only enumerated once the settings are opened: labels stay blank
   // until camera permission has been granted anyway.
@@ -606,6 +641,34 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     });
   }, [settingsOpen, stage.kind]);
 
+  // Load the set pin's options while the settings are open (and refresh them
+  // when the card in frame changes underneath). A pin held over from another
+  // card, or from last night's binder, isn't among this card's editions, so one
+  // printing of that set is fetched just to give the closed picker its name.
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const cands = tray?.candidates ?? [];
+    let cancelled = false;
+    void (async () => {
+      const matched = new Map<string, Priced<Printing>>();
+      for (const c of cands) if (c.printing && !matched.has(c.printing.set)) matched.set(c.printing.set, c.printing);
+      const others = new Map<string, Priced<Printing>>();
+      for (const oracleId of new Set(cands.map((c) => c.printing?.oracleId).filter((id): id is string => !!id))) {
+        for (const p of await getPrintingsForOracle(oracleId)) {
+          if (!matched.has(p.set) && !others.has(p.set)) others.set(p.set, p);
+        }
+      }
+      if (locks.set && !matched.has(locks.set) && !others.has(locks.set)) {
+        const sample = await getPrintingForSet(locks.set);
+        if (sample) others.set(locks.set, sample);
+      }
+      if (!cancelled) setSetOptions({ matched: [...matched.values()], others: [...others.values()] });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen, tray?.topId, tray?.candidates, locks.set]);
+
   useEffect(() => {
     locksRef.current = locks;
     try {
@@ -732,8 +795,26 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       }
     }
 
-    updateTray({ topId, candidates, ocr: 'pending', ocrHit: null });
+    // A set pin is a promise about the pile, so the reader is only asked to tell
+    // that set's printings apart: fewer candidates means a read stops being
+    // ambiguous sooner (the tie rule is what costs strip attempts), and when the
+    // pin leaves one printing standing there is nothing to read at all — that
+    // one is pinpointed on the spot, before the first OCR pass.
+    const inPin = pins.set ? candidates.filter((c) => c.printing?.set === pins.set) : [];
+    const pool = (inPin.length ? inPin : candidates).filter((c) => c.printing);
+    const pinpointed = inPin.length ? onePrinting(pool) : null;
+    const ordered = pinpointed ? [pinpointed, ...candidates.filter((c) => c !== pinpointed)] : candidates;
+    updateTray({
+      topId,
+      candidates: ordered,
+      ocr: pinpointed ? 'confirmed' : 'pending',
+      ocrHit: pinpointed?.scryfallId ?? null,
+    });
     cameraRef.current?.resume();
+
+    // Pinpointed and the pile's language is pinned too: the strip has nothing
+    // left to tell us, so skip the reader (up to 32 passes, ~10 s) entirely.
+    if (pinpointed && pins.lang) return;
 
     // S4: OCR the info strip to pin down printing + language. By the time it
     // resolves the user may already be on the next card — only touch the tray
@@ -741,42 +822,34 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     try {
       const resolution = await resolveWithOcr(
         result,
-        candidates
-          .filter((c) => c.printing)
-          .map((c) => ({
-            scryfallId: c.scryfallId,
-            set: c.printing!.set,
-            collectorNumber: c.printing!.collectorNumber,
-            releasedAt: c.printing!.releasedAt,
-          })),
+        (pinpointed ? [pinpointed] : pool).map((c) => ({
+          scryfallId: c.scryfallId,
+          set: c.printing!.set,
+          collectorNumber: c.printing!.collectorNumber,
+          releasedAt: c.printing!.releasedAt,
+        })),
       );
       const current = trayRef.current;
       if (current?.topId !== topId) return;
+      const read = resolution.parsed?.lang;
+      if (read && !locksRef.current.lang && !langTouchedRef.current) setLang(read);
+      // The pin already named the printing; this read was for the language only.
+      if (pinpointed) return;
       const hit = resolution.confirmed ?? resolution.weak;
       // Bring the confirmed edition to the front of the tray.
-      let ordered = current.candidates;
-      const idx = hit ? ordered.findIndex((c) => c.scryfallId === hit.scryfallId) : -1;
-      if (idx > 0) ordered = [ordered[idx]!, ...ordered.filter((_, j) => j !== idx)];
+      let trayOrder = current.candidates;
+      const idx = hit ? trayOrder.findIndex((c) => c.scryfallId === hit.scryfallId) : -1;
+      if (idx > 0) trayOrder = [trayOrder[idx]!, ...trayOrder.filter((_, j) => j !== idx)];
       updateTray({
         ...current,
-        candidates: ordered,
+        candidates: trayOrder,
         ocr: resolution.confirmed ? 'confirmed' : resolution.weak ? 'weak' : 'none',
         ocrHit: hit?.scryfallId ?? null,
       });
-      const read = resolution.parsed?.lang;
-      if (read && !locksRef.current.lang && !langTouchedRef.current) setLang(read);
-      armSetLock(ordered[0]?.printing?.set);
     } catch {
       const current = trayRef.current;
-      if (current?.topId === topId) updateTray({ ...current, ocr: 'unavailable' });
-      armSetLock(trayRef.current?.candidates[0]?.printing?.set);
+      if (!pinpointed && current?.topId === topId) updateTray({ ...current, ocr: 'unavailable' });
     }
-  };
-
-  /** A set lock switched on with nothing in frame takes its set from this card. */
-  const armSetLock = (set?: string) => {
-    if (!set) return;
-    setLocks((l) => (l.set === '' ? { ...l, set } : l));
   };
 
   /** Net copies this lock has added of a printing — what a picker change re-tags. */
@@ -933,8 +1006,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       langTouchedRef.current = false;
     }
   };
-  const lockSet = (on: boolean) => {
-    setLocks((l) => ({ ...l, set: on ? (trayRef.current?.candidates[0]?.printing?.set ?? '') : null }));
+  /** Pin the pile's set by picking one of the card's editions ('' = pin off). */
+  const pickSetLock = (scryfallId: string) => {
+    const p = [...setOptions.matched, ...setOptions.others].find((x) => x.scryfallId === scryfallId);
+    setLocks((l) => ({ ...l, set: p?.set ?? null }));
   };
 
   /** Swap lenses without disturbing the session — the stream is all that changes. */
@@ -1256,8 +1331,13 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const lockChips = [
     locks.finish ? FINISH_LABELS[locks.finish] : null,
     locks.lang ? locks.lang.toUpperCase() : null,
-    locks.set !== null ? (locks.set ? locks.set.toUpperCase() : 'Set: next card') : null,
+    locks.set ? locks.set.toUpperCase() : null,
   ].filter((s): s is string => !!s);
+
+  /** Which row of the set picker the pin is sitting on ('' = the "off" row). */
+  const pinnedSetPrinting = locks.set
+    ? ([...setOptions.matched, ...setOptions.others].find((p) => p.set === locks.set)?.scryfallId ?? '')
+    : '';
 
   const shown = tray ? filterBySet(orderTrayCandidates(tray, ownership), locks.set) : [];
   /** Set lock on, but nothing in this scan came from it — the tray shows everything. */
@@ -1365,19 +1445,31 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
                 ))}
               </select>
             </label>
-            <label className="scan-setting">
+            {/* Not a <label>: the picker is a button until it's opened, and a
+                label wrapping a button turns its own text into a second trigger. */}
+            <div className="scan-setting scan-setting-stacked">
               <span>
                 <strong>Set pile</strong>
                 <small>
                   {locks.set
-                    ? `Only ${locks.set.toUpperCase()} printings are suggested (they still show if the scan matches none)`
-                    : locks.set === ''
-                      ? 'Waiting — the next card you scan sets it'
-                      : 'One set only: suggest just that set’s printings, taken from the card in frame'}
+                    ? `Only ${locks.set.toUpperCase()} printings are suggested (they still show if the scan matches none), and the reader has less to tell apart`
+                    : tray
+                      ? 'One set only. Pick it from the editions of the card in frame'
+                      : 'One set only. Scan a card from the pile, then pick its set here'}
                 </small>
               </span>
-              <input type="checkbox" checked={locks.set !== null} onChange={(e) => lockSet(e.target.checked)} />
-            </label>
+              <EditionPicker
+                printings={setOptions.others}
+                highlighted={setOptions.matched}
+                highlightLabel="Matched this scan"
+                restLabel="Other sets of this card"
+                selected={pinnedSetPrinting}
+                anyLabel="Off: suggest every set"
+                placeholder="Pick the pile’s set…"
+                hideCollector
+                onSelect={pickSetLock}
+              />
+            </div>
           </div>
         )}
 

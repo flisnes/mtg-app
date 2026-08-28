@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.140.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The scanner’s set pin is a dropdown of the card’s editions instead of a checkbox that guessed from the card in frame. Set symbols, years, and a search box, so a card with twenty reprints pins the set you are actually holding.',
+      },
+      {
+        kind: 'changed',
+        text: 'A pinned set also pinpoints editions faster. When the pin leaves one printing standing, the reader does not have to run: the green check lands as the card locks, and auto-add drops the copy straight in.',
+      },
+    ],
+  },
+  {
     version: '0.139.1',
     changes: [
       {
@@ -170,73 +183,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'MTGJSON is now credited for sealed product data, as its licence requires, along with TCGCSV and Cardmarket for sealed prices and Andrew Gioia for the set and mana symbol fonts.',
-      },
-    ],
-  },
-  {
-    version: '0.134.7',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Deck, binder and box emblems that went missing on another device are back. A device still on an older build when emblems shipped dropped them on the way in and never asked again; it now re-reads your account once and restores them.',
-      },
-    ],
-  },
-  {
-    version: '0.134.6',
-    changes: [
-      {
-        kind: 'added',
-        text: '"Pick one from my collection" now has a "Not here? Add a copy" line under the grid, for when the edition you are holding never made it into the collection. Add it there and that copy fills the slot you were on.',
-      },
-    ],
-  },
-  {
-    version: '0.134.5',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Swiping down at the top of a page no longer slides the bottom nav bar half off the screen. The gesture was reaching the browser instead of stopping at the page.',
-      },
-    ],
-  },
-  {
-    version: '0.134.4',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'The trade tag and wishlist star now fill in solid when the printing on screen is the one on your list, and stay tinted when it is some other edition. A wish on "any printing" always counts as a match.',
-      },
-    ],
-  },
-  {
-    version: '0.134.3',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Cards on your wishlist now show a gold star in search results and on deck slots, so you can see what you are already hunting. Your own wishlist stays unstarred.',
-      },
-      {
-        kind: 'changed',
-        text: 'Adding a card to your collection, tradelist or wishlist from its sheet now says which list it went to before the sheet closes.',
-      },
-    ],
-  },
-  {
-    version: '0.134.2',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Tap the app version in About to read the full release notes, all versions, scrollable. No more catching them once and losing them.',
-      },
-    ],
-  },
-  {
-    version: '0.134.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Two different printings of one card filed into a binder or box no longer collapse into a single line with the second printing thrown away. Same printing twice, or "any printing", still pools onto one line.',
       },
     ],
   },

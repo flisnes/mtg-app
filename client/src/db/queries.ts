@@ -34,6 +34,16 @@ export async function getPrintingsForOracle(oracleId: string): Promise<Priced<Pr
   return withPrices(printings, (p) => p.scryfallId);
 }
 
+/**
+ * Any one printing from a set — the scanner's set pin stores a set code, and a
+ * pin taken in an earlier sitting still has to name itself (set symbol + name)
+ * in the picker. Indexed lookup, so it costs nothing.
+ */
+export async function getPrintingForSet(set: string): Promise<Priced<Printing> | undefined> {
+  const p = await db.printings.where('set').equals(set).first();
+  return p && (await withPrices([p], (x) => x.scryfallId))[0];
+}
+
 export async function getOracleCardsByIds(ids: Iterable<string>): Promise<Map<string, Priced<OracleCard>>> {
   const unique = [...new Set(ids)];
   const cards = (await db.oracleCards.bulkGet(unique)).filter((c): c is OracleCard => !!c);

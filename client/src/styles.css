@@ -4934,6 +4934,42 @@ a.seg {
      (browser-UI viewport games), cropping the card sides. */
   container-type: size;
 }
+/* The tray's hold bar: the row is frozen while the user browses it and this
+   drains the freeze. Always present (3px) rather than appearing on demand —
+   the tiles size themselves from the tray's measured height, so a strip that
+   came and went would resize every card in the row. */
+.scan-tray-hold {
+  flex-shrink: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.scan-tray-hold span {
+  display: block;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.45);
+  transform-origin: left center;
+}
+/* Another card has already locked and is waiting for the row. */
+.scan-tray-hold-new {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.scan-tray-hold-new span {
+  background: var(--accent);
+}
+.scan-pick-new {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.7rem;
+}
 .scan-tray-hint {
   margin: auto;
   color: var(--text-dim);

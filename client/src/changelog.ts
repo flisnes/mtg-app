@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.140.5',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The card row in the scanner holds still while you pick a printing. Scrolling or tapping it freezes the row (the bar on top shows for how long), and a new card in frame waits instead of shifting the printings under your finger.',
+      },
+      {
+        kind: 'fixed',
+        text: 'A confirmed edition no longer jumps to the front of a row you have started scrolling through. It still gets the green check.',
+      },
+    ],
+  },
+  {
     version: '0.140.4',
     changes: [
       {

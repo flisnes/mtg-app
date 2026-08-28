@@ -138,6 +138,19 @@ const LOCK_HOLD_MS = 3000;
 /** Consecutive card-free frames that count as "the card left the frame". More
  *  than one, so a blurred frame mid-tap can't be mistaken for a card swap. */
 const EMPTY_FRAMES_TO_RELEASE = 5;
+/**
+ * How long the tray belongs to the user after they scroll or tap it: while it's
+ * held, a new lock can't swap the row out from under the finger that is reaching
+ * for a printing. Every further touch refreshes it, a thin bar drains it, and
+ * taking the card out of frame hands it straight back.
+ */
+const TRAY_HOLD_MS = 4000;
+/** Touch this recent counts as "still browsing", so the card leaving the frame
+ *  doesn't cut the hold short mid-scroll. */
+const TRAY_TOUCH_GRACE_MS = 1000;
+/** Dead time after the tray's contents do change before a tap counts: a reorder
+ *  landing a frame before your finger must not add the printing that slid in. */
+const TRAY_SETTLE_MS = 200;
 
 /** One line of the scan session — what "complete" will write. */
 interface SessionEntry {
@@ -432,11 +445,15 @@ const AUTO_ADD_NOTES: Record<AutoAddState, string | null> = {
  * already owns bubble up (so their double-check badge is the first thing in
  * view), then the scanner's own distance order. Array.sort is stable, so equal
  * items keep that distance order.
+ *
+ * Called once, when the tray is built, and stored in that order: deriving it on
+ * every render meant a +1 (which makes you an owner of that printing) re-sorted
+ * the row under the very finger that tapped it.
  */
-function orderTrayCandidates(tray: Tray, ownership?: OwnershipIndex): Candidate[] {
-  const isHit = (c: Candidate) => (tray.ocrHit === c.scryfallId ? 0 : 1);
+function orderTrayCandidates(candidates: Candidate[], ocrHit: string | null, ownership?: OwnershipIndex): Candidate[] {
+  const isHit = (c: Candidate) => (ocrHit === c.scryfallId ? 0 : 1);
   const ownsExact = (c: Candidate) => (ownership?.lookup(c.oracle?.oracleId ?? '', c.scryfallId).ownsExact ? 0 : 1);
-  return [...tray.candidates].sort((a, b) => isHit(a) - isHit(b) || ownsExact(a) - ownsExact(b));
+  return [...candidates].sort((a, b) => isHit(a) - isHit(b) || ownsExact(a) - ownsExact(b));
 }
 
 export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target?: ScanTarget; onClose: () => void }) {
@@ -501,6 +518,21 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // The live hash index, so a lock can re-check owned printings' scan distance.
   const indexRef = useRef<ScanIndex | null>(null);
   const trayRef = useRef<Tray | null>(null);
+  const trayElRef = useRef<HTMLDivElement>(null);
+  // The tray is the user's while they browse it. `holdUntil` is when it goes
+  // back to the scanner (null = not held), `pendingId` is a different card that
+  // locked meanwhile and was dropped — the camera never stops, so it re-locks on
+  // its own the moment the hold drains.
+  const [holdUntil, setHoldUntil] = useState<number | null>(null);
+  const [holdNow, setHoldNow] = useState(0);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const holdUntilRef = useRef<number | null>(null);
+  const touchedAtRef = useRef(0);
+  /** Scrolled or tapped since this tray appeared: a late OCR result may badge
+   *  the confirmed edition but must not re-front it in a row you're reading. */
+  const touchedRef = useRef(false);
+  /** When the row's contents last actually changed, for the tap dead-time. */
+  const trayChangedAtRef = useRef(0);
   const fxSeq = useRef(0);
   // The last lock we auto-added for, so a confirmed edition adds itself once.
   const autoAddedRef = useRef<string | null>(null);
@@ -540,7 +572,50 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
 
   const total = session.reduce((n, e) => n + e.qty, 0);
 
+  /** Hand the row to the user for a while (any scroll or tap inside it). */
+  const holdTray = () => {
+    touchedRef.current = true;
+    touchedAtRef.current = Date.now();
+    const until = touchedAtRef.current + TRAY_HOLD_MS;
+    holdUntilRef.current = until;
+    setHoldUntil(until);
+    setHoldNow(touchedAtRef.current);
+  };
+
+  /** Give it back: the hold ran out, the row was scrolled home, or the card left. */
+  const releaseTray = () => {
+    if (holdUntilRef.current === null) return;
+    holdUntilRef.current = null;
+    setHoldUntil(null);
+    setPendingId(null);
+  };
+
+  // Drain the hold bar, and stop ticking the moment it's up.
+  useEffect(() => {
+    if (holdUntil === null) return;
+    setHoldNow(Date.now());
+    const t = setInterval(() => {
+      const now = Date.now();
+      setHoldNow(now);
+      if (now >= holdUntil) releaseTray();
+    }, 100);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdUntil]);
+
+  // A genuinely new card: start the row from the left, and forget that the last
+  // one was browsed (this one hasn't been).
+  useEffect(() => {
+    touchedRef.current = false;
+    if (trayElRef.current) trayElRef.current.scrollLeft = 0;
+  }, [tray?.topId]);
+
   const updateTray = (t: Tray | null) => {
+    const before = trayRef.current?.candidates.map((c) => c.scryfallId).join() ?? '';
+    const after = t?.candidates.map((c) => c.scryfallId).join() ?? '';
+    // Only a changed line-up starts the dead time — an OCR badge landing on a
+    // row that didn't move shouldn't swallow the tap that was already coming.
+    if (before !== after) trayChangedAtRef.current = Date.now();
     trayRef.current = t;
     setTray(t);
   };
@@ -560,8 +635,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         // The card is out of frame and the lock has had its hold: let go, so the
         // next card locks even when it's a second copy of the same one.
         noCardRef.current = s.cardSeen ? 0 : noCardRef.current + 1;
-        if (noCardRef.current >= EMPTY_FRAMES_TO_RELEASE && lockAtRef.current !== null && Date.now() - lockAtRef.current >= LOCK_HOLD_MS) {
-          releaseLock();
+        if (noCardRef.current >= EMPTY_FRAMES_TO_RELEASE) {
+          // The card is out of frame: nobody is picking a printing off this row
+          // any more (the tray sits at the bottom of the screen, so browsing it
+          // never covers the card), so don't make the next card wait out a hold.
+          if (Date.now() - touchedAtRef.current > TRAY_TOUCH_GRACE_MS) releaseTray();
+          if (lockAtRef.current !== null && Date.now() - lockAtRef.current >= LOCK_HOLD_MS) releaseLock();
         }
       }
       if (s.status === 'locked') void onLocked(s.result);
@@ -749,6 +828,16 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       return;
     }
 
+    // The row is under the user's finger, so dropping this lock is the whole
+    // point of the hold. Nothing is queued: the camera never stops locking, so
+    // the next one lands the moment the row is handed back. The bar only says
+    // that something is waiting for it.
+    if (holdUntilRef.current !== null && Date.now() < holdUntilRef.current) {
+      if (topId !== trayRef.current?.topId) setPendingId(topId);
+      cameraRef.current?.resume();
+      return;
+    }
+
     // A new card in frame: the pickers start from the pile pins, or from the
     // safe defaults when nothing is pinned, and nothing added under the previous
     // lock is re-tagged by them any more. The auto-add guard is per lock, so it
@@ -813,7 +902,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     const ordered = pinpointed ? [pinpointed, ...candidates.filter((c) => c !== pinpointed)] : candidates;
     updateTray({
       topId,
-      candidates: ordered,
+      candidates: orderTrayCandidates(ordered, pinpointed?.scryfallId ?? null, ownershipRef.current),
       ocr: pinpointed ? 'confirmed' : 'pending',
       ocrHit: pinpointed?.scryfallId ?? null,
     });
@@ -843,9 +932,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       // The pin already named the printing; this read was for the language only.
       if (pinpointed) return;
       const hit = resolution.confirmed ?? resolution.weak;
-      // Bring the confirmed edition to the front of the tray.
+      // Bring the confirmed edition to the front — but only on a row nobody has
+      // touched. Once the user is scrolling through the printings, shifting them
+      // all sideways is how you end up tapping the reprint next to the one you
+      // wanted; the green check has to carry the news instead.
       let trayOrder = current.candidates;
-      const idx = hit ? trayOrder.findIndex((c) => c.scryfallId === hit.scryfallId) : -1;
+      const idx = hit && !touchedRef.current ? trayOrder.findIndex((c) => c.scryfallId === hit.scryfallId) : -1;
       if (idx > 0) trayOrder = [trayOrder[idx]!, ...trayOrder.filter((_, j) => j !== idx)];
       updateTray({
         ...current,
@@ -897,6 +989,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
    *  finish/condition/language (a deck slot or wish quietly ignores what it doesn't store). */
   const bump = (c: Candidate, delta: 1 | -1, auto = false) => {
     if (!c.printing) return;
+    // The line-up moved a moment ago, so this tap was aimed at whatever used to
+    // be here. Dropping it costs a re-tap; honouring it adds the wrong printing.
+    if (!auto && Date.now() - trayChangedAtRef.current < TRAY_SETTLE_MS) return;
     // The user got there first: the copy is in the session, so call auto-add off
     // for this lock instead of dropping a second one in when the OCR lands.
     // Latching the guard ref is what actually stops it (a later set pin that
@@ -1382,7 +1477,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     ? ([...setOptions.matched, ...setOptions.others].find((p) => p.set === locks.set)?.scryfallId ?? '')
     : '';
 
-  const shown = tray ? filterBySet(orderTrayCandidates(tray, ownership), locks.set) : [];
+  // Already ordered when the tray was built — sorting here would move tiles
+  // whenever the collection changed underneath, which a +1 does every time.
+  const shown = tray ? filterBySet(tray.candidates, locks.set) : [];
   /** Set lock on, but nothing in this scan came from it — the tray shows everything. */
   const setMissed = !!locks.set && !!tray && !tray.candidates.some((c) => c.printing?.set === locks.set);
   // Auto-add's running commentary, which outranks the camera's own status while
@@ -1400,6 +1497,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
    */
   const arming = lockAt === null && live?.status === 'scanning' ? Math.min(1, live.streak / CONSENSUS_FRAMES) : 0;
   const ringFill = lockAt === null ? arming : holdLeft;
+  /** The tray's own hold: 1 right after a touch, 0 once the row is the scanner's again. */
+  const trayHoldLeft = holdUntil === null ? 0 : Math.max(0, Math.min(1, (holdUntil - holdNow) / TRAY_HOLD_MS));
 
   return createPortal(
     <div className="scan-screen" role="dialog" aria-label="Scan cards">
@@ -1685,10 +1784,32 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             </select>
           </label>
           {setMissed && <span className="scan-pick-note">No {locks.set!.toUpperCase()} match</span>}
+          {pendingId && (
+            <button className="scan-pick-new" onClick={releaseTray}>
+              <Icon name="refresh" size={12} /> New card
+            </button>
+          )}
         </div>
       )}
 
-      <div className="scan-tray">
+      {/* The row is yours while this drains. Accent means a different card has
+          already locked and is waiting for the handover, so the change that
+          follows is announced rather than sprung. */}
+      <div className={pendingId ? 'scan-tray-hold scan-tray-hold-new' : 'scan-tray-hold'} aria-hidden="true">
+        <span style={{ transform: `scaleX(${trayHoldLeft})` }} />
+      </div>
+
+      <div
+        className="scan-tray"
+        ref={trayElRef}
+        onPointerDown={holdTray}
+        onScroll={(e) => {
+          // Scrolled back to the start: you're done browsing, so hand the row
+          // over now instead of sitting out the rest of the hold.
+          if (e.currentTarget.scrollLeft <= 2) releaseTray();
+          else holdTray();
+        }}
+      >
         {tray ? (
           shown.map((c) => (
             <TrayTile

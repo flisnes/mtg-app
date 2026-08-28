@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.140.5
+
+- **The scanner's card row stops moving while you are picking a printing.** Scroll it or tap it and the row is yours: a thin bar along its top edge shows how long it stays put, and a card that comes into frame meanwhile waits its turn instead of shoving the printings sideways just as you tap. The bar turns purple with a "New card" chip when one is queued, tap that to hand the row over early, or take the card out of frame and the next one comes straight in. Scrolling back to the start also gives the row back at once.
+- **A confirmed edition no longer jumps to the front of a row you are reading.** The reader still marks it with the green check, it just stops rearranging the printings under your finger once you have started browsing them.
+
 ## 0.140.4
 
 - **Scanning cards into a deck, binder or box now asks about your collection too, even for cards you already own.** It only ever offered to register the ones you owned no copy of; a pile that mixed new cards with old ones left the old ones with nowhere to go. Every scanned card you already have now gets its own choice: *Skip* (the copy is just being filed), *Add* (it is a second copy) or *Update* (same card, but this is the printing you actually hold). Same three choices, same wording as scanning straight into the collection.

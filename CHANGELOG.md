@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.140.4
+
+- **Scanning cards into a deck, binder or box now asks about your collection too, even for cards you already own.** It only ever offered to register the ones you owned no copy of; a pile that mixed new cards with old ones left the old ones with nowhere to go. Every scanned card you already have now gets its own choice: *Skip* (the copy is just being filed), *Add* (it is a second copy) or *Update* (same card, but this is the printing you actually hold). Same three choices, same wording as scanning straight into the collection.
+
 ## 0.140.3
 
 - **Escape gets you out of select mode.** Reaching for the ✕ on the bulk bar was the only way back out. Works anywhere selecting works: decks, binders, boxes, collection, wishlist.

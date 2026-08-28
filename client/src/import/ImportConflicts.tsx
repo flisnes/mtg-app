@@ -25,6 +25,7 @@ export function ImportConflicts({
   defaultChoice = 'add',
   intro,
   confirmLabel,
+  incomingLabel = 'Import',
 }: {
   conflicts: ImportConflict[];
   /** Lines with no conflict — they go through regardless. */
@@ -39,6 +40,8 @@ export function ImportConflicts({
   intro?: ReactNode;
   /** Confirm-button text for the count of affected cards. */
   confirmLabel?: (count: number) => string;
+  /** What the incoming lines are called on each row — a scan isn't an import. */
+  incomingLabel?: string;
 }) {
   const [choices, setChoices] = useState<Map<string, ConflictChoice>>(
     () => new Map(conflicts.map((c) => [c.oracleId, defaultChoice])),
@@ -109,7 +112,7 @@ export function ImportConflicts({
                   You have: {c.existing.map(describe).join(', ')}
                 </div>
                 <div className="result-sub" style={{ whiteSpace: 'normal' }}>
-                  Import: {c.incoming.map(describe).join(', ')}
+                  {incomingLabel}: {c.incoming.map(describe).join(', ')}
                 </div>
               </div>
               <div className="chips" role="group" aria-label={`Resolve ${c.name}`}>

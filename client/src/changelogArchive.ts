@@ -1,4 +1,4 @@
-// The older half of the changelog (0.134.7 down to 0.98.0), split out of
+// The older half of the changelog (0.135.1 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,58 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.135.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The small print under a deck, binder or box in a list is small and dim again, instead of full-size text spread across the row.',
+      },
+      {
+        kind: 'changed',
+        text: 'The app downloads a little less on first open. Older release notes now load only when you go looking for them.',
+      },
+    ],
+  },
+  {
+    version: '0.135.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Card search now sorts: best match, name, mana value or price, either direction. Sorting by price ranks every hit, not just the page on screen.',
+      },
+      {
+        kind: 'added',
+        text: "Search scoped into your collection, tradelist, wishlist or a deck offers that list's own sort options, and reordering there reorders the list itself.",
+      },
+    ],
+  },
+  {
+    version: '0.134.9',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Recent searches now drop down from the search bar as a small see-through panel instead of filling the screen. Arrow keys walk the list, Enter picks one.',
+      },
+      {
+        kind: 'changed',
+        text: 'The search bar remembers 500 past searches, up from 10, and narrows them to whatever you are typing.',
+      },
+    ],
+  },
+  {
+    version: '0.134.8',
+    changes: [
+      {
+        kind: 'added',
+        text: 'About now has an "Open source licenses" page listing the 28 components the app is built on, each with its copyright and licence in full. The licences ask to be shipped with the app, and now they are.',
+      },
+      {
+        kind: 'added',
+        text: 'MTGJSON is now credited for sealed product data, as its licence requires, along with TCGCSV and Cardmarket for sealed prices and Andrew Gioia for the set and mana symbol fonts.',
+      },
+    ],
+  },
   {
     version: '0.134.7',
     changes: [

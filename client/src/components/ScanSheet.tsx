@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
-import { addToWishlistBulk, applyImport, reconcileDeck } from '../db/dataAccess.js';
+import { addToWishlistBulk, reconcileDeck } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
 import {
   getOracleCard,
@@ -219,9 +219,14 @@ interface RescanReview {
   slots: RescanSlot[];
   /** Human-readable diff vs the deck's current contents (unchanged slots omitted). */
   changes: DeckChange[];
-  /** Scanned printings not currently in the collection — offered as a follow-up add. */
+  /** Scanned cards you own no copy of, in any printing — offered as a tick-list add. */
   unowned: SessionEntry[];
+  /** Scanned cards already in the collection — offered the import's per-card Skip/Add/Update. */
+  conflicts: ImportConflict[];
 }
+
+/** The review steps a container scan walks before anything is written (empty ones are skipped). */
+type ReviewPhase = 'changes' | 'collection' | 'owned';
 
 /** What the picker bar decides: applied to every +1, and to this lock's adds when changed. */
 interface PickValues {
@@ -485,10 +490,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // Set when a collection/tradelist commit finds cards already owned: the
   // skip/add/replace resolution screen (reused from import) shows until resolved.
   const [conflictStep, setConflictStep] = useState<{ lines: ResolvedLine[]; conflicts: ImportConflict[] } | null>(null);
-  // Deck re-scan review: the computed diff + which of the two review phases
-  // ('changes' → 'collection') is showing, plus the ticked unowned cards.
+  // Container scan review: the computed diff + which review phase is showing
+  // ('changes' → 'collection' → 'owned'), plus the ticked unowned cards.
   const [rescanStep, setRescanStep] = useState<RescanReview | null>(null);
-  const [rescanPhase, setRescanPhase] = useState<'changes' | 'collection'>('changes');
+  const [rescanPhase, setRescanPhase] = useState<ReviewPhase>('changes');
   const [rescanPicked, setRescanPicked] = useState<Set<string>>(new Set());
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraScan | null>(null);
@@ -530,6 +535,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // The duplicates sheet is rendered inline by this component, so its guard
   // clock has to start when the step appears, not when the scanner opened.
   const conflictTapGuard = useTapGuard(TAP_GUARD_MS, conflictStep);
+  // Same for the review's "already own these" step — it arrives mid-flow.
+  const ownedTapGuard = useTapGuard(TAP_GUARD_MS, rescanPhase === 'owned' ? rescanStep : null);
 
   const total = session.reduce((n, e) => n + e.qty, 0);
 
@@ -1028,19 +1035,21 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     cameraRef.current?.resume();
   };
 
+  /** One scanned line as an import line (the collection write is the import write). */
+  const entryLine = (e: SessionEntry): ResolvedLine => ({
+    oracleId: e.oracleId,
+    scryfallId: e.scryfallId,
+    name: e.name,
+    quantity: e.qty,
+    // Marked for trade only when the destination is the tradelist.
+    quantityForTrade: target.kind === 'tradelist' ? e.qty : 0,
+    condition: e.condition,
+    finish: e.finish,
+    lang: e.lang,
+  });
+
   /** The session as import lines (collection/tradelist go through applyImport). */
-  const sessionLines = (): ResolvedLine[] =>
-    session.map((e) => ({
-      oracleId: e.oracleId,
-      scryfallId: e.scryfallId,
-      name: e.name,
-      quantity: e.qty,
-      // Marked for trade only when the destination is the tradelist.
-      quantityForTrade: target.kind === 'tradelist' ? e.qty : 0,
-      condition: e.condition,
-      finish: e.finish,
-      lang: e.lang,
-    }));
+  const sessionLines = (): ResolvedLine[] => session.map(entryLine);
 
   const finishScan = () => {
     clearStored();
@@ -1085,12 +1094,34 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
    * decks store no finish/condition/lang), diff it against the deck's current
    * contents, and list any scanned printing not in the collection.
    */
-  /** Scanned printings you don't own a single copy of yet (physical scans are usually in hand). */
-  const computeUnowned = async (): Promise<SessionEntry[]> => {
-    const scryfallIds = [...new Set(session.map((e) => e.scryfallId))];
-    const owned = await db.collection.where('scryfallId').anyOf(scryfallIds).toArray();
-    const ownedSet = new Set(owned.filter((e) => e.quantity > 0).map((e) => e.scryfallId));
-    return session.filter((e) => !ownedSet.has(e.scryfallId));
+  /**
+   * Split the scan for the "…and your collection?" step. A pile scanned into a
+   * deck, binder or box is cardboard in hand, and it can be a mix: cards you've
+   * never owned, cards you already have, or both. So both get a say —
+   *
+   *  - own none of it (any printing): the tick-list, everything on by default.
+   *  - already own it: the import's per-card Skip / Add / Update.
+   *
+   * The split is per card, not per printing — the same rule findImportConflicts
+   * uses — so no scanned card can turn up in both lists.
+   */
+  const buildCollectionStep = async (): Promise<Pick<RescanReview, 'unowned' | 'conflicts'>> => {
+    const conflicts = await findImportConflicts(sessionLines());
+    const owned = new Set(conflicts.map((c) => c.oracleId));
+    return { unowned: session.filter((e) => !owned.has(e.oracleId)), conflicts };
+  };
+
+  /** Review steps with something to show, in the order they're walked. */
+  const reviewPhases = (r: RescanReview): ReviewPhase[] => [
+    ...(r.changes.length ? (['changes'] as ReviewPhase[]) : []),
+    ...(r.unowned.length ? (['collection'] as ReviewPhase[]) : []),
+    ...(r.conflicts.length ? (['owned'] as ReviewPhase[]) : []),
+  ];
+
+  /** Step `delta` phases from the current one; null means there's nothing further that way. */
+  const stepPhase = (r: RescanReview, delta: 1 | -1): ReviewPhase | null => {
+    const phases = reviewPhases(r);
+    return phases[phases.indexOf(rescanPhase) + delta] ?? null;
   };
 
   const buildRescanReview = async (deckId: string): Promise<RescanReview> => {
@@ -1119,18 +1150,24 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       changes.push({ kind: 'remove', oracleId: cur.oracleId, board: cur.board, name: oracleMap.get(cur.oracleId)?.name ?? 'Unknown card', quantity: cur.quantity });
     }
 
-    // "Not in your collection" = you don't own that exact printing at all.
-    const unowned = await computeUnowned();
-
-    return { slots: [...slotMap.values()], changes, unowned };
+    return { slots: [...slotMap.values()], changes, ...(await buildCollectionStep()) };
   };
 
   /**
-   * Apply the reviewed deck write, then add the ticked unowned cards to the collection.
-   * Re-scan reconciles the deck to exactly the scan; a regular scan just appends the cards.
+   * Apply the reviewed container write, then the collection write the review
+   * settled: the ticked unowned cards, plus whatever the already-owned cards
+   * were told to do. Re-scan reconciles the container to exactly the scan; a
+   * regular scan just appends.
    */
-  const applyRescan = async () => {
+  const applyRescan = async (choices: Map<string, ConflictChoice> = new Map()) => {
     if (!rescanStep || committing || target.kind !== 'deck') return;
+    // "Update" swaps a copy you own for the scanned printing, and asks which
+    // one when you own several — settle that before touching anything.
+    const outcome = await resolveReplacements(rescanStep.conflicts, choices);
+    if (outcome === null) {
+      toast('Nothing changed: the swap was cancelled');
+      return;
+    }
     setCommitting(true);
     try {
       const r = rescanStep;
@@ -1158,14 +1195,17 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           return;
         }
       }
-      const toAdd = r.unowned.filter((e) => rescanPicked.has(entryKey(e)));
-      if (toAdd.length) {
-        await applyImport(
-          toAdd.map((e) => ({ oracleId: e.oracleId, scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang, quantity: e.qty, quantityForTrade: 0 })),
-          { source: 'scan' },
-        );
-      }
-      const addedToColl = toAdd.reduce((n, e) => n + e.qty, 0);
+      // One write for the whole collection side, through the same pipeline an
+      // import uses: the ticked unowned lines, plus the owned cards' lines
+      // (commitResolvedLines drops the ones set to Skip).
+      const toAdd = [
+        ...r.unowned.filter((e) => rescanPicked.has(entryKey(e))).map(entryLine),
+        ...r.conflicts.flatMap((c) => c.incoming),
+      ];
+      const res = toAdd.length
+        ? await commitResolvedLines(toAdd, choices, outcome, { source: 'scan' })
+        : { added: 0, flagged: 0 };
+      const addedToColl = res.added + res.flagged;
       const collSuffix = addedToColl ? ` · ${addedToColl} added to collection` : '';
       toast(
         target.rescan
@@ -1193,25 +1233,28 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     // the two-step review (deck changes, then unowned-card collection prompt).
     if (target.kind === 'deck' && target.rescan) {
       const review = await buildRescanReview(target.deckId);
-      if (review.changes.length === 0 && review.unowned.length === 0) {
+      const phase = reviewPhases(review)[0];
+      if (!phase) {
         toast(`No changes — this ${targetNoun(target)} already matches your scan`);
         finishScan();
         return;
       }
       setRescanPicked(new Set(review.unowned.map((e) => entryKey(e))));
-      setRescanPhase(review.changes.length === 0 ? 'collection' : 'changes');
+      setRescanPhase(phase);
       setRescanStep(review);
       return;
     }
     // Regular deck scan: physical cards are usually in hand, so — like re-scan —
-    // offer to also register any scanned printing you don't own in your collection.
-    // The deck append itself is deferred to applyRescan so both writes land together.
+    // ask what the collection should make of them. New cards, cards you already
+    // own, or a mix: each one gets its own answer. The deck append itself is
+    // deferred to applyRescan so both writes land together.
     if (target.kind === 'deck') {
-      const unowned = await computeUnowned();
-      if (unowned.length > 0) {
-        setRescanPicked(new Set(unowned.map((e) => entryKey(e))));
-        setRescanPhase('collection');
-        setRescanStep({ slots: [], changes: [], unowned });
+      const review: RescanReview = { slots: [], changes: [], ...(await buildCollectionStep()) };
+      const phase = reviewPhases(review)[0];
+      if (phase) {
+        setRescanPicked(new Set(review.unowned.map((e) => entryKey(e))));
+        setRescanPhase(phase);
+        setRescanStep(review);
         return;
       }
     }
@@ -1700,6 +1743,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
                         ]
                   }
                   defaultChoice={toTradelist ? 'trade' : 'add'}
+                  incomingLabel="Scanned"
                   intro={
                     toTradelist ? (
                       <>
@@ -1739,16 +1783,22 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           );
         })()}
 
-      {replaceSheet}
-
       {rescanStep && target.kind === 'deck' && rescanPhase === 'changes' && (
         <RescanChangesSheet
           changes={rescanStep.changes}
           deckName={targetLabel(target)}
           showBoards={deckBoards(target).length > 1}
           busy={committing}
-          nextLabel={rescanStep.unowned.length > 0 ? 'Next' : `Apply ${rescanStep.changes.length} change${rescanStep.changes.length === 1 ? '' : 's'}`}
-          onNext={() => (rescanStep.unowned.length > 0 ? setRescanPhase('collection') : void runCommit(applyRescan))}
+          nextLabel={
+            stepPhase(rescanStep, 1)
+              ? 'Next'
+              : `Apply ${rescanStep.changes.length} change${rescanStep.changes.length === 1 ? '' : 's'}`
+          }
+          onNext={() => {
+            const next = stepPhase(rescanStep, 1);
+            if (next) setRescanPhase(next);
+            else void runCommit(() => applyRescan());
+          }}
           onBack={() => setRescanStep(null)}
         />
       )}
@@ -1764,8 +1814,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
               yet. Pick which to also add to your collection:
             </>
           }
-          confirmLabel={(q) => (q > 0 ? `Apply · add ${q} to collection` : 'Apply without adding')}
-          backLabel={rescanStep.changes.length > 0 ? 'Back' : 'Cancel'}
+          confirmLabel={(q) =>
+            stepPhase(rescanStep, 1) ? 'Next' : q > 0 ? `Apply · add ${q} to collection` : 'Apply without adding'
+          }
+          backLabel={stepPhase(rescanStep, -1) ? 'Back' : 'Cancel'}
           onToggle={(key) =>
             setRescanPicked((prev) => {
               const next = new Set(prev);
@@ -1779,10 +1831,60 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
               prev.size === rescanStep.unowned.length ? new Set() : new Set(rescanStep.unowned.map((e) => entryKey(e))),
             )
           }
-          onBack={() => (rescanStep.changes.length > 0 ? setRescanPhase('changes') : setRescanStep(null))}
-          onConfirm={() => void runCommit(applyRescan)}
+          onBack={() => {
+            const prev = stepPhase(rescanStep, -1);
+            if (prev) setRescanPhase(prev);
+            else setRescanStep(null);
+          }}
+          onConfirm={() => {
+            const next = stepPhase(rescanStep, 1);
+            if (next) setRescanPhase(next);
+            else void runCommit(() => applyRescan());
+          }}
         />
       )}
+
+      {/* Last review step: the scanned cards you already own. Filing a pile into
+          a container says where it lives, not that you suddenly have more of it,
+          so these start on Skip — but a second physical copy (Add) or a printing
+          correction (Update) is one tap away, per card. */}
+      {rescanStep && target.kind === 'deck' && rescanPhase === 'owned' && (
+        <div className="sheet-backdrop" onClick={() => setRescanStep(null)} {...ownedTapGuard}>
+          <div className="sheet" role="dialog" aria-label="Cards you already own" onClick={(e) => e.stopPropagation()}>
+            <ImportConflicts
+              conflicts={rescanStep.conflicts}
+              otherCount={rescanStep.unowned.filter((e) => rescanPicked.has(entryKey(e))).length}
+              options={[
+                { value: 'skip', label: 'Skip' },
+                { value: 'add', label: 'Add' },
+                { value: 'replace', label: 'Update' },
+              ]}
+              defaultChoice="skip"
+              incomingLabel="Scanned"
+              intro={
+                <>
+                  {rescanStep.conflicts.length} scanned card{rescanStep.conflicts.length === 1 ? '' : 's'}{' '}
+                  {rescanStep.conflicts.length === 1 ? 'is' : 'are'} already in your collection (any printing counts).
+                  Per card: <strong>Skip</strong> leaves your collection as it is (the copy is just being filed),{' '}
+                  <strong>Add</strong> adds the scanned copy as a new one, <strong>Update</strong> swaps a copy you own
+                  for the scanned printing (your total stays the same).
+                </>
+              }
+              confirmLabel={(n) => (n > 0 ? `Apply · add ${n} to collection` : 'Apply without adding')}
+              onConfirm={(choices) => runCommit(() => applyRescan(choices))}
+              onBack={() => {
+                const prev = stepPhase(rescanStep, -1);
+                if (prev) setRescanPhase(prev);
+                else setRescanStep(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Last, so it stacks above any review step that can raise it: every
+          sheet shares one z-index, so DOM order is what decides. */}
+      {replaceSheet}
 
       {filingSheet}
       {fileTheseSheet}

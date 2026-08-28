@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.140.4',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Scanning into a deck, binder or box now asks what your collection should do with every card, not just the ones you own no copy of. Per card: Skip, Add a second copy, or Update to the printing you scanned.',
+      },
+    ],
+  },
+  {
     version: '0.140.3',
     changes: [
       {
@@ -158,58 +167,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Pulling down to refresh works again. A fix in 0.134.5 pinned the gesture to the page and disabled the browser refresh along with it; the problem it was aimed at turned out to be already handled elsewhere.',
-      },
-    ],
-  },
-  {
-    version: '0.135.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'The small print under a deck, binder or box in a list is small and dim again, instead of full-size text spread across the row.',
-      },
-      {
-        kind: 'changed',
-        text: 'The app downloads a little less on first open. Older release notes now load only when you go looking for them.',
-      },
-    ],
-  },
-  {
-    version: '0.135.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Card search now sorts: best match, name, mana value or price, either direction. Sorting by price ranks every hit, not just the page on screen.',
-      },
-      {
-        kind: 'added',
-        text: "Search scoped into your collection, tradelist, wishlist or a deck offers that list's own sort options, and reordering there reorders the list itself.",
-      },
-    ],
-  },
-  {
-    version: '0.134.9',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Recent searches now drop down from the search bar as a small see-through panel instead of filling the screen. Arrow keys walk the list, Enter picks one.',
-      },
-      {
-        kind: 'changed',
-        text: 'The search bar remembers 500 past searches, up from 10, and narrows them to whatever you are typing.',
-      },
-    ],
-  },
-  {
-    version: '0.134.8',
-    changes: [
-      {
-        kind: 'added',
-        text: 'About now has an "Open source licenses" page listing the 28 components the app is built on, each with its copyright and licence in full. The licences ask to be shipped with the app, and now they are.',
-      },
-      {
-        kind: 'added',
-        text: 'MTGJSON is now credited for sealed product data, as its licence requires, along with TCGCSV and Cardmarket for sealed prices and Andrew Gioia for the set and mana symbol fonts.',
       },
     ],
   },

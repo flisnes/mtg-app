@@ -120,6 +120,12 @@ button.danger-outline {
   padding-top: 1rem;
   padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 1rem);
   padding-inline: max(1rem, calc((100% - var(--content-max)) / 2));
+  /* The tab bar is fixed over the bottom of this scroller, so "scrolled into
+     view" and "visible" are not the same thing: scrollIntoView happily parks a
+     row underneath it. That's how the keyboard card cursor lost its highlight
+     the moment you arrowed past the fold. scroll-padding keeps anything scrolled
+     to clear of the bar. */
+  scroll-padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 0.6rem);
 }
 
 /* ---- Global search header ---- */
@@ -309,6 +315,8 @@ button.danger-outline {
   overflow-y: auto;
   background: var(--bg);
   padding: 1rem 1rem calc(var(--tab-h) + var(--safe-bottom) + 1rem);
+  /* Same tab bar, same problem: the results list has its own card cursor. */
+  scroll-padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 0.6rem);
 }
 .search-overlay-inner {
   max-width: 720px;
@@ -1441,9 +1449,11 @@ button.danger-outline {
 /* Keep the end of the list reachable while the bar covers it. */
 body:has(.bulk-bar) .app-main {
   padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 4.5rem);
+  scroll-padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 4.5rem);
 }
 body:has(.bulk-bar:not(.collapsed)) .app-main {
   padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 11rem);
+  scroll-padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 11rem);
 }
 .bulk-bar-head {
   display: flex;

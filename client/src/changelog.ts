@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.140.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Arrowing through a deck kept scrolling the card you were pointing at underneath the tab bar, so its purple outline was invisible. The cursor now stops where you can see it.',
+      },
+    ],
+  },
+  {
     version: '0.140.0',
     changes: [
       {

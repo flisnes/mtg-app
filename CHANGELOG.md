@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.140.1
+
+- **Arrowing through a deck shows you where you are again.** The keyboard cursor's purple outline was real all along, it just kept parking the card underneath the tab bar at the bottom of the screen, so every arrow press past the fold looked like nothing happened. Cards now scroll to somewhere you can see them, in lists and grids, and with the bulk-action bar up too.
+
 ## 0.140.0
 
 - **The scanner's set pin is a proper edition picker now.** It used to be a checkbox that took its set from whatever card happened to be in frame, which on a card with twenty reprints pinned the wrong set about as often as the right one. Pick the set from a list of that card's editions instead, set symbol and year included, with the ones the scan matched at the top and a search box for the other thirty.

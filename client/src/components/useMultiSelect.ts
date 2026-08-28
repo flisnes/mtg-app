@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useShortcuts } from './useShortcuts.js';
 
 /**
  * Local UI state for multi-selecting cards in a list (Collection, Tradelist,
@@ -44,6 +45,12 @@ export function useMultiSelect(): MultiSelect {
   const toggleAll = useCallback((keys: string[]) => {
     setSelected((prev) => (keys.every((k) => prev.has(k)) ? new Set() : new Set(keys)));
   }, []);
+
+  // Escape backs out of select mode, same as the ✕ on the bulk bar. Mapped to
+  // null when it's off so the key falls through to whatever else wants it —
+  // the card cursor clears itself on Escape, and it should only get the key
+  // once there's no selection left to cancel.
+  useShortcuts({ Escape: active ? exit : null });
 
   return { active, selected, count: selected.size, toggle, enter, exit, toggleAll };
 }

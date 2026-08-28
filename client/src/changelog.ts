@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.140.3',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Escape leaves select mode, so the ✕ on the bulk bar is no longer the only way out.',
+      },
+    ],
+  },
+  {
     version: '0.140.2',
     changes: [
       {

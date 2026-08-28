@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.140.3
+
+- **Escape gets you out of select mode.** Reaching for the ✕ on the bulk bar was the only way back out. Works anywhere selecting works: decks, binders, boxes, collection, wishlist.
+
 ## 0.140.2
 
 - **The keyboard cursor is actually visible in grid view now.** The last release stopped it hiding under the tab bar, but on card tiles the highlight was a thin line drawn straight onto the card's own black border, and on a card you don't own yet it faded out along with the tile. It's a proper ring standing off the art with a soft glow, and the card you're pointing at stops being greyed out while you're on it. Nesting still works: outer ring is where the cursor is, inner ring and checkmark is what's selected.

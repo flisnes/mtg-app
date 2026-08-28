@@ -52,6 +52,7 @@ const GROUPS: Group[] = [
     note: 'Copies out as an ordinary decklist, and back in as the exact printings.',
     keys: [
       { press: ['Ctrl', 'A'], does: 'Select every card on the page' },
+      { press: ['Esc'], does: 'Leave select mode' },
       { press: ['Ctrl', 'C'], does: 'Copy the selection, or the whole thing' },
       { press: ['Ctrl', 'X'], does: 'Cut, moved when you paste' },
       { press: ['Ctrl', 'V'], does: 'Paste cards, or import a list from anywhere' },

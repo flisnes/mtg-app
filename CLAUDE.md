@@ -22,6 +22,8 @@ Other scripts (`dev:client`, `dev:server`, `typecheck`) are in the root `package
 
 There is **no unit-test suite** — the user-facing surface is the PWA, driven in a real browser. Use the `/verify` skill; it covers the fixture build, the boot gates that trip every naive Playwright script, and the selectors.
 
+**Verify in grid view first.** Grid is the default and the way the app is actually used day to day; list is the secondary pass. Cards render very differently in the two, so a change that reads fine on a flat list row can be invisible on a full-bleed card tile. And screenshot the result — a class being in the DOM is not proof anyone can see it.
+
 **Clean up after yourself:** kill any dev/static/relay servers and Playwright processes you start (5173 Vite, 8787 fixture static, the trade relay) before you finish. `kill %1` does NOT stop them — taskkill the PID tree and confirm the ports are clear.
 
 ## Deploy

@@ -2162,11 +2162,33 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
 
 /* The card the keyboard is pointing at, whether the mouse put it there or the
    arrow keys did. Deliberately quieter than the selection checkmark: it says
-   "this is what + would touch", not "this is picked". */
-.card-active {
+   "this is what + would touch", not "this is picked".
+
+   Grid and list want different rings. A row is a flat dark surface, so a line
+   just inside its edge reads fine. A tile is a full-bleed card image that
+   already has a black border of its own, and a line drawn on top of that
+   border may as well not be there — which is how the cursor managed to be
+   invisible in grid view, the way most people build a deck. So the tile's ring
+   sits outside the art, with a halo to carry it over whatever the artwork
+   happens to be doing underneath. */
+.result-row.card-active {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-  border-radius: 8px;
+}
+.card-tile.card-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  /* The image's own 8px corner plus the 3px the ring stands off it. */
+  border-radius: 11px;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+/* The cursor is on the card you're about to change, so it stops being one of
+   the faded "you don't own enough of these" ones for as long as you're
+   standing on it. Fading the ring to half opacity along with the card was the
+   other half of the disappearing act. */
+.card-active.card-tile-dim,
+.card-active.result-row-dim {
+  opacity: 1;
 }
 /* Cut, not yet pasted: the card is still here and still counts, so it fades
    rather than disappears, and the dashes say it's on its way somewhere. The

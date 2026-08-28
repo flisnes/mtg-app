@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.140.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'In grid view the keyboard cursor was a thin line drawn on the card’s own black border, and it faded out on cards you do not own. It is a proper ring around the tile now, and the card you are pointing at is no longer greyed out.',
+      },
+    ],
+  },
+  {
     version: '0.140.1',
     changes: [
       {

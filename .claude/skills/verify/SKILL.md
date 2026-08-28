@@ -21,6 +21,16 @@ The user-facing surface is the PWA (`client/`). Drive it in a real browser; ther
    ```
 4. **Browser**: Playwright (not a repo dep — install in scratchpad) with `channel: 'chrome'`, headless is fine.
 
+## Verify in grid view first
+
+**Grid is how the app is actually used.** It's the default (`localStorage.cardViewMode`) and it's the view the maintainer browses cards in, so it's the one a change has to look right in. Check grid first and treat list as the secondary pass, not the other way round.
+
+This matters beyond "which selector do I query". The two views render cards completely differently, and a fix that works in one can be invisible in the other — grid tiles are full-bleed card art with their own black border, so anything subtle (a 2px outline, a low-contrast tint) that reads fine on a flat dark list row vanishes on a tile. v0.140.2 shipped exactly that bug: the keyboard cursor's highlight was correct in list view and effectively invisible in grid.
+
+- Tiles are `.card-tile` (the image button inside is `.card-tile-img`); list rows are `.result-row`.
+- Don't judge a visual change from the DOM. A class being applied is not the same as a user seeing it — screenshot the element and look. `deviceScaleFactor: 2` plus a `clip` around the element's bounding box gives a crop you can actually judge.
+- Shoot the states that stack, not just the happy one. On the deck page most tiles are **dimmed** (`.card-tile-dim`, `opacity: 0.5`, for "you don't own enough"), and a tile can be dimmed *and* under the cursor *and* selected at once. Seed some owned and some unowned cards so both show up in the same shot.
+
 ## Driving gotchas
 
 - **Two gates before the real UI, and both must be clicked through in order** (this bites every time). On a fresh IndexedDB:
@@ -29,7 +39,7 @@ The user-facing surface is the PWA (`client/`). Drive it in a real browser; ther
 
   Only then does the app proper render. Any Playwright script that jumps straight to app selectors will hang on these — click both first. Prefer in-app hash navigation (`window.location.hash = '#/…'`) over `page.goto` for subsequent steps so you don't re-trigger onboarding.
 - Ready = `.search-input` visible. The card-DB gate can take a while on first import; use a generous timeout.
-- Search result rows are `.result-row`, price is `.result-price`.
+- Search result rows are `.result-row`, price is `.result-price`. Those are list-view selectors — switching to list with `addInitScript(() => localStorage.setItem('cardViewMode','list'))` is fine when an assertion needs row text, but do the grid pass too.
 - Card DB state lives in IndexedDB database `mtg` (stores: `oracleCards`, `printings`, `priceShards`, `settings`). Read counts/settings via `page.evaluate` with raw `indexedDB.open('mtg')`.
 - The app fetches `manifest.json` ~3× per load (sync + update beacon) — ignore duplicates when asserting the request log.
 - Simulate "prices-only day" / "data changed" by generating variant fixture dirs (different `MAX_CARDS`, or hand-patch the prices file + manifest v2 block, gzip + sha256 must match) and switching the static server's root between page reloads — IndexedDB persists across reloads in one browser context, so update paths are exercised realistically.

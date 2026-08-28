@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.140.2
+
+- **The keyboard cursor is actually visible in grid view now.** The last release stopped it hiding under the tab bar, but on card tiles the highlight was a thin line drawn straight onto the card's own black border, and on a card you don't own yet it faded out along with the tile. It's a proper ring standing off the art with a soft glow, and the card you're pointing at stops being greyed out while you're on it. Nesting still works: outer ring is where the cursor is, inner ring and checkmark is what's selected.
+
 ## 0.140.1
 
 - **Arrowing through a deck shows you where you are again.** The keyboard cursor's purple outline was real all along, it just kept parking the card underneath the tab bar at the bottom of the screen, so every arrow press past the fold looked like nothing happened. Cards now scroll to somewhere you can see them, in lists and grids, and with the bulk-action bar up too.

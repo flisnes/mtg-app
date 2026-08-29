@@ -1725,10 +1725,17 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.55);
   transition: aspect-ratio 0.15s ease;
 }
-.stack-open .stack-card {
+/* An expanded card, and the one at the bottom of the pile: that last one is
+   what was just scanned or added, so it stays whole whether or not anything
+   above it is open — a stack ending in a sliver of a card looks cut off. */
+.stack-open .stack-card,
+.stack-item:last-child .stack-card {
   aspect-ratio: 488 / 680;
   border-radius: 8px;
   margin-bottom: 0.4rem;
+}
+.stack-item:last-child {
+  align-items: flex-start;
 }
 /* The face keeps the card's real proportions and is anchored at the top; the
    button above does the cropping. */

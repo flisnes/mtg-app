@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.141.4',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Visual stacks are now the default view on the trade board and in the scanned card list, and the card at the bottom of a stack always shows in full. Tiles and rows are still one tap away on the toggle.',
+      },
+    ],
+  },
+  {
     version: '0.141.3',
     changes: [
       {
@@ -162,15 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Copy, cut and paste cards on a deck, binder or box. Ctrl+C gives you a decklist anywhere else and the exact printings back in the app, Ctrl+X moves cards between decks in one undoable step, and Ctrl+V on a list from any website opens the import review already filled in. Ctrl+A selects the lot.',
-      },
-    ],
-  },
-  {
-    version: '0.137.0',
-    changes: [
-      {
-        kind: 'added',
-        text: "Ctrl+Z undoes your last change on the page you're looking at, Ctrl+Y puts it back (Cmd on a Mac). Neither reaches into a deck you've navigated away from, and both leave your typing alone.",
       },
     ],
   },

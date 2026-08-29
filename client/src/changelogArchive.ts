@@ -1,4 +1,4 @@
-// The older half of the changelog (0.136.0 down to 0.98.0), split out of
+// The older half of the changelog (0.137.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,15 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.137.0',
+    changes: [
+      {
+        kind: 'added',
+        text: "Ctrl+Z undoes your last change on the page you're looking at, Ctrl+Y puts it back (Cmd on a Mac). Neither reaches into a deck you've navigated away from, and both leave your typing alone.",
+      },
+    ],
+  },
   {
     version: '0.136.0',
     changes: [

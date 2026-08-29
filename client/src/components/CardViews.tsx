@@ -62,9 +62,9 @@ function viewPref(key: string, allowed: readonly ViewMode[], dflt: ViewMode) {
 /** The app-wide list⇄grid preference, used by every card list that has one. */
 export const useViewMode = viewPref('cardViewMode', ['list', 'grid'], 'grid');
 /** The trade board's two offer columns: card tiles or visual stacks. */
-export const useTradeViewMode = viewPref('tradeViewMode', ['grid', 'stack'], 'grid');
+export const useTradeViewMode = viewPref('tradeViewMode', ['grid', 'stack'], 'stack');
 /** The scan session's review list: plain rows or visual stacks. */
-export const useScanViewMode = viewPref('scanViewMode', ['list', 'stack'], 'list');
+export const useScanViewMode = viewPref('scanViewMode', ['list', 'stack'], 'stack');
 
 const VIEW_LABELS: Record<ViewMode, { glyph: string; title: string }> = {
   list: { glyph: '☰', title: 'List view' },

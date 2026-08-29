@@ -9,7 +9,7 @@ import { removeCollectionEntriesBulk, removeDeckCardsMatching, setQuantityForTra
 import { useFiling } from '../deck/useFiling.js';
 import { CardSheet } from './CardSheet.js';
 import { useConfirm } from './ConfirmSheet.js';
-import { CardItems, ViewToggle, useViewMode } from './CardViews.js';
+import { CardItems, ViewToggle, useGridColumns, useViewMode } from './CardViews.js';
 import { collectionCardItem } from './cardRows.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { LoadMoreSentinel } from './LoadMoreSentinel.js';
@@ -155,7 +155,8 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // thousands of entries, so rendering all of them (each a tile with images and
   // badges) janks on phones. Reset to page one when the sort or search changes.
   const filterSig = JSON.stringify({ onlyTrade, sort, query, placeFilter });
-  const { limit, showMore } = usePagedLimit(filterSig, 60);
+  const { gridRef, columns } = useGridColumns();
+  const { limit, showMore } = usePagedLimit(filterSig, 60, columns);
   const visible = filtered.slice(0, limit);
 
   // Selected keys (= entry ids) resolved back to their rows for bulk actions.
@@ -347,6 +348,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       ) : (
         <CardItems
           view={view}
+          gridRef={gridRef}
           selectable={sel.active}
           selectedKeys={sel.selected}
           onToggleSelect={sel.toggle}

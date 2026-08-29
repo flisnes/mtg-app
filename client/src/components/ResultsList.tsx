@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
+import { CardItems, ViewToggle, useGridColumns, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { LoadMoreSentinel } from './LoadMoreSentinel.js';
 
@@ -41,7 +41,8 @@ export function ResultsList({
   emptyText?: string;
 }) {
   const [view, setView] = useViewMode();
-  const { limit, showMore } = usePagedLimit(pageKey, pageSize);
+  const { gridRef, columns } = useGridColumns();
+  const { limit, showMore } = usePagedLimit(pageKey, pageSize, columns);
   const visible = items.slice(0, limit);
 
   return (
@@ -58,7 +59,7 @@ export function ResultsList({
         <p className="search-meta">{emptyText}</p>
       ) : (
         <>
-          <CardItems view={view} items={visible} />
+          <CardItems view={view} items={visible} gridRef={gridRef} />
           <LoadMoreSentinel hasMore={items.length > visible.length} onLoadMore={showMore} rearmKey={visible.length} />
         </>
       )}

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Icon } from './icons.js';
 import { ManaCost } from './ManaCost.js';
 import { useCardCursorCtx } from './useCardCursor.js';
@@ -155,9 +155,16 @@ export function CardItems({
   items,
   view,
   className,
+  gridRef,
   ...sel
-}: { items: CardItem[]; view: ViewMode; className?: string } & SelectProps) {
-  if (view === 'grid') return <CardGrid items={items} className={className} {...sel} />;
+}: {
+  items: CardItem[];
+  view: ViewMode;
+  className?: string;
+  /** Handed to the grid so a paged caller can measure its column count. */
+  gridRef?: (el: HTMLUListElement | null) => void;
+} & SelectProps) {
+  if (view === 'grid') return <CardGrid items={items} className={className} gridRef={gridRef} {...sel} />;
   if (view === 'stack') return <CardStacks items={items} className={className} {...sel} />;
   return <CardList items={items} className={className} {...sel} />;
 }
@@ -368,13 +375,19 @@ export function CardStacks({
 export function CardGrid({
   items,
   className,
+  gridRef,
   selectable = false,
   selectedKeys,
   onToggleSelect,
-}: { items: CardItem[]; className?: string } & SelectProps) {
+}: {
+  items: CardItem[];
+  className?: string;
+  gridRef?: (el: HTMLUListElement | null) => void;
+} & SelectProps) {
   const cursor = useCardCursorCtx();
   return (
     <ul
+      ref={gridRef}
       className={`card-grid${className ? ` ${className}` : ''}`}
       onMouseLeave={cursor ? () => cursor.setActive(null) : undefined}
     >
@@ -430,4 +443,39 @@ export function CardGrid({
       })}
     </ul>
   );
+}
+
+// How many cards fit across the grid right now. The template is
+// `repeat(auto-fill, minmax(…, 1fr))`, so only the browser knows the answer:
+// read it back off the resolved style and re-read it whenever the grid resizes.
+//
+// Paging uses this to load whole rows. A page of 60 on a 7-wide grid leaves a
+// half-empty last row hanging, which reads as "that's all there is" and stops
+// people scrolling for the rest. Zero (list view, or nothing rendered yet)
+// means "don't round".
+export function useGridColumns(): {
+  gridRef: (el: HTMLUListElement | null) => void;
+  columns: number;
+} {
+  const [grid, setGrid] = useState<HTMLUListElement | null>(null);
+  const [columns, setColumns] = useState(0);
+  const gridRef = useCallback((el: HTMLUListElement | null) => setGrid(el), []);
+
+  useEffect(() => {
+    if (!grid) {
+      setColumns(0);
+      return;
+    }
+    const measure = () => {
+      const template = getComputedStyle(grid).gridTemplateColumns;
+      // `none` is the horizontal card-row variant; it has no columns to count.
+      setColumns(!template || template === 'none' ? 0 : template.split(' ').filter(Boolean).length);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(grid);
+    return () => ro.disconnect();
+  }, [grid]);
+
+  return { gridRef, columns };
 }

@@ -3,7 +3,7 @@ import type { OracleCard, Priced, Printing, Rarity } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
-import { CardItems, ViewToggle, useViewMode, type CardItem } from './CardViews.js';
+import { CardItems, ViewToggle, useGridColumns, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { SortControls, formatPrice, useCardSort } from './CardSorting.js';
 import type { MultiSelect } from './useMultiSelect.js';
@@ -108,7 +108,12 @@ export function CardSearchView({
   // The debounce in useCardSearch swallows the extra run so only one search fires.
   // Reordering starts over at page one too: "cheapest first" sorts the whole
   // match set, so page three of the old order says nothing about the new one.
-  const { limit, showMore } = usePagedLimit(`${query}|${JSON.stringify(eff)}|${sortKey ? `${sort.key}:${sort.dir}` : ''}`, PAGE_SIZE);
+  const { gridRef, columns } = useGridColumns();
+  const { limit, showMore } = usePagedLimit(
+    `${query}|${JSON.stringify(eff)}|${sortKey ? `${sort.key}:${sort.dir}` : ''}`,
+    PAGE_SIZE,
+    columns,
+  );
 
   const searchSort = useMemo(() => ({ key: sort.key, dir: sort.dir }), [sort.key, sort.dir]);
   const { results, total, searching } = useCardSearch(query, {
@@ -204,6 +209,7 @@ export function CardSearchView({
 
           <CardItems
             view={view}
+            gridRef={gridRef}
             selectable={selection?.sel.active}
             selectedKeys={selection?.sel.selected}
             onToggleSelect={selection?.sel.toggle}

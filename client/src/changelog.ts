@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.141.6',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Cards now load in whole rows. A batch that ended mid-row looked like the end of the list and stopped people scrolling for the rest.',
+      },
+    ],
+  },
+  {
     version: '0.141.5',
     changes: [
       {
@@ -162,15 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Press ? for the full list of keyboard shortcuts, which were all invisible until now. Also new: + adds the search result you are pointing at, / jumps to the search box, v switches list and grid, and x ticks a card for a bulk action.',
-      },
-    ],
-  },
-  {
-    version: '0.139.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Deck building from the keyboard. Point at a card and press + or - to change its copies, Enter to open it, Delete to remove it, and the arrow keys to walk between cards. Ctrl+K jumps to the search box. A run of + presses now folds into one line in the edit history.',
       },
     ],
   },

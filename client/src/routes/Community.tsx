@@ -7,7 +7,14 @@ import { compileCardQuery, rowPrintingSummary, toSearchableEntry } from '../card
 import { Avatar } from '../components/Avatar.js';
 import { CardRow } from '../components/CardRow.js';
 import { CardSheet } from '../components/CardSheet.js';
-import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
+import {
+  CardItems,
+  ViewToggle,
+  useGridColumns,
+  useViewMode,
+  type CardItem,
+  type ViewMode,
+} from '../components/CardViews.js';
 import {
   SortControls,
   sortCards,
@@ -492,7 +499,8 @@ function ListSection<T extends { hi: boolean; match: boolean; own: boolean }>({
   build: (rows: T[]) => CardItem[];
   signature: string;
 }) {
-  const { limit, showMore } = usePagedLimit(signature, PAGE_SIZE);
+  const { gridRef, columns } = useGridColumns();
+  const { limit, showMore } = usePagedLimit(signature, PAGE_SIZE, columns);
   const visible = build(items.slice(0, limit));
   const hasMore = items.length > limit;
 
@@ -517,7 +525,7 @@ function ListSection<T extends { hi: boolean; match: boolean; own: boolean }>({
         <CardRow items={visible} hasMore={hasMore} onLoadMore={showMore} />
       ) : (
         <>
-          <CardItems view={view} items={visible} />
+          <CardItems view={view} items={visible} gridRef={gridRef} />
           {hasMore && (
             <button className="show-more" onClick={showMore}>
               Show {Math.min(PAGE_SIZE, items.length - limit)} more
@@ -572,7 +580,8 @@ function UserListAll<
     });
   }, [rows, cards, fieldsOf, sort, query]);
 
-  const { limit, showMore } = usePagedLimit(`all|${heading}|${query}|${rows.length}`, PAGE_SIZE);
+  const { gridRef, columns } = useGridColumns();
+  const { limit, showMore } = usePagedLimit(`all|${heading}|${query}|${rows.length}`, PAGE_SIZE, columns);
   const items = build(filtered.slice(0, limit));
 
   return (
@@ -605,7 +614,7 @@ function UserListAll<
         <p className="search-meta">Nothing here matches.</p>
       ) : (
         <>
-          <CardItems view={view} items={items} />
+          <CardItems view={view} items={items} gridRef={gridRef} />
           <LoadMoreSentinel hasMore={filtered.length > items.length} onLoadMore={showMore} rearmKey={items.length} />
         </>
       )}

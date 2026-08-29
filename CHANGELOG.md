@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.141.6
+
+- **Cards load a whole number of rows at a time.** A batch used to end mid-row, and a half-empty last row looks like the end of your collection, so people stopped scrolling before the next batch loaded. The count now rounds up to fill the row, however wide your screen is.
+
 ## 0.141.5
 
 - **The value and the "..." button on a deck, binder or box row sit at the right edge now.** They used to trail whatever badges the row happened to have, so they stepped left and right down the list; now they line up in a column you can run your thumb down.

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
@@ -50,7 +50,7 @@ import { useFiling } from '../deck/useFiling.js';
 import { unfileClashes, type FilingCopy } from '../deck/filing.js';
 import { useAsyncAction } from './useAsyncAction.js';
 import { CardStacks, ViewToggle, useScanViewMode, type CardItem } from './CardViews.js';
-import { formatPrice, pricedForFinish } from './cardSort.js';
+import { addToTotal, formatPrice, formatTotal, pricedForFinish, type PriceTotal } from './cardSort.js';
 import { useCardMaps } from '../db/useCardMaps.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
@@ -2210,11 +2210,17 @@ function SessionSheet({
   const [editing, setEditing] = useState<{ index: number; oracle: Priced<OracleCard> } | null>(null);
   const [view, setView] = useScanViewMode();
   const showBoards = target.kind === 'deck' && deckBoards(target).length > 1;
-  // Stacks show set names and prices, which a session entry doesn't carry;
-  // plain rows don't, so they don't pay for the lookup.
-  const { printMap } = useCardMaps(
-    view === 'stack' ? entries.map((e) => ({ scryfallId: e.scryfallId, oracleId: e.oracleId })) : [],
-  );
+  // Both views show set names and prices, which a session entry doesn't
+  // carry, and the footer sums them — so the lookup runs either way.
+  const { printMap, oracleMap } = useCardMaps(entries.map((e) => ({ scryfallId: e.scryfallId, oracleId: e.oracleId })));
+  const priceOf = (e: SessionEntry) => [pricedForFinish(printMap?.get(e.scryfallId), e.finish), oracleMap?.get(e.oracleId)];
+  // What the pile in your hand is worth, by the same reckoning as every other
+  // total in the app (per-card price × quantity, both currencies converted).
+  const totalValue = useMemo(() => {
+    const total: PriceTotal = { eur: 0, usd: 0 };
+    for (const e of entries) addToTotal(total, e.qty, ...priceOf(e));
+    return formatTotal(total);
+  }, [entries, printMap, oracleMap]);
 
   const adjust = (i: number, delta: number) => {
     const e = entries[i]!;
@@ -2300,7 +2306,7 @@ function SessionSheet({
                     {extras.length > 0 ? ` · ${extras.join(' · ')}` : ''}
                   </>
                 ),
-                price: formatPrice(pricedForFinish(printing, e.finish)),
+                price: formatPrice(...priceOf(e)),
                 onClick: () => void action.run('open that card', () => openEntry(i)),
                 actions: (
                   <>
@@ -2334,6 +2340,7 @@ function SessionSheet({
                       {e.finish !== 'nonfoil' ? ` · ${FINISH_LABELS[e.finish]}` : ''}
                       {e.condition !== 'NM' ? ` · ${e.condition}` : ''}
                     </span>
+                    {formatPrice(...priceOf(e)) && <span className="scan-list-price">{formatPrice(...priceOf(e))}</span>}
                   </span>
                 </button>
                 {showBoards && (
@@ -2353,6 +2360,13 @@ function SessionSheet({
               </li>
             ))}
           </ul>
+        )}
+
+        {entries.length > 0 && (
+          <div className="scan-list-total">
+            <span>Total value</span>
+            <strong>{totalValue}</strong>
+          </div>
         )}
 
         <div className="scan-confirm-actions">

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.141.3
+
+- **Both card layouts in the scanned-cards list show prices now, and the list totals what you scanned.** The plain rows were the ones missing a price; they have one under the printing line. A "Total value" figure sits above the Add button, so you can see what the pile in your hand is worth before it lands in the collection.
+
 ## 0.141.2
 
 - **Finish, condition and language in the scanner are buttons that cycle now, not dropdowns.** Tap one and it steps to the next value, wrapping round at the end, so tagging a foil or a Japanese card is one tap instead of a tap, a list and a second tap. The buttons are bigger than the old dropdowns were, and a pinned value still wears its padlock. On a keyboard, shift-click or alt-click steps backwards.

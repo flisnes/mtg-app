@@ -5423,6 +5423,27 @@ a.seg {
   color: var(--danger);
   border: 1px solid var(--danger);
 }
+.scan-list-price {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+/* What the whole scanned pile is worth, above the Add button. */
+.scan-list-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+.scan-list-total strong {
+  font-size: 1.05rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
 .scan-list-qty {
   display: flex;
   align-items: center;

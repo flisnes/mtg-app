@@ -1,4 +1,4 @@
-// The older half of the changelog (0.135.8 down to 0.98.0), split out of
+// The older half of the changelog (0.136.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,15 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.136.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Undo in the edit history is no longer limited to the newest entry. Any change can be reversed as long as nothing newer has touched the same copies, filters and all.',
+      },
+    ],
+  },
   {
     version: '0.135.8',
     changes: [

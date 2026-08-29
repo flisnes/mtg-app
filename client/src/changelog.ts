@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.141.3',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The scanned-cards list shows a price on both card layouts now, and a total value for everything you scanned above the Add button.',
+      },
+    ],
+  },
+  {
     version: '0.141.2',
     changes: [
       {
@@ -162,15 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: "Ctrl+Z undoes your last change on the page you're looking at, Ctrl+Y puts it back (Cmd on a Mac). Neither reaches into a deck you've navigated away from, and both leave your typing alone.",
-      },
-    ],
-  },
-  {
-    version: '0.136.0',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Undo in the edit history is no longer limited to the newest entry. Any change can be reversed as long as nothing newer has touched the same copies, filters and all.',
       },
     ],
   },

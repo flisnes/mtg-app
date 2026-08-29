@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.141.2',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Finish, condition and language in the scanner are now buttons that cycle through the options instead of dropdowns. One tap per step, and they are bigger to hit.',
+      },
+    ],
+  },
+  {
     version: '0.141.1',
     changes: [
       {
@@ -162,15 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Undo in the edit history is no longer limited to the newest entry. Any change can be reversed as long as nothing newer has touched the same copies, filters and all.',
-      },
-    ],
-  },
-  {
-    version: '0.135.8',
-    changes: [
-      {
-        kind: 'fixed',
-        text: "Buttons whose work fails now tell you, instead of looking like they did nothing. Fifteen of them were silent before, from editing a price in a card's history to changing how many sealed boxes you own.",
       },
     ],
   },

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.141.2
+
+- **Finish, condition and language in the scanner are buttons that cycle now, not dropdowns.** Tap one and it steps to the next value, wrapping round at the end, so tagging a foil or a Japanese card is one tap instead of a tap, a list and a second tap. The buttons are bigger than the old dropdowns were, and a pinned value still wears its padlock. On a keyboard, shift-click or alt-click steps backwards.
+
 ## 0.141.1
 
 - **The scanner's card row shows the set symbol above each card instead of below, and bigger.** The plus and minus buttons on the cards now sit in their own rings, so they stay visible on light borders and busy art rather than disappearing into it.

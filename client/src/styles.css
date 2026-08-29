@@ -5040,30 +5040,41 @@ a.seg {
   overflow-x: auto;
   flex-shrink: 0;
 }
+/* Each pick is a button that cycles its options, not a dropdown: bigger to hit
+   and no overlay between you and the card in frame. */
 .scan-pick {
   display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
   flex-shrink: 0;
+  min-width: 4.9rem;
+  padding: 0.3rem 0.55rem;
   color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  text-align: left;
+}
+.scan-pick:active {
+  background: rgba(255, 255, 255, 0.22);
+}
+.scan-pick-label {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
   font-size: 0.6rem;
+  line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.scan-pick select {
-  padding: 0.15rem 0.25rem;
-  font-size: 0.75rem;
+.scan-pick-value {
   color: #fff;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  text-transform: none;
-  letter-spacing: 0;
+  font-size: 0.85rem;
+  line-height: 1.1;
 }
 .scan-pick-locked {
   color: var(--accent);
-}
-.scan-pick-locked select {
   border-color: var(--accent);
 }
 .scan-pick-note {

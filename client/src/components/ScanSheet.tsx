@@ -462,6 +462,50 @@ function orderTrayCandidates(candidates: Candidate[], ocrHit: string | null, own
   return [...candidates].sort((a, b) => isHit(a) - isHit(b) || ownsExact(a) - ownsExact(b));
 }
 
+/**
+ * One of the three per-card details, as a button that cycles rather than a
+ * dropdown: scanning is a one-handed job and a native select costs a tap, an
+ * overlay and a second tap. Tap steps forward, shift/alt-click steps back (a
+ * long language list shouldn't need eleven taps to get home).
+ */
+function CyclePick<T extends string>({
+  label,
+  value,
+  options,
+  onPick,
+  render,
+  locked,
+}: {
+  label: string;
+  value: T;
+  options: readonly T[];
+  onPick: (v: T) => void;
+  render?: (v: T) => string;
+  locked?: boolean;
+}) {
+  const step = (back: boolean) => {
+    if (options.length < 2) return;
+    const at = options.indexOf(value);
+    // An unknown current value starts the walk at the front of the list.
+    const next = options[at < 0 ? 0 : (at + (back ? -1 : 1) + options.length) % options.length];
+    if (next !== undefined) onPick(next);
+  };
+  const shown = render ? render(value) : value;
+  return (
+    <button
+      type="button"
+      className={locked ? 'scan-pick scan-pick-locked' : 'scan-pick'}
+      aria-label={`${label}: ${shown}. Tap to change`}
+      onClick={(e) => step(e.shiftKey || e.altKey)}
+    >
+      <span className="scan-pick-label">
+        {locked ? <Icon name="lock" size={10} /> : null} {label}
+      </span>
+      <span className="scan-pick-value">{shown}</span>
+    </button>
+  );
+}
+
 export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target?: ScanTarget; onClose: () => void }) {
   const commitAction = useAsyncAction();
   const storageKey = sessionStorageKey(target);
@@ -1098,6 +1142,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     setCondition(c);
     retagLockAdds(picked, { ...picked, condition: c });
   };
+  // A pinned language from an older session can sit outside the list; keep it
+  // in the cycle so the button can leave it and come back to it.
+  const langOptions = LANGS.includes(lang) ? LANGS : [...LANGS, lang];
   const pickLang = (v: string) => {
     setLang(v);
     langTouchedRef.current = true;
@@ -1762,37 +1809,22 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           lock's adds. Pinned values wear a padlock; the rest reset with the next card. */}
       {stage.kind === 'scanning' && (
         <div className="scan-picks" role="group" aria-label="Details for the card you scan">
-          <label className={locks.finish ? 'scan-pick scan-pick-locked' : 'scan-pick'}>
-            <span>{locks.finish ? <Icon name="lock" size={10} /> : null} Finish</span>
-            <select value={finish} onChange={(e) => pickFinish(e.target.value as Finish)}>
-              {FINISHES.map((f) => (
-                <option key={f} value={f}>
-                  {FINISH_LABELS[f]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="scan-pick">
-            <span>Cond</span>
-            <select value={condition} onChange={(e) => pickCondition(e.target.value as Condition)}>
-              {CONDITIONS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={locks.lang ? 'scan-pick scan-pick-locked' : 'scan-pick'}>
-            <span>{locks.lang ? <Icon name="lock" size={10} /> : null} Lang</span>
-            <select value={lang} onChange={(e) => pickLang(e.target.value)}>
-              {LANGS.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-              {!LANGS.includes(lang) && <option value={lang}>{lang}</option>}
-            </select>
-          </label>
+          <CyclePick
+            label="Finish"
+            locked={!!locks.finish}
+            value={finish}
+            options={FINISHES}
+            render={(f) => FINISH_LABELS[f]}
+            onPick={pickFinish}
+          />
+          <CyclePick label="Cond" value={condition} options={CONDITIONS} onPick={pickCondition} />
+          <CyclePick
+            label="Lang"
+            locked={!!locks.lang}
+            value={lang}
+            options={langOptions}
+            onPick={pickLang}
+          />
           {setMissed && <span className="scan-pick-note">No {locks.set!.toUpperCase()} match</span>}
           {pendingId && (
             <button className="scan-pick-new" onClick={releaseTray}>

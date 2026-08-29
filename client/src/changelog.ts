@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.140.6',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The scanner card row now scrolls back to the start for every new card, including the next copy of the card you just scanned.',
+      },
+    ],
+  },
+  {
     version: '0.140.5',
     changes: [
       {

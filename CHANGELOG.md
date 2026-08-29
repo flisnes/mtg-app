@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.140.6
+
+- **The scanner's card row rewinds to the start for every new card.** It already did that when the next card was a different one, but scanning a second copy of the same card left the row wherever you had scrolled it, so the printing under your thumb was the one you picked last time rather than the first match.
+
 ## 0.140.5
 
 - **The scanner's card row stops moving while you are picking a printing.** Scroll it or tap it and the row is yours: a thin bar along its top edge shows how long it stays put, and a card that comes into frame meanwhile waits its turn instead of shoving the printings sideways just as you tap. The bar turns purple with a "New card" chip when one is queued, tap that to hand the row over early, or take the card out of frame and the next one comes straight in. Scrolling back to the start also gives the row back at once.

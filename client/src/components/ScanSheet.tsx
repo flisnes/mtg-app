@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
@@ -120,6 +120,9 @@ type Stage =
 
 /** The current lock's candidates, shown in the bottom tray until the next lock. */
 interface Tray {
+  /** Bumped once per accepted lock, so a second copy of the same card (same
+   *  topId) still counts as a new tray for anything that rewinds on one. */
+  seq: number;
   /** Top candidate of the lock that produced this tray — dedups re-locks of the same card. */
   topId: string;
   candidates: Candidate[];
@@ -519,6 +522,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const indexRef = useRef<ScanIndex | null>(null);
   const trayRef = useRef<Tray | null>(null);
   const trayElRef = useRef<HTMLDivElement>(null);
+  const traySeqRef = useRef(0);
   // The tray is the user's while they browse it. `holdUntil` is when it goes
   // back to the scanner (null = not held), `pendingId` is a different card that
   // locked meanwhile and was dropped — the camera never stops, so it re-locks on
@@ -603,12 +607,14 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holdUntil]);
 
-  // A genuinely new card: start the row from the left, and forget that the last
-  // one was browsed (this one hasn't been).
-  useEffect(() => {
+  // Every new lock — a different card, or the next copy of the same one — starts
+  // the row from the left, so a printing you scrolled to on the last card isn't
+  // what's under your thumb on this one. Keyed on the lock counter rather than
+  // the card, and laid out before paint so the old offset never flashes.
+  useLayoutEffect(() => {
     touchedRef.current = false;
     if (trayElRef.current) trayElRef.current.scrollLeft = 0;
-  }, [tray?.topId]);
+  }, [tray?.seq]);
 
   const updateTray = (t: Tray | null) => {
     const before = trayRef.current?.candidates.map((c) => c.scryfallId).join() ?? '';
@@ -901,6 +907,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     const pinpointed = inPin.length ? onePrinting(pool) : null;
     const ordered = pinpointed ? [pinpointed, ...candidates.filter((c) => c !== pinpointed)] : candidates;
     updateTray({
+      seq: ++traySeqRef.current,
       topId,
       candidates: orderTrayCandidates(ordered, pinpointed?.scryfallId ?? null, ownershipRef.current),
       ocr: pinpointed ? 'confirmed' : 'pending',

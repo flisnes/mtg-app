@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.141.5
+
+- **The value and the "..." button on a deck, binder or box row sit at the right edge now.** They used to trail whatever badges the row happened to have, so they stepped left and right down the list; now they line up in a column you can run your thumb down.
+
 ## 0.141.4
 
 - **Visual stacks are the view you get by default now, on the trade board and in the scanned card list**, and the card at the bottom of a stack always shows in full. That bottom card is the one you just scanned or added, so it is the one you most want to look at, and a stack that ended in a sliver of a card looked cut off. Card tiles and plain rows are still one tap away on the toggle.

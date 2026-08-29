@@ -812,6 +812,19 @@ button.danger-outline {
   flex-direction: column;
   gap: 0.25rem;
   min-width: 0;
+  flex: 1;
+}
+/* Value and the options button ride the right edge, so they line up down the
+   list instead of drifting with however wide each row's badges got. */
+.deck-row-end {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.deck-row-end .badge {
+  margin-left: 0;
 }
 .deck-name {
   font-weight: 500;

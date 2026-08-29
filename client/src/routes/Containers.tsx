@@ -425,48 +425,50 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                             {main} card{main === 1 ? '' : 's'}
                           </span>
                         )}
-                        {/* What you own in here, not what the list would cost to build. */}
-                        {ownText && (
-                          <span
-                            className="badge badge-value"
-                            title={
-                              missText
-                                ? `${ownText} owned · ${missText} more in cards you don't own`
-                                : `${ownText} owned — everything here is in your collection`
-                            }
-                          >
-                            {ownText}
-                          </span>
-                        )}
                         {folderName && <span className="badge deck-folder-badge">{folderName}</span>}
                       </span>
                     </span>
-                    <span onClick={swallow}>
-                      <OptionsMenu
-                        label={`${deck.name} options`}
-                        actions={[
-                          {
-                            label: deck.emblem ? 'Change emblem' : 'Choose an emblem',
-                            icon: 'emblem' as const,
-                            onClick: () => setEmblemDeck(deck),
-                          },
-                          ...(isDeck
-                            ? [
-                                {
-                                  label: 'Move to folder',
-                                  icon: 'folder' as const,
-                                  onClick: () => setMovingDeck({ id: deck.id, name: deck.name, folderId: deck.folderId }),
-                                },
-                              ]
-                            : []),
-                          {
-                            label: `Delete ${meta.noun}`,
-                            icon: 'trash',
-                            danger: true,
-                            onClick: () => void removeDeck(deck),
-                          },
-                        ]}
-                      />
+                    <span className="deck-row-end">
+                      {/* What you own in here, not what the list would cost to build. */}
+                      {ownText && (
+                        <span
+                          className="badge badge-value"
+                          title={
+                            missText
+                              ? `${ownText} owned · ${missText} more in cards you don't own`
+                              : `${ownText} owned — everything here is in your collection`
+                          }
+                        >
+                          {ownText}
+                        </span>
+                      )}
+                      <span onClick={swallow}>
+                        <OptionsMenu
+                          label={`${deck.name} options`}
+                          actions={[
+                            {
+                              label: deck.emblem ? 'Change emblem' : 'Choose an emblem',
+                              icon: 'emblem' as const,
+                              onClick: () => setEmblemDeck(deck),
+                            },
+                            ...(isDeck
+                              ? [
+                                  {
+                                    label: 'Move to folder',
+                                    icon: 'folder' as const,
+                                    onClick: () => setMovingDeck({ id: deck.id, name: deck.name, folderId: deck.folderId }),
+                                  },
+                                ]
+                              : []),
+                            {
+                              label: `Delete ${meta.noun}`,
+                              icon: 'trash',
+                              danger: true,
+                              onClick: () => void removeDeck(deck),
+                            },
+                          ]}
+                        />
+                      </span>
                     </span>
                   </Link>
                 </li>

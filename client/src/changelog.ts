@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.141.5',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Deck, binder and box rows keep their value and options button at the right edge, so they line up down the list instead of drifting with the badges.',
+      },
+    ],
+  },
+  {
     version: '0.141.4',
     changes: [
       {
@@ -162,15 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Deck building from the keyboard. Point at a card and press + or - to change its copies, Enter to open it, Delete to remove it, and the arrow keys to walk between cards. Ctrl+K jumps to the search box. A run of + presses now folds into one line in the edit history.',
-      },
-    ],
-  },
-  {
-    version: '0.138.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Copy, cut and paste cards on a deck, binder or box. Ctrl+C gives you a decklist anywhere else and the exact printings back in the app, Ctrl+X moves cards between decks in one undoable step, and Ctrl+V on a list from any website opens the import review already filled in. Ctrl+A selects the lot.',
       },
     ],
   },

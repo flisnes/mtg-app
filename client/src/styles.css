@@ -5138,8 +5138,8 @@ a.seg {
   height: 100%;
   /* Card aspect 488/680 = 0.718; card box height = tile − caption − gap.
      dvh fallback first, then the container-measured truth where supported. */
-  width: calc((25dvh - 2.3rem - 2px - var(--safe-bottom)) * 0.718);
-  width: calc((100cqh - 1.3rem - 2px) * 0.718);
+  width: calc((25dvh - 2.6rem - 2px - var(--safe-bottom)) * 0.718);
+  width: calc((100cqh - 1.6rem - 2px) * 0.718);
   flex-shrink: 0;
 }
 .scan-tile-card {
@@ -5169,7 +5169,9 @@ a.seg {
   font-size: 0.7rem;
   color: var(--text-dim);
 }
-/* Invisible tap zones: top half adds a copy, bottom half takes one back. */
+/* Tap zones: top half adds a copy, bottom half takes one back. The zone
+   itself is transparent, but its badge is not — card art runs from black to
+   white borders to full-art, so the icons carry their own backdrop. */
 .scan-tile-half {
   position: absolute;
   left: 0;
@@ -5190,18 +5192,38 @@ a.seg {
 }
 /* Centered top/bottom so they never sit on the corner badges (session count,
    ownership check, edition-confirmed check). */
+.scan-tile-half::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.62);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
 .scan-tile-half svg {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  opacity: 0.85;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9));
 }
-.scan-tile-add svg {
+.scan-tile-add::before {
   top: 4px;
+  border: 1.5px solid rgba(63, 185, 80, 0.9);
+}
+.scan-tile-sub::before {
+  bottom: 4px;
+  border: 1.5px solid rgba(248, 81, 73, 0.9);
+}
+.scan-tile-add svg {
+  top: 9px;
+  color: #7ee787;
 }
 .scan-tile-sub svg {
-  bottom: 4px;
+  bottom: 9px;
+  color: #ff9a93;
 }
 .scan-tile-add:active {
   background: linear-gradient(rgba(63, 185, 80, 0.4), transparent);
@@ -5247,7 +5269,7 @@ a.seg {
 }
 .scan-tile-caption {
   font-size: 0.65rem;
-  line-height: 1.3rem; /* reserved in the tile height calc below */
+  line-height: 1.6rem; /* reserved in the tile height calc above */
   color: var(--text-dim);
   display: flex;
   align-items: center;
@@ -5260,7 +5282,7 @@ a.seg {
 /* Bigger than the symbol printed on the card art above, so the set is legible
    at a glance — most players recognise the symbol faster than the code. */
 .scan-tile-set {
-  font-size: 1.25rem;
+  font-size: 1.6rem;
   line-height: 1;
   color: var(--text);
   flex-shrink: 0;

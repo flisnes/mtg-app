@@ -1,4 +1,4 @@
-// The older half of the changelog (0.135.1 down to 0.98.0), split out of
+// The older half of the changelog (0.135.5 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,15 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.135.5',
+    changes: [
+      {
+        kind: 'fixed',
+        text: "A device running an older version no longer strips fields off your own synced data, and no longer skips rows it doesn't understand yet. Both used to need a full re-download of the account to repair.",
+      },
+    ],
+  },
   {
     version: '0.135.4',
     changes: [

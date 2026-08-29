@@ -2116,6 +2116,16 @@ function TrayTile({
   const name = c.oracle?.name ?? 'Unknown card';
   return (
     <div className="scan-tile">
+      <span className="scan-tile-caption">
+        {c.printing ? (
+          <>
+            <SetSymbol set={c.printing.set} className="scan-tile-set" title={c.printing.setName} />
+            {c.printing.set.toUpperCase()} #{c.printing.collectorNumber}
+          </>
+        ) : (
+          '—'
+        )}
+      </span>
       <div className="scan-tile-card">
         {c.printing?.imageNormal ? <img src={c.printing.imageNormal} alt={name} /> : <div className="scan-tile-ph">{name}</div>}
         {owned && (
@@ -2141,16 +2151,6 @@ function TrayTile({
           </span>
         )}
       </div>
-      <span className="scan-tile-caption">
-        {c.printing ? (
-          <>
-            <SetSymbol set={c.printing.set} className="scan-tile-set" title={c.printing.setName} />
-            {c.printing.set.toUpperCase()} #{c.printing.collectorNumber}
-          </>
-        ) : (
-          '—'
-        )}
-      </span>
     </div>
   );
 }

@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.141.1',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'In the scanner, the set symbol now sits above each card in the row and is bigger. The plus and minus buttons have rings around them so they stay visible on light card borders and busy art.',
+      },
+    ],
+  },
+  {
     version: '0.141.0',
     changes: [
       {
@@ -162,15 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: "Buttons whose work fails now tell you, instead of looking like they did nothing. Fifteen of them were silent before, from editing a price in a card's history to changing how many sealed boxes you own.",
-      },
-    ],
-  },
-  {
-    version: '0.135.5',
-    changes: [
-      {
-        kind: 'fixed',
-        text: "A device running an older version no longer strips fields off your own synced data, and no longer skips rows it doesn't understand yet. Both used to need a full re-download of the account to repair.",
       },
     ],
   },

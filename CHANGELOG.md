@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.141.0
+
+- **A new "visual stacks" view for the trade columns and the scanned card list.** The cards lie on top of each other down the column so only each name and mana cost shows, which leaves the space beside them for the set, the quantity and the price. Tap a card and the rest of it slides out, together with its quantity buttons and a way into its details; tap it again and it goes back on the pile. Pick it with the toggle on the trade board or in the scanned cards list. Card tiles and plain rows are unchanged and still the default.
+
 ## 0.140.6
 
 - **The scanner's card row rewinds to the start for every new card.** It already did that when the next card was a different one, but scanning a second copy of the same card left the row wherever you had scrolled it, so the printing under your thumb was the one you picked last time rather than the first match.

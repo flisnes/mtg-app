@@ -49,6 +49,9 @@ import { TAP_GUARD_MS, useTapGuard } from './useTapGuard.js';
 import { useFiling } from '../deck/useFiling.js';
 import { unfileClashes, type FilingCopy } from '../deck/filing.js';
 import { useAsyncAction } from './useAsyncAction.js';
+import { CardStacks, ViewToggle, useScanViewMode, type CardItem } from './CardViews.js';
+import { formatPrice, pricedForFinish } from './cardSort.js';
+import { useCardMaps } from '../db/useCardMaps.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
 // camera fills the top of the screen and never pauses; each lock (S3 consensus
@@ -2173,6 +2176,13 @@ function SessionSheet({
   // Row tap opens the card sheet on that line for full editing (edition,
   // condition, finish, language, quantity); Apply rewrites the line in place.
   const [editing, setEditing] = useState<{ index: number; oracle: Priced<OracleCard> } | null>(null);
+  const [view, setView] = useScanViewMode();
+  const showBoards = target.kind === 'deck' && deckBoards(target).length > 1;
+  // Stacks show set names and prices, which a session entry doesn't carry;
+  // plain rows don't, so they don't pay for the lookup.
+  const { printMap } = useCardMaps(
+    view === 'stack' ? entries.map((e) => ({ scryfallId: e.scryfallId, oracleId: e.oracleId })) : [],
+  );
 
   const adjust = (i: number, delta: number) => {
     const e = entries[i]!;
@@ -2225,6 +2235,7 @@ function SessionSheet({
         <div className="scan-sheet-head">
           <h2>Scanned cards</h2>
           <span className="scan-target">→ {targetLabel(target)}</span>
+          <ViewToggle mode={view} onChange={setView} options={['list', 'stack']} />
           <button className="scan-close" onClick={onClose} aria-label="Close list">
             <Icon name="close" size={18} />
           </button>
@@ -2232,6 +2243,52 @@ function SessionSheet({
 
         {entries.length === 0 ? (
           <p className="scan-list-empty">Nothing scanned yet. Tap the top half of a match to add it.</p>
+        ) : view === 'stack' ? (
+          <CardStacks
+            className="scan-stacks"
+            items={entries.map((e, i): CardItem => {
+              const printing = printMap?.get(e.scryfallId);
+              const extras = [
+                e.lang !== 'en' ? e.lang : null,
+                e.finish !== 'nonfoil' ? FINISH_LABELS[e.finish] : null,
+                e.condition !== 'NM' ? e.condition : null,
+              ].filter(Boolean);
+              return {
+                key: entryKey(e),
+                name: e.name,
+                image: printing?.imageNormal ?? e.image ?? null,
+                foil: e.finish !== 'nonfoil',
+                count: e.qty,
+                badge: showBoards ? BOARD_LABELS[e.board] : undefined,
+                sub: (
+                  <>
+                    <SetSymbol set={e.set} title={printing?.setName ?? e.set.toUpperCase()} />
+                    <span className="stack-setname">{printing?.setName ?? e.set.toUpperCase()}</span> #
+                    {e.collectorNumber}
+                    {extras.length > 0 ? ` · ${extras.join(' · ')}` : ''}
+                  </>
+                ),
+                price: formatPrice(pricedForFinish(printing, e.finish)),
+                onClick: () => void action.run('open that card', () => openEntry(i)),
+                actions: (
+                  <>
+                    <button onClick={() => adjust(i, -1)} aria-label={`One less ${e.name}`}>
+                      <Icon name="minus" size={16} />
+                    </button>
+                    <span className="stack-qty">{e.qty}</span>
+                    <button onClick={() => adjust(i, 1)} aria-label={`One more ${e.name}`}>
+                      <Icon name="plus" size={16} />
+                    </button>
+                    {showBoards && (
+                      <button className="scan-chip" onClick={() => cycleBoard(i)}>
+                        {BOARD_LABELS[e.board]}
+                      </button>
+                    )}
+                  </>
+                ),
+              };
+            })}
+          />
         ) : (
           <ul className="scan-list">
             {entries.map((e, i) => (
@@ -2247,7 +2304,7 @@ function SessionSheet({
                     </span>
                   </span>
                 </button>
-                {target.kind === 'deck' && deckBoards(target).length > 1 && (
+                {showBoards && (
                   <button className="scan-chip" onClick={() => cycleBoard(i)}>
                     {BOARD_LABELS[e.board]}
                   </button>

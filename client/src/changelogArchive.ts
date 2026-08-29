@@ -9,6 +9,33 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.135.4',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Back no longer skips a page when you close the search overlay or a card sheet. Each one parks its own history entry now instead of guessing which entry was its own, so back peels off exactly one layer at a time.',
+      },
+    ],
+  },
+  {
+    version: '0.135.3',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Unfile now offers the deck, binder or box you are standing in. The card stays on the list, still asking for the same copy, but stops holding one: the green filed badge drops to the double checkmark and the copy is free for another deck. "File back here" puts it back.',
+      },
+    ],
+  },
+  {
+    version: '0.135.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Pulling down to refresh works again. A fix in 0.134.5 pinned the gesture to the page and disabled the browser refresh along with it; the problem it was aimed at turned out to be already handled elsewhere.',
+      },
+    ],
+  },
+  {
     version: '0.135.1',
     changes: [
       {

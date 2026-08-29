@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.141.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Visual stacks: a view where cards overlap down the column with only their names showing, and the set, quantity and price beside them. Tap a card to open it fully. Toggle it on the trade board or in the scanned cards list.',
+      },
+    ],
+  },
+  {
     version: '0.140.6',
     changes: [
       {
@@ -162,33 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: "A device running an older version no longer strips fields off your own synced data, and no longer skips rows it doesn't understand yet. Both used to need a full re-download of the account to repair.",
-      },
-    ],
-  },
-  {
-    version: '0.135.4',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Back no longer skips a page when you close the search overlay or a card sheet. Each one parks its own history entry now instead of guessing which entry was its own, so back peels off exactly one layer at a time.',
-      },
-    ],
-  },
-  {
-    version: '0.135.3',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Unfile now offers the deck, binder or box you are standing in. The card stays on the list, still asking for the same copy, but stops holding one: the green filed badge drops to the double checkmark and the copy is free for another deck. "File back here" puts it back.',
-      },
-    ],
-  },
-  {
-    version: '0.135.2',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Pulling down to refresh works again. A fix in 0.134.5 pinned the gesture to the page and disabled the browser refresh along with it; the problem it was aimed at turned out to be already handled elsewhere.',
       },
     ],
   },

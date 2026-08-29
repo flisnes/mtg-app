@@ -14,9 +14,10 @@ import { CardSheet, type SessionCardValues } from '../components/CardSheet.js';
 import { CardSearchView } from '../components/CardSearchView.js';
 import { formatPrice, pricedForFinish } from '../components/CardSorting.js';
 import { fmtEur } from '../price/rates.js';
-import { CardItems, CardList, type CardItem } from '../components/CardViews.js';
+import { CardItems, CardList, ViewToggle, useTradeViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import { CodeJoinForm } from '../components/CodeJoinForm.js';
 import { Icon } from '../components/icons.js';
+import { SetSymbol } from '../components/SetSymbol.js';
 import { ownedBadge, type OwnedBadgeSpec } from '../components/OwnedBadge.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet, clearTradeScanSessions } from '../components/ScanSheet.js';
@@ -441,6 +442,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
 
   // Printings (images + prices) and oracle cards for both offers.
   const { printMap, oracleMap } = useCardMaps([...myOffer, ...theirOffer], priceEpoch);
+  const [view, setView] = useTradeViewMode();
   const eurOf = (l: TradeLine) => pricedForFinish(printMap?.get(l.scryfallId), l.finish)?.priceEur ?? 0;
   const totalOf = (lines: TradeLine[]) => lines.reduce((sum, l) => sum + eurOf(l) * l.quantity, 0);
   const openInfo: OpenInfo = (oracle, scryfallId, ctx) => setInfo({ oracle, scryfallId, ctx });
@@ -616,6 +618,9 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             {snap.present[peer] ? 'Other User connected' : 'Waiting for other user…'}
           </div>
         )}
+        {/* Both columns share one view: a board with tiles on one side and
+            stacks on the other would be a trade nobody can read across. */}
+        <ViewToggle mode={view} onChange={setView} options={['grid', 'stack']} />
       </div>
 
       {(theyWantCount > 0 || iWantCount > 0) && (
@@ -649,6 +654,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           oracles={oracleMap}
           onInfo={openInfo}
           onEdit={(side, line, oracle) => setEditingLine({ side, line, oracle })}
+          view={view}
         />
         <OfferPanel
           side="get"
@@ -668,6 +674,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           oracles={oracleMap}
           onInfo={openInfo}
           onEdit={(side, line, oracle) => setEditingLine({ side, line, oracle })}
+          view={view}
         />
       </div>
 
@@ -866,6 +873,7 @@ function OfferPanel({
   oracles,
   onInfo,
   onEdit,
+  view,
 }: {
   side: Side;
   title: string;
@@ -884,6 +892,8 @@ function OfferPanel({
   onInfo: OpenInfo;
   /** Tap a line in an editable trade: open the full edit sheet for it. */
   onEdit: (side: Side, line: TradeLine, oracle: Priced<OracleCard>) => void;
+  /** Card tiles or visual stacks, chosen for the whole board. */
+  view: ViewMode;
 }) {
   return (
     <section className="trade-col" aria-label={`Cards ${title.toLowerCase()}`}>
@@ -898,36 +908,58 @@ function OfferPanel({
           <p className="trade-empty">{empty}</p>
         ) : (
           <CardItems
-            view="grid"
+            view={view}
             items={lines.map((l): CardItem => {
               const ind = badge(l);
               const printing = printings?.get(l.scryfallId);
               const oracle = oracles?.get(l.oracleId);
+              const price = formatPrice(pricedForFinish(printing, l.finish));
+              const less = (
+                <button onClick={() => onQty(side, lineKey(l), l.quantity - 1)} aria-label="One fewer">
+                  −
+                </button>
+              );
+              const more = (
+                <button onClick={() => onQty(side, lineKey(l), l.quantity + 1)} aria-label="One more">
+                  ＋
+                </button>
+              );
               return {
                 key: lineKey(l),
                 name: l.name,
-                image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+                // Stacks show the card's own title bar at close to full size,
+                // where the small scan turns to mush; tiles are fine with it.
+                image: (view === 'stack' ? printing?.imageNormal : null) ?? printing?.imageSmall ?? oracle?.imageSmall ?? null,
                 foil: l.finish !== 'nonfoil',
                 count: l.quantity,
                 badge: ind?.icon,
                 badgeClass: ind?.cls,
                 badgeTitle: ind?.title,
+                sub: printing ? (
+                  <>
+                    <SetSymbol set={printing.set} title={printing.setName} />
+                    <span className="stack-setname">{printing.setName}</span>
+                  </>
+                ) : undefined,
+                price: price ?? '—',
                 onClick: oracle
                   ? () => (editable ? onEdit(side, l, oracle) : onInfo(oracle, l.scryfallId, { side }))
                   : undefined,
-                actions: (
+                // Stacks carry the price beside the card, so their buttons keep
+                // the quantity between them instead.
+                actions: view === 'stack' ? (
+                  editable ? (
+                    <>
+                      {less}
+                      <span className="stack-qty">{l.quantity}</span>
+                      {more}
+                    </>
+                  ) : undefined
+                ) : (
                   <>
-                    {editable && (
-                      <button onClick={() => onQty(side, lineKey(l), l.quantity - 1)} aria-label="One fewer">
-                        −
-                      </button>
-                    )}
-                    <span className="tile-price">{formatPrice(pricedForFinish(printing, l.finish)) ?? '—'}</span>
-                    {editable && (
-                      <button onClick={() => onQty(side, lineKey(l), l.quantity + 1)} aria-label="One more">
-                        ＋
-                      </button>
-                    )}
+                    {editable && less}
+                    <span className="tile-price">{price ?? '—'}</span>
+                    {editable && more}
                   </>
                 ),
               };

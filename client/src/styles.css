@@ -1672,6 +1672,161 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   text-align: center;
 }
 
+/* ---- Visual stacks ---- */
+/* Cards overlapping straight down the column, each one showing only its title
+   bar, so the space beside them can carry the set and the price. The crop is
+   the card's own aspect ratio cut short: 488/680 is the whole card, 488/98
+   stops just under the name. Rows butt together with no gap and each card
+   casts a shadow upwards, so a collapsed card's flat bottom edge reads as
+   "the next card is lying on top of it".
+
+   The face is a percentage of the row, not a fixed width — a trade column and
+   a full-width sheet are wildly different widths, and aspect-ratio resolves
+   from whatever the face ends up being either way. */
+.card-stacks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Share of the row taken by the card face; the details column gets the rest. */
+  --stack-face: 56%;
+  /* The details beside a card are sized against the stack, not the viewport:
+     the same list is half a phone wide in a trade column and full width in the
+     scan sheet, and only the wide one has room to spell the set out. */
+  container-type: inline-size;
+}
+.stack-item {
+  display: flex;
+  /* Centred against the title bar while collapsed; an expanded card is taller
+     than anything beside it, so its details go back to the top. */
+  align-items: center;
+  gap: 0.4rem;
+}
+.stack-open {
+  align-items: flex-start;
+}
+.stack-dim {
+  opacity: 0.5;
+}
+.stack-card {
+  position: relative;
+  flex: 0 0 var(--stack-face);
+  width: var(--stack-face);
+  display: block;
+  padding: 0;
+  border: none;
+  background: var(--surface-2);
+  border-radius: 8px 8px 0 0;
+  overflow: hidden;
+  aspect-ratio: 488 / 98;
+  /* On a desktop-width sheet a percentage face would grow to something the
+     size of a real card; the stack is meant to be read, not admired. */
+  max-width: 240px;
+  cursor: pointer;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.55);
+  transition: aspect-ratio 0.15s ease;
+}
+.stack-open .stack-card {
+  aspect-ratio: 488 / 680;
+  border-radius: 8px;
+  margin-bottom: 0.4rem;
+}
+/* The face keeps the card's real proportions and is anchored at the top; the
+   button above does the cropping. */
+.stack-card img {
+  width: 100%;
+  display: block;
+  aspect-ratio: 488 / 680;
+  object-fit: cover;
+}
+.stack-ph {
+  display: block;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stack-side {
+  flex: 1;
+  min-width: 0;
+}
+.stack-line {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+/* Hidden until the stack is wide enough to spell the set out; the symbol
+   beside it always shows, and says the same thing in a tenth of the room. */
+.stack-setname {
+  display: none;
+}
+@container (min-width: 320px) {
+  .stack-setname {
+    display: inline;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+.stack-sub {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stack-qty {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.stack-price {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+/* Everything that only an expanded card has room for. */
+.stack-more {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding-top: 0.4rem;
+}
+.stack-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.stack-actions button {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+.stack-details {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+}
+/* A trade column is half a phone wide, so the details column carries little
+   more than the price. */
+/* The scan review sheet is full width: a smaller face still reads, and the
+   long details column has room for the set name and the finish. */
+.scan-stacks {
+  --stack-face: 44%;
+  overflow-y: auto;
+}
+
 /* ---- Community: swipeable card rows ---- */
 /* One list as a single horizontal strip. The scroll container owns overflow;
    arrow buttons flank it (desktop only — touch just swipes). */

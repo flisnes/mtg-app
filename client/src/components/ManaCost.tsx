@@ -8,9 +8,12 @@
 // renders multi-line rules text with pips flowing inline among the words.
 
 // A few Scryfall tokens don't match their Mana font class name directly.
+// A bare {P} is Bloomburrow's paw print (the "Season of ..." modes), not
+// Phyrexian mana -- Phyrexian is always coloured on real cards ({W/P}, {G/P}).
 const ALIAS: Record<string, string> = {
   t: 'tap',
   q: 'untap',
+  p: 'paw',
   '∞': 'infinity',
 };
 

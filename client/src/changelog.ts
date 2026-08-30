@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.141.7',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The Bloomburrow paw print renders as a paw again. Cards that spend paw prints on their modes were showing the Phyrexian mana pip instead.',
+      },
+    ],
+  },
+  {
     version: '0.141.6',
     changes: [
       {
@@ -162,15 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'A pinned set also pinpoints editions faster. When the pin leaves one printing standing, the reader does not have to run: the green check lands as the card locks, and auto-add drops the copy straight in.',
-      },
-    ],
-  },
-  {
-    version: '0.139.1',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Press ? for the full list of keyboard shortcuts, which were all invisible until now. Also new: + adds the search result you are pointing at, / jumps to the search box, v switches list and grid, and x ticks a card for a bulk action.',
       },
     ],
   },

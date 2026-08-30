@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.141.7
+
+- **Bloomburrow's paw print no longer shows up as Phyrexian mana.** The "Season of ..." sorceries and Blustering Barnyard spend paw prints on their modes; the app was drawing the Phyrexian pip there instead, which reads as a completely different cost.
+
 ## 0.141.6
 
 - **Cards load a whole number of rows at a time.** A batch used to end mid-row, and a half-empty last row looks like the end of your collection, so people stopped scrolling before the next batch loaded. The count now rounds up to fill the row, however wide your screen is.

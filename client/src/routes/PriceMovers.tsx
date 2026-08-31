@@ -13,7 +13,7 @@ import { getPrefs } from '../prefs.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { ListSortControls, compareNullable, useListSort, type ListSortPrefs } from '../components/CardSorting.js';
-import { useListFilter } from '../components/GlobalSearch.js';
+import { ListSearchButton, useListFilter } from '../components/GlobalSearch.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { Sparkline } from '../components/Sparkline.js';
 import { SetSymbol } from '../components/SetSymbol.js';
@@ -259,6 +259,7 @@ export function PriceMovers() {
               )}
             </p>
             <div className="meta-actions">
+              <ListSearchButton />
               <ListSortControls prefs={sort} onChange={setSort} options={SORT_OPTIONS} />
             </div>
           </div>

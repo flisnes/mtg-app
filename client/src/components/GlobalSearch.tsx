@@ -155,6 +155,36 @@ export function useOpenSearch(): () => void {
 }
 
 /**
+ * The list page's own search button (see `ListSearchButton`): open search
+ * already narrowed to this page's list. The header bar deliberately doesn't do
+ * this — reaching for it nearly always means "find a card to add", so it starts
+ * unscoped and this button is how you say "search what's in front of me".
+ */
+export function useOpenListSearch(): () => void {
+  const ctx = useContext(Ctx);
+  const { pathname } = useLocation();
+  return () => {
+    ctx?.setScope(listScopeFor(pathname));
+    ctx?.setOpen(true);
+    ctx?.inputRef.current?.focus();
+  };
+}
+
+/** Magnifying glass in a list's toolbar: search this list, not the database. */
+export function ListSearchButton() {
+  const { pathname } = useLocation();
+  const openListSearch = useOpenListSearch();
+  const scope = listScopeFor(pathname);
+  if (!scope) return null;
+  const label = `Search your ${SCOPE_NOUN[scope]}`;
+  return (
+    <button className="select-toggle list-search-btn" onClick={openListSearch} title={label} aria-label={label}>
+      <Icon name="search" size={15} />
+    </button>
+  );
+}
+
+/**
  * The live search query when search is scoped to *this page's own list*, else
  * ''. List views (collection, tradelist, wishlist) call this and filter their
  * rows with it, which is what keeps sorting, multi-select and bulk actions
@@ -216,9 +246,11 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({});
-  // Pre-pick the list you're standing on, so search on /wishlist starts by
-  // filtering the wishlist.
-  const [scope, setScope] = useState<PageScope | null>(() => listScopeFor(pathname));
+  // Search starts unscoped everywhere, even on /wishlist: the header bar is
+  // mostly reached for to add a card, and a pre-picked list would hide the
+  // card you were looking for. Narrowing to the list you're standing on is one
+  // tap away on the list's own button (see `ListSearchButton`).
+  const [scope, setScope] = useState<PageScope | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const pendingRef = useRef<{ scope: Scope; query: string } | null>(null);
   const queuePending = (p: { scope: Scope; query: string }) => {
@@ -240,7 +272,7 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
     pendingRef.current = null;
     setQuery(pending?.query ?? '');
     setFilters({});
-    setScope(pending?.scope ?? listScopeFor(pathname));
+    setScope(pending?.scope ?? null);
     setOpen(!!pending);
     if (!pending) inputRef.current?.blur();
   }, [pathname, query]);
@@ -284,6 +316,10 @@ export function GlobalSearchBar() {
     recordSearch(query);
     setQuery('');
     setFilters({});
+    // Scope goes too, so the next tap on the bar starts on the whole database
+    // (the usual "find a card to add") rather than resuming a list filter the
+    // user already dismissed. The list's own button re-scopes in one tap.
+    setScope(null);
     setOpen(false);
     inputRef.current?.blur();
   }

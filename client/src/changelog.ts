@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.141.8',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The search bar in the header now searches every card, instead of starting on the list you were standing on. Each list keeps a magnifying glass next to Select for searching just that list, and the scope pills still switch either way.',
+      },
+    ],
+  },
+  {
     version: '0.141.7',
     changes: [
       {
@@ -158,19 +167,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Arrowing through a deck kept scrolling the card you were pointing at underneath the tab bar, so its purple outline was invisible. The cursor now stops where you can see it.',
-      },
-    ],
-  },
-  {
-    version: '0.140.0',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'The scanner’s set pin is a dropdown of the card’s editions instead of a checkbox that guessed from the card in frame. Set symbols, years, and a search box, so a card with twenty reprints pins the set you are actually holding.',
-      },
-      {
-        kind: 'changed',
-        text: 'A pinned set also pinpoints editions faster. When the pin leaves one printing standing, the reader does not have to run: the green check lands as the card locks, and auto-add drops the copy straight in.',
       },
     ],
   },

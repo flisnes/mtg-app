@@ -19,7 +19,7 @@ import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { addToTotal, formatTotal, SortControls, sortCards, useCardSort, type PriceTotal } from '../components/CardSorting.js';
 import { useEntrySortData, wishSortFields } from '../components/useEntrySort.js';
 import { HeaderValue } from '../components/ValueSummary.js';
-import { useListFilter, useOpenSearch } from '../components/GlobalSearch.js';
+import { ListSearchButton, useListFilter, useOpenSearch } from '../components/GlobalSearch.js';
 import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheet.js';
@@ -163,6 +163,7 @@ export function Wishlist() {
           <div className="meta-row">
             <p className="search-meta">{filtered.length} card{filtered.length === 1 ? '' : 's'}</p>
             <div className="meta-actions">
+              {!sel.active && <ListSearchButton />}
               {!sel.active && filtered.length > 0 && (
                 <SelectToggle onEnter={sel.enter} />
               )}

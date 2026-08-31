@@ -9,6 +9,19 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.140.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The scanner’s set pin is a dropdown of the card’s editions instead of a checkbox that guessed from the card in frame. Set symbols, years, and a search box, so a card with twenty reprints pins the set you are actually holding.',
+      },
+      {
+        kind: 'changed',
+        text: 'A pinned set also pinpoints editions faster. When the pin leaves one printing standing, the reader does not have to run: the green check lands as the card locks, and auto-add drops the copy straight in.',
+      },
+    ],
+  },
+  {
     version: '0.139.1',
     changes: [
       {

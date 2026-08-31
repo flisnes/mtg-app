@@ -24,7 +24,7 @@ import { collectionSortFields, useEntrySortData } from './useEntrySort.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { useGoblinMode } from './useGoblinMode.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
-import { useListFilter, useOpenSearch } from './GlobalSearch.js';
+import { ListSearchButton, useListFilter, useOpenSearch } from './GlobalSearch.js';
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
 
@@ -306,6 +306,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
               <Icon name="balance" size={15} /> Sort them out
             </button>
           )}
+          {!sel.active && (filtered.length > 0 || query) && <ListSearchButton />}
           {!sel.active && filtered.length > 0 && (
             <SelectToggle onEnter={sel.enter} />
           )}

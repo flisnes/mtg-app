@@ -1319,6 +1319,13 @@ button.danger-outline {
   white-space: nowrap;
 }
 
+/* Search this list, sat next to Select in the same toolbar. Icon only: the
+   header bar searches every card (opening it usually means "find one to add"),
+   and this is the one-tap way to narrow the list already on screen instead. */
+.list-search-btn {
+  padding: 0.45rem 0.6rem;
+}
+
 /* The same button, floating, once the toolbar's copy has scrolled off (see
    components/SelectToggle.tsx). Sits above the tab bar on the right, clear of
    the bulk bar's spot (which only appears once selection is on, by which point

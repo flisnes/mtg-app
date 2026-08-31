@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.141.8
+
+- **The search bar starts on every card, and each list got its own search button.** Opening search from the header used to pre-pick the list you were standing on, which hid the card you were looking for whenever you meant to add one. It now searches the whole database, and the magnifying glass next to Select searches just that collection, tradelist, wishlist or price movers list. The scope pills still switch either way round.
+
 ## 0.141.7
 
 - **Bloomburrow's paw print no longer shows up as Phyrexian mana.** The "Season of ..." sorceries and Blustering Barnyard spend paw prints on their modes; the app was drawing the Phyrexian pip there instead, which reads as a completely different cost.

@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { Finish, OracleCard, PublicUser, TradeLine, WishLine } from '@mtg/shared';
+import type { Finish, PublicUser, TradeLine, WishLine } from '@mtg/shared';
 import { ApiError, listUsers } from '../account/api.js';
 import { useAccount } from '../account/useAccount.js';
-import { compileCardQuery, rowPrintingSummary, toSearchableEntry } from '../cardDb/querySyntax.js';
 import { Avatar } from '../components/Avatar.js';
 import { CardRow } from '../components/CardRow.js';
 import { CardSheet } from '../components/CardSheet.js';
@@ -38,7 +37,7 @@ import {
   type InfoTarget,
 } from '../community/userLists.js';
 import { fmtDate } from '../util/format.js';
-import { EmptyState, Page } from './Page.js';
+import { EmptyState, Page, usePageMeta } from './Page.js';
 
 const PAGE_SIZE = 60;
 
@@ -352,7 +351,6 @@ function UserLists({
           <UserListAll
             heading="Has for trade"
             rows={tradeBase}
-            cards={cards}
             fieldsOf={(t) => tradeFields(t.line, cards)}
             build={(rows) => buildTradeItems(rows, cards, setInfo)}
             sort={tradeSort}
@@ -363,7 +361,6 @@ function UserLists({
           <UserListAll
             heading="Wants"
             rows={wishBase}
-            cards={cards}
             fieldsOf={(w) => wishFields(w.line, cards)}
             build={(rows) => buildWishItems(rows, cards, setInfo)}
             sort={wishSort}
@@ -537,7 +534,7 @@ function ListSection<T extends { hi: boolean; match: boolean; own: boolean }>({
   );
 }
 
-/** Full-screen list with its own search, sort, view toggle and scroll autoload. */
+/** Full-screen list with its own sort, view toggle and scroll autoload. */
 function UserListAll<
   T extends {
     hi: boolean;
@@ -548,7 +545,6 @@ function UserListAll<
 >({
   heading,
   rows,
-  cards,
   fieldsOf,
   build,
   sort,
@@ -557,7 +553,6 @@ function UserListAll<
 }: {
   heading: string;
   rows: T[];
-  cards: CardMaps | undefined;
   fieldsOf: (r: T) => SortFields;
   build: (rows: T[]) => CardItem[];
   sort: CardSortPrefs;
@@ -565,49 +560,28 @@ function UserListAll<
   onClose: () => void;
 }) {
   const [view, setView] = useViewMode();
-  const [query, setQuery] = useState('');
 
-  const filtered = useMemo(() => {
-    const q = compileCardQuery(query);
-    const sorted = sortCards(rows, fieldsOf, sort);
-    if (q.isEmpty) return sorted;
-    return sorted.filter((r) => {
-      const oracle = cards?.oracles.get(r.line.oracleId) as OracleCard | undefined;
-      // The line names its own printing, so `set:` and the printing-level `is:`
-      // keywords filter that copy rather than every printing of the card.
-      const printing = r.line.scryfallId ? cards?.printings.get(r.line.scryfallId) : undefined;
-      return !!oracle && q.matches(toSearchableEntry(oracle, rowPrintingSummary(printing, r.line.finish)));
-    });
-  }, [rows, cards, fieldsOf, sort, query]);
+  const filtered = useMemo(() => sortCards(rows, fieldsOf, sort), [rows, fieldsOf, sort]);
 
   const { gridRef, columns } = useGridColumns();
-  const { limit, showMore } = usePagedLimit(`all|${heading}|${query}|${rows.length}`, PAGE_SIZE, columns);
+  const { limit, showMore } = usePagedLimit(`all|${heading}|${rows.length}`, PAGE_SIZE, columns);
   const items = build(filtered.slice(0, limit));
+
+  // Which of their lists this is, and how big, reads as the page's own header
+  // line under their name. Searching it is the header bar's job — scoped to
+  // their lists the moment you land on their page.
+  const label = `${heading} · ${rows.length} card${rows.length === 1 ? '' : 's'}`;
+  const hoisted = usePageMeta(label);
 
   return (
     <>
-      <div className="list-section-head">
+      <div className="list-toolbar">
         <button className="ghost see-all" onClick={onClose}>
           ‹ Back
         </button>
-        <h2 className="list-all-heading">
-          {heading} ({rows.length})
-        </h2>
-        <div className="list-section-actions">
-          <SortControls prefs={sort} onChange={setSort} />
-          <ViewToggle mode={view} onChange={setView} />
-        </div>
-      </div>
-
-      <div className="search-field">
-        <Icon name="search" size={16} />
-        <input
-          className="search-input"
-          type="search"
-          placeholder="Search these cards…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        {!hoisted && <p className="search-meta">{label}</p>}
+        <SortControls prefs={sort} onChange={setSort} />
+        <ViewToggle mode={view} onChange={setView} />
       </div>
 
       {filtered.length === 0 ? (

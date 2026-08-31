@@ -26,7 +26,6 @@ export function Collection() {
   return (
     <Page
       title="Collection"
-      subtitle="Everything you own. Search above to filter it."
       aside={
         <HeaderValue
           value={headerValue(withSealed)}

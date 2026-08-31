@@ -570,6 +570,7 @@ button.danger-outline {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
+  margin-bottom: 0.85rem;
 }
 .page-header-text {
   min-width: 0;
@@ -586,7 +587,6 @@ button.danger-outline {
   align-items: flex-end;
   line-height: 1.15;
   text-align: right;
-  margin-top: 0.3rem;
   min-width: 0;
 }
 .header-value-label {
@@ -607,13 +607,21 @@ button.danger-outline {
   white-space: nowrap;
 }
 .page-header h1 {
-  margin: 0.25rem 0 0.25rem;
-  font-size: 1.5rem;
+  margin: 0;
+  font-size: 1.35rem;
+}
+/* Count line under the title (see Page's `meta`): the list's own header, so no
+   line of chrome above the cards has to carry it. */
+.page-meta {
+  margin: 0.15rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
 }
 .page-subtitle {
-  margin: 0 0 1.25rem;
+  margin: 0.25rem 0 0;
   color: var(--text-dim);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 .page-body {
   display: flex;
@@ -1074,6 +1082,20 @@ button.danger-outline {
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+/* A list page's toolbar (search / Select / filter / sort / view). It carries no
+   count text — that sits under the page title — so the controls pack from the
+   left in one wrapping row, lined up with the title and the cards below. */
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+/* List/grid stays at the right end of whatever line it lands on, so the row it
+   wraps onto doesn't read as a stray button under the filters. */
+.list-toolbar .view-toggle {
+  margin-left: auto;
 }
 .meta-actions {
   display: flex;
@@ -1917,28 +1939,6 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   padding: 0.45rem 0.7rem;
   font-size: 0.85rem;
 }
-.list-all-heading {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Search box with a leading magnifier (the See-all full list). */
-.search-field {
-  position: relative;
-  display: flex;
-  align-items: center;
-  margin: 0.6rem 0 0.9rem;
-}
-.search-field svg {
-  position: absolute;
-  left: 0.8rem;
-  color: var(--text-dim);
-  pointer-events: none;
-}
-.search-field .search-input {
-  padding-left: 2.3rem;
-}
-
 /* Foil sheen: an iridescent overlay for foil / etched cards. Every host — grid
    tile, list thumb, pile face, card sheet — gives it a positioned, clipped box
    to fill, so it inherits that box's rounding and sits above the card art. */

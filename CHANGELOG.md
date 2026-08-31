@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.141.9
+
+- **The collection, wishlist and tradelist give the cards the top of the screen.** The blurb under each title is gone, the title is smaller, and the entry count moved up beside it, so the grid starts about a third of a screen higher. The list/grid switch now sits at the right end of the toolbar row. Another user's "See all" list lost its own search box (the header search already covers their lists) and its heading no longer stacks up four lines tall.
+
 ## 0.141.8
 
 - **The search bar starts on every card, and each list got its own search button.** Opening search from the header used to pre-pick the list you were standing on, which hid the card you were looking for whenever you meant to add one. It now searches the whole database, and the magnifying glass next to Select searches just that collection, tradelist, wishlist or price movers list. The scope pills still switch either way round.

@@ -134,7 +134,7 @@ export function Wishlist() {
   return (
     <Page
       title="Wishlist"
-      subtitle="Cards you’re after, shown to trade partners during a session."
+      meta={rows && rows.length > 0 ? `${filtered.length} card${filtered.length === 1 ? '' : 's'}` : undefined}
       aside={<HeaderValue value={value} />}
       menu={
         <OptionsMenu
@@ -160,16 +160,11 @@ export function Wishlist() {
         </div>
       ) : (
         <>
-          <div className="meta-row">
-            <p className="search-meta">{filtered.length} card{filtered.length === 1 ? '' : 's'}</p>
-            <div className="meta-actions">
-              {!sel.active && <ListSearchButton />}
-              {!sel.active && filtered.length > 0 && (
-                <SelectToggle onEnter={sel.enter} />
-              )}
-              <SortControls prefs={sort} onChange={setSort} withDates />
-              <ViewToggle mode={view} onChange={setView} />
-            </div>
+          <div className="list-toolbar">
+            {!sel.active && <ListSearchButton />}
+            {!sel.active && filtered.length > 0 && <SelectToggle onEnter={sel.enter} />}
+            <SortControls prefs={sort} onChange={setSort} withDates />
+            <ViewToggle mode={view} onChange={setView} />
           </div>
           {filtered.length === 0 ? (
             <p className="search-meta">Nothing here matches.</p>

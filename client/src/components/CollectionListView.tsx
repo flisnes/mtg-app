@@ -27,6 +27,7 @@ import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { ListSearchButton, useListFilter, useOpenSearch } from './GlobalSearch.js';
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
+import { usePageMeta } from '../routes/Page.js';
 
 /** Join collection entries with their card + printing display data. */
 function useJoinedCollection(): JoinedEntry[] | undefined {
@@ -114,6 +115,11 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   }, [rows, matching, sort, sortData]);
 
   const totalQty = filtered.reduce((s, r) => s + r.entry.quantity, 0);
+  // The count belongs in the page header, right under the title, so the cards
+  // start as high up the screen as they can. Standing outside a Page (never
+  // today, but the view doesn't require one) it falls back to its own line.
+  const countLine = `${filtered.length} ${filtered.length === 1 ? 'entry' : 'entries'} · ${totalQty} card${totalQty === 1 ? '' : 's'}`;
+  const hoistedCount = usePageMeta(countLine);
 
   // The heap's cards. Memoized because PileView recomputes every copy's spot
   // whenever this array changes identity, and a fresh array on every render (a
@@ -296,38 +302,32 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
 
   return (
     <>
-      <div className="meta-row">
-        <p className="search-meta">
-          {filtered.length} entr{filtered.length === 1 ? 'y' : 'ies'} · {totalQty} card{totalQty === 1 ? '' : 's'}
-        </p>
-        <div className="meta-actions">
-          {placeFilter === 'conflict' && filtered.length > 0 && (
-            <button className="select-toggle" onClick={() => navigate('/conflicts')} title="Work through these one by one">
-              <Icon name="balance" size={15} /> Sort them out
-            </button>
-          )}
-          {!sel.active && (filtered.length > 0 || query) && <ListSearchButton />}
-          {!sel.active && filtered.length > 0 && (
-            <SelectToggle onEnter={sel.enter} />
-          )}
-          <div className="sort-controls">
-            <select
-              className={placeFilter === 'all' ? '' : 'filter-on'}
-              value={placeFilter}
-              onChange={(e) => setPlaceFilter(e.target.value as PlaceFilter)}
-              aria-label="Filter by where cards are filed"
-              title="Show only cards that are (or aren't) in a deck, binder or box"
-            >
-              {PLACE_OPTIONS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-          {!pileMode && <SortControls prefs={sort} onChange={setSort} withChange withDates />}
-          {!pileMode && <ViewToggle mode={view} onChange={setView} />}
+      {!hoistedCount && <p className="search-meta">{countLine}</p>}
+      <div className="list-toolbar">
+        {placeFilter === 'conflict' && filtered.length > 0 && (
+          <button className="select-toggle" onClick={() => navigate('/conflicts')} title="Work through these one by one">
+            <Icon name="balance" size={15} /> Sort them out
+          </button>
+        )}
+        {!sel.active && (filtered.length > 0 || query) && <ListSearchButton />}
+        {!sel.active && filtered.length > 0 && <SelectToggle onEnter={sel.enter} />}
+        <div className="sort-controls">
+          <select
+            className={placeFilter === 'all' ? '' : 'filter-on'}
+            value={placeFilter}
+            onChange={(e) => setPlaceFilter(e.target.value as PlaceFilter)}
+            aria-label="Filter by where cards are filed"
+            title="Show only cards that are (or aren't) in a deck, binder or box"
+          >
+            {PLACE_OPTIONS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
+        {!pileMode && <SortControls prefs={sort} onChange={setSort} withChange withDates />}
+        {!pileMode && <ViewToggle mode={view} onChange={setView} />}
       </div>
 
       {/* Goblin mode has no Select of its own: ticking cards out of a shuffled

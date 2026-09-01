@@ -52,7 +52,8 @@ export type IconName =
   | 'chevronDown'
   | 'expand'
   | 'moveTo'
-  | 'emblem';
+  | 'emblem'
+  | 'archive';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -86,6 +87,15 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M21 8.2v7.6a2 2 0 0 1-1 1.74l-7 3.9a2 2 0 0 1-2 0l-7-3.9A2 2 0 0 1 3 15.8V8.2a2 2 0 0 1 1-1.74l7-3.9a2 2 0 0 1 2 0l7 3.9A2 2 0 0 1 21 8.2z" />
       <polyline points="3.3 7.2 12 12 20.7 7.2" />
       <path d="M12 21.6V12" />
+    </>
+  ),
+  // Tray with a card dropping into it — archiving a deck you took apart. Kept
+  // clearly apart from `collection`, which is a lidded archive box.
+  archive: (
+    <>
+      <path d="M4 13v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
+      <path d="M12 3v9" />
+      <path d="M8.5 8.5 12 12l3.5-3.5" />
     </>
   ),
   // Folder with a tab — a group of decks.

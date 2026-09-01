@@ -35,9 +35,11 @@ import {
   setContainerForTrade,
   setDeckCardQuantity,
   setDeckCardsForTrade,
+  setDeckArchived,
   setDeckCardsUnfiled,
   setDeckEmblem,
   setDeckFormat,
+  unfileWholeContainer,
 } from '../db/dataAccess.js';
 import { addToWishlistBulk, applyImport } from '../db/dataAccess.js';
 import { checkDeckLegality, formatLabel, isBasicLand, isNonDeckCard, type LegalityReport } from '../deck/legality.js';
@@ -82,6 +84,7 @@ import { DeckHistory, HISTORY_ANCHOR } from '../components/DeckHistory.js';
 import { BulkActionBar, type BulkAction } from '../components/BulkActionBar.js';
 import { BOARD_LABEL, boardOptions, type BoardOption } from '../deck/boards.js';
 import { ContainerPickerSheet } from '../components/ContainerPickerSheet.js';
+import { ArchiveDeckSheet } from '../components/ArchiveDeckSheet.js';
 import { TagSheet } from '../components/TagSheet.js';
 import { useMultiSelect, type MultiSelect } from '../components/useMultiSelect.js';
 import { SelectToggle } from '../components/SelectToggle.js';
@@ -183,6 +186,9 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // 'file' picks somewhere to *also* put the selection, 'unfile' picks somewhere
   // to take it out of — the two halves of sorting out a card promised twice.
   const [picking, setPicking] = useState<'file' | 'unfile' | null>(null);
+  // Open the archive prompt; null when closed. See ArchiveDeckSheet for why
+  // "and take the cards out?" is a question rather than part of the action.
+  const [archiveOpen, setArchiveOpen] = useState(false);
   // The multi-select "Move to…" zone picker.
   const [moving, setMoving] = useState(false);
   // The multi-select "Tag…" sheet, frozen on the slots that were selected.
@@ -741,6 +747,23 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     );
   }
 
+  /**
+   * Put the deck away: it leaves the deck list for the Archived folder and keeps
+   * everything it has, so the list you built survives being taken apart. The
+   * cards are the separate question the sheet asks.
+   */
+  async function archiveDeck(unfile: boolean) {
+    setArchiveOpen(false);
+    const freed = unfile ? await unfileWholeContainer(id) : 0;
+    await setDeckArchived(id, true);
+    toast(
+      freed > 0
+        ? `Archived · ${freed} card${plural(freed)} back on the shelf`
+        : 'Archived · find it under Archived in the deck list',
+    );
+    navigate(meta.path);
+  }
+
   async function shareDeck() {
     const session = account.session;
     if (!session) return;
@@ -795,6 +818,22 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
             ...(isDeck && account.enabled && account.session
               ? [{ label: 'Share deck', icon: 'share' as const, onClick: () => void shareDeck() }]
               : []),
+            // Deck-only, and deliberately right above Delete: the two answers to
+            // "I'm done with this deck", one of which keeps the list.
+            ...(isDeck
+              ? [
+                  deck.archivedAt
+                    ? {
+                        label: 'Restore from archive',
+                        icon: 'refresh' as const,
+                        onClick: async () => {
+                          await setDeckArchived(id, false);
+                          toast('Restored to the deck list');
+                        },
+                      }
+                    : { label: 'Archive deck', icon: 'archive' as const, onClick: () => setArchiveOpen(true) },
+                ]
+              : []),
             {
               label: `Delete ${meta.noun}`,
               icon: 'trash',
@@ -842,6 +881,9 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           }}
           aria-label={`${meta.Noun} name`}
         />
+        {/* Otherwise an archived deck looks exactly like a live one from in here,
+            and you'd wonder why it isn't in the deck list. */}
+        {deck.archivedAt && <span className="badge deck-archived-badge">Archived</span>}
       </div>
       {emblemOpen && (
         <EmblemPickerSheet
@@ -1012,6 +1054,14 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         />
       )}
       {filingSheet}
+      {archiveOpen && (
+        <ArchiveDeckSheet
+          deckName={deck.name}
+          filedCopies={(data?.rows ?? []).reduce((n, r) => n + (namesACopy(r) && !r.unfiled ? r.quantity : 0), 0)}
+          onArchive={(unfile) => void archiveDeck(unfile)}
+          onClose={() => setArchiveOpen(false)}
+        />
+      )}
       {confirmSheet}
 
       {assembling && (

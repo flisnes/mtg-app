@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.142.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Decks can be archived. An Archived folder sits under the deck list, greyed out until you use it. Archiving keeps the whole list but takes the deck out of the list of decks you play, and asks whether to unfile its cards so your other decks can have the copies back. Restore it any time from the options menu.',
+      },
+    ],
+  },
+  {
     version: '0.141.9',
     changes: [
       {
@@ -158,24 +167,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Escape leaves select mode, so the ✕ on the bulk bar is no longer the only way out.',
-      },
-    ],
-  },
-  {
-    version: '0.140.2',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'In grid view the keyboard cursor was a thin line drawn on the card’s own black border, and it faded out on cards you do not own. It is a proper ring around the tile now, and the card you are pointing at is no longer greyed out.',
-      },
-    ],
-  },
-  {
-    version: '0.140.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Arrowing through a deck kept scrolling the card you were pointing at underneath the tab bar, so its purple outline was invisible. The cursor now stops where you can see it.',
       },
     ],
   },

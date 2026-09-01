@@ -1063,6 +1063,53 @@ export async function setDeckFolder(deckId: string, folderId: string | undefined
 }
 
 /**
+ * Archive a deck, or bring it back. Nothing is deleted: the list, the slots and
+ * the history all stay exactly as they were, the deck just moves out of the deck
+ * list into the Archived folder. It keeps its `folderId` too, so restoring it
+ * drops it back into the folder it came from.
+ *
+ * Taking the cardboard out is a separate question the caller asks (see
+ * `unfileWholeContainer`) — a deck you archived because the season ended is
+ * still assembled in its box.
+ */
+export async function setDeckArchived(deckId: string, archived: boolean): Promise<void> {
+  await db.transaction('rw', [db.decks, db.outbox], async () => {
+    const deck = await db.decks.get(deckId);
+    if (!deck) return;
+    if (!!deck.archivedAt === archived) return;
+    if (archived) deck.archivedAt = Date.now();
+    else delete deck.archivedAt;
+    deck.updatedAt = Date.now();
+    await db.decks.put(deck);
+    await stagePut('decks', deck);
+  });
+}
+
+/**
+ * Take every card out of a container in one go, leaving the list untouched —
+ * disassembling a deck without losing what was in it. The multi-select "Unfile…"
+ * with nothing left unselected; see setDeckCardsUnfiled for what a slot keeps.
+ *
+ * Returns the copies freed.
+ */
+export async function unfileWholeContainer(deckId: string): Promise<number> {
+  const slots = await db.deckCards.where('deckId').equals(deckId).toArray();
+  return setDeckCardsUnfiled(slots.map((s) => s.id), true);
+}
+
+/** Copies a container is holding right now — what unfiling it would free. */
+export async function countFiledCopies(deckId: string): Promise<number> {
+  const slots = await db.deckCards.where('deckId').equals(deckId).toArray();
+  return slots.reduce((n, s) => n + (filedCopy(s) ? s.quantity : 0), 0);
+}
+
+/** Does this slot hold one of your copies? The test setDeckCardsUnfiled applies:
+ *  a brew line or an "any printing" basic never held cardboard. */
+function filedCopy(s: DeckCard): boolean {
+  return !s.anyBasic && !!s.scryfallId && !!s.condition && !!s.finish && !!s.lang && !s.unfiled;
+}
+
+/**
  * What makes a container slot unique: the card, the board, and whether it's an
  * "any printing" basic. The last part keeps the lands-box Islands out of the
  * slot holding the Islands you actually own.

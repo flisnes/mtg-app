@@ -19,8 +19,10 @@ import {
   deleteDeck,
   deleteDeckFolder,
   renameDeckFolder,
+  setDeckArchived,
   setDeckEmblem,
   setDeckFolder,
+  unfileWholeContainer,
 } from '../db/dataAccess.js';
 import { getOracleCardsByIds } from '../db/queries.js';
 import { formatLabel } from '../deck/legality.js';
@@ -32,10 +34,20 @@ import { ManaCost } from '../components/ManaCost.js';
 import { HeaderValue, missingValue, useContainersValue, valueText, type ContainerValue } from '../components/ValueSummary.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { DeckFolderPickerSheet } from '../components/DeckFolderPickerSheet.js';
+import { ArchiveDeckSheet } from '../components/ArchiveDeckSheet.js';
 import { useToast } from '../components/Toast.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
 import { convertToDisplay } from '../price/rates.js';
 import { COLOR_NAMES } from '../components/CardSorting.js';
+
+/**
+ * The Archived folder isn't a DeckFolder row — there is nothing to name, rename
+ * or delete, and it exists before you have archived anything. It's a deck flag
+ * (Deck.archivedAt) shown as a folder, so `openFolderId` carries this sentinel
+ * when the archive is the open view. Reserved ids can't collide with a real
+ * folder's: those are newId() output.
+ */
+const ARCHIVE_ID = '__archive__';
 
 // Canonical WUBRG order for pip display.
 const COLOR_ORDER: Color[] = ['W', 'U', 'B', 'R', 'G'];
@@ -109,6 +121,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
   const [renameValue, setRenameValue] = useState('');
   const [movingDeck, setMovingDeck] = useState<{ id: string; name: string; folderId?: string } | null>(null);
   const [emblemDeck, setEmblemDeck] = useState<Deck | null>(null);
+  const [archivingDeck, setArchivingDeck] = useState<{ id: string; name: string; filed: number } | null>(null);
   const [query, setQuery] = useState('');
   const [filterFormat, setFilterFormat] = useState<DeckFormat | ''>('');
   const [filterColor, setFilterColor] = useState<Color | ''>('');
@@ -134,25 +147,51 @@ export function Containers({ kind }: { kind: ContainerKind }) {
   const folderNameById = useMemo(() => new Map((folders ?? []).map((f) => [f.id, f.name])), [folders]);
   const hasFolders = isDeck && !!folders && folders.length > 0;
   const openFolder = isDeck ? folders?.find((f) => f.id === openFolderId) : undefined;
+  const archiveOpen = isDeck && openFolderId === ARCHIVE_ID;
 
-  // How many decks sit in each folder — a cheap separate query (no card
-  // lookups) so opening the sidebar doesn't pay for the detailed `rows` query
-  // below across every deck, only the ones actually in view.
-  const folderCounts = useLiveQuery(async () => {
-    if (!isDeck) return new Map<string, number>();
-    const decks = await db.decks.toArray();
+  // How many decks sit in each folder, and how many are archived — a cheap
+  // separate query (no card lookups) so opening the sidebar doesn't pay for the
+  // detailed `rows` query below across every deck, only the ones actually in
+  // view. An archived deck keeps its folderId but no longer counts toward it:
+  // it isn't in there any more, and a folder reading "3" with one deck inside
+  // sends you looking for the other two.
+  const tally = useLiveQuery(async () => {
     const counts = new Map<string, number>();
+    if (!isDeck) return { counts, archived: 0 };
+    const decks = await db.decks.toArray();
+    let archived = 0;
     for (const d of decks) {
-      if (containerKind(d) !== 'deck' || !d.folderId) continue;
+      if (containerKind(d) !== 'deck') continue;
+      if (d.archivedAt) {
+        archived++;
+        continue;
+      }
+      if (!d.folderId) continue;
       counts.set(d.folderId, (counts.get(d.folderId) ?? 0) + 1);
     }
-    return counts;
+    return { counts, archived };
   }, [isDeck]);
+  const archivedCount = tally?.archived ?? 0;
+
+  // Restore the last deck in the archive and the view you're looking at has
+  // nothing left in it — and the tile that got you here is dimmed and inert, so
+  // you couldn't come back to see it. Drop back up a level instead of leaving
+  // you on a dead end. `tally &&` so the first render, before the count loads,
+  // doesn't bounce you straight out.
+  useEffect(() => {
+    if (archiveOpen && tally && tally.archived === 0) setOpenFolderId(null);
+  }, [archiveOpen, tally]);
 
   const rows = useLiveQuery(async () => {
+    const inArchive = isDeck && openFolderId === ARCHIVE_ID;
     const list = (await db.decks.orderBy('updatedAt').reverse().toArray()).filter((d) => {
       if (containerKind(d) !== kind) return false;
-      if (!isDeck || showAllDecks) return true;
+      if (!isDeck) return true;
+      // The archive is the only view an archived deck shows in — including
+      // "All decks", which means every deck you're still playing.
+      if (inArchive) return !!d.archivedAt;
+      if (d.archivedAt) return false;
+      if (showAllDecks) return true;
       return openFolderId ? d.folderId === openFolderId : !d.folderId;
     });
     return Promise.all(
@@ -180,7 +219,13 @@ export function Containers({ kind }: { kind: ContainerKind }) {
         } else {
           colors = dominantColors(cards, oracles);
         }
-        return { deck, main, side, colors };
+        // Copies the container is holding, for the archive prompt's "take them
+        // out too?" — the cards are already loaded, so it's free here.
+        const filed = cards.reduce(
+          (n, c) => n + (!c.anyBasic && c.scryfallId && c.condition && c.finish && c.lang && !c.unfiled ? c.quantity : 0),
+          0,
+        );
+        return { deck, main, side, colors, filed };
       }),
     );
   }, [kind, openFolderId, showAllDecks]);
@@ -218,7 +263,8 @@ export function Containers({ kind }: { kind: ContainerKind }) {
   const missingTotal = value ? valueText(missingValue(value.total)) : undefined;
 
   async function create() {
-    const id = await createContainer('', kind, 'casual', openFolderId ?? undefined);
+    // The archive is a view, not a home for new decks — brew into the top level.
+    const id = await createContainer('', kind, 'casual', archiveOpen ? undefined : openFolderId ?? undefined);
     // The name/format are edited on the container's own page (works great
     // there), so land straight on it with the name field ready to type into.
     navigate(`${meta.path}/${id}`, { state: { focusName: true } });
@@ -253,6 +299,34 @@ export function Containers({ kind }: { kind: ContainerKind }) {
     toast(`Deleted folder “${folder.name}”`);
   }
 
+  /**
+   * Archive a deck, having asked whether the cardboard goes back on the shelf.
+   * The list survives either way — that's the whole point of archiving over
+   * deleting — so this never touches a slot's contents, only whether it's
+   * holding a copy (see setDeckCardsUnfiled).
+   */
+  async function archiveDeck(unfile: boolean) {
+    const deck = archivingDeck;
+    if (!deck) return;
+    setArchivingDeck(null);
+    const freed = unfile ? await unfileWholeContainer(deck.id) : 0;
+    await setDeckArchived(deck.id, true);
+    toast(
+      freed > 0
+        ? `Archived “${deck.name}” · ${freed} card${freed === 1 ? '' : 's'} back on the shelf`
+        : `Archived “${deck.name}”`,
+    );
+  }
+
+  /** Out of the archive and back into the deck list — into its old folder, which
+   *  it never left. Cards that were unfiled stay unfiled: rebuilding the deck
+   *  means going and finding the cardboard again. */
+  async function restoreDeck(deck: { id: string; name: string; folderId?: string }) {
+    await setDeckArchived(deck.id, false);
+    const where = deck.folderId ? folderNameById.get(deck.folderId) : undefined;
+    toast(where ? `Restored “${deck.name}” to “${where}”` : `Restored “${deck.name}”`);
+  }
+
   async function removeDeck(deck: { id: string; name: string }) {
     const ok = await confirm({
       title: `Delete “${deck.name}”?`,
@@ -276,8 +350,14 @@ export function Containers({ kind }: { kind: ContainerKind }) {
 
   return (
     <Page
-      title={openFolder ? openFolder.name : meta.Plural}
-      subtitle={openFolder ? 'Decks in this folder.' : meta.subtitle}
+      title={archiveOpen ? 'Archived' : openFolder ? openFolder.name : meta.Plural}
+      subtitle={
+        archiveOpen
+          ? 'Decks you have put away. Their lists are all still here.'
+          : openFolder
+            ? 'Decks in this folder.'
+            : meta.subtitle
+      }
       aside={
         <HeaderValue
           label="Owned value"
@@ -286,7 +366,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
         />
       }
     >
-      {openFolder && (
+      {(openFolder || archiveOpen) && (
         <button className="linklike folder-crumb" onClick={() => setOpenFolderId(null)}>
           ‹ Up a level
         </button>
@@ -385,19 +465,25 @@ export function Containers({ kind }: { kind: ContainerKind }) {
               ) : (
                 <>
                   <p>
-                    {openFolder ? `No decks in “${openFolder.name}” yet.` : `No ${meta.Plural.toLowerCase()} yet.`}
+                    {archiveOpen
+                      ? 'Nothing in the archive.'
+                      : openFolder
+                        ? `No decks in “${openFolder.name}” yet.`
+                        : `No ${meta.Plural.toLowerCase()} yet.`}
                   </p>
                   <p className="empty-phase">
-                    {isDeck
-                      ? `Tap “Add deck” above to make one.`
-                      : `Tap “Add ${meta.noun}” above, then file cards into it from your collection.`}
+                    {archiveOpen
+                      ? 'Archive a deck from its options menu to keep its list after you take it apart.'
+                      : isDeck
+                        ? `Tap “Add deck” above to make one.`
+                        : `Tap “Add ${meta.noun}” above, then file cards into it from your collection.`}
                   </p>
                 </>
               )}
             </div>
           ) : (
             <ul className="menu-list">
-              {visibleRows.map(({ deck, main, side, colors }) => {
+              {visibleRows.map(({ deck, main, side, colors, filed }) => {
                 const own = value?.byId.get(deck.id);
                 const ownText = own && valueText(own.owned);
                 const missText = own && valueText(missingValue(own));
@@ -458,6 +544,17 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                                     icon: 'folder' as const,
                                     onClick: () => setMovingDeck({ id: deck.id, name: deck.name, folderId: deck.folderId }),
                                   },
+                                  deck.archivedAt
+                                    ? {
+                                        label: 'Restore from archive',
+                                        icon: 'refresh' as const,
+                                        onClick: () => void restoreDeck(deck),
+                                      }
+                                    : {
+                                        label: 'Archive deck',
+                                        icon: 'archive' as const,
+                                        onClick: () => setArchivingDeck({ id: deck.id, name: deck.name, filed }),
+                                      },
                                 ]
                               : []),
                             {
@@ -477,6 +574,49 @@ export function Containers({ kind }: { kind: ContainerKind }) {
             </ul>
           )}
         </div>
+
+        {/* Below the deck list, not above it like the folder nav: the archive is
+            where decks go to rest, so it shouldn't be the first thing between
+            you and the decks you actually play. On a wide screen it tucks in
+            under Folders in the sidebar (see the media query). */}
+        {isDeck && (
+          <div className="deck-col-archive">
+            <h2 className="deck-folders-title">Archive</h2>
+            <ul className="menu-list">
+              <li>
+                <div
+                  className={[
+                    'menu-item folder-item archive-item',
+                    archivedCount === 0 ? 'archive-item-empty' : '',
+                    archiveOpen ? 'folder-item-active' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  <button
+                    className="folder-item-open"
+                    // Dimmed and inert until there's something in it — an empty
+                    // folder you can open just to be told it's empty is a dead end.
+                    disabled={archivedCount === 0}
+                    onClick={() => {
+                      setShowAllDecks(false);
+                      setOpenFolderId(ARCHIVE_ID);
+                    }}
+                  >
+                    <span className="menu-icon" aria-hidden>
+                      <Icon name="archive" />
+                    </span>
+                    <span className="deck-name">Archived</span>
+                    <span className="badge">{archivedCount}</span>
+                  </button>
+                </div>
+              </li>
+            </ul>
+            {archivedCount === 0 && (
+              <p className="fine-print">Archiving a deck keeps its list after you take the cards out of it.</p>
+            )}
+          </div>
+        )}
 
         {hasFolders && (
           <div className="deck-col-folders">
@@ -520,7 +660,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                           <Icon name="folder" />
                         </span>
                         <span className="deck-name">{folder.name}</span>
-                        <span className="badge">{folderCounts?.get(folder.id) ?? 0}</span>
+                        <span className="badge">{tally?.counts.get(folder.id) ?? 0}</span>
                       </button>
                       <OptionsMenu
                         label={`${folder.name} options`}
@@ -556,6 +696,14 @@ export function Containers({ kind }: { kind: ContainerKind }) {
             void setDeckFolder(movingDeck.id, folderId);
             setMovingDeck(null);
           }}
+        />
+      )}
+      {archivingDeck && (
+        <ArchiveDeckSheet
+          deckName={archivingDeck.name}
+          filedCopies={archivingDeck.filed}
+          onArchive={(unfile) => void archiveDeck(unfile)}
+          onClose={() => setArchivingDeck(null)}
         />
       )}
       {confirmSheet}

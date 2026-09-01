@@ -877,11 +877,24 @@ button.danger-outline {
   align-items: start;
 }
 .deck-col-list,
-.deck-col-folders {
+.deck-col-folders,
+.deck-col-archive {
   min-width: 0;
 }
 .deck-board-split .deck-col-folders {
   order: -1;
+}
+/* The archive goes the other way from the folder nav: last, under the decks. */
+.deck-col-archive {
+  order: 1;
+}
+/* Nothing archived yet — the folder is still there so you know the option
+   exists, just faded and inert until it has something in it. */
+.archive-item-empty {
+  opacity: 0.55;
+}
+.archive-item-empty .folder-item-open {
+  cursor: default;
 }
 .deck-folders-title {
   margin: 0 0 0.5rem;
@@ -924,6 +937,12 @@ button.danger-outline {
 .folder-item-active .deck-name {
   color: var(--accent);
   font-weight: 600;
+}
+.deck-archived-badge {
+  flex: 0 0 auto;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.68rem;
 }
 .folder-item-editing {
   gap: 0.85rem;
@@ -4408,10 +4427,21 @@ button.chip[aria-pressed='true'] {
   .picker-scroll {
     max-height: 420px;
   }
+  /* Room for a sidebar: folders on top, the archive under them, the deck list
+     spanning both rows beside them. */
   .deck-board-split {
     grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+    grid-template-areas: 'list folders' 'list archive';
+  }
+  .deck-board-split .deck-col-list {
+    grid-area: list;
   }
   .deck-board-split .deck-col-folders {
+    grid-area: folders;
+    order: 0;
+  }
+  .deck-board-split .deck-col-archive {
+    grid-area: archive;
     order: 0;
   }
 }

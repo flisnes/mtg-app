@@ -263,6 +263,10 @@ export function sanitizeDeckRow(raw: unknown): Deck | null {
     ...(typeof r.description === 'string' && r.description ? { description: r.description.slice(0, MAX_DECK_DESCRIPTION_LENGTH) } : {}),
     // Folders are deck-only; drop a stray folderId on a binder/box row.
     ...(kind === 'deck' && id(r.folderId) ? { folderId: id(r.folderId)! } : {}),
+    // Archiving is deck-only too. A bad stamp means "not archived" rather than
+    // ts()'s now: inventing a stamp here would archive a live deck on the
+    // receiving device.
+    ...(kind === 'deck' && Number(r.archivedAt) > 0 ? { archivedAt: Number(r.archivedAt) } : {}),
     ...(emblem ? { emblem } : {}),
     createdAt: ts(r.createdAt),
     updatedAt: ts(r.updatedAt),
@@ -415,7 +419,7 @@ const KNOWN_KEYS: Record<SyncTable, Record<string, true>> = {
   } satisfies Record<keyof Required<WishlistEntry>, true>,
   decks: {
     id: true, name: true, kind: true, format: true, description: true, folderId: true,
-    emblem: true, createdAt: true, updatedAt: true,
+    emblem: true, archivedAt: true, createdAt: true, updatedAt: true,
   } satisfies Record<keyof Required<Deck>, true>,
   deckCards: {
     id: true, deckId: true, oracleId: true, scryfallId: true, quantity: true, board: true,

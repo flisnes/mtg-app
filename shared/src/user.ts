@@ -185,6 +185,13 @@ export interface Deck {
   folderId?: string;
   /** The picture or symbol this one wears in the list; unset = the kind icon. */
   emblem?: ContainerEmblem;
+  /**
+   * When this deck was archived; unset = not archived. Deck-only. An archived
+   * deck keeps everything it has — its list, its slots, its history — it just
+   * moves out of the deck list into the Archived folder. The point is the deck
+   * you took apart but don't want to forget you built.
+   */
+  archivedAt?: number;
   createdAt: number;
   updatedAt: number;
 }

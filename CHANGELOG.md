@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.142.0
+
+- **Decks can be archived.** An Archived folder sits under the deck list, greyed out until you put something in it. Archiving takes a deck out of the list but keeps everything about it: the list, the printings, the history. Archiving asks whether to unfile its cards too, so you can take the deck apart and hand the copies back to your other decks while the list it was survives. Archived decks are also out of "All decks" and out of their folder's count. Restore one from its options menu, either in the archive or on the deck's own page, where an ARCHIVED tag now shows.
+
 ## 0.141.9
 
 - **The collection, wishlist and tradelist give the cards the top of the screen.** The blurb under each title is gone, the title is smaller, and the entry count moved up beside it, so the grid starts about a third of a screen higher. The list/grid switch now sits at the right end of the toolbar row. Another user's "See all" list lost its own search box (the header search already covers their lists) and its heading no longer stacks up four lines tall.

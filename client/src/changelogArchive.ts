@@ -1,4 +1,4 @@
-// The older half of the changelog (0.137.0 down to 0.98.0), split out of
+// The older half of the changelog (0.140.2 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,24 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.140.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'In grid view the keyboard cursor was a thin line drawn on the card’s own black border, and it faded out on cards you do not own. It is a proper ring around the tile now, and the card you are pointing at is no longer greyed out.',
+      },
+    ],
+  },
+  {
+    version: '0.140.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Arrowing through a deck kept scrolling the card you were pointing at underneath the tab bar, so its purple outline was invisible. The cursor now stops where you can see it.',
+      },
+    ],
+  },
   {
     version: '0.140.0',
     changes: [

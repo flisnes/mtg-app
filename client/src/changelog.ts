@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.144.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Filing a card from its sheet now asks which copies are going in when you own more than one. Tap a copy to send it, tap again for a second, then File. The copy you opened starts out picked, and the ones the container already holds are greyed out.',
+      },
+    ],
+  },
+  {
     version: '0.143.3',
     changes: [
       {
@@ -154,15 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'In the scanner, the set symbol now sits above each card in the row and is bigger. The plus and minus buttons have rings around them so they stay visible on light card borders and busy art.',
-      },
-    ],
-  },
-  {
-    version: '0.141.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Visual stacks: a view where cards overlap down the column with only their names showing, and the set, quantity and price beside them. Tap a card to open it fully. Toggle it on the trade board or in the scanned cards list.',
       },
     ],
   },

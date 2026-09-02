@@ -3000,6 +3000,22 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   display: inline-flex;
   padding: 0.1rem 0.25rem;
 }
+/* Counting mode (the filing picker): the chip says how many of this row are
+   going in, opposite the ownership badge so both can be read at once. A row the
+   container already holds in full is dimmed rather than hidden — its pills are
+   the explanation for why it can't be tapped. */
+.edition-tile .tile-badge-took {
+  left: auto;
+  right: 4px;
+  bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: var(--accent);
+}
+.edition-tile-full {
+  opacity: 0.45;
+}
 .edition-tile-ph {
   display: grid;
   place-items: center;
@@ -3036,6 +3052,17 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
 }
 .copy-tile-where .place-pill-name {
   max-width: 7rem;
+}
+
+/* ---- "Which copies?": the filing picker. Sized to the copies it shows rather
+   than the assembler's fixed 90dvh, so two tiles don't leave two thirds of the
+   screen empty. Enough copies to reach the sheet's ceiling and the grid does the
+   scrolling, so Cancel and File stay put. ---- */
+.file-copies-sheet {
+  overflow-y: hidden;
+}
+.file-copies-sheet .edition-grid {
+  min-height: 0;
 }
 
 /* ---- "Assemble from my collection": one card at a time, with a bar to say

@@ -31,6 +31,7 @@ import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { CardHistory } from './CardHistory.js';
 import { ContainerPickerSheet } from './ContainerPickerSheet.js';
 import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
+import { FileCopiesSheet } from './FileCopiesSheet.js';
 import { SpecialConditionsField } from './SpecialConditions.js';
 import { EventSheet } from './EventSheet.js';
 import { useOpenCollectionSearch, useOpenDbSearch } from './GlobalSearch.js';
@@ -400,8 +401,10 @@ export function CardSheet(props: CardSheetProps) {
   // The copy they're holding was never added: a nested add form, whose result
   // becomes this slot's copy.
   const [addingCopy, setAddingCopy] = useState(false);
-  // "File this copy": the deck/binder/box picker, from a card you own.
+  // "File this copy": the deck/binder/box picker, from a card you own — then,
+  // when there's more than one copy on the shelf, which of them is going in.
   const [pickingContainer, setPickingContainer] = useState(false);
+  const [pickingCopies, setPickingCopies] = useState<{ id: string; name: string; kind: ContainerKind } | null>(null);
   // History rows expand into their inline price editor. Its own toggle, not the
   // form's: correcting what you paid is reading-your-own-history work, and every
   // mode's History tab shows your own events.
@@ -751,24 +754,40 @@ export function CardSheet(props: CardSheetProps) {
 
   /** Put this copy in a deck, binder or box, straight from the entry that owns
    *  it — the same filing flow (and move-or-both question) the collection's
-   *  bulk "File away" runs, for the one card in front of you. */
+   *  bulk "File away" runs, for the one card in front of you.
+   *
+   *  Own more than one copy and *which* of them goes in is a real question (the
+   *  loose one, usually, not the one already in another deck), so it gets asked
+   *  rather than guessed: FileCopiesSheet counts them out, and its answer lands
+   *  back here as the copies to file. */
   async function fileHere(containerId: string, kind: ContainerKind) {
     setPickingContainer(false);
+    if (ownedQty > 1) {
+      const row = await db.decks.get(containerId);
+      setPickingCopies({ id: containerId, name: row?.name ?? CONTAINER_META[kind].noun, kind });
+      return;
+    }
+    await fileCopies(containerId, kind, [filingCopy()]);
+  }
+
+  async function fileCopies(containerId: string, kind: ContainerKind, copies: FilingCopy[]) {
+    setPickingCopies(null);
     setBusy(true);
-    const filed = await file(containerId, [filingCopy()]);
+    const filed = await file(containerId, copies);
     if (filed === null) {
       setBusy(false);
       return;
     }
     const noun = CONTAINER_META[kind].noun;
+    const n = filed.filed;
     // Every copy you own is in there already. Saying "filed" for a write that
     // didn't happen is how you end up filing the same card twice.
     toast(
-      filed.filed === 0
+      n === 0
         ? `Already in that ${noun}`
         : filed.mode === 'move'
-          ? `Moved to ${noun}`
-          : `Filed in ${noun}`,
+          ? `Moved ${n === 1 ? '' : `${n} copies `}to ${noun}`
+          : `Filed ${n === 1 ? '' : `${n} copies `}in ${noun}`,
     );
     onClose();
   }
@@ -1294,10 +1313,23 @@ export function CardSheet(props: CardSheetProps) {
       )}
       {pickingContainer && (
         <ContainerPickerSheet
-          title="File this copy"
+          title={ownedQty > 1 ? 'File your copies' : 'File this copy'}
           label={`Where does your ${oracleCard.name} live?`}
           onPick={(id, kind) => void fileHere(id, kind)}
           onClose={() => setPickingContainer(false)}
+        />
+      )}
+      {pickingCopies && (
+        <FileCopiesSheet
+          oracleId={oracleCard.oracleId}
+          cardName={oracleCard.name}
+          containerId={pickingCopies.id}
+          containerName={pickingCopies.name}
+          kind={pickingCopies.kind}
+          copies={ownedCopies}
+          startWith={entry?.id}
+          onCancel={() => setPickingCopies(null)}
+          onFile={(copies) => void fileCopies(pickingCopies.id, pickingCopies.kind, copies)}
         />
       )}
       {eventEntry && (

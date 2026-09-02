@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.144.0
+
+- **Filing from a card's sheet asks which copies are going in.** Own more than one copy and a "Which copies?" step now sits between picking the deck, binder or box and the write, built on the same grid as "Assemble from my collection": every copy you own as a tile, each saying where it lives right now. Tap a copy to send it, tap it again for a second, once more to take it back, then File. The copy you opened the sheet on starts out picked, so the quick case is still two taps. Copies the container already holds are greyed out with their pill as the reason, and picking one that's in another deck still raises the move-or-both question. Own one copy and nothing changes: it files straight away.
+
 ## 0.143.3
 
 - **Filing a card somewhere that already holds copies of it tops the container up instead of over-promising.** Own two Bishops of Rebirth, keep one in your White box, then file the other from the card sheet and the box used to claim three of them, with an amber "3 filed / 2 owned" warning against yourself. No deck, binder or box will now claim more copies of a card than you own, so that filing puts the loose copy away and stops there. If every copy is already in there it says so instead of filing again, and the toasts count what actually went in. The move-or-both question still comes up when some other container is holding the copy you are filing, so a card coming back out of a deck still works the way it did.

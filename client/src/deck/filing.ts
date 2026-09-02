@@ -180,6 +180,32 @@ export async function findFilingClashes(
 }
 
 /**
+ * How many more copies of each piece of cardboard a container can honestly take:
+ * what you own of it, less what it already holds, keyed by the copy's own
+ * identity (collectionKey). The cap below enforces it, and the "which copies?"
+ * picker counts against it, so what the user taps is what the write honours.
+ */
+export async function roomForCopies(targetId: string, oracleIds: string[]): Promise<Map<string, number>> {
+  const [held, entries] = await Promise.all([
+    db.deckCards.where('deckId').equals(targetId).toArray(),
+    db.collection.where('oracleId').anyOf(oracleIds).toArray(),
+  ]);
+  const room = new Map<string, number>();
+  for (const e of entries) {
+    const k = collectionKey(e);
+    room.set(k, (room.get(k) ?? 0) + e.quantity);
+  }
+  // An emptied-out slot (DeckCard.unfiled) holds nothing — claimKeyOf skips it —
+  // so the card can always go back in. Copies you own none of stay out of the
+  // map entirely: that isn't cardboard off your shelf, so nothing caps it.
+  for (const s of held) {
+    const k = claimKeyOf(s);
+    if (k !== undefined && room.has(k)) room.set(k, Math.max(0, room.get(k)! - s.quantity));
+  }
+  return room;
+}
+
+/**
  * Trim a filing to the cardboard that can actually go in: no container may claim
  * more copies of one card than you own.
  *
@@ -200,26 +226,7 @@ export async function capToOwnedCopies(targetId: string, copies: FilingCopy[]): 
   const keys = copies.map((c) => claimKeyOf({ ...c.wants, scryfallId: c.scryfallId, anyBasic: c.anyBasic }));
   if (!keys.some((k) => k)) return copies;
 
-  const [held, entries] = await Promise.all([
-    db.deckCards.where('deckId').equals(targetId).toArray(),
-    db.collection
-      .where('oracleId')
-      .anyOf([...new Set(copies.map((c) => c.oracleId))])
-      .toArray(),
-  ]);
-  // Room per physical copy: what you own, less what the target holds of it
-  // already. An emptied-out slot (DeckCard.unfiled) holds nothing — claimKeyOf
-  // skips it — so the card can always go back in.
-  const room = new Map<string, number>();
-  for (const e of entries) {
-    const k = collectionKey(e);
-    room.set(k, (room.get(k) ?? 0) + e.quantity);
-  }
-  for (const s of held) {
-    const k = claimKeyOf(s);
-    if (k !== undefined && room.has(k)) room.set(k, room.get(k)! - s.quantity);
-  }
-
+  const room = await roomForCopies(targetId, [...new Set(copies.map((c) => c.oracleId))]);
   const capped: FilingCopy[] = [];
   copies.forEach((c, i) => {
     const key = keys[i];
@@ -229,7 +236,7 @@ export async function capToOwnedCopies(targetId: string, copies: FilingCopy[]): 
       capped.push(c);
       return;
     }
-    const take = Math.min(c.quantity, Math.max(0, room.get(key)!));
+    const take = Math.min(c.quantity, room.get(key)!);
     room.set(key, room.get(key)! - take);
     if (take > 0) capped.push(take === c.quantity ? c : { ...c, quantity: take });
   });

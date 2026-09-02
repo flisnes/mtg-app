@@ -6,9 +6,14 @@ import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
 import { useDismiss } from './useDismiss.js';
 
-// "Your copies": the cards you actually hold, as tiles. Used twice — the card
-// sheet's "pick one from my collection" shortcut, and the deck assembler that
-// walks a whole list asking the same question card by card.
+// "Your copies": the cards you actually hold, as tiles. Used three times: the
+// card sheet's "pick one from my collection" shortcut, the deck assembler that
+// walks a whole list asking the same question card by card, and the filing
+// picker that asks which of your copies is going into a container.
+//
+// The first two pick one copy; the filing picker counts them, and passes
+// `picked` / `roomFor` to say how many of each row are going in and how many
+// more will fit.
 //
 // A tile shows everything you need to choose between two pieces of cardboard:
 // the printing, the traits, the sheen if it's a foil, and where the copy is
@@ -40,6 +45,8 @@ export function CopyGrid({
   printings,
   selected,
   hereId,
+  picked,
+  roomFor,
   onSelect,
 }: {
   copies: CollectionEntry[];
@@ -50,6 +57,13 @@ export function CopyGrid({
    *  and drowns out the one pill that matters, the other deck holding the card.
    *  A backed pill stays — that one says "you already committed a copy here". */
   hereId?: string;
+  /** Counting mode: copies of each row taken so far, by entry id. A tile with a
+   *  count reads as chosen and wears it, so tapping the same row twice is how
+   *  you send both your Command Beacons the same way. */
+  picked?: Map<string, number>;
+  /** Counting mode: how many more of that row the target can still take. 0
+   *  greys the tile out — its pills already say the container has them all. */
+  roomFor?: (copy: CollectionEntry) => number;
   onSelect: (copy: CollectionEntry) => void;
 }) {
   const placements = usePlacementIndex();
@@ -81,10 +95,17 @@ export function CopyGrid({
           // to it, so the pill counts those and goes green.
           return pl.backed > 0 ? [{ ...pl, quantity: pl.backed }] : [];
         });
+        const took = picked?.get(e.id) ?? 0;
+        const full = !!roomFor && roomFor(e) === 0 && took === 0;
+        const classes = ['edition-tile'];
+        if (isSelected(e) || took > 0) classes.push('edition-tile-selected');
+        if (full) classes.push('edition-tile-full');
         return (
           <button
             key={e.id}
-            className={isSelected(e) ? 'edition-tile edition-tile-selected' : 'edition-tile'}
+            className={classes.join(' ')}
+            disabled={full}
+            title={full ? 'Every copy of this one is already in there' : undefined}
             onClick={() => onSelect(e)}
           >
             <span className="edition-tile-art">
@@ -100,6 +121,11 @@ export function CopyGrid({
               >
                 ×{e.quantity}
               </span>
+              {took > 0 && (
+                <span className="tile-badge tile-badge-took" title={`${took} of these going in`}>
+                  <Icon name="check" size={11} /> {took}
+                </span>
+              )}
             </span>
             <span className="edition-tile-caption">
               {p ? (

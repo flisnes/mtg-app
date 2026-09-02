@@ -210,7 +210,10 @@ export async function editUserEvent(
 // stamped on events) and wishlist (for wish.fulfilled), so both are in scope.
 const COLLECTION_TABLES = [db.collection, db.wishlist, db.events, db.outbox, db.priceShards];
 const WISHLIST_TABLES = [db.wishlist, db.events, db.outbox];
-const DECK_TABLES = [db.decks, db.deckCards, db.events, db.outbox];
+// db.collection is in scope because filing a copy stamps the copy (see
+// touchNamedCopies): moving cardboard into or out of a container is an edit to
+// that piece of cardboard, and "Last edited" sorts on the row's own updatedAt.
+const DECK_TABLES = [db.decks, db.deckCards, db.collection, db.events, db.outbox];
 
 export interface AddToCollectionInput {
   oracleId: string;
@@ -291,12 +294,66 @@ export async function addToCollection(input: AddToCollectionInput): Promise<stri
   });
 }
 
+/** Everything a slot says about the copy it names — what it takes to find that
+ *  copy's rows. A lands-box basic and a vague brew line name nothing.
+ *
+ *  Deliberately ignores `unfiled`, unlike claimKeyOf in deck/filing.ts: an
+ *  emptied slot still names its copy, and flipping that flag is precisely the
+ *  filing change worth stamping on it. */
+function namedCopy(s: SlotCopyFields): CopyRef | undefined {
+  if (s.anyBasic || !s.scryfallId || !s.condition || !s.finish || !s.lang) return undefined;
+  return { scryfallId: s.scryfallId, condition: s.condition, finish: s.finish, lang: s.lang };
+}
+
+type SlotCopyFields = Pick<DeckCard, 'scryfallId' | 'condition' | 'finish' | 'lang' | 'anyBasic'>;
+type CopyRef = { scryfallId: string; condition: Condition; finish: Finish; lang: string };
+
 /** The one physical copy a slot names, when it names one at all — the collection
  *  key its own fields spell out. The same rule as claimKeyOf in deck/filing.ts,
  *  restated here so the mutation layer needn't import from the deck layer. */
 function slotClaimKey(s: DeckCard): string | undefined {
-  if (s.anyBasic || !s.scryfallId || !s.condition || !s.finish || !s.lang) return undefined;
-  return collectionKey({ scryfallId: s.scryfallId, condition: s.condition, finish: s.finish, lang: s.lang });
+  const ref = namedCopy(s);
+  return ref && collectionKey(ref);
+}
+
+/**
+ * Stamp the collection rows these slots name as edited, now.
+ *
+ * Filing is the one thing you can do to a piece of cardboard that leaves the
+ * copy's own row untouched: it writes a deckCards row, not a collection one.
+ * Everything else — quantities, tradelist marks, condition, finish, language,
+ * special conditions — writes the row and stamps updatedAt on the way past.
+ * "Last edited" sorts on that stamp (see components/useEntrySort.ts), so
+ * without this, putting a card into a deck or pulling it out would be the only
+ * edit that failed to bubble the card to the top.
+ *
+ * A slot names its copy by collectionKey, which since special conditions
+ * arrived can match more than one row — your plain copy and your signed one
+ * are both "that printing in that grade", and the slot cannot tell them apart.
+ * Both get stamped, because either could be the one you just filed.
+ *
+ * Cheap on purpose: one indexed lookup per distinct copy, and nothing at all
+ * for slots that name no cardboard, which is every brew line and every
+ * lands-box basic.
+ */
+async function touchNamedCopies(slots: Iterable<SlotCopyFields>, now: number): Promise<void> {
+  const refs = new Map<string, CopyRef>();
+  for (const s of slots) {
+    const ref = namedCopy(s);
+    if (ref) refs.set(collectionKey(ref), ref);
+  }
+  if (refs.size === 0) return;
+  const writes: CollectionEntry[] = [];
+  for (const r of refs.values()) {
+    const rows = await db.collection
+      .where('[scryfallId+condition+finish+lang]')
+      .equals([r.scryfallId, r.condition, r.finish, r.lang])
+      .toArray();
+    for (const e of rows) writes.push({ ...e, updatedAt: now });
+  }
+  if (writes.length === 0) return;
+  await db.collection.bulkPut(writes);
+  await stagePutMany('collection', writes);
 }
 
 /**
@@ -1080,6 +1137,8 @@ export async function deleteDeck(id: string): Promise<void> {
     await db.deckCards.where('deckId').equals(id).delete();
     await db.decks.delete(id);
     await stageDelete('decks', id);
+    // Deleting the container unfiles everything that was in it.
+    await touchNamedCopies(cards, now);
   });
 }
 
@@ -1302,6 +1361,7 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
       ...containerRef(deck),
       board,
     });
+    await touchNamedCopies([slot], now);
   });
 }
 
@@ -1385,6 +1445,7 @@ export async function addDeckCardsBulk(
     await db.deckCards.bulkPut(writes);
     await stagePutMany('deckCards', writes);
     await emitMany(events);
+    await touchNamedCopies(writes, now);
   });
 }
 
@@ -1415,6 +1476,8 @@ export async function reconcileDeck(
     const seen = new Set<string>();
     const puts: DeckCard[] = [];
     const deletes: string[] = [];
+    // Slots the re-scan swept away, kept so the copies they held get stamped.
+    const swept: DeckCard[] = [];
     const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
     const deck = await touchDeck(deckId, now);
     const batchExtra = {
@@ -1490,6 +1553,7 @@ export async function reconcileDeck(
       // seen, so a re-scan neither matches nor sweeps it away.
       if (cur.anyBasic) continue;
       deletes.push(cur.id);
+      swept.push(cur);
       removed++;
       events.push({
         ts: now,
@@ -1513,6 +1577,7 @@ export async function reconcileDeck(
       for (const id of deletes) await stageDelete('deckCards', id);
     }
     await emitMany(events);
+    await touchNamedCopies([...puts, ...swept], now);
   });
   return { added, removed, changed };
 }
@@ -1568,6 +1633,7 @@ async function moveSlotRaw(
   // what undo replays backwards to put the card back where it was.
   events.push({ ts: now, kind: 'deck.remove', ...base, board: card.board });
   events.push({ ts: now, kind: 'deck.add', ...base, board });
+  await touchNamedCopies([card], now);
   return card.quantity;
 }
 
@@ -1643,6 +1709,7 @@ export async function moveDeckCardsToContainer(
       }
       await db.deckCards.delete(id);
       await stageDelete('deckCards', id);
+      await touchNamedCopies([card], now);
 
       if (!sources.has(card.deckId)) sources.set(card.deckId, await touchDeck(card.deckId, now));
       const base = {
@@ -1772,6 +1839,10 @@ async function patchDeckCard(
     // A cleared want has to be written as undefined, not left off the object.
     const clearedWants: SlotWants = { condition: undefined, finish: undefined, lang: undefined };
     const wants = patch.wants ? { ...clearedWants, ...wantFields(patch.wants) } : {};
+    // The slot after the edit, when it survives one. Held out here so the stamp
+    // below can name both copies: repointing a slot from your English copy to
+    // the Italian one is an edit to each of them.
+    let next: DeckCard | undefined;
 
     if (quantity <= 0) {
       await db.deckCards.delete(id);
@@ -1785,7 +1856,7 @@ async function patchDeckCard(
       // slot (DeckCard.unfiled) back in. A bare quantity or tag edit leaves the
       // flag where it was.
       const refiled = 'scryfallId' in patch || !!patch.wants;
-      const next: DeckCard = {
+      next = {
         ...card,
         quantity,
         ...(anyBasic
@@ -1814,6 +1885,7 @@ async function patchDeckCard(
         now,
       );
     }
+    await touchNamedCopies(next ? [card, next] : [card], now);
   });
 }
 
@@ -1863,6 +1935,9 @@ export async function setDeckCardsUnfiled(ids: string[], unfiled: boolean): Prom
     await db.deckCards.bulkPut(writes);
     await stagePutMany('deckCards', writes);
     for (const deckId of new Set(writes.map((w) => w.deckId))) await touchDeck(deckId, now);
+    // Taking a copy out of a container by hand, or putting it back, is the
+    // plainest filing change there is.
+    await touchNamedCopies(writes, now);
   });
   return copies;
 }
@@ -1969,6 +2044,7 @@ export async function removeDeckCardsBulk(ids: string[]): Promise<number> {
     await db.deckCards.bulkDelete(slots.map((s) => s.id));
     for (const s of slots) await stageDelete('deckCards', s.id);
     for (const s of slots) removed += s.quantity;
+    await touchNamedCopies(slots, now);
     await emitMany(
       slots.map((s) => {
         const deck = decks.get(s.deckId);
@@ -2074,6 +2150,7 @@ export async function removeDeckCardsMatching(
       for (const id of deletes) await stageDelete('deckCards', id);
     }
     await emitMany(events);
+    await touchNamedCopies([...taken.keys()], now);
   });
   return removed;
 }

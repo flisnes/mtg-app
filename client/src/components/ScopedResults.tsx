@@ -56,7 +56,7 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
   const items = useMemo(() => {
     if (needWishlist) {
       const matched = (wishRows ?? []).filter(wishMatches);
-      return sortCards(matched, (r) => wishSortFields(r, sortData), sort).map(
+      return sortCards(matched, (r) => wishSortFields(r), sort).map(
         (r): CardItem => ({
           ...wishCardItem(r, { ownership, moverFlags, onClick: r.oracle ? () => setEditWish(r) : undefined }),
           key: `w:${r.entry.id}`,

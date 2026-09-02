@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.143.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Sorting by "Last edited" threw the card you just changed to the top and then dropped it back down. It now reads each copy’s own timestamp, so the card stays where it belongs — and only the copy you touched moves. Edit one edition of a Forest and the rest stay put; change the Italian copy and the English one does not budge. Filing a card into a deck, binder or box, or taking it out, counts as an edit too.',
+      },
+    ],
+  },
+  {
     version: '0.143.0',
     changes: [
       {
@@ -158,15 +167,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'A confirmed edition no longer jumps to the front of a row you have started scrolling through. It still gets the green check.',
-      },
-    ],
-  },
-  {
-    version: '0.140.4',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Scanning into a deck, binder or box now asks what your collection should do with every card, not just the ones you own no copy of. Per card: Skip, Add a second copy, or Update to the printing you scanned.',
       },
     ],
   },

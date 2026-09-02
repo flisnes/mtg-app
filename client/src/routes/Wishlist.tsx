@@ -17,7 +17,7 @@ import { SelectToggle } from '../components/SelectToggle.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { addToTotal, formatTotal, SortControls, sortCards, useCardSort, type PriceTotal } from '../components/CardSorting.js';
-import { useEntrySortData, wishSortFields } from '../components/useEntrySort.js';
+import { wishSortFields } from '../components/useEntrySort.js';
 import { HeaderValue } from '../components/ValueSummary.js';
 import { ListSearchButton, useListFilter, useOpenSearch } from '../components/GlobalSearch.js';
 import { Icon } from '../components/icons.js';
@@ -53,12 +53,11 @@ export function Wishlist() {
   const query = useListFilter('wishlist');
   const matchesQuery = useEntryMatcher(rows, query);
 
-  const sortData = useEntrySortData(sort);
 
   const filtered = useMemo(() => {
     if (!rows) return [];
-    return sortCards(rows.filter(matchesQuery), (r) => wishSortFields(r, sortData), sort);
-  }, [rows, matchesQuery, sort, sortData]);
+    return sortCards(rows.filter(matchesQuery), (r) => wishSortFields(r), sort);
+  }, [rows, matchesQuery, sort]);
 
   // Value covers the whole wishlist, not just the filtered view.
   const value = useMemo(() => {

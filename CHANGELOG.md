@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.143.1
+
+- **"Last edited" now means the copy you actually edited, and it stays put.** Sorting by it used to throw a freshly-changed card to the top for a moment and then drop it back down. It was reading the card's history log rather than the copy itself, which is both slower and blunter: your English and your Italian copy of one printing shared a single value, so neither could ever come out above the other, and one "any printing" Forest wish dragged every Forest you own up with it. It now reads each copy's own timestamp, so exactly the piece of cardboard you touched moves, and it moves once. Filing a card into a deck, binder or box, or pulling it out again, counts as touching it too.
+
 ## 0.143.0
 
 - **Mark the cardboard that isn't ordinary: altered, signed, misprint, miscut, crimped.** A "Special" dropdown on a collection copy takes any combination of the five, and a copy carrying at least one wears an amber **A** on its tile and next to its name, with the details in the subtitle. Ticking a box splits the copy onto its own line, so your altered Bolt stops sharing a row with the plain one, and a plain copy you add later never lands on the altered one. Nothing about matching changes: a signed card still fills a deck slot, still answers a wishlist line, and still counts toward what you own.

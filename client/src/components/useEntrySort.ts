@@ -3,14 +3,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema.js';
 import type { JoinedEntry, JoinedWish } from '../db/queries.js';
 import { historyChange } from '../price/history.js';
-import { loadLastEdited, lastEditedFor, type LastEditedIndex } from '../history/lastEdited.js';
 import { priceValue, pricedForFinish, type CardSortPrefs, type SortFields } from './cardSort.js';
 
-// Sorting your own cards needs two things the joined rows don't carry: the
-// recorded price change, and when the copy was last edited. Both come from
-// tables you don't want to touch unless the sort actually asks for them —
-// priceHistories is the biggest user-data table and events is append-only —
-// so they load lazily, keyed on the active sort.
+// Sorting your own cards needs one thing the joined rows don't carry: the
+// recorded price change. It comes from priceHistories, the biggest user-data
+// table, which you don't want to touch unless the sort actually asks for it —
+// so it loads lazily, keyed on the active sort.
 //
 // The collection page, the wishlist page and the search scoped into either of
 // them all sort by the same keys, so they all go through here. That's what
@@ -18,7 +16,6 @@ import { priceValue, pricedForFinish, type CardSortPrefs, type SortFields } from
 
 export interface EntrySortData {
   changes?: Map<string, { delta: number; pct: number | null }>;
-  lastEdited?: LastEditedIndex;
 }
 
 export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortData {
@@ -33,17 +30,33 @@ export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortDat
     return m;
   }, [needChanges]);
 
-  // Per-printing "last edited", matching the top row of that printing's History
-  // tab. This is what the sort keys off, NOT entry.updatedAt: updatedAt can move
-  // for reasons that leave no history entry, so the event log is the source of
-  // truth the user actually sees.
-  const needEdited = sort.key === 'updated';
-  const lastEdited = useLiveQuery(async () => (needEdited ? loadLastEdited() : undefined), [needEdited]);
-
   // Stable identity: callers memoize their sort on this, and the collection is
   // thousands of rows to re-sort if it changes every render.
-  return useMemo(() => ({ changes, lastEdited }), [changes, lastEdited]);
+  return useMemo(() => ({ changes }), [changes]);
 }
+
+// "Last edited" is the row's own updatedAt, and deliberately nothing cleverer.
+//
+// It used to be the newest event in that printing's History, which was both
+// imprecise and slow. Imprecise because the event log is keyed by scryfallId:
+// your English copy and your Italian one are the same printing, so they shared
+// a single value and could never be ordered against each other (same for a
+// plain copy and a signed one). And it leaked the other way too — a
+// printing-agnostic event (an "any printing" wish, a lands-box basic) was
+// folded into every edition, so one "any printing" Forest wish bubbled every
+// Forest you owned to the top.
+//
+// Slow because answering it meant scanning the whole append-only event log, an
+// async read the list couldn't wait for. So the first paint substituted
+// updatedAt for every row and the second paint replaced it, which visibly threw
+// a freshly-edited card to the top and then dropped it back down.
+//
+// A row's updatedAt is per copy, already correct, and already in hand. Every
+// mutation in dataAccess.ts stamps it — quantities, tradelist marks, condition,
+// finish, language, special conditions — and since filing now touches the copy
+// it claims (touchClaimedCopies), so does moving a card in or out of a deck,
+// binder or box. Nothing to load, one paint, and the sort names the exact piece
+// of cardboard you touched.
 
 /** Sort fields for a collection (or tradelist) row. */
 export function collectionSortFields(r: JoinedEntry, data: EntrySortData): SortFields {
@@ -54,18 +67,18 @@ export function collectionSortFields(r: JoinedEntry, data: EntrySortData): SortF
     change: data.changes?.get(r.entry.scryfallId)?.delta ?? null,
     changePct: data.changes?.get(r.entry.scryfallId)?.pct ?? null,
     added: r.entry.createdAt,
-    updated: (data.lastEdited && lastEditedFor(data.lastEdited, r.entry.oracleId, r.entry.scryfallId)) ?? r.entry.updatedAt,
+    updated: r.entry.updatedAt,
   };
 }
 
-/** Sort fields for a wishlist row. A wish may target "any printing", which is
- *  the null scryfallId lastEditedFor already handles. */
-export function wishSortFields(r: JoinedWish, data: EntrySortData): SortFields {
+/** Sort fields for a wishlist row. The wishlist offers no price-change sorts,
+ *  so unlike a collection row this needs nothing lazily loaded. */
+export function wishSortFields(r: JoinedWish): SortFields {
   return {
     name: r.oracle?.name,
     cmc: r.oracle?.cmc,
     price: priceValue(r.printing, r.oracle),
     added: r.entry.createdAt,
-    updated: (data.lastEdited && lastEditedFor(data.lastEdited, r.entry.oracleId, r.entry.scryfallId)) ?? r.entry.updatedAt,
+    updated: r.entry.updatedAt,
   };
 }

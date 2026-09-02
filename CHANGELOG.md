@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.144.2
+
+- **"Assemble from my collection" now leads with the copies the slot actually asked for.** A list that names a printing, a finish, a language or a condition is telling you which piece of cardboard it wants, but the picker still showed newest edition first, so the copy you meant could be five tiles down. Those copies now sort to the front, closest match first. A slot that names nothing is unchanged: newest edition, best condition, same as before.
+
 ## 0.144.1
 
 - **Re-scanning a deck, binder or box now files the cards you scanned into it.** A re-scan set the right cards and counts, but left every line as a decklist entry: no printing, no condition, so nothing turned green and the container wasn't holding your copies. Scanning is you putting physical cardboard somewhere, so it now writes the copy the camera saw, exactly like "Scan cards" always did. A line you pasted in gets pointed at the copy it turns out you own (tags and notes on it stay), and a line already holding another printing follows the card you actually sleeved. That also means a re-scan of a deck whose counts already match is no longer a no-op: it says "same cards as before" and files them.

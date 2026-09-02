@@ -64,14 +64,29 @@ export function AssembleSheet({
     };
   }, [item?.oracleId]);
 
-  // Newest edition first, best condition first — the copy you'd reach for.
+  // What the slot asked for first, then newest edition, then best condition.
+  // A slot that names a printing, a finish, a language or a minimum condition is
+  // telling you which piece of cardboard it wants; those copies belong at the
+  // front instead of somewhere down a grid of twelve Lightning Bolts. A slot
+  // that names nothing scores every copy zero and the old order stands.
   const copies = useMemo(() => {
     const order = new Map(printings.map((p, n) => [p.scryfallId, n]));
     const rank = (e: CollectionEntry) => order.get(e.scryfallId) ?? printings.length;
+    const fit = (e: CollectionEntry) => {
+      if (!slot) return 0;
+      let score = 0;
+      if (slot.scryfallId && slot.scryfallId === e.scryfallId) score += 8;
+      if (slot.finish && slot.finish === e.finish) score += 4;
+      // Condition is a minimum, same as a wish: better than asked still fits.
+      if (slot.condition && CONDITIONS.indexOf(e.condition) <= CONDITIONS.indexOf(slot.condition)) score += 2;
+      if (slot.lang && slot.lang === e.lang) score += 1;
+      return score;
+    };
     return [...(owned ?? [])].sort(
-      (a, b) => rank(a) - rank(b) || CONDITIONS.indexOf(a.condition) - CONDITIONS.indexOf(b.condition),
+      (a, b) =>
+        fit(b) - fit(a) || rank(a) - rank(b) || CONDITIONS.indexOf(a.condition) - CONDITIONS.indexOf(b.condition),
     );
-  }, [owned, printings]);
+  }, [owned, printings, slot]);
 
   const done = i >= items.length;
 

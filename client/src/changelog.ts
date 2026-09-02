@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.144.2',
+    changes: [
+      {
+        kind: 'changed',
+        text: '"Assemble from my collection" now puts the copies matching what the slot asked for first. If a line names a printing, finish, language or condition, the copies that fit lead the grid instead of sitting below the newest edition.',
+      },
+    ],
+  },
+  {
     version: '0.144.1',
     changes: [
       {
@@ -154,15 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'The scanned-cards list shows a price on both card layouts now, and a total value for everything you scanned above the Add button.',
-      },
-    ],
-  },
-  {
-    version: '0.141.2',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Finish, condition and language in the scanner are now buttons that cycle through the options instead of dropdowns. One tap per step, and they are bigger to hit.',
       },
     ],
   },

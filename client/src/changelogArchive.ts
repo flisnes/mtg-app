@@ -9,6 +9,15 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.141.2',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Finish, condition and language in the scanner are now buttons that cycle through the options instead of dropdowns. One tap per step, and they are bigger to hit.',
+      },
+    ],
+  },
+  {
     version: '0.141.1',
     changes: [
       {

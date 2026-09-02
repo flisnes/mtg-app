@@ -1,4 +1,4 @@
-// The older half of the changelog (0.140.2 down to 0.98.0), split out of
+// The older half of the changelog (0.140.3 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,15 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.140.3',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Escape leaves select mode, so the ✕ on the bulk bar is no longer the only way out.',
+      },
+    ],
+  },
   {
     version: '0.140.2',
     changes: [

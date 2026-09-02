@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.143.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Mark a copy you own as altered, signed, misprint, miscut or crimped — any combination of them — from the new Special dropdown on a collection card. Those copies wear an amber A, and they sit on their own line, so your altered copy no longer shares a row with the plain one. Matching is untouched: a signed card still fills a deck slot and still answers a wish.',
+      },
+    ],
+  },
+  {
     version: '0.142.0',
     changes: [
       {
@@ -158,15 +167,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Scanning into a deck, binder or box now asks what your collection should do with every card, not just the ones you own no copy of. Per card: Skip, Add a second copy, or Update to the printing you scanned.',
-      },
-    ],
-  },
-  {
-    version: '0.140.3',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Escape leaves select mode, so the ✕ on the bulk bar is no longer the only way out.',
       },
     ],
   },

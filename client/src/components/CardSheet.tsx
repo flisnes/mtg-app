@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { CollectionEntry, Condition, ContainerKind, CopyPrefs, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, SlotShape, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
-import { CONDITIONS, FINISHES } from '@mtg/shared';
+import type { CollectionEntry, Condition, ContainerKind, CopyPrefs, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, SlotShape, SpecialCondition, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
+import { CONDITIONS, FINISHES, specialLabel } from '@mtg/shared';
 import {
   addDeckCard,
   addToCollection,
@@ -31,6 +31,7 @@ import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { CardHistory } from './CardHistory.js';
 import { ContainerPickerSheet } from './ContainerPickerSheet.js';
 import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
+import { SpecialConditionsField } from './SpecialConditions.js';
 import { EventSheet } from './EventSheet.js';
 import { useOpenCollectionSearch, useOpenDbSearch } from './GlobalSearch.js';
 import { Icon, type IconName } from './icons.js';
@@ -373,6 +374,10 @@ export function CardSheet(props: CardSheetProps) {
     entry?.quantity ?? wishEntry?.quantity ?? wishView?.quantity ?? deckCard?.quantity ?? sessionCard?.quantity ?? 1,
   );
   const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
+  // What's remarkable about this piece of cardboard (altered, signed, …).
+  // Collection-only: a wish or a deck slot asks nothing about it, because
+  // matching a card never does.
+  const [special, setSpecial] = useState<SpecialCondition[]>(entry?.special ?? []);
   // Slot tags ride along with Save/Cancel like every other field on the sheet.
   const [tags, setTags] = useState<string[]>(deckCard?.tags ?? []);
   // Which zone the slot sits in. Editable like every other field on this form:
@@ -638,6 +643,7 @@ export function CardSheet(props: CardSheetProps) {
         ...concrete,
         quantity,
         quantityForTrade: clampedForTrade,
+        special,
       });
     }
     onClose();
@@ -680,6 +686,7 @@ export function CardSheet(props: CardSheetProps) {
         ...concrete,
         quantity,
         quantityForTrade: where === 'tradelist' ? clampedForTrade || 1 : clampedForTrade,
+        special,
       });
       onAdded?.({ scryfallId: addedId, ...concrete });
     }
@@ -956,6 +963,7 @@ export function CardSheet(props: CardSheetProps) {
             <span>{condition}</span>
             <span>{FINISH_LABELS[(finish || 'nonfoil') as Finish]}</span>
             <span>{(lang || 'en').toUpperCase()}</span>
+            {special.length > 0 && <span className="sheet-copy-special">{specialLabel(special)}</span>}
             <span className="sheet-copy-qty">
               ×{quantity}
               {clampedForTrade > 0 ? ` · ${clampedForTrade} for trade` : ''}
@@ -1021,6 +1029,15 @@ export function CardSheet(props: CardSheetProps) {
             </label>
           )}
         </div>
+        )}
+
+        {/* Altered, signed, misprint … : facts about this cardboard, not about
+            the card, so only a collection copy is asked. Ticking a box splits the
+            copy onto its own line — your altered Bolt stops sharing a row with
+            the plain one — while every match (wish, deck slot, owned count)
+            carries on ignoring it. */}
+        {collectionFields && !readOnlyEntry && (
+          <SpecialConditionsField value={special} onChange={setSpecial} disabled={!formEditable} />
         )}
 
         {/* Which zone the card sits in. A deck's zones are the one thing about a

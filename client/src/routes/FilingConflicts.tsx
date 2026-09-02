@@ -145,13 +145,16 @@ export function FilingConflicts() {
     try {
       // Take the copies off the shelves first, then out of every container: the
       // card is gone, so no slot can be holding it.
-      const entry = await db.collection
+      // Every row of this copy identity, not just the first: an altered copy of
+      // the same printing and grade is its own line, and "gone for good" means
+      // all of them are.
+      const entries = await db.collection
         .where('[scryfallId+condition+finish+lang]')
         .equals([conflict.scryfallId, conflict.condition, conflict.finish, conflict.lang])
-        .first();
-      if (entry) await removeFromCollection(entry.id, entry.quantity, reason);
+        .toArray();
+      for (const entry of entries) await removeFromCollection(entry.id, entry.quantity, reason);
       await unfile(j);
-      toast(entry ? 'Removed from your collection and unfiled' : 'Unfiled everywhere');
+      toast(entries.length ? 'Removed from your collection and unfiled' : 'Unfiled everywhere');
     } finally {
       setBusy(false);
     }

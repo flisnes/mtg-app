@@ -1,4 +1,5 @@
 import type { CollectionEntry, Condition, Finish, Priced, Printing } from '@mtg/shared';
+import { specialLabel } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { Icon } from './icons.js';
@@ -17,11 +18,12 @@ import { useDismiss } from './useDismiss.js';
 
 export const FINISH_LABELS: Record<Finish, string> = { nonfoil: 'Nonfoil', foil: 'Foil', etched: 'Etched' };
 
-/** Condition · finish · language, leaving the unremarkable defaults unsaid. */
+/** Condition · finish · language · special, leaving the unremarkable defaults unsaid. */
 export function copyDetail(e: CollectionEntry): string {
   const bits: string[] = [e.condition];
   if (e.finish !== 'nonfoil') bits.push(FINISH_LABELS[e.finish]);
   if (e.lang !== 'en') bits.push(e.lang);
+  if (e.special?.length) bits.push(specialLabel(e.special));
   return bits.join(' · ');
 }
 

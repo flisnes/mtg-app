@@ -2688,6 +2688,79 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
 }
+/* Special conditions: a checkbox list, because a card can be both signed and
+   altered. Unfolds in flow under its trigger for the same reason the edition
+   picker does — the sheet body is a scroll container, and a floating panel would
+   be clipped by it. */
+.special-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+.special-trigger:disabled {
+  cursor: default;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+.special-trigger > svg {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--text-dim);
+}
+.special-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.special-summary-none {
+  color: var(--text-dim);
+}
+.special-field.open .special-trigger {
+  border-color: var(--accent);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.special-list {
+  border: 1px solid var(--accent);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: var(--surface);
+  padding: 0.25rem;
+  margin-top: -0.25rem;
+}
+.special-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+.special-row:active {
+  background: var(--surface-2);
+}
+.special-row .select-box {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+/* The read-only copy line's special conditions, in the badge's own amber. */
+.sheet-copy-special {
+  color: #d99a2b;
+}
 /* Edition picker: one line closed (set symbol + the printing you're looking at),
    and that same line becomes the search box when it opens. The list unfolds in
    flow rather than floating — the card sheet's body is a scroll container, and a
@@ -3703,6 +3776,19 @@ button.primary {
 .badge-ft-count {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+}
+/* "A" — this cardboard is remarkable beyond its grade: altered, signed,
+   misprinted, miscut, crimped. Amber rather than accent so it doesn't read as a
+   tradelist claim, and filled so it survives sitting on a full-bleed card tile. */
+.badge-special {
+  background: #d99a2b;
+  color: #1a1a1e;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.tile-badge.badge-special {
+  background: #d99a2b;
+  color: #1a1a1e;
 }
 /* Value of the copies you own in a deck, binder or box. */
 .badge-value {

@@ -1,4 +1,5 @@
 import type { ContainerKind, DeckBoard } from '@mtg/shared';
+import { specialLabel } from '@mtg/shared';
 import type { JoinedEntry, JoinedWish, JoinedDeckCard } from '../db/queries.js';
 import type { CardItem } from './CardViews.js';
 import type { useMoverFlags } from '../price/useMoverFlags.js';
@@ -8,6 +9,7 @@ import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
 import { ownedBadge } from './OwnedBadge.js';
 import { placementBadge } from './PlacementBadge.js';
+import { specialMark } from './SpecialConditions.js';
 import { formatPrice, pricedForFinish } from './CardSorting.js';
 
 // One place that turns an owned entry (collection or wishlist) into a CardItem,
@@ -33,8 +35,12 @@ export function collectionCardItem(
       lang: r.entry.lang,
     }),
   );
+  // Altered / signed / misprint: per copy again, and the reason this row exists
+  // at all rather than being folded into the plain one.
+  const special = specialMark(r.entry.special);
   return {
     ...(place ? { place } : {}),
+    ...(special ? { special } : {}),
     key: r.entry.id,
     name: r.oracle?.name ?? '(unknown card)',
     image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
@@ -60,6 +66,7 @@ export function collectionCardItem(
         {r.printing ? `${r.printing.setName} · #${r.printing.collectorNumber} · ` : ''}
         {r.entry.condition} · {r.entry.finish}
         {r.entry.lang !== 'en' ? ` · ${r.entry.lang}` : ''}
+        {r.entry.special?.length ? ` · ${specialLabel(r.entry.special)}` : ''}
       </>
     ),
     price: formatPrice(pricedForFinish(r.printing, r.entry.finish), r.oracle) ?? '—',

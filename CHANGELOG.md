@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.143.0
+
+- **Mark the cardboard that isn't ordinary: altered, signed, misprint, miscut, crimped.** A "Special" dropdown on a collection copy takes any combination of the five, and a copy carrying at least one wears an amber **A** on its tile and next to its name, with the details in the subtitle. Ticking a box splits the copy onto its own line, so your altered Bolt stops sharing a row with the plain one, and a plain copy you add later never lands on the altered one. Nothing about matching changes: a signed card still fills a deck slot, still answers a wishlist line, and still counts toward what you own.
+
 ## 0.142.0
 
 - **Decks can be archived.** An Archived folder sits under the deck list, greyed out until you put something in it. Archiving takes a deck out of the list but keeps everything about it: the list, the printings, the history. Archiving asks whether to unfile its cards too, so you can take the deck apart and hand the copies back to your other decks while the list it was survives. Archived decks are also out of "All decks" and out of their folder's count. Restore one from its options menu, either in the archive or on the deck's own page, where an ARCHIVED tag now shows.

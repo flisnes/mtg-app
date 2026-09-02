@@ -4,8 +4,10 @@
 // Invariants (enforced in the data-access layer, not the UI — beta plan §4):
 //  - The tradelist is NOT a separate table: it is `quantityForTrade > 0` on a
 //    CollectionEntry, with `quantityForTrade <= quantity`.
-//  - Collection entries are unique on (scryfallId, condition, finish, lang);
-//    adding a duplicate increments quantity.
+//  - Collection entries are unique on (scryfallId, condition, finish, lang) plus
+//    their special conditions; adding a duplicate increments quantity. The
+//    special conditions are the only part of that key card *matching* ignores,
+//    so the two are spelled out separately: collectionKey vs entryKey.
 //  - "Owned" (for deck checkmarks) = sum of quantity over all CollectionEntry
 //    with a matching oracleId (any printing counts). A deck slot that pins an
 //    edition/finish/condition/language only counts as *had* when some owned copy
@@ -19,6 +21,73 @@ export type Condition = 'NM' | 'LP' | 'MP' | 'HP' | 'DMG';
 export const CONDITIONS: readonly Condition[] = ['NM', 'LP', 'MP', 'HP', 'DMG'];
 export const FINISHES: readonly Finish[] = ['nonfoil', 'foil', 'etched'];
 
+/**
+ * Something remarkable about one piece of cardboard that its condition grade
+ * can't say: someone painted the border out, the artist signed it, the factory
+ * cut it crooked. Several can be true of the same card (a signed *and* altered
+ * Bolt), so a copy carries a set of these, not one value.
+ *
+ * Deliberately NOT part of what a card *is*. A wish, a deck slot and the
+ * ownership count all ignore it, so a signed Bolt still fills a Bolt slot and
+ * still answers a Bolt wish. All it does is split the collection row it sits on
+ * (see entryKey in db/dataAccess.ts), so the altered copy and the plain one can
+ * be told apart on the shelf.
+ */
+export type SpecialCondition = 'altered' | 'signed' | 'misprint' | 'miscut' | 'crimped';
+
+export const SPECIAL_CONDITIONS: readonly SpecialCondition[] = [
+  'altered',
+  'signed',
+  'misprint',
+  'miscut',
+  'crimped',
+];
+
+export const SPECIAL_CONDITION_LABELS: Record<SpecialCondition, string> = {
+  altered: 'Altered',
+  signed: 'Signed',
+  misprint: 'Misprint',
+  miscut: 'Miscut',
+  crimped: 'Crimped',
+};
+
+const SPECIAL_ORDER = new Map(SPECIAL_CONDITIONS.map((s, i) => [s, i]));
+
+/**
+ * Clean a list of special conditions into the shape that gets stored: known
+ * values only, deduped, in SPECIAL_CONDITIONS order. Nothing left → undefined,
+ * so an ordinary copy carries no field at all.
+ *
+ * The fixed order matters for sync the same way normalizeCardTags' sort does:
+ * two devices that ticked the same boxes in a different sequence must end up
+ * with the same row rather than fighting over it.
+ */
+export function normalizeSpecialConditions(raw: unknown): SpecialCondition[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set<SpecialCondition>();
+  for (const v of raw) if (SPECIAL_ORDER.has(v as SpecialCondition)) seen.add(v as SpecialCondition);
+  if (seen.size === 0) return undefined;
+  return [...seen].sort((a, b) => SPECIAL_ORDER.get(a)! - SPECIAL_ORDER.get(b)!);
+}
+
+/** The stored list as one string, for keying a copy by it ('' = an ordinary copy). */
+export function specialKey(special?: readonly SpecialCondition[]): string {
+  return special?.length ? special.join(',') : '';
+}
+
+/** Whether two normalized lists say the same thing (no write needed). */
+export function sameSpecialConditions(
+  a: readonly SpecialCondition[] | undefined,
+  b: readonly SpecialCondition[] | undefined,
+): boolean {
+  return specialKey(a) === specialKey(b);
+}
+
+/** Human list for a subtitle or a tooltip ("Altered · Signed"); '' = nothing to say. */
+export function specialLabel(special?: readonly SpecialCondition[], sep = ' · '): string {
+  return (special ?? []).map((s) => SPECIAL_CONDITION_LABELS[s]).join(sep);
+}
+
 export interface CollectionEntry {
   id: string;
   oracleId: string;
@@ -29,6 +98,13 @@ export interface CollectionEntry {
   quantity: number;
   /** 0..quantity — this IS the tradelist. */
   quantityForTrade: number;
+  /**
+   * What's remarkable about this cardboard beyond its grade (altered, signed,
+   * misprint, …); absent = an ordinary copy. Part of the row's identity, so the
+   * altered copy of a printing sits on its own line next to the plain one, and
+   * an added plain copy never lands on it. Never part of card matching.
+   */
+  special?: SpecialCondition[];
   createdAt: number;
   updatedAt: number;
 }
@@ -436,6 +512,9 @@ export interface UserEvent {
   condition?: Condition;
   finish?: Finish;
   lang?: string;
+  /** Which copy it was, when that copy was a remarkable one — so undoing the add
+   *  of a signed card takes the signed card back off the shelf, not the plain one. */
+  special?: SpecialCondition[];
   /**
    * Market price per copy in EUR cents at event time (collection.add =
    * acquisition price, collection.remove = exit price). null = unknown at the

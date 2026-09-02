@@ -1,4 +1,11 @@
-import { normalizeCardTags, prefsCompatible, sameCardTags, sanitizeContainerEmblem } from '@mtg/shared';
+import {
+  normalizeCardTags,
+  normalizeSpecialConditions,
+  prefsCompatible,
+  sameCardTags,
+  sanitizeContainerEmblem,
+  specialKey,
+} from '@mtg/shared';
 import type {
   CollectionEntry,
   Condition,
@@ -17,6 +24,7 @@ import type {
   TradeLine,
   UserEvent,
   SealedItem,
+  SpecialCondition,
   WishlistEntry,
 } from '@mtg/shared';
 import { db, USER_DATA_TABLES } from './schema.js';
@@ -31,7 +39,8 @@ import type { TransferPayload } from '../transfer/payload.js';
 // here, never in UI code, so that trade completion (Phase 4) reuses the exact
 // same functions:
 //   - tradelist IS quantityForTrade on a CollectionEntry (0..quantity)
-//   - collection entries unique on (scryfallId, condition, finish, lang)
+//   - collection entries unique on (scryfallId, condition, finish, lang) plus
+//     their special conditions (collectionKey vs entryKey, below)
 //   - "owned" = sum of quantity over all entries with a matching oracleId
 //
 // Since the sync + history plan, every mutation here also does two more
@@ -46,9 +55,55 @@ function newId(): string {
   return crypto.randomUUID();
 }
 
-/** The uniqueness key for a collection entry (or trade line merging into one). */
+/**
+ * What one piece of cardboard IS, for matching purposes: printing, condition,
+ * finish, language. This is the key a deck slot claims a copy with, the key the
+ * placement index counts owned copies by, and the key a trade or import line
+ * spells out. Special conditions are deliberately absent — nothing about
+ * matching a card cares whether it's signed.
+ *
+ * Not the same as a collection ROW's identity: two rows can share this key and
+ * differ in their special conditions. See entryKey.
+ */
 export function collectionKey(e: { scryfallId: string; condition: string; finish: string; lang?: string }): string {
   return `${e.scryfallId}|${e.condition}|${e.finish}|${e.lang || 'en'}`;
+}
+
+/**
+ * The uniqueness key of a collection ROW: what the card is, plus what's
+ * remarkable about this particular copy. Your altered Bolt and your plain one
+ * are one printing in one grade, but two lines on the shelf — marking one
+ * altered must not mark the other, and adding a plain copy must not land on the
+ * altered row.
+ *
+ * The Dexie index only covers collectionKey's four fields (a row's specials are
+ * an array, which an index can't spell), so a lookup by this key queries the
+ * index and then picks the row whose specials match — see findCollectionRow.
+ */
+export function entryKey(e: {
+  scryfallId: string;
+  condition: string;
+  finish: string;
+  lang?: string;
+  special?: readonly SpecialCondition[];
+}): string {
+  return `${collectionKey(e)}|${specialKey(e.special)}`;
+}
+
+/**
+ * The one row for a copy identity + special conditions, via the compound index.
+ * Callers with no specials to name (an import line, a received trade card, an
+ * undo of an add) get the ordinary copy, which is what they mean.
+ */
+async function findCollectionRow(
+  e: { scryfallId: string; condition: Condition; finish: Finish; lang: string; special?: readonly SpecialCondition[] },
+): Promise<CollectionEntry | undefined> {
+  const rows = await db.collection
+    .where('[scryfallId+condition+finish+lang]')
+    .equals([e.scryfallId, e.condition, e.finish, e.lang])
+    .toArray();
+  const want = specialKey(e.special);
+  return rows.find((r) => specialKey(r.special) === want);
 }
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -166,23 +221,25 @@ export interface AddToCollectionInput {
   quantity?: number;
   /** If set, ensures at least this many are marked for trade after the add. */
   quantityForTrade?: number;
+  /** Altered / signed / misprint / … ; absent = an ordinary copy. Splits the row
+   *  it lands on, so an altered copy never merges into the plain one. */
+  special?: readonly SpecialCondition[];
   /** How the add was made (edit-history provenance). Defaults to 'manual'. */
   source?: EventSource;
 }
 
 /**
  * Add copies to the collection, merging into an existing entry that matches on
- * (scryfallId, condition, finish, lang). Returns the resulting entry id.
+ * (scryfallId, condition, finish, lang) and the same special conditions.
+ * Returns the resulting entry id.
  */
 export async function addToCollection(input: AddToCollectionInput): Promise<string> {
   const qty = input.quantity ?? 1;
   const lang = input.lang || 'en';
+  const special = normalizeSpecialConditions(input.special);
 
   return db.transaction('rw', COLLECTION_TABLES, async () => {
-    const existing = await db.collection
-      .where('[scryfallId+condition+finish+lang]')
-      .equals([input.scryfallId, input.condition, input.finish, lang])
-      .first();
+    const existing = await findCollectionRow({ ...input, lang, special });
 
     const now = Date.now();
     let entry: CollectionEntry;
@@ -208,6 +265,7 @@ export async function addToCollection(input: AddToCollectionInput): Promise<stri
         lang,
         quantity: qty,
         quantityForTrade: clamp(input.quantityForTrade ?? 0, 0, qty),
+        ...(special ? { special } : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -224,6 +282,7 @@ export async function addToCollection(input: AddToCollectionInput): Promise<stri
       condition: input.condition,
       finish: input.finish,
       lang,
+      ...(special ? { special } : {}),
       priceEurCents: await priceCents(input.scryfallId, input.finish),
       source,
     });
@@ -297,7 +356,12 @@ async function refileEditedCopy(before: CollectionEntry, after: CollectionEntry,
 /** Patch an entry. quantityForTrade is always clamped to [0, quantity]. */
 export async function updateCollectionEntry(
   id: string,
-  patch: Partial<Pick<CollectionEntry, 'quantity' | 'quantityForTrade' | 'condition' | 'finish' | 'lang' | 'scryfallId'>>,
+  patch: Partial<
+    Pick<
+      CollectionEntry,
+      'quantity' | 'quantityForTrade' | 'condition' | 'finish' | 'lang' | 'scryfallId' | 'special'
+    >
+  >,
 ): Promise<void> {
   // deckCards is in scope because a re-keying edit takes the copy's filing with
   // it (refileEditedCopy).
@@ -307,6 +371,7 @@ export async function updateCollectionEntry(
     const now = Date.now();
     const quantity = patch.quantity ?? entry.quantity;
     const rawForTrade = patch.quantityForTrade ?? entry.quantityForTrade;
+    const special = 'special' in patch ? normalizeSpecialConditions(patch.special) : entry.special;
     const next: CollectionEntry = {
       ...entry,
       ...patch,
@@ -314,18 +379,21 @@ export async function updateCollectionEntry(
       quantityForTrade: clamp(rawForTrade, 0, quantity),
       updatedAt: now,
     };
+    // An ordinary copy carries no field at all, so a cleared list is deleted
+    // rather than stored as [] (which would sync as a different row than the
+    // same copy on another device).
+    if (special) next.special = special;
+    else delete next.special;
 
-    // Editing condition/finish/lang/printing can re-key the entry onto another
-    // existing one. The (scryfallId, condition, finish, lang) index is NOT
-    // unique in Dexie, so a naive put would leave two rows sharing a key and
-    // every later .first() lookup would pick one at random. Merge instead, the
-    // same way updateWishlistEntry does on a printing collision.
+    // Editing condition/finish/lang/printing — or ticking a special condition —
+    // can re-key the entry onto another existing one. Row identity is not a
+    // unique index in Dexie (the compound index can't cover the specials array),
+    // so a naive put would leave two rows sharing a key and every later lookup
+    // would pick one at random. Merge instead, the same way updateWishlistEntry
+    // does on a printing collision.
     let dup: CollectionEntry | undefined;
-    if (collectionKey(next) !== collectionKey(entry)) {
-      dup = await db.collection
-        .where('[scryfallId+condition+finish+lang]')
-        .equals([next.scryfallId, next.condition, next.finish, next.lang])
-        .first();
+    if (entryKey(next) !== entryKey(entry)) {
+      dup = await findCollectionRow(next);
       if (dup?.id === id) dup = undefined;
     }
     if (dup) {
@@ -362,6 +430,7 @@ export async function updateCollectionEntry(
         condition: next.condition,
         finish: next.finish,
         lang: next.lang,
+        ...(next.special ? { special: next.special } : {}),
         priceEurCents: await priceCents(next.scryfallId, next.finish),
         source: 'manual',
         ...(delta < 0 ? { reason: 'sold' as RemovalReason } : {}),
@@ -405,6 +474,7 @@ export async function removeFromCollection(
       condition: entry.condition,
       finish: entry.finish,
       lang: entry.lang,
+      ...(entry.special ? { special: entry.special } : {}),
       priceEurCents: await priceCents(entry.scryfallId, entry.finish),
       source: 'manual',
       reason,
@@ -480,9 +550,14 @@ export async function markOwnedForTrade(
     for (const req of requests) {
       const entries = byOracle.get(req.oracleId);
       if (!entries) continue;
-      // Best match first: exact printing, then finish, then condition.
+      // Best match first: exact printing, then finish, then condition, and last
+      // an ordinary copy over an annotated one — a scan says nothing about
+      // alterations, so don't offer up the signed card while a plain one is free.
       const score = (e: CollectionEntry) =>
-        (e.scryfallId === req.scryfallId ? 4 : 0) + (e.finish === req.finish ? 2 : 0) + (e.condition === req.condition ? 1 : 0);
+        (e.scryfallId === req.scryfallId ? 8 : 0) +
+        (e.finish === req.finish ? 4 : 0) +
+        (e.condition === req.condition ? 2 : 0) +
+        (e.special?.length ? 0 : 1);
       const ranked = [...entries].sort((a, b) => score(b) - score(a));
       let remaining = req.quantity;
       for (const e of ranked) {
@@ -511,6 +586,7 @@ export async function markOwnedForTrade(
           condition: e.condition,
           finish: e.finish,
           lang: e.lang,
+          ...(e.special ? { special: e.special } : {}),
           source: meta.source ?? 'manual',
           batchId,
         })),
@@ -539,6 +615,7 @@ export async function removeCollectionEntriesBulk(ids: string[], reason: Removal
         condition: e.condition,
         finish: e.finish,
         lang: e.lang,
+        ...(e.special ? { special: e.special } : {}),
         priceEurCents: toCents(priceForFinish(prices.get(e.scryfallId), e.finish).eur),
         source: 'manual' as const,
         reason,
@@ -742,7 +819,9 @@ export interface ImportLine {
 
 /**
  * Apply a resolved import in a single transaction, merging into existing
- * entries on (scryfallId, condition, finish, lang). Same invariants as
+ * entries on (scryfallId, condition, finish, lang). An import line says nothing
+ * about special conditions, so it merges with the ordinary copy and leaves an
+ * altered or signed row of the same printing alone. Same invariants as
  * addToCollection, but bulk (fast enough for a 1000+ card import).
  *
  * `removals` is how "Update" is applied (import and scan alike): remove exactly
@@ -769,7 +848,7 @@ export async function applyImport(
   const removals = meta.removals ?? [];
   await db.transaction('rw', COLLECTION_TABLES, async () => {
     const existing = await db.collection.toArray();
-    const map = new Map(existing.map((e) => [collectionKey(e), e]));
+    const map = new Map(existing.map((e) => [entryKey(e), e]));
     const now = Date.now();
     // A Set (not `writes.includes`) so re-touching an entry is O(1), not O(n);
     // events are accumulated and flushed once instead of two IDB ops per line.
@@ -789,7 +868,7 @@ export async function applyImport(
         if (take <= 0) continue;
         const remaining = e.quantity - take;
         if (remaining <= 0) {
-          map.delete(collectionKey(e));
+          map.delete(entryKey(e));
           await db.collection.delete(e.id);
           await stageDelete('collection', e.id);
         } else {
@@ -808,6 +887,7 @@ export async function applyImport(
           condition: e.condition,
           finish: e.finish,
           lang: e.lang,
+          ...(e.special ? { special: e.special } : {}),
           priceEurCents: toCents(priceForFinish(exitPrices.get(e.scryfallId), e.finish).eur),
           reason: 'other',
           ...batchExtra,
@@ -817,7 +897,7 @@ export async function applyImport(
 
     for (const l of lines) {
       const lang = l.lang || 'en';
-      const k = collectionKey({ ...l, lang });
+      const k = entryKey({ ...l, lang });
       cards += l.quantity;
       const ex = map.get(k);
       if (ex) {
@@ -2146,19 +2226,36 @@ export async function applyCompletedTrade(
     if (await db.trades.get(sessionId)) return { applied: false }; // already applied
 
     const entries = await db.collection.toArray();
-    const byKey = new Map(entries.map((e) => [collectionKey(e), e]));
+    // Two indexes, because a trade line says what a card IS and nothing about
+    // whether the cardboard is signed or altered:
+    //  - byKey: full row identity. What a received card merges into, so a plain
+    //    copy coming in lands on your plain row, never on your altered one.
+    //  - byCopy: rows per copy identity, ordinary copies first. What a given card
+    //    comes out of — the plain one goes across the table, and an annotated row
+    //    is only touched when it's the only copy of that card you have.
+    const byKey = new Map(entries.map((e) => [entryKey(e), e]));
+    const byCopy = new Map<string, CollectionEntry[]>();
+    for (const e of entries) {
+      const k = collectionKey(e);
+      const list = byCopy.get(k);
+      if (list) list.push(e);
+      else byCopy.set(k, [e]);
+    }
+    byCopy.forEach((list) => list.sort((a, b) => (a.special?.length ? 1 : 0) - (b.special?.length ? 1 : 0)));
     const now = Date.now();
 
     // Remove given cards (decrement matching entries; reduce trade qty with them).
     for (const line of given) {
-      const ex = byKey.get(collectionKey(line));
+      const copies = byCopy.get(collectionKey(line)) ?? [];
+      const ex = copies[0];
       const ownedQty = ex?.quantity ?? 0;
       const finalOwned = ex ? Math.max(0, ex.quantity - line.quantity) : 0;
       if (ex) {
         if (finalOwned <= 0) {
           await db.collection.delete(ex.id);
           await stageDelete('collection', ex.id);
-          byKey.delete(collectionKey(line));
+          byKey.delete(entryKey(ex));
+          copies.shift();
         } else {
           ex.quantity = finalOwned;
           ex.quantityForTrade = clamp(ex.quantityForTrade, 0, finalOwned);
@@ -2213,7 +2310,7 @@ export async function applyCompletedTrade(
     // Add received cards (merge on the same compound key).
     for (const line of received) {
       const lang = line.lang || 'en';
-      const ex = byKey.get(collectionKey(line));
+      const ex = byKey.get(entryKey(line));
       if (ex) {
         ex.quantity += line.quantity;
         ex.updatedAt = now;
@@ -2232,7 +2329,7 @@ export async function applyCompletedTrade(
           createdAt: now,
           updatedAt: now,
         };
-        byKey.set(collectionKey(entry), entry);
+        byKey.set(entryKey(entry), entry);
         await db.collection.add(entry);
         await stagePut('collection', entry);
       }
@@ -2315,16 +2412,23 @@ export type UndoResult =
 
 const UNDO_TABLES = [db.collection, db.wishlist, db.decks, db.deckCards, db.trades, db.events, db.outbox];
 
+/** The copy an event was about, as a row lookup. Events written before special
+ *  conditions existed name no specials, which is exactly the ordinary copy. */
+function eventCopy(e: UserEvent & { scryfallId: string }) {
+  return {
+    scryfallId: e.scryfallId,
+    condition: e.condition ?? ('NM' as Condition),
+    finish: e.finish ?? ('nonfoil' as Finish),
+    lang: e.lang ?? 'en',
+    special: e.special,
+  };
+}
+
 /** Add e.qty copies back to the collection (reverse of a removal). */
 async function addCopiesRaw(e: UserEvent, now: number): Promise<void> {
   if (!e.scryfallId || !e.qty) return;
-  const condition = e.condition ?? 'NM';
-  const finish = e.finish ?? 'nonfoil';
-  const lang = e.lang ?? 'en';
-  const existing = await db.collection
-    .where('[scryfallId+condition+finish+lang]')
-    .equals([e.scryfallId, condition, finish, lang])
-    .first();
+  const { condition, finish, lang, special } = eventCopy({ ...e, scryfallId: e.scryfallId });
+  const existing = await findCollectionRow({ scryfallId: e.scryfallId, condition, finish, lang, special });
   if (existing) {
     const next: CollectionEntry = { ...existing, quantity: existing.quantity + e.qty, updatedAt: now };
     await db.collection.put(next);
@@ -2339,6 +2443,7 @@ async function addCopiesRaw(e: UserEvent, now: number): Promise<void> {
       lang,
       quantity: e.qty,
       quantityForTrade: 0,
+      ...(special ? { special } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -2350,10 +2455,7 @@ async function addCopiesRaw(e: UserEvent, now: number): Promise<void> {
 /** Remove e.qty copies from the collection (reverse of an add). */
 async function removeCopiesRaw(e: UserEvent, now: number): Promise<void> {
   if (!e.scryfallId || !e.qty) return;
-  const existing = await db.collection
-    .where('[scryfallId+condition+finish+lang]')
-    .equals([e.scryfallId, e.condition ?? 'NM', e.finish ?? 'nonfoil', e.lang ?? 'en'])
-    .first();
+  const existing = await findCollectionRow(eventCopy({ ...e, scryfallId: e.scryfallId }));
   if (!existing) return;
   const remaining = existing.quantity - e.qty;
   if (remaining <= 0) {
@@ -2374,10 +2476,7 @@ async function removeCopiesRaw(e: UserEvent, now: number): Promise<void> {
 /** Change an entry's quantityForTrade by delta (reverse of a tradelist mark). */
 async function tradeMarkAdjustRaw(e: UserEvent, delta: number, now: number): Promise<void> {
   if (!e.scryfallId || !delta) return;
-  const existing = await db.collection
-    .where('[scryfallId+condition+finish+lang]')
-    .equals([e.scryfallId, e.condition ?? 'NM', e.finish ?? 'nonfoil', e.lang ?? 'en'])
-    .first();
+  const existing = await findCollectionRow(eventCopy({ ...e, scryfallId: e.scryfallId }));
   if (!existing) return;
   const next: CollectionEntry = {
     ...existing,

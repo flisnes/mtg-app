@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import type { CollectionEntry, Condition, Finish, Priced, Printing } from '@mtg/shared';
+import type { CollectionEntry, Condition, Finish, Priced, Printing, SpecialCondition } from '@mtg/shared';
+import { specialLabel } from '@mtg/shared';
 import { collectionKey } from '../db/dataAccess.js';
 import { getPrintingsByIds } from '../db/queries.js';
 import { Icon } from '../components/icons.js';
@@ -155,13 +156,22 @@ function ReplaceCopySheet({
     void getPrintingsByIds(ids).then(setPrintings);
   }, [plan]);
 
-  const describe = (v: { scryfallId: string; condition: Condition; finish: Finish; lang: string }) => {
+  const describe = (v: {
+    scryfallId: string;
+    condition: Condition;
+    finish: Finish;
+    lang: string;
+    special?: readonly SpecialCondition[];
+  }) => {
     const p = printings.get(v.scryfallId);
     const parts: string[] = [];
     if (p) parts.push(`${p.set.toUpperCase()} #${p.collectorNumber}`);
     parts.push(v.condition);
     if (v.finish !== 'nonfoil') parts.push(v.finish);
     if (v.lang && v.lang !== 'en') parts.push(v.lang);
+    // Named out loud: this list is how a copy gets swapped out, and nobody
+    // should lose their signed one to an import without seeing it said.
+    if (v.special?.length) parts.push(specialLabel(v.special));
     return parts.join(' · ');
   };
   const incoming = plan.conflict.incoming.map((l) => describe(l)).join(', ');

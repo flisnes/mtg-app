@@ -10,6 +10,7 @@ import {
   USERNAME_RE,
   USER_EVENT_KINDS,
   normalizeCardTags,
+  normalizeSpecialConditions,
   sanitizeContainerEmblem,
   type CollectionEntry,
   type Condition,
@@ -31,7 +32,7 @@ import {
   type UserEventKind,
   type WishlistEntry,
 } from '@mtg/shared';
-import { collectionKey } from '../db/dataAccess.js';
+import { entryKey } from '../db/dataAccess.js';
 import { db, USER_DATA_TABLES } from '../db/schema.js';
 import { recordDay, toCents } from '../price/history.js';
 import { sanitizeOffer } from '../trade/validate.js';
@@ -186,6 +187,10 @@ export function sanitizeCollectionRow(raw: unknown): CollectionEntry | null {
     lang: typeof r.lang === 'string' && r.lang ? r.lang.slice(0, 10) : 'en',
     quantity,
     quantityForTrade: Math.min(qty(r.quantityForTrade, 0), quantity),
+    // Altered / signed / misprint / … . Normalized rather than defaulted: an
+    // ordinary copy carries no field at all, and the fixed order keeps two
+    // devices that ticked the same boxes on the same row.
+    ...(normalizeSpecialConditions(r.special) ? { special: normalizeSpecialConditions(r.special)! } : {}),
     createdAt: ts(r.createdAt),
     updatedAt: ts(r.updatedAt),
   };
@@ -358,6 +363,7 @@ export function sanitizeEventRow(raw: unknown): UserEvent | null {
     ...(CONDS.has(r.condition as string) ? { condition: r.condition as Condition } : {}),
     ...(FINS.has(r.finish as string) ? { finish: r.finish as Finish } : {}),
     ...(typeof r.lang === 'string' && r.lang ? { lang: r.lang.slice(0, 10) } : {}),
+    ...(normalizeSpecialConditions(r.special) ? { special: normalizeSpecialConditions(r.special)! } : {}),
     ...(r.priceEurCents !== undefined ? { priceEurCents: cents(r.priceEurCents) } : {}),
     ...(REASONS.has(r.reason as string) ? { reason: r.reason as RemovalReason } : {}),
     ...(id(r.deckId) ? { deckId: id(r.deckId)! } : {}),
@@ -407,7 +413,7 @@ export function sanitizeEventRow(raw: unknown): UserEvent | null {
 const KNOWN_KEYS: Record<SyncTable, Record<string, true>> = {
   collection: {
     id: true, oracleId: true, scryfallId: true, condition: true, finish: true, lang: true,
-    quantity: true, quantityForTrade: true, createdAt: true, updatedAt: true,
+    quantity: true, quantityForTrade: true, special: true, createdAt: true, updatedAt: true,
   } satisfies Record<keyof Required<CollectionEntry>, true>,
   sealedItems: {
     id: true, productId: true, name: true, set: true, setName: true, tcgplayerId: true,
@@ -434,9 +440,9 @@ const KNOWN_KEYS: Record<SyncTable, Record<string, true>> = {
   } satisfies Record<keyof Required<Trade>, true>,
   events: {
     id: true, ts: true, updatedAt: true, kind: true, oracleId: true, scryfallId: true, qty: true,
-    condition: true, finish: true, lang: true, priceEurCents: true, reason: true, deckId: true,
-    deckName: true, deckKind: true, board: true, tradeId: true, reconcile: true, source: true,
-    batchId: true, batchLabel: true,
+    condition: true, finish: true, lang: true, special: true, priceEurCents: true, reason: true,
+    deckId: true, deckName: true, deckKind: true, board: true, tradeId: true, reconcile: true,
+    source: true, batchId: true, batchLabel: true,
   } satisfies Record<keyof Required<UserEvent>, true>,
 };
 
@@ -521,15 +527,16 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
   const p = raw as Record<string, unknown>;
   if (p.version !== PAYLOAD_VERSION) return null;
 
-  // Collection: unique on id and on (scryfallId, condition, finish, lang);
-  // key collisions merge quantities, same invariant as applyImport.
+  // Collection: unique on id and on the full row identity (printing +
+  // condition + finish + language + special conditions); key collisions merge
+  // quantities, same invariant as applyImport.
   const seenIds = new Set<string>();
   const byKey = new Map<string, CollectionEntry>();
   for (const r of rows(p.collection, CAPS.collection)) {
     const entry = sanitizeCollectionRow(r);
     if (!entry || seenIds.has(entry.id)) continue;
     seenIds.add(entry.id);
-    const key = collectionKey(entry);
+    const key = entryKey(entry);
     const ex = byKey.get(key);
     if (ex) {
       ex.quantity = Math.min(MAX_QTY, ex.quantity + entry.quantity);

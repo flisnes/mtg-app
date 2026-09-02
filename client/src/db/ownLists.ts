@@ -1,4 +1,5 @@
 import type { TradeLine, WishLine } from '@mtg/shared';
+import { collectionKey } from './dataAccess.js';
 import { getOracleCardsByIds } from './queries.js';
 import { db } from './schema.js';
 
@@ -14,15 +15,29 @@ export async function readOwnTradelist(cap: number): Promise<TradeLine[]> {
   // full collection size.
   const entries = (await db.collection.where('quantityForTrade').above(0).toArray()).slice(0, cap);
   const names = await getOracleCardsByIds(entries.map((e) => e.oracleId));
-  return entries.map((e) => ({
-    oracleId: e.oracleId,
-    scryfallId: e.scryfallId,
-    name: names.get(e.oracleId)?.name ?? '(unknown card)',
-    quantity: e.quantityForTrade,
-    condition: e.condition,
-    finish: e.finish,
-    lang: e.lang,
-  }));
+  // A TradeLine says what a card is, and special conditions aren't part of that
+  // (nor of the protocol) — so an altered copy and a plain one of the same
+  // printing and grade are two rows here but one line to the partner. Merged
+  // rather than sent twice: two identical lines read as a bug on their board.
+  const byKey = new Map<string, TradeLine>();
+  for (const e of entries) {
+    const key = collectionKey(e);
+    const ex = byKey.get(key);
+    if (ex) {
+      ex.quantity += e.quantityForTrade;
+      continue;
+    }
+    byKey.set(key, {
+      oracleId: e.oracleId,
+      scryfallId: e.scryfallId,
+      name: names.get(e.oracleId)?.name ?? '(unknown card)',
+      quantity: e.quantityForTrade,
+      condition: e.condition,
+      finish: e.finish,
+      lang: e.lang,
+    });
+  }
+  return [...byKey.values()];
 }
 
 /** Snapshot the local wishlist as WishLines. */

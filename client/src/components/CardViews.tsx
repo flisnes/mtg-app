@@ -113,6 +113,9 @@ export interface CardItem {
   /** Where the card is filed (deck / binder / box). Sits after the primary
    *  badge in list rows and second in the tile's bottom-left mark row. */
   place?: { node: ReactNode; cls?: string; title?: string };
+  /** The "A" mark of a copy with special conditions (altered, signed, …), in
+   *  the same two places, after the filing badge. */
+  special?: { node: ReactNode; cls?: string; title?: string };
   /** Dim the entry (e.g. unowned deck cards). */
   dim?: boolean;
   /** Marked for a cut: still here, but on its way out as soon as it's pasted. */
@@ -213,6 +216,11 @@ export function CardList({
                 {it.place && (
                   <span className={`badge ${it.place.cls ?? ''}`} title={it.place.title}>
                     {it.place.node}
+                  </span>
+                )}
+                {it.special && (
+                  <span className={`badge ${it.special.cls ?? ''}`} title={it.special.title}>
+                    {it.special.node}
                   </span>
                 )}
               </div>
@@ -414,8 +422,9 @@ export function CardGrid({
                 <span className="card-tile-ph">{it.name}</span>
               )}
               {it.foil && it.image && <span className="foil-sheen" aria-hidden />}
-              {/* Corner marks share one row along the bottom edge: owned, filed, trend. */}
-              {(it.badge || it.place || it.trend) && (
+              {/* Corner marks share one row along the bottom edge: owned, filed,
+                  special conditions, trend. */}
+              {(it.badge || it.place || it.special || it.trend) && (
                 <span className="tile-marks">
                   {it.badge && (
                     <span className={`tile-badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
@@ -425,6 +434,11 @@ export function CardGrid({
                   {it.place && (
                     <span className={`tile-place ${it.place.cls ?? ''}`} title={it.place.title}>
                       {it.place.node}
+                    </span>
+                  )}
+                  {it.special && (
+                    <span className={`tile-badge ${it.special.cls ?? ''}`} title={it.special.title}>
+                      {it.special.node}
                     </span>
                   )}
                   {it.trend && <TrendMark dir={it.trend} tile />}

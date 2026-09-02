@@ -1281,6 +1281,21 @@ const exactSlotKey = (
       // the line that says the deck is missing it.
       `${c.oracleId}|${c.board}|${c.scryfallId ?? ''}|${wants?.condition ?? ''}|${wants?.finish ?? ''}|${wants?.lang ?? ''}|${c.unfiled ? 'out' : ''}`;
 
+/**
+ * How little a slot says about the copy filling it: 2 = no printing, no traits
+ * (a pasted decklist line), 1 = a printing only, 0 = a named physical copy. The
+ * deck re-scan re-points the vaguest slot it can find before it describes a
+ * copy it can't match.
+ */
+const vagueness = (s: DeckCard) => (s.condition || s.finish || s.lang ? 0 : s.scryfallId ? 1 : 2);
+
+/** Append to a Map of buckets, creating the bucket on first use. */
+function push<T>(map: Map<string, T[]>, key: string, value: T): void {
+  const cur = map.get(key);
+  if (cur) cur.push(value);
+  else map.set(key, [value]);
+}
+
 /** The wants worth storing — drops the "any" (undefined) ones. */
 function wantFields(wants: SlotWants | undefined): SlotWants {
   if (!wants) return {};
@@ -1451,18 +1466,25 @@ export async function addDeckCardsBulk(
 
 /**
  * Reconcile a deck to *exactly* the given slots (deck re-scan): matching slots
- * have their quantity set to the target, brand-new (oracleId, board) slots are
- * added, and any current slot missing from `target` is removed. Everything
- * shares one batchId — the whole re-scan collapses to a single undoable history
- * entry, labelled with the deck name. A slot whose quantity is unchanged emits
- * no event (a bare preferred-printing adoption stages silently, like
- * patchDeckCard). The user's hand-picked printing is kept; a scanned printing is
- * only adopted when the slot had none. "Any printing" basic slots sit this out
- * entirely — no camera can see a card you never sleeved. Returns the change counts.
+ * have their quantity set to the target, copies the deck didn't list get a new
+ * slot, and any current slot the scan didn't see is removed. Everything shares
+ * one batchId — the whole re-scan collapses to a single undoable history entry,
+ * labelled with the deck name. A slot whose quantity is unchanged emits no event
+ * (a bare re-pin stages silently, like patchDeckCard). "Any printing" basic slots
+ * sit this out entirely — no camera can see a card you never sleeved. Returns the
+ * change counts.
+ *
+ * Targets are *copies*, not decklist lines: each one names a printing and its
+ * traits, so a re-scan files what it saw the same way every other route into a
+ * container does (see deck/filing.ts). Matching is exact first — same printing,
+ * same finish, condition and language — then falls back to the vaguest slot the
+ * deck has for that card, which the scan re-points at the cardboard the camera
+ * actually found. That keeps the slot (and its tags) instead of sweeping a
+ * pasted decklist line away and adding a copy beside it.
  */
 export async function reconcileDeck(
   deckId: string,
-  target: Array<{ oracleId: string; board: DeckBoard; quantity: number; scryfallId?: string }>,
+  target: Array<{ oracleId: string; board: DeckBoard; quantity: number; scryfallId?: string; wants?: SlotWants }>,
   meta: { source?: EventSource } = {},
 ): Promise<{ added: number; removed: number; changed: number }> {
   const batchId = newId();
@@ -1472,8 +1494,35 @@ export async function reconcileDeck(
   await db.transaction('rw', DECK_TABLES, async () => {
     const now = Date.now();
     const existing = await db.deckCards.where('deckId').equals(deckId).toArray();
-    const curMap = new Map(existing.map((c) => [slotKey(c), c]));
-    const seen = new Set<string>();
+    // An "any printing" basic isn't a piece of cardboard the camera could have
+    // seen, so a re-scan neither matches nor sweeps it away.
+    const slots = existing.filter((c) => !c.anyBasic);
+    const byCopy = new Map<string, DeckCard[]>();
+    const byCard = new Map<string, DeckCard[]>();
+    for (const s of slots) {
+      // Match an emptied-out slot (DeckCard.unfiled) as if it were filed: the
+      // camera just saw the card, so it's holding its copy again.
+      push(byCopy, exactSlotKey({ ...s, unfiled: false }, s), s);
+      push(byCard, slotKey(s), s);
+    }
+    // Which slot each scanned copy lands on: exact first, then a re-point.
+    const taken = new Set<string>();
+    const pairs: Array<{ t: (typeof target)[number]; cur?: DeckCard }> = [];
+    for (const t of target) {
+      if (t.quantity <= 0) continue;
+      const cur = (byCopy.get(exactSlotKey(t, t.wants)) ?? []).find((s) => !taken.has(s.id));
+      if (cur) taken.add(cur.id);
+      pairs.push({ t, cur });
+    }
+    for (const p of pairs) {
+      if (p.cur) continue;
+      // Vaguest slot first: a line naming no printing and no traits is a brew
+      // line the scan can pin outright, ahead of one describing another copy.
+      const free = (byCard.get(slotKey(p.t)) ?? []).filter((s) => !taken.has(s.id)).sort((a, b) => vagueness(b) - vagueness(a));
+      if (free.length === 0) continue;
+      p.cur = free[0];
+      taken.add(free[0]!.id);
+    }
     const puts: DeckCard[] = [];
     const deletes: string[] = [];
     // Slots the re-scan swept away, kept so the copies they held get stamped.
@@ -1487,17 +1536,14 @@ export async function reconcileDeck(
     };
     const nameExtra = containerRef(deck);
 
-    for (const t of target) {
-      if (t.quantity <= 0) continue;
-      const key = slotKey(t);
-      seen.add(key);
-      const cur = curMap.get(key);
+    for (const { t, cur } of pairs) {
       if (!cur) {
         puts.push({
           id: newId(),
           deckId,
           oracleId: t.oracleId,
           ...(t.scryfallId ? { scryfallId: t.scryfallId } : {}),
+          ...wantFields(t.wants),
           quantity: t.quantity,
           board: t.board,
           updatedAt: now,
@@ -1517,16 +1563,28 @@ export async function reconcileDeck(
         continue;
       }
       const delta = t.quantity - cur.quantity;
-      const scryfallId = cur.scryfallId ?? t.scryfallId;
-      // The camera just saw the card in the deck, so an emptied-out slot
-      // (DeckCard.unfiled) is holding its copy again.
-      // Write when the quantity moved OR we're adopting a printing the slot
-      // lacked OR the slot said the card wasn't here.
-      if (delta !== 0 || scryfallId !== cur.scryfallId || cur.unfiled) {
+      // A scan is the ground truth about cardboard, so the slot takes on the
+      // printing and the traits of the copy the camera saw. That's what makes it
+      // hold that copy (claimKeyOf) and go green, instead of staying a brew line
+      // claiming nothing.
+      const scryfallId = t.scryfallId ?? cur.scryfallId;
+      const wants = wantFields(t.wants);
+      const repinned =
+        scryfallId !== cur.scryfallId ||
+        wants.condition !== cur.condition ||
+        wants.finish !== cur.finish ||
+        wants.lang !== cur.lang;
+      // Write when the quantity moved OR the slot now names a different copy OR
+      // it said the card wasn't here (DeckCard.unfiled).
+      if (delta !== 0 || repinned || cur.unfiled) {
         puts.push({
           ...cur,
           quantity: t.quantity,
           ...(scryfallId ? { scryfallId } : {}),
+          condition: undefined,
+          finish: undefined,
+          lang: undefined,
+          ...wants,
           unfiled: undefined,
           updatedAt: now,
         });
@@ -1547,11 +1605,8 @@ export async function reconcileDeck(
       }
     }
 
-    for (const [key, cur] of curMap) {
-      if (seen.has(key)) continue;
-      // An "any printing" basic isn't a piece of cardboard the camera could have
-      // seen, so a re-scan neither matches nor sweeps it away.
-      if (cur.anyBasic) continue;
+    for (const cur of slots) {
+      if (taken.has(cur.id)) continue;
       deletes.push(cur.id);
       swept.push(cur);
       removed++;

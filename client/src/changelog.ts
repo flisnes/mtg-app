@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.144.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Re-scanning a deck, binder or box now files the copies you scanned into it, so they turn green like they do when you use "Scan cards". Before, the cards and counts were right but nothing was actually holding them. A re-scan whose counts already match is no longer a no-op either.',
+      },
+    ],
+  },
+  {
     version: '0.144.0',
     changes: [
       {
@@ -154,15 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Finish, condition and language in the scanner are now buttons that cycle through the options instead of dropdowns. One tap per step, and they are bigger to hit.',
-      },
-    ],
-  },
-  {
-    version: '0.141.1',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'In the scanner, the set symbol now sits above each card in the row and is bigger. The plus and minus buttons have rings around them so they stay visible on light card borders and busy art.',
       },
     ],
   },

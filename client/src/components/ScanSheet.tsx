@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Condition, ContainerKind, DeckBoard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
+import type { Condition, ContainerKind, DeckBoard, DeckCard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
-import { addToWishlistBulk, reconcileDeck } from '../db/dataAccess.js';
+import { addToWishlistBulk, reconcileDeck, type SlotWants } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
 import {
   getOracleCard,
@@ -216,12 +216,13 @@ interface TapFx {
   seq: number;
 }
 
-/** A deck re-scan target slot (session collapsed to what a deck stores: oracle + board). */
+/** A deck re-scan target slot: one physical copy (printing + traits + board), as filed. */
 interface RescanSlot {
   oracleId: string;
   board: DeckBoard;
   quantity: number;
   scryfallId?: string;
+  wants: SlotWants;
   name: string;
   image?: string;
 }
@@ -238,6 +239,9 @@ interface RescanReview {
   slots: RescanSlot[];
   /** Human-readable diff vs the deck's current contents (unchanged slots omitted). */
   changes: DeckChange[];
+  /** The write would file copies the deck isn't holding, even where the diff is
+   *  empty: same cards, but listed rather than filed, or a different printing. */
+  refiles: boolean;
   /** Scanned cards you own no copy of, in any printing — offered as a tick-list add. */
   unowned: SessionEntry[];
   /** Scanned cards already in the collection — offered the import's per-card Skip/Add/Update. */
@@ -1265,7 +1269,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
 
   /** Review steps with something to show, in the order they're walked. */
   const reviewPhases = (r: RescanReview): ReviewPhase[] => [
-    ...(r.changes.length ? (['changes'] as ReviewPhase[]) : []),
+    ...(r.changes.length || r.refiles ? (['changes'] as ReviewPhase[]) : []),
     ...(r.unowned.length ? (['collection'] as ReviewPhase[]) : []),
     ...(r.conflicts.length ? (['owned'] as ReviewPhase[]) : []),
   ];
@@ -1277,32 +1281,73 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   };
 
   const buildRescanReview = async (deckId: string): Promise<RescanReview> => {
+    // What gets written: one slot per physical copy, exactly as filing writes
+    // them, so the deck holds the cardboard the camera saw.
     const slotMap = new Map<string, RescanSlot>();
     for (const e of session) {
-      const key = `${e.oracleId}|${e.board}`;
-      const cur = slotMap.get(key);
+      const cur = slotMap.get(entryKey(e));
       if (cur) cur.quantity += e.qty;
-      else slotMap.set(key, { oracleId: e.oracleId, board: e.board, quantity: e.qty, scryfallId: e.scryfallId, name: e.name, image: e.image });
+      else
+        slotMap.set(entryKey(e), {
+          oracleId: e.oracleId,
+          board: e.board,
+          quantity: e.qty,
+          scryfallId: e.scryfallId,
+          wants: { condition: e.condition, finish: e.finish, lang: e.lang },
+          name: e.name,
+          image: e.image,
+        });
     }
     // "Any printing" basics are invisible to a scan — reconcileDeck leaves them
     // alone, so the preview mustn't offer to sweep them away either.
     const current = (await db.deckCards.where('deckId').equals(deckId).toArray()).filter((c) => !c.anyBasic);
     const oracleMap = await getOracleCardsByIds(current.map((c) => c.oracleId));
-    const curMap = new Map(current.map((c) => [`${c.oracleId}|${c.board}`, c]));
+
+    // What the user reads: the diff per card and board, which is how a deck
+    // lists itself. Swapping a Sol Ring for another printing of the same Sol
+    // Ring is no change to a decklist, so it stays off this list.
+    const cardKey = (c: { oracleId: string; board: DeckBoard }) => `${c.oracleId}|${c.board}`;
+    const scanned = new Map<string, { slot: RescanSlot; quantity: number }>();
+    for (const s of slotMap.values()) {
+      const cur = scanned.get(cardKey(s));
+      if (cur) cur.quantity += s.quantity;
+      else scanned.set(cardKey(s), { slot: s, quantity: s.quantity });
+    }
+    const held = new Map<string, { card: DeckCard; quantity: number }>();
+    for (const c of current) {
+      const cur = held.get(cardKey(c));
+      if (cur) cur.quantity += c.quantity;
+      else held.set(cardKey(c), { card: c, quantity: c.quantity });
+    }
 
     const changes: DeckChange[] = [];
-    for (const [key, s] of slotMap) {
-      const cur = curMap.get(key);
-      if (!cur) changes.push({ kind: 'add', oracleId: s.oracleId, board: s.board, name: s.name, image: s.image, quantity: s.quantity });
-      else if (cur.quantity !== s.quantity)
-        changes.push({ kind: 'change', oracleId: s.oracleId, board: s.board, name: s.name, image: s.image, from: cur.quantity, to: s.quantity });
+    for (const [key, { slot: s, quantity }] of scanned) {
+      const cur = held.get(key);
+      if (!cur) changes.push({ kind: 'add', oracleId: s.oracleId, board: s.board, name: s.name, image: s.image, quantity });
+      else if (cur.quantity !== quantity)
+        changes.push({ kind: 'change', oracleId: s.oracleId, board: s.board, name: s.name, image: s.image, from: cur.quantity, to: quantity });
     }
-    for (const [key, cur] of curMap) {
-      if (slotMap.has(key)) continue;
-      changes.push({ kind: 'remove', oracleId: cur.oracleId, board: cur.board, name: oracleMap.get(cur.oracleId)?.name ?? 'Unknown card', quantity: cur.quantity });
+    for (const [key, { card, quantity }] of held) {
+      if (scanned.has(key)) continue;
+      changes.push({ kind: 'remove', oracleId: card.oracleId, board: card.board, name: oracleMap.get(card.oracleId)?.name ?? 'Unknown card', quantity });
     }
 
-    return { slots: [...slotMap.values()], changes, ...(await buildCollectionStep()) };
+    // A deck can list every card the scan saw and still be holding none of it:
+    // pasted decklist lines name no copy, so nothing in them is filed. Then the
+    // diff above is empty while the write is anything but, and the re-scan must
+    // not bow out with "already matches your scan".
+    const filed = new Map<string, number>();
+    for (const c of current) {
+      // An emptied-out slot (DeckCard.unfiled) holds nothing, so it can never
+      // match a scanned copy. Same shape as entryKey, which keys the scan.
+      if (c.unfiled) continue;
+      const key = `${c.scryfallId ?? ''}|${c.finish ?? ''}|${c.condition ?? ''}|${c.lang ?? ''}|${c.board}`;
+      filed.set(key, (filed.get(key) ?? 0) + c.quantity);
+    }
+    const refiles =
+      filed.size !== slotMap.size || [...slotMap].some(([key, s]) => filed.get(key) !== s.quantity);
+
+    return { slots: [...slotMap.values()], changes, refiles, ...(await buildCollectionStep()) };
   };
 
   /**
@@ -1336,7 +1381,13 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         if (decided.mode === 'move') await unfileClashes(decided.clashes);
         await reconcileDeck(
           target.deckId,
-          r.slots.map((s) => ({ oracleId: s.oracleId, board: s.board, quantity: s.quantity, scryfallId: s.scryfallId })),
+          r.slots.map((s) => ({
+            oracleId: s.oracleId,
+            board: s.board,
+            quantity: s.quantity,
+            scryfallId: s.scryfallId,
+            wants: s.wants,
+          })),
           { source: 'scan' },
         );
       } else {
@@ -1407,7 +1458,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     // own, or a mix: each one gets its own answer. The deck append itself is
     // deferred to applyRescan so both writes land together.
     if (target.kind === 'deck') {
-      const review: RescanReview = { slots: [], changes: [], ...(await buildCollectionStep()) };
+      const review: RescanReview = { slots: [], changes: [], refiles: false, ...(await buildCollectionStep()) };
       const phase = reviewPhases(review)[0];
       if (phase) {
         setRescanPicked(new Set(review.unowned.map((e) => entryKey(e))));
@@ -1966,7 +2017,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           nextLabel={
             stepPhase(rescanStep, 1)
               ? 'Next'
-              : `Apply ${rescanStep.changes.length} change${rescanStep.changes.length === 1 ? '' : 's'}`
+              : rescanStep.changes.length
+                ? `Apply ${rescanStep.changes.length} change${rescanStep.changes.length === 1 ? '' : 's'}`
+                : 'File the copies you scanned'
           }
           onNext={() => {
             const next = stepPhase(rescanStep, 1);
@@ -2103,9 +2156,14 @@ function RescanChangesSheet({
             <Icon name="close" size={18} />
           </button>
         </div>
-        <p className="fine-print">Sets “{deckName}” to exactly what you scanned. Cards left unchanged aren’t listed.</p>
+        <p className="fine-print">
+          Sets “{deckName}” to exactly what you scanned, and files those copies into it. Cards left unchanged aren’t
+          listed.
+        </p>
         {rows.length === 0 ? (
-          <p className="scan-list-empty">No card changes — only the collection add below.</p>
+          <p className="scan-list-empty">
+            Same cards as before. The copies you scanned get filed here, so “{deckName}” is holding them.
+          </p>
         ) : (
           <ul className="scan-list">
             {rows.map((c) => (

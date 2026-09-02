@@ -660,7 +660,7 @@ export function CardSheet(props: CardSheetProps) {
       const claims = !anyBasicPicked && !!claimKeyOf({ ...wishPrefs, scryfallId });
       if (claims) {
         const filed = await file(addTo.deckId, [filingCopy(board)]);
-        if (filed === null) return false;
+        if (!filed) return false;
       } else {
         await addDeckCard({
           deckId: addTo.deckId,
@@ -761,7 +761,15 @@ export function CardSheet(props: CardSheetProps) {
       return;
     }
     const noun = CONTAINER_META[kind].noun;
-    toast(filed === 'move' ? `Moved to ${noun}` : `Filed in ${noun}`);
+    // Every copy you own is in there already. Saying "filed" for a write that
+    // didn't happen is how you end up filing the same card twice.
+    toast(
+      filed.filed === 0
+        ? `Already in that ${noun}`
+        : filed.mode === 'move'
+          ? `Moved to ${noun}`
+          : `Filed in ${noun}`,
+    );
     onClose();
   }
 

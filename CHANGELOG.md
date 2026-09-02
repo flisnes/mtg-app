@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.143.3
+
+- **Filing a card somewhere that already holds copies of it tops the container up instead of over-promising.** Own two Bishops of Rebirth, keep one in your White box, then file the other from the card sheet and the box used to claim three of them, with an amber "3 filed / 2 owned" warning against yourself. No deck, binder or box will now claim more copies of a card than you own, so that filing puts the loose copy away and stops there. If every copy is already in there it says so instead of filing again, and the toasts count what actually went in. The move-or-both question still comes up when some other container is holding the copy you are filing, so a card coming back out of a deck still works the way it did.
+
 ## 0.143.2
 
 - **"Filed: Nowhere" stops hiding the copy still in the shoebox.** Own two of a card, file one into a deck, and the filter dropped both: it asked "is this line filed anywhere?" instead of "is any copy of it loose?". Now a line with copies left over shows under both "Filed: Nowhere" and "Filed: Somewhere", because that is the truth about it, and selecting everything under "Nowhere" grabs the loose ones again.

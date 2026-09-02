@@ -234,8 +234,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
    */
   async function bulkAddContainer(containerId: string, kind: ContainerKind) {
     setPickingContainer(false);
-    const copies = selectedRows.reduce((sum, r) => sum + r.entry.quantity, 0);
-    const mode = await file(
+    const filing = await file(
       containerId,
       selectedRows.map((r) => ({
         oracleId: r.entry.oracleId,
@@ -249,12 +248,18 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           .join(' · '),
       })),
     );
-    if (mode === null) return; // backed out of the prompt — selection stays put
+    if (filing === null) return; // backed out of the prompt — selection stays put
     const noun = CONTAINER_META[kind].noun;
+    // The count is what went in, not what was asked for: a line whose copies are
+    // already in there adds nothing, and a toast that claims otherwise is how
+    // you end up with three copies of a card you own two of.
+    const copies = filing.filed;
     toast(
-      mode === 'move'
-        ? `Moved ${copies} card${plural(copies)} to ${noun}`
-        : `Added ${copies} card${plural(copies)} to ${noun}`,
+      copies === 0
+        ? `Already in that ${noun}`
+        : filing.mode === 'move'
+          ? `Moved ${copies} card${plural(copies)} to ${noun}`
+          : `Added ${copies} card${plural(copies)} to ${noun}`,
     );
     sel.exit();
   }

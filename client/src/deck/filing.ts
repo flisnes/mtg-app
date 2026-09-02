@@ -180,6 +180,63 @@ export async function findFilingClashes(
 }
 
 /**
+ * Trim a filing to the cardboard that can actually go in: no container may claim
+ * more copies of one card than you own.
+ *
+ * Filing a line whole is the norm — the collection's "File away", the card
+ * sheet's "File this copy" and a container-to-container move all hand over every
+ * copy of the line — and the copies the target already holds are part of that
+ * same line. So filing your two Bishops of Rebirth into the box that already
+ * holds one puts the loose one away and stops, instead of promising a third
+ * Bishop that doesn't exist and raising a conflict against yourself. Copies
+ * sharing one physical identity draw from the same room, so a main + sideboard
+ * pair can't smuggle in the extra either.
+ *
+ * Only cardboard gets capped. A brew line, an "any printing" basic and an exact
+ * copy of a card you own none of all pass through untouched: none of them is a
+ * card on your shelf, so there's nothing to over-promise.
+ */
+export async function capToOwnedCopies(targetId: string, copies: FilingCopy[]): Promise<FilingCopy[]> {
+  const keys = copies.map((c) => claimKeyOf({ ...c.wants, scryfallId: c.scryfallId, anyBasic: c.anyBasic }));
+  if (!keys.some((k) => k)) return copies;
+
+  const [held, entries] = await Promise.all([
+    db.deckCards.where('deckId').equals(targetId).toArray(),
+    db.collection
+      .where('oracleId')
+      .anyOf([...new Set(copies.map((c) => c.oracleId))])
+      .toArray(),
+  ]);
+  // Room per physical copy: what you own, less what the target holds of it
+  // already. An emptied-out slot (DeckCard.unfiled) holds nothing — claimKeyOf
+  // skips it — so the card can always go back in.
+  const room = new Map<string, number>();
+  for (const e of entries) {
+    const k = collectionKey(e);
+    room.set(k, (room.get(k) ?? 0) + e.quantity);
+  }
+  for (const s of held) {
+    const k = claimKeyOf(s);
+    if (k !== undefined && room.has(k)) room.set(k, room.get(k)! - s.quantity);
+  }
+
+  const capped: FilingCopy[] = [];
+  copies.forEach((c, i) => {
+    const key = keys[i];
+    // Not a copy off your shelf: file it as asked and let the conflict flag,
+    // which is the thing that knows about promises you can't keep, do the rest.
+    if (key === undefined || !room.has(key)) {
+      capped.push(c);
+      return;
+    }
+    const take = Math.min(c.quantity, Math.max(0, room.get(key)!));
+    room.set(key, room.get(key)! - take);
+    if (take > 0) capped.push(take === c.quantity ? c : { ...c, quantity: take });
+  });
+  return capped;
+}
+
+/**
  * File the copies. Slots are written with `exact`, so the same card in two
  * printings (or two finishes) stays two lines — a box holds pieces of cardboard,
  * not decklist entries.

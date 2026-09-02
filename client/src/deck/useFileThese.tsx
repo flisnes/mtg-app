@@ -52,19 +52,23 @@ export function useFileThese(): {
   async function pick(containerId: string, kind: ContainerKind) {
     if (!pending) return;
     setPicking(false);
-    const mode = await file(containerId, pending.copies);
+    const filing = await file(containerId, pending.copies);
     // Backed out of the move-or-both question: back to the picker, not out of
     // the whole step — they were mid-decision, not cancelling the filing.
-    if (mode === null) {
+    if (filing === null) {
       setPicking(true);
       return;
     }
     const noun = CONTAINER_META[kind].noun;
-    const n = pending.count;
+    // Copies that went in, which is at most what you own of each — not the
+    // number of cards the intake landed.
+    const n = filing.filed;
     toast(
-      mode === 'move'
-        ? `Moved ${n} card${n === 1 ? '' : 's'} to ${noun}`
-        : `Filed ${n} card${n === 1 ? '' : 's'} in ${noun}`,
+      n === 0
+        ? `Already in that ${noun}`
+        : filing.mode === 'move'
+          ? `Moved ${n} card${n === 1 ? '' : 's'} to ${noun}`
+          : `Filed ${n} card${n === 1 ? '' : 's'} in ${noun}`,
     );
     done();
   }

@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.143.3',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Filing a card into a deck, binder or box that already holds copies of it no longer promises copies you do not own. Own two with one already filed there, and filing puts the loose copy away instead of claiming a third and warning you about it.',
+      },
+    ],
+  },
+  {
     version: '0.143.2',
     changes: [
       {
@@ -154,15 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Visual stacks: a view where cards overlap down the column with only their names showing, and the set, quantity and price beside them. Tap a card to open it fully. Toggle it on the trade board or in the scanned cards list.',
-      },
-    ],
-  },
-  {
-    version: '0.140.6',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'The scanner card row now scrolls back to the start for every new card, including the next copy of the card you just scanned.',
       },
     ],
   },

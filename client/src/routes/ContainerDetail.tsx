@@ -582,7 +582,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
    */
   async function bulkFile(containerId: string, targetKind: ContainerKind) {
     setPicking(null);
-    const mode = await file(
+    const filing = await file(
       containerId,
       selectedRows.map((r) => ({
         oracleId: r.oracleId,
@@ -597,12 +597,17 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           .join(' · '),
       })),
     );
-    if (mode === null) return;
+    if (filing === null) return;
     const noun = CONTAINER_META[targetKind].noun.toLowerCase();
+    // What actually went in: the target never takes more of a copy than you own,
+    // so a card it already holds adds nothing.
+    const n = filing.filed;
     toast(
-      mode === 'move'
-        ? `Moved ${selectedCopies} card${plural(selectedCopies)} to ${noun}`
-        : `Added ${selectedCopies} card${plural(selectedCopies)} to ${noun}`,
+      n === 0
+        ? `Already in that ${noun}`
+        : filing.mode === 'move'
+          ? `Moved ${n} card${plural(n)} to ${noun}`
+          : `Added ${n} card${plural(n)} to ${noun}`,
     );
     sel.exit();
   }

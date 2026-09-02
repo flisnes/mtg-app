@@ -1340,7 +1340,13 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           { source: 'scan' },
         );
       } else {
-        const mode = await file(target.deckId, scanCopies(session), { source: 'scan' });
+        const mode = await file(target.deckId, scanCopies(session), {
+          source: 'scan',
+          // The scanned copies only reach the collection further down (the
+          // commitResolvedLines call below), so there is nothing to cap this
+          // filing against yet — capping here would file nothing at all.
+          capToOwned: false,
+        });
         if (mode === null) {
           // Backed out of the prompt: leave the review up, but say so.
           toast('Nothing added: filing was cancelled');
@@ -1446,7 +1452,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           // so it's physical cardboard being filed, not a brew line — route it
           // through the filing engine, which asks (or moves it) if that same
           // copy is already claimed somewhere else.
-          const mode = await file(target.deckId, scanCopies(session), { source: 'scan' });
+          const mode = await file(target.deckId, scanCopies(session), {
+            source: 'scan',
+            // Same as the review path: the cards land in the collection after
+            // this write, so a cap would have nothing to measure against.
+            capToOwned: false,
+          });
           if (mode === null) {
             // Backed out of the "already filed elsewhere" prompt. Silence here
             // reads as a dead button, so name what didn't happen.

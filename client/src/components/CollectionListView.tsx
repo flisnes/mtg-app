@@ -79,12 +79,13 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // while one of them is active. Shared with the search scoped into this list.
   const sortData = useEntrySortData(sort);
 
-  // "Filed" means exactly what the row's badge means: this copy — printing,
-  // finish, condition, language — sits in a deck, binder or box. So "Nowhere"
-  // is the set of cards with no placement badge, and selecting all of them is
-  // the two-tap way to grab everything still loose in the shoebox. Until the
-  // index loads there's nothing to judge by, so everything passes rather than
-  // the list flashing empty.
+  // "Filed" is about copies, not rows. One row is every copy of one printing in
+  // one finish, condition and language, so filing one of your two Bolts leaves a
+  // row that is filed *and* loose: it belongs in "Somewhere" for the copy in the
+  // deck and in "Nowhere" for the one still in the shoebox. Counting containers
+  // instead of copies is what used to hide that loose Bolt. Until the index
+  // loads there's nothing to judge by, so everything passes rather than the list
+  // flashing empty.
   const matchesPlacement = useCallback(
     (r: JoinedEntry) => {
       if (placeFilter === 'all' || !placements) return true;
@@ -94,7 +95,10 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         lang: r.entry.lang,
       });
       if (placeFilter === 'conflict') return info.over;
-      return placeFilter === 'filed' ? info.places.length > 0 : info.places.length === 0;
+      // Copies of this row a deck, binder or box says it's holding — the same
+      // slots the row's badge counts.
+      const filed = info.places.reduce((n, p) => n + p.quantity, 0);
+      return placeFilter === 'filed' ? filed > 0 : filed < r.entry.quantity;
     },
     [placeFilter, placements],
   );

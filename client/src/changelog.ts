@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.143.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: '"Filed: Nowhere" hid cards you own two of when one copy was filed away. A line with copies still loose now shows up under it, so selecting them all catches everything left in the shoebox.',
+      },
+    ],
+  },
+  {
     version: '0.143.1',
     changes: [
       {
@@ -154,19 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'The scanner card row now scrolls back to the start for every new card, including the next copy of the card you just scanned.',
-      },
-    ],
-  },
-  {
-    version: '0.140.5',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'The card row in the scanner holds still while you pick a printing. Scrolling or tapping it freezes the row (the bar on top shows for how long), and a new card in frame waits instead of shifting the printings under your finger.',
-      },
-      {
-        kind: 'fixed',
-        text: 'A confirmed edition no longer jumps to the front of a row you have started scrolling through. It still gets the green check.',
       },
     ],
   },

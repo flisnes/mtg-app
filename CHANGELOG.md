@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.143.2
+
+- **"Filed: Nowhere" stops hiding the copy still in the shoebox.** Own two of a card, file one into a deck, and the filter dropped both: it asked "is this line filed anywhere?" instead of "is any copy of it loose?". Now a line with copies left over shows under both "Filed: Nowhere" and "Filed: Somewhere", because that is the truth about it, and selecting everything under "Nowhere" grabs the loose ones again.
+
 ## 0.143.1
 
 - **"Last edited" now means the copy you actually edited, and it stays put.** Sorting by it used to throw a freshly-changed card to the top for a moment and then drop it back down. It was reading the card's history log rather than the copy itself, which is both slower and blunter: your English and your Italian copy of one printing shared a single value, so neither could ever come out above the other, and one "any printing" Forest wish dragged every Forest you own up with it. It now reads each copy's own timestamp, so exactly the piece of cardboard you touched moves, and it moves once. Filing a card into a deck, binder or box, or pulling it out again, counts as touching it too.

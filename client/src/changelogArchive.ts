@@ -1,4 +1,4 @@
-// The older half of the changelog (0.140.4 down to 0.98.0), split out of
+// The older half of the changelog (0.140.5 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,19 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.140.5',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The card row in the scanner holds still while you pick a printing. Scrolling or tapping it freezes the row (the bar on top shows for how long), and a new card in frame waits instead of shifting the printings under your finger.',
+      },
+      {
+        kind: 'fixed',
+        text: 'A confirmed edition no longer jumps to the front of a row you have started scrolling through. It still gets the green check.',
+      },
+    ],
+  },
   {
     version: '0.140.4',
     changes: [

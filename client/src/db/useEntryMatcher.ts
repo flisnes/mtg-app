@@ -7,6 +7,7 @@ import {
   type RowPrinting,
   type SearchableEntry,
 } from '../cardDb/querySyntax.js';
+import { useOracleTags } from '../cardDb/useOracleTags.js';
 
 /** Any joined list row: an entry with an id, plus the card and printing it resolved to. */
 interface JoinedRow {
@@ -27,6 +28,9 @@ interface JoinedRow {
  * the DB, which can't produce a `SearchableEntry` to match against.
  */
 export function useEntryMatcher<T extends JoinedRow>(rows: T[] | undefined, query: string): (row: T) => boolean {
+  // `otag:` resolves its slug when the query is parsed, so re-parse once the
+  // tag vocabulary lands.
+  const tagsVersion = useOracleTags();
   const index = useMemo(() => {
     const m = new Map<string, SearchableEntry>();
     rows?.forEach(
@@ -43,5 +47,5 @@ export function useEntryMatcher<T extends JoinedRow>(rows: T[] | undefined, quer
       const se = index.get(row.entry.id);
       return !!se && q.matches(se);
     };
-  }, [index, query]);
+  }, [index, query, tagsVersion]);
 }

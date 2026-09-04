@@ -20,7 +20,9 @@ import { CardSearchView } from './CardSearchView.js';
 import { useShortcuts } from './useShortcuts.js';
 import { BulkActionBar } from './BulkActionBar.js';
 import { useMultiSelect } from './useMultiSelect.js';
-import { SearchHistoryDropdown, recordSearch, useSearchHistory } from './RecentSearches.js';
+import { SearchHistoryDropdown, SearchSuggestDropdown, recordSearch, useSearchHistory } from './RecentSearches.js';
+import { otagCompletions } from '../cardDb/oracleTags.js';
+import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { ScopedResults, type Scope } from './ScopedResults.js';
 import { ProfileScopedResults } from './ProfileScopedResults.js';
 import { ContainerScopedResults } from './ContainerScopedResults.js';
@@ -334,14 +336,21 @@ export function GlobalSearchBar() {
   // meaning "commit what I typed" for anyone who never touches the list.
   const [histOpen, setHistOpen] = useState(false);
   const [active, setActive] = useState(-1);
-  const matches = useSearchHistory(query);
+  // Mid-`otag:` the tag vocabulary displaces the history: four thousand slugs
+  // are undiscoverable otherwise, and old searches are no help in choosing one.
+  const tagsVersion = useOracleTags();
+  const otag = useMemo(() => otagCompletions(query), [query, tagsVersion]);
+  const history = useSearchHistory(query);
+  const matches = otag?.slugs.length ? otag.slugs : history;
   const showHistory = histOpen && matches.length > 0;
   useEffect(() => setActive(-1), [query]);
 
   // Picking only fills the query — results update live, and the search is
-  // recorded (and so moves to the top) when it ends, like any other.
-  function pickHistory(q: string) {
-    setQuery(q);
+  // recorded (and so moves to the top) when it ends, like any other. A tag
+  // completes the term in place and leaves a trailing space, so the next term
+  // can be typed straight on; a history entry replaces the whole query.
+  function pickHistory(value: string) {
+    setQuery(otag?.slugs.length ? `${otag.head}${value} ` : value);
     setHistOpen(false);
   }
 
@@ -397,9 +406,18 @@ export function GlobalSearchBar() {
             enterKeyHint="search"
             aria-label="Search cards"
           />
-          {showHistory && (
-            <SearchHistoryDropdown list={matches} active={active} onPick={pickHistory} onHover={setActive} />
-          )}
+          {showHistory &&
+            (otag?.slugs.length ? (
+              <SearchSuggestDropdown
+                list={matches}
+                active={active}
+                onPick={pickHistory}
+                onHover={setActive}
+                label="Oracle tags"
+              />
+            ) : (
+              <SearchHistoryDropdown list={matches} active={active} onPick={pickHistory} onHover={setActive} />
+            ))}
         </div>
         {open ? (
           <button className="header-close" onClick={close} aria-label="Close search">

@@ -163,3 +163,51 @@ export function SearchHistoryDropdown({
     </div>
   );
 }
+
+/**
+ * The same panel, for completions rather than history: no per-row forget and no
+ * clear-all, because nothing here is the user's to delete. Used while an
+ * `otag:` term is being typed, where the vocabulary is far more useful than
+ * what you searched for last week.
+ */
+export function SearchSuggestDropdown({
+  list,
+  active,
+  onPick,
+  onHover,
+  label,
+}: {
+  list: string[];
+  active: number;
+  onPick: (value: string) => void;
+  onHover: (index: number) => void;
+  label: string;
+}) {
+  const listRef = useRef<HTMLUListElement | null>(null);
+  useEffect(() => {
+    if (active < 0) return;
+    listRef.current?.children[active]?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
+
+  return (
+    <div className="search-history" onMouseDown={(e) => e.preventDefault()}>
+      <ul className="search-history-list" ref={listRef} role="listbox" aria-label={label}>
+        {list.map((value, i) => (
+          <li key={value} className={i === active ? 'is-active' : undefined}>
+            <button
+              className="search-history-item"
+              role="option"
+              aria-selected={i === active}
+              onClick={() => onPick(value)}
+              onMouseEnter={() => onHover(i)}
+              title={value}
+            >
+              <Icon name="tags" size={14} />
+              <span className="search-history-q">{value}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.145.0
+
+- **Search by what a card does, not just what it says: `otag:`.** Scryfall's Tagger community labels cards by function, and those labels now ship with the card database. `otag:removal`, `otag:ramp`, `otag:tutor`, `otag:pinger`, `otag:shockland` — around 4,500 tags covering 93% of cards. Tags nest, so `otag:removal` finds everything tagged under it too, and `otag:shockland` finds all ten shocklands even though none of them carries that tag directly. It combines with everything else: `otag:removal t:instant id<=wu mv<=2`. Type `otag:` in the search bar and a list of tags drops down, broadest first, so you can find what exists without leaving the app. `function:` and `oracletag:` work as synonyms, and it works on your own lists too, not just card search.
+- Flavour trivia is left out on purpose. Tags about how a card's name scans or whether its type line is unique (`alliteration` alone covers 4,418 cards) would drown the useful ones, so 57 of them are dropped before the database is built.
+- The card database grows by about 0.7 MB for this. Tags refresh weekly rather than nightly, so the community's constant retagging doesn't turn into a daily download.
+
 ## 0.144.2
 
 - **"Assemble from my collection" now leads with the copies the slot actually asked for.** A list that names a printing, a finish, a language or a condition is telling you which piece of cardboard it wants, but the picker still showed newest edition first, so the copy you meant could be five tiles down. Those copies now sort to the front, closest match first. A slot that names nothing is unchanged: newest edition, best condition, same as before.

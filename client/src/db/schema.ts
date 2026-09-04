@@ -49,6 +49,8 @@ export class MtgDatabase extends Dexie {
   /** Lazily-fetched sealed catalog and its price map (rows 'current' and 'prices'). */
   sealed!: Table<import('../sealed/store.js').SealedRow, string>;
   setTypes!: Table<import('../cardDb/setTypes.js').SetTypesRow, string>;
+  /** Lazily-fetched oracle-tag vocabulary for `otag:` search (row 'current'). */
+  oracleTags!: Table<import('../cardDb/oracleTags.js').OracleTagsRow, string>;
 
   constructor() {
     super('mtg');
@@ -231,6 +233,10 @@ export class MtgDatabase extends Dexie {
     // priceHistories rather than sharing it: every reader of that table joins
     // its key against the card DB.
     this.version(15).stores({ sealedPriceHistories: 'productId' });
+
+    // v16: the Scryfall Tagger oracle-tag vocabulary behind `otag:` search.
+    // One row, same lazy-fetch-and-cache shape as setTypes.
+    this.version(16).stores({ oracleTags: 'key' });
   }
 }
 

@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.145.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Search cards by what they do with `otag:`. Around 4,500 Scryfall Tagger labels now ship with the card database: `otag:removal`, `otag:ramp`, `otag:tutor`, `otag:shockland`. Tags nest, so a broad one finds everything under it. Type `otag:` in the search bar for the list. Works on your own lists too.',
+      },
+    ],
+  },
+  {
     version: '0.144.2',
     changes: [
       {
@@ -154,15 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Visual stacks are now the default view on the trade board and in the scanned card list, and the card at the bottom of a stack always shows in full. Tiles and rows are still one tap away on the toggle.',
-      },
-    ],
-  },
-  {
-    version: '0.141.3',
-    changes: [
-      {
-        kind: 'added',
-        text: 'The scanned-cards list shows a price on both card layouts now, and a total value for everything you scanned above the Add button.',
       },
     ],
   },

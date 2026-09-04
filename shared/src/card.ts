@@ -84,6 +84,15 @@ export interface OracleCard {
   reserved?: boolean;
   /** A Commander Game Changer (per the Commander Rules Committee list). Omitted when not one. */
   gameChanger?: boolean;
+  /**
+   * Scryfall Tagger oracle tags — what the card *does* (removal, ramp, tutor,
+   * combat trick, ...) as tagged by the Tagger community. Stored as sorted
+   * indices into the tag dictionary artifact (manifest `v2.tags`) rather than
+   * slugs, because the same few thousand strings repeated across 35k cards cost
+   * twice what the numbers do. Absent when the card carries no tags (about 7%
+   * of cards) and on card DBs built before this field existed. Drives `otag:`.
+   */
+  tags?: number[];
 }
 
 /**
@@ -298,8 +307,35 @@ export interface CardDbManifest {
      * builds made before the preferred-printing setting existed.
      */
     sets?: CardDbArtifactMeta;
+    /**
+     * The oracle-tag vocabulary the numbers in `OracleCard.tags` index into.
+     * Its own artifact because it's per-vocabulary, not per-card, and tiny
+     * (~25 KB gzipped for every tag Scryfall has). Fetched lazily like `sets`.
+     * Absent on builds made before `otag:` search existed, and on runs where
+     * the tag fetch failed — in which case `otag:` simply finds nothing.
+     */
+    tags?: CardDbArtifactMeta;
   };
 }
+
+/**
+ * One oracle tag, positional to keep the artifact small: `[slug]`, or
+ * `[slug, parentIndices]`, or `[slug, parentIndices, aliasSlugs]`. The array's
+ * own index is what `OracleCard.tags` refers to.
+ *
+ * Parents matter more than they look. Scryfall's tags are a hierarchy and a
+ * search matches the whole subtree: `otag:removal` finds 6,690 cards even
+ * though the `removal` tag itself is tagged on exactly zero — every hit comes
+ * from one of its 55 descendants. Drop the edges and the broadest, most useful
+ * tags all return nothing.
+ */
+export type OracleTagEntry =
+  | [slug: string]
+  | [slug: string, parents: number[]]
+  | [slug: string, parents: number[], aliases: string[]];
+
+/** The whole tag vocabulary, indexed by the numbers in `OracleCard.tags`. */
+export type OracleTagDictionary = OracleTagEntry[];
 
 /**
  * Set code → Scryfall `set_type`. The client uses this to resolve the "latest

@@ -1,6 +1,7 @@
 import type { Color, DeckFormat, Finish, Format, OracleCard, Priced, PrintingVariant, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPricesByIds, withPrices } from './prices.js';
+import { loadOracleTags } from './oracleTags.js';
 import { priceValue, sortCards, type CardSortPrefs } from '../components/cardSort.js';
 import {
   matchesQuery,
@@ -16,8 +17,8 @@ import {
 // would miss "bolt" → "Lightning Bolt") and cheap in-memory filtering. If this
 // ever gets slow, the plan's escape hatch is MiniSearch — not needed at 37k.
 //
-// Queries support Scryfall-style syntax (o:/t:/c:/id:/r:/mv:/f:/mana:/set:/is:,
-// negation with `-`, `or` and parentheses) — see querySyntax.ts. Bare words
+// Queries support Scryfall-style syntax (o:/t:/c:/id:/r:/mv:/f:/mana:/set:/is:/
+// otag:, negation with `-`, `or` and parentheses) — see querySyntax.ts. Bare words
 // still match names, so plain queries from the import and trade pickers behave
 // as before.
 
@@ -171,7 +172,9 @@ export async function searchCards(
   limit = 60,
   sort: SearchSort = DEFAULT_SORT,
 ): Promise<SearchResult> {
-  const index = await getIndex();
+  // Before parsing, not after: `otag:` resolves its slug at parse time, and an
+  // unresolved one degrades to a name search. Settles instantly once loaded.
+  const [index] = await Promise.all([getIndex(), loadOracleTags()]);
   const parsed = parseSearchQuery(query.trim());
   const legalIn = filters.legalIn && filters.legalIn !== 'casual' ? (filters.legalIn as Format) : undefined;
 

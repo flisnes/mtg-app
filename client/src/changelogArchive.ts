@@ -1,4 +1,4 @@
-// The older half of the changelog (0.141.1 down to 0.98.0), split out of
+// The older half of the changelog (0.141.3 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,15 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.141.3',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The scanned-cards list shows a price on both card layouts now, and a total value for everything you scanned above the Add button.',
+      },
+    ],
+  },
   {
     version: '0.141.2',
     changes: [

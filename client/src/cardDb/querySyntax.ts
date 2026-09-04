@@ -25,6 +25,10 @@ import {
 //                     the card; in a list of copies: the copy's own printing)
 //   f:modern          legal in format (restricted counts as legal)
 //   is:transform  is:reserved  is:foil  is:borderless   see IS_KEYWORDS below
+//   otag:removal  function:ramp   Scryfall Tagger oracle tag — what the card
+//                     *does*. Matches the tag's whole subtree, so `otag:removal`
+//                     also finds everything tagged `removal-destroy`, `burn
+//                     creature`, … See setOracleTagResolver below.
 //
 // Terms combine like they do on Scryfall: whitespace means AND, `or` means OR
 // (`and` may be spelled out too), parentheses group, and `-` negates either a
@@ -48,6 +52,7 @@ export type QueryTerm = { negate: boolean } & (
   | { kind: 'set'; value: string }
   | { kind: 'format'; format: Format }
   | { kind: 'is'; test: (entry: SearchableEntry) => boolean }
+  | { kind: 'otag'; ids: ReadonlySet<number> }
 );
 
 /** A term, or a boolean combination of them. */
@@ -164,6 +169,22 @@ export function toSearchableEntry(card: OracleCard, printings: PrintingSummary =
   };
 }
 
+/**
+ * Resolves an `otag:` slug to the set of tag indices that count as a match —
+ * the tag itself plus everything under it. Injected rather than imported so
+ * this module stays free of IndexedDB and network dependencies (it runs in the
+ * import worker and in every list filter); cardDb/oracleTags.ts registers the
+ * real one once the vocabulary has loaded.
+ *
+ * Null, or a null return, means "no such tag": the term is dropped and the text
+ * falls back to a name search, exactly as a mistyped `is:` keyword does.
+ */
+let oracleTagResolver: ((slug: string) => ReadonlySet<number> | null) | null = null;
+
+export function setOracleTagResolver(fn: ((slug: string) => ReadonlySet<number> | null) | null): void {
+  oracleTagResolver = fn;
+}
+
 const STRING_FIELDS: Record<string, 'name' | 'oracle' | 'type'> = {
   n: 'name',
   name: 'name',
@@ -187,6 +208,7 @@ const RARITY_FIELDS = new Set(['r', 'rarity']);
 const MANA_FIELDS = new Set(['m', 'mana']);
 const SET_FIELDS = new Set(['set', 's', 'e', 'edition']);
 const IS_FIELDS = new Set(['is']);
+const OTAG_FIELDS = new Set(['otag', 'oracletag', 'function']);
 
 const KNOWN_FIELDS = new Set([
   ...Object.keys(STRING_FIELDS),
@@ -197,6 +219,7 @@ const KNOWN_FIELDS = new Set([
   ...MANA_FIELDS,
   ...SET_FIELDS,
   ...IS_FIELDS,
+  ...OTAG_FIELDS,
 ]);
 
 const COLOR_LETTERS: Record<string, Color> = { w: 'W', u: 'U', b: 'B', r: 'R', g: 'G' };
@@ -435,6 +458,15 @@ function fieldTerm(field: string, op: string, value: string, negate: boolean): Q
     const test = IS_KEYWORDS[value.toLowerCase()];
     if (!test) return null;
     return { kind: 'is', test, negate };
+  }
+
+  if (OTAG_FIELDS.has(field)) {
+    if (op !== ':' && op !== '=') return null;
+    // Tag slugs are lowercase and hyphenated. Accept the spaced spelling too,
+    // so a quoted `otag:"spot removal"` finds `spot-removal` like Scryfall does.
+    const ids = oracleTagResolver?.(value.trim().toLowerCase().replace(/\s+/g, '-')) ?? null;
+    if (!ids) return null;
+    return { kind: 'otag', ids, negate };
   }
 
   if (RARITY_FIELDS.has(field)) {
@@ -706,6 +738,10 @@ function termMatches(entry: SearchableEntry, t: QueryTerm): boolean {
       return entry.sets.has(t.value);
     case 'is':
       return t.test(entry);
+    case 'otag':
+      // Cards average six tags and the query set is usually one subtree, so
+      // scanning the card's short list beats the other way round.
+      return !!entry.card.tags?.some((id) => t.ids.has(id));
     case 'format': {
       const status = entry.card.legalities?.[t.format];
       return status === 'legal' || status === 'restricted';

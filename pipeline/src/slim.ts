@@ -15,6 +15,7 @@ import type {
   PriceMap,
   PriceTuple,
   Printing,
+  OracleTagDictionary,
   SealedPriceMap,
   SetTypeMap,
 } from '@mtg/shared';
@@ -24,6 +25,7 @@ import { slimCard, type RawCard, type SlimResult } from './slimCard.js';
 import { buildSealedProducts } from './sealed.js';
 import { fetchSealedUsdPrices } from './sealedPrices.js';
 import { fetchSealedEurPrices } from './cardmarketPrices.js';
+import { buildOracleTags } from './oracleTags.js';
 
 // Nightly card-DB pipeline (beta plan §3). Downloads Scryfall `default_cards`,
 // slims each card to ~18 fields, and emits:
@@ -37,6 +39,9 @@ import { fetchSealedEurPrices } from './cardmarketPrices.js';
 //     while the card data itself changes rarely;
 //   - sets.<hash>.json.gz — set code → set_type, for the client's non-promo
 //     printing preference (a few KB, fetched lazily);
+//   - tags.<hash>.json.gz — the Scryfall Tagger oracle-tag vocabulary the
+//     numbers in each card's `tags` index into, for `otag:` search (~40 KB,
+//     fetched lazily). Refreshed weekly, not nightly — see oracleTags.ts;
 //   - manifest.json tying it all together.
 //
 // Superseded artifacts are pruned after each build (one build's grace window),
@@ -47,6 +52,8 @@ import { fetchSealedEurPrices } from './cardmarketPrices.js';
 //   BULK_TYPE   default 'default_cards' (use 'oracle_cards' for a fast dry run)
 //   MAX_CARDS   optional cap for quick logic tests (stops the stream early)
 //   APP_VERSION latestAppVersion for the update beacon; defaults to client ver.
+//   SKIP_TAGS    skip the oracle-tag pass (otag: search ships empty)
+//   FORCE_TAGS   refetch tags now instead of honouring the weekly cache
 //   OUT_DIR     output directory (default ./out)
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -112,7 +119,7 @@ function betterRepresentative(a: SlimResult, b: SlimResult): SlimResult {
   return a.printing.scryfallId <= b.printing.scryfallId ? a : b;
 }
 
-function toOracleCard(rep: SlimResult, tokenOracleIds: string[]): OracleCard {
+function toOracleCard(rep: SlimResult, tokenOracleIds: string[], tags: number[] | undefined): OracleCard {
   const { printing, oracle } = rep;
   return {
     oracleId: printing.oracleId,
@@ -136,6 +143,9 @@ function toOracleCard(rep: SlimResult, tokenOracleIds: string[]): OracleCard {
     ...(oracle.layout ? { layout: oracle.layout } : {}),
     ...(oracle.reserved ? { reserved: true } : {}),
     ...(oracle.gameChanger ? { gameChanger: true } : {}),
+    // Sparse like the flags above: ~7% of oracle cards carry no tag at all, and
+    // an empty array on every one of them is pure weight.
+    ...(tags?.length ? { tags } : {}),
   };
 }
 
@@ -175,7 +185,15 @@ function emitChunks<T>(name: string, rows: T[], idOf: (row: T) => string): CardD
 function referenced(m: CardDbManifest | null): Set<string> {
   const out = new Set<string>();
   if (!m) return out;
-  for (const a of [m.artifacts?.oracle, m.artifacts?.printings, m.v2?.prices, m.v2?.sealed, m.v2?.sealedPrices, m.v2?.sets]) {
+  for (const a of [
+    m.artifacts?.oracle,
+    m.artifacts?.printings,
+    m.v2?.prices,
+    m.v2?.sealed,
+    m.v2?.sealedPrices,
+    m.v2?.sets,
+    m.v2?.tags,
+  ]) {
     if (a) out.add(a.url);
   }
   for (const c of [...(m.v2?.chunks.oracle ?? []), ...(m.v2?.chunks.printings ?? [])]) out.add(c.url);
@@ -218,6 +236,25 @@ async function main(): Promise<void> {
     previous = JSON.parse(readFileSync(join(OUT_DIR, 'manifest.json'), 'utf8')) as CardDbManifest;
   } catch {
     /* first build in this OUT_DIR, or an unreadable manifest — nothing to preserve */
+  }
+
+  // Oracle tags first: it's a small, self-contained fetch that mostly hits the
+  // weekly cache, and doing it before the ~78 MB card stream keeps its peak off
+  // the same heap. Best-effort like sealed/sets — a Tagger outage must not fail
+  // the nightly card build; it just ships a DB where `otag:` finds nothing.
+  let tags: Awaited<ReturnType<typeof buildOracleTags>> | null = null;
+  if (!process.env.SKIP_TAGS) {
+    try {
+      tags = await buildOracleTags(OUT_DIR);
+      const t = tags.stats;
+      console.log(
+        `[pipeline] oracle tags (${t.source}, fetched ${t.fetchedAt.slice(0, 10)}): ${t.tags} tags, ` +
+          `${t.taggings} taggings over ${t.cards} cards` +
+          (t.source === 'network' ? ` (${t.excluded} excluded as flavour trivia)` : ''),
+      );
+    } catch (err) {
+      console.warn('[pipeline] oracle-tag fetch failed; shipping without otag: search:', (err as Error).message);
+    }
   }
 
   const entry = await getBulkEntry(BULK_TYPE);
@@ -297,7 +334,7 @@ async function main(): Promise<void> {
       tokenIds.add(oracleId);
       markerLinks++;
     }
-    return toOracleCard(rep, [...tokenIds].sort());
+    return toOracleCard(rep, [...tokenIds].sort(), tags?.byOracleId.get(rep.printing.oracleId));
   });
   console.log(`[pipeline] linked ${markerLinks} marker-card references (emblems, counters, dungeons, …)`);
 
@@ -403,6 +440,16 @@ async function main(): Promise<void> {
     console.warn('[pipeline] set-type fetch failed; shipping without it:', (err as Error).message);
   }
 
+  // The tag vocabulary the numbers on each card index into. Emitted even when
+  // every card was filtered out of a dry run — the client needs it to turn
+  // `otag:removal` into the subtree of tag indices to look for.
+  let tagsArtifact: Artifact | undefined;
+  if (tags) {
+    const dictionary: OracleTagDictionary = tags.dictionary;
+    tagsArtifact = emitHashed('tags', dictionary, dictionary.length);
+    console.log(`[pipeline]   tags: ${tagsArtifact.count} tag vocabulary (${tagsArtifact.bytes} B)`);
+  }
+
   const meta = (a: Artifact) => ({ url: a.filename, bytes: a.bytes, sha256: a.sha256, count: a.count });
   const manifest: CardDbManifest = {
     cardDbVersion: entry.updated_at,
@@ -415,6 +462,7 @@ async function main(): Promise<void> {
       ...(sealedArtifact ? { sealed: meta(sealedArtifact) } : {}),
       ...(sealedPricesArtifact ? { sealedPrices: meta(sealedPricesArtifact) } : {}),
       ...(setsArtifact ? { sets: meta(setsArtifact) } : {}),
+      ...(tagsArtifact ? { tags: meta(tagsArtifact) } : {}),
     },
   };
   writeFileSync(join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));

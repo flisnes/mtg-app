@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.145.1
+
+- **Fixed: `otag:` searches found nothing after updating to 0.145.0.** The app shipped with tag search, but the card database it was talking to was rebuilt from a cache that predated the feature, so there were no tags in it and every `otag:` query came back empty. The build now rebuilds the card database whenever the code that produces it changes, and the app re-checks for the tag list after any card-data update instead of trusting a "no tags here" answer it got before the data landed. You'll be offered a card-data update once the rebuilt database is published; take it and tag search starts working.
+
 ## 0.145.0
 
 - **Search by what a card does, not just what it says: `otag:`.** Scryfall's Tagger community labels cards by function, and those labels now ship with the card database. `otag:removal`, `otag:ramp`, `otag:tutor`, `otag:pinger`, `otag:shockland` — around 4,500 tags covering 93% of cards. Tags nest, so `otag:removal` finds everything tagged under it too, and `otag:shockland` finds all ten shocklands even though none of them carries that tag directly. It combines with everything else: `otag:removal t:instant id<=wu mv<=2`. Type `otag:` in the search bar and a list of tags drops down, broadest first, so you can find what exists without leaving the app. `function:` and `oracletag:` work as synonyms, and it works on your own lists too, not just card search.

@@ -142,6 +142,19 @@ export async function loadOracleTags(): Promise<void> {
   }
 }
 
+/**
+ * Forget the loaded vocabulary so the next search fetches it again. Called
+ * after a card-DB import: the tags artifact only appeared in the manifest with
+ * v0.145.0, so a client that looked before the rebuilt DB was published cached
+ * "there is no vocabulary" for the rest of the session and kept resolving
+ * `otag:` to nothing even once the data was there.
+ */
+export function invalidateOracleTags(): void {
+  index = null;
+  loaded = false;
+  setOracleTagResolver(null);
+}
+
 /** How many tags a slug stands for, itself included. Ranks the suggestions. */
 function subtreeSize(id: number): number {
   return index ? closure(index, id).size : 1;

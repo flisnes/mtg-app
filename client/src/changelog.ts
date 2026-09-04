@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.145.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: '`otag:` searches came back empty after the 0.145.0 update, because the card database being served predated tag search. Accept the card-data update when it is offered and tag search works.',
+      },
+    ],
+  },
+  {
     version: '0.145.0',
     changes: [
       {
@@ -154,15 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Deck, binder and box rows keep their value and options button at the right edge, so they line up down the list instead of drifting with the badges.',
-      },
-    ],
-  },
-  {
-    version: '0.141.4',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Visual stacks are now the default view on the trade board and in the scanned card list, and the card at the bottom of a stack always shows in full. Tiles and rows are still one tap away on the toggle.',
       },
     ],
   },

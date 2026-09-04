@@ -6,6 +6,7 @@ import type { ChunkTask, ImportRequest, WorkerResponse } from './messages.js';
 import { runScryfallFallback } from './fallback.js';
 import { invalidateSearchIndex } from './search.js';
 import { invalidatePriceCache } from './prices.js';
+import { invalidateOracleTags } from './oracleTags.js';
 
 // Orchestrates card-DB freshness (beta plan §3). The manifest describes the
 // card data as 256 hash-named chunks per artifact plus a separate prices file;
@@ -162,6 +163,7 @@ function workerRun(
     );
     invalidateSearchIndex();
     invalidatePriceCache();
+    invalidateOracleTags();
   };
 }
 
@@ -171,6 +173,7 @@ function fallbackRun(): RunSync {
     await runScryfallFallback((fraction, label) => onState({ status: 'progress', fraction, label }));
     invalidateSearchIndex();
     invalidatePriceCache();
+    invalidateOracleTags();
   };
 }
 

@@ -37,6 +37,7 @@ import { recordCollectionPrices } from './price/tracking.js';
 import { recordSealedPrices } from './price/sealedTracking.js';
 import { ensureRates } from './price/rates.js';
 import { startImageCacheUpkeep } from './util/imageCache.js';
+import { afterPaint } from './util/afterPaint.js';
 
 // Third-party notices carry ~26KB of verbatim licence text. Lazy so that
 // weight lands in its own chunk instead of the bundle everyone downloads.
@@ -60,20 +61,24 @@ export function App() {
 
   useEffect(() => {
     void getSetting<boolean>('onboardingComplete').then((v) => setOnboarded(!!v));
-    // Record today's price for every card in the collection (deduped per day),
-    // and the same for every unopened product on the sealed shelf.
-    void recordCollectionPrices();
-    void recordSealedPrices();
-    // Top up today's exchange rates if the display currency needs any (no-op
-    // when prices are shown in the currency Scryfall already quotes).
-    void ensureRates();
-    // Signed-in: start the sync engine (live push + outbox drain), then
-    // refresh trade-match notifications (throttled).
-    initSyncEngine();
-    void maybeFetchMatches();
-    // Trim the card-image cache back to this device's budget (Settings → Card
-    // images); the service worker only enforces the build-time ceiling.
-    startImageCacheUpkeep();
+    // Everything below reads the same IndexedDB the first screen is querying,
+    // so it waits for the browser to go idle — see util/afterPaint.ts.
+    afterPaint(() => {
+      // Record today's price for every card in the collection (deduped per day),
+      // and the same for every unopened product on the sealed shelf.
+      void recordCollectionPrices();
+      void recordSealedPrices();
+      // Top up today's exchange rates if the display currency needs any (no-op
+      // when prices are shown in the currency Scryfall already quotes).
+      void ensureRates();
+      // Signed-in: start the sync engine (live push + outbox drain), then
+      // refresh trade-match notifications (throttled).
+      initSyncEngine();
+      void maybeFetchMatches();
+      // Trim the card-image cache back to this device's budget (Settings → Card
+      // images); the service worker only enforces the build-time ceiling.
+      startImageCacheUpkeep();
+    });
   }, []);
 
   if (onboarded === null) return null; // brief: waiting on the onboarding flag

@@ -172,6 +172,41 @@ export function CardItems({
   return <CardList items={items} className={className} {...sel} />;
 }
 
+/**
+ * Stand-ins for cards whose display data is still coming out of IndexedDB. A
+ * blank screen with the word "Loading" on it reads as an empty collection; a
+ * grid of card-shaped placeholders reads as a grid that hasn't painted yet,
+ * which is the truth. Sized and spaced exactly like the real thing so nothing
+ * jumps when the cards land.
+ */
+export function CardItemsSkeleton({ view, count }: { view: ViewMode; count: number }) {
+  const keys = Array.from({ length: Math.max(1, count) }, (_, i) => i);
+  if (view === 'list' || view === 'stack') {
+    return (
+      <ul className="result-list" aria-busy="true" aria-label="Loading cards">
+        {keys.map((k) => (
+          <li key={k} className="result-row skeleton-row">
+            <span className="result-thumb skeleton-block" aria-hidden />
+            <span className="skeleton-lines" aria-hidden>
+              <span className="skeleton-block skeleton-line" />
+              <span className="skeleton-block skeleton-line skeleton-line-short" />
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    <ul className="card-grid" aria-busy="true" aria-label="Loading cards">
+      {keys.map((k) => (
+        <li key={k} className="card-tile">
+          <span className="card-tile-img skeleton-block" aria-hidden />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function CardList({
   items,
   className,

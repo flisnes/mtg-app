@@ -6,7 +6,10 @@ import { db } from '../db/schema.js';
 // writes 16 rows instead of rewriting the whole card DB. Reads go through an
 // in-memory shard cache; card rows are enriched to Priced<T> at query time.
 
-const shardCache = new Map<string, PriceMap>();
+// Keyed by shard, holding the *promise* rather than the map: a single screen
+// asks for oracle prices and printing prices at the same moment, and caching
+// only the settled value let both misses run the same IndexedDB read twice.
+const shardCache = new Map<string, Promise<PriceMap>>();
 
 export const PRICE_SHARD_KEYS = [...'0123456789abcdef'];
 
@@ -29,13 +32,18 @@ export function invalidatePriceCache(): void {
   shardCache.clear();
 }
 
-async function getShard(key: string): Promise<PriceMap> {
+function getShard(key: string): Promise<PriceMap> {
   const cached = shardCache.get(key);
   if (cached) return cached;
-  const row = await db.priceShards.get(key);
-  const map = row?.prices ?? {};
-  shardCache.set(key, map);
-  return map;
+  const pending = db.priceShards
+    .get(key)
+    .then((row) => row?.prices ?? {})
+    .catch((err) => {
+      shardCache.delete(key); // a failed read must not stick as an empty shard
+      throw err;
+    });
+  shardCache.set(key, pending);
+  return pending;
 }
 
 export interface CardPrice {

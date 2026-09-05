@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.145.2
+
+- **The collection no longer greets you with "0 entries · 0 cards" while it loads.** Nothing was ever missing: your cards live on the device, and that line was the screen counting rows it hadn't finished reading yet. It now counts straight off the collection itself, so the real number is there almost immediately, and the cards are stood in for by card-shaped placeholders instead of the word "Loading". Same in list view, and on the tradelist.
+- The launch bookkeeping that used to run the moment the app opened (daily price snapshots, sync, exchange rates, image-cache trimming) now waits for the app to finish drawing. It was competing with the very screen you were waiting for.
+
 ## 0.145.1
 
 - **Fixed: `otag:` searches found nothing after updating to 0.145.0.** The app shipped with tag search, but the card database it was talking to was rebuilt from a cache that predated the feature, so there were no tags in it and every `otag:` query came back empty. The build now rebuilds the card database whenever the code that produces it changes, and the app re-checks for the tag list after any card-data update instead of trusting a "no tags here" answer it got before the data landed. You'll be offered a card-data update once the rebuilt database is published; take it and tag search starts working.

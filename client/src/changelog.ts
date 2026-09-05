@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.145.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The collection used to open on "0 entries · 0 cards" for a moment, which looked like it had gone missing. It now shows the real count right away, with placeholder cards until the shelf finishes loading.',
+      },
+    ],
+  },
+  {
     version: '0.145.1',
     changes: [
       {
@@ -154,15 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Cards now load in whole rows. A batch that ended mid-row looked like the end of the list and stopped people scrolling for the rest.',
-      },
-    ],
-  },
-  {
-    version: '0.141.5',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Deck, binder and box rows keep their value and options button at the right edge, so they line up down the list instead of drifting with the badges.',
       },
     ],
   },

@@ -6619,3 +6619,49 @@ a.seg {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* ---- Loading placeholders ---- */
+/* Card-shaped stand-ins while a list's display data comes out of IndexedDB
+   (CardItemsSkeleton). Deliberately quiet: a soft breath, not a shimmer racing
+   across the screen, because on a full collection this is on screen for under
+   a second and anything louder reads as an error state. */
+.skeleton-block {
+  display: block;
+  background: var(--surface-2);
+  border-radius: 8px;
+  animation: skeleton-breathe 1.4s ease-in-out infinite;
+}
+.card-tile > .card-tile-img.skeleton-block {
+  cursor: default;
+}
+.skeleton-row {
+  gap: 0.75rem;
+}
+.skeleton-lines {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.skeleton-line {
+  height: 0.7rem;
+  border-radius: 4px;
+}
+.skeleton-line-short {
+  width: 45%;
+}
+@keyframes skeleton-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-block {
+    animation: none;
+    opacity: 0.7;
+  }
+}

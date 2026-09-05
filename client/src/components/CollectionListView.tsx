@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { ContainerKind } from '@mtg/shared';
+import type { CollectionEntry, ContainerKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
@@ -9,7 +9,7 @@ import { removeCollectionEntriesBulk, removeDeckCardsMatching, setQuantityForTra
 import { useFiling } from '../deck/useFiling.js';
 import { CardSheet } from './CardSheet.js';
 import { useConfirm } from './ConfirmSheet.js';
-import { CardItems, ViewToggle, useGridColumns, useViewMode } from './CardViews.js';
+import { CardItems, CardItemsSkeleton, ViewToggle, useGridColumns, useViewMode } from './CardViews.js';
 import { collectionCardItem } from './cardRows.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { LoadMoreSentinel } from './LoadMoreSentinel.js';
@@ -34,6 +34,18 @@ function useJoinedCollection(): JoinedEntry[] | undefined {
   return useLiveQuery(async () => joinCollectionEntries(await db.collection.toArray()), []);
 }
 
+/**
+ * The collection rows on their own, with no card-DB join. This is a small table
+ * and it lands in a few milliseconds, where joining thousands of entries against
+ * 100k printings and the price shards takes the better part of a second. It's
+ * what lets the screen say honestly how much is in there while the rest catches
+ * up, instead of standing at "0 entries · 0 cards" long enough to look like the
+ * collection went to the graveyard.
+ */
+function useCollectionEntries(): CollectionEntry[] | undefined {
+  return useLiveQuery(() => db.collection.toArray(), []);
+}
+
 /** Narrow the list to copies that are (or aren't) in a deck, binder or box —
  *  or to the ones promised to more places than you own. */
 type PlaceFilter = 'all' | 'unfiled' | 'filed' | 'conflict';
@@ -47,6 +59,7 @@ const PLACE_OPTIONS: [PlaceFilter, string][] = [
 
 export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean }) {
   const rows = useJoinedCollection();
+  const entries = useCollectionEntries();
   const navigate = useNavigate();
   const { file, sheet: filingSheet } = useFiling();
   const [editing, setEditing] = useState<JoinedEntry | null>(null);
@@ -118,11 +131,27 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     return sortCards(matching, (r) => collectionSortFields(r, sortData), sort);
   }, [rows, matching, sort, sortData]);
 
-  const totalQty = filtered.reduce((s, r) => s + r.entry.quantity, 0);
+  // How many rows are on the way, straight off the collection table. Only used
+  // while the join is in flight, which is the only time it can differ from what
+  // the list is showing.
+  const pending = (entries ?? []).filter((e) => !onlyTrade || e.quantityForTrade > 0).length;
+  // Counted off the joined rows once they're here, and off the raw entries
+  // before that. A filter or a search is the one case the shortcut can't cover
+  // (both need the joined data to judge a row), so the line waits rather than
+  // print a total the filter is about to change.
+  const counted: { rows: number; qty: number } | null = rows
+    ? { rows: filtered.length, qty: filtered.reduce((s, r) => s + r.entry.quantity, 0) }
+    : entries && !query && placeFilter === 'all'
+      ? entries
+          .filter((e) => !onlyTrade || e.quantityForTrade > 0)
+          .reduce((acc, e) => ({ rows: acc.rows + 1, qty: acc.qty + e.quantity }), { rows: 0, qty: 0 })
+      : null;
   // The count belongs in the page header, right under the title, so the cards
   // start as high up the screen as they can. Standing outside a Page (never
   // today, but the view doesn't require one) it falls back to its own line.
-  const countLine = `${filtered.length} ${filtered.length === 1 ? 'entry' : 'entries'} · ${totalQty} card${totalQty === 1 ? '' : 's'}`;
+  const countLine = counted
+    ? `${counted.rows} ${counted.rows === 1 ? 'entry' : 'entries'} · ${counted.qty} card${counted.qty === 1 ? '' : 's'}`
+    : '';
   const hoistedCount = usePageMeta(countLine);
 
   // The heap's cards. Memoized because PileView recomputes every copy's spot
@@ -160,6 +189,11 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       }),
     [matching],
   );
+
+  // Row-dependent toolbar chrome goes by what's on the way while the join is in
+  // flight, so the search and Select buttons don't shove the sort controls
+  // sideways the moment the cards land.
+  const hasRows = rows ? filtered.length > 0 : pending > 0;
 
   // Page the rendered list — the collection is the one list guaranteed to reach
   // thousands of entries, so rendering all of them (each a tile with images and
@@ -289,8 +323,6 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     { label: 'Delete', icon: 'trash', danger: true, onClick: () => void bulkDelete() },
   ];
 
-  if (rows === undefined) return <p className="search-meta">Loading…</p>;
-
   // An active filter emptying the list is not an empty collection — don't offer
   // the "add some cards" onboarding to someone who has simply filed them all.
   const emptyState = placeFilter === 'conflict' && !query ? (
@@ -311,15 +343,15 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
 
   return (
     <>
-      {!hoistedCount && <p className="search-meta">{countLine}</p>}
+      {!hoistedCount && countLine && <p className="search-meta">{countLine}</p>}
       <div className="list-toolbar">
         {placeFilter === 'conflict' && filtered.length > 0 && (
           <button className="select-toggle" onClick={() => navigate('/conflicts')} title="Work through these one by one">
             <Icon name="balance" size={15} /> Sort them out
           </button>
         )}
-        {!sel.active && (filtered.length > 0 || query) && <ListSearchButton />}
-        {!sel.active && filtered.length > 0 && <SelectToggle onEnter={sel.enter} />}
+        {!sel.active && (hasRows || query) && <ListSearchButton />}
+        {!sel.active && hasRows && <SelectToggle onEnter={sel.enter} />}
         <div className="sort-controls">
           <select
             className={placeFilter === 'all' ? '' : 'filter-on'}
@@ -347,7 +379,13 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         <p className="search-meta">Picking cards — the pile comes back when you're done.</p>
       )}
 
-      {pileMode && !sel.active ? (
+      {rows === undefined ? (
+        // Still joining. The header already carries the real count, so the body
+        // owes the user card-shaped placeholders, not a word that reads like an
+        // answer. Roughly a screenful, capped by what's actually on the way —
+        // an empty collection must never flash placeholders for cards nobody has.
+        pending > 0 && <CardItemsSkeleton view={pileMode ? 'grid' : view} count={Math.min(pending, 24)} />
+      ) : pileMode && !sel.active ? (
         matching.length === 0 ? (
           emptyState
         ) : (
@@ -365,7 +403,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           items={visible.map((r) => collectionCardItem(r, { moverFlags, placements, onClick: () => setEditing(r) }))}
         />
       )}
-      {(!pileMode || sel.active) && (
+      {rows !== undefined && (!pileMode || sel.active) && (
         <LoadMoreSentinel
           hasMore={filtered.length > visible.length}
           onLoadMore={showMore}

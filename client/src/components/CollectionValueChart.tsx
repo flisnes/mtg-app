@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { DAY_MS, type OracleCard, type Priced, type UserEvent } from '@mtg/shared';
+import { DAY_MS, type ContainerKind, type OracleCard, type Priced, type UserEvent } from '@mtg/shared';
 import { fmtMoney } from '../price/rates.js';
-import { useCollectionValueSeries, type CollectionValuePoint } from '../price/collectionValue.js';
+import {
+  useCollectionValueSeries,
+  useContainerValueSeries,
+  type CollectionValuePoint,
+  type CollectionValueSeries,
+} from '../price/collectionValue.js';
+import { CONTAINER_META } from '../deck/containers.js';
 import { groupEntries, type HistoryEntry } from '../history/useHistoryEntries.js';
 import { batchCount, describeBatch, describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { useCardMaps } from '../db/useCardMaps.js';
@@ -11,10 +17,11 @@ import { CardList, StackedThumb, type CardItem } from './CardViews.js';
 import { CardSheet } from './CardSheet.js';
 import { EventSheet } from './EventSheet.js';
 import { Icon } from './icons.js';
-import { niceTicks } from './PriceChart.js';
+import { niceTicks, ZoomHint } from './PriceChart.js';
 import { useDismiss } from './useDismiss.js';
+import { usePlotZoom } from './usePlotZoom.js';
 
-// The collection's worth over time, opened from the header's total. Two ways to
+// What a pile has been worth over time, opened from a header total. Two ways to
 // read the same pile:
 //
 //  - Total: what everything you held that day was worth. A card contributes
@@ -24,8 +31,11 @@ import { useDismiss } from './useDismiss.js';
 //    Buying costs nothing on this line (you paid what it was worth), so what's
 //    left is whether the cards you keep are earning their place.
 //
-// Picking a day fills the list underneath with what you added or removed that
-// day, which is where the steps in the total line come from.
+// Picking a day fills the list underneath with what came in or out that day,
+// which is where the steps in the total line come from.
+//
+// The whole collection and one deck, binder or box draw the same chart from the
+// same series builder — only the words and which event log it replays differ.
 
 type Mode = 'total' | 'gain';
 
@@ -35,15 +45,85 @@ const H = PAD.t + PLOT_H + PAD.b;
 const X_LABEL_Y = H - 12;
 const MIN_W = 240;
 
-/** A day's collection moves, collapsed into one marker per direction. */
+/** A day's moves, collapsed into one marker per direction. */
 interface Marker {
   day: number;
   dir: 'in' | 'out';
 }
 
+/** Everything the chart says in words, which is all that differs between piles. */
+interface Words {
+  title: string;
+  totalNote: string;
+  gainNote: string;
+  inLabel: string;
+  outLabel: string;
+  pickHint: string;
+  quietDay: (date: string) => string;
+}
+
+/** The collection's value chart, opened from the collection header total. */
 export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) {
-  useDismiss(onClose);
   const series = useCollectionValueSeries();
+  return (
+    <ValueChartSheet
+      series={series}
+      words={{
+        title: 'Collection value',
+        totalNote: 'What you held each day was worth',
+        gainNote: 'What those cards have gained since you got them',
+        inLabel: 'Cards in',
+        outLabel: 'Cards out',
+        pickHint: 'Pick a day on the chart to see what you added or removed.',
+        quietDay: (d) => `Nothing came in or out on ${d}.`,
+      }}
+      onClose={onClose}
+    />
+  );
+}
+
+/** The same chart for one deck, binder or box, from its own filing log. */
+export function ContainerValueChartSheet({
+  deckId,
+  name,
+  kind,
+  onClose,
+}: {
+  deckId: string;
+  name: string;
+  kind: ContainerKind;
+  onClose: () => void;
+}) {
+  const series = useContainerValueSeries(deckId);
+  const noun = CONTAINER_META[kind].noun;
+  return (
+    <ValueChartSheet
+      series={series}
+      words={{
+        title: name,
+        totalNote: `What this ${noun} held each day was worth`,
+        gainNote: 'What those cards have gained since you got them',
+        inLabel: 'Cards filed',
+        outLabel: 'Cards pulled',
+        pickHint: `Pick a day on the chart to see what came in or out of this ${noun}.`,
+        quietDay: (d) => `Nothing came in or out on ${d}.`,
+      }}
+      onClose={onClose}
+    />
+  );
+}
+
+function ValueChartSheet({
+  series,
+  words,
+  onClose,
+}: {
+  /** undefined while loading, null when there isn't enough history to draw. */
+  series: CollectionValueSeries | null | undefined;
+  words: Words;
+  onClose: () => void;
+}) {
+  useDismiss(onClose);
   const [mode, setMode] = useState<Mode>('total');
   const [cursor, setCursor] = useState<number | null>(null);
   const [openEntry, setOpenEntry] = useState<HistoryEntry | null>(null);
@@ -79,32 +159,53 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
     const out: Marker[] = [];
     for (const [day, events] of series.eventsByDay) {
       for (const dir of ['in', 'out'] as const) {
-        const kind = dir === 'in' ? 'collection.add' : 'collection.remove';
-        if (events.some((e) => e.kind === kind)) out.push({ day, dir });
+        if (events.some((e) => (e.kind === series.addKind) === (dir === 'in'))) out.push({ day, dir });
       }
     }
     return out.sort((a, b) => a.day - b.day);
   }, [series]);
 
+  const W = width ? Math.max(MIN_W, width) : 0;
+  const zoom = usePlotZoom({
+    points: pts.length,
+    padL: PAD.l,
+    padR: PAD.r,
+    viewW: W,
+    onTap: (x) => pick(x, true),
+    onHover: (x) => pick(x),
+  });
+
   const geom = useMemo(() => {
-    if (!pts.length || !width) return null;
-    const W = Math.max(MIN_W, width);
+    if (!pts.length || !W) return null;
     const plotW = W - PAD.l - PAD.r;
-    const t0 = pts[0]!.ts;
-    const t1 = pts[pts.length - 1]!.ts;
+    const tA = pts[0]!.ts;
+    const full = pts[pts.length - 1]!.ts - tA || DAY_MS;
+    const t0 = tA + zoom.lo * full;
+    const t1 = tA + zoom.hi * full;
     const span = t1 - t0 || DAY_MS;
+
+    // The days in view, plus the one just outside each edge so the line enters
+    // and leaves the frame rather than stopping short of it.
+    let from = 0;
+    while (from < pts.length - 1 && pts[from + 1]!.ts <= t0) from++;
+    let to = pts.length - 1;
+    while (to > from && pts[to - 1]!.ts >= t1) to--;
+    const vis = pts.slice(from, to + 1);
 
     let lo = Infinity;
     let hi = -Infinity;
-    for (const p of pts) {
+    for (const p of vis) {
       const v = valueOf(p);
       if (v < lo) lo = v;
       if (v > hi) hi = v;
     }
     // Both modes have a meaningful zero: an empty collection, or break-even.
-    // Anchoring to it stops a flat line from being drawn as dramatic noise.
-    lo = Math.min(lo, 0);
-    hi = Math.max(hi, 0);
+    // Anchoring to it stops a flat line from being drawn as dramatic noise —
+    // but zoomed in, the detail is the point and zero can fall off the axis.
+    if (!zoom.zoomed) {
+      lo = Math.min(lo, 0);
+      hi = Math.max(hi, 0);
+    }
     const pad = (hi - lo || Math.abs(hi) || 1) * 0.12;
     const yMin = lo - pad;
     const yMax = hi + pad;
@@ -112,9 +213,10 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
     const x = (ts: number) => PAD.l + ((ts - t0) / span) * plotW;
     const y = (v: number) => PAD.t + (1 - (v - yMin) / (yMax - yMin)) * PLOT_H;
 
-    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.ts).toFixed(1)},${y(valueOf(p)).toFixed(1)}`).join(' ');
+    const line = vis.map((p, i) => `${i ? 'L' : 'M'}${x(p.ts).toFixed(1)},${y(valueOf(p)).toFixed(1)}`).join(' ');
     const zeroY = y(0);
-    const area = `${line} L${x(t1).toFixed(1)},${zeroY.toFixed(1)} L${x(t0).toFixed(1)},${zeroY.toFixed(1)} Z`;
+    const base = Math.min(Math.max(zeroY, PAD.t), PAD.t + PLOT_H).toFixed(1);
+    const area = `${line} L${x(vis[vis.length - 1]!.ts).toFixed(1)},${base} L${x(vis[0]!.ts).toFixed(1)},${base} Z`;
 
     const days = Math.round(span / DAY_MS);
     const dateFmt = new Intl.DateTimeFormat(undefined, days > 300 ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' });
@@ -129,15 +231,16 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
 
     return { W, x, y, line, area, zeroY, t0, t1, span, plotW, yTicks: niceTicks(yMin, yMax, 4), xTicks, days };
     // valueOf closes over `mode`, which is what actually changes the geometry.
-  }, [pts, width, mode]);
+  }, [pts, W, mode, zoom.lo, zoom.hi, zoom.zoomed]);
 
   /**
    * Nearest day to a client x within the plot, for scrub and keyboard. Tapping
    * the day that's already picked lets go of it again — the list below is the
    * point of picking one, and there has to be a way back to an empty list.
    */
-  function pick(clientX: number, el: SVGSVGElement, toggle = false) {
-    if (!geom) return;
+  function pick(clientX: number, toggle = false) {
+    const el = plotRef.current;
+    if (!geom || !el) return;
     const rect = el.getBoundingClientRect();
     const px = ((clientX - rect.left) * geom.W) / (rect.width || geom.W);
     const ts = geom.t0 + ((px - PAD.l) / geom.plotW) * geom.span;
@@ -155,7 +258,9 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
 
   const latest = pts[pts.length - 1];
   const firstPt = pts[0];
-  const focus = cursor != null ? pts[cursor] : undefined;
+  const picked = cursor != null ? pts[cursor] : undefined;
+  // A zoom can leave the crosshair off-frame; it belongs to the view.
+  const focus = picked && geom && picked.ts >= geom.t0 && picked.ts <= geom.t1 ? picked : undefined;
   const shown = focus ?? latest;
   const change = firstPt && latest ? valueOf(latest) - valueOf(firstPt) : 0;
   const dir = change > 0.005 ? 'up' : change < -0.005 ? 'down' : 'flat';
@@ -178,13 +283,11 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
     // tree, where events still bubble — without the target check, tapping a
     // card in the day list would close the chart under it.
     <div className="sheet-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="sheet price-chart-sheet" role="dialog" aria-label="Collection value over time" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet price-chart-sheet" role="dialog" aria-label={`${words.title} over time`} onClick={(e) => e.stopPropagation()}>
         <div className="edition-picker-head">
           <div className="price-chart-titles">
-            <h2>Collection value</h2>
-            <div className="fine-print">
-              {mode === 'total' ? 'What you held each day was worth' : 'What those cards have gained since you got them'}
-            </div>
+            <h2>{words.title}</h2>
+            <div className="fine-print">{mode === 'total' ? words.totalNote : words.gainNote}</div>
           </div>
           <button onClick={onClose} aria-label="Close">
             <Icon name="close" size={18} />
@@ -235,11 +338,8 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
                   viewBox={`0 0 ${geom.W} ${H}`}
                   tabIndex={0}
                   role="img"
-                  aria-label={`Collection ${mode === 'total' ? 'value' : 'gain'} from ${fmtDate(geom.t0)} to ${fmtDate(geom.t1)}, ${money(valueOf(firstPt!))} to ${money(valueOf(latest))}`}
-                  onPointerDown={(e) => pick(e.clientX, e.currentTarget, true)}
-                  onPointerMove={(e) => {
-                    if (e.buttons) pick(e.clientX, e.currentTarget);
-                  }}
+                  aria-label={`${words.title} from ${fmtDate(geom.t0)} to ${fmtDate(geom.t1)}, ${money(valueOf(firstPt!))} to ${money(valueOf(latest))}`}
+                  {...zoom.bind}
                   onKeyDown={(e) => {
                     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
                     e.preventDefault();
@@ -252,6 +352,11 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
                       <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
                       <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
                     </linearGradient>
+                    {/* Zoomed in, the line runs past both edges — this is what
+                        keeps it off the axis labels. */}
+                    <clipPath id="collection-chart-clip">
+                      <rect x={PAD.l - 1} y={0} width={geom.plotW + 2} height={H} />
+                    </clipPath>
                   </defs>
 
                   {geom.yTicks.map((v) => (
@@ -263,19 +368,50 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
                     </g>
                   ))}
 
-                  <path className="pc-area" d={geom.area} fill="url(#collection-chart-fill)" />
-                  <path className="pc-line" d={geom.line} />
+                  <g clipPath="url(#collection-chart-clip)">
+                    <path className="pc-area" d={geom.area} fill="url(#collection-chart-fill)" />
+                    <path className="pc-line" d={geom.line} />
 
-                  {/* Break-even, which in gain mode is the only number that
-                      matters: above it the pile is up, below it it's down. */}
-                  {mode === 'gain' && (
-                    <g>
-                      <line className="pc-basis" x1={PAD.l} y1={geom.zeroY} x2={geom.W - PAD.r} y2={geom.zeroY} />
-                      <text className="pc-basis-label" x={geom.W - PAD.r} y={geom.zeroY - 5} textAnchor="end">
-                        break even
-                      </text>
-                    </g>
-                  )}
+                    {/* Break-even, which in gain mode is the only number that
+                        matters: above it the pile is up, below it it's down. */}
+                    {mode === 'gain' && (
+                      <g>
+                        <line className="pc-basis" x1={PAD.l} y1={geom.zeroY} x2={geom.W - PAD.r} y2={geom.zeroY} />
+                        <text className="pc-basis-label" x={geom.W - PAD.r} y={geom.zeroY - 5} textAnchor="end">
+                          break even
+                        </text>
+                      </g>
+                    )}
+
+                    {focus && (
+                      <g className="pc-cursor">
+                        <line x1={geom.x(focus.ts)} y1={PAD.t} x2={geom.x(focus.ts)} y2={PAD.t + PLOT_H} />
+                        <circle cx={geom.x(focus.ts)} cy={geom.y(valueOf(focus))} r={4} />
+                      </g>
+                    )}
+
+                    {/* Days something came in or out — the days the list below
+                        has something to say. */}
+                    {markers.map((m) => {
+                      const p = pts.reduce((a, b) => (Math.abs(b.day - m.day) < Math.abs(a.day - m.day) ? b : a));
+                      return (
+                        <g
+                          key={`${m.day}-${m.dir}`}
+                          className={`pc-mark pc-mark-${m.dir}`}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            setCursor(pts.indexOf(p));
+                          }}
+                        >
+                          <title>{fmtDate(p.ts)}</title>
+                          <circle className="pc-hit" cx={geom.x(p.ts)} cy={geom.y(valueOf(p))} r={14} />
+                          <circle cx={geom.x(p.ts)} cy={geom.y(valueOf(p))} r={4} />
+                        </g>
+                      );
+                    })}
+
+                    {!focus && <circle className="pc-end" cx={geom.x(latest.ts)} cy={geom.y(valueOf(latest))} r={4} />}
+                  </g>
 
                   <line className="pc-grid" x1={PAD.l} y1={PAD.t + PLOT_H} x2={geom.W - PAD.r} y2={PAD.t + PLOT_H} />
 
@@ -290,38 +426,17 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
                       {t.label}
                     </text>
                   ))}
-
-                  {focus && (
-                    <g className="pc-cursor">
-                      <line x1={geom.x(focus.ts)} y1={PAD.t} x2={geom.x(focus.ts)} y2={PAD.t + PLOT_H} />
-                      <circle cx={geom.x(focus.ts)} cy={geom.y(valueOf(focus))} r={4} />
-                    </g>
-                  )}
-
-                  {/* Days you bought or sold — the days the list below has
-                      something to say. */}
-                  {markers.map((m) => {
-                    const p = pts.reduce((a, b) => (Math.abs(b.day - m.day) < Math.abs(a.day - m.day) ? b : a));
-                    return (
-                      <g
-                        key={`${m.day}-${m.dir}`}
-                        className={`pc-mark pc-mark-${m.dir}`}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          setCursor(pts.indexOf(p));
-                        }}
-                      >
-                        <title>{fmtDate(p.ts)}</title>
-                        <circle className="pc-hit" cx={geom.x(p.ts)} cy={geom.y(valueOf(p))} r={14} />
-                        <circle cx={geom.x(p.ts)} cy={geom.y(valueOf(p))} r={4} />
-                      </g>
-                    );
-                  })}
-
-                  {!focus && <circle className="pc-end" cx={geom.x(latest.ts)} cy={geom.y(valueOf(latest))} r={4} />}
                 </svg>
               )}
+
+              {zoom.zoomed && (
+                <button type="button" className="pc-reset" onClick={zoom.reset}>
+                  Reset zoom
+                </button>
+              )}
             </div>
+
+            <ZoomHint />
 
             <div className="price-chart-readout">
               <div>
@@ -335,7 +450,7 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
                 <span className="fine-print">market value</span>
               </div>
               <div>
-                <span className="fine-print">Tracked</span>
+                <span className="fine-print">{zoom.zoomed ? 'Shown' : 'Tracked'}</span>
                 <strong>{(geom?.days ?? 0) + 1} days</strong>
                 <span className="fine-print">{markers.length} move{markers.length === 1 ? '' : 's'}</span>
               </div>
@@ -346,19 +461,20 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
                 <svg width="10" height="10" aria-hidden>
                   <circle cx="5" cy="5" r="4" fill="var(--ok)" />
                 </svg>
-                Cards in
+                {words.inLabel}
               </span>
               <span>
                 <svg width="10" height="10" aria-hidden>
                   <circle cx="5" cy="5" r="4" fill="var(--danger)" />
                 </svg>
-                Cards out
+                {words.outLabel}
               </span>
             </div>
 
             <DayEvents
               day={focus?.day}
               events={dayEvents}
+              words={words}
               onOpenEntry={setOpenEntry}
             />
 
@@ -399,10 +515,12 @@ export function CollectionValueChartSheet({ onClose }: { onClose: () => void }) 
 function DayEvents({
   day,
   events,
+  words,
   onOpenEntry,
 }: {
   day: number | undefined;
   events: UserEvent[];
+  words: Words;
   onOpenEntry: (entry: HistoryEntry) => void;
 }) {
   // An import or a trade is one thing that happened, not forty — same grouping
@@ -411,10 +529,10 @@ function DayEvents({
   const { printMap, oracleMap } = useCardMaps(events.map((e) => ({ scryfallId: e.scryfallId ?? '', oracleId: e.oracleId })));
 
   if (day == null) {
-    return <p className="fine-print">Pick a day on the chart to see what you added or removed.</p>;
+    return <p className="fine-print">{words.pickHint}</p>;
   }
   if (!entries.length) {
-    return <p className="fine-print">Nothing came in or out on {fmtDate(day * DAY_MS)}.</p>;
+    return <p className="fine-print">{words.quietDay(fmtDate(day * DAY_MS))}</p>;
   }
 
   const imgOf = (oracleId: string, scryfallId?: string | null): string | null =>

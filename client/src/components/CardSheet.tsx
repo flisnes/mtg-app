@@ -26,6 +26,7 @@ import { PlacementPills } from './PlacementBadge.js';
 import { db } from '../db/schema.js';
 import { getPriceHistory } from '../price/tracking.js';
 import { getMergedPriceHistory } from '../price/serverHistory.js';
+import { acquisitionGain, useCostBasis } from '../price/costBasis.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
 import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { CardHistory } from './CardHistory.js';
@@ -493,6 +494,12 @@ export function CardSheet(props: CardSheetProps) {
     };
   }, [shownId]);
 
+  // What the copies cost, so the trend can say how the card has done for *you*
+  // rather than how our archive has done. Falls back to the recorded change
+  // when nothing was paid on record (a scanned-in card, a gift, a trade).
+  const basis = useCostBasis(oracleCard.oracleId, shownId);
+  const gain = trend ? acquisitionGain(trend, basis) : null;
+
   const printing = useMemo(
     () => printings.find((p) => p.scryfallId === scryfallId),
     [printings, scryfallId],
@@ -881,7 +888,7 @@ export function CardSheet(props: CardSheetProps) {
               />
             )}
             <div className="result-price">{cardPrice}</div>
-            {trend && trend.points > 1 && <PriceTrend trend={trend} onOpen={() => setChartOpen(true)} />}
+            {trend && trend.points > 1 && <PriceTrend trend={trend} gain={gain} onOpen={() => setChartOpen(true)} />}
             {/* Where the copies live. A binder name can be long, so the pills
                 scroll on their own rather than pushing the form down. */}
             {placement && placement.places.length > 0 && (

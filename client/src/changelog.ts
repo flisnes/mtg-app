@@ -32,6 +32,27 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.145.3',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'A card now shows how much it has gained or lost against what you paid for it, not against the day we started recording prices. Cards that came in without a price still show the recorded movement.',
+      },
+      {
+        kind: 'added',
+        text: 'The price charts pan and zoom. Scroll or pinch to zoom, drag to move along the line, double-tap to reset.',
+      },
+      {
+        kind: 'added',
+        text: 'Decks, binders and boxes carry a total value in the header. Tap it for that container’s value over time, including what its cards have gained since you got them.',
+      },
+      {
+        kind: 'removed',
+        text: 'The little graph on a container’s History panel. It drew card counts in the price chart’s clothes, which read as money.',
+      },
+    ],
+  },
+  {
     version: '0.145.2',
     changes: [
       {
@@ -154,15 +175,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'The Bloomburrow paw print renders as a paw again. Cards that spend paw prints on their modes were showing the Phyrexian mana pip instead.',
-      },
-    ],
-  },
-  {
-    version: '0.141.6',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Cards now load in whole rows. A batch that ended mid-row looked like the end of the list and stopped people scrolling for the rest.',
       },
     ],
   },

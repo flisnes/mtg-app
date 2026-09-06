@@ -38,8 +38,6 @@ export interface DeckHistory {
   removed: number;
   /** Oldest recorded change, or null when there are none. */
   since: number | null;
-  /** Deck size after every recorded change, oldest first — the sparkline. */
-  curve: number[];
   loading: boolean;
 }
 
@@ -119,9 +117,6 @@ export function useDeckHistory(deckId: string, limit: number): DeckHistory {
     return out;
   }, [all, limit, sizes]);
 
-  // Oldest → newest, so the line reads left-to-right like time does.
-  const curve = useMemo(() => (all && sizes ? all.map((e) => sizes.get(e.id) ?? 0).reverse() : []), [all, sizes]);
-
   return {
     days,
     total: all?.length ?? 0,
@@ -129,7 +124,6 @@ export function useDeckHistory(deckId: string, limit: number): DeckHistory {
     added: totals.added,
     removed: totals.removed,
     since: all?.length ? all[all.length - 1]!.ts : null,
-    curve,
     loading: events === undefined || held === undefined,
   };
 }

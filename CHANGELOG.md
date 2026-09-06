@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.145.3
+
+- **A card's price change is now measured against what you paid for it.** "Up 87% since 18 May" was a fact about how long we have been recording prices, not about your money. Wherever an acquisition price is on record, the card sheet and the full price chart now lead with the gain (or loss) on what the copies cost you. Cards that came in without a price (a scan, a gift, a trade) still show the recorded movement.
+- **The price charts pan and zoom.** Scroll or pinch to zoom in on a stretch of the line, drag to move along it, double-tap or hit "Reset zoom" to go back. The axes, the high/low readout and the day count all follow the window you are looking at. Works on the card chart, the collection value chart and the sealed shelf chart.
+- **Decks, binders and boxes have a total value in the header, and it opens a chart.** Same readout the collection page carries, in the same space beside the options menu. Tapping it opens that container's value over time, with a "Since acquisition" view that measures the cards filed there against what you paid for them.
+- **Removed:** the little line graph on a container's History panel. It was drawing card counts with the price chart's visuals, which made it look like money when it never was.
+
 ## 0.145.2
 
 - **The collection no longer greets you with "0 entries · 0 cards" while it loads.** Nothing was ever missing: your cards live on the device, and that line was the screen counting rows it hadn't finished reading yet. It now counts straight off the collection itself, so the real number is there almost immediately, and the cards are stood in for by card-shaped placeholders instead of the word "Loading". Same in list view, and on the tradelist.

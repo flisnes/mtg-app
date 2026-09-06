@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { DAY_MS, type Finish, type PriceHistory, type UserEvent } from '@mtg/shared';
+import { DAY_MS, type Finish, type PriceHistory, type UserEvent, type UserEventKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPricesByIds, priceForFinish, type CardPrice } from '../cardDb/prices.js';
 import { getPrefs } from '../prefs.js';
@@ -21,6 +21,11 @@ import { canConvert, convertToDisplay } from './rates.js';
 // Everything lands in one display-currency unit, by the same rule the value
 // totals use (priceValue in CardSorting): the base currency's reading wins, the
 // other one fills in, and a missing FX rate falls back to the raw quote.
+//
+// The same replay draws a deck, binder or box: swap the event kinds for
+// deck.add / deck.remove and the holdings for that container's slots. Those
+// events carry no price of their own, so the cost basis is handed in from the
+// collection's acquisitions instead (`paidByKey`).
 
 /** One day of the collection's worth. */
 export interface CollectionValuePoint {
@@ -39,10 +44,20 @@ export interface CollectionValueSeries {
   pts: CollectionValuePoint[];
   /** Currency code every value above is quoted in. */
   unit: string;
-  /** Collection add/remove events, keyed by the day they land on. */
+  /** The add/remove events replayed, keyed by the day they land on. */
   eventsByDay: Map<number, UserEvent[]>;
   /** Copies held today whose printing has no recorded price at all. */
   unpriced: number;
+  /** The kind that counts as copies arriving — the rest are copies leaving. */
+  addKind: UserEventKind;
+}
+
+/** Which moves to replay, and what to fall back on when they carry no price. */
+export interface ValueSeriesOpts {
+  addKind?: UserEventKind;
+  removeKind?: UserEventKind;
+  /** Average paid per copy in EUR units, by `scryfallId|finish`. */
+  paidByKey?: Map<string, number>;
 }
 
 type Cur = 'eur' | 'usd';
@@ -60,7 +75,8 @@ function dayNum(day: string): number {
   return Math.round(Date.parse(day) / DAY_MS);
 }
 
-function keyOf(scryfallId: string, finish: Finish): string {
+/** How a printing-and-finish is keyed everywhere in here. */
+export function valueKeyOf(scryfallId: string, finish: Finish): string {
   return `${scryfallId}|${finish}`;
 }
 
@@ -87,7 +103,11 @@ export function buildCollectionValueSeries(
   events: readonly UserEvent[],
   histories: readonly PriceHistory[],
   prices: Map<string, CardPrice>,
+  opts: ValueSeriesOpts = {},
 ): CollectionValueSeries | null {
+  const addKind = opts.addKind ?? 'collection.add';
+  const removeKind = opts.removeKind ?? 'collection.remove';
+  const paidByKey = opts.paidByKey;
   const base: Cur = getPrefs().baseCurrency === 'USD' ? 'usd' : 'eur';
   const readers = new Map<string, Reader>();
   let first = Infinity;
@@ -118,7 +138,7 @@ export function buildCollectionValueSeries(
 
   const held = new Map<string, number>();
   for (const e of entries) {
-    if (e.quantity > 0) held.set(keyOf(e.scryfallId, e.finish), (held.get(keyOf(e.scryfallId, e.finish)) ?? 0) + e.quantity);
+    if (e.quantity > 0) held.set(valueKeyOf(e.scryfallId, e.finish), (held.get(valueKeyOf(e.scryfallId, e.finish)) ?? 0) + e.quantity);
   }
 
   /** In-window moves per key, ascending, stamped with their day index. */
@@ -131,15 +151,15 @@ export function buildCollectionValueSeries(
 
   const ordered = [...events].sort((a, b) => a.ts - b.ts);
   for (const e of ordered) {
-    if (e.kind !== 'collection.add' && e.kind !== 'collection.remove') continue;
+    if (e.kind !== addKind && e.kind !== removeKind) continue;
     if (!e.scryfallId) continue;
-    const key = keyOf(e.scryfallId, e.finish ?? 'nonfoil');
+    const key = valueKeyOf(e.scryfallId, e.finish ?? 'nonfoil');
     const qty = e.qty ?? 1;
     const day = Math.floor(e.ts / DAY_MS);
     if (day < first) {
       // Older than any reading: it shaped the starting stock, and if it carried
       // a price it's the best cost basis we have for those copies.
-      if (e.kind === 'collection.add' && e.priceEurCents != null) {
+      if (e.kind === addKind && e.priceEurCents != null) {
         const acc = older.get(key) ?? { paid: 0, copies: 0 };
         acc.paid += (e.priceEurCents / 100) * qty;
         acc.copies += qty;
@@ -153,7 +173,7 @@ export function buildCollectionValueSeries(
     const list = moves.get(key);
     if (list) list.push({ d, e });
     else moves.set(key, [{ d, e }]);
-    netIn.set(key, (netIn.get(key) ?? 0) + (e.kind === 'collection.add' ? qty : -qty));
+    netIn.set(key, (netIn.get(key) ?? 0) + (e.kind === addKind ? qty : -qty));
     const dayKey = first + d;
     const onDay = eventsByDay.get(dayKey);
     if (onDay) onDay.push(e);
@@ -187,7 +207,13 @@ export function buildCollectionValueSeries(
 
     let qty = Math.max(0, now - (netIn.get(key) ?? 0));
     const pre = older.get(key);
-    const seed = pre && pre.copies > 0 ? (pre.paid / pre.copies) * scale.eur : firstPrice;
+    const knownPaid = paidByKey?.get(key);
+    const seed =
+      pre && pre.copies > 0
+        ? (pre.paid / pre.copies) * scale.eur
+        : knownPaid != null
+          ? knownPaid * scale.eur
+          : firstPrice;
     let basis = qty * (Number.isFinite(seed) ? seed : 0);
 
     const list = moves.get(key) ?? [];
@@ -205,8 +231,15 @@ export function buildCollectionValueSeries(
         const { e } = list[mi]!;
         mi++;
         const n = e.qty ?? 1;
-        if (e.kind === 'collection.add') {
-          const paid = e.priceEurCents != null ? (e.priceEurCents / 100) * scale.eur : Number.isFinite(price) ? price : firstPrice;
+        if (e.kind === addKind) {
+          const paid =
+            e.priceEurCents != null
+              ? (e.priceEurCents / 100) * scale.eur
+              : knownPaid != null
+                ? knownPaid * scale.eur
+                : Number.isFinite(price)
+                  ? price
+                  : firstPrice;
           qty += n;
           basis += n * (Number.isFinite(paid) ? paid : 0);
         } else {
@@ -229,7 +262,7 @@ export function buildCollectionValueSeries(
     const day = first + d;
     pts.push({ day, ts: day * DAY_MS, total: totals[d]!, basis: bases[d]!, gain: totals[d]! - bases[d]! });
   }
-  return { pts, unit, eventsByDay, unpriced };
+  return { pts, unit, eventsByDay, unpriced, addKind };
 }
 
 /** The live daily value series for the whole collection. Null = not enough data. */
@@ -243,4 +276,54 @@ export function useCollectionValueSeries(): CollectionValueSeries | null | undef
     const prices = await getPricesByIds(histories.map((h) => h.scryfallId));
     return buildCollectionValueSeries(entries, events, histories, prices);
   }, []);
+}
+
+/**
+ * The same series for one deck, binder or box: the copies filed there, replayed
+ * through that container's own add/remove log. "Any printing" basics and token
+ * slots are left out for the same reason they're left out of the header total —
+ * nobody prices a lands-box Island.
+ *
+ * Filing a card costs nothing, so the cost basis has to come from somewhere
+ * else: the collection's acquisitions, averaged per printing and finish.
+ */
+export function useContainerValueSeries(deckId: string): CollectionValueSeries | null | undefined {
+  return useLiveQuery(async () => {
+    const [cards, events, acquisitions] = await Promise.all([
+      db.deckCards.where('deckId').equals(deckId).toArray(),
+      db.events.where('deckId').equals(deckId).toArray(),
+      db.events.where('kind').equals('collection.add').toArray(),
+    ]);
+    const entries = cards
+      .filter((c) => c.scryfallId && !c.anyBasic && c.board !== 'token')
+      .map((c) => ({ scryfallId: c.scryfallId!, finish: c.finish ?? 'nonfoil', quantity: c.quantity }));
+    const ids = [
+      ...new Set([
+        ...entries.map((e) => e.scryfallId),
+        ...events.map((e) => e.scryfallId).filter((s): s is string => !!s),
+      ]),
+    ];
+    if (!ids.length) return null;
+    const idSet = new Set(ids);
+    const [rows, prices] = await Promise.all([db.priceHistories.bulkGet(ids), getPricesByIds(ids)]);
+    const histories = rows.filter((h): h is PriceHistory => !!h);
+
+    const paid = new Map<string, { paid: number; copies: number }>();
+    for (const e of acquisitions) {
+      if (!e.scryfallId || e.priceEurCents == null || !idSet.has(e.scryfallId)) continue;
+      const key = valueKeyOf(e.scryfallId, e.finish ?? 'nonfoil');
+      const acc = paid.get(key) ?? { paid: 0, copies: 0 };
+      const qty = e.qty ?? 1;
+      acc.paid += (e.priceEurCents / 100) * qty;
+      acc.copies += qty;
+      paid.set(key, acc);
+    }
+    const paidByKey = new Map([...paid].map(([k, v]) => [k, v.paid / v.copies]));
+
+    return buildCollectionValueSeries(entries, events, histories, prices, {
+      addKind: 'deck.add',
+      removeKind: 'deck.remove',
+      paidByKey,
+    });
+  }, [deckId]);
 }

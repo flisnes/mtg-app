@@ -61,7 +61,8 @@ import { CardSheet, FINISH_LABELS } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import { ownedBadge } from '../components/OwnedBadge.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
-import { containerValue, missingValue, valueText } from '../components/ValueSummary.js';
+import { containerValue, HeaderValue, missingValue, valueText } from '../components/ValueSummary.js';
+import { ContainerValueChartSheet } from '../components/CollectionValueChart.js';
 import {
   SortControls,
   groupCards,
@@ -179,6 +180,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [emblemOpen, setEmblemOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [valueChartOpen, setValueChartOpen] = useState(false);
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('deck', { group: 'type' });
   const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: DeckCardEdit } | null>(null);
@@ -788,7 +790,18 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         <button className="linklike" onClick={goBack}>
           ‹ {meta.Plural}
         </button>
-        <OptionsMenu
+        {/* The same readout the collection header carries, in the same empty
+            space beside the options menu — and the same way in to the chart. */}
+        <div className="deck-head-aside">
+          {ownedWorth && (
+            <HeaderValue
+              label={isDeck ? 'Owned value' : 'Total value'}
+              value={ownedWorth}
+              onClick={() => setValueChartOpen(true)}
+              title={`Open the ${meta.noun} value chart`}
+            />
+          )}
+          <OptionsMenu
           label={`${meta.Noun} options`}
           actions={[
             // Go and find the cardboard: the list card by card, each showing the
@@ -856,7 +869,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               },
             },
           ]}
-        />
+          />
+        </div>
       </div>
 
       <div className="deck-name-row">
@@ -928,7 +942,6 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               )}
             </>
           )}
-          {ownedWorth && <> · <strong>{ownedWorth}</strong> owned</>}
           {missingWorth && <> · <strong>{missingWorth}</strong> missing</>}
         </p>
       </div>
@@ -1079,6 +1092,9 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       )}
 
       <DeckHistory deckId={id} kind={kind} open={historyOpen} onToggle={() => setHistoryOpen((v) => !v)} />
+      {valueChartOpen && (
+        <ContainerValueChartSheet deckId={id} name={deck.name} kind={kind} onClose={() => setValueChartOpen(false)} />
+      )}
 
       {info && (
         <CardSheet mode="deck" oracleCard={info.card} deckCard={{ ...info.deckCard, containerKind: kind }} onClose={() => setInfo(null)} />

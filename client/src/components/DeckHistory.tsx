@@ -9,7 +9,6 @@ import { fmtDate } from '../util/format.js';
 import { CardSheet } from './CardSheet.js';
 import { EventSheet } from './EventSheet.js';
 import { Icon } from './icons.js';
-import { Sparkline } from './Sparkline.js';
 import { usePagedLimit } from './usePagedLimit.js';
 
 // "How this deck got here": the container's own changes, newest first, in day
@@ -46,7 +45,7 @@ export function DeckHistory({
   onToggle: () => void;
 }) {
   const { limit, showMore } = usePagedLimit(deckId, PAGE_SIZE);
-  const { days, total, hasMore, added, removed, since, curve, loading } = useDeckHistory(deckId, limit);
+  const { days, total, hasMore, added, removed, since, loading } = useDeckHistory(deckId, limit);
   const [openEntry, setOpenEntry] = useState<HistoryEntry | null>(null);
   const [card, setCard] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
 
@@ -74,7 +73,6 @@ export function DeckHistory({
         <h2 className="history-toggle-title">
           History <span className="badge">{total}</span>
         </h2>
-        {curve.length > 1 && <Sparkline values={curve} width={64} height={20} />}
         {total > 0 && (
           <span className="history-when">
             <span className="history-qty-in">+{added}</span> <span className="history-qty-out">−{removed}</span>

@@ -4,17 +4,23 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { DAY_MS, type DayReadings, type UserEvent, type UserEventKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
+import { costBasisOf } from '../price/costBasis.js';
 import { convertToDisplay, fmtMoney } from '../price/rates.js';
 import { describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { fmtDate } from '../util/format.js';
 import { Icon } from './icons.js';
 import { useDismiss } from './useDismiss.js';
+import { usePlotZoom } from './usePlotZoom.js';
 
 // The card sheet's sparkline, opened up: the recorded daily price of one
 // printing on real axes, with what *you* did to the card marked on it. Money
 // events (bought, sold, traded) get a dot on the line; everything else (deck
 // slots, wishlist, tradelist) is a tick in the rug under the plot, so a busy
 // deck-shuffling week never buries the two markers that matter.
+//
+// The headline change is measured against what you paid whenever we know it —
+// that's the number about your money. Only a card with no recorded acquisition
+// price falls back to "since tracking began", which is a fact about our archive.
 //
 // Everything is drawn in the display currency: readings are stored per day in
 // EUR/USD cents (price/history.ts) and acquisition prices in EUR cents, so both
@@ -62,6 +68,11 @@ export function niceTicks(min: number, max: number, count: number): number[] {
   const out: number[] = [];
   for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-6; v += step) out.push(v);
   return out;
+}
+
+/** How to read a zoomable plot, said once under every one of them. */
+export function ZoomHint() {
+  return <p className="fine-print pc-hint">Scroll or pinch to zoom, drag to pan, double-tap to reset.</p>;
 }
 
 export function PriceChartSheet({
@@ -170,18 +181,11 @@ export function PriceChartSheet({
       }
     }
 
-    // What the copies on hand cost, per copy — the line to compare "now"
-    // against. Acquisition prices are always EUR cents; without a EUR rate we
-    // can't put them on a USD-quoted axis, so the line just doesn't draw.
-    let paid = 0;
-    let copies = 0;
-    for (const e of scoped) {
-      if (e.kind !== 'collection.add' || e.priceEurCents == null) continue;
-      const qty = e.qty ?? 1;
-      paid += (e.priceEurCents / 100) * qty;
-      copies += qty;
-    }
-    const costBasis = copies > 0 && series.eurRate != null ? (paid / copies) * series.eurRate : null;
+    // What the copies on hand cost, per copy — the line the current price is
+    // measured against. Acquisition prices are always EUR cents; without a EUR
+    // rate we can't put them on a USD-quoted axis, so the line just doesn't draw.
+    const basis = costBasisOf(scoped, scryfallId);
+    const costBasis = basis && series.eurRate != null ? basis.perCopy * series.eurRate : null;
 
     return {
       markers: [...byMajor.values()].sort((a, b) => a.ts - b.ts),
@@ -193,22 +197,45 @@ export function PriceChartSheet({
 
   const money = (v: number) => fmtMoney(v, series?.unit ?? 'EUR');
 
+  const pts = series?.pts ?? [];
+  const W = width ? Math.max(MIN_W, width) : 0;
+  const zoom = usePlotZoom({
+    points: pts.length,
+    padL: PAD.l,
+    padR: PAD.r,
+    viewW: W,
+    hoverScrub: true,
+    onTap: (x) => pick(x),
+    onHover: (x) => pick(x),
+  });
+
   const geom = useMemo(() => {
-    if (!series || !width) return null;
-    const W = Math.max(MIN_W, width);
+    if (!series || !W) return null;
     const plotW = W - PAD.l - PAD.r;
-    const { pts } = series;
-    const t0 = pts[0]!.ts;
-    const t1 = pts[pts.length - 1]!.ts;
+    const all = series.pts;
+    const tA = all[0]!.ts;
+    const full = all[all.length - 1]!.ts - tA || DAY_MS;
+    const t0 = tA + zoom.lo * full;
+    const t1 = tA + zoom.hi * full;
     const span = t1 - t0 || DAY_MS;
+
+    // The readings in view, plus the one just outside each edge so the line
+    // enters and leaves the frame rather than stopping short of it.
+    let from = 0;
+    while (from < all.length - 1 && all[from + 1]!.ts <= t0) from++;
+    let to = all.length - 1;
+    while (to > from && all[to - 1]!.ts >= t1) to--;
+    const vis = all.slice(from, to + 1);
 
     let lo = Infinity;
     let hi = -Infinity;
-    for (const p of pts) {
+    for (const p of vis) {
       if (p.v < lo) lo = p.v;
       if (p.v > hi) hi = p.v;
     }
-    if (marks.costBasis != null) {
+    // The full view always makes room for the paid line — it's the comparison
+    // the chart is for. Zoomed in, the detail wins and the line can fall off.
+    if (marks.costBasis != null && !zoom.zoomed) {
       lo = Math.min(lo, marks.costBasis);
       hi = Math.max(hi, marks.costBasis);
     }
@@ -221,8 +248,9 @@ export function PriceChartSheet({
     const x = (ts: number) => PAD.l + ((ts - t0) / span) * plotW;
     const y = (v: number) => PAD.t + (1 - (v - yMin) / (yMax - yMin)) * PLOT_H;
 
-    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.ts).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
-    const area = `${line} L${x(t1).toFixed(1)},${(PAD.t + PLOT_H).toFixed(1)} L${x(t0).toFixed(1)},${(PAD.t + PLOT_H).toFixed(1)} Z`;
+    const line = vis.map((p, i) => `${i ? 'L' : 'M'}${x(p.ts).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+    const base = (PAD.t + PLOT_H).toFixed(1);
+    const area = `${line} L${x(vis[vis.length - 1]!.ts).toFixed(1)},${base} L${x(vis[0]!.ts).toFixed(1)},${base} Z`;
 
     const days = Math.round(span / DAY_MS);
     const dateFmt = new Intl.DateTimeFormat(undefined, days > 300 ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' });
@@ -235,12 +263,14 @@ export function PriceChartSheet({
       xTicks.push({ ts, label });
     }
 
-    return { W, x, y, line, area, t0, t1, span, plotW, yTicks: niceTicks(yMin, yMax, 4), xTicks, days };
-  }, [series, width, marks.costBasis]);
+    return { W, x, y, line, area, t0, t1, span, plotW, yTicks: niceTicks(yMin, yMax, 4), xTicks, days, vis };
+  }, [series, W, marks.costBasis, zoom.lo, zoom.hi, zoom.zoomed]);
 
   /** Nearest reading to a client x within the plot, for scrub and keyboard. */
-  function pick(clientX: number, el: SVGSVGElement) {
+  function pick(clientX: number) {
     if (!series || !geom) return;
+    const el = plotRef.current;
+    if (!el) return;
     const rect = el.getBoundingClientRect();
     const px = ((clientX - rect.left) * geom.W) / (rect.width || geom.W);
     const ts = geom.t0 + ((px - PAD.l) / geom.plotW) * geom.span;
@@ -256,15 +286,25 @@ export function PriceChartSheet({
     setCursor(best);
   }
 
-  const pts = series?.pts ?? [];
   const latest = pts[pts.length - 1];
   const firstPt = pts[0];
-  const focus = cursor != null ? pts[cursor] : undefined;
-  const lo = pts.length ? pts.reduce((a, p) => (p.v < a.v ? p : a)) : undefined;
-  const hi = pts.length ? pts.reduce((a, p) => (p.v > a.v ? p : a)) : undefined;
+  const picked = cursor != null ? pts[cursor] : undefined;
+  // A zoom can leave the crosshair off-frame; it belongs to the view, not the
+  // whole series.
+  const focus = picked && geom && picked.ts >= geom.t0 && picked.ts <= geom.t1 ? picked : undefined;
+  // The readout follows the window: zooming into August is asking what August did.
+  const shown = geom?.vis ?? pts;
+  const lo = shown.length ? shown.reduce((a, p) => (p.v < a.v ? p : a)) : undefined;
+  const hi = shown.length ? shown.reduce((a, p) => (p.v > a.v ? p : a)) : undefined;
+  // "Since tracking began" is only the headline when nothing was paid on record.
   const change = firstPt && latest ? latest.v - firstPt.v : 0;
-  const dir = change > 0.005 ? 'up' : change < -0.005 ? 'down' : 'flat';
-  const pct = firstPt?.v ? (change / firstPt.v) * 100 : null;
+  const gain =
+    marks.costBasis != null && latest
+      ? { paid: marks.costBasis, delta: latest.v - marks.costBasis, pct: marks.costBasis ? ((latest.v - marks.costBasis) / marks.costBasis) * 100 : null }
+      : null;
+  const headline = gain ? gain.delta : change;
+  const headlinePct = gain ? gain.pct : firstPt?.v ? (change / firstPt.v) * 100 : null;
+  const dir = headline > 0.005 ? 'up' : headline < -0.005 ? 'down' : 'flat';
 
   /** Events sitting on the focused day, for the tooltip. */
   const focusEvents = useMemo(() => {
@@ -299,9 +339,12 @@ export function PriceChartSheet({
           <div className="price-chart-hero">
             <div className="price-chart-now">{money(latest.v)}</div>
             <div className={`price-change price-${dir}`}>
-              {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·'} {money(Math.abs(change))}
-              {pct != null && ` (${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}%)`}
-              <span className="fine-print"> since {fmtDate(firstPt!.ts)}</span>
+              {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·'} {money(Math.abs(headline))}
+              {headlinePct != null && ` (${headlinePct >= 0 ? '+' : '−'}${Math.abs(headlinePct).toFixed(1)}%)`}
+              <span className="fine-print">
+                {' '}
+                {gain ? `on the ${money(gain.paid)} you paid` : `since ${fmtDate(firstPt!.ts)}`}
+              </span>
             </div>
           </div>
         )}
@@ -316,10 +359,7 @@ export function PriceChartSheet({
               tabIndex={0}
               role="img"
               aria-label={`Price from ${fmtDate(geom.t0)} to ${fmtDate(geom.t1)}, ${money(firstPt!.v)} to ${money(latest!.v)}`}
-              onPointerDown={(e) => pick(e.clientX, e.currentTarget)}
-              onPointerMove={(e) => {
-                if (e.buttons || e.pointerType === 'mouse') pick(e.clientX, e.currentTarget);
-              }}
+              {...zoom.bind}
               onPointerLeave={() => setCursor(null)}
               onKeyDown={(e) => {
                 if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
@@ -333,6 +373,11 @@ export function PriceChartSheet({
                   <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
                   <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
                 </linearGradient>
+                {/* Zoomed in, the line runs past both edges — this is what keeps
+                    it (and its markers) from spilling over the axis labels. */}
+                <clipPath id="price-chart-clip">
+                  <rect x={PAD.l - 1} y={0} width={geom.plotW + 2} height={H} />
+                </clipPath>
               </defs>
 
               {geom.yTicks.map((v) => (
@@ -344,29 +389,59 @@ export function PriceChartSheet({
                 </g>
               ))}
 
-              <path className="pc-area" d={geom.area} fill="url(#price-chart-fill)" />
-              <path className="pc-line" d={geom.line} />
+              <g clipPath="url(#price-chart-clip)">
+                <path className="pc-area" d={geom.area} fill="url(#price-chart-fill)" />
+                <path className="pc-line" d={geom.line} />
 
-              {/* What you paid per copy — the line the current price is worth
-                  comparing against. Dashed so it never reads as a gridline. */}
-              {marks.costBasis != null && (
-                <g>
-                  <line className="pc-basis" x1={PAD.l} y1={geom.y(marks.costBasis)} x2={geom.W - PAD.r} y2={geom.y(marks.costBasis)} />
-                  <text className="pc-basis-label" x={geom.W - PAD.r} y={geom.y(marks.costBasis) - 5} textAnchor="end">
-                    paid {money(marks.costBasis)}
-                  </text>
-                </g>
-              )}
+                {/* What you paid per copy — the line the current price is worth
+                    comparing against. Dashed so it never reads as a gridline. */}
+                {marks.costBasis != null && (
+                  <g>
+                    <line className="pc-basis" x1={PAD.l} y1={geom.y(marks.costBasis)} x2={geom.W - PAD.r} y2={geom.y(marks.costBasis)} />
+                    <text className="pc-basis-label" x={geom.W - PAD.r} y={geom.y(marks.costBasis) - 5} textAnchor="end">
+                      paid {money(marks.costBasis)}
+                    </text>
+                  </g>
+                )}
 
-              {/* Deck, wishlist and tradelist activity: a tick each, under the
-                  plot, where it can't compete with the money markers. */}
-              {marks.rug.map((r) => (
-                <g key={`rug-${r.day}`} className="pc-rug" onPointerDown={(e) => e.stopPropagation()} onClick={() => onEventClick?.(r.events[0]!)}>
-                  <title>{`${fmtDate(r.ts)}: ${r.events.map((e) => describeEvent(e).verb).join(', ')}`}</title>
-                  <rect className="pc-hit" x={geom.x(r.ts) - 9} y={RUG_TOP - 6} width={18} height={RUG_H + 12} />
-                  <line x1={geom.x(r.ts)} y1={RUG_TOP} x2={geom.x(r.ts)} y2={RUG_TOP + RUG_H} />
-                </g>
-              ))}
+                {/* Deck, wishlist and tradelist activity: a tick each, under the
+                    plot, where it can't compete with the money markers. */}
+                {marks.rug.map((r) => (
+                  <g key={`rug-${r.day}`} className="pc-rug" onPointerDown={(e) => e.stopPropagation()} onClick={() => onEventClick?.(r.events[0]!)}>
+                    <title>{`${fmtDate(r.ts)}: ${r.events.map((e) => describeEvent(e).verb).join(', ')}`}</title>
+                    <rect className="pc-hit" x={geom.x(r.ts) - 9} y={RUG_TOP - 6} width={18} height={RUG_H + 12} />
+                    <line x1={geom.x(r.ts)} y1={RUG_TOP} x2={geom.x(r.ts)} y2={RUG_TOP + RUG_H} />
+                  </g>
+                ))}
+
+                {focus && (
+                  <g className="pc-cursor">
+                    <line x1={geom.x(focus.ts)} y1={PAD.t} x2={geom.x(focus.ts)} y2={PAD.t + PLOT_H} />
+                    <circle cx={geom.x(focus.ts)} cy={geom.y(focus.v)} r={4} />
+                  </g>
+                )}
+
+                {/* Where the line stops is today's price — it needs an end, or
+                    the stroke just runs out at the frame. */}
+                <circle className="pc-end" cx={geom.x(latest!.ts)} cy={geom.y(latest!.v)} r={4} />
+
+                {/* Bought, sold, traded: a dot on the line itself. */}
+                {marks.markers.map((m) => {
+                  const p = pts.reduce((a, b) => (Math.abs(b.day - m.day) < Math.abs(a.day - m.day) ? b : a));
+                  return (
+                    <g
+                      key={`${m.day}-${m.dir}`}
+                      className={`pc-mark pc-mark-${m.dir}`}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => onEventClick?.(m.events[0]!)}
+                    >
+                      <title>{`${fmtDate(m.ts)}: ${m.events.map((e) => describeEvent(e).verb).join(', ')}`}</title>
+                      <circle className="pc-hit" cx={geom.x(m.ts)} cy={geom.y(p.v)} r={14} />
+                      <circle cx={geom.x(m.ts)} cy={geom.y(p.v)} r={5} />
+                    </g>
+                  );
+                })}
+              </g>
 
               <line className="pc-grid" x1={PAD.l} y1={PAD.t + PLOT_H} x2={geom.W - PAD.r} y2={PAD.t + PLOT_H} />
 
@@ -381,37 +456,15 @@ export function PriceChartSheet({
                   {t.label}
                 </text>
               ))}
-
-              {/* Where the line stops is today's price — it needs an end, or
-                  the stroke just runs out at the frame. */}
-              <circle className="pc-end" cx={geom.x(latest!.ts)} cy={geom.y(latest!.v)} r={4} />
-
-              {focus && (
-                <g className="pc-cursor">
-                  <line x1={geom.x(focus.ts)} y1={PAD.t} x2={geom.x(focus.ts)} y2={PAD.t + PLOT_H} />
-                  <circle cx={geom.x(focus.ts)} cy={geom.y(focus.v)} r={4} />
-                </g>
-              )}
-
-              {/* Bought, sold, traded: a dot on the line itself. */}
-              {marks.markers.map((m) => {
-                const p = pts.reduce((a, b) => (Math.abs(b.day - m.day) < Math.abs(a.day - m.day) ? b : a));
-                return (
-                  <g
-                    key={`${m.day}-${m.dir}`}
-                    className={`pc-mark pc-mark-${m.dir}`}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => onEventClick?.(m.events[0]!)}
-                  >
-                    <title>{`${fmtDate(m.ts)}: ${m.events.map((e) => describeEvent(e).verb).join(', ')}`}</title>
-                    <circle className="pc-hit" cx={geom.x(m.ts)} cy={geom.y(p.v)} r={14} />
-                    <circle cx={geom.x(m.ts)} cy={geom.y(p.v)} r={5} />
-                  </g>
-                );
-              })}
             </svg>
           ) : (
             <p className="fine-print">Not enough readings yet to draw a chart.</p>
+          )}
+
+          {zoom.zoomed && (
+            <button type="button" className="pc-reset" onClick={zoom.reset}>
+              Reset zoom
+            </button>
           )}
 
           {focus && geom && (
@@ -437,6 +490,8 @@ export function PriceChartSheet({
           )}
         </div>
 
+        {series && <ZoomHint />}
+
         {/* The values you'd otherwise have to hunt for with the crosshair —
             a tooltip should add to a chart, never be the only way to read it. */}
         {lo && hi && (
@@ -452,9 +507,9 @@ export function PriceChartSheet({
               <span className="fine-print">{fmtDate(lo.ts)}</span>
             </div>
             <div>
-              <span className="fine-print">Tracked</span>
+              <span className="fine-print">{zoom.zoomed ? 'Shown' : 'Tracked'}</span>
               <strong>{(geom?.days ?? 0) + 1} days</strong>
-              <span className="fine-print">{pts.length} readings</span>
+              <span className="fine-print">{shown.length} readings</span>
             </div>
           </div>
         )}

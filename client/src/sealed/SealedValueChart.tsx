@@ -5,8 +5,9 @@ import { fmtMoney } from '../price/rates.js';
 import { useSealedValueSeries } from '../price/sealedValue.js';
 import { fmtDate } from '../util/format.js';
 import { Icon } from '../components/icons.js';
-import { niceTicks } from '../components/PriceChart.js';
+import { niceTicks, ZoomHint } from '../components/PriceChart.js';
 import { useDismiss } from '../components/useDismiss.js';
+import { usePlotZoom } from '../components/usePlotZoom.js';
 import { SealedImage } from './SealedImage.js';
 import { itemImage } from './product.js';
 
@@ -45,24 +46,45 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
   const unit = series?.unit ?? 'EUR';
   const money = (v: number) => fmtMoney(Math.abs(v) < 1e-6 ? 0 : v, unit);
 
+  const W = width ? Math.max(MIN_W, width) : 0;
+  const zoom = usePlotZoom({
+    points: pts.length,
+    padL: PAD.l,
+    padR: PAD.r,
+    viewW: W,
+    onTap: (x) => pick(x, true),
+    onHover: (x) => pick(x),
+  });
+
   const geom = useMemo(() => {
-    if (!pts.length || !width) return null;
-    const W = Math.max(MIN_W, width);
+    if (!pts.length || !W) return null;
     const plotW = W - PAD.l - PAD.r;
-    const t0 = pts[0]!.ts;
-    const t1 = pts[pts.length - 1]!.ts;
+    const tA = pts[0]!.ts;
+    const full = pts[pts.length - 1]!.ts - tA || DAY_MS;
+    const t0 = tA + zoom.lo * full;
+    const t1 = tA + zoom.hi * full;
     const span = t1 - t0 || DAY_MS;
+
+    // The days in view, plus the one just outside each edge so the line enters
+    // and leaves the frame rather than stopping short of it.
+    let from = 0;
+    while (from < pts.length - 1 && pts[from + 1]!.ts <= t0) from++;
+    let to = pts.length - 1;
+    while (to > from && pts[to - 1]!.ts >= t1) to--;
+    const vis = pts.slice(from, to + 1);
 
     let lo = Infinity;
     let hi = -Infinity;
-    for (const p of pts) {
+    for (const p of vis) {
       if (p.total < lo) lo = p.total;
       if (p.total > hi) hi = p.total;
     }
     // An empty shelf is a meaningful zero, so anchor to it rather than drawing a
-    // flat line as dramatic noise.
-    lo = Math.min(lo, 0);
-    hi = Math.max(hi, 0);
+    // flat line as dramatic noise — unless zoomed in, where the detail wins.
+    if (!zoom.zoomed) {
+      lo = Math.min(lo, 0);
+      hi = Math.max(hi, 0);
+    }
     const pad = (hi - lo || Math.abs(hi) || 1) * 0.12;
     const yMin = lo - pad;
     const yMax = hi + pad;
@@ -70,9 +92,10 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
     const x = (ts: number) => PAD.l + ((ts - t0) / span) * plotW;
     const y = (v: number) => PAD.t + (1 - (v - yMin) / (yMax - yMin)) * PLOT_H;
 
-    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.ts).toFixed(1)},${y(p.total).toFixed(1)}`).join(' ');
+    const line = vis.map((p, i) => `${i ? 'L' : 'M'}${x(p.ts).toFixed(1)},${y(p.total).toFixed(1)}`).join(' ');
     const zeroY = y(0);
-    const area = `${line} L${x(t1).toFixed(1)},${zeroY.toFixed(1)} L${x(t0).toFixed(1)},${zeroY.toFixed(1)} Z`;
+    const base = Math.min(Math.max(zeroY, PAD.t), PAD.t + PLOT_H).toFixed(1);
+    const area = `${line} L${x(vis[vis.length - 1]!.ts).toFixed(1)},${base} L${x(vis[0]!.ts).toFixed(1)},${base} Z`;
 
     const days = Math.round(span / DAY_MS);
     const dateFmt = new Intl.DateTimeFormat(
@@ -89,11 +112,12 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
     }
 
     return { W, x, y, line, area, t0, t1, span, plotW, yTicks: niceTicks(yMin, yMax, 4), xTicks, days };
-  }, [pts, width]);
+  }, [pts, W, zoom.lo, zoom.hi, zoom.zoomed]);
 
   /** Nearest day to a client x within the plot; tapping the picked day lets go. */
-  function pick(clientX: number, el: SVGSVGElement, toggle = false) {
-    if (!geom) return;
+  function pick(clientX: number, toggle = false) {
+    const el = plotRef.current;
+    if (!geom || !el) return;
     const rect = el.getBoundingClientRect();
     const px = ((clientX - rect.left) * geom.W) / (rect.width || geom.W);
     const ts = geom.t0 + ((px - PAD.l) / geom.plotW) * geom.span;
@@ -111,7 +135,9 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
 
   const latest = pts[pts.length - 1];
   const firstPt = pts[0];
-  const focus = cursor != null ? pts[cursor] : undefined;
+  const picked = cursor != null ? pts[cursor] : undefined;
+  // A zoom can leave the crosshair off-frame; it belongs to the view.
+  const focus = picked && geom && picked.ts >= geom.t0 && picked.ts <= geom.t1 ? picked : undefined;
   const shown = focus ?? latest;
   const change = firstPt && latest ? latest.total - firstPt.total : 0;
   const dir = change > 0.005 ? 'up' : change < -0.005 ? 'down' : 'flat';
@@ -167,10 +193,7 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
                   tabIndex={0}
                   role="img"
                   aria-label={`Sealed value from ${fmtDate(geom.t0)} to ${fmtDate(geom.t1)}, ${money(firstPt!.total)} to ${money(latest.total)}`}
-                  onPointerDown={(e) => pick(e.clientX, e.currentTarget, true)}
-                  onPointerMove={(e) => {
-                    if (e.buttons) pick(e.clientX, e.currentTarget);
-                  }}
+                  {...zoom.bind}
                   onKeyDown={(e) => {
                     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
                     e.preventDefault();
@@ -183,6 +206,11 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
                       <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
                       <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
                     </linearGradient>
+                    {/* Zoomed in, the line runs past both edges — this is what
+                        keeps it off the axis labels. */}
+                    <clipPath id="sealed-chart-clip">
+                      <rect x={PAD.l - 1} y={0} width={geom.plotW + 2} height={H} />
+                    </clipPath>
                   </defs>
 
                   {geom.yTicks.map((v) => (
@@ -194,8 +222,10 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
                     </g>
                   ))}
 
-                  <path className="pc-area" d={geom.area} fill="url(#sealed-chart-fill)" />
-                  <path className="pc-line" d={geom.line} />
+                  <g clipPath="url(#sealed-chart-clip)">
+                    <path className="pc-area" d={geom.area} fill="url(#sealed-chart-fill)" />
+                    <path className="pc-line" d={geom.line} />
+                  </g>
 
                   <line className="pc-grid" x1={PAD.l} y1={PAD.t + PLOT_H} x2={geom.W - PAD.r} y2={PAD.t + PLOT_H} />
 
@@ -211,6 +241,7 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
                     </text>
                   ))}
 
+                  <g clipPath="url(#sealed-chart-clip)">
                   {focus && (
                     <g className="pc-cursor">
                       <line x1={geom.x(focus.ts)} y1={PAD.t} x2={geom.x(focus.ts)} y2={PAD.t + PLOT_H} />
@@ -238,9 +269,18 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
                   })}
 
                   {!focus && <circle className="pc-end" cx={geom.x(latest.ts)} cy={geom.y(latest.total)} r={4} />}
+                  </g>
                 </svg>
               )}
+
+              {zoom.zoomed && (
+                <button type="button" className="pc-reset" onClick={zoom.reset}>
+                  Reset zoom
+                </button>
+              )}
             </div>
+
+            <ZoomHint />
 
             {lo && hi && (
               <div className="price-chart-readout">

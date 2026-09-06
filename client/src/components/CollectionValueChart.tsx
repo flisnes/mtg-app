@@ -263,17 +263,14 @@ function ValueChartSheet({
   const focus = picked && geom && picked.ts >= geom.t0 && picked.ts <= geom.t1 ? picked : undefined;
   const shown = focus ?? latest;
   const change = firstPt && latest ? valueOf(latest) - valueOf(firstPt) : 0;
-  const dir = change > 0.005 ? 'up' : change < -0.005 ? 'down' : 'flat';
-  // In gain mode the headline number is already a change, so the percentage
-  // that means something is the return on what the pile cost, not on day one.
-  const pct =
-    mode === 'gain'
-      ? latest && latest.basis > 0
-        ? (latest.gain / latest.basis) * 100
-        : null
-      : firstPt && valueOf(firstPt) > 0
-        ? (change / valueOf(firstPt)) * 100
-        : null;
+  // In gain mode the headline number *is* the change, so the line under it says
+  // that one number as a share of what the pile cost. Quoting how far the gain
+  // itself has travelled since the chart started is a second, unrelated figure
+  // sharing one label, which is how the two used to disagree.
+  const gainPct = latest && latest.basis > 0 ? (latest.gain / latest.basis) * 100 : null;
+  const headline = mode === 'gain' ? (latest?.gain ?? 0) : change;
+  const dir = headline > 0.005 ? 'up' : headline < -0.005 ? 'down' : 'flat';
+  const pct = firstPt && valueOf(firstPt) > 0 ? (change / valueOf(firstPt)) * 100 : null;
 
   const dayEvents = focus ? (series?.eventsByDay.get(focus.day) ?? []) : [];
 
@@ -320,11 +317,23 @@ function ValueChartSheet({
                 <div className="price-change">
                   <span className="fine-print">on {fmtDate(focus.ts)}</span>
                 </div>
+              ) : mode === 'gain' ? (
+                <div className={`price-change price-${dir}`}>
+                  {gainPct != null ? (
+                    <>
+                      {gainPct >= 0 ? '+' : '−'}
+                      {Math.abs(gainPct).toFixed(1)}%
+                      <span className="fine-print"> on the {money(latest.basis)} you paid</span>
+                    </>
+                  ) : (
+                    <span className="fine-print">No acquisition prices recorded, so there is nothing to measure against.</span>
+                  )}
+                </div>
               ) : (
                 <div className={`price-change price-${dir}`}>
                   {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·'} {money(Math.abs(change))}
                   {pct != null && ` (${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}%)`}
-                  <span className="fine-print"> {mode === 'gain' ? 'of what it cost' : `since ${fmtDate(firstPt!.ts)}`}</span>
+                  <span className="fine-print"> since {fmtDate(firstPt!.ts)}</span>
                 </div>
               )}
             </div>

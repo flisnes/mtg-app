@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.145.4',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The "Since acquisition" chart put two unrelated figures on one line: the gain, and how far that gain had moved since the chart started. It now reads the gain and the same gain as a share of what you paid.',
+      },
+    ],
+  },
+  {
     version: '0.145.3',
     changes: [
       {
@@ -166,15 +175,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'The search bar in the header now searches every card, instead of starting on the list you were standing on. Each list keeps a magnifying glass next to Select for searching just that list, and the scope pills still switch either way.',
-      },
-    ],
-  },
-  {
-    version: '0.141.7',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'The Bloomburrow paw print renders as a paw again. Cards that spend paw prints on their modes were showing the Phyrexian mana pip instead.',
       },
     ],
   },

@@ -1,4 +1,4 @@
-// The older half of the changelog (0.141.6 down to 0.98.0), split out of
+// The older half of the changelog (0.141.7 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,15 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.141.7',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The Bloomburrow paw print renders as a paw again. Cards that spend paw prints on their modes were showing the Phyrexian mana pip instead.',
+      },
+    ],
+  },
   {
     version: '0.141.6',
     changes: [

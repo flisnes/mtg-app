@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.145.4
+
+- **The "Since acquisition" view was quoting two different numbers as if they were one.** The big figure is what the pile has gained on what it cost, but the line beside it added how far that gain had travelled since the chart began, then labelled the pair "of what it cost" (only the percentage was). It now says the one number twice: the gain, and the gain as a share of what you paid, which is what the Cost and Worth boxes underneath already add up to.
+
 ## 0.145.3
 
 - **A card's price change is now measured against what you paid for it.** "Up 87% since 18 May" was a fact about how long we have been recording prices, not about your money. Wherever an acquisition price is on record, the card sheet and the full price chart now lead with the gain (or loss) on what the copies cost you. Cards that came in without a price (a scan, a gift, a trade) still show the recorded movement.

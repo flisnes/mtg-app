@@ -9,6 +9,7 @@ import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
 import { ownedBadge } from './OwnedBadge.js';
 import { placementBadge } from './PlacementBadge.js';
+import { langMark } from './LangFlag.js';
 import { specialMark } from './SpecialConditions.js';
 import { formatPrice, pricedForFinish } from './CardSorting.js';
 
@@ -38,9 +39,13 @@ export function collectionCardItem(
   // Altered / signed / misprint: per copy again, and the reason this row exists
   // at all rather than being folded into the plain one.
   const special = specialMark(r.entry.special);
+  // Same per-copy logic: a flag belongs on the Italian copy, not on the row
+  // above it that happens to be the same card in English.
+  const lang = langMark(r.entry.lang);
   return {
     ...(place ? { place } : {}),
     ...(special ? { special } : {}),
+    ...(lang ? { lang } : {}),
     key: r.entry.id,
     name: r.oracle?.name ?? '(unknown card)',
     image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
@@ -65,7 +70,7 @@ export function collectionCardItem(
         {r.printing && <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />}
         {r.printing ? `${r.printing.setName} · #${r.printing.collectorNumber} · ` : ''}
         {r.entry.condition} · {r.entry.finish}
-        {r.entry.lang !== 'en' ? ` · ${r.entry.lang}` : ''}
+        {lang ? ` · ${r.entry.lang}` : ''}
         {r.entry.special?.length ? ` · ${specialLabel(r.entry.special)}` : ''}
       </>
     ),
@@ -86,12 +91,16 @@ export function wishCardItem(
   // itself. What's worth knowing is whether you've since picked the card up.
   const own = opts.ownership?.lookup(r.entry.oracleId, r.entry.scryfallId ?? r.oracle?.defaultScryfallId);
   const ownBadge = ownedBadge(own && { ...own, wished: 0 });
+  // A wish that pins a language you don't collect in flies its flag; one still
+  // on "any language" says nothing, because anything would do.
+  const lang = langMark(r.entry.lang);
   // Any finish/condition/lang the wish pins down (undefined = "any", shown as
-  // nothing); condition is a minimum, English is the norm (only shown if not).
+  // nothing); condition is a minimum, and the language spells itself out only
+  // when it's the one the flag is already flagging.
   const prefs = [
     r.entry.finish,
     r.entry.condition ? `min ${r.entry.condition}` : undefined,
-    r.entry.lang && r.entry.lang !== 'en' ? r.entry.lang : undefined,
+    lang ? r.entry.lang : undefined,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -113,6 +122,7 @@ export function wishCardItem(
     image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
     foil: !!r.entry.finish && r.entry.finish !== 'nonfoil',
     count: r.entry.quantity,
+    ...(lang ? { lang } : {}),
     badge: ownBadge?.icon,
     badgeClass: ownBadge?.cls,
     badgeTitle: ownBadge?.title,
@@ -133,6 +143,9 @@ const BOARD_LABEL: Record<DeckBoard, string> = { main: '', side: 'Sideboard', co
 
 /** A deck/binder/box slot: which board it's in (deck), or its printing (storage). */
 export function deckCardItem(r: JoinedDeckCard, opts: { kind: ContainerKind; onClick?: () => void }): CardItem {
+  // A slot that named a language: the flag says which copy this binder page or
+  // deck list is actually asking for.
+  const lang = langMark(r.entry.lang);
   return {
     key: r.entry.id,
     name: r.oracle?.name ?? '(unknown card)',
@@ -140,6 +153,7 @@ export function deckCardItem(r: JoinedDeckCard, opts: { kind: ContainerKind; onC
     mana: r.oracle?.manaCost,
     foil: !!r.entry.finish && r.entry.finish !== 'nonfoil',
     count: r.entry.quantity,
+    ...(lang ? { lang } : {}),
     sub:
       opts.kind === 'deck' ? (
         BOARD_LABEL[r.entry.board] || undefined

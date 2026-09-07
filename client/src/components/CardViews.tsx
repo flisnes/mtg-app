@@ -116,6 +116,9 @@ export interface CardItem {
   /** The "A" mark of a copy with special conditions (altered, signed, …), in
    *  the same two places, after the filing badge. */
   special?: { node: ReactNode; cls?: string; title?: string };
+  /** A flag, when the copy isn't in the language you collect in. Last of the
+   *  marks: the rest are about you, this one is about the cardboard. */
+  lang?: { node: ReactNode; cls?: string; title?: string };
   /** Dim the entry (e.g. unowned deck cards). */
   dim?: boolean;
   /** Marked for a cut: still here, but on its way out as soon as it's pasted. */
@@ -258,6 +261,11 @@ export function CardList({
                     {it.special.node}
                   </span>
                 )}
+                {it.lang && (
+                  <span className={`badge ${it.lang.cls ?? ''}`} title={it.lang.title}>
+                    {it.lang.node}
+                  </span>
+                )}
               </div>
               {it.sub && <div className="result-sub">{it.sub}</div>}
             </div>
@@ -392,6 +400,11 @@ export function CardStacks({
                     {it.place.node}
                   </span>
                 )}
+                {it.lang && (
+                  <span className={`badge ${it.lang.cls ?? ''}`} title={it.lang.title}>
+                    {it.lang.node}
+                  </span>
+                )}
                 {it.sub && <span className="stack-sub">{it.sub}</span>}
                 {it.count != null && it.count !== 1 && <span className="stack-qty">×{it.count}</span>}
                 {it.trend && <TrendMark dir={it.trend} />}
@@ -458,8 +471,8 @@ export function CardGrid({
               )}
               {it.foil && it.image && <span className="foil-sheen" aria-hidden />}
               {/* Corner marks share one row along the bottom edge: owned, filed,
-                  special conditions, trend. */}
-              {(it.badge || it.place || it.special || it.trend) && (
+                  special conditions, language, trend. */}
+              {(it.badge || it.place || it.special || it.lang || it.trend) && (
                 <span className="tile-marks">
                   {it.badge && (
                     <span className={`tile-badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
@@ -474,6 +487,11 @@ export function CardGrid({
                   {it.special && (
                     <span className={`tile-badge ${it.special.cls ?? ''}`} title={it.special.title}>
                       {it.special.node}
+                    </span>
+                  )}
+                  {it.lang && (
+                    <span className={`tile-badge ${it.lang.cls ?? ''}`} title={it.lang.title}>
+                      {it.lang.node}
                     </span>
                   )}
                   {it.trend && <TrendMark dir={it.trend} tile />}

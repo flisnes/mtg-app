@@ -19,6 +19,8 @@ import { formatDiagnostics } from '../errorLog.js';
 import { Page } from './Page.js';
 import { fmtDate, fmtDateTime as fmtWhen } from '../util/format.js';
 import { setPrefs, type FilingPolicy, type PrintingPref, type UpdatePolicy } from '../prefs.js';
+import { LANGS } from '../components/CardSheet.js';
+import { LangFlag, langName } from '../components/LangFlag.js';
 import { usePrefs } from '../usePrefs.js';
 import { CURRENCIES, ensureRates, rateSummary } from '../price/rates.js';
 import {
@@ -78,6 +80,7 @@ export function Settings() {
     <Page title="Settings">
       <AccountSection />
       <CurrencySection />
+      <LanguageSection />
       <PrintingSection />
       <FilingSection />
       <DownloadsSection />
@@ -427,6 +430,43 @@ function CurrencySection() {
 function fmtRateDate(iso: string): string {
   const ts = Date.parse(iso);
   return Number.isNaN(ts) ? iso : fmtDate(ts);
+}
+
+// ---------------------------------------------------------------------------
+// Language: which one your cards are expected to be in
+// ---------------------------------------------------------------------------
+
+function LanguageSection() {
+  const { preferredLang } = usePrefs();
+
+  return (
+    <section className="about-section">
+      <h2>Language</h2>
+      <p className="fine-print">
+        The language you collect in. Any card in a different one gets a small flag next to its badges, wherever it
+        shows up: your collection, a binder page, or the pile your trade partner just pushed across the table.
+      </p>
+
+      <label className="field">
+        I collect in
+        <select value={preferredLang} onChange={(e) => setPrefs({ preferredLang: e.target.value })}>
+          {LANGS.map((l) => (
+            <option key={l} value={l}>
+              {langName(l)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="fine-print lang-pref-sample">
+        No flag on {langName(preferredLang)} cards. Everything else looks like this:{' '}
+        {LANGS.filter((l) => l !== preferredLang).map((l) => (
+          <span key={l} className="badge badge-lang" title={langName(l)}>
+            <LangFlag lang={l} size={11} />
+          </span>
+        ))}
+      </p>
+    </section>
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { Icon } from '../components/icons.js';
 import { SetSymbol } from '../components/SetSymbol.js';
+import { langMark } from '../components/LangFlag.js';
 import { sanitizePublicTradelist, sanitizePublicWishlist } from '../trade/validate.js';
 import type { CardItem } from '../components/CardViews.js';
 
@@ -149,11 +150,13 @@ export function tradeLineItem(
 ): CardItem {
   const oracle = cards?.oracles.get(line.oracleId);
   const printing = cards?.printings.get(line.scryfallId);
+  const lang = langMark(line.lang);
   return {
     key,
     name: oracle?.name ?? line.name,
     image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
     count: line.quantity,
+    ...(lang ? { lang } : {}),
     sub: (
       <>
         {printing && <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />}
@@ -195,12 +198,14 @@ export function wishLineItem(
   ) : (
     'any printing'
   );
+  const lang = langMark(line.lang);
   return {
     key,
     name: oracle?.name ?? line.name,
     image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
     foil: !!line.finish && line.finish !== 'nonfoil',
     count: line.quantity,
+    ...(lang ? { lang } : {}),
     sub: detail ? (
       <>
         {printingSub} · {detail}

@@ -1,5 +1,5 @@
-// Device preferences: how money is displayed, which printing represents a card,
-// and how freely the app may spend the user's data plan.
+// Device preferences: how money is displayed, which language and printing a card
+// is expected in, and how freely the app may spend the user's data plan.
 //
 // These live in localStorage rather than the synced `settings` table for two
 // reasons. They're device-shaped ("this phone is on mobile data", "this browser
@@ -31,6 +31,13 @@ export type FilingPolicy = 'ask' | 'move' | 'copy';
 export interface Prefs {
   /** An ECB currency code (see price/rates.ts CURRENCIES). Equal to base = no conversion. */
   displayCurrency: string;
+  /**
+   * The language you collect in (a Scryfall code, see LANGS in
+   * components/CardSheet.tsx). Copies in any other language wear a flag badge
+   * (components/LangFlag.tsx), which is built during render — same reason the
+   * currency lives here.
+   */
+  preferredLang: string;
   baseCurrency: BaseCurrency;
   printing: PrintingPref;
   /** Layered on top of `printing`: show the printing you own, whatever the rule says. */
@@ -53,6 +60,7 @@ export interface Prefs {
 // agree to. The update banner's "don't ask again" moves a feed off 'ask'.
 const DEFAULTS: Prefs = {
   displayCurrency: 'EUR',
+  preferredLang: 'en',
   baseCurrency: 'EUR',
   printing: 'latest',
   preferOwnedPrinting: false,

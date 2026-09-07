@@ -3843,6 +3843,45 @@ button.primary {
   background: #d99a2b;
   color: #1a1a1e;
 }
+/* The flag a copy flies when it isn't in the language you collect in. The chip
+   goes see-through and loses its padding: the flag is already a coloured
+   rectangle, and a tinted box around it just makes two rectangles. */
+.badge.badge-lang,
+.tile-badge.badge-lang {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  padding: 0;
+  vertical-align: middle;
+}
+/* A hairline, because these flags are mostly edge-to-edge colour: without it
+   Japan's white field bleeds into a pale chip and Germany's black bar bleeds
+   into the dark one on a card tile. */
+.lang-flag {
+  display: block;
+  border-radius: 1.5px;
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.45);
+}
+/* Settings' "everything else looks like this" strip. */
+.lang-pref-sample .badge-lang {
+  margin-left: 0.3rem;
+}
+/* A language we haven't drawn a flag for (Phyrexian, or whatever Scryfall adds
+   next) falls back to its code. */
+.lang-code {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 0 0.2rem;
+}
+.tile-badge.badge-lang .lang-code {
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+}
 /* Value of the copies you own in a deck, binder or box. */
 .badge-value {
   color: var(--text);

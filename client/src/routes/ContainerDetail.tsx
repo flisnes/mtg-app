@@ -60,6 +60,7 @@ import { useToast } from '../components/Toast.js';
 import { CardSheet, FINISH_LABELS } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import { ownedBadge } from '../components/OwnedBadge.js';
+import { langMark } from '../components/LangFlag.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { containerValue, HeaderValue, missingValue, valueText } from '../components/ValueSummary.js';
 import { ContainerValueChartSheet } from '../components/CollectionValueChart.js';
@@ -1319,8 +1320,12 @@ function Board({
               : { yes: 'including the copy this slot names', no: 'this slot hasn’t picked a copy yet' },
           filedHere,
         );
+    // A slot that pinned a language: the flag says which copy the list wants,
+    // so a deck built out of your Japanese cards reads as one at a glance.
+    const lang = langMark(r.lang);
     return {
       key: r.id,
+      ...(lang ? { lang } : {}),
       name: r.oracle ? (r.board === 'token' ? tokenLabel(r.oracle) : r.oracle.name) : '(unknown card)',
       image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
       mana: r.oracle?.manaCost,

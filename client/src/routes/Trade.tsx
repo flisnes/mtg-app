@@ -19,6 +19,7 @@ import { CodeJoinForm } from '../components/CodeJoinForm.js';
 import { Icon } from '../components/icons.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { ownedBadge, type OwnedBadgeSpec } from '../components/OwnedBadge.js';
+import { langMark } from '../components/LangFlag.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet, clearTradeScanSessions } from '../components/ScanSheet.js';
 import { TradeQr } from '../components/TradeQr.js';
@@ -911,6 +912,10 @@ function OfferPanel({
             view={view}
             items={lines.map((l): CardItem => {
               const ind = badge(l);
+              // The one place a flag earns its keep most: your partner hands you
+              // a card and you want to know it's the Spanish one before you take
+              // it, not after.
+              const lang = langMark(l.lang);
               const printing = printings?.get(l.scryfallId);
               const oracle = oracles?.get(l.oracleId);
               const price = formatPrice(pricedForFinish(printing, l.finish));
@@ -935,6 +940,7 @@ function OfferPanel({
                 badge: ind?.icon,
                 badgeClass: ind?.cls,
                 badgeTitle: ind?.title,
+                ...(lang ? { lang } : {}),
                 sub: printing ? (
                   <>
                     <SetSymbol set={printing.set} title={printing.setName} />
@@ -1198,12 +1204,14 @@ function BalancePanel({
         className="picker-scroll"
         items={suggestions.map((c): CardItem => {
           const oracle = c.oracle;
+          const lang = langMark(c.line.lang);
           return {
             key: c.key,
             name: c.name,
             image: c.printing?.imageSmall ?? oracle?.imageSmall ?? null,
             foil: c.line.finish !== 'nonfoil',
             count: picks.get(c.key),
+            ...(lang ? { lang } : {}),
             badge: c.wanted > 0 ? '⭐' : undefined,
             badgeClass: 'badge-wish',
             badgeTitle:
@@ -1292,17 +1300,20 @@ function AddCardsPanel({
       <CardList
         items={sortedTradelist.map(({ entry: e, oracle, printing, wanted }): CardItem => {
           const name = oracle?.name ?? '(unknown card)';
+          const lang = langMark(e.lang);
           return {
             key: e.id,
             name,
             image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
             foil: e.finish !== 'nonfoil',
+            ...(lang ? { lang } : {}),
             badge: wanted > 0 ? '⭐' : undefined,
             badgeClass: 'badge-wish',
             badgeTitle: wanted > 0 ? `They want ×${wanted}` : undefined,
             sub: (
               <>
-                {e.condition} · {e.finish} · {e.quantityForTrade} for trade
+                {e.condition} · {e.finish}
+                {lang ? ` · ${e.lang}` : ''} · {e.quantityForTrade} for trade
                 {wanted > 0 ? ` · they want ×${wanted}` : ''}
               </>
             ),
@@ -1389,18 +1400,20 @@ function AddTheirCardsPanel({
         items={sorted.map(({ l, wanted }): CardItem => {
           const printing = printMap?.get(l.scryfallId);
           const oracle = oracleMap?.get(l.oracleId);
+          const lang = langMark(l.lang);
           return {
             key: lineKey(l),
             name: l.name,
             image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
             foil: l.finish !== 'nonfoil',
+            ...(lang ? { lang } : {}),
             badge: wanted > 0 ? '⭐' : undefined,
             badgeClass: 'badge-wish',
             badgeTitle: wanted > 0 ? `On your wishlist (×${wanted})` : undefined,
             sub: (
               <>
                 {l.condition} · {l.finish}
-                {l.lang !== 'en' ? ` · ${l.lang}` : ''} · {l.quantity} for trade
+                {lang ? ` · ${l.lang}` : ''} · {l.quantity} for trade
                 {wanted > 0 ? ` · you want ×${wanted}` : ''}
               </>
             ),

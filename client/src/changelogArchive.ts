@@ -1,4 +1,4 @@
-// The older half of the changelog (0.141.7 down to 0.98.0), split out of
+// The older half of the changelog (0.141.8 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,15 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.141.8',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The search bar in the header now searches every card, instead of starting on the list you were standing on. Each list keeps a magnifying glass next to Select for searching just that list, and the scope pills still switch either way.',
+      },
+    ],
+  },
   {
     version: '0.141.7',
     changes: [

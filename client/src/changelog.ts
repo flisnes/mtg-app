@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.146.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Cards in a language you don’t collect in now wear a small flag next to their badges — in your collection, in decks and boxes, and in a trade. Pick the language you collect in under Settings -> Language.',
+      },
+    ],
+  },
+  {
     version: '0.145.4',
     changes: [
       {
@@ -166,15 +175,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Cards start higher up on the collection, wishlist and tradelist. The blurb under the title is gone and the count moved up next to it. Another user’s full list lost its own search box, since the header search already reaches their lists.',
-      },
-    ],
-  },
-  {
-    version: '0.141.8',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'The search bar in the header now searches every card, instead of starting on the list you were standing on. Each list keeps a magnifying glass next to Select for searching just that list, and the scope pills still switch either way.',
       },
     ],
   },

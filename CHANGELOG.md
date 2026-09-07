@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.146.0
+
+- **A card in a language you don't collect in now flies its flag.** Set the language you collect in under Settings -> Language (English out of the box) and every copy in a different one gets a small flag beside its badges: your collection and tradelist, wishlist lines that pin a language, deck, binder and box slots, other people's published lists, and the pile a trade partner pushes across the table. All eleven languages Magic prints in are drawn, so you can tell a Japanese Kor Outfitter from a Korean one at a glance instead of reading the fine print under the name.
+- Set it to something other than English and it works the other way round: your English cards are the ones with a flag on them.
+
 ## 0.145.4
 
 - **The "Since acquisition" view was quoting two different numbers as if they were one.** The big figure is what the pile has gained on what it cost, but the line beside it added how far that gain had travelled since the chart began, then labelled the pair "of what it cost" (only the percentage was). It now says the one number twice: the gain, and the gain as a share of what you paid, which is what the Cost and Worth boxes underneath already add up to.

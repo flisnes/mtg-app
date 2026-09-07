@@ -122,7 +122,7 @@ export function EditHistory() {
   const canUndo = (entry: HistoryEntry): boolean => undoable.has(entry.id);
 
   return (
-    <Page title="Edit history" subtitle="Every change you've made to your collection, newest first.">
+    <Page title="Collection history" subtitle="Every change you've made to your collection, newest first.">
       <div className="list-toolbar">
         <input
           className="search-input grow"
@@ -192,7 +192,7 @@ export function EditHistory() {
           mode="info"
           oracleCard={card.oracle}
           initialScryfallId={card.scryfallId}
-          initialTab="history"
+          openHistory
           onClose={() => setCard(null)}
         />
       )}

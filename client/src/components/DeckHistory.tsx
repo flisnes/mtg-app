@@ -134,7 +134,7 @@ export function DeckHistory({
           mode="info"
           oracleCard={card.oracle}
           initialScryfallId={card.scryfallId}
-          initialTab="history"
+          openHistory
           onClose={() => setCard(null)}
         />
       )}

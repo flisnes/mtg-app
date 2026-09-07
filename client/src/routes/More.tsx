@@ -12,7 +12,7 @@ const LINKS: { to: string; label: string; icon: IconName }[] = [
   { to: '/movers', label: 'Price movers', icon: 'prices' },
   { to: '/spoilers', label: 'Spoilers & reprints', icon: 'spoilers' },
   { to: '/community', label: 'Community', icon: 'community' },
-  { to: '/edit-history', label: 'Edit history', icon: 'edit' },
+  { to: '/edit-history', label: 'Collection history', icon: 'edit' },
   { to: '/history', label: 'Trade history', icon: 'history' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
   { to: '/about', label: 'About', icon: 'about' },

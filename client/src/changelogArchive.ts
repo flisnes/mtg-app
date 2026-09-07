@@ -1,4 +1,4 @@
-// The older half of the changelog (0.141.8 down to 0.98.0), split out of
+// The older half of the changelog (0.141.9 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,15 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.141.9',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Cards start higher up on the collection, wishlist and tradelist. The blurb under the title is gone and the count moved up next to it. Another user’s full list lost its own search box, since the header search already reaches their lists.',
+      },
+    ],
+  },
   {
     version: '0.141.8',
     changes: [

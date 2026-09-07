@@ -5,7 +5,7 @@ import { CONTAINER_META } from '../deck/containers.js';
 // Single source of truth for how a recorded UserEvent is presented — its label,
 // icon, and qty direction — plus the filter categories the edit-history view
 // offers. Adding or removing a recorded event type is a change *here* (and the
-// matching emit() in dataAccess); the card History tab, the edit-history list,
+// matching emit() in dataAccess); the card's collection history, the list,
 // the event modal, and the type filter all read from this file so they stay in
 // step. Keep it presentation-only: no DB access, no React.
 
@@ -54,7 +54,7 @@ function isTrade(e: UserEvent): boolean {
   return e.source === 'trade' || e.tradeId != null;
 }
 
-/** How to render a single event (card History tab + edit-history rows). */
+/** How to render a single event (card collection history + history rows). */
 export function describeEvent(e: UserEvent): EventDisplay {
   switch (e.kind) {
     case 'collection.add':

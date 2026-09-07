@@ -2521,18 +2521,13 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   flex: 0 1 auto;
   min-height: 3.25rem;
 }
-/* The history tab hands its own scrolling to the timeline, so the summary and
-   the "Fix prices" toggle stay put above it. */
-.card-sheet .sheet-body-history {
-  overflow: hidden;
-}
 /* The art sets the height of the head, and it follows the viewport: a short
    phone in landscape gets a smaller card rather than a sheet with no room left
    for the form. */
 .card-sheet .sheet-card-wrap,
 .card-sheet .sheet-card-ph {
-  width: min(42%, calc(clamp(120px, 23dvh, 220px) * 488 / 680));
-  max-width: 210px;
+  width: min(50%, calc(clamp(150px, 30dvh, 340px) * 488 / 680));
+  max-width: 260px;
   aspect-ratio: 488 / 680;
   height: auto;
 }
@@ -2566,6 +2561,142 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
 .sheet-copy-qty {
   margin-left: auto;
   font-weight: 600;
+}
+/* "Wants" on someone else's wish: a label, so the separator after it doesn't. */
+.sheet-copy-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.sheet-copy-summary > span.sheet-copy-label + span::before {
+  content: none;
+  margin-right: 0;
+}
+
+/* The three copy traits as one tappable line: NM · Nonfoil · EN, or "Any
+   condition · any finish · any language" on a wish or a slot. The fields
+   unfold under it, so a form that only needs a quantity shows one row instead
+   of a labelled grid of three answers that were already right. */
+.sheet-traits {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.sheet-traits-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+}
+.sheet-traits-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-traits-trigger > svg {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  transition: transform 0.15s ease-out;
+}
+.sheet-traits.open .sheet-traits-trigger {
+  border-color: var(--accent);
+}
+.sheet-traits.open .sheet-traits-trigger > svg {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-traits-trigger > svg {
+    transition: none;
+  }
+}
+
+/* An answer almost nobody gives (copies for trade, a signed card, slot tags)
+   is a line you can ignore until it's yours, not a field row that books 60px
+   of a sheet already over budget. */
+.sheet-reveal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  align-self: flex-start;
+  padding: 0.1rem 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 0.88rem;
+}
+.sheet-reveal > svg {
+  flex-shrink: 0;
+}
+
+/* Which printing this is, said beside the art it changes rather than as the
+   first field of the form. A button where the edition is yours to pick, plain
+   text where it isn't — a greyed-out dropdown says no more than the text and
+   makes the reader work out that it's dead. */
+.sheet-edition {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-width: 0;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+}
+.sheet-edition-static {
+  border-color: transparent;
+  background: none;
+  padding-inline: 0;
+  color: var(--text-dim);
+}
+.sheet-edition-symbol {
+  flex-shrink: 0;
+  width: 1.1rem;
+  font-size: 1rem;
+  line-height: 1;
+  text-align: center;
+}
+.sheet-edition-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-edition > svg:last-child {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+/* The way out, in the same place on every mode, so no mode has to spend an
+   action-row button on Close. */
+.sheet-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  padding: 0.35rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.sheet-close:hover {
+  color: var(--text);
 }
 .sheet-card-wrap .sheet-card {
   width: 100%;
@@ -2878,20 +3009,18 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   color: var(--text-dim);
 }
 /* The picker plus the "view all editions" grid button beside it. */
-.edition-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
+/* Search box over the printings grid: forty printings is a lot of art to scroll
+   past when you already know the set code. */
+.edition-grid-search {
+  flex: none;
+  padding: 0.55rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
 }
-/* Aligned to the picker's first line, so an open list doesn't stretch it. */
-.edition-grid-btn {
-  display: grid;
-  place-items: center;
-  padding: 0.55rem 0.7rem;
-  align-self: flex-start;
-}
-/* "Pick one from my collection": sits right under the Edition field, so the
-   shortcut is next to the thing it fills in. */
+/* "Pick one from my collection": sits with the fields it fills in. */
 .pick-copy-btn {
   display: inline-flex;
   align-items: center;
@@ -3122,8 +3251,8 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   margin: 0 0.05em;
   vertical-align: -0.05em;
 }
-/* Rules text is the one part of the details tab with no upper bound, so in the
-   card sheet it gets its own scroll instead of pushing the fields off. */
+/* Rules text is the one part of the sheet with no upper bound, so it gets its
+   own scroll instead of pushing the fields off. */
 .card-sheet .sheet-oracle {
   margin-top: 0;
   max-height: 7rem;
@@ -3131,6 +3260,94 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   overscroll-behavior: contain;
   padding-right: 0.25rem;
 }
+/* On a form the card is context, not the thing being answered: two lines and a
+   way to open it. Faded rather than cut, so it reads as "there's more" instead
+   of as a rendering bug. Two lines of 0.9rem/1.55 is 2.8rem exactly.
+   Line-clamp is deliberately not used here: .symbol-text puts each ability in
+   its own <p>, and -webkit-box would count paragraphs, not lines. */
+.card-sheet .sheet-oracle-clamped {
+  max-height: 2.8rem;
+  min-height: 0;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
+}
+.card-sheet .sheet-oracle-more {
+  margin-top: -0.35rem;
+}
+/* ---- The card sheet on a desktop: two columns, centered ----
+   A 560px strip hugging the bottom edge of a 1080px screen left about 1360px of
+   width and 200px of height unused while the rules text scrolled inside a 112px
+   window. Same component, one breakpoint: the head becomes the left column (a
+   card at something like its real size, with what it's worth and where your
+   copies are under it) and everything you answer sits in the right one. */
+@media (min-width: 900px) {
+  .card-sheet-backdrop {
+    align-items: center;
+    padding: 2rem 1rem;
+  }
+  .card-sheet {
+    max-width: 920px;
+    border-radius: 16px;
+    padding: 1.1rem 1.25rem;
+    max-height: min(86dvh, 780px);
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'name name'
+      'head body'
+      'head quick'
+      'head actions';
+    column-gap: 1.5rem;
+    row-gap: 0.6rem;
+  }
+  .card-sheet .sheet-name-row {
+    grid-area: name;
+  }
+  .card-sheet .sheet-head {
+    grid-area: head;
+    flex-direction: column;
+    gap: 0.55rem;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  /* Sized off the viewport's height so a short window gets a smaller card
+     rather than a column that outgrows the sheet. */
+  .card-sheet .sheet-card-wrap,
+  .card-sheet .sheet-card-ph {
+    width: min(100%, calc(clamp(240px, 52dvh, 460px) * 488 / 680));
+    max-width: none;
+    align-self: center;
+  }
+  .card-sheet .sheet-body {
+    grid-area: body;
+  }
+  .card-sheet .sheet-quickadd {
+    grid-area: quick;
+  }
+  .card-sheet .sheet-actions {
+    grid-area: actions;
+  }
+  /* Room enough that neither the rules text nor the filed-in pills need a
+     scrollbar of their own. */
+  .card-sheet .sheet-oracle {
+    max-height: none;
+  }
+  .card-sheet .sheet-oracle-clamped {
+    max-height: none;
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .card-sheet .sheet-oracle-more {
+    display: none;
+  }
+  .card-sheet .sheet-info .sheet-places {
+    max-height: none;
+  }
+}
+
 /* Highlight a phrase in the rules text and this offers to search for it. It sits
    below the text rather than floating at the selection, so the OS's own
    selection menu (which floats above) has nothing to fight over. Outside the
@@ -3183,6 +3400,11 @@ button.primary {
 }
 .sheet-actions button:first-child {
   margin-right: auto;
+}
+/* Two answers of the same kind (Wishlist/Collection, File away/Edit): they sit
+   together, rather than one being flung left like a Cancel. */
+.sheet-actions.sheet-actions-pair button:first-child {
+  margin-right: 0;
 }
 /* Compact +icon quick-adds for the non-origin lists sit beside the primary
    labeled "+List" button; keep the plus and glyph centered and tight. */
@@ -3511,12 +3733,32 @@ button.primary {
   font-size: 0.95rem;
 }
 
-/* ---- Card history tab (card sheet) ---- */
+/* A tab strip inside a sheet (the value chart's modes, the emblem picker's
+   sources). .seg-row's overflow:hidden zeroes its min flex size, and .sheet is
+   a max-height column flexbox — without this the row gets crushed to ~2px. */
 .sheet-tabs {
   margin: 0.35rem 0 0;
-  /* .seg-row's overflow:hidden zeroes its min flex size, and .sheet is a
-     max-height column flexbox — without this the row gets crushed to ~2px. */
   flex-shrink: 0;
+}
+
+/* ---- Collection history (its own sheet over the card sheet) ---- */
+/* Was a tab on the card sheet, which charged every mode 56px for a panel
+   almost nobody opens and split the sheet where the content doesn't. */
+/* Sized to the timeline, not to the viewport: two events shouldn't open a
+   sheet with 700px of nothing under them (.sheet already caps it at 90dvh). */
+.card-history-sheet {
+  min-height: 0;
+}
+.card-history-title {
+  flex: 1;
+  min-width: 0;
+}
+.card-history-title h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.card-history-title p {
+  margin: 0.15rem 0 0;
 }
 .history-summary {
   font-size: 0.9rem;
@@ -3550,9 +3792,9 @@ button.primary {
   flex-direction: column;
   gap: 2px;
 }
-/* Inside the card sheet the timeline is the scroller, so a card with a hundred
-   events doesn't move the buttons. */
-.card-sheet .history-list {
+/* Inside its sheet the timeline is the scroller, so a card with a hundred
+   events doesn't push the head off. */
+.card-history-sheet .history-list {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -5970,11 +6212,19 @@ a.seg {
 }
 
 /* Card sheet: name and its options menu share a row. */
+/* The card sheet's top bar: the name gets the sheet's whole width, and the two
+   controls sit where they always are. Beside the art they were fighting a
+   168px column, and a long name pushed the ✕ off the edge. */
 .sheet-name-row {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0;
+}
+.sheet-name-row .sheet-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .sealed-note {
   margin: 0;

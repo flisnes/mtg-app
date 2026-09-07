@@ -2,6 +2,17 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.147.0
+
+- **The card sheet has been rebuilt around the card.** The picture is half again as big on a phone, and on a desktop the sheet is a proper two-column window: the card at something close to its real size on the left, everything you answer on the right, and the rules text at full length instead of scrolling inside a two-inch box. The fullest version of the sheet (a card in a deck) used to want more than a phone screen; it now fits one, with a bigger picture than before.
+- **The Details / History tabs are gone.** Details was never a tab, it was the sheet: the price and the "filed in" pills above the strip and the Save button below it both belonged to it, so it charged every card sheet in the app for a switch that only moved a third of what you were looking at.
+- **The card's history moved into the ⋯ menu, as "Collection history".** "History" never said whose. It's yours, for this card. The menu also picked up **Price history**, which until now was only reachable by tapping the little sparkline (so it was invisible on a card we have no trend for yet), and **All printings**, which has gained a search box, so a card with forty printings no longer means scrolling forty pieces of art to find the Modern Horizons one.
+- **Condition, finish and language are one line.** "NM · Foil · EN", or "Any condition · any finish · any language" on a wish or a deck slot, tappable to open the three fields. And nothing on the sheet is greyed out any more: someone else's wish, or a copy of yours you aren't editing, shows its answers as text instead of as dead dropdowns you have to work out are dead.
+- **The answers almost nobody gives are links until you want them.** Copies for trade, "altered, signed, misprint", and slot tags now arrive when you ask for them, and arrive already open when the card already has one.
+- **Which printing you're looking at sits beside the card art**, where changing it changes what you see, rather than as the first field of the form.
+- **Close is an ✕ in the top corner**, in the same place on every mode, so the button row can hold what you actually came for: a card you're only looking at offers "Add to collection" and "Add to wishlist" there, and a copy you own offers "File away" and "Edit".
+- **Renamed:** More -> "Edit history" is now **Collection history**. Same page, and the line under the title says what it holds.
+
 ## 0.146.0
 
 - **A card in a language you don't collect in now flies its flag.** Set the language you collect in under Settings -> Language (English out of the box) and every copy in a different one gets a small flag beside its badges: your collection and tradelist, wishlist lines that pin a language, deck, binder and box slots, other people's published lists, and the pile a trade partner pushes across the table. All eleven languages Magic prints in are drawn, so you can tell a Japanese Kor Outfitter from a Korean one at a glance instead of reading the fine print under the name.

@@ -29,7 +29,7 @@ import { getMergedPriceHistory } from '../price/serverHistory.js';
 import { acquisitionGain, useCostBasis } from '../price/costBasis.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
 import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
-import { CardHistory } from './CardHistory.js';
+import { CardHistorySheet } from './CardHistory.js';
 import { ContainerPickerSheet } from './ContainerPickerSheet.js';
 import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
 import { FileCopiesSheet } from './FileCopiesSheet.js';
@@ -47,7 +47,6 @@ import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
-import { EditionPicker } from './EditionPicker.js';
 import { TagField } from './TagField.js';
 import { useDismiss } from './useDismiss.js';
 
@@ -147,8 +146,9 @@ interface CardSheetCommon {
   oracleCard: Priced<OracleCard>;
   /** Preselect a specific printing (e.g. the one named in a trade line). */
   initialScryfallId?: string;
-  /** Open on a specific tab (e.g. deep-link to History from the edit history). */
-  initialTab?: 'details' | 'history';
+  /** Open with the Collection history sheet already up (deep-link from the
+   *  collection-wide history, where the card was named by an event). */
+  openHistory?: boolean;
   /**
    * Printings to group first in the Edition dropdown, each with a short note
    * (e.g. "×2, 1 for trade") — the trade board uses this to surface the
@@ -215,7 +215,7 @@ export type CardSheetProps = CardSheetCommon &
   );
 
 export function CardSheet(props: CardSheetProps) {
-  const { oracleCard, initialScryfallId, initialTab, highlightPrintings, onClose } = props;
+  const { oracleCard, initialScryfallId, openHistory, highlightPrintings, onClose } = props;
   // The current mode's own props, unpacked once. Everything below reads these
   // rather than narrowing `props` at each of the three dozen sites that ask.
   const entry = props.mode === 'edit' ? props.entry : undefined;
@@ -243,9 +243,10 @@ export function CardSheet(props: CardSheetProps) {
   // deck/session are always a form; info is never editable.
   const [editMode, setEditMode] = useState(false);
   const canToggleEdit = mode === 'edit';
+  // Every read-only shape now reads as lines rather than as dead fields, so
+  // "an owned copy you're only looking at" stopped needing a flag of its own:
+  // it is just !formEditable, same as someone else's wish.
   const formEditable = mode === 'add' || mode === 'wish' || mode === 'deck' || mode === 'session' || (mode === 'edit' && editMode);
-  /** An owned copy being looked at, not edited: it reads as a line, not a form. */
-  const readOnlyEntry = mode === 'edit' && !editMode;
   const addTo: AddTarget = addFlow ? { kind: addFlow } : (mode === 'add' && addTarget) || { kind: 'collection' };
   // Wishlist adds default to "any printing"; deck slots don't store an edition
   // at all, so those variants drop the collection-specific fields below.
@@ -388,11 +389,26 @@ export function CardSheet(props: CardSheetProps) {
   // save() takes a `board` parameter (the board an *add* targets), and a slot
   // being moved must not read that.
   const [zone, setZone] = useState<DeckBoard>(deckCard?.board ?? 'main');
+  // Progressive disclosure. Condition/finish/language read as one line until
+  // you want to change them; the three answers almost nobody changes (copies
+  // for trade, what's remarkable about the cardboard, slot tags) are a link
+  // until they hold something. Each opens already-open when there's an answer
+  // to show, so nothing you've set can hide behind a "+".
+  const [traitsOpen, setTraitsOpen] = useState(false);
+  const [showForTrade, setShowForTrade] = useState(
+    (entry?.quantityForTrade ?? 0) > 0 || addTo.kind === 'tradelist',
+  );
+  const [showSpecial, setShowSpecial] = useState((entry?.special?.length ?? 0) > 0);
+  const [showTags, setShowTags] = useState((deckCard?.tags?.length ?? 0) > 0);
+  // Rules text runs full height on a card you're reading and two lines on a
+  // form, where the card is context rather than the thing being answered.
+  const [oracleOpen, setOracleOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [trend, setTrend] = useState<HistoryChange | null>(null);
   const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(null);
-  const [tab, setTab] = useState<'details' | 'history'>(initialTab ?? 'details');
-  // Visual "view all editions" grid, layered over the sheet.
+  // The card's own collection history, from the ⋯ menu, as a sheet over this one.
+  const [historyOpen, setHistoryOpen] = useState(!!openHistory);
+  // Visual "all printings" grid, layered over the sheet.
   const [allEditions, setAllEditions] = useState(false);
   // The sparkline blown up: full price chart with axes and event markers.
   const [chartOpen, setChartOpen] = useState(false);
@@ -406,12 +422,8 @@ export function CardSheet(props: CardSheetProps) {
   // when there's more than one copy on the shelf, which of them is going in.
   const [pickingContainer, setPickingContainer] = useState(false);
   const [pickingCopies, setPickingCopies] = useState<{ id: string; name: string; kind: ContainerKind } | null>(null);
-  // History rows expand into their inline price editor. Its own toggle, not the
-  // form's: correcting what you paid is reading-your-own-history work, and every
-  // mode's History tab shows your own events.
-  const [historyEdit, setHistoryEdit] = useState(false);
-  // Event info modal opened from the History tab (out of edit mode), plus a
-  // nested card sheet when the user drills from that event into another card.
+  // Event info modal opened from the collection history, plus a nested card
+  // sheet when the user drills from that event into another card.
   const [eventEntry, setEventEntry] = useState<HistoryEntry | null>(null);
   const [nestedCard, setNestedCard] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
   // The card landed on one of your lists: the sheet says so where the button
@@ -568,6 +580,42 @@ export function CardSheet(props: CardSheetProps) {
   const availableFinishes = wishMode
     ? FINISHES
     : printing?.finishes ?? (deckPrefs ? FINISHES : (['nonfoil'] as Finish[]));
+
+  // Rules text as a form's context: two lines with a way to open it, rather
+  // than a 7rem window that is the first thing the layout squeezes. Estimated
+  // from the text instead of measured, so there's no flash of the wrong height
+  // — about fifty characters fit a line beside a phone-width sheet, and every
+  // ability starts its own. Desktop drops the clamp in CSS, where the column is
+  // wide enough that none of this applies.
+  const oracleLines = useMemo(() => {
+    const text = oracleCard.oracleText;
+    if (!text) return 0;
+    return text.split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / 50)), 0);
+  }, [oracleCard.oracleText]);
+  // Gated on there being a form at all, not on the mode: a copy you own but
+  // aren't editing has one line of body under the art, so clipping its rules
+  // text to buy room back would be spending nothing on nothing.
+  const oracleCollapsible = formEditable && oracleLines > 2;
+  const oracleClamped = oracleCollapsible && !oracleOpen;
+
+  // Which printing this is, said where the art is: the edition belongs with the
+  // card it changes, not as the first field of a form.
+  const editionLabel = printing
+    ? `${printing.setName} · #${printing.collectorNumber}`
+    : anyBasicPicked
+      ? 'Any printing, from your lands box'
+      : anyPrefs && scryfallId === ANY_PRINTING
+        ? 'Any printing'
+        : '';
+
+  // The copy's three traits as one line, in the same words the fields use, so
+  // the summary and the open form never disagree. A lands-box basic claims no
+  // copy of yours, so it prefers nothing and the line goes away entirely.
+  const traitWords: string[] = [];
+  if (showCondition) traitWords.push(condition ? (anyPrefs ? `${condition} or better` : condition) : 'Any condition');
+  if (showFinish) traitWords.push(finish ? FINISH_LABELS[finish as Finish] : 'Any finish');
+  if (showLang) traitWords.push(lang ? lang.toUpperCase() : 'Any language');
+  const traitsVisible = traitWords.length > 0 && !anyBasicPicked;
 
   // Full-size image + price for the currently-selected printing (falls back to the oracle default).
   const cardImage = printing?.imageNormal ?? oracleCard.imageNormal ?? printing?.imageSmall ?? oracleCard.imageSmall ?? null;
@@ -802,13 +850,43 @@ export function CardSheet(props: CardSheetProps) {
   // Portal to <body>: the sheet must escape any stacking context its opener
   // lives in (e.g. the search overlay), or the tab bar can cover its buttons.
   return createPortal(
-    <div className="sheet-backdrop" onClick={onClose}>
+    // Its own backdrop class: at 900px and up this one centers the sheet
+    // instead of sitting it on the bottom edge (see styles.css).
+    <div className="sheet-backdrop card-sheet-backdrop" onClick={onClose}>
       <div
         className="sheet card-sheet"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label={mode === 'info' ? oracleCard.name : `${mode === 'add' ? 'Add' : 'Edit'} ${oracleCard.name}`}
       >
+        {/* Name and the two controls span the sheet, above the art. Beside the
+            art they were sharing a 168px column with a ⋯ and an ✕, which a card
+            called "_____ _____ Rocketship" wins by pushing them off the edge. */}
+        <div className="sheet-name-row">
+          <div className="sheet-name">{oracleCard.name}</div>
+          <OptionsMenu
+            label="Card options"
+            actions={[
+              { label: 'Collection history', icon: 'history', onClick: () => setHistoryOpen(true) },
+              // Only reachable by tapping the sparkline until now, which made
+              // it invisible on a card whose trend we can't draw yet.
+              ...(priceHistory
+                ? [{ label: 'Price history', icon: 'prices' as IconName, onClick: () => setChartOpen(true) }]
+                : []),
+              ...(editionPickable && printings.length > 0
+                ? [{ label: 'All printings', icon: 'grid' as IconName, onClick: () => setAllEditions(true) }]
+                : []),
+              { label: 'Find sealed products with this card', icon: 'sealed', onClick: () => setSealedOpen(true) },
+            ]}
+          />
+          {/* The way out, in the same place on every mode. The action row used
+              to spend 54px on a Close button doing what the backdrop and
+              Escape already do. */}
+          <button type="button" className="sheet-close" onClick={onClose} aria-label="Close" title="Close">
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+
         <div className="sheet-head">
           {cardImage || !editionResolved ? (
             // The wrap holds the card's space from the first frame; what goes in
@@ -855,23 +933,38 @@ export function CardSheet(props: CardSheetProps) {
               your copies are filed. That column is as tall as the card, and the
               form below it starts at a fixed place on every card. */}
           <div className="sheet-info">
-            <div className="sheet-name-row">
-              <div className="sheet-name">{oracleCard.name}</div>
-              <OptionsMenu
-                label="Card options"
-                actions={[
-                  {
-                    label: 'Find sealed products with this card',
-                    icon: 'sealed',
-                    onClick: () => setSealedOpen(true),
-                  },
-                ]}
-              />
-            </div>
             <div className="result-sub sheet-typeline">
               {oracleCard.manaCost && <ManaCost cost={oracleCard.manaCost} />}
               <span>{oracleCard.typeLine}</span>
             </div>
+            {editionResolved && editionLabel !== '' && (
+              editionPickable ? (
+                <button
+                  type="button"
+                  className="sheet-edition"
+                  onClick={() => setAllEditions(true)}
+                  aria-label={`Printing: ${editionLabel}. Choose another`}
+                  title="Choose a printing"
+                >
+                  {printing ? (
+                    <SetSymbol set={printing.set} className="sheet-edition-symbol" title={printing.setName} />
+                  ) : (
+                    <span className="sheet-edition-symbol" aria-hidden />
+                  )}
+                  <span className="sheet-edition-name">{editionLabel}</span>
+                  <Icon name="chevronDown" size={14} />
+                </button>
+              ) : (
+                // Not yours to flip (a copy you're only looking at, someone
+                // else's wish): the answer as text, never as a dead dropdown.
+                <div className="sheet-edition sheet-edition-static">
+                  {printing && <SetSymbol set={printing.set} className="sheet-edition-symbol" title={printing.setName} />}
+                  <span className="sheet-edition-name">{editionLabel}</span>
+                </div>
+              )
+            )}
+            <div className="result-price">{cardPrice}</div>
+            {trend && trend.points > 1 && <PriceTrend trend={trend} gain={gain} onOpen={() => setChartOpen(true)} />}
             {mode !== 'edit' && ownedQty > 0 && (
               <OwnedHere
                 qty={ownedQty}
@@ -887,8 +980,6 @@ export function CardSheet(props: CardSheetProps) {
                 }
               />
             )}
-            <div className="result-price">{cardPrice}</div>
-            {trend && trend.points > 1 && <PriceTrend trend={trend} gain={gain} onOpen={() => setChartOpen(true)} />}
             {/* Where the copies live. A binder name can be long, so the pills
                 scroll on their own rather than pushing the form down. */}
             {placement && placement.places.length > 0 && (
@@ -900,43 +991,20 @@ export function CardSheet(props: CardSheetProps) {
           </div>
         </div>
 
-        <div className="seg-row sheet-tabs" role="tablist" aria-label="Card view">
-          <button
-            role="tab"
-            aria-selected={tab === 'details'}
-            className={tab === 'details' ? 'seg seg-active' : 'seg'}
-            onClick={() => setTab('details')}
-          >
-            Details
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === 'history'}
-            className={tab === 'history' ? 'seg seg-active' : 'seg'}
-            onClick={() => setTab('history')}
-          >
-            History
-          </button>
-        </div>
-
-        {/* The one part of the sheet that scrolls. Head, tabs and the action row
+        {/* The one part of the sheet that scrolls. The head and the action row
             stay put, so the buttons are always in the same place no matter how
-            much rules text or history the card carries. */}
-        <div className={tab === 'history' ? 'sheet-body sheet-body-history' : 'sheet-body'}>
-        {tab === 'history' ? (
-          <CardHistory
-            oracleCard={oracleCard}
-            scryfallId={shownId}
-            printings={printings}
-            priceHistory={priceHistory}
-            editMode={historyEdit}
-            onToggleEdit={() => setHistoryEdit((v) => !v)}
-            onEventClick={(e: UserEvent) => setEventEntry({ kind: 'single', id: e.id, ts: e.ts, event: e })}
-          />
-        ) : (
-        <>
+            much rules text the card carries. */}
+        <div className="sheet-body">
         {oracleCard.oracleText && (
-          <SymbolText className="oracle-text sheet-oracle" text={oracleCard.oracleText} />
+          <SymbolText
+            className={oracleClamped ? 'oracle-text sheet-oracle sheet-oracle-clamped' : 'oracle-text sheet-oracle'}
+            text={oracleCard.oracleText}
+          />
+        )}
+        {oracleCollapsible && (
+          <button type="button" className="sheet-reveal sheet-oracle-more" onClick={() => setOracleOpen((v) => !v)}>
+            {oracleOpen ? 'Less rules text' : 'Read the rules text'}
+          </button>
         )}
         {oracleSelection && (
           <OracleSearchChip
@@ -948,38 +1016,6 @@ export function CardSheet(props: CardSheetProps) {
           />
         )}
 
-        {/* Not a <label>: the picker is a button until it's opened, and a label
-            wrapping a button turns its own text into a second trigger. */}
-        <div className="field">
-          <span>Edition</span>
-          <div className="edition-row">
-            <EditionPicker
-              printings={otherPrintings}
-              highlighted={highlighted}
-              highlightLabel={highlightPrintings?.label}
-              notes={highlightPrintings?.notes}
-              selected={scryfallId}
-              // A basic in a container spends its "any" on the lands box (the
-              // slot is detached from the collection entirely); everything else
-              // means "any edition of this card that I own".
-              anyLabel={basicAny ? 'Any printing (from your lands box)' : anyPrefs ? 'Any printing' : undefined}
-              disabled={!editionPickable}
-              onSelect={setScryfallId}
-            />
-            {editionPickable && printings.length > 0 && (
-              <button
-                type="button"
-                className="edition-grid-btn"
-                onClick={() => setAllEditions(true)}
-                aria-label="View all editions"
-                title="View all editions"
-              >
-                <Icon name="grid" size={18} />
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* The shortcut that makes a slot concrete: point it at a copy you
             actually have and the edition, finish, condition and language all come
             along, so the double check means "this very card". */}
@@ -989,14 +1025,18 @@ export function CardSheet(props: CardSheetProps) {
           </button>
         )}
 
-        {/* Looking at a copy you own: three greyed-out dropdowns and two dead
-            steppers say the same thing as one line, and cost the sheet the room
-            the card art wants. The form itself is one tap away. */}
-        {readOnlyEntry && (
+        {/* Condition, finish and language as one line.
+            Nothing to change here (a copy you're only looking at, someone
+            else's wish): the answers as text. Three greyed-out dropdowns and a
+            dead stepper say exactly this much and cost four times the room, and
+            the reader has to work out that they're dead before believing them.
+            The quantity rides along, since there's no stepper to carry it. */}
+        {traitsVisible && !formEditable && (
           <div className="sheet-copy-summary">
-            <span>{condition}</span>
-            <span>{FINISH_LABELS[(finish || 'nonfoil') as Finish]}</span>
-            <span>{(lang || 'en').toUpperCase()}</span>
+            {wishInfo && <span className="sheet-copy-label">Wants</span>}
+            {traitWords.map((w) => (
+              <span key={w}>{w}</span>
+            ))}
             {special.length > 0 && <span className="sheet-copy-special">{specialLabel(special)}</span>}
             <span className="sheet-copy-qty">
               ×{quantity}
@@ -1005,73 +1045,109 @@ export function CardSheet(props: CardSheetProps) {
           </div>
         )}
 
-        {/* A lands-box basic never claims a copy of yours, so it prefers nothing. */}
-        {!readOnlyEntry && (showCondition || showFinish || showLang) && !anyBasicPicked && (
-        <div className="field-grid">
-          {showCondition && (
-          <label className="field">
-            <span>{anyPrefs ? 'Minimum condition' : 'Condition'}</span>
-            <select value={condition} onChange={(e) => setCondition(e.target.value as Condition | '')} disabled={!formEditable}>
-              {anyPrefs && <option value="">Any</option>}
-              {CONDITIONS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
-          )}
-          {showFinish && (
-          <label className="field">
-            <span>Finish</span>
-            <select value={finish} onChange={(e) => setFinish(e.target.value as Finish | '')} disabled={!formEditable}>
-              {anyPrefs && <option value="">Any</option>}
-              {availableFinishes.map((f) => (
-                <option key={f} value={f}>
-                  {FINISH_LABELS[f]}
-                </option>
-              ))}
-            </select>
-          </label>
-          )}
-          {showLang && (
-          <label className="field">
-            <span>Language</span>
-            <select value={lang} onChange={(e) => setLang(e.target.value)} disabled={!formEditable}>
-              {anyPrefs && <option value="">Any</option>}
-              {LANGS.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </label>
-          )}
-        </div>
+        {/* The same line, tappable, when they are yours to change: the three
+            fields unfold under it rather than sitting there labelled and open
+            on a form where two of them are already right. */}
+        {traitsVisible && formEditable && (
+          <div className={traitsOpen ? 'sheet-traits open' : 'sheet-traits'}>
+            <button
+              type="button"
+              className="sheet-traits-trigger"
+              aria-expanded={traitsOpen}
+              onClick={() => setTraitsOpen((v) => !v)}
+            >
+              <span className="sheet-traits-summary">{traitWords.join(' · ')}</span>
+              <Icon name="chevronDown" size={16} />
+            </button>
+            {traitsOpen && (
+              <div className="field-grid">
+                {showCondition && (
+                  <label className="field">
+                    <span>{anyPrefs ? 'Min. condition' : 'Condition'}</span>
+                    <select value={condition} onChange={(e) => setCondition(e.target.value as Condition | '')}>
+                      {anyPrefs && <option value="">Any</option>}
+                      {CONDITIONS.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {showFinish && (
+                  <label className="field">
+                    <span>Finish</span>
+                    <select value={finish} onChange={(e) => setFinish(e.target.value as Finish | '')}>
+                      {anyPrefs && <option value="">Any</option>}
+                      {availableFinishes.map((f) => (
+                        <option key={f} value={f}>
+                          {FINISH_LABELS[f]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {showLang && (
+                  <label className="field">
+                    <span>Language</span>
+                    <select value={lang} onChange={(e) => setLang(e.target.value)}>
+                      {anyPrefs && <option value="">Any</option>}
+                      {LANGS.map((l) => (
+                        <option key={l} value={l}>
+                          {l}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
-        {(mode !== 'info' || wishInfo) && !readOnlyEntry && (
+        {/* Quantity is the one field always in play, so it's always a stepper.
+            "For trade" is 0 on nearly every add, so it's a link until it isn't. */}
+        {formEditable && (
         <div className="field-grid">
           <label className="field">
             <span>Quantity</span>
-            <QtyStepper value={quantity} min={1} disabled={!formEditable} onChange={setQuantity} onEnter={saveOnEnter} />
+            <QtyStepper value={quantity} min={1} onChange={setQuantity} onEnter={saveOnEnter} />
           </label>
-          {collectionFields && (
+          {collectionFields && showForTrade && (
             <label className="field">
               <span>For trade</span>
-              <QtyStepper value={clampedForTrade} min={0} max={quantity} disabled={!formEditable} onChange={setForTrade} onEnter={saveOnEnter} />
+              <QtyStepper value={clampedForTrade} min={0} max={quantity} onChange={setForTrade} onEnter={saveOnEnter} />
             </label>
           )}
         </div>
         )}
+        {collectionFields && formEditable && !showForTrade && (
+          <button
+            type="button"
+            className="sheet-reveal"
+            onClick={() => {
+              setShowForTrade(true);
+              setForTrade((v) => Math.max(1, v));
+            }}
+          >
+            <Icon name="tradelist" size={14} /> Mark copies for trade
+          </button>
+        )}
 
         {/* Altered, signed, misprint … : facts about this cardboard, not about
-            the card, so only a collection copy is asked. Ticking a box splits the
-            copy onto its own line — your altered Bolt stops sharing a row with
-            the plain one — while every match (wish, deck slot, owned count)
-            carries on ignoring it. */}
-        {collectionFields && !readOnlyEntry && (
-          <SpecialConditionsField value={special} onChange={setSpecial} disabled={!formEditable} />
+            the card, so only a collection copy is asked, and empty on nearly
+            every copy, so it stays a link until it holds something. Ticking a
+            box splits the copy onto its own line — your altered Bolt stops
+            sharing a row with the plain one — while every match (wish, deck
+            slot, owned count) carries on ignoring it. */}
+        {collectionFields && formEditable && (
+          showSpecial ? (
+            <SpecialConditionsField value={special} onChange={setSpecial} />
+          ) : (
+            <button type="button" className="sheet-reveal" onClick={() => setShowSpecial(true)}>
+              <Icon name="edit" size={14} /> Altered, signed, misprint…
+            </button>
+          )
         )}
 
         {/* Which zone the card sits in. A deck's zones are the one thing about a
@@ -1105,9 +1181,16 @@ export function CardSheet(props: CardSheetProps) {
         )}
 
         {/* Slot tags: your own labels on this card in this list ("Ramp",
-            "Turn-3 play"), which the group-by-tag view reads. */}
+            "Turn-3 play"), which the group-by-tag view reads. Empty on nearly
+            every slot, so the field arrives when asked for. */}
         {mode === 'deck' && deckCard?.deckId && (
-          <TagField deckId={deckCard.deckId} tags={tags} onChange={setTags} />
+          showTags ? (
+            <TagField deckId={deckCard.deckId} tags={tags} onChange={setTags} />
+          ) : (
+            <button type="button" className="sheet-reveal" onClick={() => setShowTags(true)}>
+              <Icon name="tags" size={14} /> Tag this slot
+            </button>
+          )
         )}
 
         {/* The slot was emptied out on purpose, and saving names the copy it
@@ -1118,23 +1201,23 @@ export function CardSheet(props: CardSheetProps) {
           </p>
         )}
 
-        </>
-        )}
         </div>
 
         {/* File-into-your-lists affordance, for the modes that aren't about your
-            lists: a container slot (yours or not), a wish you just got hold of,
-            or any card you're only viewing. Each opens that list's real add
-            form — the copy is yours to describe, not ours to guess. */}
-        {(mode === 'deck' || deckAdd || mode === 'info') && (
+            lists: a container slot (yours or not). Each opens that list's real
+            add form — the copy is yours to describe, not ours to guess. The
+            buttons say what they do, so the row no longer spends a label on it.
+            Info mode's pair moved into the action row: they're the only reason
+            anyone opens that sheet, and the Close button they sat above was
+            doing what the backdrop, Escape and the ✕ already do. */}
+        {(mode === 'deck' || deckAdd) && (
           <div className="sheet-quickadd">
-            <span className="sheet-quickadd-label">Add to your</span>
             <div className="sheet-quickadd-btns">
               <button onClick={() => startAdd('collection')} disabled={busy} title="Add to collection">
-                <Icon name="collection" size={16} /> Collection
+                <Icon name="collection" size={16} /> Add to collection
               </button>
               <button onClick={() => startAdd('wishlist')} disabled={busy} title="Add to wishlist">
-                <Icon name="wishlist" size={16} /> Wishlist
+                <Icon name="wishlist" size={16} /> Add to wishlist
               </button>
             </div>
           </div>
@@ -1149,18 +1232,6 @@ export function CardSheet(props: CardSheetProps) {
             </div>
           </div>
         )}
-        {/* Cardboard you own, on its way somewhere: same filing flow as the
-            collection's bulk "File away", for the one copy in front of you. */}
-        {mode === 'edit' && !editMode && (
-          <div className="sheet-quickadd">
-            <span className="sheet-quickadd-label">File this copy</span>
-            <div className="sheet-quickadd-btns">
-              <button onClick={() => setPickingContainer(true)} disabled={busy} title="File into a deck, binder or box">
-                <Icon name="binder" size={16} /> Into a deck, binder or box
-              </button>
-            </div>
-          </div>
-        )}
 
         {added ? (
           // Where the +List button was a moment ago: the same shape, answered.
@@ -1171,17 +1242,26 @@ export function CardSheet(props: CardSheetProps) {
             </p>
           </div>
         ) : mode === 'info' ? (
-          <div className="sheet-actions">
-            <button className="primary" onClick={onClose}>
-              Close
+          // Nothing to save, so the row holds what someone actually came for.
+          <div className="sheet-actions sheet-actions-pair">
+            <button onClick={() => startAdd('wishlist')} disabled={busy} title="Add to wishlist">
+              <Icon name="wishlist" size={16} /> Add to wishlist
+            </button>
+            <button className="primary" onClick={() => startAdd('collection')} disabled={busy} title="Add to collection">
+              <Icon name="collection" size={16} /> Add to collection
             </button>
           </div>
         ) : canToggleEdit && !editMode ? (
-          <div className="sheet-actions">
+          // A copy you own, not being edited: filing it somewhere is as likely
+          // as changing it, so both are buttons instead of one riding above the
+          // other in its own labelled row.
+          <div className="sheet-actions sheet-actions-pair">
+            <button onClick={() => setPickingContainer(true)} disabled={busy} title="File into a deck, binder or box">
+              <Icon name="binder" size={16} /> File away
+            </button>
             <button className="primary" onClick={() => setEditMode(true)}>
               <Icon name="edit" size={16} /> Edit
             </button>
-            <button onClick={onClose}>Close</button>
           </div>
         ) : (
           <div className="sheet-actions">
@@ -1339,14 +1419,25 @@ export function CardSheet(props: CardSheetProps) {
           onFile={(copies) => void fileCopies(pickingCopies.id, pickingCopies.kind, copies)}
         />
       )}
+      {historyOpen && (
+        <CardHistorySheet
+          oracleCard={oracleCard}
+          scryfallId={shownId}
+          printings={printings}
+          priceHistory={priceHistory}
+          onEventClick={(e: UserEvent) => setEventEntry({ kind: 'single', id: e.id, ts: e.ts, event: e })}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
       {eventEntry && (
         <EventSheet
           entry={eventEntry}
           onOpenCard={(oracle, scryfallId) => {
             setEventEntry(null);
-            // Same card: just switch this sheet to its history. Different card
-            // (a batch line): open a nested sheet on its history tab.
-            if (oracle.oracleId === oracleCard.oracleId) setTab('history');
+            // Same card: show its history (already open if that's where this
+            // event came from, but the price chart reaches here too). Different
+            // card (a batch line): a nested sheet on that card's history.
+            if (oracle.oracleId === oracleCard.oracleId) setHistoryOpen(true);
             else setNestedCard({ oracle, scryfallId });
           }}
           onClose={() => setEventEntry(null)}
@@ -1357,7 +1448,7 @@ export function CardSheet(props: CardSheetProps) {
           mode="info"
           oracleCard={nestedCard.oracle}
           initialScryfallId={nestedCard.scryfallId}
-          initialTab="history"
+          openHistory
           onClose={() => setNestedCard(null)}
         />
       )}
@@ -1544,6 +1635,19 @@ export function EditionGrid({
   onClose: () => void;
 }) {
   useDismiss(onClose);
+  // A card can have forty printings, and scrolling art to find "the Modern
+  // Horizons 2 one" is slower than typing it. Set name, set code and collector
+  // number all match, since those are the three things printed on the card.
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? printings.filter(
+        (p) =>
+          p.setName.toLowerCase().includes(q) ||
+          p.set.toLowerCase().includes(q) ||
+          p.collectorNumber.toLowerCase().includes(q),
+      )
+    : printings;
   // stopPropagation on the backdrop: this overlay nests inside the card
   // sheet's backdrop, whose click handler would otherwise also close the sheet.
   return (
@@ -1554,21 +1658,31 @@ export function EditionGrid({
         onClose();
       }}
     >
-      <div className="sheet edition-picker-sheet" role="dialog" aria-label="All editions" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet edition-picker-sheet" role="dialog" aria-label="All printings" onClick={(e) => e.stopPropagation()}>
         <div className="edition-picker-head">
-          <h2>All editions</h2>
+          <h2>All printings</h2>
           <button onClick={onClose} aria-label="Close">
             <Icon name="close" size={18} />
           </button>
         </div>
+        <input
+          type="search"
+          className="edition-grid-search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by set, code or number"
+          aria-label="Search printings"
+        />
+        {q && shown.length === 0 && <p className="fine-print">No printing matches that.</p>}
         <div className="edition-grid">
-          {anyOption && (
+          {/* "Any printing" has no set name to search, so it only shows unfiltered. */}
+          {anyOption && !q && (
             <button className={selected === ANY_PRINTING ? 'edition-tile edition-tile-selected' : 'edition-tile'} onClick={() => onSelect(ANY_PRINTING)}>
               <span className="edition-tile-ph">Any printing</span>
               <span className="edition-tile-caption">No specific edition</span>
             </button>
           )}
-          {printings.map((p) => {
+          {shown.map((p) => {
             const img = p.imageSmall ?? p.imageNormal;
             return (
               <button

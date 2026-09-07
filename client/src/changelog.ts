@@ -32,6 +32,23 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.147.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The card sheet is rebuilt around the card: a bigger picture, two columns on a desktop, and condition/finish/language on one tappable line. Nothing on it is greyed out any more: a copy you are only looking at reads as text instead of dead dropdowns.',
+      },
+      {
+        kind: 'changed',
+        text: 'The Details / History tabs are gone. The card’s own history is in the ⋯ menu as "Collection history", next to price history and a searchable "All printings". More -> "Edit history" got the same name.',
+      },
+      {
+        kind: 'added',
+        text: '"For trade", "altered, signed, misprint" and slot tags are links that open when you want them, so even a card in a deck now fits one phone screen.',
+      },
+    ],
+  },
+  {
     version: '0.146.0',
     changes: [
       {
@@ -166,15 +183,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Decks can be archived. An Archived folder sits under the deck list, greyed out until you use it. Archiving keeps the whole list but takes the deck out of the list of decks you play, and asks whether to unfile its cards so your other decks can have the copies back. Restore it any time from the options menu.',
-      },
-    ],
-  },
-  {
-    version: '0.141.9',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Cards start higher up on the collection, wishlist and tradelist. The blurb under the title is gone and the count moved up next to it. Another user’s full list lost its own search box, since the header search already reaches their lists.',
       },
     ],
   },

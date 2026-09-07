@@ -8,14 +8,86 @@ import { centsAround } from '../price/history.js';
 import { currencySymbol, moneyInput } from '../price/rates.js';
 import { describeEvent, qtyBadge, REASON_LABELS } from '../history/eventRegistry.js';
 import { fmtCents, fmtDate } from '../util/format.js';
+import { Icon } from './icons.js';
 import { useAsyncAction } from './useAsyncAction.js';
+import { useDismiss } from './useDismiss.js';
 
-// History tab of the card sheet (sync plan, 2026-07-16): the card's event
-// timeline — acquisitions with the market price at the time, removals with a
-// reason, deck ins/outs, and the wishlist journey. Acquisition/exit prices and
-// removal reasons are user-editable (removals default to 'sold'). Labels/icons
-// come from the shared event registry (history/eventRegistry).
+// The card's event timeline (sync plan, 2026-07-16) — acquisitions with the
+// market price at the time, removals with a reason, deck ins/outs, and the
+// wishlist journey. Acquisition/exit prices and removal reasons are
+// user-editable (removals default to 'sold'). Labels/icons come from the shared
+// event registry (history/eventRegistry).
 
+
+/**
+ * The timeline as a sheet over whatever opened it, reached from the card
+ * sheet's ⋯ menu as "Collection history".
+ *
+ * It used to be a tab on the card sheet, which charged all fifteen shapes of
+ * that sheet 56px for a panel almost nobody opens, and split the sheet where
+ * the content doesn't: the head above the tabs (price, owned count, filed-in
+ * pills) and the buttons below them both belong to the details view, so the
+ * strip claimed to switch views while two thirds of the sheet ignored it.
+ * "History" also never said whose — this name does.
+ *
+ * Nested inside the card sheet's own backdrop (like EditionGrid), so its
+ * click handler has to stop propagating or the sheet underneath closes too.
+ */
+export function CardHistorySheet({
+  oracleCard,
+  scryfallId,
+  printings,
+  priceHistory,
+  onEventClick,
+  onClose,
+}: {
+  oracleCard: Priced<OracleCard>;
+  scryfallId: string;
+  printings: Priced<Printing>[];
+  priceHistory?: PriceHistory | null;
+  onEventClick?: (e: UserEvent) => void;
+  onClose: () => void;
+}) {
+  // Correcting what you paid is reading-your-own-history work, so the toggle
+  // lives with the rows it fixes and dies with this sheet.
+  const [editMode, setEditMode] = useState(false);
+  useDismiss(onClose);
+  return (
+    <div
+      className="sheet-backdrop"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      <div
+        className="sheet card-history-sheet"
+        role="dialog"
+        aria-label={`Collection history for ${oracleCard.name}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="edition-picker-head">
+          <div className="card-history-title">
+            <h2>Collection history</h2>
+            <p className="fine-print">Every change you've made to {oracleCard.name} in your collection.</p>
+          </div>
+          <button onClick={onClose} aria-label="Close">
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+        <CardHistory
+          oracleCard={oracleCard}
+          scryfallId={scryfallId}
+          printings={printings}
+          priceHistory={priceHistory}
+          editMode={editMode}
+          onToggleEdit={() => setEditMode((v) => !v)}
+          onEventClick={onEventClick}
+        />
+      </div>
+    </div>
+  );
+}
 
 export function CardHistory({
   oracleCard,

@@ -98,6 +98,31 @@ export function normalize(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(COMBINING_MARKS, '');
 }
 
+const LIGATURES: Record<string, string> = { æ: 'ae', œ: 'oe', ß: 'ss' };
+const LIGATURE_CHARS = /[æœß]/g;
+const APOSTROPHES = /['‘’ʼ`´]/g;
+const NOT_ALNUM = /[^\p{L}\p{N}]+/gu;
+
+/**
+ * Name matching on top of `normalize`, with punctuation out of the way: typing
+ * "lions eye" finds Lion's Eye Diamond and "aether" finds an Æther. Apostrophes
+ * vanish (Lion's → lions); every other mark becomes a space, so "bond kin",
+ * "bond-kin" and "Yawgmoth, Thran Physician" all match what you'd expect.
+ *
+ * Only names go through this — oracle text keeps its punctuation, or `o:{T}`
+ * would decay into "matches every card with a t in it".
+ */
+export function normalizeName(s: string): string {
+  const out = normalize(s)
+    .replace(LIGATURE_CHARS, (c) => LIGATURES[c]!)
+    .replace(APOSTROPHES, '')
+    .replace(NOT_ALNUM, ' ')
+    .trim();
+  // A name (or query) that is nothing but punctuation keeps its literal form,
+  // so "_____" stays findable and a lone `-` doesn't become a match-everything.
+  return out || normalize(s);
+}
+
 /**
  * Pre-normalise a card's match fields into a `SearchableEntry`. Shared by the
  * full-DB search index (search.ts) and the owned-list filters (collection /
@@ -157,7 +182,7 @@ export function toSearchableEntry(card: OracleCard, printings: PrintingSummary =
   for (const s of printings.sets ?? []) sets.add(s.toLowerCase());
   return {
     card,
-    normName: normalize(card.name),
+    normName: normalizeName(card.name),
     lowerType: card.typeLine.toLowerCase(),
     normOracle,
     normOracleTilde,
@@ -289,11 +314,11 @@ function lex(source: string): LexToken[] {
 
     const term = field && op ? fieldTerm(field, op, value, negate) : null;
     if (term) out.push({ t: 'term', term });
-    else if (!field) out.push({ t: 'term', term: { kind: 'name', value: normalize(value), negate } });
+    else if (!field) out.push({ t: 'term', term: { kind: 'name', value: normalizeName(value), negate } });
     else
       out.push({
         t: 'term',
-        term: { kind: 'name', value: normalize(m[0]!.replace(/^-/, '').replaceAll('"', '')), negate },
+        term: { kind: 'name', value: normalizeName(m[0]!.replace(/^-/, '').replaceAll('"', '')), negate },
       });
   }
   return out;
@@ -418,7 +443,7 @@ function fieldTerm(field: string, op: string, value: string, negate: boolean): Q
   const stringKind = STRING_FIELDS[field];
   if (stringKind) {
     if (op !== ':' && op !== '=') return null;
-    return { kind: stringKind, value: normalize(value), negate };
+    return { kind: stringKind, value: (stringKind === 'name' ? normalizeName : normalize)(value), negate };
   }
 
   const colorField = COLOR_FIELDS[field];

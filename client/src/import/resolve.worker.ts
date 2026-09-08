@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import type { Finish, OracleCard, Printing } from '@mtg/shared';
-import { normalize as normalizeText } from '../cardDb/querySyntax.js';
+import { normalize as normalizeText, normalizeName as normalizeNameText } from '../cardDb/querySyntax.js';
 import { buildNameMultiIndex, cardPriority } from '../cardDb/search.js';
 import { resolveDisplayPrintings } from '../cardDb/preferredPrinting.js';
 import { db } from '../db/schema.js';
@@ -12,6 +12,7 @@ function post(msg: ResolveResponse): void {
 }
 
 const normalize = (s: string) => normalizeText(s).trim();
+const normName = (s: string) => normalizeNameText(s).trim();
 const alnum = (s: string) => normalize(s).replace(/[^a-z0-9]/g, '');
 
 /** Levenshtein edit distance (two-row DP) for ranking typo suggestions. */
@@ -128,9 +129,9 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
       // face so the line resolves to the real card, not nothing.
       const front = line.name.split(/\s*\/\/?\s*/)[0]!;
       const candidates =
-        nameMap.get(normalize(line.name)) ??
+        nameMap.get(normName(line.name)) ??
         looseMap.get(alnum(line.name)) ??
-        nameMap.get(normalize(front)) ??
+        nameMap.get(normName(front)) ??
         looseMap.get(alnum(front));
       if (candidates?.length) candidateMatches.push({ line, candidates });
       else unmatched.push({ raw: line.raw, name: line.name, quantity: line.quantity, finish: line.finish, board: line.board, suggestions: [] });
@@ -141,9 +142,9 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
     // name comes first — good for typos like "Lightnng Bolt" → "Lightning Bolt".
     if (unmatched.length) {
       post({ type: 'progress', label: 'Finding suggestions…', fraction: 0.55 });
-      const names = cards.map((c) => ({ name: c.name, norm: normalize(c.name) }));
+      const names = cards.map((c) => ({ name: c.name, norm: normName(c.name) }));
       for (const u of unmatched) {
-        const q = normalize(u.name);
+        const q = normName(u.name);
         const head = q.slice(0, 3);
         const words = q.split(/\s+/).filter((w) => w.length >= 4);
         const cand: Array<{ name: string; d: number }> = [];

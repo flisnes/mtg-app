@@ -5,7 +5,7 @@ import { loadOracleTags } from './oracleTags.js';
 import { priceValue, sortCards, type CardSortPrefs } from '../components/cardSort.js';
 import {
   matchesQuery,
-  normalize,
+  normalizeName,
   parseSearchQuery,
   toSearchableEntry,
   type PrintingSummary,
@@ -112,7 +112,7 @@ export function buildNameMultiIndex(cards: OracleCard[]): Map<string, OracleCard
   // Pass 1: exact full names.
   const fullNameKeys = new Set<string>();
   for (const c of cards) {
-    const n = normalize(c.name);
+    const n = normalizeName(c.name);
     fullNameKeys.add(n);
     add(n, c);
   }
@@ -120,7 +120,7 @@ export function buildNameMultiIndex(cards: OracleCard[]): Map<string, OracleCard
   for (const c of cards) {
     const slash = c.name.indexOf(' // ');
     if (slash !== -1) {
-      const front = normalize(c.name.slice(0, slash));
+      const front = normalizeName(c.name.slice(0, slash));
       if (!fullNameKeys.has(front)) add(front, c);
     }
   }
@@ -145,7 +145,7 @@ export async function resolveOracleByName(name: string): Promise<OracleCard | un
   if (!nameLookup) nameLookup = buildNameIndex((await getIndex()).map((e) => e.card));
   // Try the full name, then just the front face for "Front / Back" or "Front // Back".
   for (const candidate of [name, name.split(/\s*\/\/?\s*/)[0]!]) {
-    const hit = nameLookup.get(normalize(candidate));
+    const hit = nameLookup.get(normalizeName(candidate));
     if (hit) return hit;
   }
   return undefined;

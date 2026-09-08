@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.147.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Search ignores apostrophes, hyphens and commas: "lions" finds Lion’s Eye Diamond and "bond kin" finds Ainok Bond-Kin. Æ counts as "ae" both ways, so "aether charge" and "Æther Charge" find the same card.',
+      },
+    ],
+  },
+  {
     version: '0.147.0',
     changes: [
       {
@@ -174,15 +183,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Mark a copy you own as altered, signed, misprint, miscut or crimped — any combination of them — from the new Special dropdown on a collection card. Those copies wear an amber A, and they sit on their own line, so your altered copy no longer shares a row with the plain one. Matching is untouched: a signed card still fills a deck slot and still answers a wish.',
-      },
-    ],
-  },
-  {
-    version: '0.142.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Decks can be archived. An Archived folder sits under the deck list, greyed out until you use it. Archiving keeps the whole list but takes the deck out of the list of decks you play, and asks whether to unfile its cards so your other decks can have the copies back. Restore it any time from the options menu.',
       },
     ],
   },

@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.147.1
+
+- **Search stops caring about apostrophes, hyphens and commas.** Typing "lions" now finds Lion's Eye Diamond, "shizo deaths" finds Shizo, Death's Storehouse, and "bond kin" finds Ainok Bond-Kin. Punctuation in a card name no longer has to be reproduced exactly, in the card search, your own lists, or an imported file.
+- **Æ works both ways.** "Æther Charge" and "aether charge" find the same card, so an old card can be typed the way it's printed.
+
 ## 0.147.0
 
 - **The card sheet has been rebuilt around the card.** The picture is half again as big on a phone, and on a desktop the sheet is a proper two-column window: the card at something close to its real size on the left, everything you answer on the right, and the rules text at full length instead of scrolling inside a two-inch box. The fullest version of the sheet (a card in a deck) used to want more than a phone screen; it now fits one, with a bigger picture than before.

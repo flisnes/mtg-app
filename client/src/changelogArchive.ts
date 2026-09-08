@@ -9,6 +9,15 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.142.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Decks can be archived. An Archived folder sits under the deck list, greyed out until you use it. Archiving keeps the whole list but takes the deck out of the list of decks you play, and asks whether to unfile its cards so your other decks can have the copies back. Restore it any time from the options menu.',
+      },
+    ],
+  },
+  {
     version: '0.141.9',
     changes: [
       {

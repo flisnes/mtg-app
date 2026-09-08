@@ -7,6 +7,7 @@ import { runScryfallFallback } from './fallback.js';
 import { invalidateSearchIndex } from './search.js';
 import { invalidatePriceCache } from './prices.js';
 import { invalidateOracleTags } from './oracleTags.js';
+import { invalidateSetIndex } from './setIndex.js';
 
 // Orchestrates card-DB freshness (beta plan §3). The manifest describes the
 // card data as 256 hash-named chunks per artifact plus a separate prices file;
@@ -164,6 +165,7 @@ function workerRun(
     invalidateSearchIndex();
     invalidatePriceCache();
     invalidateOracleTags();
+    invalidateSetIndex();
   };
 }
 
@@ -174,6 +176,7 @@ function fallbackRun(): RunSync {
     invalidateSearchIndex();
     invalidatePriceCache();
     invalidateOracleTags();
+    invalidateSetIndex();
   };
 }
 

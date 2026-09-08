@@ -29,6 +29,21 @@ const COLORS = [
 const TYPES = ['Creature', 'Instant', 'Sorcery', 'Artifact', 'Enchantment', 'Planeswalker', 'Land'];
 const PAGE_SIZE = 60;
 
+/**
+ * Result rows are keyed by oracle card, except when a `set:` term pinned them
+ * to individual printings — then the printing's own id has to be in the key or
+ * the set's five Forests are one row wearing five hats.
+ */
+export function resultKey(card: { oracleId: string }, printing?: { scryfallId: string }): string {
+  return printing ? `${card.oracleId}#${printing.scryfallId}` : card.oracleId;
+}
+
+/** The card (and, when pinned, the printing) a result key stands for. */
+export function splitResultKey(key: string): { oracleId: string; scryfallId: string | null } {
+  const [oracleId, scryfallId] = key.split('#');
+  return { oracleId: oracleId!, scryfallId: scryfallId ?? null };
+}
+
 /** A small corner indicator on each result (e.g. "do I own this?"). */
 export interface ResultBadge {
   icon: ReactNode;
@@ -86,7 +101,8 @@ export function CardSearchView({
    *  is not bound. */
   quickAdd?: (card: Priced<OracleCard>, printing?: Priced<Printing>) => void;
   /**
-   * Multi-select over the results, keyed by oracleId. Supplied by the caller so
+   * Multi-select over the results, keyed by `resultKey` (an oracle id, or an
+   * oracle id and a printing when a `set:` term pinned the rows). Supplied by the caller so
    * it owns both the state and the bulk bar — search results are cards, not
    * copies you own, so what a selection of them can do is the caller's call.
    * `onKeys` reports every result currently listed, for "select all".
@@ -116,15 +132,21 @@ export function CardSearchView({
   );
 
   const searchSort = useMemo(() => ({ key: sort.key, dir: sort.dir }), [sort.key, sort.dir]);
-  const { results, total, searching } = useCardSearch(query, {
+  const { results, printings, total, searching } = useCardSearch(query, {
     filters: eff,
     limit,
     sort: sortKey ? searchSort : undefined,
     enabled: hasCriteria,
+    expandPrintings: true,
   });
   // Which printing each result should appear as. Empty (and free) unless the
   // user has moved off the default "latest printing" preference.
   const shown = useDisplayPrintings(results);
+  // A `set:` term outranks the preference: asking for a set and being shown
+  // your favourite printing from some other one is not an answer to the question.
+  const pinned = printings.length > 0;
+  const printingAt = (i: number, card: Priced<OracleCard>) =>
+    (pinned ? printings[i] : undefined) ?? shown.get(card.oracleId);
 
   const setFilter = (key: keyof SearchFilters, value: string) =>
     setFilters((f) => ({ ...f, [key]: value || undefined }));
@@ -132,14 +154,15 @@ export function CardSearchView({
   // Keep the caller's "select all" pointed at what's actually listed, which
   // changes as you type and as you page.
   const onKeys = selection?.onKeys;
-  const resultKeys = results.map((c) => c.oracleId).join('|');
+  const keys = results.map((c, i) => resultKey(c, pinned ? printings[i] : undefined));
+  const resultKeys = keys.join('|');
   useEffect(() => {
     onKeys?.(resultKeys ? resultKeys.split('|') : []);
   }, [onKeys, resultKeys]);
 
   return (
     <CardCursorProvider whileOverlay>
-      {quickAdd && <QuickAddKey results={results} shown={shown} onAdd={quickAdd} />}
+      {quickAdd && <QuickAddKey results={results} keys={keys} printingAt={printingAt} onAdd={quickAdd} />}
       {onQueryChange && (
         <input
           className="search-input"
@@ -213,11 +236,11 @@ export function CardSearchView({
             selectable={selection?.sel.active}
             selectedKeys={selection?.sel.selected}
             onToggleSelect={selection?.sel.toggle}
-            items={results.map((card): CardItem => {
-              const printing = shown.get(card.oracleId);
+            items={results.map((card, i): CardItem => {
+              const printing = printingAt(i, card);
               const b = badgeFor?.(card, printing);
               return {
-                key: card.oracleId,
+                key: keys[i]!,
                 name: card.name,
                 image: printing?.imageSmall ?? card.imageSmall ?? null,
                 mana: card.manaCost,
@@ -228,6 +251,9 @@ export function CardSearchView({
                   <>
                     <span className={`rarity-dot rarity-${card.rarity}`} aria-hidden />
                     {printing ? `${printing.setName} · ` : ''}
+                    {/* Pinned to a set, the collector number is what tells its
+                        five Forests apart in a list row. */}
+                    {pinned && printings[i] ? `#${printings[i]!.collectorNumber} · ` : ''}
                     {card.typeLine}
                   </>
                 ),
@@ -265,18 +291,21 @@ export function CardSearchView({
  */
 function QuickAddKey({
   results,
-  shown,
+  keys,
+  printingAt,
   onAdd,
 }: {
   results: Priced<OracleCard>[];
-  shown: Map<string, Priced<Printing>>;
+  keys: string[];
+  printingAt: (index: number, card: Priced<OracleCard>) => Priced<Printing> | undefined;
   onAdd: (card: Priced<OracleCard>, printing?: Priced<Printing>) => void;
 }) {
   const cursor = useCardCursorCtx();
   const at = cursor?.activeKey ?? null;
-  const card = at ? results.find((c) => c.oracleId === at) : undefined;
+  const index = at ? keys.indexOf(at) : -1;
+  const card = index >= 0 ? results[index]! : undefined;
   useShortcuts(
-    { '+': card ? () => onAdd(card, shown.get(card.oracleId)) : null },
+    { '+': card ? () => onAdd(card, printingAt(index, card)) : null },
     { whileOverlay: true, whileTyping: true, allowRepeat: true },
   );
   return null;

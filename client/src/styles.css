@@ -403,6 +403,20 @@ button.danger-outline {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Codes are two to six characters; a floor keeps the names beside them in a
+     column instead of a ragged edge. */
+  min-width: 3.5rem;
+}
+/* What a completion means, trailing its code: `blb` is nothing until it says
+   Bloomburrow next to it. Yields the row to the code when space runs out. */
+.search-history-hint {
+  flex: 1;
+  min-width: 2rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 0.82rem;
 }
 /* Dim until pointed at, but never hidden: on a phone there is no hover, and
    forgetting a typo'd search shouldn't need a mouse. */

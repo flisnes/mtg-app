@@ -22,7 +22,9 @@ import {
 //   cmc:even          mana value parity (even/odd)
 //   mana>={2}  m:uu   mana cost symbols (: means "at least", like colors)
 //   set:znr  s:znr    printed in this set (in the card search: any printing of
-//                     the card; in a list of copies: the copy's own printing)
+//                     the card; in a list of copies: the copy's own printing).
+//                     A card search pinned to a set also lists that set's
+//                     printings one by one — see pinnedSets below.
 //   f:modern          legal in format (restricted counts as legal)
 //   is:transform  is:reserved  is:foil  is:borderless   see IS_KEYWORDS below
 //   otag:removal  function:ramp   Scryfall Tagger oracle tag — what the card
@@ -716,6 +718,50 @@ const IS_KEYWORDS: Record<string, (e: SearchableEntry) => boolean> = {
 export function compileCardQuery(query: string): { isEmpty: boolean; matches: (entry: SearchableEntry) => boolean } {
   const parsed = parseSearchQuery(query.trim());
   return { isEmpty: parsed.root === null, matches: (entry) => matchesQuery(entry, parsed) };
+}
+
+/**
+ * The set codes a query pins every result to, or null when it doesn't pin any.
+ *
+ * Only a `set:` term the whole query hangs on counts: ANDed in (`forest set:job`)
+ * or an OR every branch of which pins a set (`set:m10 or set:m11`). A negated
+ * term, or an OR branch that could match outside the set, means results can come
+ * from anywhere and there's nothing to pin to.
+ *
+ * The card search uses this to switch from "one row per card" to "one row per
+ * printing in that set" — the only reading of `set:job` that can show you all
+ * five Forests it printed.
+ */
+export function pinnedSets(q: ParsedQuery): string[] | null {
+  const codes = q.root ? pinnedIn(q.root) : null;
+  return codes?.size ? [...codes] : null;
+}
+
+function pinnedIn(node: QueryNode): Set<string> | null {
+  switch (node.kind) {
+    case 'and': {
+      // Any pinning child pins the whole conjunction; the rest just narrow it.
+      const out = new Set<string>();
+      for (const child of node.children) for (const c of pinnedIn(child) ?? []) out.add(c);
+      return out.size ? out : null;
+    }
+    case 'or': {
+      // Every branch has to pin, or the union isn't a bound on the results.
+      const out = new Set<string>();
+      for (const child of node.children) {
+        const codes = pinnedIn(child);
+        if (!codes) return null;
+        for (const c of codes) out.add(c);
+      }
+      return out.size ? out : null;
+    }
+    case 'not':
+      return null;
+    case 'set':
+      return node.negate ? null : new Set([node.value]);
+    default:
+      return null;
+  }
 }
 
 export function matchesQuery(entry: SearchableEntry, q: ParsedQuery): boolean {

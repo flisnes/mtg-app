@@ -1,4 +1,4 @@
-// The older half of the changelog (0.141.9 down to 0.98.0), split out of
+// The older half of the changelog (0.143.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,15 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.143.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Mark a copy you own as altered, signed, misprint, miscut or crimped — any combination of them — from the new Special dropdown on a collection card. Those copies wear an amber A, and they sit on their own line, so your altered copy no longer shares a row with the plain one. Matching is untouched: a signed card still fills a deck slot and still answers a wish.',
+      },
+    ],
+  },
   {
     version: '0.142.0',
     changes: [

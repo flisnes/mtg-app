@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Icon } from './icons.js';
+import { Icon, type IconName } from './icons.js';
 
 // Recent card searches, offered the moment the search bar is focused.
 //
@@ -167,21 +167,30 @@ export function SearchHistoryDropdown({
 /**
  * The same panel, for completions rather than history: no per-row forget and no
  * clear-all, because nothing here is the user's to delete. Used while an
- * `otag:` term is being typed, where the vocabulary is far more useful than
- * what you searched for last week.
+ * `otag:` or `set:` term is being typed, where the vocabulary is far more useful
+ * than what you searched for last week. `hint` is the human-readable half a code
+ * needs — nobody knows `rex` is Jurassic World Collection until it says so.
  */
+/** One completion: the text that goes in the query, plus what it means. */
+export interface SuggestItem {
+  value: string;
+  hint?: string;
+}
+
 export function SearchSuggestDropdown({
   list,
   active,
   onPick,
   onHover,
   label,
+  icon = 'tags',
 }: {
-  list: string[];
+  list: SuggestItem[];
   active: number;
   onPick: (value: string) => void;
   onHover: (index: number) => void;
   label: string;
+  icon?: IconName;
 }) {
   const listRef = useRef<HTMLUListElement | null>(null);
   useEffect(() => {
@@ -192,18 +201,19 @@ export function SearchSuggestDropdown({
   return (
     <div className="search-history" onMouseDown={(e) => e.preventDefault()}>
       <ul className="search-history-list" ref={listRef} role="listbox" aria-label={label}>
-        {list.map((value, i) => (
-          <li key={value} className={i === active ? 'is-active' : undefined}>
+        {list.map((item, i) => (
+          <li key={item.value} className={i === active ? 'is-active' : undefined}>
             <button
               className="search-history-item"
               role="option"
               aria-selected={i === active}
-              onClick={() => onPick(value)}
+              onClick={() => onPick(item.value)}
               onMouseEnter={() => onHover(i)}
-              title={value}
+              title={item.hint ? `${item.value} — ${item.hint}` : item.value}
             >
-              <Icon name="tags" size={14} />
-              <span className="search-history-q">{value}</span>
+              <Icon name={icon} size={14} />
+              <span className="search-history-q">{item.value}</span>
+              {item.hint && <span className="search-history-hint">{item.hint}</span>}
             </button>
           </li>
         ))}

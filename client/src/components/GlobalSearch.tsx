@@ -16,12 +16,20 @@ import { addDeckCard, addToCollection, addToWishlist, addToWishlistBulk } from '
 import { formatLabel, isBackground, isBasicLand, isValidCommanderPair } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
-import { CardSearchView } from './CardSearchView.js';
+import { CardSearchView, splitResultKey } from './CardSearchView.js';
 import { useShortcuts } from './useShortcuts.js';
 import { BulkActionBar } from './BulkActionBar.js';
 import { useMultiSelect } from './useMultiSelect.js';
-import { SearchHistoryDropdown, SearchSuggestDropdown, recordSearch, useSearchHistory } from './RecentSearches.js';
+import {
+  SearchHistoryDropdown,
+  SearchSuggestDropdown,
+  recordSearch,
+  useSearchHistory,
+  type SuggestItem,
+} from './RecentSearches.js';
 import { otagCompletions } from '../cardDb/oracleTags.js';
+import { setCompletions } from '../cardDb/setIndex.js';
+import { useSetIndex } from '../cardDb/useSetIndex.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { ScopedResults, type Scope } from './ScopedResults.js';
 import { ProfileScopedResults } from './ProfileScopedResults.js';
@@ -336,21 +344,34 @@ export function GlobalSearchBar() {
   // meaning "commit what I typed" for anyone who never touches the list.
   const [histOpen, setHistOpen] = useState(false);
   const [active, setActive] = useState(-1);
-  // Mid-`otag:` the tag vocabulary displaces the history: four thousand slugs
-  // are undiscoverable otherwise, and old searches are no help in choosing one.
+  // Mid-`otag:` or mid-`set:` the vocabulary displaces the history: four
+  // thousand tag slugs and nine hundred set codes are undiscoverable otherwise,
+  // and old searches are no help in choosing one.
   const tagsVersion = useOracleTags();
+  const setsVersion = useSetIndex();
   const otag = useMemo(() => otagCompletions(query), [query, tagsVersion]);
+  const sets = useMemo(() => setCompletions(query), [query, setsVersion]);
   const history = useSearchHistory(query);
-  const matches = otag?.slugs.length ? otag.slugs : history;
+  const suggest: { head: string; items: SuggestItem[]; label: string; icon: IconName } | null = otag?.slugs.length
+    ? { head: otag.head, items: otag.slugs.map((value) => ({ value })), label: 'Oracle tags', icon: 'tags' }
+    : sets?.sets.length
+      ? {
+          head: sets.head,
+          items: sets.sets.map((s) => ({ value: s.code, hint: s.name })),
+          label: 'Sets',
+          icon: 'sealed',
+        }
+      : null;
+  const matches = suggest ? suggest.items.map((i) => i.value) : history;
   const showHistory = histOpen && matches.length > 0;
   useEffect(() => setActive(-1), [query]);
 
   // Picking only fills the query — results update live, and the search is
-  // recorded (and so moves to the top) when it ends, like any other. A tag
-  // completes the term in place and leaves a trailing space, so the next term
-  // can be typed straight on; a history entry replaces the whole query.
+  // recorded (and so moves to the top) when it ends, like any other. A tag or
+  // set code completes the term in place and leaves a trailing space, so the
+  // next term can be typed straight on; a history entry replaces the whole query.
   function pickHistory(value: string) {
-    setQuery(otag?.slugs.length ? `${otag.head}${value} ` : value);
+    setQuery(suggest ? `${suggest.head}${value} ` : value);
     setHistOpen(false);
   }
 
@@ -407,13 +428,14 @@ export function GlobalSearchBar() {
             aria-label="Search cards"
           />
           {showHistory &&
-            (otag?.slugs.length ? (
+            (suggest ? (
               <SearchSuggestDropdown
-                list={matches}
+                list={suggest.items}
                 active={active}
                 onPick={pickHistory}
                 onHover={setActive}
-                label="Oracle tags"
+                label={suggest.label}
+                icon={suggest.icon}
               />
             ) : (
               <SearchHistoryDropdown list={matches} active={active} onPick={pickHistory} onHover={setActive} />
@@ -479,8 +501,10 @@ function SearchOverlay() {
   async function bulkWish() {
     const ids = [...sel.selected];
     if (ids.length === 0) return;
+    // A row pinned to a printing by a `set:` term wishes for that printing; an
+    // ordinary row still wishes for the card, any edition.
     const res = await addToWishlistBulk(
-      ids.map((oracleId) => ({ oracleId, scryfallId: null, quantity: 1 })),
+      ids.map((key) => ({ ...splitResultKey(key), quantity: 1 })),
       { source: 'manual', label: 'From search' },
     );
     toast(`Added ${res.cards} card${res.cards === 1 ? '' : 's'} to wishlist`);

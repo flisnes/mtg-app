@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.147.2',
+    changes: [
+      {
+        kind: 'added',
+        text: 'A `set:` term in the card search now lists that set’s printings one by one, instead of one tile per card in your preferred printing. `forest set:blb` shows all five Bloomburrow Forests, and tapping one opens on that printing.',
+      },
+      {
+        kind: 'added',
+        text: 'The search bar suggests set codes. Type `set:` for the newest sets, or part of a name to narrow it — each code comes with the full set name beside it.',
+      },
+    ],
+  },
+  {
     version: '0.147.1',
     changes: [
       {
@@ -174,15 +187,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Sorting by "Last edited" threw the card you just changed to the top and then dropped it back down. It now reads each copy’s own timestamp, so the card stays where it belongs — and only the copy you touched moves. Edit one edition of a Forest and the rest stay put; change the Italian copy and the English one does not budge. Filing a card into a deck, binder or box, or taking it out, counts as an edit too.',
-      },
-    ],
-  },
-  {
-    version: '0.143.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Mark a copy you own as altered, signed, misprint, miscut or crimped — any combination of them — from the new Special dropdown on a collection card. Those copies wear an amber A, and they sit on their own line, so your altered copy no longer shares a row with the plain one. Matching is untouched: a signed card still fills a deck slot and still answers a wish.',
       },
     ],
   },

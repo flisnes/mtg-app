@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.147.2
+
+- **`set:` now shows you the set.** Put `set:blb` in the card search and the results stop being one tile per card and become one tile per printing that set actually holds, whatever printing you normally prefer to see. `forest set:blb` lays out all five Bloomburrow Forests side by side instead of picking one for you, and tapping any of them opens on that exact printing, ready to add.
+- **The search bar suggests set codes.** Type `set:` and it lists sets newest first; type any of the name and it narrows, with the full set name beside each code — nobody remembers that Jurassic World Collection is `rex`. The same dropdown that has been completing `otag:` for a while now does sets too.
+
 ## 0.147.1
 
 - **Search stops caring about apostrophes, hyphens and commas.** Typing "lions" now finds Lion's Eye Diamond, "shizo deaths" finds Shizo, Death's Storehouse, and "bond kin" finds Ainok Bond-Kin. Punctuation in a card name no longer has to be reproduced exactly, in the card search, your own lists, or an imported file.

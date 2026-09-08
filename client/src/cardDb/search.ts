@@ -1,4 +1,4 @@
-import type { Color, DeckFormat, Finish, Format, OracleCard, Priced, PrintingVariant, Rarity } from '@mtg/shared';
+import type { Color, DeckFormat, Finish, Format, OracleCard, Priced, Printing, PrintingVariant, Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPricesByIds, withPrices } from './prices.js';
 import { loadOracleTags } from './oracleTags.js';
@@ -7,6 +7,7 @@ import {
   matchesQuery,
   normalizeName,
   parseSearchQuery,
+  pinnedSets,
   toSearchableEntry,
   type PrintingSummary,
   type SearchableEntry,
@@ -38,11 +39,24 @@ type Indexed = SearchableEntry;
 
 let cache: Indexed[] | null = null;
 let nameLookup: Map<string, OracleCard> | null = null;
+let sets: SetInfo[] | null = null;
 
 /** Drop the cache after a card-DB re-import so search reflects new data. */
 export function invalidateSearchIndex(): void {
   cache = null;
   nameLookup = null;
+  sets = null;
+}
+
+/** One set the card DB knows about, for the `set:` completions. */
+export interface SetInfo {
+  /** Lowercased set code, as `set:` wants it. */
+  code: string;
+  name: string;
+  /** ISO date of the earliest printing we hold from it. */
+  releasedAt: string;
+  /** How many printings the DB holds from it. */
+  count: number;
 }
 
 interface PrintingAgg {
@@ -58,6 +72,10 @@ async function getIndex(): Promise<Indexed[]> {
   if (cache) return cache;
   const [cards, printings] = await Promise.all([db.oracleCards.toArray(), db.printings.toArray()]);
   const byOracle = new Map<string, PrintingAgg>();
+  // The set list falls out of the same pass: the printings table is the only
+  // place a set's full name lives, and re-reading 100k rows just to build the
+  // `set:` completion list would be absurd when they're already in hand.
+  const bySet = new Map<string, SetInfo>();
   for (const p of printings) {
     let agg = byOracle.get(p.oracleId);
     if (!agg) {
@@ -69,7 +87,16 @@ async function getIndex(): Promise<Indexed[]> {
     if (p.promo) agg.hasPromo = true;
     for (const v of p.variants ?? []) agg.variants.add(v);
     agg.count++;
+
+    const code = p.set.toLowerCase();
+    const known = bySet.get(code);
+    if (!known) bySet.set(code, { code, name: p.setName, releasedAt: p.releasedAt, count: 1 });
+    else {
+      known.count++;
+      if (p.releasedAt < known.releasedAt) known.releasedAt = p.releasedAt;
+    }
   }
+  sets = [...bySet.values()];
   cache = cards.map((c) => {
     const agg = byOracle.get(c.oracleId);
     const summary: PrintingSummary | undefined = agg && {
@@ -82,6 +109,15 @@ async function getIndex(): Promise<Indexed[]> {
     return toSearchableEntry(c, summary);
   });
   return cache;
+}
+
+/**
+ * Every set the card DB holds a printing from, unordered. Costs the one-time
+ * index build and nothing after that.
+ */
+export async function getSetIndex(): Promise<SetInfo[]> {
+  await getIndex();
+  return sets ?? [];
 }
 
 /**
@@ -153,7 +189,43 @@ export async function resolveOracleByName(name: string): Promise<OracleCard | un
 
 export interface SearchResult {
   cards: Priced<OracleCard>[];
+  /**
+   * Index-aligned with `cards`: the printing that row stands for. Only present
+   * when the query pinned a set (see `expandPrintings`); otherwise the caller's
+   * own printing preference decides what each card displays as.
+   */
+  printings?: (Priced<Printing> | undefined)[];
   total: number;
+}
+
+/**
+ * Printings of the pinned sets, grouped by oracle card and in collector-number
+ * order — so `forest set:blb` lists the set's Forests the way the set numbers
+ * them, not the way a UUID sorts.
+ */
+async function printingsForSets(codes: string[]): Promise<Map<string, Printing[]>> {
+  // Codes come out of the parser lowercased; the table stores Scryfall's own
+  // casing, which is lowercase today but isn't ours to promise.
+  const rows = await db.printings.where('set').anyOfIgnoreCase(codes).toArray();
+  const out = new Map<string, Printing[]>();
+  for (const p of rows) {
+    // A printing with no art is a row the user can't tell from any other.
+    if (!p.imageSmall && !p.imageNormal) continue;
+    const list = out.get(p.oracleId);
+    if (list) list.push(p);
+    else out.set(p.oracleId, [p]);
+  }
+  for (const list of out.values()) list.sort(byCollectorNumber);
+  return out;
+}
+
+/** Collector numbers are strings but read as numbers: 2 before 10, ★ after 100. */
+function byCollectorNumber(a: Printing, b: Printing): number {
+  const na = parseInt(a.collectorNumber, 10);
+  const nb = parseInt(b.collectorNumber, 10);
+  if (Number.isNaN(na) !== Number.isNaN(nb)) return Number.isNaN(na) ? 1 : -1;
+  if (!Number.isNaN(na) && na !== nb) return na - nb;
+  return a.collectorNumber.localeCompare(b.collectorNumber) || (a.scryfallId < b.scryfallId ? -1 : 1);
 }
 
 /**
@@ -171,14 +243,23 @@ export async function searchCards(
   filters: SearchFilters = {},
   limit = 60,
   sort: SearchSort = DEFAULT_SORT,
+  /**
+   * Let a `set:` term take over the result rows: one row per printing in that
+   * set instead of one per card, showing the set's own printing rather than the
+   * user's preferred one. Opt-in, because a picker that keys its rows by oracle
+   * card can't hold two rows for the same card.
+   */
+  expandPrintings = false,
 ): Promise<SearchResult> {
   // Before parsing, not after: `otag:` resolves its slug at parse time, and an
   // unresolved one degrades to a name search. Settles instantly once loaded.
   const [index] = await Promise.all([getIndex(), loadOracleTags()]);
   const parsed = parseSearchQuery(query.trim());
+  const pins = expandPrintings ? pinnedSets(parsed) : null;
+  const pinned = pins ? await printingsForSets(pins) : null;
   const legalIn = filters.legalIn && filters.legalIn !== 'casual' ? (filters.legalIn as Format) : undefined;
 
-  const matches: Array<{ card: OracleCard; score: number }> = [];
+  const matches: Array<{ card: OracleCard; score: number; printing?: Printing }> = [];
   for (const entry of index) {
     if (filters.color && !entry.card.colors.includes(filters.color)) continue;
     if (filters.rarity && entry.card.rarity !== filters.rarity) continue;
@@ -212,14 +293,32 @@ export async function searchCards(
       }
       score = Math.max(score, phraseScore);
     }
-    matches.push({ card: entry.card, score });
+    // Pinned to a set: the card's printings *in that set* are the rows. A card
+    // that matched but has nothing showable there still gets its one plain row.
+    const prints = pinned?.get(entry.card.oracleId);
+    if (prints?.length) for (const printing of prints) matches.push({ card: entry.card, score, printing });
+    else matches.push({ card: entry.card, score });
   }
 
   const ordered = await orderMatches(matches, sort);
+  const page = ordered.slice(0, limit);
 
-  // Prices are joined only for the returned page, not the whole match set.
+  // Prices are joined only for the returned page, not the whole match set. A
+  // pinned printing carries its own price — a Secret Lair Forest is not a
+  // Foundations one.
+  let printings: (Priced<Printing> | undefined)[] | undefined;
+  if (pinned) {
+    const priced = await withPrices(
+      page.map((m) => m.printing).filter((p): p is Printing => !!p),
+      (p) => p.scryfallId,
+    );
+    const byId = new Map(priced.map((p) => [p.scryfallId, p]));
+    printings = page.map((m) => (m.printing ? byId.get(m.printing.scryfallId) : undefined));
+  }
+
   return {
-    cards: await withPrices(ordered.slice(0, limit).map((m) => m.card), (c) => c.defaultScryfallId),
+    cards: await withPrices(page.map((m) => m.card), (c) => c.defaultScryfallId),
+    ...(printings ? { printings } : {}),
     total: matches.length,
   };
 }
@@ -233,21 +332,27 @@ export async function searchCards(
  * prices live in 16 already-cached shard blobs, so that's a map lookup per
  * card rather than a second trip to IndexedDB.
  */
-async function orderMatches(
-  matches: Array<{ card: OracleCard; score: number }>,
+async function orderMatches<T extends { card: OracleCard; score: number; printing?: Printing }>(
+  matches: T[],
   sort: SearchSort,
-): Promise<Array<{ card: OracleCard; score: number }>> {
+): Promise<T[]> {
+  // A card that expanded into several printings keeps them together and in
+  // collector order, whatever the outer sort is.
+  const tie = (a: T, b: T) =>
+    a.card.name.localeCompare(b.card.name) ||
+    (a.printing && b.printing ? byCollectorNumber(a.printing, b.printing) : 0);
   if (sort.key === 'relevance' || sort.key === 'change' || sort.key === 'changePct' || sort.key === 'added' || sort.key === 'updated') {
     // The four owned-list keys have no meaning for a card that isn't yours;
     // a stored preference that leaks in falls back to best-match.
     const mul = sort.key === 'relevance' && sort.dir === 'asc' ? -1 : 1;
-    return [...matches].sort((a, b) => (b.score - a.score) * mul || a.card.name.localeCompare(b.card.name));
+    return [...matches].sort((a, b) => (b.score - a.score) * mul || tie(a, b));
   }
-  const prices = sort.key === 'price' ? await getPricesByIds(matches.map((m) => m.card.defaultScryfallId)) : null;
+  const idOf = (m: T) => m.printing?.scryfallId ?? m.card.defaultScryfallId;
+  const prices = sort.key === 'price' ? await getPricesByIds(matches.map(idOf)) : null;
   return sortCards(
     matches,
     (m) => {
-      const p = prices?.get(m.card.defaultScryfallId);
+      const p = prices?.get(idOf(m));
       return {
         name: m.card.name,
         cmc: m.card.cmc,

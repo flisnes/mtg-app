@@ -32,6 +32,25 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.147.3',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'The card sheet puts the rules text up beside the art, and the price and "filed in" pills down at the top of the form. The text is never folded away now, so highlighting a phrase to search for it always works.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'Condition, finish, language and "special" are four dropdowns on one line, for trade is back next to the quantity, and the edition line says the set code so the collector number fits.',
+      },
+      {
+        kind: 'changed',
+        text: 'A tall card sheet grows up to the search bar before anything has to scroll.',
+      },
+    ],
+  },
+  {
     version: '0.147.2',
     changes: [
       {
@@ -178,15 +197,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: '"Filed: Nowhere" hid cards you own two of when one copy was filed away. A line with copies still loose now shows up under it, so selecting them all catches everything left in the shoebox.',
-      },
-    ],
-  },
-  {
-    version: '0.143.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Sorting by "Last edited" threw the card you just changed to the top and then dropped it back down. It now reads each copy’s own timestamp, so the card stays where it belongs — and only the copy you touched moves. Edit one edition of a Forest and the rest stay put; change the Italian copy and the English one does not budge. Filing a card into a deck, binder or box, or taking it out, counts as an edit too.',
       },
     ],
   },

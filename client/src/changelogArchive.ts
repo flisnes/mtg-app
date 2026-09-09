@@ -1,4 +1,4 @@
-// The older half of the changelog (0.143.0 down to 0.98.0), split out of
+// The older half of the changelog (0.143.1 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,15 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.143.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Sorting by "Last edited" threw the card you just changed to the top and then dropped it back down. It now reads each copy’s own timestamp, so the card stays where it belongs — and only the copy you touched moves. Edit one edition of a Forest and the rest stay put; change the Italian copy and the English one does not budge. Filing a card into a deck, binder or box, or taking it out, counts as an edit too.',
+      },
+    ],
+  },
   {
     version: '0.143.0',
     changes: [

@@ -2509,31 +2509,37 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   overflow: hidden;
   gap: 0.6rem;
   padding-inline: 0.85rem;
+  /* A tall card (long rules text, or a form with every control on show) grows
+     the sheet up to just under the search bar instead of scrolling inside a
+     short frame. Nothing is clipped that the screen had room for. */
+  max-height: calc(100dvh - var(--header-h) - var(--safe-top) - 0.5rem);
 }
-.card-sheet .sheet-head,
 .card-sheet .sheet-quickadd,
 .card-sheet .sheet-actions {
   flex-shrink: 0;
 }
-.card-sheet .sheet-body {
+/* Art, rules text and form scroll as one region. The rules text sits beside the
+   art now, and text has no upper bound, so pinning the head at its natural
+   height would squeeze the form to nothing on a card with five abilities. */
+.card-sheet .sheet-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
+  gap: 0.6rem;
+}
+.card-sheet .sheet-body {
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
 }
-/* Fields keep their size; if the tab really is taller than the frame the body
-   scrolls, rather than every box in it getting squeezed a little. The rules text
-   is the exception — it gives up its room first, down to a couple of lines, and
-   scrolls inside itself. That's what keeps the form on one screen. */
+/* Every field keeps its own size; the region scrolls if the whole thing really
+   is taller than the screen. Nothing gets a little bit squeezed. */
+.card-sheet .sheet-scroll > *,
 .card-sheet .sheet-body > * {
   flex-shrink: 0;
-}
-.card-sheet .sheet-oracle {
-  flex: 0 1 auto;
-  min-height: 3.25rem;
 }
 /* The art sets the height of the head, and it follows the viewport: a short
    phone in landscape gets a smaller card rather than a sheet with no room left
@@ -2555,6 +2561,23 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   white-space: normal;
   overflow: visible;
 }
+/* What it's worth and what you already have of it, as the form's first line:
+   price, the sparkline that opens the full chart, and the owned badge pushed to
+   the far end. */
+.sheet-worth {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+}
+.sheet-worth .result-price {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.sheet-worth .sheet-owned {
+  margin-left: auto;
+}
+
 /* The copy you own, as one line: NM · Foil · EN · ×3. */
 .sheet-copy-summary {
   display: flex;
@@ -2633,24 +2656,6 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   .sheet-traits-trigger > svg {
     transition: none;
   }
-}
-
-/* An answer almost nobody gives (copies for trade, a signed card, slot tags)
-   is a line you can ignore until it's yours, not a field row that books 60px
-   of a sheet already over budget. */
-.sheet-reveal {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  align-self: flex-start;
-  padding: 0.1rem 0;
-  border: none;
-  background: none;
-  color: var(--accent);
-  font-size: 0.88rem;
-}
-.sheet-reveal > svg {
-  flex-shrink: 0;
 }
 
 /* Which printing this is, said beside the art it changes rather than as the
@@ -2833,6 +2838,22 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
 }
+/* Condition, finish, language and special conditions on one line, however many
+   of the four a given mode asks for — a flex row divides itself, where a grid
+   would need a column count per case. */
+.field-row {
+  display: flex;
+  gap: 0.4rem;
+}
+.field-row > .field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.field-row .field select,
+.field-row .field .special-trigger {
+  padding-inline: 0.4rem;
+  font-size: 0.85rem;
+}
 /* Special conditions: a checkbox list, because a card can be both signed and
    altered. Unfolds in flow under its trigger for the same reason the edition
    picker does — the sheet body is a scroll container, and a floating panel would
@@ -2880,6 +2901,19 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   background: var(--surface);
   padding: 0.25rem;
   margin-top: -0.25rem;
+}
+/* On the card sheet's traits row the trigger is a quarter of the width, which
+   "Crimped" alone would wrap in, so the sheet renders the list under the whole
+   row instead. In flow, not floating: the sheet grows to hold it rather than
+   the boxes hanging over the quantity steppers. */
+.sheet-traits > .special-list {
+  margin-top: 0;
+  border-top: 1px solid var(--accent);
+  border-radius: 10px;
+}
+.field-row .special-field.open .special-trigger {
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
 }
 .special-row {
   display: flex;
@@ -3265,36 +3299,24 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   margin: 0 0.05em;
   vertical-align: -0.05em;
 }
-/* Rules text is the one part of the sheet with no upper bound, so it gets its
-   own scroll instead of pushing the fields off. */
+/* Rules text rides in the column beside the art, at eye level with the card it
+   belongs to, and is never clipped or folded: selecting a phrase here searches
+   the database for it, and you can't select what's behind a link. A touch
+   smaller than body text, since the column is narrow and the whole ability has
+   to fit. */
 .card-sheet .sheet-oracle {
-  margin-top: 0;
-  max-height: 7rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 0.25rem;
+  margin-top: 0.1rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
 }
-/* On a form the card is context, not the thing being answered: two lines and a
-   way to open it. Faded rather than cut, so it reads as "there's more" instead
-   of as a rendering bug. Two lines of 0.9rem/1.55 is 2.8rem exactly.
-   Line-clamp is deliberately not used here: .symbol-text puts each ability in
-   its own <p>, and -webkit-box would count paragraphs, not lines. */
-.card-sheet .sheet-oracle-clamped {
-  max-height: 2.8rem;
-  min-height: 0;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
-  mask-image: linear-gradient(to bottom, #000 55%, transparent);
-}
-.card-sheet .sheet-oracle-more {
-  margin-top: -0.35rem;
-}
-/* ---- The card sheet on a desktop: two columns, centered ----
+/* ---- The card sheet on a desktop: the art in its own column, centered ----
    A 560px strip hugging the bottom edge of a 1080px screen left about 1360px of
-   width and 200px of height unused while the rules text scrolled inside a 112px
-   window. Same component, one breakpoint: the head becomes the left column (a
-   card at something like its real size, with what it's worth and where your
-   copies are under it) and everything you answer sits in the right one. */
+   width and 200px of height unused. Same component, one breakpoint: the art gets
+   a column to itself at something like its real size, and everything else — what
+   the card is, then what you're answering about your copy — reads straight down
+   the column beside it. The two used to be separate scroll regions, which broke
+   the moment the rules text moved up beside the art: the left column overran the
+   sheet while the right one sat half empty. */
 @media (min-width: 900px) {
   .card-sheet-backdrop {
     align-items: center;
@@ -3304,61 +3326,40 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
     max-width: 920px;
     border-radius: 16px;
     padding: 1.1rem 1.25rem;
-    max-height: min(86dvh, 780px);
-    display: grid;
-    grid-template-columns: 320px minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto auto;
-    grid-template-areas:
-      'name name'
-      'head body'
-      'head quick'
-      'head actions';
-    column-gap: 1.5rem;
-    row-gap: 0.6rem;
+    max-height: min(90dvh, 860px);
+    gap: 0.7rem;
   }
-  .card-sheet .sheet-name-row {
-    grid-area: name;
+  /* The head stops being a row of its own: the art and the column beside it
+     become grid items here, so the form can go on down that same column. */
+  .card-sheet .sheet-scroll {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    column-gap: 1.5rem;
+    row-gap: 0.7rem;
   }
   .card-sheet .sheet-head {
-    grid-area: head;
-    flex-direction: column;
-    gap: 0.55rem;
-    min-height: 0;
-    overflow-y: auto;
+    display: contents;
   }
-  /* Sized off the viewport's height so a short window gets a smaller card
-     rather than a column that outgrows the sheet. */
   .card-sheet .sheet-card-wrap,
   .card-sheet .sheet-card-ph {
-    width: min(100%, calc(clamp(240px, 52dvh, 460px) * 488 / 680));
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+    width: 100%;
     max-width: none;
-    align-self: center;
+  }
+  .card-sheet .sheet-info {
+    grid-column: 2;
+    grid-row: 1;
   }
   .card-sheet .sheet-body {
-    grid-area: body;
+    grid-column: 2;
+    grid-row: 2;
   }
-  .card-sheet .sheet-quickadd {
-    grid-area: quick;
-  }
-  .card-sheet .sheet-actions {
-    grid-area: actions;
-  }
-  /* Room enough that neither the rules text nor the filed-in pills need a
-     scrollbar of their own. */
+  /* A 540px column here, so the rules text gets body size back. */
   .card-sheet .sheet-oracle {
-    max-height: none;
-  }
-  .card-sheet .sheet-oracle-clamped {
-    max-height: none;
-    overflow: visible;
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-  .card-sheet .sheet-oracle-more {
-    display: none;
-  }
-  .card-sheet .sheet-info .sheet-places {
-    max-height: none;
+    font-size: 0.9rem;
   }
 }
 
@@ -3523,11 +3524,10 @@ button.primary {
 .sheet-price-trend:hover {
   background: var(--surface-2);
 }
-/* In the column beside the art there's no room for sparkline, change and chevron
-   on one line — let the change drop under the line it belongs to. */
+/* Down in the form there's the full width of the sheet, so sparkline, change
+   and chevron fit the one line they were written for. */
 .card-sheet .sheet-price-trend {
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 .sheet-price-trend > svg:last-child {
   color: var(--text-dim);
@@ -6521,16 +6521,7 @@ a.seg {
   align-items: baseline;
   gap: 0.4rem;
   flex-wrap: wrap;
-  margin: 0.5rem 0 0;
-}
-/* Beside the art, "Filed in" is the one thing here that can name four binders.
-   Cap it and let it scroll so the head keeps the card's height. */
-.sheet-info .sheet-places {
-  margin-top: auto;
-  padding-top: 0.4rem;
-  max-height: 5rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  margin: 0;
 }
 .sheet-places-label {
   font-size: 0.75rem;

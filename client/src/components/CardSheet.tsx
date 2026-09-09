@@ -33,7 +33,7 @@ import { CardHistorySheet } from './CardHistory.js';
 import { ContainerPickerSheet } from './ContainerPickerSheet.js';
 import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
 import { FileCopiesSheet } from './FileCopiesSheet.js';
-import { SpecialConditionsField } from './SpecialConditions.js';
+import { SpecialConditionsField, SpecialConditionsList } from './SpecialConditions.js';
 import { EventSheet } from './EventSheet.js';
 import { useOpenCollectionSearch, useOpenDbSearch } from './GlobalSearch.js';
 import { Icon, type IconName } from './icons.js';
@@ -389,20 +389,16 @@ export function CardSheet(props: CardSheetProps) {
   // save() takes a `board` parameter (the board an *add* targets), and a slot
   // being moved must not read that.
   const [zone, setZone] = useState<DeckBoard>(deckCard?.board ?? 'main');
-  // Progressive disclosure. Condition/finish/language read as one line until
-  // you want to change them; the three answers almost nobody changes (copies
-  // for trade, what's remarkable about the cardboard, slot tags) are a link
-  // until they hold something. Each opens already-open when there's an answer
-  // to show, so nothing you've set can hide behind a "+".
+  // Condition, finish, language and special conditions read as one line until
+  // you want to change them, then unfold as four dropdowns on one row. That's
+  // the only fold left on the form: for trade, special conditions and slot tags
+  // each used to hide behind a link, which is a row of its own — no room saved
+  // and a tap spent to get at a control that was going to fit anyway.
   const [traitsOpen, setTraitsOpen] = useState(false);
-  const [showForTrade, setShowForTrade] = useState(
-    (entry?.quantityForTrade ?? 0) > 0 || addTo.kind === 'tradelist',
-  );
-  const [showSpecial, setShowSpecial] = useState((entry?.special?.length ?? 0) > 0);
-  const [showTags, setShowTags] = useState((deckCard?.tags?.length ?? 0) > 0);
-  // Rules text runs full height on a card you're reading and two lines on a
-  // form, where the card is context rather than the thing being answered.
-  const [oracleOpen, setOracleOpen] = useState(false);
+  // The Special dropdown's own boxes. Open state lives here because the list
+  // spans the whole traits row rather than the quarter its trigger occupies —
+  // a floating panel would be clipped by the scroll region it sits in.
+  const [specialOpen, setSpecialOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [trend, setTrend] = useState<HistoryChange | null>(null);
   const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(null);
@@ -581,27 +577,13 @@ export function CardSheet(props: CardSheetProps) {
     ? FINISHES
     : printing?.finishes ?? (deckPrefs ? FINISHES : (['nonfoil'] as Finish[]));
 
-  // Rules text as a form's context: two lines with a way to open it, rather
-  // than a 7rem window that is the first thing the layout squeezes. Estimated
-  // from the text instead of measured, so there's no flash of the wrong height
-  // — about fifty characters fit a line beside a phone-width sheet, and every
-  // ability starts its own. Desktop drops the clamp in CSS, where the column is
-  // wide enough that none of this applies.
-  const oracleLines = useMemo(() => {
-    const text = oracleCard.oracleText;
-    if (!text) return 0;
-    return text.split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / 50)), 0);
-  }, [oracleCard.oracleText]);
-  // Gated on there being a form at all, not on the mode: a copy you own but
-  // aren't editing has one line of body under the art, so clipping its rules
-  // text to buy room back would be spending nothing on nothing.
-  const oracleCollapsible = formEditable && oracleLines > 2;
-  const oracleClamped = oracleCollapsible && !oracleOpen;
-
   // Which printing this is, said where the art is: the edition belongs with the
-  // card it changes, not as the first field of a form.
+  // card it changes, not as the first field of a form. The set *code*, not its
+  // name — beside the art there's about 20 characters to play with, and
+  // "Commander Legends: Battle for Baldur's Gate" spent all of them pushing the
+  // collector number off the edge. The symbol and its tooltip still name the set.
   const editionLabel = printing
-    ? `${printing.setName} · #${printing.collectorNumber}`
+    ? `${printing.set.toUpperCase()} · #${printing.collectorNumber}`
     : anyBasicPicked
       ? 'Any printing, from your lands box'
       : anyPrefs && scryfallId === ANY_PRINTING
@@ -616,6 +598,8 @@ export function CardSheet(props: CardSheetProps) {
   if (showFinish) traitWords.push(finish ? FINISH_LABELS[finish as Finish] : 'Any finish');
   if (showLang) traitWords.push(lang ? lang.toUpperCase() : 'Any language');
   const traitsVisible = traitWords.length > 0 && !anyBasicPicked;
+  // Folded up, the line has to account for the fourth dropdown as well.
+  const traitSummary = [...traitWords, ...(special.length > 0 ? [specialLabel(special)] : [])].join(' · ');
 
   // Full-size image + price for the currently-selected printing (falls back to the oracle default).
   const cardImage = printing?.imageNormal ?? oracleCard.imageNormal ?? printing?.imageSmall ?? oracleCard.imageSmall ?? null;
@@ -887,6 +871,12 @@ export function CardSheet(props: CardSheetProps) {
           </button>
         </div>
 
+        {/* Head and form scroll as one. The rules text lives beside the art now,
+            and text has no upper bound, so a head pinned at its natural height
+            would squeeze the form to nothing on a card with five abilities.
+            (At 900px and up this element is display:contents and the two go
+            back to being their own columns — see styles.css.) */}
+        <div className="sheet-scroll">
         <div className="sheet-head">
           {cardImage || !editionResolved ? (
             // The wrap holds the card's space from the first frame; what goes in
@@ -928,10 +918,10 @@ export function CardSheet(props: CardSheetProps) {
           ) : (
             <div className="sheet-card sheet-card-ph">{oracleCard.name}</div>
           )}
-          {/* Everything that describes the card rides in the column beside the
-              art — name, cost, type, what you own, what it's worth and where
-              your copies are filed. That column is as tall as the card, and the
-              form below it starts at a fixed place on every card. */}
+          {/* What the card *is* rides in the column beside the art: cost, type,
+              which printing this is, and the rules text. What your copy is
+              worth and where it's filed are answers about your collection, so
+              they lead the form below instead. */}
           <div className="sheet-info">
             <div className="result-sub sheet-typeline">
               {oracleCard.manaCost && <ManaCost cost={oracleCard.manaCost} />}
@@ -963,57 +953,54 @@ export function CardSheet(props: CardSheetProps) {
                 </div>
               )
             )}
-            <div className="result-price">{cardPrice}</div>
-            {trend && trend.points > 1 && <PriceTrend trend={trend} gain={gain} onOpen={() => setChartOpen(true)} />}
-            {mode !== 'edit' && ownedQty > 0 && (
-              <OwnedHere
-                qty={ownedQty}
-                forTrade={ownedForTrade}
-                ownsExact={ownsExact}
-                onOpen={
-                  canOpenInCollection
-                    ? () => {
-                        onClose();
-                        openCollectionSearch(oracleCard.name);
-                      }
-                    : undefined
-                }
-              />
+            {/* The rules text, never clipped and never behind a link: selecting
+                a phrase here searches the database for it (OracleSearchChip),
+                which is most of why the text is on this sheet at all. */}
+            {oracleCard.oracleText && (
+              <SymbolText className="oracle-text sheet-oracle" text={oracleCard.oracleText} />
             )}
-            {/* Where the copies live. A binder name can be long, so the pills
-                scroll on their own rather than pushing the form down. */}
-            {placement && placement.places.length > 0 && (
-              <div className="sheet-places">
-                <span className="sheet-places-label">Filed in</span>
-                <PlacementPills info={placement} onNavigate={onClose} />
-              </div>
+            {oracleSelection && (
+              <OracleSearchChip
+                selection={oracleSelection}
+                onSearch={(query) => {
+                  onClose();
+                  openDbSearch(query);
+                }}
+              />
             )}
           </div>
         </div>
 
-        {/* The one part of the sheet that scrolls. The head and the action row
-            stay put, so the buttons are always in the same place no matter how
-            much rules text the card carries. */}
         <div className="sheet-body">
-        {oracleCard.oracleText && (
-          <SymbolText
-            className={oracleClamped ? 'oracle-text sheet-oracle sheet-oracle-clamped' : 'oracle-text sheet-oracle'}
-            text={oracleCard.oracleText}
-          />
-        )}
-        {oracleCollapsible && (
-          <button type="button" className="sheet-reveal sheet-oracle-more" onClick={() => setOracleOpen((v) => !v)}>
-            {oracleOpen ? 'Less rules text' : 'Read the rules text'}
-          </button>
-        )}
-        {oracleSelection && (
-          <OracleSearchChip
-            selection={oracleSelection}
-            onSearch={(query) => {
-              onClose();
-              openDbSearch(query);
-            }}
-          />
+        {/* What it's worth, what you already have of it and where those copies
+            are filed — the answers-about-your-copies half of the sheet, so they
+            lead the form rather than crowding the column beside the art. */}
+        <div className="sheet-worth">
+          <div className="result-price">{cardPrice}</div>
+          {trend && trend.points > 1 && <PriceTrend trend={trend} gain={gain} onOpen={() => setChartOpen(true)} />}
+          {mode !== 'edit' && ownedQty > 0 && (
+            <OwnedHere
+              qty={ownedQty}
+              forTrade={ownedForTrade}
+              ownsExact={ownsExact}
+              onOpen={
+                canOpenInCollection
+                  ? () => {
+                      onClose();
+                      openCollectionSearch(oracleCard.name);
+                    }
+                  : undefined
+              }
+            />
+          )}
+        </div>
+        {/* Where the copies live. A binder name can be long, so the pills wrap
+            rather than pushing the form down. */}
+        {placement && placement.places.length > 0 && (
+          <div className="sheet-places">
+            <span className="sheet-places-label">Filed in</span>
+            <PlacementPills info={placement} onNavigate={onClose} />
+          </div>
         )}
 
         {/* The shortcut that makes a slot concrete: point it at a copy you
@@ -1045,9 +1032,9 @@ export function CardSheet(props: CardSheetProps) {
           </div>
         )}
 
-        {/* The same line, tappable, when they are yours to change: the three
+        {/* The same line, tappable, when they are yours to change: the four
             fields unfold under it rather than sitting there labelled and open
-            on a form where two of them are already right. */}
+            on a form where most of them are already right. */}
         {traitsVisible && formEditable && (
           <div className={traitsOpen ? 'sheet-traits open' : 'sheet-traits'}>
             <button
@@ -1056,11 +1043,11 @@ export function CardSheet(props: CardSheetProps) {
               aria-expanded={traitsOpen}
               onClick={() => setTraitsOpen((v) => !v)}
             >
-              <span className="sheet-traits-summary">{traitWords.join(' · ')}</span>
+              <span className="sheet-traits-summary">{traitSummary}</span>
               <Icon name="chevronDown" size={16} />
             </button>
             {traitsOpen && (
-              <div className="field-grid">
+              <div className="field-row">
                 {showCondition && (
                   <label className="field">
                     <span>{anyPrefs ? 'Min. condition' : 'Condition'}</span>
@@ -1100,54 +1087,43 @@ export function CardSheet(props: CardSheetProps) {
                     </select>
                   </label>
                 )}
+                {/* Altered, signed, misprint …: a fact about this piece of
+                    cardboard, not about the card, so only a collection copy is
+                    asked. Ticking a box splits the copy onto its own line —
+                    your altered Bolt stops sharing a row with the plain one —
+                    while every match (wish, deck slot, owned count) carries on
+                    ignoring it. */}
+                {collectionFields && (
+                  <SpecialConditionsField
+                    value={special}
+                    open={specialOpen}
+                    onToggle={() => setSpecialOpen((v) => !v)}
+                  />
+                )}
               </div>
+            )}
+            {traitsOpen && collectionFields && specialOpen && (
+              <SpecialConditionsList value={special} onChange={setSpecial} />
             )}
           </div>
         )}
 
-        {/* Quantity is the one field always in play, so it's always a stepper.
-            "For trade" is 0 on nearly every add, so it's a link until it isn't. */}
+        {/* Quantity and the slice of it you'd part with, side by side. "For
+            trade" is 0 on most copies, but it's a stepper sitting in room the
+            quantity row already had, so nothing is gained by hiding it. */}
         {formEditable && (
         <div className="field-grid">
           <label className="field">
             <span>Quantity</span>
             <QtyStepper value={quantity} min={1} onChange={setQuantity} onEnter={saveOnEnter} />
           </label>
-          {collectionFields && showForTrade && (
+          {collectionFields && (
             <label className="field">
               <span>For trade</span>
               <QtyStepper value={clampedForTrade} min={0} max={quantity} onChange={setForTrade} onEnter={saveOnEnter} />
             </label>
           )}
         </div>
-        )}
-        {collectionFields && formEditable && !showForTrade && (
-          <button
-            type="button"
-            className="sheet-reveal"
-            onClick={() => {
-              setShowForTrade(true);
-              setForTrade((v) => Math.max(1, v));
-            }}
-          >
-            <Icon name="tradelist" size={14} /> Mark copies for trade
-          </button>
-        )}
-
-        {/* Altered, signed, misprint … : facts about this cardboard, not about
-            the card, so only a collection copy is asked, and empty on nearly
-            every copy, so it stays a link until it holds something. Ticking a
-            box splits the copy onto its own line — your altered Bolt stops
-            sharing a row with the plain one — while every match (wish, deck
-            slot, owned count) carries on ignoring it. */}
-        {collectionFields && formEditable && (
-          showSpecial ? (
-            <SpecialConditionsField value={special} onChange={setSpecial} />
-          ) : (
-            <button type="button" className="sheet-reveal" onClick={() => setShowSpecial(true)}>
-              <Icon name="edit" size={14} /> Altered, signed, misprint…
-            </button>
-          )
         )}
 
         {/* Which zone the card sits in. A deck's zones are the one thing about a
@@ -1181,16 +1157,9 @@ export function CardSheet(props: CardSheetProps) {
         )}
 
         {/* Slot tags: your own labels on this card in this list ("Ramp",
-            "Turn-3 play"), which the group-by-tag view reads. Empty on nearly
-            every slot, so the field arrives when asked for. */}
+            "Turn-3 play"), which the group-by-tag view reads. */}
         {mode === 'deck' && deckCard?.deckId && (
-          showTags ? (
-            <TagField deckId={deckCard.deckId} tags={tags} onChange={setTags} />
-          ) : (
-            <button type="button" className="sheet-reveal" onClick={() => setShowTags(true)}>
-              <Icon name="tags" size={14} /> Tag this slot
-            </button>
-          )
+          <TagField deckId={deckCard.deckId} tags={tags} onChange={setTags} />
         )}
 
         {/* The slot was emptied out on purpose, and saving names the copy it
@@ -1201,6 +1170,7 @@ export function CardSheet(props: CardSheetProps) {
           </p>
         )}
 
+        </div>
         </div>
 
         {/* File-into-your-lists affordance, for the modes that aren't about your

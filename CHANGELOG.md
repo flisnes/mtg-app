@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.147.3
+
+- **The rules text moved up beside the card art.** It's the thing you read, so it sits at eye level with the picture, and what your copy is worth plus where it's filed moved down to lead the form. The text is never clipped or folded away any more, in any version of the sheet, so highlighting a phrase to search the database for it always works without a tap first.
+- **The edition line says the set code, not the set name.** "9ED · #268" instead of a set name that ate the whole line and pushed the collector number off the edge. The symbol still names the set if you hover it.
+- **Condition, finish, language and "special" are four dropdowns on one line.** Altered/signed/misprint is the fourth one rather than a link under the form, and copies for trade sits next to the quantity again. Nothing on the sheet hides behind a link to a field any more, slot tags included.
+- **A tall card sheet grows instead of scrolling.** A card with five abilities, or a form with every control open, expands the sheet up to the search bar before anything has to scroll.
+
 ## 0.147.2
 
 - **`set:` now shows you the set.** Put `set:blb` in the card search and the results stop being one tile per card and become one tile per printing that set actually holds, whatever printing you normally prefer to see. `forest set:blb` lays out all five Bloomburrow Forests side by side instead of picking one for you, and tapping any of them opens on that exact printing, ready to add.

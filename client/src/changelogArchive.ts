@@ -1,4 +1,4 @@
-// The older half of the changelog (0.143.3 down to 0.98.0), split out of
+// The older half of the changelog (0.144.1 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,24 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.144.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Re-scanning a deck, binder or box now files the copies you scanned into it, so they turn green like they do when you use "Scan cards". Before, the cards and counts were right but nothing was actually holding them. A re-scan whose counts already match is no longer a no-op either.',
+      },
+    ],
+  },
+  {
+    version: '0.144.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Filing a card from its sheet now asks which copies are going in when you own more than one. Tap a copy to send it, tap again for a second, then File. The copy you opened starts out picked, and the ones the container already holds are greyed out.',
+      },
+    ],
+  },
   {
     version: '0.143.3',
     changes: [

@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema.js';
 import type { JoinedEntry, JoinedWish } from '../db/queries.js';
-import { historyChange } from '../price/history.js';
+import { BADGE_WINDOW_DAYS, moverStats } from '../price/movers.js';
+import { convertToDisplay } from '../price/rates.js';
 import { priceValue, pricedForFinish, type CardSortPrefs, type SortFields } from './cardSort.js';
 
 // Sorting your own cards needs one thing the joined rows don't carry: the
@@ -13,6 +14,16 @@ import { priceValue, pricedForFinish, type CardSortPrefs, type SortFields } from
 // The collection page, the wishlist page and the search scoped into either of
 // them all sort by the same keys, so they all go through here. That's what
 // lets the scoped search offer the very same options the list page does.
+//
+// The change is measured over a fixed BADGE_WINDOW_DAYS window, the same one
+// the up/down badges on the tiles use. It used to be "since this card's first
+// reading", which is not a quantity you can rank a collection by: each card's
+// history starts the day you added it, and opening a card sheet while signed in
+// silently backfills that card from the server archive and lengthens its window
+// again. So the list ranked cards by how long they'd been tracked, mixed a
+// three-month drift in with a card added yesterday (one reading, a flat zero),
+// and disagreed with the very badges you'd check it against. A fixed window
+// measures every card over the same days, or reports nothing.
 
 export interface EntrySortData {
   changes?: Map<string, { delta: number; pct: number | null }>;
@@ -24,8 +35,12 @@ export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortDat
     if (!needChanges) return undefined;
     const m = new Map<string, { delta: number; pct: number | null }>();
     for (const h of await db.priceHistories.toArray()) {
-      const c = historyChange(h);
-      if (c) m.set(h.scryfallId, { delta: c.delta, pct: c.pct });
+      const s = moverStats(h, BADGE_WINDOW_DAYS);
+      if (!s) continue;
+      // Into the display currency, like the price sort: a history quoted in USD
+      // and one quoted in EUR are otherwise ranked against each other raw.
+      const delta = convertToDisplay(s.delta, s.cur === 'eur' ? 'EUR' : 'USD') ?? s.delta;
+      m.set(h.scryfallId, { delta, pct: s.pct });
     }
     return m;
   }, [needChanges]);

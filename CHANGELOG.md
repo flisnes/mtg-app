@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.147.6
+
+- **Sorting by price change actually sorts now.** The two price-change sorts measured each card from its own first recorded reading, which is a different day for every card: one you added three months ago showed a three-month drift, one added yesterday showed a flat zero, and opening a card's sheet quietly backfilled its history from the server and stretched its window again. So the list ranked your collection by how long it had been tracked rather than by anything about the price, which read as no sorting at all. Both sorts now measure the same seven days for every card, the same window the up and down arrows on the tiles use, and say so in their names. A card too new to have a week of readings sorts to the end instead of pretending it hasn't moved.
+- **A dollar move and a euro move are compared properly.** Price change put a $10 move above an €9 one because it never converted, unlike the price sort next to it. Both are now weighed in your own currency.
+
 ## 0.147.5
 
 - **The Special field counts instead of trailing off.** Tick two things about a copy and the dropdown said "Altere…", which told you less than nothing. It now reads "2 selected", spells them out on hover, and the line above the row still names the whole lot.

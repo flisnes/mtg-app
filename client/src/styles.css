@@ -2846,8 +2846,18 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   gap: 0.4rem;
 }
 .field-row > .field {
-  flex: 1 1 0;
+  /* Each field takes the width its own answer needs, then shares out what's
+     left — `1 1 0` gave all four an equal quarter, and a quarter of a 390px
+     phone is 51px of text: enough for "NM" and "EN", not for "2 selected"
+     beside them while "Nonfoil" sat in room it didn't want. Both the label and
+     the answer ellipsis if a row ever does run out. */
+  flex: 1 1 auto;
   min-width: 0;
+}
+.field-row > .field > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .field-row .field select,
 .field-row .field .sheet-picker-trigger {

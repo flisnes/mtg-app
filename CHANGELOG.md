@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.147.5
+
+- **The Special field counts instead of trailing off.** Tick two things about a copy and the dropdown said "Altere…", which told you less than nothing. It now reads "2 selected", spells them out on hover, and the line above the row still names the whole lot.
+- **The four dropdowns share out the width by what they hold.** They were an equal quarter each, so "Nonfoil" sat in room it didn't need while its neighbour ran out of it. Now the long answer gets the slack the short ones aren't using.
+
 ## 0.147.4
 
 - **The card sheet's dropdowns open inside the sheet.** Condition, finish and language were native dropdowns, which the phone drew as a box in the middle of the screen and the desktop as a panel floating off the field: two shapes for one control, neither of them part of the form you were filling in. They now unfold under the row like Special always did, and the sheet grows to make room. Only one is open at a time, so picking a language puts the condition list away.

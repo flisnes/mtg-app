@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.147.5',
+    changes: [
+      {
+        kind: 'fixed',
+        text:
+          'Two special conditions on one copy left the card sheet showing "Altere…". It now says "2 selected", and the four dropdowns share out the width by what they hold, so a long answer stops getting cut off.',
+      },
+    ],
+  },
+  {
     version: '0.147.4',
     changes: [
       {
@@ -189,15 +199,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Filing a card from its sheet now asks which copies are going in when you own more than one. Tap a copy to send it, tap again for a second, then File. The copy you opened starts out picked, and the ones the container already holds are greyed out.',
-      },
-    ],
-  },
-  {
-    version: '0.143.3',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Filing a card into a deck, binder or box that already holds copies of it no longer promises copies you do not own. Own two with one already filed there, and filing puts the loose copy away instead of claiming a third and warning you about it.',
       },
     ],
   },

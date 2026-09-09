@@ -620,6 +620,7 @@ export function CardSheet(props: CardSheetProps) {
     key: TraitKey;
     label: string;
     summary: string;
+    detail?: string;
     muted: boolean;
     options: SheetSelectOption[];
     selected: string[];
@@ -668,7 +669,12 @@ export function CardSheet(props: CardSheetProps) {
     traitFields.push({
       key: 'special',
       label: 'Special',
-      summary: specialLabel(special) || 'None',
+      // The only field here that can hold more than one answer, in a quarter of
+      // a phone's width: "Altered, Signed" truncates to "Altere…", which says
+      // less than a count does. The line above the row spells them all out.
+      summary:
+        special.length === 0 ? 'None' : special.length === 1 ? specialLabel(special) : `${special.length} selected`,
+      detail: special.length > 1 ? specialLabel(special) : undefined,
       muted: special.length === 0,
       options: SPECIAL_CONDITIONS.map((sc) => ({ value: sc, label: SPECIAL_CONDITION_LABELS[sc] })),
       selected: special,
@@ -1137,6 +1143,7 @@ export function CardSheet(props: CardSheetProps) {
                     key={f.key}
                     label={f.label}
                     summary={f.summary}
+                    detail={f.detail}
                     muted={f.muted}
                     open={openTrait === f.key}
                     onToggle={() => setOpenTrait((cur) => (cur === f.key ? null : f.key))}

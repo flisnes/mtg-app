@@ -9,8 +9,8 @@ import { Icon } from './icons.js';
 // the sheet grows by the height of the list and everything stays where it was.
 //
 // The trigger and the list are separate pieces because they sit in different
-// places: the trigger is one of four quarter-width fields on the traits row,
-// and the list needs the whole row (a quarter of a phone wraps "Crimped"). The
+// places: the trigger is one of up to four narrow fields on the traits row, and
+// the list needs the whole row (a quarter of a phone wraps "Crimped"). The
 // caller therefore owns which field is open — and only one ever is.
 
 export interface SheetSelectOption {
@@ -22,12 +22,17 @@ export interface SheetSelectOption {
 export function SheetSelectField({
   label,
   summary,
+  detail,
   muted = false,
   open,
   onToggle,
 }: {
   label: string;
   summary: string;
+  /** The answer spelled out, where `summary` counts it instead ("2 selected").
+   *  Read out by a screen reader and shown on hover, so the count is never the
+   *  only way to find out what's actually ticked. */
+  detail?: string;
   /** Nothing chosen yet ("None", "Any") — the answer reads dim. */
   muted?: boolean;
   open: boolean;
@@ -41,7 +46,8 @@ export function SheetSelectField({
         className="sheet-picker-trigger"
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-label={`${label}: ${summary}`}
+        aria-label={`${label}: ${detail ?? summary}`}
+        title={detail}
         onClick={onToggle}
       >
         <span className={muted ? 'sheet-picker-summary sheet-picker-summary-none' : 'sheet-picker-summary'}>

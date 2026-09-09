@@ -2,7 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { CollectionEntry, Condition, ContainerKind, CopyPrefs, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, SlotShape, SpecialCondition, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
-import { CONDITIONS, FINISHES, specialLabel } from '@mtg/shared';
+import {
+  CONDITIONS,
+  FINISHES,
+  SPECIAL_CONDITIONS,
+  SPECIAL_CONDITION_LABELS,
+  normalizeSpecialConditions,
+  specialLabel,
+} from '@mtg/shared';
 import {
   addDeckCard,
   addToCollection,
@@ -33,7 +40,7 @@ import { CardHistorySheet } from './CardHistory.js';
 import { ContainerPickerSheet } from './ContainerPickerSheet.js';
 import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
 import { FileCopiesSheet } from './FileCopiesSheet.js';
-import { SpecialConditionsField, SpecialConditionsList } from './SpecialConditions.js';
+import { SheetSelectField, SheetSelectList, type SheetSelectOption } from './SheetSelect.js';
 import { EventSheet } from './EventSheet.js';
 import { useOpenCollectionSearch, useOpenDbSearch } from './GlobalSearch.js';
 import { Icon, type IconName } from './icons.js';
@@ -119,6 +126,9 @@ export interface SessionCardValues {
   finish?: Finish;
   condition?: Condition;
 }
+
+/** The four dropdowns on the traits row; only one is ever open. */
+type TraitKey = 'condition' | 'finish' | 'lang' | 'special';
 
 /** Sentinel for the "any printing" edition option in wish mode. */
 const ANY_PRINTING = '';
@@ -395,10 +405,11 @@ export function CardSheet(props: CardSheetProps) {
   // each used to hide behind a link, which is a row of its own — no room saved
   // and a tap spent to get at a control that was going to fit anyway.
   const [traitsOpen, setTraitsOpen] = useState(false);
-  // The Special dropdown's own boxes. Open state lives here because the list
-  // spans the whole traits row rather than the quarter its trigger occupies —
-  // a floating panel would be clipped by the scroll region it sits in.
-  const [specialOpen, setSpecialOpen] = useState(false);
+  // Which of the four trait dropdowns is unfolded, if any. One piece of state
+  // rather than four, because they behave as one control: opening Language puts
+  // Condition away. The lists live outside the row of triggers (they need its
+  // whole width), so the row can't own this.
+  const [openTrait, setOpenTrait] = useState<TraitKey | null>(null);
   const [busy, setBusy] = useState(false);
   const [trend, setTrend] = useState<HistoryChange | null>(null);
   const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(null);
@@ -600,6 +611,76 @@ export function CardSheet(props: CardSheetProps) {
   const traitsVisible = traitWords.length > 0 && !anyBasicPicked;
   // Folded up, the line has to account for the fourth dropdown as well.
   const traitSummary = [...traitWords, ...(special.length > 0 ? [specialLabel(special)] : [])].join(' · ');
+
+  // The traits row as data: the four dropdowns and the one list that's open.
+  // Written out once rather than four near-identical blocks of JSX, because the
+  // trigger and its list are rendered in two different places and had to agree.
+  const anyOption: SheetSelectOption[] = anyPrefs ? [{ value: '', label: 'Any' }] : [];
+  const traitFields: {
+    key: TraitKey;
+    label: string;
+    summary: string;
+    muted: boolean;
+    options: SheetSelectOption[];
+    selected: string[];
+    multi?: boolean;
+    onPick: (value: string) => void;
+  }[] = [];
+  if (showCondition) {
+    traitFields.push({
+      key: 'condition',
+      label: anyPrefs ? 'Min. condition' : 'Condition',
+      summary: condition || 'Any',
+      muted: !condition,
+      options: [...anyOption, ...CONDITIONS.map((c) => ({ value: c, label: c }))],
+      selected: [condition],
+      onPick: (v) => setCondition(v as Condition | ''),
+    });
+  }
+  if (showFinish) {
+    traitFields.push({
+      key: 'finish',
+      label: 'Finish',
+      summary: finish ? FINISH_LABELS[finish as Finish] : 'Any',
+      muted: !finish,
+      options: [...anyOption, ...availableFinishes.map((f) => ({ value: f, label: FINISH_LABELS[f] }))],
+      selected: [finish],
+      onPick: (v) => setFinish(v as Finish | ''),
+    });
+  }
+  if (showLang) {
+    traitFields.push({
+      key: 'lang',
+      label: 'Language',
+      summary: lang ? lang.toUpperCase() : 'Any',
+      muted: !lang,
+      options: [...anyOption, ...LANGS.map((l) => ({ value: l, label: l.toUpperCase() }))],
+      selected: [lang],
+      onPick: setLang,
+    });
+  }
+  // Altered, signed, misprint …: a fact about this piece of cardboard, not about
+  // the card, so only a collection copy is asked, and the one field here that
+  // takes more than one answer. Ticking a box splits the copy onto its own line
+  // — your altered Bolt stops sharing a row with the plain one — while every
+  // match (wish, deck slot, owned count) carries on ignoring it.
+  if (collectionFields) {
+    traitFields.push({
+      key: 'special',
+      label: 'Special',
+      summary: specialLabel(special) || 'None',
+      muted: special.length === 0,
+      options: SPECIAL_CONDITIONS.map((sc) => ({ value: sc, label: SPECIAL_CONDITION_LABELS[sc] })),
+      selected: special,
+      multi: true,
+      onPick: (v) => {
+        const sc = v as SpecialCondition;
+        const next = special.includes(sc) ? special.filter((x) => x !== sc) : [...special, sc];
+        setSpecial(normalizeSpecialConditions(next) ?? []);
+      },
+    });
+  }
+  const openField = traitFields.find((f) => f.key === openTrait);
 
   // Full-size image + price for the currently-selected printing (falls back to the oracle default).
   const cardImage = printing?.imageNormal ?? oracleCard.imageNormal ?? printing?.imageSmall ?? oracleCard.imageSmall ?? null;
@@ -1041,69 +1122,43 @@ export function CardSheet(props: CardSheetProps) {
               type="button"
               className="sheet-traits-trigger"
               aria-expanded={traitsOpen}
-              onClick={() => setTraitsOpen((v) => !v)}
+              onClick={() => {
+                setTraitsOpen((v) => !v);
+                setOpenTrait(null);
+              }}
             >
               <span className="sheet-traits-summary">{traitSummary}</span>
               <Icon name="chevronDown" size={16} />
             </button>
             {traitsOpen && (
               <div className="field-row">
-                {showCondition && (
-                  <label className="field">
-                    <span>{anyPrefs ? 'Min. condition' : 'Condition'}</span>
-                    <select value={condition} onChange={(e) => setCondition(e.target.value as Condition | '')}>
-                      {anyPrefs && <option value="">Any</option>}
-                      {CONDITIONS.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                {showFinish && (
-                  <label className="field">
-                    <span>Finish</span>
-                    <select value={finish} onChange={(e) => setFinish(e.target.value as Finish | '')}>
-                      {anyPrefs && <option value="">Any</option>}
-                      {availableFinishes.map((f) => (
-                        <option key={f} value={f}>
-                          {FINISH_LABELS[f]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                {showLang && (
-                  <label className="field">
-                    <span>Language</span>
-                    <select value={lang} onChange={(e) => setLang(e.target.value)}>
-                      {anyPrefs && <option value="">Any</option>}
-                      {LANGS.map((l) => (
-                        <option key={l} value={l}>
-                          {l}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                {/* Altered, signed, misprint …: a fact about this piece of
-                    cardboard, not about the card, so only a collection copy is
-                    asked. Ticking a box splits the copy onto its own line —
-                    your altered Bolt stops sharing a row with the plain one —
-                    while every match (wish, deck slot, owned count) carries on
-                    ignoring it. */}
-                {collectionFields && (
-                  <SpecialConditionsField
-                    value={special}
-                    open={specialOpen}
-                    onToggle={() => setSpecialOpen((v) => !v)}
+                {traitFields.map((f) => (
+                  <SheetSelectField
+                    key={f.key}
+                    label={f.label}
+                    summary={f.summary}
+                    muted={f.muted}
+                    open={openTrait === f.key}
+                    onToggle={() => setOpenTrait((cur) => (cur === f.key ? null : f.key))}
                   />
-                )}
+                ))}
               </div>
             )}
-            {traitsOpen && collectionFields && specialOpen && (
-              <SpecialConditionsList value={special} onChange={setSpecial} />
+            {/* The one open list, under the whole row. Picking a single answer
+                is the end of the question, so it closes; ticking one of several
+                isn't, so Special stays open. */}
+            {traitsOpen && openField && (
+              <SheetSelectList
+                key={openField.key}
+                label={openField.label}
+                options={openField.options}
+                selected={openField.selected}
+                multi={openField.multi}
+                onPick={(v) => {
+                  openField.onPick(v);
+                  if (!openField.multi) setOpenTrait(null);
+                }}
+              />
             )}
           </div>
         )}

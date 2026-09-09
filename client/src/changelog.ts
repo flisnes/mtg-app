@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.147.4',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'Condition, finish and language now open inside the card sheet, the way Special does, instead of as a box in the middle of the screen. One at a time, all at the same line spacing, capped at five rows with the current answer already in view.',
+      },
+    ],
+  },
+  {
     version: '0.147.3',
     changes: [
       {
@@ -188,15 +198,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Filing a card into a deck, binder or box that already holds copies of it no longer promises copies you do not own. Own two with one already filed there, and filing puts the loose copy away instead of claiming a third and warning you about it.',
-      },
-    ],
-  },
-  {
-    version: '0.143.2',
-    changes: [
-      {
-        kind: 'fixed',
-        text: '"Filed: Nowhere" hid cards you own two of when one copy was filed away. A line with copies still loose now shows up under it, so selecting them all catches everything left in the shoebox.',
       },
     ],
   },

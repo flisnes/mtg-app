@@ -1,20 +1,9 @@
-import {
-  SPECIAL_CONDITIONS,
-  SPECIAL_CONDITION_LABELS,
-  normalizeSpecialConditions,
-  specialLabel,
-  type SpecialCondition,
-} from '@mtg/shared';
-import { Icon } from './icons.js';
+import { specialLabel, type SpecialCondition } from '@mtg/shared';
 
 // What's remarkable about one piece of cardboard beyond its grade: altered,
 // signed, misprint, miscut, crimped. Several can be true of the same card, so
-// the picker is a checkbox list rather than a select, and the boxes unfold in
-// flow under the row it sits on — the card sheet's body is a scroll container,
-// and a floating panel would be clipped by it (the same reason EditionPicker
-// does). The trigger and the list are separate pieces because the trigger is a
-// quarter-width field on the traits row and the list needs the whole row (a
-// quarter of a phone wraps "Crimped"), so the sheet lays them out itself.
+// the card sheet asks for them with a checkbox list (SheetSelect's `multi`
+// mode) rather than a picker with one answer.
 //
 // This is an annotation on cardboard you own, never a fact about the card: no
 // wish, deck slot or ownership count reads it (see SpecialCondition in
@@ -30,73 +19,4 @@ export function specialMark(
 ): { node: string; cls: string; title: string } | undefined {
   if (!special?.length) return undefined;
   return { node: 'A', cls: 'badge-special', title: specialLabel(special) };
-}
-
-/**
- * The "Special" dropdown as it sits on the card sheet's traits row. Open state
- * belongs to the caller so the list (below) can be laid out as its sibling.
- */
-export function SpecialConditionsField({
-  value,
-  open,
-  onToggle,
-  disabled = false,
-}: {
-  value: SpecialCondition[];
-  open: boolean;
-  onToggle: () => void;
-  disabled?: boolean;
-}) {
-  const summary = specialLabel(value) || 'None';
-  return (
-    <div className={`field special-field${open ? ' open' : ''}`}>
-      <span>Special</span>
-      <button
-        type="button"
-        className="special-trigger"
-        disabled={disabled}
-        aria-expanded={open}
-        onClick={onToggle}
-      >
-        <span className={value.length ? 'special-summary' : 'special-summary special-summary-none'}>{summary}</span>
-        <Icon name="chevronDown" size={16} />
-      </button>
-    </div>
-  );
-}
-
-/** The boxes themselves, rendered under the whole traits row. */
-export function SpecialConditionsList({
-  value,
-  onChange,
-}: {
-  value: SpecialCondition[];
-  onChange: (next: SpecialCondition[]) => void;
-}) {
-  function toggle(s: SpecialCondition) {
-    const next = value.includes(s) ? value.filter((v) => v !== s) : [...value, s];
-    onChange(normalizeSpecialConditions(next) ?? []);
-  }
-  return (
-    <div className="special-list" role="group" aria-label="Special conditions">
-      {SPECIAL_CONDITIONS.map((s) => {
-        const checked = value.includes(s);
-        return (
-          <button
-            key={s}
-            type="button"
-            className="special-row"
-            role="checkbox"
-            aria-checked={checked}
-            onClick={() => toggle(s)}
-          >
-            <span className={`select-box${checked ? ' checked' : ''}`} aria-hidden>
-              {checked && <Icon name="check" size={14} />}
-            </span>
-            {SPECIAL_CONDITION_LABELS[s]}
-          </button>
-        );
-      })}
-    </div>
-  );
 }

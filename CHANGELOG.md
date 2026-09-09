@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.147.4
+
+- **The card sheet's dropdowns open inside the sheet.** Condition, finish and language were native dropdowns, which the phone drew as a box in the middle of the screen and the desktop as a panel floating off the field: two shapes for one control, neither of them part of the form you were filling in. They now unfold under the row like Special always did, and the sheet grows to make room. Only one is open at a time, so picking a language puts the condition list away.
+- **The lists all look the same and stop at five rows.** Special's checkboxes and the other three sit at the same line spacing, and a long list (eleven languages) scrolls inside itself rather than pushing the buttons off the screen. It opens with the current answer already in view.
+
 ## 0.147.3
 
 - **The rules text moved up beside the card art.** It's the thing you read, so it sits at eye level with the picture, and what your copy is worth plus where it's filed moved down to lead the form. The text is never clipped or folded away any more, in any version of the sheet, so highlighting a phrase to search the database for it always works without a tap first.

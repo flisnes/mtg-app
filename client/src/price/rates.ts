@@ -153,6 +153,18 @@ export function convertToDisplay(amount: number, from: BaseCurrency): number | n
   return (amount / usdPerEur) * target;
 }
 
+/**
+ * USD → EUR, or null when no rate is cached. Acquisition prices are stored in
+ * EUR cents whatever the display settings say, so this is how a card quoted
+ * only in dollars gets a recorded basis at all (see price/acquisition.ts).
+ * Null is common and expected: rates are only fetched when the display
+ * currency differs from the base one.
+ */
+export function usdToEur(amount: number): number | null {
+  const usdPerEur = rateFromEur('USD');
+  return usdPerEur == null ? null : amount / usdPerEur;
+}
+
 /** True when the display currency is reachable — i.e. converted prices are showable. */
 export function canConvert(): boolean {
   const { displayCurrency, baseCurrency } = getPrefs();

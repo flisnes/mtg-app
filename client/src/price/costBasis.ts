@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { DayReadings, UserEvent } from '@mtg/shared';
+import type { DayReadings, Finish, UserEvent } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
 import { centsNearest, dayKeyOf, type HistoryChange } from './history.js';
@@ -28,6 +28,20 @@ import { convertToDisplay } from './rates.js';
 //
 // Rung 3 is an estimate off the archive rather than a fact about your money, so
 // it's flagged (`estimated`) and the sheet says so.
+//
+// Foils get a second flag. The daily archive is nonfoil-only (see
+// notes/foil-price-tracking.md), so rung 3 on a foil copy prices it off the
+// plain version, which for a chase foil is not even the right order of
+// magnitude. Same for anything acquired before v0.53.0, when every finish was
+// stamped with the nonfoil price. Neither is fixable after the fact — we have
+// no historical foil prices to go back for — so both are flagged
+// (`crossFinish`) and the sheet says which number it couldn't stand behind.
+
+/**
+ * Adds recorded before this stamped the nonfoil price on every finish; a foil's
+ * basis from before it is the plain version's price. v0.53.0, 2026-07-25.
+ */
+export const FOIL_PRICING_SINCE = Date.parse('2026-07-25T00:00:00Z');
 
 /** What the recorded acquisitions of one printing cost, averaged per copy. */
 export interface CostBasis {
@@ -40,6 +54,9 @@ export interface CostBasis {
   /** True when any copy's figure came off the archive (rung 3) rather than a
    *  recorded price. */
   estimated: boolean;
+  /** True when any counted copy is foil or etched and its figure could only
+   *  come from a nonfoil price. See the note above. */
+  crossFinish: boolean;
 }
 
 /**
@@ -52,22 +69,29 @@ export interface CostBasis {
  * without it the ladder stops at rung 2, which is what callers that have no
  * history to hand get.
  *
- * Prices are per copy *and per finish* as stamped, but averaged across finishes
- * here, because a PriceHistory has no foil lane to separate them with yet. When
- * it grows one, this is where the finish filter goes.
+ * Prices are stamped per copy *and per finish*, so pass the `finish` being
+ * shown and only that finish's acquisitions count: a card owned both plain and
+ * foil gets two honest bases rather than one blended average. Adds that name no
+ * finish (an "any printing" wish fulfilled, a lands-box basic) count towards
+ * every finish. Omit `finish` to average across all of them, which is what
+ * callers with no single finish in view want.
  */
 export function costBasisOf(
   events: readonly UserEvent[],
   scryfallId?: string,
   history?: DayReadings,
+  finish?: Finish,
 ): CostBasis | null {
   let paid = 0;
   let copies = 0;
   let since = Infinity;
   let estimated = false;
+  let crossFinish = false;
   for (const e of events) {
     if (e.kind !== 'collection.add') continue;
     if (scryfallId && e.scryfallId && e.scryfallId !== scryfallId) continue;
+    if (finish && e.finish && e.finish !== finish) continue;
+    const copyFinish = e.finish ?? finish ?? 'nonfoil';
     let cents = e.priceEurCents ?? null;
     if (cents == null) {
       if (!history) continue;
@@ -75,6 +99,9 @@ export function costBasisOf(
       if (!near) continue;
       cents = near.cents;
       estimated = true;
+      if (copyFinish !== 'nonfoil') crossFinish = true;
+    } else if (copyFinish !== 'nonfoil' && e.ts < FOIL_PRICING_SINCE) {
+      crossFinish = true;
     }
     const qty = e.qty ?? 1;
     paid += (cents / 100) * qty;
@@ -82,7 +109,7 @@ export function costBasisOf(
     if (e.ts < since) since = e.ts;
   }
   if (copies <= 0) return null;
-  return { perCopy: paid / copies, copies, since, estimated };
+  return { perCopy: paid / copies, copies, since, estimated, crossFinish };
 }
 
 /**
@@ -95,19 +122,20 @@ export function useCostBasis(
   oracleId: string | undefined,
   scryfallId: string | undefined,
   history?: DayReadings | null,
+  finish?: Finish,
 ): CostBasis | null | undefined {
   return useLiveQuery(async () => {
     if (!oracleId) return null;
     const events = await db.events.where('oracleId').equals(oracleId).toArray();
-    return costBasisOf(events, scryfallId, history ?? undefined);
-  }, [oracleId, scryfallId, history]);
+    return costBasisOf(events, scryfallId, history ?? undefined, finish);
+  }, [oracleId, scryfallId, history, finish]);
 }
 
 /** A card measured against what it cost, with both figures in one currency. */
 export interface AcquisitionGain {
   /** Average paid per copy. */
   paid: number;
-  /** Latest recorded price. */
+  /** What a copy is worth now. */
   now: number;
   /** now − paid. */
   delta: number;
@@ -117,23 +145,37 @@ export interface AcquisitionGain {
   since: number;
   /** The basis was estimated off the archive, not recorded (see CostBasis). */
   estimated: boolean;
+  /** The basis could only come from a nonfoil price (see CostBasis). */
+  crossFinish: boolean;
 }
 
 /**
- * Line the latest reading up against what the copies cost. Null when nothing
- * was paid on record, or when a USD-quoted card and a EUR price can't be put
- * in one currency because there's no rate to hand.
+ * Line what a copy is worth now up against what the copies cost. Null when
+ * nothing was paid on record, or when a USD-quoted card and a EUR price can't
+ * be put in one currency because there's no rate to hand.
+ *
+ * `now` is the current price of the *finish being shown*, which callers that
+ * know it must pass: the trend's own last reading is a nonfoil number, and
+ * measuring what you paid for a foil against the plain version's price invents
+ * a loss on every foil card in the collection. Without it the fallback is that
+ * last reading, which is right for nonfoil and all a caller with no printing to
+ * hand (the sealed shelf) can offer.
  */
-export function acquisitionGain(trend: HistoryChange, basis: CostBasis | null | undefined): AcquisitionGain | null {
+export function acquisitionGain(
+  trend: HistoryChange,
+  basis: CostBasis | null | undefined,
+  now?: { amount: number; currency: BaseCurrency } | null,
+): AcquisitionGain | null {
   if (!basis || !(basis.perCopy > 0)) return null;
-  const from: BaseCurrency = trend.cur === 'eur' ? 'EUR' : 'USD';
-  const now = convertToDisplay(trend.current, from);
+  const from: BaseCurrency = now ? now.currency : trend.cur === 'eur' ? 'EUR' : 'USD';
+  const raw = now ? now.amount : trend.current;
+  const converted = convertToDisplay(raw, from);
   const paid = convertToDisplay(basis.perCopy, 'EUR');
   const pair =
-    now != null && paid != null
-      ? { now, paid, unit: getPrefs().displayCurrency }
-      : trend.cur === 'eur'
-        ? { now: trend.current, paid: basis.perCopy, unit: 'EUR' }
+    converted != null && paid != null
+      ? { now: converted, paid, unit: getPrefs().displayCurrency }
+      : from === 'EUR'
+        ? { now: raw, paid: basis.perCopy, unit: 'EUR' }
         : null;
   if (!pair) return null;
   const delta = pair.now - pair.paid;
@@ -143,5 +185,6 @@ export function acquisitionGain(trend: HistoryChange, basis: CostBasis | null | 
     pct: pair.paid ? (delta / pair.paid) * 100 : null,
     since: basis.since,
     estimated: basis.estimated,
+    crossFinish: basis.crossFinish,
   };
 }

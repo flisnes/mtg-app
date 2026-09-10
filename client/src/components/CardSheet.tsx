@@ -51,7 +51,7 @@ import { PriceChartSheet } from './PriceChart.js';
 import { PriceTrend } from './PriceTrend.js';
 import { useToast } from './Toast.js';
 import type { HistoryEntry } from '../history/useHistoryEntries.js';
-import { formatPrice, pricedForFinish } from './CardSorting.js';
+import { formatPrice, pickPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
 import { TagField } from './TagField.js';
@@ -513,18 +513,28 @@ export function CardSheet(props: CardSheetProps) {
     };
   }, [shownId]);
 
+  const printing = useMemo(
+    () => printings.find((p) => p.scryfallId === scryfallId),
+    [printings, scryfallId],
+  );
+
   // What the copies cost, so the trend can say how the card has done for *you*
   // rather than how our archive has done. The history goes in because a copy
   // with no recorded price is valued from the reading nearest the day it went
   // in (see costBasis.ts), and the merged row is the one with the server's
   // longer window in it.
-  const basis = useCostBasis(oracleCard.oracleId, shownId, priceHistory);
-  const gain = trend ? acquisitionGain(trend, basis) : null;
-
-  const printing = useMemo(
-    () => printings.find((p) => p.scryfallId === scryfallId),
-    [printings, scryfallId],
+  //
+  // The finish goes in twice over, and both matter for a foil. It picks which
+  // acquisitions count, and it picks the price the gain is measured *to* — the
+  // same quote the header prints, not the tracked line's last reading, which is
+  // the nonfoil price and would show a loss on every foil you own.
+  const shownFinish: Finish = finish || 'nonfoil';
+  const basis = useCostBasis(oracleCard.oracleId, shownId, priceHistory, shownFinish);
+  const nowQuote = useMemo(
+    () => pickPrice([pricedForFinish(printing, shownFinish), oracleCard]),
+    [printing, shownFinish, oracleCard],
   );
+  const gain = trend ? acquisitionGain(trend, basis, nowQuote) : null;
   // "Do I own this card (any printing)?" — live so it reflects edits made from
   // this very sheet. Shown everywhere except plain edit mode, where the entry
   // being edited already proves ownership.
@@ -695,7 +705,7 @@ export function CardSheet(props: CardSheetProps) {
   // Back face for double-faced cards (transform / modal DFC / …); absent for single-faced ones.
   const cardBackImage =
     printing?.imageBackNormal ?? oracleCard.imageBackNormal ?? printing?.imageBackSmall ?? oracleCard.imageBackSmall ?? null;
-  const cardPrice = formatPrice(pricedForFinish(printing, finish || 'nonfoil'), oracleCard) ?? '—';
+  const cardPrice = formatPrice(pricedForFinish(printing, shownFinish), oracleCard) ?? '—';
   // Flip state for the shown card art; reset when switching editions (a
   // different printing may not be double-faced at all).
   const [flipped, setFlipped] = useState(false);
@@ -1066,7 +1076,14 @@ export function CardSheet(props: CardSheetProps) {
             lead the form rather than crowding the column beside the art. */}
         <div className="sheet-worth">
           <div className="result-price">{cardPrice}</div>
-          {trend && trend.points > 1 && <PriceTrend trend={trend} gain={gain} onOpen={() => setChartOpen(true)} />}
+          {trend && trend.points > 1 && (
+            <PriceTrend
+              trend={trend}
+              gain={gain}
+              nonfoilLine={shownFinish !== 'nonfoil'}
+              onOpen={() => setChartOpen(true)}
+            />
+          )}
           {mode !== 'edit' && ownedQty > 0 && (
             <OwnedHere
               qty={ownedQty}
@@ -1366,6 +1383,8 @@ export function CardSheet(props: CardSheetProps) {
           oracleId={oracleCard.oracleId}
           scryfallId={shownId}
           history={priceHistory}
+          finish={shownFinish}
+          now={nowQuote}
           onEventClick={(e) => {
             setChartOpen(false);
             setEventEntry({ kind: 'single', id: e.id, ts: e.ts, event: e });

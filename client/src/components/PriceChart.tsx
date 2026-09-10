@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { DAY_MS, type DayReadings, type UserEvent, type UserEventKind } from '@mtg/shared';
+import { DAY_MS, type DayReadings, type Finish, type UserEvent, type UserEventKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
 import { costBasisOf } from '../price/costBasis.js';
@@ -22,6 +22,13 @@ import { usePlotZoom } from './usePlotZoom.js';
 // that's the number about your money. Only a card with no recorded acquisition
 // price falls back to "since tracking began", which is a fact about our archive.
 //
+// The line itself is the *nonfoil* price: that's the only series we archive
+// daily (see notes/foil-price-tracking.md). So for a foil the hero figure is
+// the card's real current price, passed in by the sheet, while the line below
+// it charts the plain version's movement — and a footnote says so, because a
+// foil's line and a foil's price are two different things and passing one off
+// as the other is how you end up trusting a number you shouldn't.
+//
 // Everything is drawn in the display currency: readings are stored per day in
 // EUR/USD cents (price/history.ts) and acquisition prices in EUR cents, so both
 // go through convertToDisplay before they ever share an axis.
@@ -29,6 +36,9 @@ import { usePlotZoom } from './usePlotZoom.js';
 // Without a card (`oracleId` omitted) the same chart draws a bare price line —
 // that's the sealed shelf's use, where a box has no oracleId, no event log and
 // so nothing to mark on it.
+
+/** How a finish reads in a sentence. */
+const FINISH_WORD: Record<Finish, string> = { nonfoil: 'nonfoil', foil: 'foil', etched: 'etched foil' };
 
 /** Events that moved money, and so earn a marker on the line itself. */
 const MAJOR: ReadonlySet<UserEventKind> = new Set<UserEventKind>(['collection.add', 'collection.remove']);
@@ -81,6 +91,8 @@ export function PriceChartSheet({
   oracleId,
   scryfallId,
   history,
+  finish,
+  now,
   onEventClick,
   onClose,
 }: {
@@ -92,6 +104,14 @@ export function PriceChartSheet({
   /** The shown printing; the timeline scopes to it plus printing-agnostic events. */
   scryfallId?: string;
   history: DayReadings;
+  /** Finish on show, which decides which acquisitions the basis counts. */
+  finish?: Finish;
+  /**
+   * What a copy of that finish is worth right now. The tracked line is nonfoil,
+   * so this is what the headline change measures to; omit it (the sealed shelf)
+   * and the line's last reading stands in.
+   */
+  now?: { amount: number; currency: BaseCurrency } | null;
   /** Tapping a marker opens that event (the card sheet's own event modal). */
   onEventClick?: (e: UserEvent) => void;
   onClose: () => void;
@@ -147,7 +167,15 @@ export function PriceChartSheet({
 
   // What happened to this printing, split into line markers and rug ticks.
   const marks = useMemo(() => {
-    const empty = { markers: [] as Marker[], rug: [] as { day: number; ts: number; events: UserEvent[] }[], earlier: 0, costBasis: null as number | null };
+    const empty = {
+      markers: [] as Marker[],
+      rug: [] as { day: number; ts: number; events: UserEvent[] }[],
+      earlier: 0,
+      costBasis: null as number | null,
+      basisLine: null as number | null,
+      basisEstimated: false,
+      basisCrossFinish: false,
+    };
     if (!series || !events) return empty;
     const first = series.pts[0]!.day;
     const last = series.pts[series.pts.length - 1]!.day;
@@ -188,7 +216,7 @@ export function PriceChartSheet({
     // basis this chart declined to draw. Acquisition prices are always EUR
     // cents; without a EUR rate we can't put them on a USD-quoted axis, so the
     // line just doesn't draw.
-    const basis = costBasisOf(scoped, scryfallId, history);
+    const basis = costBasisOf(scoped, scryfallId, history, finish);
     const costBasis = basis && series.eurRate != null ? basis.perCopy * series.eurRate : null;
 
     return {
@@ -196,10 +224,21 @@ export function PriceChartSheet({
       rug: [...byRug.values()].sort((a, b) => a.ts - b.ts),
       earlier,
       costBasis,
+      // What you paid for a foil doesn't belong on a nonfoil axis: the gap
+      // between the two is a difference of finish, not a gain, and drawing it
+      // squashes the line it's supposed to be compared against. The figure
+      // still leads the sheet, with the footnote to explain it.
+      basisLine: !finish || finish === 'nonfoil' ? costBasis : null,
+      basisEstimated: !!basis?.estimated,
+      basisCrossFinish: !!basis?.crossFinish,
     };
-  }, [series, events, scryfallId, history]);
+  }, [series, events, scryfallId, history, finish]);
 
   const money = (v: number) => fmtMoney(v, series?.unit ?? 'EUR');
+  const isFoil = !!finish && finish !== 'nonfoil';
+  // A basis can read as cross-finish without a finish prop (the copies carry
+  // their own), so "foil" is the honest default word for it.
+  const finishWord = isFoil ? FINISH_WORD[finish!] : 'foil';
 
   const pts = series?.pts ?? [];
   const W = width ? Math.max(MIN_W, width) : 0;
@@ -239,9 +278,9 @@ export function PriceChartSheet({
     }
     // The full view always makes room for the paid line — it's the comparison
     // the chart is for. Zoomed in, the detail wins and the line can fall off.
-    if (marks.costBasis != null && !zoom.zoomed) {
-      lo = Math.min(lo, marks.costBasis);
-      hi = Math.max(hi, marks.costBasis);
+    if (marks.basisLine != null && !zoom.zoomed) {
+      lo = Math.min(lo, marks.basisLine);
+      hi = Math.max(hi, marks.basisLine);
     }
     // A flat line still needs a band to sit in; otherwise leave air above and
     // below so the extremes aren't glued to the frame.
@@ -268,7 +307,7 @@ export function PriceChartSheet({
     }
 
     return { W, x, y, line, area, t0, t1, span, plotW, yTicks: niceTicks(yMin, yMax, 4), xTicks, days, vis };
-  }, [series, W, marks.costBasis, zoom.lo, zoom.hi, zoom.zoomed]);
+  }, [series, W, marks.basisLine, zoom.lo, zoom.hi, zoom.zoomed]);
 
   /** Nearest reading to a client x within the plot, for scrub and keyboard. */
   function pick(clientX: number) {
@@ -292,6 +331,18 @@ export function PriceChartSheet({
 
   const latest = pts[pts.length - 1];
   const firstPt = pts[0];
+  // Today's price for the finish on show, in the unit the axis is drawn in.
+  // Null when the two can't be reconciled (a USD-quoted line, a EUR-quoted
+  // foil and no rate to hand), and then the line's own last reading stands in.
+  const nowV = useMemo(() => {
+    if (!now || !series) return null;
+    if (series.unit === getPrefs().displayCurrency) {
+      const v = convertToDisplay(now.amount, now.currency);
+      if (v != null) return v;
+    }
+    return series.unit === now.currency ? now.amount : null;
+  }, [now, series]);
+  const heroV = nowV ?? latest?.v ?? null;
   const picked = cursor != null ? pts[cursor] : undefined;
   // A zoom can leave the crosshair off-frame; it belongs to the view, not the
   // whole series.
@@ -303,8 +354,8 @@ export function PriceChartSheet({
   // "Since tracking began" is only the headline when nothing was paid on record.
   const change = firstPt && latest ? latest.v - firstPt.v : 0;
   const gain =
-    marks.costBasis != null && latest
-      ? { paid: marks.costBasis, delta: latest.v - marks.costBasis, pct: marks.costBasis ? ((latest.v - marks.costBasis) / marks.costBasis) * 100 : null }
+    marks.costBasis != null && heroV != null
+      ? { paid: marks.costBasis, delta: heroV - marks.costBasis, pct: marks.costBasis ? ((heroV - marks.costBasis) / marks.costBasis) * 100 : null }
       : null;
   const headline = gain ? gain.delta : change;
   const headlinePct = gain ? gain.pct : firstPt?.v ? (change / firstPt.v) * 100 : null;
@@ -339,15 +390,19 @@ export function PriceChartSheet({
           </button>
         </div>
 
-        {latest && (
+        {latest && heroV != null && (
           <div className="price-chart-hero">
-            <div className="price-chart-now">{money(latest.v)}</div>
+            <div className="price-chart-now">{money(heroV)}</div>
             <div className={`price-change price-${dir}`}>
               {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·'} {money(Math.abs(headline))}
               {headlinePct != null && ` (${headlinePct >= 0 ? '+' : '−'}${Math.abs(headlinePct).toFixed(1)}%)`}
               <span className="fine-print">
                 {' '}
-                {gain ? `on the ${money(gain.paid)} you paid` : `since ${fmtDate(firstPt!.ts)}`}
+                {gain
+                  ? marks.basisEstimated || marks.basisCrossFinish
+                    ? `over an estimated ${money(gain.paid)}`
+                    : `on the ${money(gain.paid)} you paid`
+                  : `since ${fmtDate(firstPt!.ts)}`}
               </span>
             </div>
           </div>
@@ -399,11 +454,11 @@ export function PriceChartSheet({
 
                 {/* What you paid per copy — the line the current price is worth
                     comparing against. Dashed so it never reads as a gridline. */}
-                {marks.costBasis != null && (
+                {marks.basisLine != null && (
                   <g>
-                    <line className="pc-basis" x1={PAD.l} y1={geom.y(marks.costBasis)} x2={geom.W - PAD.r} y2={geom.y(marks.costBasis)} />
-                    <text className="pc-basis-label" x={geom.W - PAD.r} y={geom.y(marks.costBasis) - 5} textAnchor="end">
-                      paid {money(marks.costBasis)}
+                    <line className="pc-basis" x1={PAD.l} y1={geom.y(marks.basisLine)} x2={geom.W - PAD.r} y2={geom.y(marks.basisLine)} />
+                    <text className="pc-basis-label" x={geom.W - PAD.r} y={geom.y(marks.basisLine) - 5} textAnchor="end">
+                      paid {money(marks.basisLine)}
                     </text>
                   </g>
                 )}
@@ -546,6 +601,22 @@ export function PriceChartSheet({
         {marks.earlier > 0 && (
           <p className="fine-print">
             {marks.earlier} earlier event{marks.earlier === 1 ? '' : 's'} happened before price tracking began — the History tab has them.
+          </p>
+        )}
+
+        {/* Say which price the line is. A foil owner reading a nonfoil line as
+            their card's history is the whole reason this footnote exists. */}
+        {isFoil && (
+          <p className="fine-print">
+            The line is the nonfoil price. We don't record {finishWord} prices day by day yet, so the figure above the
+            chart is today's {finishWord} price and the line shows how the plain version has moved.
+          </p>
+        )}
+        {gain && (marks.basisCrossFinish || marks.basisEstimated) && (
+          <p className="fine-print">
+            {marks.basisCrossFinish
+              ? `The change is measured against an estimated ${money(marks.costBasis!)} per copy, taken from the nonfoil price: we have no ${finishWord} price on record for the day you got it.`
+              : `The change is measured against an estimated ${money(marks.costBasis!)} per copy. No price was recorded when you got it, so the reading nearest that day stands in.`}
           </p>
         )}
 

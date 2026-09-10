@@ -15,8 +15,24 @@ import { Sparkline } from './Sparkline.js';
  * it" rather than "since you paid" so the two aren't passed off as one. Only a
  * card we can't price at acquisition at all falls back to "since tracking
  * began", which is a fact about our archive and not about you.
+ *
+ * An estimate is marked "est." with the reason in the tooltip, and a foil whose
+ * basis could only come from a nonfoil price says so outright: we archive
+ * nonfoil prices only (see notes/foil-price-tracking.md), and a foil measured
+ * against the plain version's price is not a number to act on.
  */
-export function PriceTrend({ trend, gain, onOpen }: { trend: HistoryChange; gain?: AcquisitionGain | null; onOpen: () => void }) {
+export function PriceTrend({
+  trend,
+  gain,
+  nonfoilLine,
+  onOpen,
+}: {
+  trend: HistoryChange;
+  gain?: AcquisitionGain | null;
+  /** The sparkline is the nonfoil series but the copy on show isn't nonfoil. */
+  nonfoilLine?: boolean;
+  onOpen: () => void;
+}) {
   const delta = gain ? gain.delta : trend.delta;
   const pct = gain ? gain.pct : trend.pct;
   const dir = delta > 0.001 ? 'up' : delta < -0.001 ? 'down' : 'flat';
@@ -28,10 +44,14 @@ export function PriceTrend({ trend, gain, onOpen }: { trend: HistoryChange; gain
       onClick={onOpen}
       title={
         gain
-          ? gain.estimated
-            ? `Worth about ${fmtMoney(gain.paid, gain.unit)} per copy when you got it`
-            : `You paid ${fmtMoney(gain.paid, gain.unit)} per copy`
-          : 'Open the full price chart'
+          ? gain.crossFinish
+            ? `Estimated at ${fmtMoney(gain.paid, gain.unit)} per copy from the nonfoil price, the only one we track day by day`
+            : gain.estimated
+              ? `Worth about ${fmtMoney(gain.paid, gain.unit)} per copy when you got it`
+              : `You paid ${fmtMoney(gain.paid, gain.unit)} per copy`
+          : nonfoilLine
+            ? 'Open the full price chart. The tracked line is the nonfoil price.'
+            : 'Open the full price chart'
       }
     >
       <Sparkline values={trend.series} width={64} />
@@ -40,7 +60,7 @@ export function PriceTrend({ trend, gain, onOpen }: { trend: HistoryChange; gain
         {pct != null && ` (${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}%)`}
         <span className="fine-print">
           {' · '}
-          {gain ? (gain.estimated ? 'since you got it' : 'since you paid') : `${trend.points} pts`}
+          {gain ? (gain.estimated || gain.crossFinish ? 'since you got it (est.)' : 'since you paid') : `${trend.points} pts`}
         </span>
       </div>
       <Icon name="expand" size={14} />

@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.147.8
+
+- **A foil card is now valued against what you paid for the foil.** The value change on a foil weighed your foil purchase against the plain version's price, which turned every foil you own into an invented loss. It now compares today's foil price to what that copy cost, and a card you hold both plain and foil gets a figure for each instead of one blended average.
+- **The price chart says which price it draws.** We record the nonfoil price daily and nothing else yet, so the chart's line is the nonfoil one. On a foil the big figure above it is today's foil price, a footnote explains the difference, and the "paid" line is left off the plot rather than squashing the line it can't honestly be compared to.
+- **An estimated starting price admits it.** Where we have no price on record for the day a foil came in, the change is worked out from the nonfoil price, and the sheet marks it "(est.)" and says so in full on the chart. Foils bought before the app priced foils separately are flagged the same way.
+- **Cards priced only in dollars get a starting price too.** An acquisition with no euro quote for its finish now records the dollar quote converted, instead of recording nothing.
+
 ## 0.147.7
 
 - **The collection's price sorts are now "Value change" and "Value change %", measured since you got the card.** They sort by the very figure the card sheet prints, so a card can never rank by one number and show you another. Yesterday's seven-day window is gone: for how the market moved over a set span, Price movers still has 7, 30 and 90 days.

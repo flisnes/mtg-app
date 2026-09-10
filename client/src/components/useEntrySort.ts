@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema.js';
+import { getPricesByIds, priceForFinish } from '../cardDb/prices.js';
 import type { JoinedEntry, JoinedWish } from '../db/queries.js';
 import { acquisitionGain, costBasisOf } from '../price/costBasis.js';
 import { historyChange } from '../price/history.js';
-import { priceValue, pricedForFinish, type CardSortPrefs, type SortFields } from './cardSort.js';
+import { valueKeyOf } from '../price/collectionValue.js';
+import { pickPrice, priceValue, pricedForFinish, type CardSortPrefs, type SortFields } from './cardSort.js';
 
 // Sorting your own cards needs one thing the joined rows don't carry: the
 // recorded price change. It comes from priceHistories, the biggest user-data
@@ -31,6 +33,8 @@ import { priceValue, pricedForFinish, type CardSortPrefs, type SortFields } from
 // movement over a comparable window, that's what Price movers is for.
 
 export interface EntrySortData {
+  /** Keyed by printing *and* finish (valueKeyOf): your foil copy and your plain
+   *  one cost different money and are worth different money. */
   changes?: Map<string, { delta: number; pct: number | null }>;
 }
 
@@ -46,6 +50,10 @@ export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortDat
       db.priceHistories.toArray(),
       db.events.where('kind').equals('collection.add').toArray(),
     ]);
+    // Today's price per finish, because that's what the change measures *to*.
+    // The tracked readings are nonfoil, so a foil row weighed against its own
+    // last reading would show a loss it never took (see costBasis.ts).
+    const prices = await getPricesByIds(entries.map((e) => e.scryfallId));
     const historyById = new Map(histories.map((h) => [h.scryfallId, h]));
     // Grouped by oracle because a printing-agnostic add (an "any printing" wish
     // fulfilled, a lands-box basic) counts towards every printing of that card.
@@ -61,16 +69,19 @@ export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortDat
     // agnostic still needs an answer.
     const m = new Map<string, { delta: number; pct: number | null }>();
     for (const entry of entries) {
-      if (m.has(entry.scryfallId)) continue;
+      const key = valueKeyOf(entry.scryfallId, entry.finish);
+      if (m.has(key)) continue;
       const h = historyById.get(entry.scryfallId);
       if (!h) continue;
       const trend = historyChange(h);
       if (!trend) continue;
-      const basis = costBasisOf(eventsByOracle.get(entry.oracleId) ?? [], entry.scryfallId, h);
+      const basis = costBasisOf(eventsByOracle.get(entry.oracleId) ?? [], entry.scryfallId, h, entry.finish);
+      const { eur, usd } = priceForFinish(prices.get(entry.scryfallId), entry.finish);
+      const now = pickPrice([{ priceEur: eur, priceUsd: usd }]);
       // Same call, same fallback, same number as the sheet's PriceTrend, so a
       // card can never rank by one figure and display another.
-      const gain = acquisitionGain(trend, basis);
-      m.set(entry.scryfallId, gain ? { delta: gain.delta, pct: gain.pct } : { delta: trend.delta, pct: trend.pct });
+      const gain = acquisitionGain(trend, basis, now);
+      m.set(key, gain ? { delta: gain.delta, pct: gain.pct } : { delta: trend.delta, pct: trend.pct });
     }
     return m;
   }, [needChanges]);
@@ -109,8 +120,8 @@ export function collectionSortFields(r: JoinedEntry, data: EntrySortData): SortF
     name: r.oracle?.name,
     cmc: r.oracle?.cmc,
     price: priceValue(pricedForFinish(r.printing, r.entry.finish), r.oracle),
-    change: data.changes?.get(r.entry.scryfallId)?.delta ?? null,
-    changePct: data.changes?.get(r.entry.scryfallId)?.pct ?? null,
+    change: data.changes?.get(valueKeyOf(r.entry.scryfallId, r.entry.finish))?.delta ?? null,
+    changePct: data.changes?.get(valueKeyOf(r.entry.scryfallId, r.entry.finish))?.pct ?? null,
     added: r.entry.createdAt,
     updated: r.entry.updatedAt,
   };

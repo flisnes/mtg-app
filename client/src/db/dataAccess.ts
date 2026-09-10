@@ -29,8 +29,8 @@ import type {
 } from '@mtg/shared';
 import { db, USER_DATA_TABLES } from './schema.js';
 import { getSetting } from './settings.js';
-import { getPricesByIds, priceForFinish } from '../cardDb/prices.js';
-import { toCents } from '../price/history.js';
+import { getPricesByIds } from '../cardDb/prices.js';
+import { acquisitionCents } from '../price/acquisition.js';
 import { stagePut, stagePutMany, stageDelete } from '../sync/outbox.js';
 import { rowKeysOf } from './undoScope.js';
 import type { TransferPayload } from '../transfer/payload.js';
@@ -158,13 +158,13 @@ function wishFulfilledEvent(
 }
 
 /**
- * Current market price per copy in EUR cents (null = unknown). Reads the
- * price shards, so db.priceShards must be in the transaction scope when this
- * is called inside one.
+ * Current market price per copy of this finish in EUR cents (null = unknown).
+ * Reads the price shards, so db.priceShards must be in the transaction scope
+ * when this is called inside one.
  */
 async function priceCents(scryfallId: string, finish: Finish): Promise<number | null> {
   const prices = await getPricesByIds([scryfallId]);
-  return toCents(priceForFinish(prices.get(scryfallId), finish).eur);
+  return acquisitionCents(prices.get(scryfallId), finish);
 }
 
 /**
@@ -673,7 +673,7 @@ export async function removeCollectionEntriesBulk(ids: string[], reason: Removal
         finish: e.finish,
         lang: e.lang,
         ...(e.special ? { special: e.special } : {}),
-        priceEurCents: toCents(priceForFinish(prices.get(e.scryfallId), e.finish).eur),
+        priceEurCents: acquisitionCents(prices.get(e.scryfallId), e.finish),
         source: 'manual' as const,
         reason,
       })),
@@ -945,7 +945,7 @@ export async function applyImport(
           finish: e.finish,
           lang: e.lang,
           ...(e.special ? { special: e.special } : {}),
-          priceEurCents: toCents(priceForFinish(exitPrices.get(e.scryfallId), e.finish).eur),
+          priceEurCents: acquisitionCents(exitPrices.get(e.scryfallId), e.finish),
           reason: 'other',
           ...batchExtra,
         });
@@ -987,7 +987,7 @@ export async function applyImport(
         condition: l.condition,
         finish: l.finish,
         lang,
-        priceEurCents: toCents(priceForFinish(prices.get(l.scryfallId), l.finish).eur),
+        priceEurCents: acquisitionCents(prices.get(l.scryfallId), l.finish),
         ...batchExtra,
       });
       const wf = wishFulfilledEvent(wishesByOracle, l.oracleId, l.scryfallId, l.quantity, now, { source, batchId });
@@ -2352,7 +2352,7 @@ export async function applyCompletedTrade(
 
   // Exit/acquisition prices for the trade's history events, one bulk lookup.
   const prices = await getPricesByIds([...given, ...received].map((l) => l.scryfallId));
-  const centsOf = (scryfallId: string, finish: Finish) => toCents(priceForFinish(prices.get(scryfallId), finish).eur);
+  const centsOf = (scryfallId: string, finish: Finish) => acquisitionCents(prices.get(scryfallId), finish);
 
   return db.transaction('rw', [db.collection, db.wishlist, db.trades, db.events, db.outbox, db.decks, db.deckCards], async () => {
     if (await db.trades.get(sessionId)) return { applied: false }; // already applied

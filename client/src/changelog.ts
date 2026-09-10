@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.147.8',
+    changes: [
+      {
+        kind: 'fixed',
+        text:
+          'A foil is measured against what you paid for the foil, not against the plain version, so foils no longer show an invented loss. Hold a card both plain and foil and each gets its own figure.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'The price chart draws the nonfoil price, the only one we record daily, and now says so on a foil card. Where a starting price had to be estimated from it, the change is marked "(est.)".',
+      },
+    ],
+  },
+  {
     version: '0.147.7',
     changes: [
       {
@@ -197,15 +212,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Search cards by what they do with `otag:`. Around 4,500 Scryfall Tagger labels now ship with the card database: `otag:removal`, `otag:ramp`, `otag:tutor`, `otag:shockland`. Tags nest, so a broad one finds everything under it. Type `otag:` in the search bar for the list. Works on your own lists too.',
-      },
-    ],
-  },
-  {
-    version: '0.144.2',
-    changes: [
-      {
-        kind: 'changed',
-        text: '"Assemble from my collection" now puts the copies matching what the slot asked for first. If a line names a printing, finish, language or condition, the copies that fit lead the grid instead of sitting below the newest edition.',
       },
     ],
   },

@@ -86,8 +86,11 @@ type PricedSource = { priceEur: number | null; priceUsd: number | null } | undef
 /**
  * The first price available in the user's base currency, else the first in the
  * other one, tagged with which it is. Callers convert or format from there.
+ *
+ * Exported because the value-change figures need the quote *and* its currency
+ * (see acquisitionGain), not the converted number the sort uses.
  */
-function pickPrice(sources: PricedSource[]): { amount: number; currency: BaseCurrency } | null {
+export function pickPrice(sources: PricedSource[]): { amount: number; currency: BaseCurrency } | null {
   const base = getPrefs().baseCurrency;
   const first = base === 'EUR' ? (s: NonNullable<PricedSource>) => s.priceEur : (s: NonNullable<PricedSource>) => s.priceUsd;
   const other = base === 'EUR' ? (s: NonNullable<PricedSource>) => s.priceUsd : (s: NonNullable<PricedSource>) => s.priceEur;

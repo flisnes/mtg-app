@@ -1,4 +1,4 @@
-import type { Condition, Finish, SealedProduct } from '@mtg/shared';
+import type { Condition, Finish, OracleCard, Priced, Printing, SealedProduct } from '@mtg/shared';
 import { applyImport, type ImportLine } from '../db/dataAccess.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import type { FilingCopy } from '../deck/filing.js';
@@ -17,6 +17,11 @@ export interface OpenRow {
   collectorNumber: string;
   qty: number;
   finish: Finish;
+  /** The exact printing the product ships — art, set symbol and price all come
+   *  from this one, not from whichever edition the card is best known in. */
+  printing: Priced<Printing>;
+  /** Missing only when the card DB has the printing but not its oracle row. */
+  oracle: Priced<OracleCard> | undefined;
 }
 
 export interface OpenContents {
@@ -45,6 +50,8 @@ export async function loadContents(product: SealedProduct): Promise<OpenContents
       collectorNumber: pr.collectorNumber,
       qty: c.qty,
       finish: c.finish,
+      printing: pr,
+      oracle: oracles.get(pr.oracleId),
     });
   }
   rows.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));

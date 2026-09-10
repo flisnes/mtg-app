@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.147.9',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Sealed products now open. Tap one in "Find sealed products with this card", or in the add sheet, to see a grid of the cards inside it in the printings it actually ships. The card you looked up is marked, and any card opens from there.',
+      },
+    ],
+  },
+  {
     version: '0.147.8',
     changes: [
       {
@@ -203,15 +213,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: '`otag:` searches came back empty after the 0.145.0 update, because the card database being served predated tag search. Accept the card-data update when it is offered and tag search works.',
-      },
-    ],
-  },
-  {
-    version: '0.145.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Search cards by what they do with `otag:`. Around 4,500 Scryfall Tagger labels now ship with the card database: `otag:removal`, `otag:ramp`, `otag:tutor`, `otag:shockland`. Tags nest, so a broad one finds everything under it. Type `otag:` in the search bar for the list. Works on your own lists too.',
       },
     ],
   },

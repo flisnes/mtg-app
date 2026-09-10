@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.147.9
+
+- **Tap a sealed product to see what's inside it.** "Find sealed products with this card" used to name the precons and stop there; now every result opens a grid of the cards that product ships, in the exact printings it ships them in. The card you looked it up with is marked, and tapping any card opens it like a card anywhere else in the app.
+- **The add and open sheets show cards instead of a list of names.** Choosing "Open it, add the cards", either on the way in or on a box off the shelf, now shows the same grid with set symbols, foils and prices, so you can see what you are about to add. List view is a tap away if you prefer the names.
+
 ## 0.147.8
 
 - **A foil card is now valued against what you paid for the foil.** The value change on a foil weighed your foil purchase against the plain version's price, which turned every foil you own into an invented loss. It now compares today's foil price to what that copy cost, and a card you hold both plain and foil gets a figure for each instead of one blended average.

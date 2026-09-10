@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { SealedProduct } from '@mtg/shared';
 import { Sheet } from '../components/Sheet.js';
 import { SealedImage } from './SealedImage.js';
+import { SealedContentsSheet } from './SealedContents.js';
 import { loadSealedProducts } from './store.js';
 import { cardCount, productImage, productsContaining, subtitle, type ProductWithCard } from './product.js';
 
@@ -29,6 +31,10 @@ export function SealedWithCardSheet({
   onClose: () => void;
 }) {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
+  // Naming the product is only half an answer: the follow-up question is always
+  // "what else was in it?", so a hit opens its card list.
+  const [contents, setContents] = useState<SealedProduct | null>(null);
+  const highlightIds = useMemo(() => new Set(scryfallIds), [scryfallIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,7 +73,7 @@ export function SealedWithCardSheet({
           <ul className="sealed-results">
             {load.hits.map(({ product, qty }) => (
               <li key={product.id}>
-                <div className="sealed-result sealed-result-static">
+                <button className="sealed-result" onClick={() => setContents(product)}>
                   <SealedImage url={productImage(product, 'thumb')} alt="" className="sealed-shot-sm" />
                   <span className="sealed-result-text">
                     <span className="sealed-result-name">{product.name}</span>
@@ -76,7 +82,7 @@ export function SealedWithCardSheet({
                       {qty > 1 ? ` · ${qty} copies of this card` : ''}
                     </span>
                   </span>
-                </div>
+                </button>
               </li>
             ))}
           </ul>
@@ -86,6 +92,10 @@ export function SealedWithCardSheet({
       <div className="sheet-actions">
         <button onClick={onClose}>Close</button>
       </div>
+
+      {contents && (
+        <SealedContentsSheet product={contents} highlightIds={highlightIds} onClose={() => setContents(null)} />
+      )}
     </Sheet>
   );
 }

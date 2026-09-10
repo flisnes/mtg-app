@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CONDITIONS, type Condition, type Finish, type SealedPriceMap, type SealedProduct } from '@mtg/shared';
+import { CONDITIONS, type Condition, type SealedPriceMap, type SealedProduct } from '@mtg/shared';
 import { addSealedItem } from '../db/dataAccess.js';
 import { loadSealedProducts } from '../sealed/store.js';
 import { loadContents, openIntoCollection, perCopyCount, type OpenContents } from '../sealed/open.js';
+import { SealedContentsList } from '../sealed/SealedContents.js';
 import { SealedImage } from '../sealed/SealedImage.js';
 import {
   cardCount,
@@ -34,7 +35,6 @@ type Load =
 type Outcome = 'unopened' | 'cards';
 
 const MAX_RESULTS = 60;
-const finishTag = (f: Finish) => (f === 'foil' ? ' · foil' : f === 'etched' ? ' · etched' : '');
 
 export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
@@ -369,22 +369,18 @@ function DetailView({
             </label>
           </div>
 
+          {/* The cards themselves, in the printings this product ships — a
+              precon's Sol Ring is a specific piece of cardboard, and you can
+              tap any of them to read the card before you commit to adding it. */}
           {detail ? (
-            <ul className="sealed-cardlist">
-              {detail.rows.map((r) => (
-                <li key={`${r.scryfallId}|${r.finish}`}>
-                  <span className="sealed-card-qty">{r.qty * copies}×</span>
-                  <span className="sealed-card-name">
-                    {r.name}
-                    <span className="sealed-card-set">
-                      {' '}
-                      {r.set.toUpperCase()} #{r.collectorNumber}
-                      {finishTag(r.finish)}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="sealed-contents">
+              <SealedContentsList
+                rows={detail.rows}
+                pageKey={product.id}
+                copies={copies}
+                status={`${perCopy * copies} card${perCopy * copies === 1 ? '' : 's'} going in.`}
+              />
+            </div>
           ) : (
             <p className="sealed-msg">Loading contents…</p>
           )}

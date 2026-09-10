@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { CONDITIONS, type Condition, type Finish, type SealedItem, type SealedProduct } from '@mtg/shared';
+import { CONDITIONS, type Condition, type SealedItem, type SealedProduct } from '@mtg/shared';
 import { setSealedItemQuantity } from '../db/dataAccess.js';
 import { LANGS } from '../components/CardSheet.js';
 import { Sheet } from '../components/Sheet.js';
 import { useToast } from '../components/Toast.js';
 import { useFileThese } from '../deck/useFileThese.js';
+import { SealedContentsList } from './SealedContents.js';
 import { loadContents, openIntoCollection, perCopyCount, type OpenContents } from './open.js';
 
 // Cracking a box you already own. The add sheet has always been able to open a
@@ -12,8 +13,6 @@ import { loadContents, openIntoCollection, perCopyCount, type OpenContents } fro
 // but Remove, then re-add as cards. This is the same operation, one copy at a
 // time: the cards land in the collection, the shelf count drops, and the same
 // "where do these live?" prompt every other bulk intake asks follows.
-
-const finishTag = (f: Finish) => (f === 'foil' ? ' · foil' : f === 'etched' ? ' · etched' : '');
 
 export function OpenSealedSheet({
   item,
@@ -129,21 +128,14 @@ export function OpenSealedSheet({
         </div>
 
         {contents ? (
-          <ul className="sealed-cardlist">
-            {contents.rows.map((r) => (
-              <li key={`${r.scryfallId}|${r.finish}`}>
-                <span className="sealed-card-qty">{r.qty * copies}×</span>
-                <span className="sealed-card-name">
-                  {r.name}
-                  <span className="sealed-card-set">
-                    {' '}
-                    {r.set.toUpperCase()} #{r.collectorNumber}
-                    {finishTag(r.finish)}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className="sealed-contents">
+            <SealedContentsList
+              rows={contents.rows}
+              pageKey={product.id}
+              copies={copies}
+              status={`${perCopy * copies} card${perCopy * copies === 1 ? '' : 's'} going in.`}
+            />
+          </div>
         ) : (
           <p className="sealed-msg">Loading contents…</p>
         )}

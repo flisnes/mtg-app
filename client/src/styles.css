@@ -4169,6 +4169,16 @@ button.primary {
   color: #fff;
 }
 /* Value of the copies you own in a deck, binder or box. */
+/* "This is the card you asked about" — the one card in a 400-card display the
+   sealed reverse lookup was opened for. */
+.badge.badge-hit,
+.tile-badge.badge-hit {
+  display: inline-flex;
+  align-items: center;
+  background: var(--accent);
+  color: #fff;
+  vertical-align: middle;
+}
 .badge-value {
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -6303,31 +6313,23 @@ a.seg {
   gap: 0.4rem;
   width: 100%;
 }
-.sealed-cardlist {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  max-height: 40dvh;
+/* The contents grid inside the add / open sheets. Its own scroll box, because
+   the button that adds 400 cards has to stay reachable without scrolling past
+   all 400 of them. */
+.sealed-contents {
+  max-height: 46dvh;
   overflow-y: auto;
-  font-size: 0.85rem;
+  margin: 0 -0.25rem;
+  padding: 0 0.25rem;
 }
-.sealed-cardlist li {
-  display: flex;
-  gap: 0.5rem;
-}
-.sealed-card-qty {
-  color: var(--text-dim);
-  flex-shrink: 0;
-  min-width: 2.2rem;
-}
-.sealed-card-name {
-  min-width: 0;
-}
-.sealed-card-set {
-  color: var(--text-dim);
+/* The view toggle rides along at the top of that box; scrolled away with the
+   cards it would be unreachable from card 20 onwards. */
+.sealed-contents .meta-row {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  padding-bottom: 0.35rem;
 }
 
 /* ---- Profiles: avatars, profile page, avatar editor ---- */

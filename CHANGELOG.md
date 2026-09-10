@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.147.7
+
+- **The collection's price sorts are now "Value change" and "Value change %", measured since you got the card.** They sort by the very figure the card sheet prints, so a card can never rank by one number and show you another. Yesterday's seven-day window is gone: for how the market moved over a set span, Price movers still has 7, 30 and 90 days.
+- **Cards with no recorded purchase price get one worked out.** What you told us you paid wins, then the price we stamped on the day the card went in, and failing both, the recorded reading closest to that day. Cards you owned before the app kept a history are valued from the first reading we ever took, so your oldest cards join the sort instead of sitting at the bottom of it. An estimated figure says "since you got it" rather than "since you paid", and hovering it tells you what the card was worth back then.
+- **The price chart and the History tab use that same starting price.** The chart draws its cost line for cards that never had one, and the History tab's value change stopped ignoring the copies the sheet above it was already counting.
+
 ## 0.147.6
 
 - **Sorting by price change actually sorts now.** The two price-change sorts measured each card from its own first recorded reading, which is a different day for every card: one you added three months ago showed a three-month drift, one added yesterday showed a flat zero, and opening a card's sheet quietly backfilled its history from the server and stretched its window again. So the list ranked your collection by how long it had been tracked rather than by anything about the price, which read as no sorting at all. Both sorts now measure the same seven days for every card, the same window the up and down arrows on the tiles use, and say so in their names. A card too new to have a week of readings sorts to the end instead of pretending it hasn't moved.

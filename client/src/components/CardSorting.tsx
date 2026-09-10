@@ -9,7 +9,6 @@ import {
   type SortDir,
   type SortKey,
 } from './cardSort.js';
-import { BADGE_WINDOW_DAYS } from '../price/movers.js';
 
 // Sort/group controls, and the per-view persistence behind them. Every card
 // list in the app (decks, collection, tradelist, wishlist, card search) renders
@@ -82,13 +81,14 @@ const SORT_OPTIONS: [SortKey, string][] = [
   ['cmc', 'Sort: Mana value'],
   ['price', 'Sort: Price'],
 ];
-// Only where recorded price history is wired up (collection/tradelist). The
-// window is named in the label because it's the same seven days the up/down
-// badges on the tiles measure, and an unlabelled "price change" reads as
-// all-time (which is what it used to be, and what made the order meaningless).
+// Only where recorded price history is wired up (collection/tradelist). Called
+// "value change" rather than "price change" because it isn't the card's move on
+// the market, it's what your copies have done since they cost you what they
+// cost: the same figure the card sheet shows. Market moves over a comparable
+// window live on the Price movers page.
 const CHANGE_OPTIONS: [SortKey, string][] = [
-  ['change', `Sort: Price change (${BADGE_WINDOW_DAYS}d)`],
-  ['changePct', `Sort: Price change % (${BADGE_WINDOW_DAYS}d)`],
+  ['change', 'Sort: Value change'],
+  ['changePct', 'Sort: Value change %'],
 ];
 // Only where entries carry createdAt/updatedAt (collection/tradelist).
 const DATE_OPTIONS: [SortKey, string][] = [

@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.147.7',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'The collection sorts by "Value change" and "Value change %" now, measured since you got each card, which is the same figure the card sheet shows. Price movers is still the place for a fixed 7, 30 or 90 day window.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'Cards with no recorded purchase price are valued from the reading closest to the day they went in, so the ones you owned before the app tracked prices join the sort instead of falling to the bottom. Those say "since you got it" rather than "since you paid".',
+      },
+    ],
+  },
+  {
     version: '0.147.6',
     changes: [
       {

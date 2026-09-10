@@ -78,6 +78,34 @@ export function centsAround(h: DayReadings, day: string, lookback = 7): number |
   return null;
 }
 
+/**
+ * The EUR reading nearest `day` in either direction, and how many days away it
+ * was. Unlike centsAround this will look *forward*, because it answers a
+ * different question: what was this card worth when I got it? A card acquired
+ * before its history starts (everything you owned before the event log existed,
+ * or before the server archive did) has no earlier reading to find, and the
+ * first one recorded is the honest estimate. Ties go to the earlier day.
+ */
+export function centsNearest(h: DayReadings, day: string): { cents: number; awayDays: number } | null {
+  if (Number.isNaN(Date.parse(day))) return null;
+  const idx = dayOffset(h.startDay, day);
+  let best: { cents: number; awayDays: number } | null = null;
+  for (let i = 0; i < h.eur.length; i++) {
+    const v = h.eur[i];
+    if (v == null) continue;
+    const away = Math.abs(i - idx);
+    if (!best || away < best.awayDays) best = { cents: v, awayDays: away };
+    // Readings are in day order, so once we start moving away we are done.
+    else if (i > idx) break;
+  }
+  return best;
+}
+
+/** The UTC day key ("YYYY-MM-DD") an epoch-ms timestamp falls on. */
+export function dayKeyOf(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
 /** Summary of a card's recorded price movement, in currency units. */
 export interface HistoryChange {
   cur: 'eur' | 'usd';

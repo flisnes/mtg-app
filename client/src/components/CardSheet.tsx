@@ -514,9 +514,11 @@ export function CardSheet(props: CardSheetProps) {
   }, [shownId]);
 
   // What the copies cost, so the trend can say how the card has done for *you*
-  // rather than how our archive has done. Falls back to the recorded change
-  // when nothing was paid on record (a scanned-in card, a gift, a trade).
-  const basis = useCostBasis(oracleCard.oracleId, shownId);
+  // rather than how our archive has done. The history goes in because a copy
+  // with no recorded price is valued from the reading nearest the day it went
+  // in (see costBasis.ts), and the merged row is the one with the server's
+  // longer window in it.
+  const basis = useCostBasis(oracleCard.oracleId, shownId, priceHistory);
   const gain = trend ? acquisitionGain(trend, basis) : null;
 
   const printing = useMemo(

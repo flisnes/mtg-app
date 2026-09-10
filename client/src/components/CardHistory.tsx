@@ -4,7 +4,7 @@ import type { OracleCard, Priced, PriceHistory, Printing, RemovalReason, UserEve
 import { REMOVAL_REASONS } from '@mtg/shared';
 import { editUserEvent } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
-import { centsAround } from '../price/history.js';
+import { centsAround, centsNearest, dayKeyOf } from '../price/history.js';
 import { currencySymbol, moneyInput } from '../price/rates.js';
 import { describeEvent, qtyBadge, REASON_LABELS } from '../history/eventRegistry.js';
 import { fmtCents, fmtDate } from '../util/format.js';
@@ -148,9 +148,15 @@ export function CardHistory({
   };
 
   // Summary: owned since the earliest acquisition; value change = Σ over
-  // acquisitions with a known price of qty × (price now − price then).
-  // Removed copies aren't netted out — this is "how the cards you picked up
-  // have moved", not a realized P&L.
+  // acquisitions of qty × (price now − price then). Removed copies aren't
+  // netted out — this is "how the cards you picked up have moved", not a
+  // realized P&L.
+  //
+  // "Price then" climbs the same ladder the sheet's own figure does (see
+  // costBasis.ts): what you told us, else what we stamped on the day, else the
+  // reading nearest that day. Skipping the unpriced adds instead would have
+  // this line report nothing on exactly the cards the sheet above it reports a
+  // gain for.
   const summary = useMemo(() => {
     const adds = sorted.filter((e) => e.kind === 'collection.add');
     if (!adds.length) return null;
@@ -158,16 +164,17 @@ export function CardHistory({
     let delta = 0;
     let priced = false;
     for (const e of adds) {
-      if (e.priceEurCents == null) continue;
+      const then = e.priceEurCents ?? (priceHistory ? centsNearest(priceHistory, dayKeyOf(e.ts))?.cents ?? null : null);
+      if (then == null) continue;
       const now = centsNow(e.scryfallId);
       if (now == null) continue;
-      delta += (now - e.priceEurCents) * (e.qty ?? 1);
+      delta += (now - then) * (e.qty ?? 1);
       priced = true;
     }
     return { since, delta: priced ? delta : null };
     // centsNow only depends on printings/oracleCard, stable per render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sorted, printings, oracleCard]);
+  }, [sorted, printings, oracleCard, priceHistory]);
 
   if (!events) return null;
   if (!sorted.length) {

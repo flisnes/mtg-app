@@ -182,9 +182,13 @@ export function PriceChartSheet({
     }
 
     // What the copies on hand cost, per copy — the line the current price is
-    // measured against. Acquisition prices are always EUR cents; without a EUR
-    // rate we can't put them on a USD-quoted axis, so the line just doesn't draw.
-    const basis = costBasisOf(scoped, scryfallId);
+    // measured against. The history goes in so a copy with no recorded price is
+    // valued from the reading nearest the day it went in, the same ladder the
+    // sheet's figure climbs; otherwise the sheet could report a gain over a
+    // basis this chart declined to draw. Acquisition prices are always EUR
+    // cents; without a EUR rate we can't put them on a USD-quoted axis, so the
+    // line just doesn't draw.
+    const basis = costBasisOf(scoped, scryfallId, history);
     const costBasis = basis && series.eurRate != null ? basis.perCopy * series.eurRate : null;
 
     return {
@@ -193,7 +197,7 @@ export function PriceChartSheet({
       earlier,
       costBasis,
     };
-  }, [series, events, scryfallId]);
+  }, [series, events, scryfallId, history]);
 
   const money = (v: number) => fmtMoney(v, series?.unit ?? 'EUR');
 

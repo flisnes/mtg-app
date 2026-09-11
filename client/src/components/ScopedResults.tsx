@@ -58,7 +58,12 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
       const matched = (wishRows ?? []).filter(wishMatches);
       return sortCards(matched, (r) => wishSortFields(r), sort).map(
         (r): CardItem => ({
-          ...wishCardItem(r, { ownership, moverFlags, onClick: r.oracle ? () => setEditWish(r) : undefined }),
+          ...wishCardItem(r, {
+            ownership,
+            moverFlags,
+            showYear: sort.key === 'released',
+            onClick: r.oracle ? () => setEditWish(r) : undefined,
+          }),
           key: `w:${r.entry.id}`,
         }),
       );
@@ -70,7 +75,12 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
     );
     return sortCards(matched, (r) => collectionSortFields(r, sortData), sort).map(
       (r): CardItem => ({
-        ...collectionCardItem(r, { moverFlags, placements, onClick: () => setEditColl(r) }),
+        ...collectionCardItem(r, {
+          moverFlags,
+          placements,
+          showYear: sort.key === 'released',
+          onClick: () => setEditColl(r),
+        }),
         key: `c:${r.entry.id}`,
       }),
     );
@@ -84,7 +94,7 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
         items={items}
         pageKey={`${query}|${scope}|${sort.key}:${sort.dir}`}
         status={loading ? 'Loading…' : resultCount(items.length)}
-        controls={<SortControls prefs={sort} onChange={setSort} withChange={needCollection} withDates />}
+        controls={<SortControls prefs={sort} onChange={setSort} withChange={needCollection} withDates withRelease />}
         showEmpty={!loading && items.length === 0}
       />
 

@@ -21,10 +21,27 @@ import { formatPrice, pricedForFinish } from './CardSorting.js';
 type MoverFlags = ReturnType<typeof useMoverFlags>;
 type Ownership = ReturnType<typeof useOwnershipIndex>;
 
+/**
+ * The release-year mark, and only while the list is actually sorted by release
+ * date — the rest of the time the year is noise, and the set name in the
+ * subtitle already says roughly when. A row with no printing pinned (an "any
+ * printing" wish, a lands-box basic) has no year to show and gets nothing.
+ */
+export function yearMark(
+  printing: { releasedAt: string; setName: string } | undefined,
+  show: boolean | undefined,
+): CardItem['year'] {
+  if (!show || !printing) return undefined;
+  return {
+    node: printing.releasedAt.slice(0, 4),
+    title: `${printing.setName} · released ${printing.releasedAt}`,
+  };
+}
+
 /** A collection/tradelist row: printing + condition + finish, with a "for trade" badge. */
 export function collectionCardItem(
   r: JoinedEntry,
-  opts: { moverFlags?: MoverFlags; placements?: PlacementIndex; onClick?: () => void },
+  opts: { moverFlags?: MoverFlags; placements?: PlacementIndex; showYear?: boolean; onClick?: () => void },
 ): CardItem {
   // Per copy: the badge belongs on the card that's actually filed away, not on
   // every edition — nor on your English copy when it's the Spanish one that's in
@@ -42,10 +59,12 @@ export function collectionCardItem(
   // Same per-copy logic: a flag belongs on the Italian copy, not on the row
   // above it that happens to be the same card in English.
   const lang = langMark(r.entry.lang);
+  const year = yearMark(r.printing, opts.showYear);
   return {
     ...(place ? { place } : {}),
     ...(special ? { special } : {}),
     ...(lang ? { lang } : {}),
+    ...(year ? { year } : {}),
     key: r.entry.id,
     name: r.oracle?.name ?? '(unknown card)',
     image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
@@ -83,7 +102,7 @@ export function collectionCardItem(
 /** A wishlist row: a specific printing or "any printing", with an owned badge. */
 export function wishCardItem(
   r: JoinedWish,
-  opts: { ownership?: Ownership; moverFlags?: MoverFlags; onClick?: () => void },
+  opts: { ownership?: Ownership; moverFlags?: MoverFlags; showYear?: boolean; onClick?: () => void },
 ): CardItem {
   // A wish shows a specific printing, or the oracle's default for "any printing".
   // The wishlist star is zeroed out here: every row on this list is a wish, so
@@ -104,6 +123,7 @@ export function wishCardItem(
   ]
     .filter(Boolean)
     .join(' · ');
+  const year = yearMark(r.printing, opts.showYear);
   const printingSub = r.entry.scryfallId ? (
     r.printing ? (
       <>
@@ -123,6 +143,7 @@ export function wishCardItem(
     foil: !!r.entry.finish && r.entry.finish !== 'nonfoil',
     count: r.entry.quantity,
     ...(lang ? { lang } : {}),
+    ...(year ? { year } : {}),
     badge: ownBadge?.icon,
     badgeClass: ownBadge?.cls,
     badgeTitle: ownBadge?.title,
@@ -142,10 +163,14 @@ export function wishCardItem(
 const BOARD_LABEL: Record<DeckBoard, string> = { main: '', side: 'Sideboard', commander: 'Commander', token: 'Token' };
 
 /** A deck/binder/box slot: which board it's in (deck), or its printing (storage). */
-export function deckCardItem(r: JoinedDeckCard, opts: { kind: ContainerKind; onClick?: () => void }): CardItem {
+export function deckCardItem(
+  r: JoinedDeckCard,
+  opts: { kind: ContainerKind; showYear?: boolean; onClick?: () => void },
+): CardItem {
   // A slot that named a language: the flag says which copy this binder page or
   // deck list is actually asking for.
   const lang = langMark(r.entry.lang);
+  const year = yearMark(r.printing, opts.showYear);
   return {
     key: r.entry.id,
     name: r.oracle?.name ?? '(unknown card)',
@@ -154,6 +179,7 @@ export function deckCardItem(r: JoinedDeckCard, opts: { kind: ContainerKind; onC
     foil: !!r.entry.finish && r.entry.finish !== 'nonfoil',
     count: r.entry.quantity,
     ...(lang ? { lang } : {}),
+    ...(year ? { year } : {}),
     sub:
       opts.kind === 'deck' ? (
         BOARD_LABEL[r.entry.board] || undefined

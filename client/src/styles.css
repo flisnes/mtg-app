@@ -4140,6 +4140,16 @@ button.primary {
   padding: 0;
   vertical-align: middle;
 }
+/* The release year, shown only while a list is sorted by release date. It is a
+   number in a row of glyphs, so it gets tabular figures and no extra colour —
+   the other marks are claims about the copy, this one is just the date the sort
+   is running on. */
+.badge.badge-year,
+.tile-badge.badge-year {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  vertical-align: middle;
+}
 /* A hairline, because these flags are mostly edge-to-edge colour: without it
    Japan's white field bleeds into a pale chip and Germany's black bar bleeds
    into the dark one on a card tile. */

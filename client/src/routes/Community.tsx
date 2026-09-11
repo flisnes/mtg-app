@@ -18,6 +18,7 @@ import {
   SortControls,
   sortCards,
   priceValue,
+  releaseFields,
   pricedForFinish,
   useCardSort,
   type CardSortPrefs,
@@ -91,7 +92,12 @@ function useLayout(): [Layout, (l: Layout) => void] {
 function tradeFields(line: TradeLine, cards: CardMaps | undefined): SortFields {
   const oracle = cards?.oracles.get(line.oracleId);
   const printing = cards?.printings.get(line.scryfallId);
-  return { name: oracle?.name ?? line.name, cmc: oracle?.cmc, price: priceValue(pricedForFinish(printing, line.finish), oracle) };
+  return {
+    name: oracle?.name ?? line.name,
+    cmc: oracle?.cmc,
+    price: priceValue(pricedForFinish(printing, line.finish), oracle),
+    ...releaseFields(printing),
+  };
 }
 
 /** Sort fields for a wish line (may be "any printing" and have no finish). */
@@ -102,6 +108,7 @@ function wishFields(line: WishLine, cards: CardMaps | undefined): SortFields {
     name: oracle?.name ?? line.name,
     cmc: oracle?.cmc,
     price: priceValue(pricedForFinish(printing, line.finish ?? 'nonfoil'), oracle),
+    ...releaseFields(printing),
   };
 }
 
@@ -213,17 +220,27 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
   );
 }
 
-function buildTradeItems(rows: TradeEntry[], cards: CardMaps | undefined, onOpen: (t: InfoTarget) => void): CardItem[] {
+function buildTradeItems(
+  rows: TradeEntry[],
+  cards: CardMaps | undefined,
+  onOpen: (t: InfoTarget) => void,
+  showYear?: boolean,
+): CardItem[] {
   return rows.map(({ line, match, hi }, i) =>
-    tradeLineItem(line, `${line.scryfallId}-${i}`, cards, { match, hi }, (oracle) =>
+    tradeLineItem(line, `${line.scryfallId}-${i}`, cards, { match, hi, showYear }, (oracle) =>
       onOpen({ oracle, scryfallId: line.scryfallId }),
     ),
   );
 }
 
-function buildWishItems(rows: WishEntry[], cards: CardMaps | undefined, onOpen: (t: InfoTarget) => void): CardItem[] {
+function buildWishItems(
+  rows: WishEntry[],
+  cards: CardMaps | undefined,
+  onOpen: (t: InfoTarget) => void,
+  showYear?: boolean,
+): CardItem[] {
   return rows.map(({ line, match, own, hi }, i) =>
-    wishLineItem(line, `${line.oracleId}-${i}`, cards, { match, own, hi }, (oracle) =>
+    wishLineItem(line, `${line.oracleId}-${i}`, cards, { match, own, hi, showYear }, (oracle) =>
       onOpen({ oracle, scryfallId: line.scryfallId ?? undefined, wish: line }),
     ),
   );
@@ -352,7 +369,7 @@ function UserLists({
             heading="Has for trade"
             rows={tradeBase}
             fieldsOf={(t) => tradeFields(t.line, cards)}
-            build={(rows) => buildTradeItems(rows, cards, setInfo)}
+            build={(rows, showYear) => buildTradeItems(rows, cards, setInfo, showYear)}
             sort={tradeSort}
             setSort={setTradeSort}
             onClose={closeAll}
@@ -362,7 +379,7 @@ function UserLists({
             heading="Wants"
             rows={wishBase}
             fieldsOf={(w) => wishFields(w.line, cards)}
-            build={(rows) => buildWishItems(rows, cards, setInfo)}
+            build={(rows, showYear) => buildWishItems(rows, cards, setInfo, showYear)}
             sort={wishSort}
             setSort={setWishSort}
             onClose={closeAll}
@@ -422,7 +439,7 @@ function UserLists({
             setSort={setTradeSort}
             onSeeAll={() => openAll('trade')}
             items={tradeOrdered}
-            build={(rows) => buildTradeItems(rows, cards, setInfo)}
+            build={(rows, showYear) => buildTradeItems(rows, cards, setInfo, showYear)}
             signature={`${username}|trade|${tradeBase.length}`}
           />
 
@@ -436,7 +453,7 @@ function UserLists({
             setSort={setWishSort}
             onSeeAll={() => openAll('wish')}
             items={wishOrdered}
-            build={(rows) => buildWishItems(rows, cards, setInfo)}
+            build={(rows, showYear) => buildWishItems(rows, cards, setInfo, showYear)}
             signature={`${username}|wish|${wishBase.length}`}
           />
         </>
@@ -493,12 +510,12 @@ function ListSection<T extends { hi: boolean; match: boolean; own: boolean }>({
   setSort: (p: CardSortPrefs) => void;
   onSeeAll: () => void;
   items: T[];
-  build: (rows: T[]) => CardItem[];
+  build: (rows: T[], showYear: boolean) => CardItem[];
   signature: string;
 }) {
   const { gridRef, columns } = useGridColumns();
   const { limit, showMore } = usePagedLimit(signature, PAGE_SIZE, columns);
-  const visible = build(items.slice(0, limit));
+  const visible = build(items.slice(0, limit), sort.key === 'released');
   const hasMore = items.length > limit;
 
   return (
@@ -508,7 +525,7 @@ function ListSection<T extends { hi: boolean; match: boolean; own: boolean }>({
           {heading} ({count})
         </h2>
         <div className="list-section-actions">
-          {count > 0 && <SortControls prefs={sort} onChange={setSort} />}
+          {count > 0 && <SortControls prefs={sort} onChange={setSort} withRelease />}
           {count > 0 && (
             <button className="ghost see-all" onClick={onSeeAll}>
               See all
@@ -554,7 +571,7 @@ function UserListAll<
   heading: string;
   rows: T[];
   fieldsOf: (r: T) => SortFields;
-  build: (rows: T[]) => CardItem[];
+  build: (rows: T[], showYear: boolean) => CardItem[];
   sort: CardSortPrefs;
   setSort: (p: CardSortPrefs) => void;
   onClose: () => void;
@@ -565,7 +582,7 @@ function UserListAll<
 
   const { gridRef, columns } = useGridColumns();
   const { limit, showMore } = usePagedLimit(`all|${heading}|${rows.length}`, PAGE_SIZE, columns);
-  const items = build(filtered.slice(0, limit));
+  const items = build(filtered.slice(0, limit), sort.key === 'released');
 
   // Which of their lists this is, and how big, reads as the page's own header
   // line under their name. Searching it is the header bar's job — scoped to
@@ -580,7 +597,7 @@ function UserListAll<
           ‹ Back
         </button>
         {!hoisted && <p className="search-meta">{label}</p>}
-        <SortControls prefs={sort} onChange={setSort} />
+        <SortControls prefs={sort} onChange={setSort} withRelease />
         <ViewToggle mode={view} onChange={setView} />
       </div>
 

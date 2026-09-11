@@ -5,7 +5,7 @@ import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { CardSheet } from './CardSheet.js';
 import type { CardItem } from './CardViews.js';
 import { ResultsList, resultCount } from './ResultsList.js';
-import { SortControls, priceValue, sortCards, useCardSort, type SortFields } from './CardSorting.js';
+import { SortControls, priceValue, releaseFields, sortCards, useCardSort, type SortFields } from './CardSorting.js';
 import {
   useUserLists,
   useResolvedCards,
@@ -65,18 +65,23 @@ export function ProfileScopedResults({
 
     // Item plus what to sort it by, kept side by side: a CardItem has a name
     // but not a mana value or a price to order on.
+    const showYear = sort.key === 'released';
     const out: { item: CardItem; fields: SortFields }[] = [];
-    const fieldsFor = (oracle: Priced<OracleCard> | undefined, scryfallId: string | null): SortFields => ({
-      name: oracle?.name,
-      cmc: oracle?.cmc,
-      price: priceValue(scryfallId ? cards?.printings.get(scryfallId) : undefined, oracle),
-    });
+    const fieldsFor = (oracle: Priced<OracleCard> | undefined, scryfallId: string | null): SortFields => {
+      const printing = scryfallId ? cards?.printings.get(scryfallId) : undefined;
+      return {
+        name: oracle?.name,
+        cmc: oracle?.cmc,
+        price: priceValue(printing, oracle),
+        ...releaseFields(printing),
+      };
+    };
     if (showTrade) {
       lists.tradelist.forEach((line, i) => {
         const oracle = cards?.oracles.get(line.oracleId);
         if (!matchesQuery(oracle, line)) return;
         out.push({
-          item: tradeLineItem(line, `t:${line.scryfallId}-${i}`, cards, { match: iWant(line), hi: false }, (o) =>
+          item: tradeLineItem(line, `t:${line.scryfallId}-${i}`, cards, { match: iWant(line), hi: false, showYear }, (o) =>
             setInfo({ oracle: o, scryfallId: line.scryfallId }),
           ),
           fields: fieldsFor(oracle, line.scryfallId),
@@ -90,7 +95,7 @@ export function ProfileScopedResults({
         const match = iHave(line);
         const own = !match && iOwn(line);
         out.push({
-          item: wishLineItem(line, `w:${line.oracleId}-${i}`, cards, { match, own, hi: false }, (o) =>
+          item: wishLineItem(line, `w:${line.oracleId}-${i}`, cards, { match, own, hi: false, showYear }, (o) =>
             setInfo({ oracle: o, scryfallId: line.scryfallId ?? undefined, wish: line }),
           ),
           fields: fieldsFor(oracle, line.scryfallId),
@@ -108,7 +113,7 @@ export function ProfileScopedResults({
         items={items}
         pageKey={`profile:${username}|${query}|${showTrade}|${showWish}|${sort.key}:${sort.dir}`}
         status={error ? error : loading ? 'Loading…' : `${resultCount(items.length)} in ${username}’s lists`}
-        controls={<SortControls prefs={sort} onChange={setSort} />}
+        controls={<SortControls prefs={sort} onChange={setSort} withRelease />}
         showEmpty={!loading && !error && items.length === 0}
       />
 

@@ -119,6 +119,10 @@ export interface CardItem {
   /** A flag, when the copy isn't in the language you collect in. Last of the
    *  marks: the rest are about you, this one is about the cardboard. */
   lang?: { node: ReactNode; cls?: string; title?: string };
+  /** Release year, shown only while the list is sorted by release date — a grid
+   *  tile is all art, so the thing being sorted on has to be visible somewhere
+   *  or the order reads as random. Sits with the other cardboard marks. */
+  year?: { node: ReactNode; title?: string };
   /** Dim the entry (e.g. unowned deck cards). */
   dim?: boolean;
   /** Marked for a cut: still here, but on its way out as soon as it's pasted. */
@@ -266,6 +270,11 @@ export function CardList({
                     {it.lang.node}
                   </span>
                 )}
+                {it.year && (
+                  <span className="badge badge-year" title={it.year.title}>
+                    {it.year.node}
+                  </span>
+                )}
               </div>
               {it.sub && <div className="result-sub">{it.sub}</div>}
             </div>
@@ -405,6 +414,11 @@ export function CardStacks({
                     {it.lang.node}
                   </span>
                 )}
+                {it.year && (
+                  <span className="badge badge-year" title={it.year.title}>
+                    {it.year.node}
+                  </span>
+                )}
                 {it.sub && <span className="stack-sub">{it.sub}</span>}
                 {it.count != null && it.count !== 1 && <span className="stack-qty">×{it.count}</span>}
                 {it.trend && <TrendMark dir={it.trend} />}
@@ -471,8 +485,8 @@ export function CardGrid({
               )}
               {it.foil && it.image && <span className="foil-sheen" aria-hidden />}
               {/* Corner marks share one row along the bottom edge: owned, filed,
-                  special conditions, language, trend. */}
-              {(it.badge || it.place || it.special || it.lang || it.trend) && (
+                  special conditions, language, release year, trend. */}
+              {(it.badge || it.place || it.special || it.lang || it.year || it.trend) && (
                 <span className="tile-marks">
                   {it.badge && (
                     <span className={`tile-badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
@@ -492,6 +506,11 @@ export function CardGrid({
                   {it.lang && (
                     <span className={`tile-badge ${it.lang.cls ?? ''}`} title={it.lang.title}>
                       {it.lang.node}
+                    </span>
+                  )}
+                  {it.year && (
+                    <span className="tile-badge badge-year" title={it.year.title}>
+                      {it.year.node}
                     </span>
                   )}
                   {it.trend && <TrendMark dir={it.trend} tile />}

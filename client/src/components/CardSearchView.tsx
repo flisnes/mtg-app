@@ -6,6 +6,7 @@ import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
 import { CardItems, ViewToggle, useGridColumns, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { SortControls, formatPrice, useCardSort } from './CardSorting.js';
+import { yearMark } from './cardRows.js';
 import type { MultiSelect } from './useMultiSelect.js';
 import { SelectToggle } from './SelectToggle.js';
 import { CardCursorProvider, useCardCursorCtx } from './useCardCursor.js';
@@ -132,7 +133,7 @@ export function CardSearchView({
   );
 
   const searchSort = useMemo(() => ({ key: sort.key, dir: sort.dir }), [sort.key, sort.dir]);
-  const { results, printings, total, searching } = useCardSearch(query, {
+  const { results, printings, releases, total, searching } = useCardSearch(query, {
     filters: eff,
     limit,
     sort: sortKey ? searchSort : undefined,
@@ -225,7 +226,7 @@ export function CardSearchView({
               {selection && !selection.sel.active && results.length > 0 && (
                 <SelectToggle onEnter={selection.sel.enter} />
               )}
-              {sortKey && <SortControls prefs={sort} onChange={setSort} withRelevance />}
+              {sortKey && <SortControls prefs={sort} onChange={setSort} withRelevance withRelease />}
               <ViewToggle mode={view} onChange={setView} />
             </div>
           </div>
@@ -239,6 +240,11 @@ export function CardSearchView({
             items={results.map((card, i): CardItem => {
               const printing = printingAt(i, card);
               const b = badgeFor?.(card, printing);
+              // Sorted by release, a grid of art says nothing about the order
+              // it's in — the year is the only thing that explains it. A card
+              // you don't own has no printing of yours to date, so this is the
+              // card's debut (or the pinned printing, when `set:` named one).
+              const year = yearMark(releases[i], sort.key === 'released');
               return {
                 key: keys[i]!,
                 name: card.name,
@@ -247,6 +253,7 @@ export function CardSearchView({
                 badge: b?.icon,
                 badgeClass: b?.cls,
                 badgeTitle: b?.title,
+                ...(year ? { year } : {}),
                 sub: (
                   <>
                     <span className={`rarity-dot rarity-${card.rarity}`} aria-hidden />

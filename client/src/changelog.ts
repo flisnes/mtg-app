@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.148.1',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Sort by release date, on every card list. Your own lists order by the printing you hold; the card database orders by when the card first came out. While that sort is on, each card shows its release year.',
+      },
+    ],
+  },
+  {
     version: '0.148.0',
     changes: [
       {

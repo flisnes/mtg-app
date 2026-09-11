@@ -367,7 +367,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
             ))}
           </select>
         </div>
-        {!pileMode && <SortControls prefs={sort} onChange={setSort} withChange withDates />}
+        {!pileMode && <SortControls prefs={sort} onChange={setSort} withChange withDates withRelease />}
         {!pileMode && <ViewToggle mode={view} onChange={setView} />}
       </div>
 
@@ -400,7 +400,14 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           selectable={sel.active}
           selectedKeys={sel.selected}
           onToggleSelect={sel.toggle}
-          items={visible.map((r) => collectionCardItem(r, { moverFlags, placements, onClick: () => setEditing(r) }))}
+          items={visible.map((r) =>
+            collectionCardItem(r, {
+              moverFlags,
+              placements,
+              showYear: sort.key === 'released',
+              onClick: () => setEditing(r),
+            }),
+          )}
         />
       )}
       {rows !== undefined && (!pileMode || sel.active) && (

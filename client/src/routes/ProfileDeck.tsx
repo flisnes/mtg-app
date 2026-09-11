@@ -15,8 +15,9 @@ import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { formatLabel } from '../deck/legality.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
-import { extraLands, GroupCountBadge, SortControls, groupCards, priceValue, sortCards, useCardSort } from '../components/CardSorting.js';
+import { extraLands, GroupCountBadge, SortControls, groupCards, priceValue, releaseFields, sortCards, useCardSort } from '../components/CardSorting.js';
 import { SetSymbol } from '../components/SetSymbol.js';
+import { yearMark } from '../components/cardRows.js';
 import { Icon } from '../components/icons.js';
 import { useToast } from '../components/Toast.js';
 import { shareDeckLink } from '../deck/share.js';
@@ -123,11 +124,13 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
       const entries: DeckEntry[] = lines.map((line, i) => {
         const oracle = cards?.oracles.get(line.oracleId);
         const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
+        const year = yearMark(printing, sort.key === 'released');
         const item: CardItem = {
           key: `${line.oracleId}-${line.scryfallId ?? ''}-${i}`,
           name: oracle?.name ?? '(unknown card)',
           image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
           count: line.quantity,
+          ...(year ? { year } : {}),
           sub: printing ? (
             <>
               <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />
@@ -142,7 +145,12 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
       });
       const sorted = sortCards(
         entries,
-        (e) => ({ name: e.oracle?.name, cmc: e.oracle?.cmc, price: priceValue(e.printing, e.oracle) }),
+        (e) => ({
+          name: e.oracle?.name,
+          cmc: e.oracle?.cmc,
+          price: priceValue(e.printing, e.oracle),
+          ...releaseFields(e.printing),
+        }),
         sort,
       );
       return { board, title, entries: sorted, count: lines.reduce((s, l) => s + l.quantity, 0) };
@@ -185,7 +193,7 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
           {deck.description && <p className="fine-print">{deck.description}</p>}
           <div className="list-toolbar">
             <span className="grow" />
-            <SortControls prefs={sort} onChange={setSort} groups />
+            <SortControls prefs={sort} onChange={setSort} groups withRelease />
             <ViewToggle mode={view} onChange={setView} />
           </div>
           {boards.length === 0 ? (

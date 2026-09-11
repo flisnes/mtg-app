@@ -9,7 +9,7 @@ import { convertToDisplay, fmtConverted, fmtMoney } from '../price/rates.js';
 // search imports this and search.ts is reachable from a web worker — the hooks
 // and the controls live next door in CardSorting.tsx.
 
-export type SortKey = 'relevance' | 'name' | 'cmc' | 'price' | 'change' | 'changePct' | 'added' | 'updated';
+export type SortKey = 'relevance' | 'name' | 'cmc' | 'price' | 'change' | 'changePct' | 'added' | 'updated' | 'released';
 export type SortDir = 'asc' | 'desc';
 export type GroupKey = 'none' | 'type' | 'color' | 'tag';
 
@@ -44,6 +44,23 @@ export interface SortFields {
   /** Epoch ms the card was added / last edited — collection views only. */
   added?: number | null;
   updated?: number | null;
+  /**
+   * When the cardboard came out (ISO date) plus the set and collector number it
+   * came out in. Sorting by release orders on all three: a set is a release, and
+   * within one the collector number is the order the cards were printed in.
+   * Owned rows use the printing they hold; card search uses the card's debut.
+   */
+  released?: string | null;
+  set?: string | null;
+  collector?: string | null;
+}
+
+/** The three release fields off a printing row; empty for a row without one. */
+export function releaseFields(
+  printing: { releasedAt: string; set: string; collectorNumber: string } | undefined,
+): Pick<SortFields, 'released' | 'set' | 'collector'> {
+  if (!printing) return {};
+  return { released: printing.releasedAt, set: printing.set, collector: printing.collectorNumber };
 }
 
 /** The variant price fields carried on a joined (Priced) card row. */
@@ -163,6 +180,17 @@ export function sortCards<T>(items: T[], get: (t: T) => SortFields, prefs: Pick<
     else if (prefs.key === 'changePct') cmp = compareNullable(fa.changePct, fb.changePct, mul);
     else if (prefs.key === 'added') cmp = compareNullable(fa.added, fb.added, mul);
     else if (prefs.key === 'updated') cmp = compareNullable(fa.updated, fb.updated, mul);
+    else if (prefs.key === 'released') {
+      // Release, then set, then collector number. The date alone leaves two sets
+      // that shipped the same day (a main set and its Commander decks) shuffled
+      // into each other, and a set alone leaves its cards in no order at all —
+      // together they read as "the sets in order, each in the order it was
+      // printed". Only the date takes the direction: flipping to newest-first
+      // should turn the stack of sets over, not deal each one out backwards.
+      cmp = compareNullableText(fa.released, fb.released, mul);
+      if (cmp === 0) cmp = compareNullableText(fa.set, fb.set, 1);
+      if (cmp === 0) cmp = compareCollectorNumbers(fa.collector, fb.collector);
+    }
     if (cmp === 0) {
       cmp = (fa.name ?? '').localeCompare(fb.name ?? '');
       if (prefs.key === 'name') cmp *= mul;
@@ -177,6 +205,26 @@ export function compareNullable(a: number | null | undefined, b: number | null |
   if (a == null) return 1;
   if (b == null) return -1;
   return (a - b) * mul;
+}
+
+/** compareNullable for strings that sort as text — ISO dates and set codes. */
+function compareNullableText(a: string | null | undefined, b: string | null | undefined, mul: number): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  return (a < b ? -1 : a > b ? 1 : 0) * mul;
+}
+
+/** Collector numbers are strings but read as numbers: 2 before 10, ★ after 100. */
+export function compareCollectorNumbers(a: string | null | undefined, b: string | null | undefined): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  const na = parseInt(a, 10);
+  const nb = parseInt(b, 10);
+  if (Number.isNaN(na) !== Number.isNaN(nb)) return Number.isNaN(na) ? 1 : -1;
+  if (!Number.isNaN(na) && na !== nb) return na - nb;
+  return a.localeCompare(b);
 }
 
 // ---- Grouping ----

@@ -61,6 +61,7 @@ import { CardSheet, FINISH_LABELS } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import { ownedBadge } from '../components/OwnedBadge.js';
 import { langMark } from '../components/LangFlag.js';
+import { yearMark } from '../components/cardRows.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { containerValue, HeaderValue, missingValue, valueText } from '../components/ValueSummary.js';
 import { ContainerValueChartSheet } from '../components/CollectionValueChart.js';
@@ -70,6 +71,7 @@ import {
   GroupCountBadge,
   extraLands,
   priceValue,
+  releaseFields,
   pricedForFinish,
   sortCards,
   useCardSort,
@@ -954,7 +956,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         {!sel.active && data.rows.length > 0 && (
           <SelectToggle onEnter={sel.enter} />
         )}
-        <SortControls prefs={sort} onChange={setSort} groups tagGroups />
+        <SortControls prefs={sort} onChange={setSort} groups tagGroups withRelease />
         <ViewToggle mode={view} onChange={setView} />
       </div>
 
@@ -989,13 +991,14 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               placements={placements}
               sel={sel}
               commanderDeck={isCommander}
+              showYear={sort.key === 'released'}
               emptyHint="No commander yet. Tap a card below and set its zone, or use the +Cmdr button in search."
             />
           )}
-          <Board title="Mainboard" rows={main} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} />
-          <Board title="Sideboard" rows={side} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} />
+          <Board title="Mainboard" rows={main} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
+          <Board title="Sideboard" rows={side} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
           {tokens.length > 0 && (
-            <Board title="Tokens" rows={tokens} deckId={id} group="none" view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} />
+            <Board title="Tokens" rows={tokens} deckId={id} group="none" view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
           )}
           {data.suggestedTokens.length > 0 && (
             <TokenSuggestions deckId={id} view={view} tokens={data.suggestedTokens} />
@@ -1014,6 +1017,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           onEdit={setInfo}
           placements={placements}
           sel={sel}
+          showYear={sort.key === 'released'}
           emptyHint={`Nothing filed here yet. Search above, scan a stack, or select cards in your collection and file them into this ${meta.noun}.`}
         />
       )}
@@ -1186,6 +1190,7 @@ function sortRows(rows: Row[], prefs: CardSortPrefs): Row[] {
       cmc: r.oracle?.cmc,
       // A lands-box basic costs the deck nothing, so it sorts by nothing.
       price: r.anyBasic ? 0 : priceValue(r.printing, r.oracle),
+      ...releaseFields(r.printing),
     }),
     prefs,
   );
@@ -1262,6 +1267,7 @@ function Board({
   placements,
   sel,
   commanderDeck = false,
+  showYear = false,
   emptyHint,
 }: {
   title: string;
@@ -1278,6 +1284,8 @@ function Board({
   sel?: MultiSelect;
   /** Commander-format deck: show move-to/from-command-zone actions. */
   commanderDeck?: boolean;
+  /** Sorted by release date: every slot shows the year it's being ordered on. */
+  showYear?: boolean;
   emptyHint?: string;
 }) {
   const ownership = useOwnershipIndex();
@@ -1323,9 +1331,11 @@ function Board({
     // A slot that pinned a language: the flag says which copy the list wants,
     // so a deck built out of your Japanese cards reads as one at a glance.
     const lang = langMark(r.lang);
+    const year = yearMark(r.printing, showYear);
     return {
       key: r.id,
       ...(lang ? { lang } : {}),
+      ...(year ? { year } : {}),
       name: r.oracle ? (r.board === 'token' ? tokenLabel(r.oracle) : r.oracle.name) : '(unknown card)',
       image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
       mana: r.oracle?.manaCost,

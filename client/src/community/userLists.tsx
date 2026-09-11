@@ -14,6 +14,7 @@ import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { Icon } from '../components/icons.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { langMark } from '../components/LangFlag.js';
+import { yearMark } from '../components/cardRows.js';
 import { sanitizePublicTradelist, sanitizePublicWishlist } from '../trade/validate.js';
 import type { CardItem } from '../components/CardViews.js';
 
@@ -145,18 +146,20 @@ export function tradeLineItem(
   line: TradeLine,
   key: string,
   cards: CardMaps | undefined,
-  flags: { match: boolean; hi: boolean },
+  flags: { match: boolean; hi: boolean; showYear?: boolean },
   onOpen?: (oracle: Priced<OracleCard>) => void,
 ): CardItem {
   const oracle = cards?.oracles.get(line.oracleId);
   const printing = cards?.printings.get(line.scryfallId);
   const lang = langMark(line.lang);
+  const year = yearMark(printing, flags.showYear);
   return {
     key,
     name: oracle?.name ?? line.name,
     image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
     count: line.quantity,
     ...(lang ? { lang } : {}),
+    ...(year ? { year } : {}),
     sub: (
       <>
         {printing && <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />}
@@ -180,7 +183,7 @@ export function wishLineItem(
   line: WishLine,
   key: string,
   cards: CardMaps | undefined,
-  flags: { match: boolean; own: boolean; hi: boolean },
+  flags: { match: boolean; own: boolean; hi: boolean; showYear?: boolean },
   onOpen?: (oracle: Priced<OracleCard>) => void,
 ): CardItem {
   const oracle = cards?.oracles.get(line.oracleId);
@@ -199,6 +202,7 @@ export function wishLineItem(
     'any printing'
   );
   const lang = langMark(line.lang);
+  const year = yearMark(printing, flags.showYear);
   return {
     key,
     name: oracle?.name ?? line.name,
@@ -206,6 +210,7 @@ export function wishLineItem(
     foil: !!line.finish && line.finish !== 'nonfoil',
     count: line.quantity,
     ...(lang ? { lang } : {}),
+    ...(year ? { year } : {}),
     sub: detail ? (
       <>
         {printingSub} · {detail}

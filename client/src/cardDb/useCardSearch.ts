@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { OracleCard, Priced, Printing } from '@mtg/shared';
-import { searchCards, type SearchFilters, type SearchSort } from './search.js';
+import { searchCards, type ReleaseInfo, type SearchFilters, type SearchSort } from './search.js';
 
 // Debounced card-database search, shared by every picker (global search
 // overlay, import fixes, trade offers). Results clear when the criteria empty.
@@ -9,6 +9,7 @@ const NO_FILTERS: SearchFilters = {};
 const BEST_MATCH: SearchSort = { key: 'relevance', dir: 'desc' };
 /** Shared empty array, so an unpinned search doesn't churn a new identity per render. */
 const NO_PRINTINGS: (Priced<Printing> | undefined)[] = [];
+const NO_RELEASES: (ReleaseInfo | undefined)[] = [];
 
 export function useCardSearch(
   query: string,
@@ -31,6 +32,8 @@ export function useCardSearch(
   results: Priced<OracleCard>[];
   /** Index-aligned with `results` when a `set:` term pinned them; empty otherwise. */
   printings: (Priced<Printing> | undefined)[];
+  /** Index-aligned with `results` when sorting by release date; empty otherwise. */
+  releases: (ReleaseInfo | undefined)[];
   total: number;
   searching: boolean;
 } {
@@ -38,6 +41,7 @@ export function useCardSearch(
   const enabled = opts.enabled ?? query.trim().length > 0;
   const [results, setResults] = useState<Priced<OracleCard>[]>([]);
   const [printings, setPrintings] = useState<(Priced<Printing> | undefined)[]>(NO_PRINTINGS);
+  const [releases, setReleases] = useState<(ReleaseInfo | undefined)[]>(NO_RELEASES);
   const [total, setTotal] = useState(0);
   const [searching, setSearching] = useState(false);
 
@@ -45,6 +49,7 @@ export function useCardSearch(
     if (!enabled) {
       setResults([]);
       setPrintings(NO_PRINTINGS);
+      setReleases(NO_RELEASES);
       setTotal(0);
       setSearching(false);
       return;
@@ -59,6 +64,7 @@ export function useCardSearch(
       if (cancelled) return;
       setResults(res.cards);
       setPrintings(res.printings ?? NO_PRINTINGS);
+      setReleases(res.releases ?? NO_RELEASES);
       setTotal(res.total);
       setSearching(false);
     }, 120);
@@ -68,5 +74,5 @@ export function useCardSearch(
     };
   }, [query, filters, limit, sort, enabled, expandPrintings]);
 
-  return { results, printings, total, searching };
+  return { results, printings, releases, total, searching };
 }

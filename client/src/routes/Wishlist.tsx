@@ -162,7 +162,7 @@ export function Wishlist() {
           <div className="list-toolbar">
             {!sel.active && <ListSearchButton />}
             {!sel.active && filtered.length > 0 && <SelectToggle onEnter={sel.enter} />}
-            <SortControls prefs={sort} onChange={setSort} withDates />
+            <SortControls prefs={sort} onChange={setSort} withDates withRelease />
             <ViewToggle mode={view} onChange={setView} />
           </div>
           {filtered.length === 0 ? (
@@ -174,7 +174,12 @@ export function Wishlist() {
               selectedKeys={sel.selected}
               onToggleSelect={sel.toggle}
               items={filtered.map((r) =>
-                wishCardItem(r, { ownership, moverFlags, onClick: r.oracle ? () => setEditing(r) : undefined }),
+                wishCardItem(r, {
+                  ownership,
+                  moverFlags,
+                  showYear: sort.key === 'released',
+                  onClick: r.oracle ? () => setEditing(r) : undefined,
+                }),
               )}
             />
           )}

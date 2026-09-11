@@ -2,7 +2,7 @@ import type { Color, DeckFormat, Finish, Format, OracleCard, Priced, Printing, P
 import { db } from '../db/schema.js';
 import { getPricesByIds, withPrices } from './prices.js';
 import { loadOracleTags } from './oracleTags.js';
-import { priceValue, sortCards, type CardSortPrefs } from '../components/cardSort.js';
+import { compareCollectorNumbers, priceValue, releaseFields, sortCards, type CardSortPrefs } from '../components/cardSort.js';
 import {
   matchesQuery,
   normalizeName,
@@ -40,12 +40,28 @@ type Indexed = SearchableEntry;
 let cache: Indexed[] | null = null;
 let nameLookup: Map<string, OracleCard> | null = null;
 let sets: SetInfo[] | null = null;
+let debuts: Map<string, Debut> | null = null;
 
 /** Drop the cache after a card-DB re-import so search reflects new data. */
 export function invalidateSearchIndex(): void {
   cache = null;
   nameLookup = null;
   sets = null;
+  debuts = null;
+}
+
+/**
+ * Where a card first appeared. An OracleCard carries no date of its own — its
+ * `defaultScryfallId` points at the *newest* printing — so the release sort
+ * takes the earliest printing instead, which is the only release date a card
+ * you don't own has. Falls out of the index build's existing pass over the
+ * printings table, so it costs a string compare per printing and nothing else.
+ */
+interface Debut {
+  releasedAt: string;
+  set: string;
+  setName: string;
+  collectorNumber: string;
 }
 
 /** One set the card DB knows about, for the `set:` completions. */
@@ -72,6 +88,7 @@ async function getIndex(): Promise<Indexed[]> {
   if (cache) return cache;
   const [cards, printings] = await Promise.all([db.oracleCards.toArray(), db.printings.toArray()]);
   const byOracle = new Map<string, PrintingAgg>();
+  const byDebut = new Map<string, Debut>();
   // The set list falls out of the same pass: the printings table is the only
   // place a set's full name lives, and re-reading 100k rows just to build the
   // `set:` completion list would be absurd when they're already in hand.
@@ -88,6 +105,22 @@ async function getIndex(): Promise<Indexed[]> {
     for (const v of p.variants ?? []) agg.variants.add(v);
     agg.count++;
 
+    // Same day, two printings: take the lower collector number, so a card that
+    // debuted in a set with a showcase sibling sorts at the plain one's spot.
+    const debut = byDebut.get(p.oracleId);
+    if (
+      !debut ||
+      p.releasedAt < debut.releasedAt ||
+      (p.releasedAt === debut.releasedAt && compareCollectorNumbers(p.collectorNumber, debut.collectorNumber) < 0)
+    ) {
+      byDebut.set(p.oracleId, {
+        releasedAt: p.releasedAt,
+        set: p.set,
+        setName: p.setName,
+        collectorNumber: p.collectorNumber,
+      });
+    }
+
     const code = p.set.toLowerCase();
     const known = bySet.get(code);
     if (!known) bySet.set(code, { code, name: p.setName, releasedAt: p.releasedAt, count: 1 });
@@ -97,6 +130,7 @@ async function getIndex(): Promise<Indexed[]> {
     }
   }
   sets = [...bySet.values()];
+  debuts = byDebut;
   cache = cards.map((c) => {
     const agg = byOracle.get(c.oracleId);
     const summary: PrintingSummary | undefined = agg && {
@@ -195,7 +229,20 @@ export interface SearchResult {
    * own printing preference decides what each card displays as.
    */
   printings?: (Priced<Printing> | undefined)[];
+  /**
+   * Index-aligned with `cards`: where that row's cardboard came out. Only
+   * present when the results are sorted by release date, because that's the
+   * only time the list has to show what it ordered on. A pinned row reports its
+   * own printing; every other row reports the card's debut.
+   */
+  releases?: (ReleaseInfo | undefined)[];
   total: number;
+}
+
+/** The release facts a result row can show: the year, and what to call it. */
+export interface ReleaseInfo {
+  releasedAt: string;
+  setName: string;
 }
 
 /**
@@ -219,13 +266,11 @@ async function printingsForSets(codes: string[]): Promise<Map<string, Printing[]
   return out;
 }
 
-/** Collector numbers are strings but read as numbers: 2 before 10, ★ after 100. */
+/** Printing order within a set, with the id as the last resort for a dead heat. */
 function byCollectorNumber(a: Printing, b: Printing): number {
-  const na = parseInt(a.collectorNumber, 10);
-  const nb = parseInt(b.collectorNumber, 10);
-  if (Number.isNaN(na) !== Number.isNaN(nb)) return Number.isNaN(na) ? 1 : -1;
-  if (!Number.isNaN(na) && na !== nb) return na - nb;
-  return a.collectorNumber.localeCompare(b.collectorNumber) || (a.scryfallId < b.scryfallId ? -1 : 1);
+  return (
+    compareCollectorNumbers(a.collectorNumber, b.collectorNumber) || (a.scryfallId < b.scryfallId ? -1 : 1)
+  );
 }
 
 /**
@@ -316,9 +361,16 @@ export async function searchCards(
     printings = page.map((m) => (m.printing ? byId.get(m.printing.scryfallId) : undefined));
   }
 
+  // Page-sized map lookups, and only for the sort that shows them.
+  const releases =
+    sort.key === 'released'
+      ? page.map((m): ReleaseInfo | undefined => m.printing ?? debuts?.get(m.card.oracleId))
+      : undefined;
+
   return {
     cards: await withPrices(page.map((m) => m.card), (c) => c.defaultScryfallId),
     ...(printings ? { printings } : {}),
+    ...(releases ? { releases } : {}),
     total: matches.length,
   };
 }
@@ -349,6 +401,10 @@ async function orderMatches<T extends { card: OracleCard; score: number; printin
   }
   const idOf = (m: T) => m.printing?.scryfallId ?? m.card.defaultScryfallId;
   const prices = sort.key === 'price' ? await getPricesByIds(matches.map(idOf)) : null;
+  // A row a `set:` term pinned to one printing sorts by that printing — it is
+  // the card the row is showing. Everything else sorts by the card's debut,
+  // which the index build (already run to produce these matches) left behind.
+  const byDebut = sort.key === 'released' ? debuts : null;
   return sortCards(
     matches,
     (m) => {
@@ -357,6 +413,7 @@ async function orderMatches<T extends { card: OracleCard; score: number; printin
         name: m.card.name,
         cmc: m.card.cmc,
         price: p ? priceValue({ priceEur: p.eur, priceUsd: p.usd }) : null,
+        ...(byDebut ? releaseFields(m.printing ?? byDebut.get(m.card.oracleId)) : {}),
       };
     },
     sort,

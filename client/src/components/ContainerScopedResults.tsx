@@ -8,7 +8,7 @@ import { CardSheet } from './CardSheet.js';
 import type { CardItem } from './CardViews.js';
 import { ResultsList, resultCount } from './ResultsList.js';
 import { deckCardItem } from './cardRows.js';
-import { SortControls, priceValue, sortCards, useCardSort } from './CardSorting.js';
+import { SortControls, priceValue, releaseFields, sortCards, useCardSort } from './CardSorting.js';
 
 // The global search, scoped into the deck/binder/box you're standing on: it
 // searches that container's own cards instead of the whole database. Mirrors
@@ -45,9 +45,13 @@ export function ContainerScopedResults({
         cmc: r.oracle?.cmc,
         // A lands-box basic costs the container nothing, so it sorts by nothing.
         price: r.entry.anyBasic ? 0 : priceValue(r.printing, r.oracle),
+        ...releaseFields(r.printing),
       }),
       sort,
-    ).map((r): CardItem => ({ ...deckCardItem(r, { kind, onClick: () => setEditing(r) }), key: r.entry.id }));
+    ).map((r): CardItem => ({
+      ...deckCardItem(r, { kind, showYear: sort.key === 'released', onClick: () => setEditing(r) }),
+      key: r.entry.id,
+    }));
   }, [rows, matches, kind, sort]);
 
   const loading = rows === undefined;
@@ -58,7 +62,7 @@ export function ContainerScopedResults({
         items={items}
         pageKey={`container:${deckId}|${query}|${sort.key}:${sort.dir}`}
         status={loading ? 'Loading…' : resultCount(items.length)}
-        controls={<SortControls prefs={sort} onChange={setSort} />}
+        controls={<SortControls prefs={sort} onChange={setSort} withRelease />}
         showEmpty={!loading && items.length === 0}
       />
 

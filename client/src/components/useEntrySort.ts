@@ -6,7 +6,7 @@ import type { JoinedEntry, JoinedWish } from '../db/queries.js';
 import { acquisitionGain, costBasisOf } from '../price/costBasis.js';
 import { historyChange } from '../price/history.js';
 import { valueKeyOf } from '../price/collectionValue.js';
-import { pickPrice, priceValue, pricedForFinish, type CardSortPrefs, type SortFields } from './cardSort.js';
+import { pickPrice, priceValue, pricedForFinish, releaseFields, type CardSortPrefs, type SortFields } from './cardSort.js';
 
 // Sorting your own cards needs one thing the joined rows don't carry: the
 // recorded price change. It comes from priceHistories, the biggest user-data
@@ -124,6 +124,7 @@ export function collectionSortFields(r: JoinedEntry, data: EntrySortData): SortF
     changePct: data.changes?.get(valueKeyOf(r.entry.scryfallId, r.entry.finish))?.pct ?? null,
     added: r.entry.createdAt,
     updated: r.entry.updatedAt,
+    ...releaseFields(r.printing),
   };
 }
 
@@ -136,5 +137,6 @@ export function wishSortFields(r: JoinedWish): SortFields {
     price: priceValue(r.printing, r.oracle),
     added: r.entry.createdAt,
     updated: r.entry.updatedAt,
+    ...releaseFields(r.printing),
   };
 }

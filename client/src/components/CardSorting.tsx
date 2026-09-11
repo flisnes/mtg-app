@@ -95,6 +95,10 @@ const DATE_OPTIONS: [SortKey, string][] = [
   ['added', 'Sort: Date added'],
   ['updated', 'Sort: Last edited'],
 ];
+// When the cardboard came out. Every list that shows a printing can offer it,
+// including the card database — there it means the card's debut rather than the
+// printing you hold, which is the only release date a card you don't own has.
+const RELEASE_OPTION: [SortKey, string] = ['released', 'Sort: Release date'];
 const GROUP_OPTIONS: [GroupKey, string][] = [
   ['none', 'Group: None'],
   ['type', 'Group: Card type'],
@@ -111,6 +115,7 @@ export function SortControls({
   withRelevance = false,
   withChange = false,
   withDates = false,
+  withRelease = false,
 }: {
   prefs: CardSortPrefs;
   onChange: (p: CardSortPrefs) => void;
@@ -124,12 +129,15 @@ export function SortControls({
   withChange?: boolean;
   /** Offer date-added / last-edited sorts (views that supply SortFields.added/updated). */
   withDates?: boolean;
+  /** Offer the release-date sort (views that supply SortFields.released). */
+  withRelease?: boolean;
 }) {
   const sortOptions = [
     ...(withRelevance ? [RELEVANCE_OPTION] : []),
     ...SORT_OPTIONS,
     ...(withChange ? CHANGE_OPTIONS : []),
     ...(withDates ? DATE_OPTIONS : []),
+    ...(withRelease ? [RELEASE_OPTION] : []),
   ];
   const groupOptions = tagGroups ? [...GROUP_OPTIONS, TAG_GROUP_OPTION] : GROUP_OPTIONS;
   return (

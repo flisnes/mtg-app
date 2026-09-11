@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.148.1
+
+- **Sort any card list by release date.** New sort option on your collection, wishlist, decks, binders, boxes, other people's lists and the card database. Your own lists order by the printing you actually hold, so a binder reads as a timeline of your cardboard; the card database orders by when the card first appeared, so a reprint sorts to its debut rather than its latest treatment. Sets that shipped the same day stay together, and within a set the cards come out in collector-number order.
+- **The year shows on the cards while that sort is on.** A grid of card art says nothing about the order it is in, so each card wears its release year in the corner (and next to its name in list view) for as long as you are sorted by release. Hover it for the set and the full date. Switch to any other sort and the year goes away again.
+
 ## 0.148.0
 
 - **See which formats a card is legal in, from the card sheet's "..." menu.** "Format legality" lists Standard, Pioneer, Modern, Legacy, Vintage, Pauper and Commander with the card's standing in each: green for legal, red for banned, amber for restricted, grey for not legal. Handy before you sleeve up a card you half-remember getting banned.

@@ -4461,6 +4461,52 @@ button.primary {
 .legality-bad li {
   margin: 0.15rem 0;
 }
+/* The card sheet's format-legality list: one row per tracked format, the
+   verdict as a colored chip. Green legal, red banned, amber restricted, grey
+   not legal — the same tones the rest of the app uses for those states. */
+.legality-list {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.legality-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+}
+.legality-format {
+  font-size: 0.95rem;
+}
+.legality-chip {
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  white-space: nowrap;
+}
+.legality-chip.legality-legal {
+  background: rgba(78, 201, 123, 0.18);
+  color: var(--ok);
+}
+.legality-chip.legality-banned {
+  background: rgba(255, 92, 92, 0.18);
+  color: var(--danger);
+}
+.legality-chip.legality-restricted {
+  background: rgba(230, 162, 60, 0.2);
+  color: #e6a23c;
+}
+.legality-chip.legality-not-legal {
+  background: var(--surface);
+  color: var(--text-dim);
+}
 .tile-badge.badge-illegal {
   background: var(--danger);
   color: #fff;

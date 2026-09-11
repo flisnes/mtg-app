@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.148.0
+
+- **See which formats a card is legal in, from the card sheet's "..." menu.** "Format legality" lists Standard, Pioneer, Modern, Legacy, Vintage, Pauper and Commander with the card's standing in each: green for legal, red for banned, amber for restricted, grey for not legal. Handy before you sleeve up a card you half-remember getting banned.
+
 ## 0.147.9
 
 - **Tap a sealed product to see what's inside it.** "Find sealed products with this card" used to name the precons and stop there; now every result opens a grid of the cards that product ships, in the exact printings it ships them in. The card you looked it up with is marked, and tapping any card opens it like a card anywhere else in the app.

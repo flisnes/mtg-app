@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.148.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'The card sheet’s ⋯ menu has "Format legality": the seven formats we track with the card’s standing in each. Green legal, red banned, amber restricted, grey not legal.',
+      },
+    ],
+  },
+  {
     version: '0.147.9',
     changes: [
       {
@@ -195,24 +205,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'removed',
         text: 'The little graph on a container’s History panel. It drew card counts in the price chart’s clothes, which read as money.',
-      },
-    ],
-  },
-  {
-    version: '0.145.2',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'The collection used to open on "0 entries · 0 cards" for a moment, which looked like it had gone missing. It now shows the real count right away, with placeholder cards until the shelf finishes loading.',
-      },
-    ],
-  },
-  {
-    version: '0.145.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: '`otag:` searches came back empty after the 0.145.0 update, because the card database being served predated tag search. Accept the card-data update when it is offered and tag search works.',
       },
     ],
   },

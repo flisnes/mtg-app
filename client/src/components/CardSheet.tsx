@@ -45,6 +45,7 @@ import { EventSheet } from './EventSheet.js';
 import { useOpenCollectionSearch, useOpenDbSearch } from './GlobalSearch.js';
 import { Icon, type IconName } from './icons.js';
 import { OptionsMenu } from './OptionsMenu.js';
+import { CardLegalitySheet } from './CardLegalitySheet.js';
 import { OracleSearchChip, useOracleSelection } from './OracleSearchChip.js';
 import { SealedWithCardSheet } from '../sealed/SealedWithCardSheet.js';
 import { PriceChartSheet } from './PriceChart.js';
@@ -420,6 +421,7 @@ export function CardSheet(props: CardSheetProps) {
   // The sparkline blown up: full price chart with axes and event markers.
   const [chartOpen, setChartOpen] = useState(false);
   const [sealedOpen, setSealedOpen] = useState(false);
+  const [legalityOpen, setLegalityOpen] = useState(false);
   // "Pick one from my collection" (container slots): the owned-copies overlay.
   const [pickingCopy, setPickingCopy] = useState(false);
   // The copy they're holding was never added: a nested add form, whose result
@@ -960,6 +962,7 @@ export function CardSheet(props: CardSheetProps) {
                 ? [{ label: 'All printings', icon: 'grid' as IconName, onClick: () => setAllEditions(true) }]
                 : []),
               { label: 'Find sealed products with this card', icon: 'sealed', onClick: () => setSealedOpen(true) },
+              { label: 'Format legality', icon: 'balance', onClick: () => setLegalityOpen(true) },
             ]}
           />
           {/* The way out, in the same place on every mode. The action row used
@@ -1392,6 +1395,7 @@ export function CardSheet(props: CardSheetProps) {
           onClose={() => setChartOpen(false)}
         />
       )}
+      {legalityOpen && <CardLegalitySheet oracleCard={oracleCard} onClose={() => setLegalityOpen(false)} />}
       {sealedOpen && (
         <SealedWithCardSheet
           cardName={oracleCard.name}

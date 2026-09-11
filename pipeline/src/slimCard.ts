@@ -1,5 +1,5 @@
 import type { Color, Finish, Format, LegalityStatus, Printing, PrintingVariant, Rarity } from '@mtg/shared';
-import { FORMATS, PRINTING_VARIANTS, normalizeColors } from '@mtg/shared';
+import { FORMATS, MANA_LETTERS, PRINTING_VARIANTS, normalizeColors } from '@mtg/shared';
 
 // Map a raw Scryfall card object down to our slim Printing, tolerating unknown
 // and added fields (beta plan handoff note). Also carries the oracle-invariant
@@ -34,6 +34,8 @@ export interface RawCard {
   oracle_text?: string;
   colors?: string[];
   color_identity?: string[];
+  /** Mana this card can add, e.g. ["U","W"]. Scryfall computes it for lands, rocks, dorks and rituals alike. */
+  produced_mana?: string[];
   rarity: string;
   power?: string;
   toughness?: string;
@@ -136,6 +138,17 @@ function variantsOf(card: RawCard): PrintingVariant[] {
   return PRINTING_VARIANTS.filter((v) => found.has(v));
 }
 
+/**
+ * `produced_mana` as a MANA_LETTERS-ordered string, so the field is stable
+ * whatever order Scryfall streamed the array in. Anything that isn't a mana
+ * letter is dropped rather than trusted.
+ */
+function produces(values: string[] | undefined): string {
+  if (!values?.length) return '';
+  const seen = new Set(values);
+  return [...MANA_LETTERS].filter((c) => seen.has(c)).join('');
+}
+
 function price(value: string | null | undefined): number | null {
   if (value == null) return null;
   const n = Number(value);
@@ -231,6 +244,8 @@ export interface SlimResult {
     oracleText: string | null;
     colors: Color[];
     colorIdentity: Color[];
+    /** Mana letters this card adds, MANA_LETTERS-ordered; '' when it adds none. */
+    produces: string;
     rarity: Rarity;
     legalities: Partial<Record<Format, LegalityStatus>>;
     power: string | null;
@@ -306,6 +321,7 @@ export function slimCard(card: RawCard): SlimResult | null {
       oracleText: of.oracleText,
       colors: of.colors,
       colorIdentity: normalizeColors(card.color_identity),
+      produces: produces(card.produced_mana),
       rarity: rarity(card.rarity),
       legalities: legalities(card.legalities),
       power: of.power,

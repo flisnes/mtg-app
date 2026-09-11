@@ -93,6 +93,112 @@ export interface OracleCard {
    * of cards) and on card DBs built before this field existed. Drives `otag:`.
    */
   tags?: number[];
+  /**
+   * The kinds of mana this card can add, from Scryfall's `produced_mana`, as a
+   * string in MANA_LETTERS order — `"WU"` for Hallowed Fountain, `"C"` for Sol
+   * Ring, `"WUBRG"` for Birds of Paradise. Omitted for the ~93% of cards that
+   * produce no mana, and absent on card DBs built before this field. Drives
+   * `produces:` search and the deck analysis's colored-source counting.
+   *
+   * It says *which* colors, never *how much* or *when* — a card that taps for
+   * two, or enters tapped, looks identical here. That's what `mana` is for.
+   */
+  produces?: string;
+  /**
+   * How this card feeds the mana system: what it adds, when, and whether it
+   * arrives tapped. See ManaProfileTuple. Omitted for cards that neither
+   * produce mana nor ramp, and absent on card DBs built before this field.
+   */
+  mana?: ManaProfileTuple;
+}
+
+/**
+ * The mana letters, in the order `OracleCard.produces` writes them. WUBRG is
+ * Magic's canonical color order; `C` (colorless) trails it, matching how
+ * Scryfall sorts a mana cost.
+ */
+export const MANA_LETTERS = 'WUBRGC';
+
+/**
+ * How a card puts mana into play, coarse enough to be derivable and specific
+ * enough to sequence a turn with:
+ *
+ *   land       a land that taps for mana
+ *   rock       an artifact that taps for mana (Sol Ring, a Signet)
+ *   dork       a creature that taps for mana (Llanowar Elves) — summoning sick
+ *   landramp   fetches a land onto the battlefield (Rampant Growth, Cultivate)
+ *   ritual     one-shot mana (Dark Ritual)
+ *   extraland  lets you play additional lands (Exploration, Azusa)
+ *
+ * Stored as an index into MANA_KINDS.
+ */
+export type ManaKind = 'land' | 'rock' | 'dork' | 'landramp' | 'ritual' | 'extraland';
+
+export const MANA_KINDS: readonly ManaKind[] = ['land', 'rock', 'dork', 'landramp', 'ritual', 'extraland'];
+
+/** Arrives tapped every time (Jungle Hollow, Temple of Enlightenment). */
+export const MANA_TAPPED = 1;
+/**
+ * Arrives tapped only sometimes — the checklands, shocklands, fastlands,
+ * slowlands and battle lands, whose rules text says "enters tapped" inside a
+ * sentence beginning "unless". Distinct from MANA_TAPPED because the two read
+ * identically in oracle text and play nothing alike.
+ */
+export const MANA_MAYBE_TAPPED = 2;
+/** The mana isn't available the turn it resolves (a creature's summoning sickness). */
+export const MANA_SICK = 4;
+/** Spends itself: a ritual adds mana once, not every turn. */
+export const MANA_ONE_SHOT = 8;
+/**
+ * We could not work out how much mana it adds, so `adds` is a floor of 1.
+ * Bloom Tender, Charmed Pendant, Astral Cornucopia: cards whose amount depends
+ * on the board. Consumers should say so rather than quietly using the 1.
+ */
+export const MANA_UNKNOWN = 16;
+
+/**
+ * `[kind, adds, flags]`, positional for the same reason PriceTuple is: this
+ * rides on several thousand oracle rows and the key names would cost more than
+ * the values.
+ *
+ *   kind   index into MANA_KINDS
+ *   adds   mana it adds once available, the turn it's available (1 for a
+ *          Forest, 2 for Sol Ring, 3 for Dark Ritual). For `landramp` this is
+ *          lands fetched onto the battlefield, which is the same thing a turn
+ *          later. A floor of 1 when MANA_UNKNOWN is set.
+ *   flags  MANA_TAPPED | MANA_MAYBE_TAPPED | MANA_SICK | MANA_ONE_SHOT |
+ *          MANA_UNKNOWN
+ *
+ * Which *colors* it adds lives in `produces`, not here, so the two aren't
+ * duplicated. A `landramp` card has no `produces` at all: what it makes depends
+ * on the land it fetches.
+ */
+export type ManaProfileTuple = [kind: number, adds: number, flags: number];
+
+/** ManaProfileTuple unpacked. */
+export interface ManaProfile {
+  kind: ManaKind;
+  adds: number;
+  /** 'never' | 'always' | 'maybe' — see MANA_TAPPED / MANA_MAYBE_TAPPED. */
+  tapped: 'never' | 'always' | 'maybe';
+  /** Summoning-sick: the mana is there from the *next* turn. */
+  sick: boolean;
+  oneShot: boolean;
+  /** `adds` is a guess of 1; the real amount depends on the board. */
+  unknown: boolean;
+}
+
+export function decodeManaProfile(tuple: ManaProfileTuple | undefined): ManaProfile | null {
+  if (!tuple) return null;
+  const [kind, adds, flags] = tuple;
+  return {
+    kind: MANA_KINDS[kind] ?? 'land',
+    adds,
+    tapped: flags & MANA_TAPPED ? 'always' : flags & MANA_MAYBE_TAPPED ? 'maybe' : 'never',
+    sick: !!(flags & MANA_SICK),
+    oneShot: !!(flags & MANA_ONE_SHOT),
+    unknown: !!(flags & MANA_UNKNOWN),
+  };
 }
 
 /**

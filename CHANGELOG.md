@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.148.2
+
+- **Search by the mana a card makes.** `produces:g` finds everything that taps for green, lands and rocks and mana creatures alike. `produces:wu` wants both colors, `produces:c` is colorless mana, `produces=wu` is exactly those two and nothing else, and `produces>=3` finds your three-color fixing. Works anywhere the search bar does, so you can point it at your own collection.
+- **`is:tapland` knows the difference between "always" and "sometimes".** A Jungle Hollow always enters tapped; a Glacial Fortress only does when you are short on lands. Both print "enters tapped" on the card, so `is:tapland` is the ones that really always do. `is:untappedsource` is the other side of it, and `is:manasource` is anything that taps for mana at all. Try `is:untappedsource produces:w t:land` when a double-white two-drop keeps sitting in your hand.
+- The card database gained two new facts per card to make this work, so you will be offered a card-data update after this release. It is a bigger one than usual, once.
+
 ## 0.148.1
 
 - **Sort any card list by release date.** New sort option on your collection, wishlist, decks, binders, boxes, other people's lists and the card database. Your own lists order by the printing you actually hold, so a binder reads as a timeline of your cardboard; the card database orders by when the card first appeared, so a reprint sorts to its debut rather than its latest treatment. Sets that shipped the same day stay together, and within a set the cards come out in collector-number order.

@@ -1,4 +1,4 @@
-// The older half of the changelog (0.145.2 down to 0.98.0), split out of
+// The older half of the changelog (0.145.4 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,36 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.145.4',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The "Since acquisition" chart put two unrelated figures on one line: the gain, and how far that gain had moved since the chart started. It now reads the gain and the same gain as a share of what you paid.',
+      },
+    ],
+  },
+  {
+    version: '0.145.3',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'A card now shows how much it has gained or lost against what you paid for it, not against the day we started recording prices. Cards that came in without a price still show the recorded movement.',
+      },
+      {
+        kind: 'added',
+        text: 'The price charts pan and zoom. Scroll or pinch to zoom, drag to move along the line, double-tap to reset.',
+      },
+      {
+        kind: 'added',
+        text: 'Decks, binders and boxes carry a total value in the header. Tap it for that container’s value over time, including what its cards have gained since you got them.',
+      },
+      {
+        kind: 'removed',
+        text: 'The little graph on a container’s History panel. It drew card counts in the price chart’s clothes, which read as money.',
+      },
+    ],
+  },
   {
     version: '0.145.2',
     changes: [

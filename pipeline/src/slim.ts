@@ -19,13 +19,14 @@ import type {
   SealedPriceMap,
   SetTypeMap,
 } from '@mtg/shared';
-import { isMarkerCard, isVariantPrinting } from '@mtg/shared';
+import { MANA_UNKNOWN, isMarkerCard, isVariantPrinting } from '@mtg/shared';
 import { getBulkEntry, getSetTypes, openBulkStream } from './scryfall.js';
 import { slimCard, type RawCard, type SlimResult } from './slimCard.js';
 import { buildSealedProducts } from './sealed.js';
 import { fetchSealedUsdPrices } from './sealedPrices.js';
 import { fetchSealedEurPrices } from './cardmarketPrices.js';
 import { buildOracleTags } from './oracleTags.js';
+import { buildManaTagIndex, manaProfileOf, type ManaTagIndex } from './manaProfile.js';
 
 // Nightly card-DB pipeline (beta plan §3). Downloads Scryfall `default_cards`,
 // slims each card to ~18 fields, and emits:
@@ -119,8 +120,16 @@ function betterRepresentative(a: SlimResult, b: SlimResult): SlimResult {
   return a.printing.scryfallId <= b.printing.scryfallId ? a : b;
 }
 
-function toOracleCard(rep: SlimResult, tokenOracleIds: string[], tags: number[] | undefined): OracleCard {
+function toOracleCard(
+  rep: SlimResult,
+  tokenOracleIds: string[],
+  tags: number[] | undefined,
+  manaTags: ManaTagIndex | null,
+): OracleCard {
   const { printing, oracle } = rep;
+  const mana = manaTags
+    ? manaProfileOf({ typeLine: oracle.typeLine, oracleText: oracle.oracleText, produces: oracle.produces, tags }, manaTags)
+    : undefined;
   return {
     oracleId: printing.oracleId,
     name: oracle.name,
@@ -146,6 +155,11 @@ function toOracleCard(rep: SlimResult, tokenOracleIds: string[], tags: number[] 
     // Sparse like the flags above: ~7% of oracle cards carry no tag at all, and
     // an empty array on every one of them is pure weight.
     ...(tags?.length ? { tags } : {}),
+    // Sparse like the flags above: only ~8% of cards touch the mana system at
+    // all, so an empty slot on the other 33k rows is pure weight. Together the
+    // two fields cost about 30 KB gzipped across the whole card DB.
+    ...(oracle.produces ? { produces: oracle.produces } : {}),
+    ...(mana ? { mana } : {}),
   };
 }
 
@@ -257,6 +271,11 @@ async function main(): Promise<void> {
     }
   }
 
+  // Mana profiles ride on the tags (see manaProfile.ts: the tapland /
+  // conditional-tapland split is the whole reason this is derivable), so
+  // without a vocabulary there are none — same graceful degradation as `otag:`.
+  const manaTags = tags ? buildManaTagIndex(tags.dictionary) : null;
+
   const entry = await getBulkEntry(BULK_TYPE);
   console.log(`[pipeline] ${BULK_TYPE} updated_at=${entry.updated_at} size≈${(entry.compressed_size / 1e6).toFixed(0)}MB`);
 
@@ -334,9 +353,16 @@ async function main(): Promise<void> {
       tokenIds.add(oracleId);
       markerLinks++;
     }
-    return toOracleCard(rep, [...tokenIds].sort(), tags?.byOracleId.get(rep.printing.oracleId));
+    return toOracleCard(rep, [...tokenIds].sort(), tags?.byOracleId.get(rep.printing.oracleId), manaTags);
   });
   console.log(`[pipeline] linked ${markerLinks} marker-card references (emblems, counters, dungeons, …)`);
+  const producers = oracleCards.filter((c) => c.produces).length;
+  const profiles = oracleCards.filter((c) => c.mana);
+  const unknownAmount = profiles.filter((c) => c.mana![2] & MANA_UNKNOWN).length;
+  console.log(
+    `[pipeline] mana: ${producers} cards produce mana, ${profiles.length} carry a profile ` +
+      `(${unknownAmount} with an amount we can't model)`,
+  );
 
   // Chunked price-less artifacts (primary path).
   const oracleChunks = emitChunks('oracle-slim', oracleCards, (c) => c.oracleId);

@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.148.2',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Search by the mana a card makes. `produces:g` finds anything that taps for green, `produces:wu` wants both colors, `produces>=3` finds your fixing. Plus `is:tapland` for the lands that always enter tapped (not the ones that only sometimes do), `is:untappedsource` for the ones that don’t, and `is:manasource` for anything that taps for mana.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'The card database learned two new things about every card to make that work, so expect a card-data update after this one. Bigger than usual, just this once.',
+      },
+    ],
+  },
+  {
     version: '0.148.1',
     changes: [
       {
@@ -185,36 +200,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Cards in a language you don’t collect in now wear a small flag next to their badges — in your collection, in decks and boxes, and in a trade. Pick the language you collect in under Settings -> Language.',
-      },
-    ],
-  },
-  {
-    version: '0.145.4',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'The "Since acquisition" chart put two unrelated figures on one line: the gain, and how far that gain had moved since the chart started. It now reads the gain and the same gain as a share of what you paid.',
-      },
-    ],
-  },
-  {
-    version: '0.145.3',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'A card now shows how much it has gained or lost against what you paid for it, not against the day we started recording prices. Cards that came in without a price still show the recorded movement.',
-      },
-      {
-        kind: 'added',
-        text: 'The price charts pan and zoom. Scroll or pinch to zoom, drag to move along the line, double-tap to reset.',
-      },
-      {
-        kind: 'added',
-        text: 'Decks, binders and boxes carry a total value in the header. Tap it for that container’s value over time, including what its cards have gained since you got them.',
-      },
-      {
-        kind: 'removed',
-        text: 'The little graph on a container’s History panel. It drew card counts in the price chart’s clothes, which read as money.',
       },
     ],
   },

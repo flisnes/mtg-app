@@ -1,5 +1,6 @@
 import {
   FORMATS,
+  MANA_TAPPED,
   normalizeColors,
   type Color,
   type Finish,
@@ -21,6 +22,11 @@ import {
 //   mv:2  cmc<=3      mana value
 //   cmc:even          mana value parity (even/odd)
 //   mana>={2}  m:uu   mana cost symbols (: means "at least", like colors)
+//   produces:g  produces:wu  produces>=3   mana the card can *add*, from
+//                     Scryfall's produced_mana: lands, rocks, dorks, rituals.
+//                     `:` means "at least these", so produces:wu wants both
+//                     colors; produces:c is colorless mana; a bare number
+//                     counts how many colors it makes.
 //   set:znr  s:znr    printed in this set (in the card search: any printing of
 //                     the card; in a list of copies: the copy's own printing).
 //                     A card search pinned to a set also lists that set's
@@ -51,6 +57,7 @@ export type QueryTerm = { negate: boolean } & (
   | { kind: 'cmc'; op: NumOp; value: number }
   | { kind: 'cmcParity'; even: boolean }
   | { kind: 'mana'; op: NumOp; generic: number; symbols: Map<string, number> }
+  | { kind: 'produces'; op: NumOp; letters: string[] | null; count: number | null }
   | { kind: 'set'; value: string }
   | { kind: 'format'; format: Format }
   | { kind: 'is'; test: (entry: SearchableEntry) => boolean }
@@ -233,6 +240,7 @@ const CMC_FIELDS = new Set(['cmc', 'mv', 'manavalue']);
 const FORMAT_FIELDS = new Set(['f', 'format', 'legal']);
 const RARITY_FIELDS = new Set(['r', 'rarity']);
 const MANA_FIELDS = new Set(['m', 'mana']);
+const PRODUCES_FIELDS = new Set(['produces', 'produce']);
 const SET_FIELDS = new Set(['set', 's', 'e', 'edition']);
 const IS_FIELDS = new Set(['is']);
 const OTAG_FIELDS = new Set(['otag', 'oracletag', 'function']);
@@ -244,6 +252,7 @@ const KNOWN_FIELDS = new Set([
   ...FORMAT_FIELDS,
   ...RARITY_FIELDS,
   ...MANA_FIELDS,
+  ...PRODUCES_FIELDS,
   ...SET_FIELDS,
   ...IS_FIELDS,
   ...OTAG_FIELDS,
@@ -475,6 +484,15 @@ function fieldTerm(field: string, op: string, value: string, negate: boolean): Q
     return { kind: 'mana', op: op === ':' ? '>=' : (op as NumOp), ...want, negate };
   }
 
+  if (PRODUCES_FIELDS.has(field)) {
+    const spec = parseProducesValue(value);
+    if (!spec) return null;
+    // `produces:wu` means "adds white and blue" (at least), matching how `c:`
+    // reads; a count (`produces>=3`) compares numerically as written.
+    const numOp: NumOp = op === ':' ? (spec.count !== null ? '=' : '>=') : (op as NumOp);
+    return { kind: 'produces', op: numOp, ...spec, negate };
+  }
+
   if (SET_FIELDS.has(field)) {
     if (op !== ':' && op !== '=') return null;
     return { kind: 'set', value: value.toLowerCase(), negate };
@@ -527,6 +545,29 @@ function parseColorValue(value: string): { set: Color[] | null; special: 'multic
     set.add(c);
   }
   return set.size ? { set: [...set], special: null } : null;
+}
+
+/**
+ * The `produces:` value: either mana letters (`wu`, `green`, `c`, `any`) or a
+ * count (`produces>=3`). Colorless is a letter here, not a special case the way
+ * it is for `c:` — "adds {C}" and "has no color" are different facts, and a
+ * Sol Ring is only the first.
+ */
+function parseProducesValue(value: string): { letters: string[] | null; count: number | null } | null {
+  const v = value.trim().toLowerCase();
+  if (!v) return null;
+  if (/^\d+$/.test(v)) return { letters: null, count: Number(v) };
+  if (v === 'any' || v === 'rainbow') return { letters: ['W', 'U', 'B', 'R', 'G'], count: null };
+  const word = COLOR_WORDS[v];
+  if (word) return { letters: [word], count: null };
+  if (v === 'colorless') return { letters: ['C'], count: null };
+  const letters = new Set<string>();
+  for (const ch of v) {
+    const letter = ch === 'c' ? 'C' : COLOR_LETTERS[ch];
+    if (!letter) return null;
+    letters.add(letter);
+  }
+  return letters.size ? { letters: [...letters], count: null } : null;
 }
 
 // One symbol per {brace group}, or shorthand for a single letter/number outside
@@ -673,6 +714,19 @@ const IS_KEYWORDS: Record<string, (e: SearchableEntry) => boolean> = {
   slowland: (e) => e.lowerType.includes('land') && e.normOracle.includes('control two or more other lands'),
   bounceland: (e) => e.lowerType.includes('land') && e.normOracle.includes("return a land you control to its owner's hand"),
 
+  // Mana production — needs OracleCard.produces/mana (absent on older card DBs,
+  // where these find nothing rather than everything).
+  //
+  // `is:tapland` is the *always* tapped one: Jungle Hollow, not Glacial
+  // Fortress. That split comes from Tagger, which is the only place it exists —
+  // both cards print "enters tapped", the checkland just puts "unless" in front
+  // of it. `is:untappedsource` is what a turn-two double-pip spell actually
+  // needs, and is the whole reason the distinction is worth carrying.
+  manasource: (e) => !!e.card.produces,
+  manaproducer: (e) => !!e.card.produces,
+  tapland: (e) => !!e.card.mana && (e.card.mana[2] & MANA_TAPPED) !== 0,
+  untappedsource: (e) => !!e.card.produces && !!e.card.mana && (e.card.mana[2] & MANA_TAPPED) === 0,
+
   // Mana symbols — reuses the mana: parser.
   hybrid: (e) => manaSymbolsOf(e.card).some((s) => s.includes('/') && !s.endsWith('/P')),
   phyrexian: (e) => manaSymbolsOf(e.card).some((s) => s.endsWith('/P')),
@@ -805,6 +859,17 @@ function termMatches(entry: SearchableEntry, t: QueryTerm): boolean {
       return entry.card.cmc % 2 === 0 === t.even;
     case 'mana':
       return compareMana(entry.card.manaCost, t.op, t);
+    case 'produces': {
+      // Absent on card DBs built before the field, where it reads as "produces
+      // nothing" — the safe failure: the term finds nothing rather than
+      // everything, and the next nightly card-data update fixes it.
+      const made = entry.card.produces ?? '';
+      if (t.count !== null) {
+        // Scryfall counts colors here, so {C} doesn't make a Sol Ring monochrome.
+        return compareNum([...made].filter((c) => c !== 'C').length, t.op, t.count);
+      }
+      return matchLetterSet(made, t.op, t.letters!);
+    }
     case 'set':
       return entry.sets.has(t.value);
     case 'is':
@@ -824,6 +889,27 @@ function matchColorSet(cardColors: readonly Color[], op: NumOp, set: Color[]): b
   const have = new Set(cardColors);
   const allWanted = set.every((c) => have.has(c)); // card ⊇ query
   const onlyWanted = cardColors.every((c) => set.includes(c)); // card ⊆ query
+  switch (op) {
+    case '=':
+      return allWanted && onlyWanted;
+    case '!=':
+      return !(allWanted && onlyWanted);
+    case '>=':
+      return allWanted;
+    case '<=':
+      return onlyWanted;
+    case '>':
+      return allWanted && !onlyWanted;
+    case '<':
+      return onlyWanted && !allWanted;
+  }
+}
+
+/** matchColorSet over `produces`, whose alphabet is WUBRG plus colorless C. */
+function matchLetterSet(made: string, op: NumOp, want: string[]): boolean {
+  const have = new Set(made);
+  const allWanted = want.every((c) => have.has(c)); // card ⊇ query
+  const onlyWanted = [...have].every((c) => want.includes(c)); // card ⊆ query
   switch (op) {
     case '=':
       return allWanted && onlyWanted;

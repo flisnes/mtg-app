@@ -26,7 +26,7 @@ import { buildSealedProducts } from './sealed.js';
 import { fetchSealedUsdPrices } from './sealedPrices.js';
 import { fetchSealedEurPrices } from './cardmarketPrices.js';
 import { buildOracleTags } from './oracleTags.js';
-import { buildManaTagIndex, manaProfileOf, type ManaTagIndex } from './manaProfile.js';
+import { buildManaTagIndex, fetchProfileOf, manaProfileOf, type ManaTagIndex } from './manaProfile.js';
 
 // Nightly card-DB pipeline (beta plan §3). Downloads Scryfall `default_cards`,
 // slims each card to ~18 fields, and emits:
@@ -127,9 +127,10 @@ function toOracleCard(
   manaTags: ManaTagIndex | null,
 ): OracleCard {
   const { printing, oracle } = rep;
-  const mana = manaTags
-    ? manaProfileOf({ typeLine: oracle.typeLine, oracleText: oracle.oracleText, produces: oracle.produces, tags }, manaTags)
-    : undefined;
+  const manaInput = { typeLine: oracle.typeLine, oracleText: oracle.oracleText, produces: oracle.produces, tags };
+  const mana = manaTags ? manaProfileOf(manaInput, manaTags) : undefined;
+  // Read off the text, not the tags, and so not gated on the tag download.
+  const fetch = fetchProfileOf(manaInput);
   return {
     oracleId: printing.oracleId,
     name: oracle.name,
@@ -160,6 +161,7 @@ function toOracleCard(
     // two fields cost about 30 KB gzipped across the whole card DB.
     ...(oracle.produces ? { produces: oracle.produces } : {}),
     ...(mana ? { mana } : {}),
+    ...(fetch ? { fetch } : {}),
   };
 }
 
@@ -359,9 +361,10 @@ async function main(): Promise<void> {
   const producers = oracleCards.filter((c) => c.produces).length;
   const profiles = oracleCards.filter((c) => c.mana);
   const unknownAmount = profiles.filter((c) => c.mana![2] & MANA_UNKNOWN).length;
+  const fetches = oracleCards.filter((c) => c.fetch);
   console.log(
     `[pipeline] mana: ${producers} cards produce mana, ${profiles.length} carry a profile ` +
-      `(${unknownAmount} with an amount we can't model)`,
+      `(${unknownAmount} with an amount we can't model), ${fetches.length} fetchlands`,
   );
 
   // Chunked price-less artifacts (primary path).

@@ -1,5 +1,7 @@
-import type { ManaProfileTuple, OracleTagDictionary } from '@mtg/shared';
+import type { FetchProfileTuple, ManaProfileTuple, OracleTagDictionary } from '@mtg/shared';
 import {
+  BASIC_LAND_TYPES,
+  FETCH_BASIC_ONLY,
   MANA_KINDS,
   MANA_MAYBE_TAPPED,
   MANA_ONE_SHOT,
@@ -257,4 +259,76 @@ export function manaProfileOf(card: ManaProfileInput, index: ManaTagIndex): Mana
   if (card.produces) return [kindOf('rock'), parsed ?? 1, parsed === null ? MANA_UNKNOWN : 0];
 
   return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Fetchlands
+//
+// Scryfall gives a fetchland no `produced_mana`, and it is right not to: a
+// Scalding Tarn adds no mana, it trades itself for a card. So the profile above
+// skips it entirely, and until this existed a fetch was invisible to every
+// colored-source count in the app — which on an eight-fetch manabase is not a
+// rounding error. A UR deck's turn-two Counterspell read 29% when the honest
+// figure was 69%.
+//
+// What a fetch is worth is a fact about the deck, not the card: it makes every
+// color of every land it could find *in that decklist*. So all that is derived
+// here is the search terms, and the resolving happens on the client, where a
+// decklist is in scope.
+//
+// This is text parsing, which rule 1 above says to distrust — but there is no
+// tag for "and it finds an Island or a Mountain", and the sentence these cards
+// print is one sentence with no "unless" in it. The parse is anchored on
+// "Search your library for … onto the battlefield" and only ever emits the five
+// basic land types, so a card that searches for something we don't model (a
+// Desert, a Sphere) comes out as no fetch at all rather than as a wrong one.
+
+/** "Search your library for <what>, put it/them onto the battlefield". */
+const FETCH_SENTENCE = /Search your library for ([^.]*?),? (?:and )?put (?:it|them|that card)[^.]*?onto the battlefield/i;
+
+/** The fetched land arrives tapped, which costs the same turn a tapland does. */
+const ARRIVES_TAPPED = /onto the battlefield tapped/i;
+
+/** Fabled Passage: tapped, then untapped once you control four lands. */
+const THEN_UNTAPS = /onto the battlefield tapped[^.]*\.[^.]*untap/i;
+
+/**
+ * The fetch *itself* enters tapped (Grasslands, Krosan Verge). It costs you the
+ * same turn a tapland does even when the land it finds arrives untapped:
+ * cracking it needs {T}, and a land that entered tapped has no {T} to give
+ * until your next untap step.
+ *
+ * The self-reference wording only. A shockland's "If you don't, it enters
+ * tapped" hangs off an "unless" and means something else entirely, which is the
+ * whole reason the profile above leans on tags rather than text.
+ */
+const SELF_ENTERS_TAPPED = /(?:^|\n)This land enters tapped\./i;
+
+/**
+ * What a fetchland searches out, or undefined when the card isn't one.
+ *
+ * Only lands are considered. Farseek and Cultivate put lands into play too, but
+ * they are spells that cost mana on a turn you wanted to spend it, and the
+ * profile above already files them as `landramp`.
+ */
+export function fetchProfileOf(card: ManaProfileInput): FetchProfileTuple | undefined {
+  if (!/\bLand\b/.test(card.typeLine)) return undefined;
+  const text = card.oracleText ?? '';
+  const m = FETCH_SENTENCE.exec(text);
+  if (!m) return undefined;
+  const phrase = m[1] ?? '';
+
+  // "a basic land card" names no type and means all of them; anything else has
+  // to say which, and we only model the five that make colors.
+  const named = Object.entries(BASIC_LAND_TYPES).filter(([, type]) => new RegExp(`\\b${type}\\b`, 'i').test(phrase));
+  const anyBasic = named.length === 0 && /\bbasic land\b/i.test(phrase);
+  const types = anyBasic ? Object.keys(BASIC_LAND_TYPES).join('') : named.map(([letter]) => letter).join('');
+  if (!types) return undefined;
+
+  const basicOnly = anyBasic || /\bbasic\b/i.test(phrase);
+  let flags = basicOnly ? FETCH_BASIC_ONLY : 0;
+  if (SELF_ENTERS_TAPPED.test(text) || ARRIVES_TAPPED.test(text)) {
+    flags |= THEN_UNTAPS.test(text) ? MANA_MAYBE_TAPPED : MANA_TAPPED;
+  }
+  return [types, flags];
 }

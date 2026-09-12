@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.151.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Fetchlands count as colored sources. They tap for nothing, so the new colored-source report could not see them at all, and an eight-fetch manabase read far worse than it plays. A fetch now counts for every color of every land it could actually find in your deck.',
+      },
+      {
+        kind: 'changed',
+        text: 'Evolving Wilds and the other fetches that cost you a turn count from turn two, and show up in the tapland tax where they used to slip past it.',
+      },
+    ],
+  },
+  {
     version: '0.151.0',
     changes: [
       {
@@ -194,19 +207,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'A tall card sheet grows up to the search bar before anything has to scroll.',
-      },
-    ],
-  },
-  {
-    version: '0.147.2',
-    changes: [
-      {
-        kind: 'added',
-        text: 'A `set:` term in the card search now lists that set’s printings one by one, instead of one tile per card in your preferred printing. `forest set:blb` shows all five Bloomburrow Forests, and tapping one opens on that printing.',
-      },
-      {
-        kind: 'added',
-        text: 'The search bar suggests set codes. Type `set:` for the newest sets, or part of a name to narrow it — each code comes with the full set name beside it.',
       },
     ],
   },

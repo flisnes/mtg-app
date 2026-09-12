@@ -110,6 +110,17 @@ export interface OracleCard {
    * produce mana nor ramp, and absent on card DBs built before this field.
    */
   mana?: ManaProfileTuple;
+  /**
+   * A fetchland: the basic land types it searches out. See FetchProfileTuple.
+   * Omitted for everything that isn't one (about 99.5% of cards), and absent on
+   * card DBs built before this field.
+   *
+   * A fetch has no `produces` and no `mana` of its own, because it makes no
+   * mana — it trades itself for a land. What colors it is worth is a fact about
+   * the *deck* it is in, not about the card, so only the search terms live here
+   * and the resolving happens where a decklist is in scope.
+   */
+  fetch?: FetchProfileTuple;
 }
 
 /**
@@ -200,6 +211,62 @@ export function decodeManaProfile(tuple: ManaProfileTuple | undefined): ManaProf
     unknown: !!(flags & MANA_UNKNOWN),
   };
 }
+
+/** The fetch can only find a *basic* land, so a shockland sharing the type is out of reach. */
+export const FETCH_BASIC_ONLY = 4;
+
+/**
+ * `[types, flags]` — a fetchland, in the only two facts that aren't already
+ * derivable from the deck it sits in.
+ *
+ *   types  the basic land types it searches for, written as the letter of the
+ *          color that type taps for: Scalding Tarn "UR" (Island or Mountain),
+ *          Windswept Heath "WG", Evolving Wilds "WUBRG" (any basic land).
+ *          Matching happens on the *type*, not the color, which is why the
+ *          letters have to be read back through MANA_LETTERS rather than
+ *          compared against `produces` — a Scalding Tarn in a deck with a
+ *          Hallowed Fountain is a white source, because a Hallowed Fountain is
+ *          an Island.
+ *   flags  MANA_TAPPED (the land arrives tapped — Evolving Wilds, the
+ *          panoramas, the slow fetches) | MANA_MAYBE_TAPPED (arrives tapped
+ *          and may untap — Fabled Passage) | FETCH_BASIC_ONLY
+ *
+ * The flags describe the land it *puts down*, not the fetch itself. Every fetch
+ * worth the name enters untapped; what costs you a turn is what it finds.
+ */
+export type FetchProfileTuple = [types: string, flags: number];
+
+/** FetchProfileTuple unpacked. */
+export interface FetchProfile {
+  /** Basic land types it can search for, as MANA_LETTERS letters. */
+  types: string;
+  /** How the land it finds arrives. */
+  tapped: 'never' | 'always' | 'maybe';
+  /** Basics only: it can't find a shockland or a triome that shares the type. */
+  basicOnly: boolean;
+}
+
+export function decodeFetchProfile(tuple: FetchProfileTuple | undefined): FetchProfile | null {
+  if (!tuple) return null;
+  const [types, flags] = tuple;
+  return {
+    types,
+    tapped: flags & MANA_TAPPED ? 'always' : flags & MANA_MAYBE_TAPPED ? 'maybe' : 'never',
+    basicOnly: !!(flags & FETCH_BASIC_ONLY),
+  };
+}
+
+/**
+ * The basic land types, in MANA_LETTERS order, so a letter and a type line can
+ * be matched without a second alphabet.
+ */
+export const BASIC_LAND_TYPES: Readonly<Record<string, string>> = {
+  W: 'Plains',
+  U: 'Island',
+  B: 'Swamp',
+  R: 'Mountain',
+  G: 'Forest',
+};
 
 /**
  * A "marker" card: the printed reminder cardboard a mechanic asks you to keep

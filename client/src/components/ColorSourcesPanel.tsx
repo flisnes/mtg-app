@@ -63,6 +63,13 @@ export function ColorSourcesPanel({
           {report.shortfalls.length > MAX_ROWS && (
             <p className="fine-print">And {report.shortfalls.length - MAX_ROWS} more below 90%.</p>
           )}
+          {report.fetches > 0 && (
+            <p className="fine-print">
+              {report.fetches} fetchland{report.fetches === 1 ? '' : 's'} counted as {report.fetches === 1 ? 'a source' : 'sources'} of
+              everything {report.fetches === 1 ? 'it' : 'they'} could find in this deck. Each land can only be found once, so a pile of
+              fetches over a single Island is friendlier here than at the table.
+            </p>
+          )}
           <p className="fine-print">
             Each card is held to its mana value as the turn to cast it, at a 90% bar, worked out exactly for a library of{' '}
             {report.library} on the play with no mulligans. Karsten's published tables ask two to four fewer, because his simulations get

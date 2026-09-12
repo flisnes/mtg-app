@@ -1,4 +1,4 @@
-import { decodeManaProfile, type DeckBoard, type DeckFormat, type OracleCard } from '@mtg/shared';
+import { BASIC_LAND_TYPES, decodeFetchProfile, decodeManaProfile, type DeckBoard, type DeckFormat, type OracleCard } from '@mtg/shared';
 import { atLeast } from './hypergeom.js';
 import { cardsSeen, handSize, type DrawSetup } from './gameModel.js';
 import { bindingPips, parseManaCost, pipKey, type PipColor } from './manaCost.js';
@@ -54,6 +54,8 @@ export interface DeckSource {
   slow: boolean;
   /** How much it makes depends on the board; `units` is a floor of 1. */
   unknown: boolean;
+  /** A fetchland: its colors were resolved from what this deck holds, not from the card. */
+  fetched: boolean;
   /**
    * It is the commander, so it is always available and never drawn. Kept out
    * of every count the hypergeometric sees — a card that isn't in the library
@@ -110,6 +112,8 @@ export interface ManaReport {
   hasManaData: boolean;
   /** Cards whose printed cost we could not fully model ({X}, snow). */
   unmodelled: number;
+  /** Fetchland copies in the library whose colors were resolved from the deck. */
+  fetches: number;
 }
 
 const faces = (typeLine: string) => typeLine.split('//').map((f) => f.trim());
@@ -138,6 +142,83 @@ function readyTurn(kind: string, cmc: number, tapped: string): number | null {
   if (kind === 'land') return tapped === 'always' ? 2 : 1;
   if (kind === 'rock' || kind === 'dork') return Math.max(2, Math.ceil(cmc) + 1);
   return null;
+}
+
+/**
+ * What a fetchland is worth, which is a question about the deck rather than
+ * about the card. A Scalding Tarn searches for an Island or a Mountain; what
+ * that gets you depends entirely on which Islands and Mountains are in the
+ * ninety-nine. In a UR deck it is a blue-or-red source. In a deck also running
+ * Hallowed Fountain it is a white source too, because a Hallowed Fountain is an
+ * Island — which is why the match is on the *type line* and not on `produces`.
+ *
+ * Nothing here invents a color: a fetch can only find a land already in the
+ * deck, so its colors are always a subset of the deck's. That is why counting
+ * fetches cannot turn an uncastable card castable, and why leaving them out
+ * only ever understated things.
+ *
+ * The one place this flatters a deck is the pathological one: eight fetches and
+ * a single Island are eight blue sources here, and in a real game the second
+ * fetch finds nothing blue. Each land can only be found once, and a
+ * hypergeometric over the multiset cannot see that. The panel says so.
+ */
+function fetchSources(rows: readonly SourceRow[], produced: ReadonlyMap<string, DeckSource>): DeckSource[] {
+  const fetches: { row: SourceRow; oracle: OracleCard }[] = [];
+  /** Lands that could be found, with the type line to match against. */
+  const targets: { typeLine: string; colors: PipColor[]; basic: boolean }[] = [];
+
+  for (const r of rows) {
+    const o = r.oracle;
+    if (!o || r.quantity <= 0) continue;
+    if (r.board !== 'main' && r.board !== 'commander') continue;
+    if (isNotACard(o)) continue;
+    if (o.fetch) fetches.push({ row: r, oracle: o });
+    // A fetch searches the library, so only the mainboard can answer it. What
+    // it finds has to be a land that makes mana; a Bojuka Bog is findable and
+    // worth nothing to a color count.
+    if (r.board !== 'main') continue;
+    const colors = pipColors(o.produces);
+    if (colors.length === 0 || !isLandFace(faces(o.typeLine)[0] ?? '')) continue;
+    targets.push({ typeLine: o.typeLine, colors, basic: /^Basic\b/i.test(o.typeLine) });
+  }
+  if (fetches.length === 0 || targets.length === 0) return [];
+
+  const byOracle = new Map<string, DeckSource>();
+  for (const { row, oracle } of fetches) {
+    const existing = byOracle.get(oracle.oracleId);
+    if (existing) {
+      existing.copies += row.quantity;
+      existing.fromCommandZone &&= row.board === 'commander';
+      continue;
+    }
+    const profile = decodeFetchProfile(oracle.fetch)!;
+    const wanted = [...profile.types].map((letter) => BASIC_LAND_TYPES[letter]).filter((t): t is string => !!t);
+    const colors = new Set<PipColor>();
+    for (const target of targets) {
+      if (profile.basicOnly && !target.basic) continue;
+      if (!wanted.some((type) => new RegExp(`\\b${type}\\b`).test(target.typeLine))) continue;
+      for (const c of target.colors) colors.add(c);
+    }
+    if (colors.size === 0) continue;
+    byOracle.set(oracle.oracleId, {
+      oracleId: oracle.oracleId,
+      name: oracle.name,
+      colors: (['W', 'U', 'B', 'R', 'G', 'C'] as PipColor[]).filter((c) => colors.has(c)),
+      units: 1,
+      // The fetch itself is untapped; what costs you a turn is what it puts
+      // down. Evolving Wilds is a turn-two source for the same reason a Temple is.
+      readyTurn: profile.tapped === 'always' ? 2 : 1,
+      copies: row.quantity,
+      slow: profile.tapped === 'always',
+      unknown: false,
+      fetched: true,
+      fromCommandZone: row.board === 'commander',
+    });
+  }
+  // A fetch that shares an oracle id with something already counted as a
+  // producer cannot happen, but the caller merges by id, so say it out loud.
+  for (const id of byOracle.keys()) if (produced.has(id)) byOracle.delete(id);
+  return [...byOracle.values()];
 }
 
 /** The mana-producing cards in the library, plus the commander, which is always there. */
@@ -169,9 +250,11 @@ export function deckSources(rows: readonly SourceRow[]): DeckSource[] {
       copies: r.quantity,
       slow: profile.tapped === 'always',
       unknown: profile.unknown,
+      fetched: false,
       fromCommandZone: r.board === 'commander',
     });
   }
+  for (const source of fetchSources(rows, byOracle)) byOracle.set(source.oracleId, source);
   return [...byOracle.values()];
 }
 
@@ -305,6 +388,7 @@ export function manaReport(
     library,
     hasManaData: sources.length > 0,
     unmodelled,
+    fetches: sources.filter((s) => s.fetched).reduce((n, s) => n + s.copies, 0),
   };
 }
 

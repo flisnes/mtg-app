@@ -1,4 +1,4 @@
-import { decodeManaProfile, type DeckBoard, type DeckFormat, type OracleCard } from '@mtg/shared';
+import { decodeFetchProfile, decodeManaProfile, type DeckBoard, type DeckFormat, type OracleCard } from '@mtg/shared';
 
 // Deck mana statistics: the curve, what the lands cost you in tempo, and
 // whether there are enough of them. Pure arithmetic over the deck's rows and
@@ -148,6 +148,17 @@ export function deckManaStats(rows: readonly StatsRow[], format: DeckFormat | un
         profiledLands += qty;
         if (profile.tapped === 'always') tappedAlways += qty;
         else if (profile.tapped === 'maybe') tappedMaybe += qty;
+      }
+      // A fetchland taps for nothing and so has no mana profile, but an
+      // Evolving Wilds costs you the same turn a Jungle Hollow does: the land
+      // it puts down arrives tapped. A Scalding Tarn costs you nothing and a
+      // Fabled Passage costs you something for three turns, which is what
+      // 'maybe' already means everywhere else here.
+      const fetch = decodeFetchProfile(o.fetch);
+      if (fetch) {
+        profiledLands += qty;
+        if (fetch.tapped === 'always') tappedAlways += qty;
+        else if (fetch.tapped === 'maybe') tappedMaybe += qty;
       }
     }
     // A modal back is a land *and* a spell, and belongs on both sides of the

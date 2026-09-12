@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.151.1
+
+- **Fetchlands count as sources now.** A Scalding Tarn taps for nothing, so it was invisible to the colored-source report, which on an eight-fetch manabase was not a rounding error: a UR deck's turn-two Counterspell read 29% when the honest figure was 69%.
+- **What a fetch is worth depends on your deck, so that is how it is worked out.** It counts for every color of every land it could actually find in your list. A Scalding Tarn in a deck running Hallowed Fountain is a white source, because a Hallowed Fountain is an Island. A Prismatic Vista in a deck with no basics finds nothing and counts for nothing.
+- **Fetches that cost you a turn are treated like taplands.** Evolving Wilds puts its land down tapped and Grasslands enters tapped itself, so both count from turn two and both now show up in the tapland tax, where they were escaping it before.
+- One caveat the panel states: each land can only be found once, so eight fetches over a single Island read friendlier here than they play.
+- Your card database gained one fact per card for this, so you will be offered a card-data update after this release.
+
 ## 0.151.0
 
 - **Colored sources, in the deck stats sheet.** How many cards tap for each of your colors, and which card your mana lets down worst: "2 white sources short for Wrath of God on turn 4". Cards that clear the bar stay out of your way; the ones that don't are listed worst first.

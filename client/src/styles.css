@@ -4597,6 +4597,108 @@ button.primary {
   color: var(--text-dim);
   line-height: 1;
 }
+/* --- Draw odds (phase 2 of the deck analysis) --------------------------------
+   The group picker is the search bar, so the controls are a row of presets, a
+   query field and a stepper. The chart reuses .curve's columns; only the bar
+   heights differ, being a percentage of certainty rather than of the tallest
+   bucket. */
+.odds-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.odds-chip {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.odds-chip-on {
+  background: color-mix(in srgb, var(--accent) 26%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--text);
+}
+.odds-query {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+}
+.odds-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.odds-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  flex: none;
+}
+.odds-stepper button {
+  width: 1.9rem;
+  padding: 0.25rem 0;
+  font-size: 1rem;
+  line-height: 1;
+  background: var(--surface-2);
+}
+.odds-stepper button:disabled {
+  opacity: 0.4;
+}
+.odds-stepper strong {
+  min-width: 1ch;
+  text-align: center;
+  color: var(--text);
+}
+/* The seg row carries a bottom margin for its usual home in a form; here it
+   sits in a flex row that already spaces things. */
+.odds-seg {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 11rem;
+}
+.odds-seg .seg {
+  padding: 0.35rem 0.3rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+/* Shorter than the mana curve: seven columns of percentages don't need the
+   height, and the sheet has a lot to say below them. */
+.odds-curve {
+  height: 130px;
+}
+/* The full 0-100% range, so a bar's height is the probability rather than a
+   share of the biggest one. The padding is the headroom a full bar's own
+   reading sits in, and percentage heights resolve inside it for free. */
+.odds-track {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  padding-top: 0.9rem;
+  display: flex;
+  align-items: flex-end;
+}
+.odds-curve .curve-bar {
+  position: relative;
+}
+.odds-curve .curve-count {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  height: auto;
+  margin-bottom: 0.1rem;
+  text-align: center;
+}
+.odds-names {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}
+
 /* The card sheet's format-legality list: one row per tracked format, the
    verdict as a colored chip. Green legal, red banned, amber restricted, grey
    not legal — the same tones the rest of the app uses for those states. */

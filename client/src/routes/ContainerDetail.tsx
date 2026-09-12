@@ -1109,7 +1109,9 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       )}
 
       <DeckHistory deckId={id} kind={kind} open={historyOpen} onToggle={() => setHistoryOpen((v) => !v)} />
-      {statsOpen && <DeckStatsSheet stats={stats} name={deck.name} format={deck.format} onClose={() => setStatsOpen(false)} />}
+      {statsOpen && (
+        <DeckStatsSheet stats={stats} rows={data.rows} name={deck.name} format={deck.format} onClose={() => setStatsOpen(false)} />
+      )}
       {valueChartOpen && (
         <ContainerValueChartSheet deckId={id} name={deck.name} kind={kind} onClose={() => setValueChartOpen(false)} />
       )}

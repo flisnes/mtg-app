@@ -2,6 +2,8 @@ import type { DeckFormat } from '@mtg/shared';
 import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
 import { CURVE_MAX, TAX_TURNS, type DeckManaStats } from '../deck/manaStats.js';
+import { DrawOddsPanel } from './DrawOddsPanel.js';
+import type { GroupRow } from '../analysis/groups.js';
 
 // What the deck's mana looks like before a single card is drawn: the curve, the
 // tempo the tapped lands cost you, and whether there are enough lands for what
@@ -68,11 +70,14 @@ function taplandText(stats: DeckManaStats): string {
 
 export function DeckStatsSheet({
   stats,
+  rows,
   name,
   format,
   onClose,
 }: {
   stats: DeckManaStats;
+  /** The deck's slots, for the draw-odds panel to run its search against. */
+  rows: readonly GroupRow[];
   name: string;
   format: DeckFormat | undefined;
   onClose: () => void;
@@ -130,6 +135,8 @@ export function DeckStatsSheet({
           ) : (
             <p className="fine-print">Your card database predates this data. Refresh it from About to see which of your lands enter tapped.</p>
           )}
+
+          <DrawOddsPanel rows={rows} format={format} />
 
           <p className="fine-print deck-stats-note">
             Goldfish numbers: they assume a land drop every turn and nobody on the other side of the table.

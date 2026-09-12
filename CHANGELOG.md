@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.150.0
+
+- **Draw odds, in the deck stats sheet.** "What are the odds I have three lands in my opening hand?" now has an answer, and so does every question shaped like it. Pick a group of cards, say how many you want, and read the curve: opening hand, then turns one through six.
+- **The group picker is the search bar.** Anything you can search, you can count: `type:land`, `otag:removal`, `cmc<=2 -type:land`, a card name, `c:r produces:r`. Five presets (lands, ramp, removal, creatures, cheap spells) are one tap, and the panel lists which cards it matched so you can see the search did what you meant.
+- On the play or on the draw, and at least one through six copies. The numbers are exact hypergeometric odds, not a simulation, so there is no margin of error to squint at. They assume no mulligans and no card selection: fetching, scrying and digging all beat them.
+- In Commander the library is the 99, and a commander that matches your search is called out separately, because you always have it and never draw it.
+
 ## 0.149.0
 
 - **Deck stats, from a deck's "..." menu or the line under the legality panel.** The mana curve as a histogram, your land count weighed against Frank Karsten's rule of thumb for the curve you actually built, and what your tapped lands cost you: "8 of your 24 lands always enter tapped. Expect to lose about 1.3 mana over your first 4 turns."

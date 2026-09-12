@@ -3,7 +3,8 @@ import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
 import { CURVE_MAX, TAX_TURNS, type DeckManaStats } from '../deck/manaStats.js';
 import { DrawOddsPanel } from './DrawOddsPanel.js';
-import type { GroupRow } from '../analysis/groups.js';
+import { ColorSourcesPanel } from './ColorSourcesPanel.js';
+import { librarySize, type GroupRow } from '../analysis/groups.js';
 
 // What the deck's mana looks like before a single card is drawn: the curve, the
 // tempo the tapped lands cost you, and whether there are enough lands for what
@@ -135,6 +136,8 @@ export function DeckStatsSheet({
           ) : (
             <p className="fine-print">Your card database predates this data. Refresh it from About to see which of your lands enter tapped.</p>
           )}
+
+          <ColorSourcesPanel rows={rows} library={librarySize(rows)} format={format} />
 
           <DrawOddsPanel rows={rows} format={format} />
 

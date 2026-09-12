@@ -4708,6 +4708,69 @@ button.primary {
   font-size: 0.75rem;
 }
 
+/* Colored sources: a row of per-color counts, then the cards that fall short.
+   The rows wrap on a phone rather than squeezing a card name into an ellipsis,
+   which is the one part of the row you can't guess from the rest of it. */
+.source-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.source-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.9rem;
+}
+.source-chip-slow {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+.source-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.source-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.4rem;
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.85rem;
+}
+.source-row-name {
+  font-weight: 600;
+  min-width: 0;
+}
+.source-row-cost {
+  font-size: 0.75rem;
+}
+/* The percentage is the reason the row is here, so it gets the right edge to
+   itself and the note drops to a second line behind it. */
+.source-row-p {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  /* The same amber the legality chips use for "yes, but": short is not banned. */
+  color: #e6a23c;
+}
+.source-row-bad .source-row-p {
+  color: var(--danger);
+}
+.source-row-note {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
 /* The card sheet's format-legality list: one row per tracked format, the
    verdict as a colored chip. Green legal, red banned, amber restricted, grey
    not legal — the same tones the rest of the app uses for those states. */

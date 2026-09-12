@@ -1,4 +1,4 @@
-// The older half of the changelog (0.146.0 down to 0.98.0), split out of
+// The older half of the changelog (0.147.1 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,32 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.147.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Search ignores apostrophes, hyphens and commas: "lions" finds Lion’s Eye Diamond and "bond kin" finds Ainok Bond-Kin. Æ counts as "ae" both ways, so "aether charge" and "Æther Charge" find the same card.',
+      },
+    ],
+  },
+  {
+    version: '0.147.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The card sheet is rebuilt around the card: a bigger picture, two columns on a desktop, and condition/finish/language on one tappable line. Nothing on it is greyed out any more: a copy you are only looking at reads as text instead of dead dropdowns.',
+      },
+      {
+        kind: 'changed',
+        text: 'The Details / History tabs are gone. The card’s own history is in the ⋯ menu as "Collection history", next to price history and a searchable "All printings". More -> "Edit history" got the same name.',
+      },
+      {
+        kind: 'added',
+        text: '"For trade", "altered, signed, misprint" and slot tags are links that open when you want them, so even a card in a deck now fits one phone screen.',
+      },
+    ],
+  },
   {
     version: '0.146.0',
     changes: [

@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.151.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Colored sources, in the deck stats sheet. It counts what taps for each of your colors and names the card your mana lets down worst: "2 white sources short for Wrath of God on turn 4". A card your deck makes no mana for at all reads "never".',
+      },
+      {
+        kind: 'added',
+        text: 'Taplands count from turn two and mana rocks from a turn after you could cast them, so the count is what you can actually tap, not what is in the list.',
+      },
+    ],
+  },
+  {
     version: '0.150.1',
     changes: [
       {
@@ -194,32 +207,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'The search bar suggests set codes. Type `set:` for the newest sets, or part of a name to narrow it — each code comes with the full set name beside it.',
-      },
-    ],
-  },
-  {
-    version: '0.147.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Search ignores apostrophes, hyphens and commas: "lions" finds Lion’s Eye Diamond and "bond kin" finds Ainok Bond-Kin. Æ counts as "ae" both ways, so "aether charge" and "Æther Charge" find the same card.',
-      },
-    ],
-  },
-  {
-    version: '0.147.0',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'The card sheet is rebuilt around the card: a bigger picture, two columns on a desktop, and condition/finish/language on one tappable line. Nothing on it is greyed out any more: a copy you are only looking at reads as text instead of dead dropdowns.',
-      },
-      {
-        kind: 'changed',
-        text: 'The Details / History tabs are gone. The card’s own history is in the ⋯ menu as "Collection history", next to price history and a searchable "All printings". More -> "Edit history" got the same name.',
-      },
-      {
-        kind: 'added',
-        text: '"For trade", "altered, signed, misprint" and slot tags are links that open when you want them, so even a card in a deck now fits one phone screen.',
       },
     ],
   },

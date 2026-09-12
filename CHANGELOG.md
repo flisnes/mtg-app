@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.151.0
+
+- **Colored sources, in the deck stats sheet.** How many cards tap for each of your colors, and which card your mana lets down worst: "2 white sources short for Wrath of God on turn 4". Cards that clear the bar stay out of your way; the ones that don't are listed worst first.
+- **A card your deck makes no mana for at all reads "never".** That check is a real payment solver rather than a source count, so it catches the case counting misses: two duals that each make white can't both pay the white pips of `{2}{W}{W}` when one of them is needed elsewhere in the cost.
+- Taplands count from turn two and mana rocks from a turn after you could cast them, so the number is what you can actually tap on the turn in question, not what is in the list.
+- The odds are exact for your library's real size, at Karsten's 90% bar, on the play, with no mulligans. That last part makes them stricter than his published tables by two to four sources, since his simulations get to mulligan for a source. The sheet says so.
+
 ## 0.150.1
 
 - **Fixed: the deck stats charts were flat on a phone.** The mana curve and the new draw-odds chart both collapsed to their axis labels once the sheet was taller than the screen, which on a phone is always. Both stand up properly again, and the sheet scrolls.

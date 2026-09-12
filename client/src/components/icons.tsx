@@ -53,6 +53,7 @@ export type IconName =
   | 'expand'
   | 'moveTo'
   | 'emblem'
+  | 'chart'
   | 'archive';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
@@ -70,6 +71,15 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <rect x="3" y="6" width="13" height="15" rx="2" />
       <path d="M7 6V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-2" />
+    </>
+  ),
+  // Three bars on a baseline — the deck's mana curve, and deck stats generally.
+  chart: (
+    <>
+      <path d="M4 20h16" />
+      <path d="M7 20v-7" />
+      <path d="M12 20V6" />
+      <path d="M17 20v-10" />
     </>
   ),
   // Ring binder, rings on the spine — a binder of stored cards.

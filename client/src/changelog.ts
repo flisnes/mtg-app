@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.149.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Deck stats: the mana curve, your land count against Karsten’s rule of thumb for that curve, and what your tapped lands cost you in tempo. Open it from the line under the legality panel, or from the deck’s “...” menu.',
+      },
+    ],
+  },
+  {
     version: '0.148.2',
     changes: [
       {
@@ -191,15 +201,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: '"For trade", "altered, signed, misprint" and slot tags are links that open when you want them, so even a card in a deck now fits one phone screen.',
-      },
-    ],
-  },
-  {
-    version: '0.146.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Cards in a language you don’t collect in now wear a small flag next to their badges — in your collection, in decks and boxes, and in a trade. Pick the language you collect in under Settings -> Language.',
       },
     ],
   },

@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.149.0
+
+- **Deck stats, from a deck's "..." menu or the line under the legality panel.** The mana curve as a histogram, your land count weighed against Frank Karsten's rule of thumb for the curve you actually built, and what your tapped lands cost you: "8 of your 24 lands always enter tapped. Expect to lose about 1.3 mana over your first 4 turns."
+- **The line under the legality panel says the headline without opening anything**: land count, how many enter tapped, and whether that is about right for the curve.
+- Lands that only *sometimes* enter tapped (shocks, checks, fastlands) are counted separately and stay out of the tempo number, because you decide when those cost you. Modal cards with a land on the back count as both a land and a spell, and the sheet says so. Cards whose mana output depends on the board get a footnote rather than a made-up number.
+- Commander decks count the commander as a card you cast, and get Karsten's 99-card baseline rather than the 60-card one.
+
 ## 0.148.2
 
 - **Search by the mana a card makes.** `produces:g` finds everything that taps for green, lands and rocks and mana creatures alike. `produces:wu` wants both colors, `produces:c` is colorless mana, `produces=wu` is exactly those two and nothing else, and `produces>=3` finds your three-color fixing. Works anywhere the search bar does, so you can point it at your own collection.

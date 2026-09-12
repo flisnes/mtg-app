@@ -65,6 +65,8 @@ import { yearMark } from '../components/cardRows.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { containerValue, HeaderValue, missingValue, valueText } from '../components/ValueSummary.js';
 import { ContainerValueChartSheet } from '../components/CollectionValueChart.js';
+import { DeckStatsLine, DeckStatsSheet } from '../components/DeckStatsSheet.js';
+import { deckManaStats } from '../deck/manaStats.js';
 import {
   SortControls,
   groupCards,
@@ -184,6 +186,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const [emblemOpen, setEmblemOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [valueChartOpen, setValueChartOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const [view, setView] = useViewMode();
   const [sort, setSort] = useCardSort('deck', { group: 'type' });
   const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: DeckCardEdit } | null>(null);
@@ -324,6 +327,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         data?.deck?.format,
         (data?.rows ?? []).map((r) => ({ oracleId: r.oracleId, quantity: r.quantity, board: r.board, oracle: r.oracle })),
       ),
+    [data],
+  );
+
+  // The mana arithmetic behind the stats line and its sheet. Deck-only: a binder
+  // or box is a shelf, not a curve.
+  const stats = useMemo(
+    () => deckManaStats((data?.rows ?? []).map((r) => ({ quantity: r.quantity, board: r.board, oracle: r.oracle })), data?.deck?.format),
     [data],
   );
 
@@ -823,6 +833,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
             { label: `Re-scan ${meta.noun}`, icon: 'refresh', onClick: () => setScanning('rescan') },
             { label: 'Import list', icon: 'import', onClick: () => setShowImport((v) => !v) },
             { label: 'Export', icon: 'export', onClick: exportDeck },
+            ...(isDeck ? [{ label: 'Deck stats', icon: 'chart' as const, onClick: () => setStatsOpen(true) }] : []),
             // The panel lives at the very bottom, under however many cards are
             // filed here, so the menu opens it *and* takes you to it.
             { label: 'History', icon: 'history', onClick: showHistory },
@@ -950,6 +961,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       </div>
 
       {isDeck && <LegalityPanel report={legality} format={deck.format ?? 'casual'} />}
+      {isDeck && stats.total > 0 && <DeckStatsLine stats={stats} onOpen={() => setStatsOpen(true)} />}
 
       <div className="list-toolbar">
         <p className="search-meta grow">Search above to add cards to this {meta.noun}.</p>
@@ -1097,6 +1109,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       )}
 
       <DeckHistory deckId={id} kind={kind} open={historyOpen} onToggle={() => setHistoryOpen((v) => !v)} />
+      {statsOpen && <DeckStatsSheet stats={stats} name={deck.name} format={deck.format} onClose={() => setStatsOpen(false)} />}
       {valueChartOpen && (
         <ContainerValueChartSheet deckId={id} name={deck.name} kind={kind} onClose={() => setValueChartOpen(false)} />
       )}

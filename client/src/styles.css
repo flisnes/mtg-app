@@ -4471,6 +4471,132 @@ button.primary {
 .legality-bad li {
   margin: 0.15rem 0;
 }
+
+/* --- Deck stats (phase 1 of the deck analysis) -------------------------------
+   One tappable line under the legality panel, and the sheet it opens. The line
+   carries the land count, the taplands and the verdict, because those are the
+   three things worth knowing without opening anything. */
+.deck-stats-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.deck-stats-line > svg {
+  flex: none;
+  color: var(--text-dim);
+}
+.deck-stats-bits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.45rem;
+  min-width: 0;
+}
+/* The interpunct separator is the list's own, so a hidden middle item doesn't
+   leave a dangling dot behind it. */
+.deck-stats-bits > span + span::before {
+  content: '· ';
+  color: var(--text-dim);
+}
+.deck-stats-tone.tone-ok {
+  color: var(--ok);
+}
+.deck-stats-tone.tone-light,
+.deck-stats-tone.tone-heavy {
+  color: var(--text-dim);
+}
+/* The sheet shell is a flex column with its own gap, so everything inside
+   relies on that rather than stacking margins on top of it. */
+.deck-stats-sheet p {
+  margin: 0;
+}
+.deck-stats-head {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin: 0.4rem 0 -0.2rem;
+}
+.deck-stats-tiles {
+  display: flex;
+  gap: 0.5rem;
+}
+.deck-stat {
+  flex: 1;
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 0.55rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.deck-stat strong {
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+.deck-stat span {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.deck-stats-verdict {
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.deck-stats-verdict.tone-ok strong {
+  color: var(--ok);
+}
+.deck-stats-note {
+  border-top: 1px solid var(--border);
+  padding-top: 0.7rem;
+  margin-top: 0.3rem;
+}
+/* The curve: one column per mana value, the bar growing off a shared baseline.
+   Heights are a percentage of the tallest bucket, so a 4-card deck and a
+   40-card one both fill the box. */
+.curve {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.3rem;
+  height: 140px;
+}
+.curve-col {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.curve-count {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  line-height: 1;
+  height: 0.8rem;
+}
+.curve-bar {
+  width: 100%;
+  /* An empty bucket still draws a sliver, so the axis reads as a row of slots
+     rather than as a gap someone forgot to fill. */
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, var(--accent), rgba(124, 108, 255, 0.45));
+}
+.curve-tick {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  line-height: 1;
+}
 /* The card sheet's format-legality list: one row per tracked format, the
    verdict as a colored chip. Green legal, red banned, amber restricted, grey
    not legal — the same tones the rest of the app uses for those states. */

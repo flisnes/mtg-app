@@ -31,6 +31,17 @@ This matters beyond "which selector do I query". The two views render cards comp
 - Don't judge a visual change from the DOM. A class being applied is not the same as a user seeing it — screenshot the element and look. `deviceScaleFactor: 2` plus a `clip` around the element's bounding box gives a crop you can actually judge.
 - Shoot the states that stack, not just the happy one. On the deck page most tiles are **dimmed** (`.card-tile-dim`, `opacity: 0.5`, for "you don't own enough"), and a tile can be dimmed *and* under the cursor *and* selected at once. Seed some owned and some unowned cards so both show up in the same shot.
 
+## Verify at phone height
+
+**Use a phone-sized viewport (393x873 is a good default), not a tall desktop one.** A 1400px-tall window hides an entire class of layout bug in this app, and has shipped one at least twice.
+
+`.sheet` is `display: flex; flex-direction: column; max-height: 90dvh; overflow-y: auto`. Children default to `flex-shrink: 1`, so the moment a sheet's content exceeds 90dvh **every child is squashed to make it fit** — and anything with a fixed pixel height collapses to its content. On a tall viewport the sheet fits, nothing shrinks, and the screenshots look perfect.
+
+- v0.150.0 shipped the deck-stats mana curve and draw-odds chart both flattened to their axis labels on a phone. Fixed in v0.150.1 with `.deck-stats-sheet > * { flex-shrink: 0 }`; `.sheet-tabs` carries the same guard for the same reason, having been crushed to ~2px before that.
+- Any change that **adds content to an existing sheet** can break something further up that sheet which you never touched. Screenshot the whole sheet, not just your new section.
+- Measure, don't squint: `page.evaluate` the `getBoundingClientRect().height` of the fixed-height element and compare it to the CSS. A 140px chart reporting 33px is unambiguous in a way a screenshot of a short bar is not. Comparing `sheet.scrollHeight` against its client height tells you whether the sheet is overflowing at all.
+- A sheet that overflows is normal and fine — it is supposed to scroll. The bug is children shrinking instead.
+
 ## Driving gotchas
 
 - **Two gates before the real UI, and both must be clicked through in order** (this bites every time). On a fresh IndexedDB:

@@ -4,6 +4,7 @@ import { Icon } from './icons.js';
 import { CURVE_MAX, TAX_TURNS, type DeckManaStats } from '../deck/manaStats.js';
 import { DrawOddsPanel } from './DrawOddsPanel.js';
 import { ColorSourcesPanel } from './ColorSourcesPanel.js';
+import { OnCurvePanel } from './OnCurvePanel.js';
 import { MulliganPanel } from './MulliganPanel.js';
 import { librarySize, type GroupRow } from '../analysis/groups.js';
 
@@ -139,6 +140,8 @@ export function DeckStatsSheet({
           )}
 
           <ColorSourcesPanel rows={rows} library={librarySize(rows)} format={format} />
+
+          <OnCurvePanel rows={rows} format={format} />
 
           <DrawOddsPanel rows={rows} format={format} />
 

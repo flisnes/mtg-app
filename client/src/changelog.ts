@@ -32,6 +32,26 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.153.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'On curve, in the deck stats sheet. It deals twenty thousand games, mulligans them and plays the land drops out in order, so it can tell a tapland played on turn one from the same tapland on turn three. Pick any card and see how often your mana actually pays for it by each turn.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Fetchlands now take the land they find out of the library, so eight fetches over a single Island count as one blue source, the same as at the table.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'Split, adventure and modal cards had both halves of their printed cost added together, so an Adventure creature costing {W} was checked as if it cost {1}{W}{W} and read as uncastable.',
+      },
+    ],
+  },
+  {
     version: '0.152.0',
     changes: [
       {
@@ -191,16 +211,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'fixed',
         text:
           'Two special conditions on one copy left the card sheet showing "Altere…". It now says "2 selected", and the four dropdowns share out the width by what they hold, so a long answer stops getting cut off.',
-      },
-    ],
-  },
-  {
-    version: '0.147.4',
-    changes: [
-      {
-        kind: 'changed',
-        text:
-          'Condition, finish and language now open inside the card sheet, the way Special does, instead of as a box in the middle of the screen. One at a time, all at the same line spacing, capped at five rows with the current answer already in view.',
       },
     ],
   },

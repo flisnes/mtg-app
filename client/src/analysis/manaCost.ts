@@ -10,6 +10,9 @@
 //   {X}   counted as zero. "Can I cast it on curve" has no answer otherwise.
 //   {S}   snow, counted as one generic. We don't track snow permanents.
 //   {W/P} Phyrexian, payable with two life, so it never constrains a color.
+//   //    a two-faced cost is the *front* face only. You cast one half, not
+//         both, and reading "{W} // {1}{W}" as a single {1}{W}{W} is how an
+//         Adventure creature ends up uncastable on turn one in its own deck.
 
 /** A single mana that a pip can be paid with. Colorless {C} is not a color, but it is a requirement. */
 export type PipColor = 'W' | 'U' | 'B' | 'R' | 'G' | 'C';
@@ -40,9 +43,15 @@ export interface ParsedCost {
   hasX: boolean;
   /** Symbols we don't model, verbatim, so a caller can say so instead of guessing. */
   unmodelled: string[];
+  /**
+   * Faces the printed cost has. Two for a split, adventure or modal card, of
+   * which only the front is parsed — so `mana` is what the front half asks for
+   * and not Scryfall's `cmc`, which sums both halves for a split.
+   */
+  faces: number;
 }
 
-const EMPTY: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [] };
+const EMPTY: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [], faces: 1 };
 
 /** Pips that must be paid in colored mana — the only ones that constrain a deck. */
 export function bindingPips(cost: ParsedCost): Pip[] {
@@ -56,10 +65,12 @@ export function pipKey(pip: Pip): string {
 
 export function parseManaCost(cost: string | null | undefined): ParsedCost {
   if (!cost) return EMPTY;
-  const out: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [] };
+  const halves = cost.split('//');
+  const front = halves[0] ?? '';
+  const out: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [], faces: halves.length };
   const re = /\{([^}]+)\}/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(cost))) {
+  while ((m = re.exec(front))) {
     const raw = (m[1] ?? '').trim().toUpperCase();
     if (/^\d+$/.test(raw)) {
       out.generic += Number(raw);

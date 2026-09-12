@@ -316,7 +316,10 @@ export function manaReport(
     const binding = bindingPips(cost);
     if (binding.length === 0) continue;
 
-    const turn = Math.min(MAX_CHECK_TURN, Math.max(1, Math.ceil(o.cmc)));
+    // The turn comes from the cost we parsed, not from Scryfall's `cmc`: a
+    // split card's cmc is both halves added together, and an Adventure's cost
+    // string holds two of them. You cast one half.
+    const turn = Math.min(MAX_CHECK_TURN, Math.max(1, Math.ceil(cost.mana)));
     const seen = cardsSeen(setup, turn);
 
     // Group the pips by what can pay them, so {W}{W} is one requirement for two

@@ -4859,6 +4859,35 @@ button.primary {
   color: var(--text-dim);
 }
 
+/* On curve (phase 5): the simulated panel. It reuses the draw-odds chart, the
+   colored-source rows and the seg toggle, because it is answering the same
+   shape of question with a different engine and the sheet should not look like
+   four tools stapled together. What it adds is a card picker and one marked
+   column: the turn the card is actually trying to be cast on. */
+.sim-pick {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+/* The one column the card is judged on. Everything else in the chart is
+   context, so the reading eye needs somewhere to land. */
+.sim-bar-curve {
+  background: linear-gradient(180deg, var(--accent), rgba(124, 108, 255, 0.7));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.sim-tick-curve {
+  color: var(--text);
+  font-weight: 600;
+}
+.sim-waiting {
+  color: var(--text-dim);
+}
+
 /* The card sheet's format-legality list: one row per tracked format, the
    verdict as a colored chip. Green legal, red banned, amber restricted, grey
    not legal — the same tones the rest of the app uses for those states. */

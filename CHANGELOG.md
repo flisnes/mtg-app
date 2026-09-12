@@ -2,6 +2,16 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.153.0
+
+- **On curve: the simulator.** Every number in the deck stats sheet up to now was a count. This one deals twenty thousand games, mulligans them, plays the land drops out in order and asks whether the mana was actually there. It is the only engine here that can see the difference between a tapland played on turn one and the same tapland on turn three.
+- **Pick any card, get the curve.** How often your mana pays for it by each turn, with the turn it is trying to be cast on marked, plus how often you have drawn it by then and so how often you really cast it on curve.
+- **It will disagree with the colored-source count above it, and it is usually right.** That check counts white sources and stops. This one also charges you for the lands you never drew and the ones that came down tapped, so a four-drop can have plenty of white and still not have four mana.
+- **Fetchlands now cost the library the land they find.** Eight fetches over a single Island are one blue source here, the same as at the table, which is the caveat the colored-source panel could only print.
+- Rocks, dorks and Rampant Growth-style ramp are played out too, and Commander's free first mulligan and always-in-hand commander are in the model.
+- It says what it assumes, on its face: the mulligan rule, the land-drop policy, the confidence interval, and the things it leaves out (rituals, cost reducers, Treasure, card selection).
+- **Fixed:** split, adventure and modal cards had both halves of their printed cost added together, so an Adventure creature costing {W} was checked as if it cost {1}{W}{W} and read as uncastable. Affects the colored-source report too.
+
 ## 0.152.0
 
 - **Opening hand, in the deck stats sheet.** How often this deck gives you a seven worth keeping, what your average opening hand actually is once the mulligans are counted, and what each hand in between is worth. A 24-land sixty keeps 84% of its sevens and starts on 6.8 cards.

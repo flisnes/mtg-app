@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.150.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The deck stats charts were flat on a phone. The mana curve and the draw-odds chart both collapsed to their axis labels whenever the sheet was taller than the screen. Both stand up again.',
+      },
+    ],
+  },
+  {
     version: '0.150.0',
     changes: [
       {

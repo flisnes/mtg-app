@@ -4519,6 +4519,15 @@ button.primary {
 .deck-stats-sheet p {
   margin: 0;
 }
+/* .sheet is a max-height column flexbox, so once the content passes 90dvh every
+   child shrinks to make it fit — and a chart with a fixed height and no say in
+   the matter collapses to its axis labels. This sheet fits on a desktop window
+   and does not on a phone, which is exactly how it shipped flat in v0.150.0.
+   Nothing in here should ever shrink; the sheet scrolls instead. Same trap as
+   .sheet-tabs, one section further down the page. */
+.deck-stats-sheet > * {
+  flex-shrink: 0;
+}
 .deck-stats-head {
   font-size: 0.8rem;
   text-transform: uppercase;

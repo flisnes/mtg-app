@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.150.1
+
+- **Fixed: the deck stats charts were flat on a phone.** The mana curve and the new draw-odds chart both collapsed to their axis labels once the sheet was taller than the screen, which on a phone is always. Both stand up properly again, and the sheet scrolls.
+
 ## 0.150.0
 
 - **Draw odds, in the deck stats sheet.** "What are the odds I have three lands in my opening hand?" now has an answer, and so does every question shaped like it. Pick a group of cards, say how many you want, and read the curve: opening hand, then turns one through six.

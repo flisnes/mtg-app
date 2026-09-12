@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.152.0
+
+- **Opening hand, in the deck stats sheet.** How often this deck gives you a seven worth keeping, what your average opening hand actually is once the mulligans are counted, and what each hand in between is worth. A 24-land sixty keeps 84% of its sevens and starts on 6.8 cards.
+- **What a bad hand is really worth.** One land is 18% to have three by turn three; two lands is 66%; a seven you would have kept is 89%. That is the comparison the table is for, so you can see how far off the hand in front of you is instead of guessing.
+- **Your keep rule is a search, and a pair of steppers.** Two to five lands out of the box, and `is:untappedsource` or `cmc<=2 -type:land` if that is the rule you actually play by. Move the minimum and watch what it costs you in cards.
+- Commander's free first mulligan is in the model, so an EDH deck keeps a seven 97% of the time and averages a full seven cards.
+- What it will not do is tell you to mulligan. Shipping a hand trades a card for a better land count, and this panel counts lands, not cards. The simulator that can answer that is the next piece.
+
 ## 0.151.1
 
 - **Fetchlands count as sources now.** A Scalding Tarn taps for nothing, so it was invisible to the colored-source report, which on an eight-fetch manabase was not a rounding error: a UR deck's turn-two Counterspell read 29% when the honest figure was 69%.

@@ -4771,6 +4771,94 @@ button.primary {
   color: var(--text-dim);
 }
 
+/* Mulligan advisor: the hand-size spread reads as a row of horizontal bars
+   because there are only three of them and each one has a name longer than a
+   tick label. Below it, one row per opening-hand count — same shape as the
+   colored-source rows, so the sheet keeps one idea of what a "row" looks
+   like. */
+.mull-sizes,
+.mull-hands {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.mull-size {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+.mull-size-n {
+  flex: none;
+  min-width: 7.5rem;
+  color: var(--text-dim);
+}
+.mull-size-track {
+  flex: 1;
+  height: 0.6rem;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.mull-size-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), rgba(124, 108, 255, 0.45));
+}
+.mull-size-p {
+  flex: none;
+  min-width: 2.6rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.mull-hand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.4rem;
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.85rem;
+}
+.mull-hand-n {
+  font-weight: 600;
+}
+.mull-hand-tag {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.mull-hand-keep .mull-hand-tag {
+  color: var(--ok);
+}
+/* Too few and too many are both mulligans, and they fail in opposite
+   directions; one amber tone for "your rule says no" is enough. */
+.mull-hand-short .mull-hand-tag,
+.mull-hand-flood .mull-hand-tag {
+  color: #e6a23c;
+}
+.mull-hand-p {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.mull-hand-freq {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+/* A hand that already holds the goal gets words instead of a number, so it
+   drops out of the column your eye is scanning for the low ones. */
+.mull-hand-done {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
 /* The card sheet's format-legality list: one row per tracked format, the
    verdict as a colored chip. Green legal, red banned, amber restricted, grey
    not legal — the same tones the rest of the app uses for those states. */

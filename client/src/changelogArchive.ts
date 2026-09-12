@@ -1,4 +1,4 @@
-// The older half of the changelog (0.147.2 down to 0.98.0), split out of
+// The older half of the changelog (0.147.3 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,25 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.147.3',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'The card sheet puts the rules text up beside the art, and the price and "filed in" pills down at the top of the form. The text is never folded away now, so highlighting a phrase to search for it always works.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'Condition, finish, language and "special" are four dropdowns on one line, for trade is back next to the quantity, and the edition line says the set code so the collector number fits.',
+      },
+      {
+        kind: 'changed',
+        text: 'A tall card sheet grows up to the search bar before anything has to scroll.',
+      },
+    ],
+  },
   {
     version: '0.147.2',
     changes: [

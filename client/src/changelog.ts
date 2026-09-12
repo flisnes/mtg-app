@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.152.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Opening hand, in the deck stats sheet. How often your deck hands you a keepable seven, how many cards you start with on average, and what each opening hand is worth: a one-lander is 18% to have three lands by turn three, a two-lander 66%.',
+      },
+      {
+        kind: 'added',
+        text: 'The keep rule is a search, same as the draw-odds group. Two to five lands is the default; two to five untapped sources, or one cheap spell, is a stepper and a query away.',
+      },
+    ],
+  },
+  {
     version: '0.151.1',
     changes: [
       {
@@ -188,25 +201,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'Condition, finish and language now open inside the card sheet, the way Special does, instead of as a box in the middle of the screen. One at a time, all at the same line spacing, capped at five rows with the current answer already in view.',
-      },
-    ],
-  },
-  {
-    version: '0.147.3',
-    changes: [
-      {
-        kind: 'changed',
-        text:
-          'The card sheet puts the rules text up beside the art, and the price and "filed in" pills down at the top of the form. The text is never folded away now, so highlighting a phrase to search for it always works.',
-      },
-      {
-        kind: 'changed',
-        text:
-          'Condition, finish, language and "special" are four dropdowns on one line, for trade is back next to the quantity, and the edition line says the set code so the collector number fits.',
-      },
-      {
-        kind: 'changed',
-        text: 'A tall card sheet grows up to the search bar before anything has to scroll.',
       },
     ],
   },

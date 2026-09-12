@@ -4,6 +4,7 @@ import { Icon } from './icons.js';
 import { CURVE_MAX, TAX_TURNS, type DeckManaStats } from '../deck/manaStats.js';
 import { DrawOddsPanel } from './DrawOddsPanel.js';
 import { ColorSourcesPanel } from './ColorSourcesPanel.js';
+import { MulliganPanel } from './MulliganPanel.js';
 import { librarySize, type GroupRow } from '../analysis/groups.js';
 
 // What the deck's mana looks like before a single card is drawn: the curve, the
@@ -140,6 +141,8 @@ export function DeckStatsSheet({
           <ColorSourcesPanel rows={rows} library={librarySize(rows)} format={format} />
 
           <DrawOddsPanel rows={rows} format={format} />
+
+          <MulliganPanel rows={rows} format={format} />
 
           <p className="fine-print deck-stats-note">
             Goldfish numbers: they assume a land drop every turn and nobody on the other side of the table.

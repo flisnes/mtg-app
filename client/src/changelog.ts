@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.153.1',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'Your commander leads the On curve panel now, with its own chart. It waits in the command zone rather than in your library, so the odds of casting it on turn four are purely about your mana, and every game in the run counts toward the number.',
+      },
+    ],
+  },
+  {
     version: '0.153.0',
     changes: [
       {
@@ -201,16 +211,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'fixed',
         text:
           'Sorting the collection by price change barely sorted anything. Each card was measured from its own first reading, so the order tracked how long you had owned a card rather than what its price did. Both price-change sorts now cover the same seven days for every card, the window the arrows on the tiles use, and a dollar move is converted before it is weighed against a euro one.',
-      },
-    ],
-  },
-  {
-    version: '0.147.5',
-    changes: [
-      {
-        kind: 'fixed',
-        text:
-          'Two special conditions on one copy left the card sheet showing "Altere…". It now says "2 selected", and the four dropdowns share out the width by what they hold, so a long answer stops getting cut off.',
       },
     ],
   },

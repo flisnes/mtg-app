@@ -128,9 +128,16 @@ export interface SimCostGroup {
 export interface SimResult {
   games: number;
   maxTurn: number;
-  /** Every card with a printed cost, worst on-curve odds first. */
+  /** Library cards with a printed cost, worst on-curve odds first. */
   cards: SimCardResult[];
-  /** The distinct printed costs in the deck, worst first. The report to act on. */
+  /**
+   * The command zone. Reported apart from `cards` because it is a different
+   * kind of card: you have it in every game, from turn one, without drawing it,
+   * and most decks are built around casting it. Never pooled with a library
+   * card that happens to share its cost, and never in `costs`.
+   */
+  commanders: SimCardResult[];
+  /** The distinct printed costs in the library, worst first. The report to act on. */
   costs: SimCostGroup[];
   /** Mean mana available, indexed by turn. */
   manaByTurn: number[];
@@ -591,9 +598,15 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     if (!card.spell || g < 0) continue;
     const held = cumulative(heldAt, i * stride);
     const cast = cumulative(castAt, i * stride);
+    // A commander pools with nobody. Pooling exists to borrow sample from cards
+    // that share an answer, and the commander already has every game in the run
+    // behind it: it is in hand from turn one, so its denominator is the whole
+    // 20,000. Folding it in with a three-of at the same cost would mix two
+    // different conditionals and make the better estimate worse.
+    const pool = card.commander ? -(g + 1) : g;
     pending.push({
       card,
-      group: g,
+      group: pool,
       held,
       cast,
       // From the parsed cost rather than Scryfall's `cmc`, which sums both
@@ -601,14 +614,14 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
       curveTurn: Math.min(opts.maxTurn, Math.max(1, Math.ceil(card.cost!.mana))),
       copies: card.copies + (card.commander ? 1 : 0),
     });
-    const ph = pooledHeld.get(g) ?? new Float64Array(stride);
-    const pc = pooledCast.get(g) ?? new Float64Array(stride);
+    const ph = pooledHeld.get(pool) ?? new Float64Array(stride);
+    const pc = pooledCast.get(pool) ?? new Float64Array(stride);
     for (let turn = 1; turn < stride; turn++) {
       ph[turn] = ph[turn]! + held[turn]!;
       pc[turn] = pc[turn]! + cast[turn]!;
     }
-    pooledHeld.set(g, ph);
-    pooledCast.set(g, pc);
+    pooledHeld.set(pool, ph);
+    pooledCast.set(pool, pc);
   }
 
   /** Pooled P(payable | held), which is 0 where nothing was ever held to ask. */
@@ -623,6 +636,7 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
   const costs: SimCostGroup[] = [];
   const byGroup = new Map<number, SimCostGroup>();
   const results: SimCardResult[] = [];
+  const commanders: SimCardResult[] = [];
   let weight = 0;
   let weighted = 0;
 
@@ -631,7 +645,7 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     const onCurvePay = payByTurn[p.curveTurn]!;
     const heldByTurn = [0, ...[...p.held].slice(1).map((count) => count * per)];
     const castByTurn = [0, ...[...p.cast].slice(1).map((count) => count * per)];
-    results.push({
+    (p.card.commander ? commanders : results).push({
       oracleId: p.card.oracleId,
       name: p.card.name,
       manaCost: p.card.manaCost,
@@ -649,6 +663,9 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     weight += p.copies;
     weighted += p.copies * onCurvePay;
 
+    // The commander has its own section, so it gets no cost row: a row reading
+    // "1 card at this cost" next to a block about that same card is noise.
+    if (p.card.commander) continue;
     const existing = byGroup.get(p.group);
     if (existing) {
       existing.names.push(p.card.name);
@@ -681,6 +698,7 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     games,
     maxTurn: opts.maxTurn,
     cards: results,
+    commanders,
     costs,
     manaByTurn: [...manaSum].map((sum) => sum * per),
     landDropByTurn: [...landDrops].map((count) => count * per),

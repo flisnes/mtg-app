@@ -103,58 +103,57 @@ function Report({
   const shortfalls = result.costs.filter((c) => c.onCurvePay < THRESHOLD);
   const card = result.cards.find((c) => c.oracleId === picked) ?? result.cards[0];
 
-  if (!card) return <p className="deck-stats-verdict">Nothing in this deck has a cost to pay.</p>;
-
-  const ci = halfWidth(card.onCurvePay, card.paySample);
+  if (!card && result.commanders.length === 0) {
+    return <p className="deck-stats-verdict">Nothing in this deck has a cost to pay.</p>;
+  }
 
   return (
     <>
-      <p className={`deck-stats-verdict${shortfalls.length === 0 ? ' tone-ok' : ''}`}>{verdict(result, shortfalls)}</p>
+      {/* The command zone first. It is the one card you are guaranteed to have
+          in every game, it is usually the card the deck was built around, and
+          it is the only one here whose odds are purely about your mana. */}
+      {result.commanders.map((c) => (
+        <Commander key={c.oracleId} card={c} />
+      ))}
 
-      <select className="sim-pick" value={card.oracleId} onChange={(e) => onPick(e.target.value)} aria-label="Card to chart">
-        {result.cards.map((c) => (
-          <option key={c.oracleId} value={c.oracleId}>
-            {c.name} · {pctShort(c.onCurvePay)} on turn {c.curveTurn}
-          </option>
-        ))}
-      </select>
-      <div className="curve odds-curve" role="img" aria-label={chartLabel(card)}>
-        {card.payByTurn.slice(1).map((p, i) => {
-          const turn = i + 1;
-          return (
-            <div key={turn} className="curve-col">
-              <div className="odds-track">
-                <div className={`curve-bar${turn === card.curveTurn ? ' sim-bar-curve' : ''}`} style={{ height: `${p * 100}%` }}>
-                  <span className="curve-count">{Math.round(p * 100)}</span>
-                </div>
-              </div>
-              <span className={`curve-tick${turn === card.curveTurn ? ' sim-tick-curve' : ''}`}>{turn}</span>
-            </div>
-          );
-        })}
-      </div>
-      <p className="fine-print">
-        How often your mana pays for {card.name} by each turn, counting only the games you are holding it. Turn {card.curveTurn} is its
-        curve: you have drawn it by then {pct(card.heldByTurn[card.curveTurn] ?? 0)} of the time, so you actually cast it on curve{' '}
-        {pct(card.onCurveCast)} of games.
-        {card.commander && ' It is your commander, so it is in hand every game.'} ±{(ci * 100).toFixed(1)} points.
-      </p>
+      {card && (
+        <>
+          {result.commanders.length > 0 && <h4 className="deck-stats-head">The rest of the deck</h4>}
+          <p className={`deck-stats-verdict${shortfalls.length === 0 ? ' tone-ok' : ''}`}>{verdict(result, shortfalls)}</p>
 
-      {shortfalls.length > 0 && (
-        <ul className="source-rows">
-          {shortfalls.slice(0, MAX_ROWS).map((c) => (
-            <li key={c.manaCost} className="source-row">
-              <ManaCost cost={c.manaCost} className="source-row-cost" />
-              <span className="source-row-name">{nameList(c.names)}</span>
-              <span className="source-row-p">{pctShort(c.onCurvePay)}</span>
-              <span className="source-row-note">
-                turn {c.curveTurn} · {c.copies} card{c.copies === 1 ? '' : 's'} at this cost
-              </span>
-            </li>
-          ))}
-        </ul>
+          <select className="sim-pick" value={card.oracleId} onChange={(e) => onPick(e.target.value)} aria-label="Card to chart">
+            {result.cards.map((c) => (
+              <option key={c.oracleId} value={c.oracleId}>
+                {c.name} · {pctShort(c.onCurvePay)} on turn {c.curveTurn}
+              </option>
+            ))}
+          </select>
+          <PayChart card={card} />
+          <p className="fine-print">
+            How often your mana pays for {card.name} by each turn, counting only the games you are holding it. Turn {card.curveTurn} is
+            its curve: you have drawn it by then {pct(card.heldByTurn[card.curveTurn] ?? 0)} of the time, so you actually cast it on
+            curve {pct(card.onCurveCast)} of games. ±{(halfWidth(card.onCurvePay, card.paySample) * 100).toFixed(1)} points.
+          </p>
+
+          {shortfalls.length > 0 && (
+            <ul className="source-rows">
+              {shortfalls.slice(0, MAX_ROWS).map((c) => (
+                <li key={c.manaCost} className="source-row">
+                  <ManaCost cost={c.manaCost} className="source-row-cost" />
+                  <span className="source-row-name">{nameList(c.names)}</span>
+                  <span className="source-row-p">{pctShort(c.onCurvePay)}</span>
+                  <span className="source-row-note">
+                    turn {c.curveTurn} · {c.copies} card{c.copies === 1 ? '' : 's'} at this cost
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {shortfalls.length > MAX_ROWS && (
+            <p className="fine-print">And {shortfalls.length - MAX_ROWS} more costs below 90% on curve.</p>
+          )}
+        </>
       )}
-      {shortfalls.length > MAX_ROWS && <p className="fine-print">And {shortfalls.length - MAX_ROWS} more costs below 90% on curve.</p>}
 
       <p className="fine-print">
         Simulated, {result.games.toLocaleString()} games.{running && ' Re-dealing…'} You average {manaLine(result)}.{' '}
@@ -177,13 +176,64 @@ function Report({
   );
 }
 
+/**
+ * The commander's own block, ahead of everything else.
+ *
+ * It earns the place: it waits in the command zone, so unlike every other card
+ * in the deck there is no question of drawing it, and the whole deck is usually
+ * built on the assumption that it resolves. That also makes it the one card
+ * here whose number is *only* about the mana, which is why it needs no "you
+ * have drawn it by then" clause and gets the full run behind its interval.
+ */
+function Commander({ card }: { card: SimCardResult }) {
+  const ci = halfWidth(card.onCurvePay, card.paySample);
+  const late = card.payByTurn[Math.min(card.curveTurn + 2, card.payByTurn.length - 1)] ?? 0;
+  return (
+    <>
+      <p className={`deck-stats-verdict${card.onCurvePay >= THRESHOLD ? ' tone-ok' : ''}`}>
+        <strong>
+          You cast {card.name} on turn {card.curveTurn} {pctShort(card.onCurvePay)} of the time.
+        </strong>{' '}
+        It is waiting in the command zone every game, so this is your mana and nothing else.
+      </p>
+      <PayChart card={card} />
+      <p className="fine-print">
+        <ManaCost cost={card.manaCost} /> on turn {card.curveTurn}, and {pct(late)} by turn{' '}
+        {Math.min(card.curveTurn + 2, card.payByTurn.length - 1)}. ±{(ci * 100).toFixed(1)} points. Commander tax is not counted, so
+        this is the first cast, not the one after they killed it.
+      </p>
+    </>
+  );
+}
+
+/** The per-turn bars, with the turn the card is trying to be cast on marked. */
+function PayChart({ card }: { card: SimCardResult }) {
+  return (
+    <div className="curve odds-curve" role="img" aria-label={chartLabel(card)}>
+      {card.payByTurn.slice(1).map((p, i) => {
+        const turn = i + 1;
+        return (
+          <div key={turn} className="curve-col">
+            <div className="odds-track">
+              <div className={`curve-bar${turn === card.curveTurn ? ' sim-bar-curve' : ''}`} style={{ height: `${p * 100}%` }}>
+                <span className="curve-count">{Math.round(p * 100)}</span>
+              </div>
+            </div>
+            <span className={`curve-tick${turn === card.curveTurn ? ' sim-tick-curve' : ''}`}>{turn}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function verdict(result: SimResult, shortfalls: readonly SimCostGroup[]): ReactNode {
   const total = result.costs.length;
   if (shortfalls.length === 0) {
     return (
       <>
-        <strong>The mana is there on time.</strong> All {total} cost{total === 1 ? '' : 's'} in this deck clear 90% on their own curve,
-        and the deck averages {pct(result.deckOnCurve)}.
+        <strong>The mana is there on time.</strong> All {total} cost{total === 1 ? '' : 's'} in the library clear 90% on their own
+        curve, and the deck averages {pct(result.deckOnCurve)}.
       </>
     );
   }

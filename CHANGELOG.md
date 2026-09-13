@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.153.1
+
+- **Your commander goes first in the On curve panel, with its own chart.** It is the card the deck is built around and the only one you are guaranteed to have, so it gets the top of the panel instead of a slot in a list sorted by whatever is worst.
+- Because it waits in the command zone rather than in your library, its number is purely about your mana: no draw step involved, and every game in the run counts toward it. Commander tax is not counted, so it is the first cast, not the one after they killed it.
+- It is no longer averaged in with library cards that happen to share its printed cost. Those are two different questions and pooling them made the more certain answer worse.
+
 ## 0.153.0
 
 - **On curve: the simulator.** Every number in the deck stats sheet up to now was a count. This one deals twenty thousand games, mulligans them, plays the land drops out in order and asks whether the mana was actually there. It is the only engine here that can see the difference between a tapland played on turn one and the same tapland on turn three.

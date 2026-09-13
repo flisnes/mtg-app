@@ -123,6 +123,18 @@ export function DeckStatsSheet({
               which is what {stats.modalLands === 1 ? 'it is' : 'they are'}.
             </p>
           )}
+          {stats.sacrificedLands > 0 && (
+            <p className="fine-print">
+              Something here eats {stats.sacrificedLands} land{plural(stats.sacrificedLands)} as it enters, so the verdict is judged
+              against {stats.effectiveLands}. A Lotus Field is three permanents becoming one.
+            </p>
+          )}
+          {stats.bounceLands > 0 && (
+            <p className="fine-print">
+              {stats.bounceLands} of them {stats.bounceLands === 1 ? 'returns a land' : 'return a land'} to your hand on entry. That is
+              land-count neutral — you get the card back as a spare land drop — and costs you a mana on the turn it lands.
+            </p>
+          )}
 
           <h3 className="deck-stats-head">Taplands</h3>
           {stats.hasManaData ? (

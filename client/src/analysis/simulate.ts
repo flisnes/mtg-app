@@ -1,5 +1,5 @@
 import type { DeckFormat } from '@mtg/shared';
-import { canPay, maxMatching, type ManaUnit } from './canPay.js';
+import { canPay, maxMatching, type ManaUnit, type UnitGroup } from './canPay.js';
 import { handSize } from './gameModel.js';
 import { KEEP_ANYTHING_AT } from './mulligan.js';
 import { makeRng, shuffle } from './rng.js';
@@ -218,6 +218,116 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
   const srcMask = new Int32Array(MAX_SOURCES);
   const srcUnits = new Int32Array(MAX_SOURCES);
   const srcOnline = new Int32Array(MAX_SOURCES);
+  /** Last turn the source still works, or 0 for "it doesn't go away". */
+  const srcExpires = new Int32Array(MAX_SOURCES);
+  /** Its mana is all one color, chosen once: a group, not independent units. */
+  const srcOneColor = new Uint8Array(MAX_SOURCES);
+  /** A land, so a granter in play widens what it taps for. */
+  const srcIsLand = new Uint8Array(MAX_SOURCES);
+  /** Which card it is, so a Karoo can hand one back to you. */
+  const srcCard = new Int32Array(MAX_SOURCES);
+  const unitGroups: UnitGroup[] = [];
+  /** Sources on the battlefield. Lives out here so the pool builder can see it. */
+  let srcLen = 0;
+  /** Colors every land you control also makes, from an Urborg or a Lantern in play. */
+  let grantMask = 0;
+
+  /**
+   * The mana available this turn, as the payment solver wants it, and how much
+   * of it there is.
+   *
+   * Three things happen here that did not used to. A source past its lifetime
+   * is skipped, so Urza's Saga stops paying after three turns and a Peat Bog
+   * after two activations instead of feeding an eight-turn game sixteen mana. A
+   * source whose mana is all one color becomes a *group*, because Lotus Field
+   * makes three of one color and not three of any. And a granter in play ORs
+   * its colors into every land, which is the one place this model was too mean
+   * rather than too kind.
+   */
+  const buildPool = (turn: number): number => {
+    units.length = 0;
+    unitGroups.length = 0;
+    let total = 0;
+    for (let s = 0; s < srcLen; s++) {
+      if (srcOnline[s]! > turn) continue;
+      const expires = srcExpires[s]!;
+      if (expires > 0 && turn > expires) continue;
+      const n = srcUnits[s]!;
+      total += n;
+      const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
+      if (srcOneColor[s] && n > 1) unitGroups.push({ colors: UNIT_BY_MASK[mask]!.colors, count: n });
+      else for (let u = 0; u < n; u++) units.push(UNIT_BY_MASK[mask]!);
+    }
+    return total;
+  };
+
+  /**
+   * Put a source onto the battlefield. `index` is the card it is; `card` is what
+   * that card does, which for a fetch is the land it found rather than the fetch.
+   *
+   * A granter's colors are OR'd in on arrival and never removed, because nothing
+   * in a goldfish removes a permanent. Only granters the sequencer actually puts
+   * down are seen — an Urborg or a Chromatic Lantern. A Prismatic Omen is filed
+   * as a plain spell and never reaches the battlefield here, so the simulator
+   * misses it where the colored-source report, which is deck-relative, does not.
+   */
+  const addSource = (index: number, card: SimCard, online: number, turn: number): boolean => {
+    if (srcLen >= MAX_SOURCES) return false;
+    srcMask[srcLen] = card.mask;
+    srcUnits[srcLen] = card.adds;
+    srcOnline[srcLen] = online;
+    // A lifetime is counted from the turn it arrives and includes that turn.
+    // Urza's Saga gains its ability from chapter I at precombat main and is
+    // sacrificed after III, so you tap it for {C} on the turn it dies too.
+    srcExpires[srcLen] = card.life > 0 ? turn + card.life - 1 : 0;
+    srcOneColor[srcLen] = card.oneColor ? 1 : 0;
+    srcIsLand[srcLen] = card.role === 'land' || card.role === 'fetch' ? 1 : 0;
+    srcCard[srcLen] = index;
+    srcLen++;
+    grantMask |= card.grantMask;
+    return true;
+  };
+
+  /**
+   * The lands a source costs you on the way in, taken off the battlefield.
+   * Returns a card to put back into your hand, or -1.
+   *
+   * Lotus Field is net minus two lands: three permanents become one, and the
+   * model used to count it as a bonus. A Karoo is subtler and the arithmetic is
+   * worth stating, because the sign is not obvious — you are a mana down the
+   * turn it lands and a mana up forever after, but the land it returns is a
+   * *spare land drop*, which is the whole reason the cycle is playable. The two
+   * pull opposite ways, which is why they are both modelled rather than
+   * averaged into a correction factor.
+   *
+   * What it gives up is the most recently played land other than the one that
+   * just entered. That is not optimal play — you would return the worst land —
+   * but it is cheap and it is the same conservative direction everywhere else
+   * here takes.
+   */
+  const payEntryCost = (card: SimCard): number => {
+    let back = -1;
+    for (let k = 0; k < card.entry; k++) {
+      let pick = -1;
+      for (let s = srcLen - 2; s >= 0; s--) {
+        if (srcIsLand[s]) {
+          pick = s;
+          break;
+        }
+      }
+      if (pick < 0) break;
+      if (card.bounce) back = srcCard[pick]!;
+      srcLen--;
+      srcMask[pick] = srcMask[srcLen]!;
+      srcUnits[pick] = srcUnits[srcLen]!;
+      srcOnline[pick] = srcOnline[srcLen]!;
+      srcExpires[pick] = srcExpires[srcLen]!;
+      srcOneColor[pick] = srcOneColor[srcLen]!;
+      srcIsLand[pick] = srcIsLand[srcLen]!;
+      srcCard[pick] = srcCard[srcLen]!;
+    }
+    return back;
+  };
   const firstCast = new Int32Array(n);
   const firstHeld = new Int32Array(n);
   const firstPay = new Int32Array(groups);
@@ -238,7 +348,8 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
     firstCast.fill(0);
     firstHeld.fill(0);
     firstPay.fill(0);
-    let srcLen = 0;
+    srcLen = 0;
+    grantMask = 0;
     let colorsHeld = 0;
     let handLen = 0;
     /** Cards still in the library, which a fetch shrinks. */
@@ -284,14 +395,7 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
 
       // The mana already online, and the pool it makes, both of which the land
       // drop is a decision about.
-      units.length = 0;
-      let pending = 0;
-      for (let s = 0; s < srcLen; s++) {
-        if (srcOnline[s]! > turn) continue;
-        pending += srcUnits[s]!;
-        const unit = UNIT_BY_MASK[srcMask[s]!]!;
-        for (let u = 0; u < srcUnits[s]!; u++) units.push(unit);
-      }
+      const pending = buildPool(turn);
       let needUntapped = false;
       // The cheapest thing in hand you still cannot pay for: the cost this
       // turn's land is really being chosen for.
@@ -331,38 +435,31 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
       }
       if (best >= 0) {
         landDrops[turn] = landDrops[turn]! + 1;
-        const card = cards[hand[best]!]!;
+        const cardIndex = hand[best]!;
+        const card = cards[cardIndex]!;
         hand[best] = hand[--handLen]!;
         if (card.role === 'fetch') {
           const at = findLand(cards, library, top, libLen, colorsHeld, card.fetchTargets, goal, units);
-          if (at >= 0 && srcLen < MAX_SOURCES) {
-            const land = cards[library[at]!]!;
+          if (at >= 0) {
+            const index = library[at]!;
+            const land = cards[index]!;
             const slow = card.tapped === 'always' || land.tapped === 'always';
-            srcMask[srcLen] = land.mask;
-            srcUnits[srcLen] = land.adds;
-            srcOnline[srcLen] = turn + (slow ? 1 : 0);
-            srcLen++;
-            colorsHeld |= land.mask;
-            library[at] = library[--libLen]!;
+            if (addSource(index, land, turn + (slow ? 1 : 0), turn)) {
+              colorsHeld |= land.mask;
+              library[at] = library[--libLen]!;
+              const back = payEntryCost(land);
+              if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
+            }
           }
-        } else if (srcLen < MAX_SOURCES) {
-          srcMask[srcLen] = card.mask;
-          srcUnits[srcLen] = card.adds;
-          srcOnline[srcLen] = turn + (card.tapped === 'always' ? 1 : 0);
-          srcLen++;
+        } else if (addSource(cardIndex, card, turn + (card.tapped === 'always' ? 1 : 0), turn)) {
           colorsHeld |= card.mask;
+          const back = payEntryCost(card);
+          if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
         }
       }
 
       // --- What could you pay for, with everything untapped -----------------
-      units.length = 0;
-      let available = 0;
-      for (let s = 0; s < srcLen; s++) {
-        if (srcOnline[s]! > turn) continue;
-        available += srcUnits[s]!;
-        const unit = UNIT_BY_MASK[srcMask[s]!]!;
-        for (let u = 0; u < srcUnits[s]!; u++) units.push(unit);
-      }
+      const available = buildPool(turn);
       manaSum[turn] = manaSum[turn]! + available;
 
       // Which of the cards in hand the mana covers. Only cards in hand: the
@@ -381,7 +478,7 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
         if (firstCast[index] !== 0) continue;
         if (firstPay[g] === 0 && payStamp[g] !== stamp) {
           payStamp[g] = stamp;
-          if (canPay(cards[index]!.cost!, units)) firstPay[g] = turn;
+          if (canPay(cards[index]!.cost!, units, unitGroups)) firstPay[g] = turn;
         }
         if (firstPay[g] !== 0) firstCast[index] = turn;
       }
@@ -401,30 +498,27 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
         rampCost = card.cmc;
       }
       if (rampAt >= 0) {
-        const card = cards[hand[rampAt]!]!;
+        const rampIndex = hand[rampAt]!;
+        const card = cards[rampIndex]!;
         hand[rampAt] = hand[--handLen]!;
         if (card.role === 'landramp') {
           // What it fetches is a land out of the library, arriving tapped. That
           // is Rampant Growth exactly and Nature's Lore a turn late, which is
           // the conservative half of the two.
-          for (let k = 0; k < card.adds && srcLen < MAX_SOURCES; k++) {
+          for (let k = 0; k < card.adds; k++) {
             const at = findLand(cards, library, top, libLen, colorsHeld, null, goal, units);
             if (at < 0) break;
-            const land = cards[library[at]!]!;
-            srcMask[srcLen] = land.mask;
-            srcUnits[srcLen] = land.adds;
-            srcOnline[srcLen] = turn + 1;
-            srcLen++;
+            const index = library[at]!;
+            const land = cards[index]!;
+            if (!addSource(index, land, turn + 1, turn)) break;
             colorsHeld |= land.mask;
             library[at] = library[--libLen]!;
+            const back = payEntryCost(land);
+            if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
           }
-        } else if (srcLen < MAX_SOURCES) {
-          srcMask[srcLen] = card.mask;
-          srcUnits[srcLen] = card.adds;
           // The mana that cast it has been spent, and a dork is summoning sick
           // on top of that, so either way it pays for something from next turn.
-          srcOnline[srcLen] = turn + 1;
-          srcLen++;
+        } else if (addSource(rampIndex, card, turn + 1, turn)) {
           colorsHeld |= card.mask;
         }
       }
@@ -469,9 +563,14 @@ function landScore(
   let matched = 0;
   if (goal && goal.length > 0 && card.mask !== 0) {
     const unit = UNIT_BY_MASK[card.mask]!;
-    for (let u = 0; u < card.adds; u++) pool.push(unit);
+    // A source whose mana is all one color is worth one unit to a *matching*,
+    // whatever it adds: three mana of any one color would otherwise cover one
+    // pip of each of three colors here and none of them at the table. Scoring
+    // it at one understates the land, which is the direction to be wrong in.
+    const worth = card.oneColor ? 1 : card.adds;
+    for (let u = 0; u < worth; u++) pool.push(unit);
     matched = maxMatching(goal, pool);
-    pool.length -= card.adds;
+    pool.length -= worth;
   }
   // A conditional tapland is untapped whenever you want it to be, which is the
   // same call the tapland tax makes by leaving them out of its average.
@@ -509,9 +608,10 @@ function findLand(
     let matched = 0;
     if (goal && goal.length > 0) {
       const unit = UNIT_BY_MASK[card.mask]!;
-      for (let u = 0; u < card.adds; u++) pool.push(unit);
+      const worth = card.oneColor ? 1 : card.adds;
+      for (let u = 0; u < worth; u++) pool.push(unit);
       matched = maxMatching(goal, pool);
-      pool.length -= card.adds;
+      pool.length -= worth;
     }
     const score = matched * 1000 + popcount(card.mask & ~colorsHeld) * 10 + (card.tapped === 'always' ? 0 : 1);
     if (score > bestScore) {

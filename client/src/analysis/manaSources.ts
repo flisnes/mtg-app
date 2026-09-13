@@ -1,8 +1,16 @@
-import { BASIC_LAND_TYPES, decodeFetchProfile, decodeManaProfile, type DeckBoard, type DeckFormat, type OracleCard } from '@mtg/shared';
+import {
+  BASIC_LAND_TYPES,
+  decodeFetchProfile,
+  decodeManaProfile,
+  sourceColors,
+  type DeckBoard,
+  type DeckFormat,
+  type OracleCard,
+} from '@mtg/shared';
 import { atLeast } from './hypergeom.js';
 import { cardsSeen, handSize, type DrawSetup } from './gameModel.js';
 import { bindingPips, parseManaCost, pipKey, type PipColor } from './manaCost.js';
-import { canPay, missingColors, type ManaUnit } from './canPay.js';
+import { canPay, missingColors, type ManaUnit, type UnitGroup } from './canPay.js';
 
 // The colored-source report: for every card in the deck, are there enough
 // sources of its colors to actually cast it on curve?
@@ -47,6 +55,21 @@ export interface DeckSource {
   colors: PipColor[];
   /** Mana it adds once it is online. */
   units: number;
+  /**
+   * All of `units` has to be one color (Lotus Field, Gilded Lotus). The payment
+   * solver gets these as a group rather than as independent units, because
+   * three mana of any one color is not three five-color sources.
+   */
+  oneColor: boolean;
+  /**
+   * Its mana has no color we can name: Exotic Orchard reads an opponent's
+   * board, and a goldfish has no opponents. It pays generic and no pip.
+   */
+  generic: boolean;
+  /** Spendable only on part of the deck (Ancient Ziggurat). Counted, and footnoted. */
+  restricted: boolean;
+  /** Turns or activations before it is gone (Urza's Saga, the depletion lands). */
+  life: number;
   /** Earliest turn it can pay for a spell cast that same turn. */
   readyTurn: number;
   copies: number;
@@ -56,6 +79,8 @@ export interface DeckSource {
   unknown: boolean;
   /** A fetchland: its colors were resolved from what this deck holds, not from the card. */
   fetched: boolean;
+  /** A land, so a `grants` effect in this deck widens what it can tap for. */
+  isLand: boolean;
   /**
    * It is the commander, so it is always available and never drawn. Kept out
    * of every count the hypergeometric sees — a card that isn't in the library
@@ -114,6 +139,14 @@ export interface ManaReport {
   unmodelled: number;
   /** Fetchland copies in the library whose colors were resolved from the deck. */
   fetches: number;
+  /** Colors a granter (Urborg, Chromatic Lantern) adds to every land in the deck. */
+  granted: PipColor[];
+  /** Copies whose mana is spendable only on part of the deck (Ancient Ziggurat). */
+  restricted: number;
+  /** Copies whose color depends on an opponent's lands, so they only pay generic. */
+  genericOnly: number;
+  /** Copies that run out — Urza's Saga, the depletion lands. */
+  expiring: number;
 }
 
 const faces = (typeLine: string) => typeLine.split('//').map((f) => f.trim());
@@ -211,7 +244,12 @@ function fetchSources(rows: readonly SourceRow[], produced: ReadonlyMap<string, 
       copies: row.quantity,
       slow: profile.tapped === 'always',
       unknown: false,
+      oneColor: false,
+      generic: false,
+      restricted: false,
+      life: 0,
       fetched: true,
+      isLand: true,
       fromCommandZone: row.board === 'commander',
     });
   }
@@ -221,9 +259,37 @@ function fetchSources(rows: readonly SourceRow[], produced: ReadonlyMap<string, 
   return [...byOracle.values()];
 }
 
+/**
+ * Colors this deck hands to every land in it — Urborg makes them all Swamps,
+ * Chromatic Lantern gives them all an any-color ability.
+ *
+ * Deck-relative like a fetchland, and for the same reason: these cards never
+ * add mana, they add a color *option*, so what one is worth is a fact about the
+ * lands around it. This is the mana model's only under-count — an Urborg in a
+ * deck with ten Mountains makes eleven black sources and we counted one — and
+ * it is fixed with a mask union rather than a count change.
+ *
+ * The mainboard only. A granter in the command zone is always available, but
+ * the shape of that answer ("every land is a Swamp, in the games you have cast
+ * your commander") is not something a hypergeometric can carry, and claiming
+ * the colors unconditionally would overstate every deck with a Chromatic
+ * Lantern commander.
+ */
+function grantedColors(rows: readonly SourceRow[]): PipColor[] {
+  const granted = new Set<PipColor>();
+  for (const r of rows) {
+    if (!r.oracle?.grants || r.quantity <= 0 || r.board !== 'main') continue;
+    for (const c of pipColors(r.oracle.grants)) granted.add(c);
+  }
+  return (['W', 'U', 'B', 'R', 'G', 'C'] as PipColor[]).filter((c) => granted.has(c));
+}
+
 /** The mana-producing cards in the library, plus the commander, which is always there. */
 export function deckSources(rows: readonly SourceRow[]): DeckSource[] {
   const byOracle = new Map<string, DeckSource>();
+  /** Reflecting Pool and friends: resolved once the rest of the deck is known. */
+  const reflecting: DeckSource[] = [];
+
   for (const r of rows) {
     const o = r.oracle;
     if (!o || r.quantity <= 0) continue;
@@ -233,15 +299,18 @@ export function deckSources(rows: readonly SourceRow[]): DeckSource[] {
     if (!profile) continue;
     const ready = readyTurn(profile.kind, o.cmc, profile.tapped);
     if (ready === null) continue;
-    const colors = pipColors(o.produces);
-    if (colors.length === 0) continue;
+    // The profile's own colors, not `produces` — which is the union over every
+    // ability the card has at any price, and so calls Nykthos a six-color
+    // source when the ability we costed at one mana adds {C}.
+    const colors = pipColors(sourceColors(profile, o.produces));
+    if (colors.length === 0 && !profile.opponent) continue;
     const existing = byOracle.get(o.oracleId);
     if (existing) {
       existing.copies += r.quantity;
       existing.fromCommandZone &&= r.board === 'commander';
       continue;
     }
-    byOracle.set(o.oracleId, {
+    const source: DeckSource = {
       oracleId: o.oracleId,
       name: o.name,
       colors,
@@ -250,26 +319,74 @@ export function deckSources(rows: readonly SourceRow[]): DeckSource[] {
       copies: r.quantity,
       slow: profile.tapped === 'always',
       unknown: profile.unknown,
+      oneColor: profile.oneColor && profile.adds > 1,
+      generic: profile.opponent,
+      restricted: profile.restricted,
+      life: profile.life,
       fetched: false,
+      isLand: profile.kind === 'land',
       fromCommandZone: r.board === 'commander',
-    });
+    };
+    byOracle.set(o.oracleId, source);
+    if (profile.reflects) reflecting.push(source);
   }
   for (const source of fetchSources(rows, byOracle)) byOracle.set(source.oracleId, source);
-  return [...byOracle.values()];
+
+  const sources = [...byOracle.values()];
+
+  // Reflecting Pool taps for any type a land *you* control could produce, which
+  // unlike Exotic Orchard's opponent-facing version is a question the decklist
+  // answers. Same trick as a fetchland, and a much better answer than either
+  // guessing five colors or giving up and calling it colorless.
+  for (const pool of reflecting) {
+    const from = new Set<PipColor>();
+    for (const s of sources) {
+      if (s === pool || !s.isLand || s.generic) continue;
+      for (const c of s.colors) from.add(c);
+    }
+    pool.colors = (['W', 'U', 'B', 'R', 'G', 'C'] as PipColor[]).filter((c) => from.has(c));
+  }
+
+  const granted = grantedColors(rows);
+  if (granted.length > 0) {
+    for (const s of sources) {
+      if (!s.isLand) continue;
+      const widened = new Set<PipColor>([...s.colors, ...granted]);
+      s.colors = (['W', 'U', 'B', 'R', 'G', 'C'] as PipColor[]).filter((c) => widened.has(c));
+      // A land that only made mana an opponent could is now also, definitely, a
+      // Swamp. That is a color we can name, so it stops being generic-only.
+      if (s.colors.length > 0) s.generic = false;
+    }
+  }
+  return sources;
 }
 
 /**
  * The pool as the payment solver wants it: one unit per mana, capped at what
  * the cost could possibly use. This asks "could the deck ever pay this",
  * not "will you draw it", so every distinct source is assumed available.
+ *
+ * Two sources don't become plain units. A Lotus Field's three mana are a
+ * *group* — three of one color, chosen once — because expanded as independent
+ * five-color units they pay {W}{U}{B}, which is a cost the card cannot pay. An
+ * Exotic Orchard's mana has no color we can name, so it becomes a unit with no
+ * colors: it fills generic and matches no pip.
  */
-function unitPool(sources: readonly DeckSource[], cap: number): ManaUnit[] {
+function unitPool(sources: readonly DeckSource[], cap: number): { units: ManaUnit[]; groups: UnitGroup[] } {
   const units: ManaUnit[] = [];
+  const groups: UnitGroup[] = [];
   for (const s of sources) {
     const have = Math.min(s.copies * s.units, cap);
-    for (let i = 0; i < have; i++) units.push({ colors: s.colors });
+    if (s.oneColor) {
+      // Each *copy* picks its own color, so they are separate groups.
+      for (let copy = 0; copy < s.copies && groups.length * s.units < cap; copy++) {
+        groups.push({ colors: s.colors, count: s.units });
+      }
+      continue;
+    }
+    for (let i = 0; i < have; i++) units.push({ colors: s.generic ? [] : s.colors });
   }
-  return units;
+  return { units, groups };
 }
 
 /** Fewest sources that clear `threshold` for `pips` of them by `seen` cards. */
@@ -361,9 +478,9 @@ export function manaReport(
     if (!worst) continue;
 
     const pool = unitPool(all, cost.mana);
-    if (!canPay(cost, pool)) {
+    if (!canPay(cost, pool.units, pool.groups)) {
       worst.uncastable = true;
-      worst.missing = missingColors(cost, pool);
+      worst.missing = missingColors(cost, pool.units, pool.groups);
       worst.ok = false;
     }
     checks.push(worst);
@@ -392,6 +509,10 @@ export function manaReport(
     hasManaData: sources.length > 0,
     unmodelled,
     fetches: sources.filter((s) => s.fetched).reduce((n, s) => n + s.copies, 0),
+    granted: grantedColors(rows),
+    restricted: sources.filter((s) => s.restricted).reduce((n, s) => n + s.copies, 0),
+    genericOnly: sources.filter((s) => s.generic).reduce((n, s) => n + s.copies, 0),
+    expiring: sources.filter((s) => s.life > 0).reduce((n, s) => n + s.copies, 0),
   };
 }
 

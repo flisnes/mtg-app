@@ -32,6 +32,26 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.153.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text:
+          "The mana model counted a lot of cards as sources that are not. Caged Sun, Mirari's Wake, Vorinclex and every Treasure-maker cause mana without making any, and were being counted as mana rocks. Nykthos and the Cave and Gate lands were counted as six-color sources when their free ability makes one colorless.",
+      },
+      {
+        kind: 'fixed',
+        text:
+          "Urborg, Yavimaya and Chromatic Lantern now make every land in your deck a source of what they grant, which is the one thing the mana report was under-counting. Lotus Field makes three of one color rather than one of each, costs you the two lands it eats, and Urza's Saga and the depletion lands stop producing when they run out.",
+      },
+      {
+        kind: 'changed',
+        text:
+          'Because every card in the database moved, your next card-DB refresh downloads the whole thing rather than the usual few kilobytes.',
+      },
+    ],
+  },
+  {
     version: '0.153.1',
     changes: [
       {
@@ -201,16 +221,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'fixed',
         text:
           'Cards with no recorded purchase price are valued from the reading closest to the day they went in, so the ones you owned before the app tracked prices join the sort instead of falling to the bottom. Those say "since you got it" rather than "since you paid".',
-      },
-    ],
-  },
-  {
-    version: '0.147.6',
-    changes: [
-      {
-        kind: 'fixed',
-        text:
-          'Sorting the collection by price change barely sorted anything. Each card was measured from its own first reading, so the order tracked how long you had owned a card rather than what its price did. Both price-change sorts now cover the same seven days for every card, the window the arrows on the tiles use, and a dollar move is converted before it is weighed against a euro one.',
       },
     ],
   },

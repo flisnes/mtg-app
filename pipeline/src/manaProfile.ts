@@ -2,9 +2,16 @@ import type { FetchProfileTuple, ManaProfileTuple, OracleTagDictionary } from '@
 import {
   BASIC_LAND_TYPES,
   FETCH_BASIC_ONLY,
+  MANA_BOUNCE,
+  MANA_EXPIRES,
   MANA_KINDS,
+  MANA_LETTERS,
   MANA_MAYBE_TAPPED,
+  MANA_ONE_COLOR,
   MANA_ONE_SHOT,
+  MANA_OPPONENT,
+  MANA_REFLECTS,
+  MANA_RESTRICTED,
   MANA_SICK,
   MANA_TAPPED,
   MANA_UNKNOWN,
@@ -150,32 +157,244 @@ function addsInClause(clause: string): number | null {
 }
 
 /**
- * Every "add …" on the card, with whatever precedes it on the line — which for
- * an activated ability is its cost. Case-insensitive and unanchored because
- * triggered abilities put it mid-sentence ("Whenever this creature attacks, add
- * {R}"), and `\badd ` can't collide with "additional" or "add a counter".
+ * One "add …" on the card, split into everything downstream needs: how much it
+ * nets, which colors it makes, and the handful of ways it fails to be an
+ * ordinary repeatable source.
  */
-const ADD_CLAUSE = /^(.*?)\badd ([^.\n]*)/gim;
+interface AddClause {
+  /** Mana it nets after its own activation cost, or null when the board decides. */
+  net: number | null;
+  /**
+   * Colors it makes, in MANA_LETTERS order, or '' when we cannot name them —
+   * which covers both "we failed to parse it" and "there is no answer"
+   * (`opponent`). The two are told apart by the flags, not by this string.
+   */
+  colors: string;
+  /** "Add three mana of any one color": all of `net`, one color. */
+  oneColor: boolean;
+  /** Colors are whatever an opponent's lands make. */
+  opponent: boolean;
+  /** Colors are whatever your own lands make. */
+  reflects: boolean;
+  /** "Spend this mana only to cast a creature spell." */
+  restricted: boolean;
+  /** The cost spends the card, or a counter it entered with, so it is finite. */
+  limited: boolean;
+  /**
+   * It names a color we cannot resolve — "the chosen color", "your commander's
+   * color identity". Citadel Gate's "{T}: Add {W} or one mana of the chosen
+   * color" makes two colors and we can only see one, so narrowing to that one
+   * would be worse than not narrowing at all.
+   */
+  vague: boolean;
+}
+
+/** "{T}: Add {C}" — a cost you can pay at will, which is what a source is. */
+const TAP_COST = /\{T\}/i;
 
 /**
- * Mana the card *nets*, being the best of its abilities. Net, because a Signet
- * reads "{1}, {T}: Add {U}{G}" — it fixes two mana but ramps you one, and a
- * model that credits it with two will happily promise a turn-three six-drop.
- * Best rather than first, because the reminder text on a land prints its mana
- * ability twice and a card with two abilities is worth its better one.
+ * The "add" is inside quotation marks, which in Magic's templating always means
+ * the ability belongs to something else: Chromatic Lantern's `Lands you control
+ * have "{T}: Add one mana of any color."`, Gift of Paradise's `Enchanted land
+ * has "…"`, and the reminder text on every card that makes Treasure tokens.
+ * The card causes mana to exist and taps for none of it, so Scryfall fills in
+ * `produced_mana` and we must not read that as a source.
  */
-function addsOnCard(oracleText: string | null): number | null {
-  let best: number | null = null;
-  for (const m of (oracleText ?? '').matchAll(ADD_CLAUSE)) {
-    if (BOARD_DEPENDENT.test(m[0])) continue;
-    const gross = addsInClause(m[2] ?? '');
-    if (gross === null) continue;
-    let cost = 0;
-    for (const s of (m[1] ?? '').matchAll(SYMBOL)) cost += symbolValue(s[1]!);
-    const net = Math.max(0, gross - cost);
-    if (best === null || net > best) best = net;
+const QUOTED_ABILITY = /["“'‘]/;
+
+/**
+ * The exception, and the only one: a card handing the ability to *itself*.
+ * Urza's Saga's `I — This Saga gains "{T}: Add {C}."` is a real {C} source for
+ * as long as the Saga is around.
+ */
+const GAINS_ITSELF = /\bthis [\w' ]+ gains\b/i;
+
+/**
+ * A triggered ability, which is every mana doubler ever printed: "Whenever you
+ * tap a land for mana, add one mana of any type that land produced." Caged Sun,
+ * Vorinclex, Mirari's Wake and Zendikar Resurgent all hang their mana off
+ * somebody else's ability and have no way to make mana on their own.
+ */
+const TRIGGERED = /^\s*(?:whenever|when|at the beginning)\b/i;
+
+/**
+ * The cost spends the card itself, so the ability is not what the card does
+ * every turn: Black Lotus and Lotus Petal sacrifice, Vivid Crag and the
+ * depletion lands spend a counter that entered with them. Either way the clause
+ * loses to a plain "{T}: Add" printed on the same card — Crystal Vein's "{T},
+ * Sacrifice this land: Add {C}{C}" is a one-off cash-in, and reading it as the
+ * land's output is how a one-mana land gets credited with two every turn.
+ */
+const SELF_LIMITED = /\bsacrifice (?:this|it)\b|\bremove an? [\w-]+ counter from (?:this|it)\b/i;
+
+/** "Add one mana of any color that a land an opponent controls could produce." */
+const OPPONENT_COLORS = /\ban opponent controls could produce\b/i;
+/** Reflecting Pool: the same sentence about a zone we *can* see. */
+const OWN_COLORS = /\ba land you control could produce\b/i;
+/** Ancient Ziggurat, Cavern of Souls: real mana, spendable on part of the deck. */
+const RESTRICTED_USE = /\bspend this mana only\b/i;
+/** "Add three mana of any one color" — Lotus Field, Black Lotus, Chromatic Orrery. */
+const ONE_COLOR_WORDING = /\bany one color\b|\bthe same color\b/i;
+
+/** "of any color" is the five; "of any type" also includes colorless. */
+const ANY_COLOR = /\bof any color\b/i;
+const ANY_TYPE = /\bof any type\b/i;
+
+/** A color chosen at some point we do not simulate, so we cannot name it. */
+const VAGUE_COLOR = /\bthe chosen color\b|\bchosen type\b|\bcolor identity\b/i;
+
+/**
+ * Which colors a clause makes. Read off the clause and not off Scryfall's
+ * `produced_mana`, which is the union over every ability the card has at every
+ * price — the whole reason Nykthos reads as a six-color source when the ability
+ * we costed at one mana adds {C}.
+ */
+function colorsInClause(body: string): string {
+  if (OPPONENT_COLORS.test(body) || OWN_COLORS.test(body)) return '';
+  if (ANY_TYPE.test(body)) return MANA_LETTERS;
+  if (ANY_COLOR.test(body)) return MANA_LETTERS.replace('C', '');
+  const seen = new Set<string>();
+  for (const m of body.matchAll(SYMBOL)) {
+    for (const part of m[1]!.toUpperCase().split('/')) {
+      if (MANA_LETTERS.includes(part) && part.length === 1) seen.add(part);
+    }
   }
-  return best;
+  return [...MANA_LETTERS].filter((c) => seen.has(c)).join('');
+}
+
+/** "{T}: Add …", once per line, with the cost that precedes it. */
+const ADD_CLAUSE = /^(.*?)\badd ([^.\n]*)/i;
+
+/**
+ * The clause adds *mana* and not something else. `\badd ` happily matches "add
+ * a lore counter" and Class reminder text's "add its ability", which were
+ * harmless while all we read off a clause was a number — they parse to nothing
+ * — and stopped being harmless the moment the mere existence of a clause
+ * started deciding whether the card is a source at all.
+ */
+const ADDS_MANA = /\{[WUBRGCSX0-9/]+\}|\bmana\b/i;
+
+/**
+ * Every "add …" the card can perform *itself*.
+ *
+ * Two exclusions carry §9.D, and both are about the same mistake: Scryfall
+ * fills in `produced_mana` for anything that causes mana to be added, and the
+ * old fallback read that as "this card taps for mana". Caged Sun has no tap
+ * ability at all and was being counted as a one-mana any-color rock; Vorinclex
+ * was filed as a `dork`, so the sequencer would cast a six-mana 6/6 as ramp and
+ * then tap it. A card whose only "add" is granted to other permanents, or hangs
+ * off a trigger, is not a source. Dropping the odd genuinely-triggered producer
+ * along with them under-counts, which is the safe direction.
+ */
+function ownClauses(oracleText: string | null): AddClause[] {
+  const out: AddClause[] = [];
+  for (const line of (oracleText ?? '').split('\n')) {
+    const m = ADD_CLAUSE.exec(line);
+    if (!m) continue;
+    const cost = m[1] ?? '';
+    const body = m[2] ?? '';
+    if (QUOTED_ABILITY.test(cost) && !GAINS_ITSELF.test(cost)) continue;
+    if (TRIGGERED.test(cost)) continue;
+    if (!ADDS_MANA.test(body)) continue;
+
+    // The amount is read from the cost and the clause only. The *rest* of the
+    // line is a different sentence and routinely mentions {X} for reasons that
+    // have nothing to do with how much mana this makes — Rosheen Meanderer's
+    // "Spend this mana only on costs that contain {X}" follows a perfectly
+    // countable {C}{C}{C}{C}, and letting it reach BOARD_DEPENDENT turns four
+    // mana into an unknown one.
+    let net: number | null = null;
+    if (!BOARD_DEPENDENT.test(cost + ' add ' + body)) {
+      const gross = addsInClause(body);
+      if (gross !== null) {
+        let paid = 0;
+        for (const s of cost.matchAll(SYMBOL)) paid += symbolValue(s[1]!);
+        net = Math.max(0, gross - paid);
+      }
+    }
+    out.push({
+      net,
+      colors: colorsInClause(body),
+      oneColor: ONE_COLOR_WORDING.test(body),
+      opponent: OPPONENT_COLORS.test(body),
+      reflects: OWN_COLORS.test(body),
+      // Where the mana may be spent *is* in the following sentence, so this one
+      // reads the whole line.
+      restricted: RESTRICTED_USE.test(line),
+      limited: SELF_LIMITED.test(cost) && TAP_COST.test(cost),
+      vague: VAGUE_COLOR.test(body),
+    });
+  }
+  return out;
+}
+
+/** What the profile is built from: the card's best repeatable ability, or abilities. */
+interface Chosen {
+  /** Mana it nets, or null when the board decides. */
+  net: number | null;
+  /** Union of the colors every tied unrestricted clause makes. */
+  colors: string;
+  oneColor: boolean;
+  opponent: boolean;
+  reflects: boolean;
+  /** Every clause at this price is spendable only on part of the deck. */
+  restricted: boolean;
+  /** Every clause at this price spends the card, so the mana comes once. */
+  limited: boolean;
+}
+
+/**
+ * Pick the ability the profile describes.
+ *
+ * Repeatable first, because Crystal Vein's "{T}, Sacrifice this land: Add
+ * {C}{C}" nets more than its "{T}: Add {C}" and is not what the land does every
+ * turn — taking the bigger number is how a one-mana land ends up credited with
+ * two mana a turn forever. When every clause spends the card (Black Lotus,
+ * Lotus Petal), the best of those wins and the caller marks it one-shot.
+ *
+ * How much it adds and which colors it makes then come apart, and they have to.
+ * `adds` is one ability's output — you tap the card once. The colors are the
+ * union over *every* ability you can use for free, because you choose which one
+ * each time you tap: Shivan Reef prints "{T}: Add {C}" and "{T}: Add {U} or
+ * {R}", and Phyrexian Tower "{T}: Add {C}" beside a two-mana black one. Picking
+ * a single clause for both turns the first into a Wastes and the second into a
+ * land that cannot pay {C}.
+ *
+ * Three kinds of clause stay out of that union, each for its own reason:
+ * restricted ones, because Cavern of Souls only makes its any-color mana for
+ * one creature type and {C} is the honest half; limited ones, because Vivid
+ * Crag's any-color mode runs out; and vague ones, because naming half of
+ * Citadel Gate's two colors is worse than naming neither. When the exclusions
+ * leave nothing — Ancient Ziggurat is restricted and nothing else — the best
+ * clause speaks for the card and carries its flag.
+ */
+function bestClause(clauses: readonly AddClause[]): Chosen | undefined {
+  const repeatable = clauses.filter((c) => !c.limited);
+  const pool = repeatable.length > 0 ? repeatable : clauses;
+  if (pool.length === 0) return undefined;
+
+  /** null nets sort last: a number we parsed beats one we didn't. */
+  const rank = (c: AddClause) => (c.net === null ? -1 : c.net);
+  const best = Math.max(...pool.map(rank));
+  const tied = pool.filter((c) => rank(c) === best);
+  const open = tied.filter((c) => !c.restricted);
+  const winners = open.length > 0 ? open : tied;
+
+  /** Every ability that actually hands you mana at no price but the tap. */
+  const free = pool.filter((c) => !c.restricted && !c.vague && (c.net ?? 0) >= 1);
+  const speaking = free.length > 0 ? free : winners;
+  const colors = new Set<string>();
+  for (const c of speaking) for (const letter of c.colors) colors.add(letter);
+
+  return {
+    net: best < 0 ? null : best,
+    colors: speaking.some((c) => c.vague) ? '' : [...MANA_LETTERS].filter((c) => colors.has(c)).join(''),
+    oneColor: winners.every((c) => c.oneColor),
+    opponent: speaking.every((c) => c.opponent),
+    reflects: speaking.every((c) => c.reflects),
+    restricted: winners.every((c) => c.restricted),
+    limited: repeatable.length === 0,
+  };
 }
 
 /**
@@ -189,6 +408,38 @@ const PUTS_LAND_IN_PLAY = /onto the battlefield/i;
 /** Fetched lands overwhelmingly arrive tapped, and here the text says so plainly. */
 const FETCHES_TAPPED = /onto the battlefield tapped/i;
 
+/**
+ * "This land enters tapped with two depletion counters on it", and the ability
+ * removes one to pay. Two activations and it sacrifices itself, so an
+ * eight-turn simulation that models Peat Bog as a permanent credits it with
+ * sixteen mana instead of four.
+ */
+const DEPLETION = /\bwith (\w+) depletion counters?\b/i;
+
+/** A Saga sacrifices itself after its last chapter; the numeral says how many turns. */
+const SAGA_LIFETIME = /\bsacrifice after (I+)\b/i;
+
+/** Lotus Field: three permanents become one. Net minus two lands, and we counted it a bonus. */
+const SACS_LANDS_ON_ENTRY = /\benters,? sacrifice (\w+) lands?\b/i;
+
+/**
+ * The Karoos. The land comes back, which is a spare land drop and not a loss.
+ * Two generations word it differently: the Ravnica cycle triggers a return, the
+ * Visions cycle makes returning a land the price of keeping this one. Same
+ * arithmetic either way — you are down a land in play and up one in hand.
+ */
+const BOUNCES_LAND_ON_ENTRY =
+  /\benters,? return an? [\w ]*land you control to its owner's hand\b|\bsacrifice it unless you return an? [\w ]*(?:land|Plains|Island|Swamp|Mountain|Forest) you control to its owner's hand\b/i;
+
+/** "Each land is a Swamp in addition to its other land types." */
+const GRANTS_BASIC_TYPE = /\beach land is an? (Plains|Island|Swamp|Mountain|Forest)\b/i;
+
+/** Prismatic Omen, Dryad of the Ilysian Grove. */
+const GRANTS_EVERY_TYPE = /\blands you control are every basic land type\b/i;
+
+/** Chromatic Lantern, Joiner Adept: the ability itself, handed to every land. */
+const GRANTS_ANY_COLOR = /\blands you control have "[^"]*\badd one mana of any color/i;
+
 export interface ManaProfileInput {
   typeLine: string;
   oracleText: string | null;
@@ -196,6 +447,63 @@ export interface ManaProfileInput {
   produces: string;
   /** The card's own tag indices (OracleCard.tags), unexpanded. */
   tags: readonly number[] | undefined;
+}
+
+/** A written or digit count, as a number — "two" depletion counters, "two" lands. */
+function countWord(word: string): number {
+  const n = Number(word);
+  if (Number.isFinite(n)) return n;
+  const i = WRITTEN_NUMBERS.indexOf(word.toLowerCase());
+  return i >= 0 ? i + 1 : 0;
+}
+
+/**
+ * How long the source lasts, in turns or activations, or 0 for "forever".
+ *
+ * Urza's Saga gains "{T}: Add {C}" from chapter I the turn it enters and
+ * sacrifices itself after III. The lore counter goes on at precombat main, so
+ * you get to tap it on the turn it dies too: three turns of {C}, then nothing.
+ */
+function lifetimeOf(card: ManaProfileInput): number {
+  const text = card.oracleText ?? '';
+  const depletion = DEPLETION.exec(text);
+  if (depletion) return countWord(depletion[1]!);
+  if (/\bSaga\b/.test(card.typeLine)) {
+    const saga = SAGA_LIFETIME.exec(text);
+    if (saga) return saga[1]!.length;
+  }
+  return 0;
+}
+
+/** Lands it costs you as it enters, and whether they come back. */
+function entryCostOf(oracleText: string | null): { entry: number; bounce: boolean } {
+  const text = oracleText ?? '';
+  if (BOUNCES_LAND_ON_ENTRY.test(text)) return { entry: 1, bounce: true };
+  const sacs = SACS_LANDS_ON_ENTRY.exec(text);
+  if (sacs) return { entry: countWord(sacs[1]!), bounce: false };
+  return { entry: 0, bounce: false };
+}
+
+/**
+ * Colors this card hands to every land you control, or undefined for the ~35k
+ * that hand out nothing.
+ *
+ * These cards never add mana, they add a color *option*, so they are a mask to
+ * union into other sources rather than a source of their own. Urborg's own
+ * `produces` of `B` is right about Urborg and blind to the other half: in a
+ * deck with ten Mountains it makes eleven black sources, and the mana model's
+ * only under-count is counting it as one.
+ */
+export function grantsOf(card: ManaProfileInput): string | undefined {
+  const text = card.oracleText ?? '';
+  if (GRANTS_EVERY_TYPE.test(text) || GRANTS_ANY_COLOR.test(text)) return MANA_LETTERS.replace('C', '');
+  const basic = GRANTS_BASIC_TYPE.exec(text);
+  if (basic) {
+    const type = basic[1]!.toLowerCase();
+    const letter = Object.entries(BASIC_LAND_TYPES).find(([, name]) => name.toLowerCase() === type)?.[0];
+    if (letter) return letter;
+  }
+  return undefined;
 }
 
 /**
@@ -213,30 +521,78 @@ export function manaProfileOf(card: ManaProfileInput, index: ManaTagIndex): Mana
 
   const isLand = /\bLand\b/.test(card.typeLine);
   const isCreature = /\bCreature\b/.test(card.typeLine);
-  const parsed = addsOnCard(card.oracleText);
+  const clauses = ownClauses(card.oracleText);
+  const clause = bestClause(clauses);
+  const parsed = clause?.net ?? null;
+  /** It can make mana by itself, rather than causing somebody else's land to. */
+  const ownsMana = clauses.length > 0;
+
+  /**
+   * Everything past `flags` in the tuple, trimmed back to nothing for the great
+   * majority of cards that need none of it.
+   */
+  const tail = (colors: string | null, life = 0, entry = 0): (string | null | number)[] => {
+    const parts: (string | null | number)[] = [colors, life, entry];
+    while (parts.length && (parts.at(-1) === 0 || parts.at(-1) === null)) parts.pop();
+    return parts;
+  };
+
+  /** Flags the chosen clause implies, whatever kind of card it sits on. */
+  const clauseFlags = (): number =>
+    (clause?.oneColor && (clause.net ?? 0) > 1 ? MANA_ONE_COLOR : 0) |
+    (clause?.opponent ? MANA_OPPONENT : 0) |
+    (clause?.reflects ? MANA_REFLECTS : 0) |
+    (clause?.restricted ? MANA_RESTRICTED : 0);
+
+  /**
+   * The clause's colors, or null to fall back to `produces`.
+   *
+   * Narrowing only happens when we could actually *name* a narrower set. A
+   * clause we failed to read (Bloom Tender's devotion-style counting) keeps
+   * `produces`, because the alternative is telling a five-color dork it makes
+   * nothing. An opponent-dependent clause is the one case where empty is the
+   * answer rather than a failure, and it is flagged as such.
+   */
+  const clauseColors = (): string | null => {
+    if (!clause) return null;
+    if (clause.opponent) return '';
+    if (!clause.colors) return null;
+    // Only ever narrow. `produced_mana` is the union over everything the card
+    // can do, so it is an upper bound by construction: a parse that comes out
+    // *wider* has misread the text, and trusting it would have us claiming
+    // colors the card cannot make — the one kind of error this whole section
+    // exists to stop.
+    const narrowed = [...clause.colors].filter((c) => card.produces.includes(c)).join('');
+    return narrowed === card.produces ? null : narrowed;
+  };
 
   if (isLand && card.produces) {
     // Lands tap for one unless they say otherwise (Ancient Tomb, Crystal Vein),
     // and unlike a rock a land with no printed mana ability is a basic — whose
     // one mana is a rule, not text. So an unparsed land is 1, not unknown.
-    const flags = tagged(index.tapland)
-      ? MANA_TAPPED
-      : tagged(index.conditionalTapland)
-        ? MANA_MAYBE_TAPPED
-        : 0;
-    return [kindOf('land'), parsed ?? 1, flags];
+    const life = lifetimeOf(card);
+    const { entry, bounce } = entryCostOf(card.oracleText);
+    const flags =
+      (tagged(index.tapland) ? MANA_TAPPED : tagged(index.conditionalTapland) ? MANA_MAYBE_TAPPED : 0) |
+      clauseFlags() |
+      (life ? MANA_EXPIRES : 0) |
+      (bounce ? MANA_BOUNCE : 0);
+    return [kindOf('land'), parsed ?? 1, flags, ...tail(clauseColors(), life, entry)] as ManaProfileTuple;
   }
 
   // A mana creature's mana arrives a turn late. Checked before `rock` because
   // Tagger tags a few artifact creatures as both.
-  if (card.produces && (tagged(index.dork) || (isCreature && parsed !== null))) {
-    return [kindOf('dork'), parsed ?? 1, MANA_SICK | (parsed === null ? MANA_UNKNOWN : 0)];
+  if (card.produces && ownsMana && (tagged(index.dork) || (isCreature && parsed !== null))) {
+    const flags = MANA_SICK | clauseFlags() | (parsed === null ? MANA_UNKNOWN : 0) | (clause?.limited ? MANA_ONE_SHOT : 0);
+    return [kindOf('dork'), parsed ?? 1, flags, ...tail(clauseColors())] as ManaProfileTuple;
   }
-  if (card.produces && tagged(index.rock)) {
-    return [kindOf('rock'), parsed ?? 1, parsed === null ? MANA_UNKNOWN : 0];
+  if (card.produces && ownsMana && tagged(index.rock)) {
+    const flags = clauseFlags() | (parsed === null ? MANA_UNKNOWN : 0) | (clause?.limited ? MANA_ONE_SHOT : 0);
+    return [kindOf('rock'), parsed ?? 1, flags, ...tail(clauseColors())] as ManaProfileTuple;
   }
-  if (card.produces && tagged(index.ritual)) {
-    return [kindOf('ritual'), parsed ?? 1, MANA_ONE_SHOT | (parsed === null ? MANA_UNKNOWN : 0)];
+  if (card.produces && ownsMana && tagged(index.ritual)) {
+    const flags = MANA_ONE_SHOT | clauseFlags() | (parsed === null ? MANA_UNKNOWN : 0);
+    return [kindOf('ritual'), parsed ?? 1, flags, ...tail(clauseColors())] as ManaProfileTuple;
   }
 
   // Exploration, Azusa: worth a land drop only while you have spare lands in
@@ -256,7 +612,16 @@ export function manaProfileOf(card: ManaProfileInput, index: ManaTagIndex): Mana
   // Produces mana but fits no family Tagger names — an Ornithopter of Paradise
   // nobody has tagged yet, a one-off enchantment. Still a source; call it a
   // rock, which is the kind with no timing quirks.
-  if (card.produces) return [kindOf('rock'), parsed ?? 1, parsed === null ? MANA_UNKNOWN : 0];
+  //
+  // `ownsMana` is the guard §9.D asks for, and it is the whole reason this
+  // branch was dangerous: `produced_mana` is filled in for anything that causes
+  // mana to be added, so without it Caged Sun — which has no tap ability at all
+  // — shipped as a one-mana any-color rock, and Mirari's Wake, Zendikar
+  // Resurgent, both Gauntlets and Joiner Adept alongside it.
+  if (card.produces && ownsMana) {
+    const flags = clauseFlags() | (parsed === null ? MANA_UNKNOWN : 0) | (clause?.limited ? MANA_ONE_SHOT : 0);
+    return [kindOf('rock'), parsed ?? 1, flags, ...tail(clauseColors())] as ManaProfileTuple;
+  }
 
   return undefined;
 }

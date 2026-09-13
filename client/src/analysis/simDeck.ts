@@ -1,4 +1,11 @@
-import { BASIC_LAND_TYPES, decodeFetchProfile, decodeManaProfile, type DeckBoard, type OracleCard } from '@mtg/shared';
+import {
+  BASIC_LAND_TYPES,
+  decodeFetchProfile,
+  decodeManaProfile,
+  sourceColors,
+  type DeckBoard,
+  type OracleCard,
+} from '@mtg/shared';
 import { parseManaCost, type ParsedCost, type PipColor } from './manaCost.js';
 import type { ManaUnit } from './canPay.js';
 
@@ -75,6 +82,18 @@ export interface SimCard {
   fetchTargets: number[];
   /** A land on the back face, so it is a land drop of last resort. */
   modal: boolean;
+  /** All of `adds` is one color, chosen once. Lotus Field, Gilded Lotus. */
+  oneColor: boolean;
+  /** Mana with no nameable color: it pays generic and no pip. Exotic Orchard. */
+  generic: boolean;
+  /** Turns it stays online once it arrives, or 0 for forever. */
+  life: number;
+  /** Lands it costs you as it enters. */
+  entry: number;
+  /** Those lands go back to hand instead of the graveyard, so they can be replayed. */
+  bounce: boolean;
+  /** Colors this card gives every land you control while it is out. */
+  grantMask: number;
   /** Copies in the library. Zero for a card that only sits in the command zone. */
   copies: number;
   /** In the command zone: always available, never drawn. */
@@ -168,13 +187,21 @@ export function buildSimDeck(rows: readonly DeckRow[]): SimDeck {
       // A land has nothing to pay, so it has nothing to check.
       spell: !landFront && !!o.manaCost,
       cost: landFront ? null : parseManaCost(o.manaCost),
-      mask: colorMask(o.produces),
+      // The profile's colors, not `produces` — see sourceColors(). A card whose
+      // mana has no nameable color keeps an empty mask and pays generic only.
+      mask: colorMask(profile ? sourceColors(profile, o.produces) : o.produces),
       // A utility land that taps for nothing still costs you your land drop and
       // adds no mana, which is exactly what a zero says.
       adds: profile?.adds ?? (role === 'land' && !o.produces ? 0 : 1),
       tapped: fetch?.tapped ?? profile?.tapped ?? 'never',
       fetchTargets: [],
       modal: landAnywhere && !landFront,
+      oneColor: !!profile?.oneColor && (profile?.adds ?? 0) > 1,
+      generic: !!profile?.opponent,
+      life: profile?.life ?? 0,
+      entry: profile?.entry ?? 0,
+      bounce: !!profile?.bounce,
+      grantMask: colorMask(o.grants),
       copies: r.board === 'main' ? r.quantity : 0,
       commander: r.board === 'commander',
     });

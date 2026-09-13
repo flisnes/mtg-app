@@ -2,6 +2,19 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.153.2
+
+- **The mana model stopped believing Scryfall about colors.** A card's "produces" list is the union of every way it could ever make mana, at any price. Nykthos was counted as a six-color source when its free ability makes one colorless; so were Crystal Quarry, Cascading Cataracts, Cavern of Souls, Unclaimed Territory and the whole Cave and Gate family. 135 cards now report the colors of the ability they were actually costed at.
+- **Cards that double or hand out mana are no longer counted as if they made it.** Caged Sun has no tap ability at all and was shipping as a one-mana any-color rock. Vorinclex was filed as a mana creature, so the simulator would cast a six-mana 6/6 as ramp and then tap it. Mirari's Wake, Zendikar Resurgent, both Gauntlets, Joiner Adept, Cryptolith Rite, every Treasure-maker and every "enchanted land taps for" aura were in the same bucket. 532 cards left the source count and went back to being spells you cast.
+- **Urborg and friends now make your lands what they say they make them.** An Urborg in a deck with ten Mountains makes eleven black sources and we were counting one. Same for Yavimaya, Chromatic Lantern, Prismatic Omen, Dryad of the Ilysian Grove and the Leyline of the Guildpact. This was the only place the model was too mean instead of too kind.
+- **"Add three mana of any one color" is three of one, not one of each.** Lotus Field, Gilded Lotus, Jeweled Lotus and Black Lotus were being handed to the payment solver as three independent five-color sources, so a deck with one Lotus Field read as able to cast anything. It now picks a color, like the card does.
+- **Lands that run out now run out.** Urza's Saga taps for three turns, Peat Bog for two activations. Over an eight-turn simulation a Peat Bog was being credited with sixteen mana.
+- **Lands that cost you lands now cost you lands.** Lotus Field turns three permanents into one, so the land-count verdict judges the deck against two fewer. A Karoo returns a land to your hand instead, which is land-count neutral and costs you a mana on the turn — both are modelled rather than averaged into a fudge factor.
+- **Exotic Orchard and Fellwar Stone read an opponent's board, and a goldfish has no opponents.** They count as mana that pays generic costs and no colored pip, which is honest in a way that claiming five colors was not. Reflecting Pool asks about *your* lands, so it resolves against your decklist like a fetchland does.
+- **Fixed:** Crystal Vein and the sacrifice-land cycle were credited with two mana every turn forever off an ability that spends the land. Black Lotus and Lotus Petal were treated as permanent sources rather than one-shots.
+- A card with several free mana abilities keeps all their colors: Shivan Reef prints "{T}: Add {C}" and "{T}: Add {U} or {R}" and is a source of all three.
+- This moves every card in the database, so your next card-DB refresh is a full one rather than the usual few kilobytes.
+
 ## 0.153.1
 
 - **Your commander goes first in the On curve panel, with its own chart.** It is the card the deck is built around and the only one you are guaranteed to have, so it gets the top of the panel instead of a slot in a list sorted by whatever is worst.

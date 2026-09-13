@@ -1,4 +1,4 @@
-// The older half of the changelog (0.147.5 down to 0.98.0), split out of
+// The older half of the changelog (0.147.6 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,16 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.147.6',
+    changes: [
+      {
+        kind: 'fixed',
+        text:
+          'Sorting the collection by price change barely sorted anything. Each card was measured from its own first reading, so the order tracked how long you had owned a card rather than what its price did. Both price-change sorts now cover the same seven days for every card, the window the arrows on the tiles use, and a dollar move is converted before it is weighed against a euro one.',
+      },
+    ],
+  },
   {
     version: '0.147.5',
     changes: [

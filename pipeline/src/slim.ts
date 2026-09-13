@@ -26,7 +26,7 @@ import { buildSealedProducts } from './sealed.js';
 import { fetchSealedUsdPrices } from './sealedPrices.js';
 import { fetchSealedEurPrices } from './cardmarketPrices.js';
 import { buildOracleTags } from './oracleTags.js';
-import { buildManaTagIndex, fetchProfileOf, manaProfileOf, type ManaTagIndex } from './manaProfile.js';
+import { buildManaTagIndex, fetchProfileOf, grantsOf, manaProfileOf, type ManaTagIndex } from './manaProfile.js';
 
 // Nightly card-DB pipeline (beta plan §3). Downloads Scryfall `default_cards`,
 // slims each card to ~18 fields, and emits:
@@ -131,6 +131,7 @@ function toOracleCard(
   const mana = manaTags ? manaProfileOf(manaInput, manaTags) : undefined;
   // Read off the text, not the tags, and so not gated on the tag download.
   const fetch = fetchProfileOf(manaInput);
+  const grants = grantsOf(manaInput);
   return {
     oracleId: printing.oracleId,
     name: oracle.name,
@@ -162,6 +163,7 @@ function toOracleCard(
     ...(oracle.produces ? { produces: oracle.produces } : {}),
     ...(mana ? { mana } : {}),
     ...(fetch ? { fetch } : {}),
+    ...(grants ? { grants } : {}),
   };
 }
 
@@ -362,9 +364,15 @@ async function main(): Promise<void> {
   const profiles = oracleCards.filter((c) => c.mana);
   const unknownAmount = profiles.filter((c) => c.mana![2] & MANA_UNKNOWN).length;
   const fetches = oracleCards.filter((c) => c.fetch);
+  const narrowed = profiles.filter((c) => c.mana!.length > 3 && c.mana![3] !== null && c.mana![3] !== c.produces);
+  const granters = oracleCards.filter((c) => c.grants);
   console.log(
     `[pipeline] mana: ${producers} cards produce mana, ${profiles.length} carry a profile ` +
       `(${unknownAmount} with an amount we can't model), ${fetches.length} fetchlands`,
+  );
+  console.log(
+    `[pipeline] mana: ${narrowed.length} profiles make fewer colors than produced_mana claims, ` +
+      `${granters.length} cards grant colors to your lands`,
   );
 
   // Chunked price-less artifacts (primary path).

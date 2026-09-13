@@ -40,6 +40,12 @@ export interface DeckManaStats {
   total: number;
   /** Cards with a land face, modal backs included. */
   lands: number;
+  /** Land cards minus the ones a Lotus Field eats: what you will hold in play. */
+  effectiveLands: number;
+  /** Lands sacrificed by something entering (Lotus Field). Gone, not returned. */
+  sacrificedLands: number;
+  /** Karoos. Land-count neutral, tempo-negative on the turn, a spare land drop after. */
+  bounceLands: number;
   /** Of those, the ones whose front face is a spell — they are in `spells` too. */
   modalLands: number;
   spells: number;
@@ -124,6 +130,8 @@ export function deckManaStats(rows: readonly StatsRow[], format: DeckFormat | un
   let mvSum = 0;
   let tappedAlways = 0;
   let tappedMaybe = 0;
+  let sacrificedLands = 0;
+  let bounceLands = 0;
   let cheapRamp = 0;
   let unknown = 0;
   let profiledLands = 0;
@@ -148,6 +156,15 @@ export function deckManaStats(rows: readonly StatsRow[], format: DeckFormat | un
         profiledLands += qty;
         if (profile.tapped === 'always') tappedAlways += qty;
         else if (profile.tapped === 'maybe') tappedMaybe += qty;
+        // What it costs you on the way in. A Lotus Field turns three lands into
+        // one, so a deck with 24 lands and a Lotus Field has 22 for the purpose
+        // of "will you hit your drops" — counting it as a 24th was the model
+        // reading a cost as a bonus. A Karoo takes a land off the battlefield
+        // and puts it back in your hand, so it is land-count *neutral* here: it
+        // costs tempo on the turn, not cardboard. Sacrificed lands come out of
+        // the count; bounced ones do not.
+        if (profile.entry > 0 && !profile.bounce) sacrificedLands += profile.entry * qty;
+        if (profile.entry > 0 && profile.bounce) bounceLands += qty;
       }
       // A fetchland taps for nothing and so has no mana profile, but an
       // Evolving Wilds costs you the same turn a Jungle Hollow does: the land
@@ -181,10 +198,16 @@ export function deckManaStats(rows: readonly StatsRow[], format: DeckFormat | un
   // is untapped whenever you want it to be, and averaging that in would be the
   // kind of hidden fudge factor this whole feature exists to avoid.
   const taplandTax = lands > 0 ? (TAX_TURNS * tappedAlways) / lands : 0;
+  // The count the land verdict is judged against: what you will actually have
+  // in play, not how many land cards are in the list.
+  const effectiveLands = Math.max(0, lands - sacrificedLands);
 
   return {
     total,
     lands,
+    effectiveLands,
+    sacrificedLands,
+    bounceLands,
     modalLands,
     spells,
     curve,
@@ -194,7 +217,7 @@ export function deckManaStats(rows: readonly StatsRow[], format: DeckFormat | un
     taplandTax,
     cheapRamp,
     unknown,
-    land: verdict(lands, recommendedLands(format, total, avgMv, cheapRamp)),
+    land: verdict(effectiveLands, recommendedLands(format, total, avgMv, cheapRamp)),
     hasManaData: profiledLands > 0 || lands === 0,
   };
 }

@@ -121,6 +121,22 @@ export interface OracleCard {
    * and the resolving happens where a decklist is in scope.
    */
   fetch?: FetchProfileTuple;
+  /**
+   * Colors this card gives to *every land you control*, as MANA_LETTERS —
+   * Urborg `"B"`, Yavimaya `"G"`, Chromatic Lantern and Prismatic Omen
+   * `"WUBRG"`. Omitted for everything that isn't one of the handful, and
+   * absent on card DBs built before this field.
+   *
+   * These cards never add mana, they add a color *option*, which is why this is
+   * a mask to union into other sources and not a `mana` profile of its own. An
+   * Urborg in a deck with ten Mountains makes eleven black sources; counting it
+   * as one black source (which is what its own `produces` says, and is true
+   * about the card) is the one place the mana model *under*-counts.
+   *
+   * Deck-relative, like `fetch`: what it is worth depends on the lands around
+   * it, so the resolving happens where a decklist is in scope.
+   */
+  grants?: string;
 }
 
 /**
@@ -166,11 +182,53 @@ export const MANA_ONE_SHOT = 8;
  * on the board. Consumers should say so rather than quietly using the 1.
  */
 export const MANA_UNKNOWN = 16;
+/**
+ * Every mana in `adds` has to be the *same* color, chosen from the profile's
+ * colors. Lotus Field's "Add three mana of any one color" and Black Lotus's
+ * are three mana or no mana, never one of each: expanded as independent
+ * five-color units they pay {W}{U}{B}, which is a cost neither card can pay.
+ * Only meaningful when `adds > 1` and more than one color is on offer.
+ */
+export const MANA_ONE_COLOR = 32;
+/**
+ * It goes away. `life` says after how many turns or activations — three for
+ * Urza's Saga, two for the depletion lands. Without this the simulator credits
+ * a Peat Bog with sixteen mana over an eight-turn game instead of four.
+ */
+export const MANA_EXPIRES = 64;
+/**
+ * `entry` lands go back to their owner's hand rather than to the graveyard:
+ * the Karoos ("return a land you control to its owner's hand"). The difference
+ * matters — a bounced land is a spare land drop, a sacrificed one is gone.
+ */
+export const MANA_BOUNCE = 128;
+/**
+ * Its colors are whatever an *opponent's* lands make (Exotic Orchard, Fellwar
+ * Stone). A goldfish has no opponents, so there is no honest colored answer and
+ * `colors` is empty: the mana pays generic and never a pip. That errs the right
+ * way — it never claims a color the deck might not have, and it never pretends
+ * the land is blank.
+ */
+export const MANA_OPPONENT = 256;
+/**
+ * The mana is real but spendable only on part of your deck: Ancient Ziggurat
+ * and Pillar of the Paruns (creature spells, multicolored spells). Counted like
+ * any other source, flagged so the UI can say what the count includes — how
+ * much a Cavern is worth is a fact about how creature-dense the deck is.
+ */
+export const MANA_RESTRICTED = 512;
+/**
+ * Its colors are whatever the rest of *your* lands make (Reflecting Pool).
+ * Unlike MANA_OPPONENT this is answerable, because your decklist is in scope:
+ * it resolves against the deck the same way a fetchland's colors do.
+ */
+export const MANA_REFLECTS = 1024;
 
 /**
- * `[kind, adds, flags]`, positional for the same reason PriceTuple is: this
- * rides on several thousand oracle rows and the key names would cost more than
- * the values.
+ * `[kind, adds, flags, colors?, life?, entry?]`, positional for the same reason
+ * PriceTuple is: this rides on several thousand oracle rows and the key names
+ * would cost more than the values. Everything past `flags` is omitted on the
+ * ~95% of profiles that don't need it.
  *
  *   kind   index into MANA_KINDS
  *   adds   mana it adds once available, the turn it's available (1 for a
@@ -178,13 +236,33 @@ export const MANA_UNKNOWN = 16;
  *          lands fetched onto the battlefield, which is the same thing a turn
  *          later. A floor of 1 when MANA_UNKNOWN is set.
  *   flags  MANA_TAPPED | MANA_MAYBE_TAPPED | MANA_SICK | MANA_ONE_SHOT |
- *          MANA_UNKNOWN
+ *          MANA_UNKNOWN | MANA_ONE_COLOR | MANA_EXPIRES | MANA_BOUNCE |
+ *          MANA_OPPONENT | MANA_RESTRICTED | MANA_REFLECTS
+ *   colors what the ability we costed actually makes, when that is *narrower*
+ *          than `produces`; null or absent when the two agree. See below.
+ *   life   turns or activations before it is gone, with MANA_EXPIRES.
+ *   entry  lands it costs you as it enters — sacrificed, or returned to hand
+ *          with MANA_BOUNCE.
  *
- * Which *colors* it adds lives in `produces`, not here, so the two aren't
- * duplicated. A `landramp` card has no `produces` at all: what it makes depends
- * on the land it fetches.
+ * `colors` exists because `produces` answers a different question. Scryfall's
+ * `produced_mana` is the union over *every* ability at *any* price: Nykthos
+ * comes out as a six-color source when the ability we costed at one mana is
+ * "{T}: Add {C}" and nothing else. The profile costs one clause, so it has to
+ * carry that clause's colors. An empty string is a real value and means the
+ * mana has no color we can name (MANA_OPPONENT) — distinct from null, which
+ * means "the same as `produces`".
+ *
+ * A `landramp` card has no `produces` and no `colors` at all: what it makes
+ * depends on the land it fetches.
  */
-export type ManaProfileTuple = [kind: number, adds: number, flags: number];
+export type ManaProfileTuple = [
+  kind: number,
+  adds: number,
+  flags: number,
+  colors?: string | null,
+  life?: number,
+  entry?: number,
+];
 
 /** ManaProfileTuple unpacked. */
 export interface ManaProfile {
@@ -197,11 +275,31 @@ export interface ManaProfile {
   oneShot: boolean;
   /** `adds` is a guess of 1; the real amount depends on the board. */
   unknown: boolean;
+  /** All of `adds` is one color, chosen from `colors`. See MANA_ONE_COLOR. */
+  oneColor: boolean;
+  /** Colors depend on an opponent's lands, so `colors` is empty. See MANA_OPPONENT. */
+  opponent: boolean;
+  /** Colors are whatever your own lands make; resolve against the deck. See MANA_REFLECTS. */
+  reflects: boolean;
+  /** Spendable only on part of your deck. See MANA_RESTRICTED. */
+  restricted: boolean;
+  /** Turns or activations it lasts, or 0 when it is permanent. */
+  life: number;
+  /** Lands it costs you on the way in, or 0. */
+  entry: number;
+  /** Those lands go back to hand rather than to the graveyard. */
+  bounce: boolean;
+  /**
+   * The colors the costed ability makes, or null to mean "whatever `produces`
+   * says". Empty string means "mana with no nameable color", which is not the
+   * same thing — see the tuple's docs.
+   */
+  colors: string | null;
 }
 
 export function decodeManaProfile(tuple: ManaProfileTuple | undefined): ManaProfile | null {
   if (!tuple) return null;
-  const [kind, adds, flags] = tuple;
+  const [kind, adds, flags, colors, life, entry] = tuple;
   return {
     kind: MANA_KINDS[kind] ?? 'land',
     adds,
@@ -209,7 +307,24 @@ export function decodeManaProfile(tuple: ManaProfileTuple | undefined): ManaProf
     sick: !!(flags & MANA_SICK),
     oneShot: !!(flags & MANA_ONE_SHOT),
     unknown: !!(flags & MANA_UNKNOWN),
+    oneColor: !!(flags & MANA_ONE_COLOR),
+    opponent: !!(flags & MANA_OPPONENT),
+    reflects: !!(flags & MANA_REFLECTS),
+    restricted: !!(flags & MANA_RESTRICTED),
+    life: life ?? 0,
+    entry: entry ?? 0,
+    bounce: !!(flags & MANA_BOUNCE),
+    colors: colors ?? null,
   };
+}
+
+/**
+ * The colors a source actually makes: the costed ability's, falling back to
+ * `produced_mana` for the great majority where the two agree. Every consumer
+ * wants this rather than `produces` on its own.
+ */
+export function sourceColors(profile: ManaProfile, produces: string | undefined): string {
+  return profile.colors ?? produces ?? '';
 }
 
 /** The fetch can only find a *basic* land, so a shockland sharing the type is out of reach. */

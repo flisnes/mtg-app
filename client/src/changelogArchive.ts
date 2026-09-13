@@ -9,6 +9,36 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.147.8',
+    changes: [
+      {
+        kind: 'fixed',
+        text:
+          'A foil is measured against what you paid for the foil, not against the plain version, so foils no longer show an invented loss. Hold a card both plain and foil and each gets its own figure.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'The price chart draws the nonfoil price, the only one we record daily, and now says so on a foil card. Where a starting price had to be estimated from it, the change is marked "(est.)".',
+      },
+    ],
+  },
+  {
+    version: '0.147.7',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'The collection sorts by "Value change" and "Value change %" now, measured since you got each card, which is the same figure the card sheet shows. Price movers is still the place for a fixed 7, 30 or 90 day window.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'Cards with no recorded purchase price are valued from the reading closest to the day they went in, so the ones you owned before the app tracked prices join the sort instead of falling to the bottom. Those say "since you got it" rather than "since you paid".',
+      },
+    ],
+  },
+  {
     version: '0.147.6',
     changes: [
       {

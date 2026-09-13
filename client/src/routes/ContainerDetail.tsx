@@ -45,6 +45,8 @@ import { addToWishlistBulk, applyImport } from '../db/dataAccess.js';
 import { checkDeckLegality, formatLabel, isBasicLand, isNonDeckCard, type LegalityReport } from '../deck/legality.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { useFiling } from '../deck/useFiling.js';
+import type { FilingCopy } from '../deck/filing.js';
+import type { ManaFix } from '../deck/manaFixes.js';
 import { buildDeckText } from '../deck/deckText.js';
 import { shareDeckLink } from '../deck/share.js';
 import { getUserProfile } from '../account/api.js';
@@ -590,6 +592,40 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   }
 
   /**
+   * Take the deck-stats panel's mana suggestion: file that many copies of a
+   * card you own into the mainboard. The ordinary filing path, so what moves is
+   * real cardboard out of the binder or box it was sitting in, and the green
+   * collection badge follows it. The panel only ever suggests spare copies, so
+   * the move-or-both question shouldn't come up — and if it does, it's because
+   * a slot elsewhere names the same copy, which is exactly when it should.
+   */
+  async function addManaFix(fix: ManaFix) {
+    const copies: FilingCopy[] = [];
+    let left = fix.copies;
+    for (const c of fix.candidate.copies) {
+      if (left <= 0) break;
+      const take = Math.min(left, c.quantity);
+      left -= take;
+      copies.push({
+        oracleId: fix.candidate.oracleId,
+        quantity: take,
+        board: 'main',
+        scryfallId: c.scryfallId,
+        wants: { condition: c.condition, finish: c.finish, lang: c.lang },
+        label: fix.candidate.name,
+      });
+    }
+    if (copies.length === 0) return;
+    const filing = await file(id, copies);
+    if (filing === null) return;
+    toast(
+      filing.filed === 0
+        ? `Already in this ${meta.noun}`
+        : `Added ${filing.filed}× ${fix.candidate.name} to the ${meta.noun}`,
+    );
+  }
+
+  /**
    * File the selection into another deck, binder or box. Same cardboard, new
    * home: the printing and traits travel with it rather than merging the foil
    * into the slot that happens to hold the nonfoil — and a copy that's already
@@ -1110,7 +1146,16 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
 
       <DeckHistory deckId={id} kind={kind} open={historyOpen} onToggle={() => setHistoryOpen((v) => !v)} />
       {statsOpen && (
-        <DeckStatsSheet stats={stats} rows={data.rows} name={deck.name} format={deck.format} onClose={() => setStatsOpen(false)} />
+        <DeckStatsSheet
+          stats={stats}
+          rows={data.rows}
+          deckId={id}
+          name={deck.name}
+          format={deck.format}
+          placements={placements}
+          onAddFix={(fix) => void addManaFix(fix)}
+          onClose={() => setStatsOpen(false)}
+        />
       )}
       {valueChartOpen && (
         <ContainerValueChartSheet deckId={id} name={deck.name} kind={kind} onClose={() => setValueChartOpen(false)} />

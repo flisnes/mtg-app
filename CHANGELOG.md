@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.154.0
+
+- **Deck stats now tells you how to fix the mana, out of the cards you already own.** The colored-source report says you are two white sources short; the new panel under it says you have a Tundra in your Duals binder and two spare Plains in a bulk box, and files them into the deck in one tap. No deckbuilding site can answer that, because none of them know what is on your shelf.
+- **Cards another deck is holding are named, never suggested.** Your Modern deck's Hallowed Fountain is that deck's card. The panel tells you where it went rather than quietly taking it apart. A card in a binder or a box is spare; a card in a deck is not.
+- The suggestions are checked against the deck's format, its copy limit and its commander's color identity, so nothing is offered that you could not legally play. A fetchland in your collection is scored for the lands this decklist actually runs, the same way the report scores one already in the deck.
+- Nothing here suggests what to **cut**. Adding four lands to a sixty-card deck makes it a sixty-four card deck, and the odds only move all the way once you take four cards out. Which four is not a question arithmetic answers, and the panel says so.
+- **Fixed:** the On curve panel's "On the play / On the draw" toggle was squashed to a 2px line on a phone.
+
 ## 0.153.2
 
 - **The mana model stopped believing Scryfall about colors.** A card's "produces" list is the union of every way it could ever make mana, at any price. Nykthos was counted as a six-color source when its free ability makes one colorless; so were Crystal Quarry, Cascading Cataracts, Cavern of Souls, Unclaimed Territory and the whole Cave and Gate family. 135 cards now report the colors of the ability they were actually costed at.

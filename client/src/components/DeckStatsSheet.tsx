@@ -1,12 +1,17 @@
+import { useMemo } from 'react';
 import type { DeckFormat } from '@mtg/shared';
 import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
 import { CURVE_MAX, TAX_TURNS, type DeckManaStats } from '../deck/manaStats.js';
 import { DrawOddsPanel } from './DrawOddsPanel.js';
 import { ColorSourcesPanel } from './ColorSourcesPanel.js';
+import { ManaFixPanel } from './ManaFixPanel.js';
 import { OnCurvePanel } from './OnCurvePanel.js';
 import { MulliganPanel } from './MulliganPanel.js';
 import { librarySize, type GroupRow } from '../analysis/groups.js';
+import { manaReport } from '../analysis/manaSources.js';
+import type { ManaFix } from '../deck/manaFixes.js';
+import type { PlacementIndex } from '../db/usePlacements.js';
 
 // What the deck's mana looks like before a single card is drawn: the curve, the
 // tempo the tapped lands cost you, and whether there are enough lands for what
@@ -74,17 +79,29 @@ function taplandText(stats: DeckManaStats): string {
 export function DeckStatsSheet({
   stats,
   rows,
+  deckId,
   name,
   format,
+  placements,
+  onAddFix,
   onClose,
 }: {
   stats: DeckManaStats;
   /** The deck's slots, for the draw-odds panel to run its search against. */
   rows: readonly GroupRow[];
+  deckId: string;
   name: string;
   format: DeckFormat | undefined;
+  /** Where the cards are, for the fix panel's "spare or spoken for" question. */
+  placements: PlacementIndex | undefined;
+  onAddFix: (fix: ManaFix) => void;
   onClose: () => void;
 }) {
+  // On the play, always: it is the harsher of the two by one card, and a
+  // deckbuilding check that only holds up when you win the die roll isn't one.
+  // Lifted out of the panel because the fix panel answers the same report.
+  const report = useMemo(() => manaReport(rows, librarySize(rows), format, { onPlay: true }), [rows, format]);
+
   return (
     <Sheet onClose={onClose} title={`Deck stats: ${name}`} className="deck-stats-sheet">
       {stats.total === 0 ? (
@@ -151,7 +168,16 @@ export function DeckStatsSheet({
             <p className="fine-print">Your card database predates this data. Refresh it from About to see which of your lands enter tapped.</p>
           )}
 
-          <ColorSourcesPanel rows={rows} library={librarySize(rows)} format={format} />
+          <ColorSourcesPanel report={report} />
+
+          <ManaFixPanel
+            report={report}
+            rows={rows}
+            deckId={deckId}
+            format={format}
+            placements={placements}
+            onAdd={onAddFix}
+          />
 
           <OnCurvePanel rows={rows} format={format} />
 

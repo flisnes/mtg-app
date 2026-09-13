@@ -147,6 +147,47 @@ function deckCopyOverride(o: OracleCard): number | null {
 }
 
 /**
+ * How many more copies of a card this deck could legally take — 0 when it can't
+ * take any, Infinity for a basic land or a Shadowborn Apostle. The read-only
+ * half of the legality rules: `checkDeckLegality` reports what a deck did
+ * wrong, this answers whether a suggestion is worth making in the first place.
+ *
+ * `identity` is the commanders' combined color identity (see
+ * `commanderIdentity`), or null for a format that doesn't care.
+ */
+export function copiesWelcome(
+  format: DeckFormat | undefined,
+  oracle: OracleCard,
+  inDeck: number,
+  identity: ReadonlySet<Color> | null,
+): number {
+  const fmt = format ?? 'casual';
+  if (isNonDeckCard(oracle)) return 0;
+  if (identity && oracle.colorIdentity.some((c) => !identity.has(c))) return 0;
+  const rule = RULES[fmt];
+  // Casual checks nothing, so nothing is ever in the way.
+  if (fmt === 'casual') return Infinity;
+  const status = oracle.legalities?.[fmt as Format];
+  // An absent legality is a card DB older than the field, not a banning.
+  if (status === 'banned' || status === 'not_legal') return 0;
+  if (status === 'restricted') return Math.max(0, 1 - inDeck);
+  if (isBasicLand(oracle) || !rule.maxCopies) return Infinity;
+  const limit = deckCopyOverride(oracle) ?? rule.maxCopies;
+  return Math.max(0, limit - inDeck);
+}
+
+/** The commanders' combined color identity, or null when the format doesn't enforce one. */
+export function commanderIdentity(
+  format: DeckFormat | undefined,
+  cards: readonly { board: DeckBoard; oracle?: OracleCard }[],
+): Set<Color> | null {
+  if (!RULES[format ?? 'casual']?.commander) return null;
+  const commanders = cards.filter((c) => c.board === 'commander' && c.oracle);
+  if (commanders.length === 0) return null;
+  return new Set<Color>(commanders.flatMap((c) => c.oracle!.colorIdentity));
+}
+
+/**
  * Tokens, emblems, and art-series "cards" are not real deck cards — they never
  * belong in the mainboard, command zone, or sideboard (a deck's token board is
  * exactly where they do belong — see checkDeckLegality). Mirrors the collision

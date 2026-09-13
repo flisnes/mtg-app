@@ -1,7 +1,5 @@
-import { useMemo } from 'react';
-import type { DeckFormat } from '@mtg/shared';
 import { ManaCost } from './ManaCost.js';
-import { manaReport, shortfallHeadline, colorName, type CastCheck, type SourceRow } from '../analysis/manaSources.js';
+import { shortfallHeadline, colorName, type CastCheck, type ManaReport } from '../analysis/manaSources.js';
 import type { PipColor } from '../analysis/manaCost.js';
 
 // "Can I actually cast this?" — the colored-source half of the deck's mana,
@@ -17,19 +15,7 @@ const MAX_ROWS = 6;
 
 const pct = (p: number) => `${Math.round(p * 100)}%`;
 
-export function ColorSourcesPanel({
-  rows,
-  library,
-  format,
-}: {
-  rows: readonly SourceRow[];
-  library: number;
-  format: DeckFormat | undefined;
-}) {
-  // On the play, always: it is the harsher of the two by one card, and a
-  // deckbuilding check that only holds up when you win the die roll isn't one.
-  const report = useMemo(() => manaReport(rows, library, format, { onPlay: true }), [rows, library, format]);
-
+export function ColorSourcesPanel({ report }: { report: ManaReport }) {
   return (
     <>
       <h3 className="deck-stats-head">Colored sources</h3>

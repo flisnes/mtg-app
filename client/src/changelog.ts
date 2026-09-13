@@ -32,6 +32,20 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.154.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          "Deck stats now tells you what to do about a colored-source shortfall, out of the cards you already own. \"Two white sources short\" becomes \"+2 Tundra, 2 spare in Binder: Duals\", and one tap files them into the deck. Cards another deck is holding are named but never suggested.",
+      },
+      {
+        kind: 'fixed',
+        text: "The On curve panel's play/draw toggle was squashed to a hairline on a phone.",
+      },
+    ],
+  },
+  {
     version: '0.153.2',
     changes: [
       {
@@ -191,36 +205,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'Sealed products now open. Tap one in "Find sealed products with this card", or in the add sheet, to see a grid of the cards inside it in the printings it actually ships. The card you looked up is marked, and any card opens from there.',
-      },
-    ],
-  },
-  {
-    version: '0.147.8',
-    changes: [
-      {
-        kind: 'fixed',
-        text:
-          'A foil is measured against what you paid for the foil, not against the plain version, so foils no longer show an invented loss. Hold a card both plain and foil and each gets its own figure.',
-      },
-      {
-        kind: 'changed',
-        text:
-          'The price chart draws the nonfoil price, the only one we record daily, and now says so on a foil card. Where a starting price had to be estimated from it, the change is marked "(est.)".',
-      },
-    ],
-  },
-  {
-    version: '0.147.7',
-    changes: [
-      {
-        kind: 'changed',
-        text:
-          'The collection sorts by "Value change" and "Value change %" now, measured since you got each card, which is the same figure the card sheet shows. Price movers is still the place for a fixed 7, 30 or 90 day window.',
-      },
-      {
-        kind: 'fixed',
-        text:
-          'Cards with no recorded purchase price are valued from the reading closest to the day they went in, so the ones you owned before the app tracked prices join the sort instead of falling to the bottom. Those say "since you got it" rather than "since you paid".',
       },
     ],
   },

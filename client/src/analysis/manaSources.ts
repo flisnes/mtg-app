@@ -156,7 +156,7 @@ const isNotACard = (o: OracleCard) => {
   return t.startsWith('token') || t.includes('emblem') || t === 'card';
 };
 
-const pipColors = (produces: string | undefined): PipColor[] =>
+export const pipColors = (produces: string | undefined): PipColor[] =>
   produces ? ([...produces].filter((c) => 'WUBRGC'.includes(c)) as PipColor[]) : [];
 
 /**
@@ -171,7 +171,7 @@ const pipColors = (produces: string | undefined): PipColor[] =>
  * A ritual is not a source, and what a Rampant Growth fetches depends on what
  * is left in the library — a number we would have to invent.
  */
-function readyTurn(kind: string, cmc: number, tapped: string): number | null {
+export function readyTurn(kind: string, cmc: number, tapped: string): number | null {
   if (kind === 'land') return tapped === 'always' ? 2 : 1;
   if (kind === 'rock' || kind === 'dork') return Math.max(2, Math.ceil(cmc) + 1);
   return null;
@@ -195,10 +195,50 @@ function readyTurn(kind: string, cmc: number, tapped: string): number | null {
  * fetch finds nothing blue. Each land can only be found once, and a
  * hypergeometric over the multiset cannot see that. The panel says so.
  */
+export interface FetchTarget {
+  typeLine: string;
+  colors: PipColor[];
+  basic: boolean;
+}
+
+/**
+ * The lands in this deck a fetch could go and get. Built once and asked many
+ * times: the answer is the same for every fetch in the list, and the same
+ * question gets asked of every fetch sitting unused in your collection.
+ *
+ * A fetch searches the library, so only the mainboard can answer it. What it
+ * finds has to be a land that makes mana; a Bojuka Bog is findable and worth
+ * nothing to a color count.
+ */
+export function fetchTargets(rows: readonly SourceRow[]): FetchTarget[] {
+  const targets: FetchTarget[] = [];
+  for (const r of rows) {
+    const o = r.oracle;
+    if (!o || r.quantity <= 0 || r.board !== 'main' || isNotACard(o)) continue;
+    const colors = pipColors(o.produces);
+    if (colors.length === 0 || !isLandFace(faces(o.typeLine)[0] ?? '')) continue;
+    targets.push({ typeLine: o.typeLine, colors, basic: /^Basic\b/i.test(o.typeLine) });
+  }
+  return targets;
+}
+
+/** What one fetchland is worth against those targets. Empty when it finds nothing. */
+export function fetchColorsIn(oracle: OracleCard, targets: readonly FetchTarget[]): PipColor[] {
+  const profile = decodeFetchProfile(oracle.fetch);
+  if (!profile) return [];
+  const wanted = [...profile.types].map((letter) => BASIC_LAND_TYPES[letter]).filter((t): t is string => !!t);
+  const colors = new Set<PipColor>();
+  for (const target of targets) {
+    if (profile.basicOnly && !target.basic) continue;
+    if (!wanted.some((type) => new RegExp(`\\b${type}\\b`).test(target.typeLine))) continue;
+    for (const c of target.colors) colors.add(c);
+  }
+  return (['W', 'U', 'B', 'R', 'G', 'C'] as PipColor[]).filter((c) => colors.has(c));
+}
+
 function fetchSources(rows: readonly SourceRow[], produced: ReadonlyMap<string, DeckSource>): DeckSource[] {
   const fetches: { row: SourceRow; oracle: OracleCard }[] = [];
-  /** Lands that could be found, with the type line to match against. */
-  const targets: { typeLine: string; colors: PipColor[]; basic: boolean }[] = [];
+  const targets = fetchTargets(rows);
 
   for (const r of rows) {
     const o = r.oracle;
@@ -206,13 +246,6 @@ function fetchSources(rows: readonly SourceRow[], produced: ReadonlyMap<string, 
     if (r.board !== 'main' && r.board !== 'commander') continue;
     if (isNotACard(o)) continue;
     if (o.fetch) fetches.push({ row: r, oracle: o });
-    // A fetch searches the library, so only the mainboard can answer it. What
-    // it finds has to be a land that makes mana; a Bojuka Bog is findable and
-    // worth nothing to a color count.
-    if (r.board !== 'main') continue;
-    const colors = pipColors(o.produces);
-    if (colors.length === 0 || !isLandFace(faces(o.typeLine)[0] ?? '')) continue;
-    targets.push({ typeLine: o.typeLine, colors, basic: /^Basic\b/i.test(o.typeLine) });
   }
   if (fetches.length === 0 || targets.length === 0) return [];
 
@@ -225,18 +258,12 @@ function fetchSources(rows: readonly SourceRow[], produced: ReadonlyMap<string, 
       continue;
     }
     const profile = decodeFetchProfile(oracle.fetch)!;
-    const wanted = [...profile.types].map((letter) => BASIC_LAND_TYPES[letter]).filter((t): t is string => !!t);
-    const colors = new Set<PipColor>();
-    for (const target of targets) {
-      if (profile.basicOnly && !target.basic) continue;
-      if (!wanted.some((type) => new RegExp(`\\b${type}\\b`).test(target.typeLine))) continue;
-      for (const c of target.colors) colors.add(c);
-    }
-    if (colors.size === 0) continue;
+    const colors = fetchColorsIn(oracle, targets);
+    if (colors.length === 0) continue;
     byOracle.set(oracle.oracleId, {
       oracleId: oracle.oracleId,
       name: oracle.name,
-      colors: (['W', 'U', 'B', 'R', 'G', 'C'] as PipColor[]).filter((c) => colors.has(c)),
+      colors,
       units: 1,
       // The fetch itself is untapped; what costs you a turn is what it puts
       // down. Evolving Wilds is a turn-two source for the same reason a Temple is.
@@ -275,7 +302,7 @@ function fetchSources(rows: readonly SourceRow[], produced: ReadonlyMap<string, 
  * the colors unconditionally would overstate every deck with a Chromatic
  * Lantern commander.
  */
-function grantedColors(rows: readonly SourceRow[]): PipColor[] {
+export function grantedColors(rows: readonly SourceRow[]): PipColor[] {
   const granted = new Set<PipColor>();
   for (const r of rows) {
     if (!r.oracle?.grants || r.quantity <= 0 || r.board !== 'main') continue;

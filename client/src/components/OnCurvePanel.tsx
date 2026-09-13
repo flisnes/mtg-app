@@ -58,25 +58,31 @@ export function OnCurvePanel({ rows, format }: { rows: readonly DeckRow[]; forma
   return (
     <>
       <h3 className="deck-stats-head">On curve</h3>
-      <div className="seg-row odds-seg" role="radiogroup" aria-label="Play or draw">
-        <button
-          type="button"
-          className={`seg${onPlay ? ' seg-active' : ''}`}
-          role="radio"
-          aria-checked={onPlay}
-          onClick={() => setOnPlay(true)}
-        >
-          On the play
-        </button>
-        <button
-          type="button"
-          className={`seg${onPlay ? '' : ' seg-active'}`}
-          role="radio"
-          aria-checked={!onPlay}
-          onClick={() => setOnPlay(false)}
-        >
-          On the draw
-        </button>
+      {/* Wrapped, the way the draw-odds and mulligan toggles are: `.odds-seg` is
+          `flex: 1`, which inside a row means "fill the row" and inside the
+          sheet's own column flexbox means "height zero, then grow". Dropped
+          straight into the sheet it renders as a 2px line on a phone. */}
+      <div className="odds-controls">
+        <div className="seg-row odds-seg" role="radiogroup" aria-label="Play or draw">
+          <button
+            type="button"
+            className={`seg${onPlay ? ' seg-active' : ''}`}
+            role="radio"
+            aria-checked={onPlay}
+            onClick={() => setOnPlay(true)}
+          >
+            On the play
+          </button>
+          <button
+            type="button"
+            className={`seg${onPlay ? '' : ' seg-active'}`}
+            role="radio"
+            aria-checked={!onPlay}
+            onClick={() => setOnPlay(false)}
+          >
+            On the draw
+          </button>
+        </div>
       </div>
       {status.kind === 'error' ? (
         <p className="fine-print">The simulator stopped: {status.message}</p>

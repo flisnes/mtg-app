@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { DeckFormat } from '@mtg/shared';
 import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
@@ -7,6 +7,10 @@ import { DrawOddsPanel } from './DrawOddsPanel.js';
 import { ColorSourcesPanel } from './ColorSourcesPanel.js';
 import { ManaFixPanel } from './ManaFixPanel.js';
 import { OnCurvePanel } from './OnCurvePanel.js';
+import { DeckTrajectory } from './DeckTrajectory.js';
+import { buildSimDeck } from '../analysis/simDeck.js';
+import { defaultSimOptions } from '../analysis/simulate.js';
+import { useSimulation } from '../analysis/useSimulation.js';
 import { MulliganPanel } from './MulliganPanel.js';
 import { librarySize, type GroupRow } from '../analysis/groups.js';
 import { manaReport } from '../analysis/manaSources.js';
@@ -102,6 +106,15 @@ export function DeckStatsSheet({
   // Lifted out of the panel because the fix panel answers the same report.
   const report = useMemo(() => manaReport(rows, librarySize(rows), format, { onPlay: true }), [rows, format]);
 
+  // One simulation for the whole sheet. The trajectory charts and the on-curve
+  // table are two readings of the same twenty thousand games, so they share a
+  // worker and a play/draw toggle rather than each heating the phone on its own.
+  const [onPlay, setOnPlay] = useState(true);
+  const simDeck = useMemo(() => buildSimDeck(rows), [rows]);
+  const simOpts = useMemo(() => defaultSimOptions(format, onPlay), [format, onPlay]);
+  const sim = useSimulation(simDeck, simOpts);
+  const simResult = sim.kind === 'done' ? sim.result : sim.kind === 'running' ? sim.previous : undefined;
+
   return (
     <Sheet onClose={onClose} title={`Deck stats: ${name}`} className="deck-stats-sheet">
       {stats.total === 0 ? (
@@ -179,7 +192,55 @@ export function DeckStatsSheet({
             onAdd={onAddFix}
           />
 
-          <OnCurvePanel rows={rows} format={format} />
+          <h3 className="deck-stats-head">How the game unfolds</h3>
+          {/* The toggle serves both simulated panels, so it sits above the first
+              of them. Wrapped in `.odds-controls` because `.odds-seg` is
+              `flex: 1`, which inside a row means "fill the row" and inside the
+              sheet's own column flexbox means "height zero, then grow" — dropped
+              straight into the sheet it renders as a 2px line on a phone. */}
+          <div className="odds-controls">
+            <div className="seg-row odds-seg" role="radiogroup" aria-label="Play or draw">
+              <button
+                type="button"
+                className={`seg${onPlay ? ' seg-active' : ''}`}
+                role="radio"
+                aria-checked={onPlay}
+                onClick={() => setOnPlay(true)}
+              >
+                On the play
+              </button>
+              <button
+                type="button"
+                className={`seg${onPlay ? '' : ' seg-active'}`}
+                role="radio"
+                aria-checked={!onPlay}
+                onClick={() => setOnPlay(false)}
+              >
+                On the draw
+              </button>
+            </div>
+          </div>
+          {!simDeck.hasManaData ? (
+            <p className="fine-print">
+              Your card database predates this data. Refresh it from About to see how this deck plays out.
+            </p>
+          ) : sim.kind === 'error' ? (
+            <p className="fine-print">The simulator stopped: {sim.message}</p>
+          ) : !simResult ? (
+            <p className="deck-stats-verdict sim-waiting">Dealing {simOpts.games.toLocaleString()} games…</p>
+          ) : (
+            <>
+              <DeckTrajectory result={simResult} />
+              <p className="fine-print">
+                An average game, over {simResult.games.toLocaleString()} of them. Each turn it plays a land, then spends what it has:
+                ramp first, then the rest of the hand, priciest first. Everything that is not ramp resolves as a blank — a draw spell
+                that draws nothing, a Treasure that never appears — so every line here is a floor rather than an estimate, and the
+                decks it is least fair to are the ones doing the most.
+              </p>
+            </>
+          )}
+
+          <OnCurvePanel status={sim} opts={simOpts} hasManaData={simDeck.hasManaData} />
 
           <DrawOddsPanel rows={rows} format={format} />
 

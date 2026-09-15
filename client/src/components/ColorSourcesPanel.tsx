@@ -120,9 +120,12 @@ function verdict(checks: readonly CastCheck[], shortfalls: readonly CastCheck[])
   );
 }
 
-/** The right-hand clause: what is missing, or how far off the count is. */
+/** The right-hand clause: what is missing, how far off the count is, or when it lands. */
 function rowNote(c: CastCheck): string {
   if (c.uncastable) return `no ${c.missing.map((m) => colorName([m])).join(' or ')} mana`;
+  if (c.needed === null) {
+    return `turn ${c.turn} · ${c.sources} ${colorName(c.colors)} · ${c.clearsAtTurn ? `clears turn ${c.clearsAtTurn}` : 'never clears'}`;
+  }
   const short = Math.max(1, c.needed - c.sources);
   return `turn ${c.turn} · ${c.sources} of ${c.needed} ${colorName(c.colors)} (${short} short)`;
 }

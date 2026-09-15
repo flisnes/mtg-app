@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.155.0
+
+- **Deck stats now shows how the game actually unfolds.** Two charts over the first eight turns: how much mana you have against how much of it you spend, and how many cards you have seen against how many are still in your hand. Every other panel in that sheet answers a question about one card. This is the first one about the deck.
+- **The gap between mana available and mana spent is the thing to look at.** A deck sitting on six mana on turn five and spending three has a curve problem no other panel here can see.
+- **The simulator now plays the whole turn out.** It used to cast one ramp spell a turn and stop, because anything more meant tracking partly spent mana. It now spends down: ramp first and priciest first, then the rest of the hand, with a coin flip between equals. Two Signets on turn four is a line it can take now.
+- **Fixed: the colored-source report no longer asks for lands that cannot exist.** Triple black on turn three in a 99-card deck needs 45 black sources. A deck with 41 lands cannot have 45 of anything, so the report was telling a mono-black deck it was short of black while the panel above it said the land count was fine. Where the target is out of reach it now tells you which turn the card does come online instead, and the collection fix panel stops offering lands for a gap no decklist can close.
+- Everything that is not ramp still resolves as a blank: a draw spell that draws nothing, a Treasure that never appears. So the new curves are a floor rather than an estimate, and the sheet says so.
+
 ## 0.154.0
 
 - **Deck stats now tells you how to fix the mana, out of the cards you already own.** The colored-source report says you are two white sources short; the new panel under it says you have a Tundra in your Duals binder and two spare Plains in a bulk box, and files them into the deck in one tap. No deckbuilding site can answer that, because none of them know what is on your shelf.

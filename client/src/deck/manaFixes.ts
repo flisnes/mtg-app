@@ -127,7 +127,12 @@ export function manaNeeds(report: ManaReport): ManaNeed[] {
     // For an uncastable card the binding group is whatever bound the odds
     // check; what it actually lacks is `missing`, and it has none of it.
     const colors = c.uncastable && c.missing.length > 0 ? c.missing : c.colors;
-    const short = Math.max(1, c.needed - (c.uncastable ? 0 : c.sources));
+    // No reachable target means no fix: the bar is above what any manabase this
+    // size could hold, so there is no number of lands from your shelves that
+    // closes it, and offering some anyway is the contradiction this whole panel
+    // was accused of. An uncastable card still lacks a colour and still counts.
+    if (c.needed === null && !c.uncastable) continue;
+    const short = Math.max(1, (c.needed ?? c.pips) - (c.uncastable ? 0 : c.sources));
     const key = colors.join('');
     const cur = byColors.get(key);
     if (!cur) {

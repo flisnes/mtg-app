@@ -1,9 +1,7 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import type { DeckFormat } from '@mtg/shared';
+import { useState, type ReactNode } from 'react';
 import { ManaCost } from './ManaCost.js';
-import { buildSimDeck, type DeckRow } from '../analysis/simDeck.js';
-import { defaultSimOptions, halfWidth, type SimCardResult, type SimCostGroup, type SimResult } from '../analysis/simulate.js';
-import { useSimulation } from '../analysis/useSimulation.js';
+import { halfWidth, type SimCardResult, type SimCostGroup, type SimOptions, type SimResult } from '../analysis/simulate.js';
+import type { SimStatus } from '../analysis/useSimulation.js';
 
 // "Do I actually cast this on turn four?" — phase 5, and the first panel in
 // this sheet whose number is simulated rather than exact.
@@ -35,16 +33,25 @@ const pct = (p: number) => `${Math.round(p * 100)}%`;
 const pctShort = (p: number) => (p >= THRESHOLD ? pct(p) : `${Math.min(Math.round(p * 100), Math.round(THRESHOLD * 100) - 1)}%`);
 const one = (n: number) => n.toFixed(1);
 
-export function OnCurvePanel({ rows, format }: { rows: readonly DeckRow[]; format: DeckFormat | undefined }) {
+/**
+ * The simulation itself now lives in the sheet, because the trajectory panel
+ * above reads the same run. Two panels, one worker: a second `useSimulation`
+ * here would deal another twenty thousand games to answer a question the first
+ * one already answered, on a phone, for nothing.
+ */
+export function OnCurvePanel({
+  status,
+  opts,
+  hasManaData,
+}: {
+  status: SimStatus;
+  opts: SimOptions;
+  hasManaData: boolean;
+}) {
   const [picked, setPicked] = useState<string | null>(null);
-  const [onPlay, setOnPlay] = useState(true);
-  const deck = useMemo(() => buildSimDeck(rows), [rows]);
-  const opts = useMemo(() => defaultSimOptions(format, onPlay), [format, onPlay]);
-  const status = useSimulation(deck, opts);
-
   const result = status.kind === 'done' ? status.result : status.kind === 'running' ? status.previous : undefined;
 
-  if (!deck.hasManaData) {
+  if (!hasManaData) {
     return (
       <>
         <h3 className="deck-stats-head">On curve</h3>
@@ -58,32 +65,6 @@ export function OnCurvePanel({ rows, format }: { rows: readonly DeckRow[]; forma
   return (
     <>
       <h3 className="deck-stats-head">On curve</h3>
-      {/* Wrapped, the way the draw-odds and mulligan toggles are: `.odds-seg` is
-          `flex: 1`, which inside a row means "fill the row" and inside the
-          sheet's own column flexbox means "height zero, then grow". Dropped
-          straight into the sheet it renders as a 2px line on a phone. */}
-      <div className="odds-controls">
-        <div className="seg-row odds-seg" role="radiogroup" aria-label="Play or draw">
-          <button
-            type="button"
-            className={`seg${onPlay ? ' seg-active' : ''}`}
-            role="radio"
-            aria-checked={onPlay}
-            onClick={() => setOnPlay(true)}
-          >
-            On the play
-          </button>
-          <button
-            type="button"
-            className={`seg${onPlay ? '' : ' seg-active'}`}
-            role="radio"
-            aria-checked={!onPlay}
-            onClick={() => setOnPlay(false)}
-          >
-            On the draw
-          </button>
-        </div>
-      </div>
       {status.kind === 'error' ? (
         <p className="fine-print">The simulator stopped: {status.message}</p>
       ) : !result ? (
@@ -174,9 +155,9 @@ function Report({
       <p className="fine-print">
         A goldfish: nobody is across the table and the play pattern is fixed. It keeps a seven holding two to five lands, bottoms the
         spare land or the priciest spell, plays a land every turn (an untapped one when a card in hand costs exactly one more than it
-        has, otherwise the tapland while it is free), cracks a fetch for the land that widens its colors, and casts one rock, dork or
-        land-ramp spell a turn. Rituals, cost reducers, Treasure and card selection are all left out, so a deck built on those reads
-        worse here than it plays.
+        has, otherwise the tapland while it is free), cracks a fetch for the land that widens its colors, then spends the turn down:
+        ramp first and priciest first, then the rest of the hand, with a coin flip between equals. Everything that is not ramp resolves
+        as a blank, so a deck built on card selection, Treasure, rituals or cost reducers reads worse here than it plays.
       </p>
     </>
   );

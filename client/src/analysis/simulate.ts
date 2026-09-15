@@ -3,7 +3,7 @@ import { canPay, maxMatching, type ManaUnit, type UnitGroup } from './canPay.js'
 import { handSize } from './gameModel.js';
 import { KEEP_ANYTHING_AT } from './mulligan.js';
 import { makeRng, shuffle } from './rng.js';
-import { bindingPips, type Pip } from './manaCost.js';
+import { bindingPips, type ParsedCost, type Pip } from './manaCost.js';
 import { popcount, UNIT_BY_MASK, type SimCard, type SimDeck } from './simDeck.js';
 
 // The simulator: phase 5, and the only engine here that can answer a question
@@ -33,6 +33,13 @@ const PROGRESS_EVERY = 2000;
 
 /** Room for the battlefield. A goldfish that gets past this has other problems. */
 const MAX_SOURCES = 64;
+
+/**
+ * Spells cast in one turn before the sequencer stops asking. A turn that wants
+ * more than this is a turn the model has already lost the thread of, and the
+ * trajectory panel says so rather than grinding through it.
+ */
+const MAX_CASTS_PER_TURN = 8;
 
 /** Karsten's simulations ship a hand with fewer than two lands; so does this one. */
 export const DEFAULT_KEEP_MIN = 2;
@@ -141,6 +148,17 @@ export interface SimResult {
   costs: SimCostGroup[];
   /** Mean mana available, indexed by turn. */
   manaByTurn: number[];
+  /**
+   * Mean mana actually spent on spells, indexed by turn. The gap against
+   * `manaByTurn` is the thing no other panel in this sheet can see: mana you
+   * had and had nothing to do with. It runs high, because a spell that draws
+   * you a card resolves here as a blank and never buys you the next one.
+   */
+  manaSpentByTurn: number[];
+  /** Mean cards off the top of the library by end of turn: the opener plus draws. */
+  cardsSeenByTurn: number[];
+  /** Mean cards left in hand at end of turn, after the turn's spells have left it. */
+  handSizeByTurn: number[];
   /** P(you had a land to play), indexed by turn. */
   landDropByTurn: number[];
   /** P(the game started below seven cards). */
@@ -179,8 +197,13 @@ export function halfWidth(p: number, games: number): number {
  *   5. Record every card in hand you could pay for with everything untapped.
  *      Taken *before* any mana is spent, because the card you are asking about
  *      is the card you would have spent it on.
- *   6. Cast the most expensive rock, dork or land-ramp spell you can afford,
- *      one per turn. Its mana arrives the turn after.
+ *   6. Spend the turn. Ramp first, priciest first, because a Signet cast before
+ *      the three-drop is a source next turn and cast after it is a card in
+ *      hand; then the rest of the hand, priciest first, until the mana is gone.
+ *      A tie between equals is a coin flip rather than decklist order.
+ *   7. Everything that is not ramp resolves as a blank. It leaves your hand and
+ *      it costs you the mana, and it does not draw, mill or make a Treasure.
+ *      That is a one-directional error: every curve here is a floor.
  */
 export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: number) => void): SimResult {
   const cards = deck.cards;
@@ -339,7 +362,15 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
   /** heldAt[card * stride + turn]: games where it first reached your hand then. */
   const heldAt = new Uint32Array(n * stride);
   const manaSum = new Float64Array(stride);
+  /** Mana actually committed to spells, against the mana that was there to commit. */
+  const spentSum = new Float64Array(stride);
+  /** Cards off the top of the library: the opener plus every draw step. */
+  const seenSum = new Float64Array(stride);
+  /** Cards still in hand at end of turn, once the turn's spells have left it. */
+  const handSum = new Float64Array(stride);
   const landDrops = new Uint32Array(stride);
+  /** Every cost committed this turn, folded into one, so partial spends add up. */
+  const paid: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [], faces: 1 };
   let handSizeSum = 0;
   let mulliganed = 0;
   const games = deckSize > 0 ? opts.games : 0;
@@ -483,24 +514,71 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
         if (firstPay[g] !== 0) firstCast[index] = turn;
       }
 
-      // --- Ramp -------------------------------------------------------------
-      let rampAt = -1;
-      let rampCost = -1;
-      for (let i = 0; i < handLen; i++) {
-        const index = hand[i]!;
+      // --- Spend the turn ---------------------------------------------------
+      // Until this phase existed the sequencer cast exactly one ramp spell a
+      // turn and nothing else, because anything more meant accounting for
+      // partially spent mana (§8's stated omission). `paid` is that accounting:
+      // every cost committed this turn is folded into one cost and the whole
+      // thing is re-solved, so "can I still afford this as well" is the same
+      // canPay question the rest of the file already trusts.
+      //
+      // Ramp goes first, most expensive first. It is not a preference, it is
+      // the only ordering that does not cost you mana later: a Signet cast
+      // before the three-drop is a source next turn, and cast after it is a
+      // card in hand. The rest is spend-down, priciest first, with a coin flip
+      // between equals so that two four-drops in hand do not always resolve in
+      // decklist order.
+      paid.generic = 0;
+      paid.pips.length = 0;
+      paid.mana = 0;
+      let spent = 0;
+      for (let cast = 0; cast < MAX_CASTS_PER_TURN; cast++) {
+        const left = available - spent;
+        if (left <= 0) break;
+        let pick = -1;
+        let pickRank = -1;
+        let ties = 0;
+        for (let i = 0; i < handLen; i++) {
+          const card = cards[hand[i]!]!;
+          if (!card.spell || !card.cost) continue;
+          // The cheap test first: a cost that wants more mana than is left
+          // cannot be paid whatever colors it wants, and skipping it here is
+          // what keeps the solver off nine tenths of the hand.
+          if (card.cost.mana > left) continue;
+          const ramp = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp';
+          const rank = (ramp ? 1000 : 0) + card.cost.mana;
+          if (rank < pickRank) continue;
+          // Reservoir sampling over the ties, so the choice is uniform among
+          // equals without building a list to shuffle.
+          if (rank === pickRank) {
+            ties++;
+            if (rng.int(ties) !== 0) continue;
+          } else {
+            ties = 1;
+            pickRank = rank;
+          }
+          pick = i;
+        }
+        if (pick < 0) break;
+        // Only now does the matching solver run, and only on the one card the
+        // policy actually wants to cast.
+        const index = hand[pick]!;
         const card = cards[index]!;
-        if (card.role !== 'rock' && card.role !== 'dork' && card.role !== 'landramp') continue;
-        if (card.cmc <= rampCost) continue;
-        // Already solved this turn, by the pass above.
-        const g = groupOf[index]!;
-        if (g < 0 || firstPay[g] === 0) continue;
-        rampAt = i;
-        rampCost = card.cmc;
-      }
-      if (rampAt >= 0) {
-        const rampIndex = hand[rampAt]!;
-        const card = cards[rampIndex]!;
-        hand[rampAt] = hand[--handLen]!;
+        const before = paid.pips.length;
+        paid.generic += card.cost!.generic;
+        for (const pip of card.cost!.pips) paid.pips.push(pip);
+        if (!canPay(paid, units, unitGroups)) {
+          // Unaffordable in *these* colors alongside what is already committed.
+          // Roll it back and stop: the next-best card is usually the same
+          // colors and re-scanning the hand for it costs more than it wins.
+          paid.generic -= card.cost!.generic;
+          paid.pips.length = before;
+          break;
+        }
+        paid.mana += card.cost!.mana;
+        spent += card.cost!.mana;
+        hand[pick] = hand[--handLen]!;
+
         if (card.role === 'landramp') {
           // What it fetches is a land out of the library, arriving tapped. That
           // is Rampant Growth exactly and Nature's Lore a turn late, which is
@@ -508,9 +586,9 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
           for (let k = 0; k < card.adds; k++) {
             const at = findLand(cards, library, top, libLen, colorsHeld, null, goal, units);
             if (at < 0) break;
-            const index = library[at]!;
-            const land = cards[index]!;
-            if (!addSource(index, land, turn + 1, turn)) break;
+            const found = library[at]!;
+            const land = cards[found]!;
+            if (!addSource(found, land, turn + 1, turn)) break;
             colorsHeld |= land.mask;
             library[at] = library[--libLen]!;
             const back = payEntryCost(land);
@@ -518,10 +596,18 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
           }
           // The mana that cast it has been spent, and a dork is summoning sick
           // on top of that, so either way it pays for something from next turn.
-        } else if (addSource(rampIndex, card, turn + 1, turn)) {
-          colorsHeld |= card.mask;
+        } else if (card.role === 'rock' || card.role === 'dork') {
+          if (addSource(index, card, turn + 1, turn)) colorsHeld |= card.mask;
         }
+        // Everything else resolves as a blank. It left your hand and it cost
+        // you the mana, and what it *does* is phase 9's problem. That is the
+        // one-directional error the panel has to own up to: a draw spell that
+        // does not draw makes every curve here a floor rather than an estimate.
       }
+
+      spentSum[turn] = spentSum[turn]! + spent;
+      seenSum[turn] = seenSum[turn]! + top;
+      handSum[turn] = handSum[turn]! + handLen;
     }
 
     for (let i = 0; i < n; i++) {
@@ -535,7 +621,19 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
     if (onProgress && (game + 1) % PROGRESS_EVERY === 0) onProgress(game + 1);
   }
 
-  return summarise(deck, opts, games, { castAt, heldAt, groupOf, stride, manaSum, landDrops, handSizeSum, mulliganed });
+  return summarise(deck, opts, games, {
+    castAt,
+    heldAt,
+    groupOf,
+    stride,
+    manaSum,
+    spentSum,
+    seenSum,
+    handSum,
+    landDrops,
+    handSizeSum,
+    mulliganed,
+  });
 }
 
 /**
@@ -659,13 +757,16 @@ interface Tallies {
   groupOf: Int32Array;
   stride: number;
   manaSum: Float64Array;
+  spentSum: Float64Array;
+  seenSum: Float64Array;
+  handSum: Float64Array;
   landDrops: Uint32Array;
   handSizeSum: number;
   mulliganed: number;
 }
 
 function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): SimResult {
-  const { castAt, heldAt, groupOf, stride, manaSum, landDrops } = t;
+  const { castAt, heldAt, groupOf, stride, manaSum, spentSum, seenSum, handSum, landDrops } = t;
   const per = games > 0 ? 1 / games : 0;
 
   /** A first-turn histogram turned into "by turn t", which is what anyone reads. */
@@ -801,6 +902,9 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     commanders,
     costs,
     manaByTurn: [...manaSum].map((sum) => sum * per),
+    manaSpentByTurn: [...spentSum].map((sum) => sum * per),
+    cardsSeenByTurn: [...seenSum].map((sum) => sum * per),
+    handSizeByTurn: [...handSum].map((sum) => sum * per),
     landDropByTurn: [...landDrops].map((count) => count * per),
     pMulligan: t.mulliganed * per,
     meanHandSize: t.handSizeSum * per,

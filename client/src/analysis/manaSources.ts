@@ -112,8 +112,18 @@ export interface CastCheck {
   colors: PipColor[];
   /** Copies in the library that make one of those colors and are online by `turn`. */
   sources: number;
-  /** Sources this deck would need for the threshold. */
-  needed: number;
+  /**
+   * Sources this deck would need for the threshold, or null when no deck of
+   * this shape could hold that many. A 99-card list with 41 lands cannot put
+   * 48 black sources in play, so "9 short" was an instruction to nowhere.
+   */
+  needed: number | null;
+  /**
+   * The first turn this cost clears the bar with the sources it already has,
+   * or null if it never does inside MAX_CHECK_TURN. This is the honest answer
+   * when `needed` is null: the card is not late, it is a later card.
+   */
+  clearsAtTurn: number | null;
   /** Exact odds of holding `pips` of them by `turn`. */
   p: number;
   ok: boolean;
@@ -417,11 +427,21 @@ function unitPool(sources: readonly DeckSource[], cap: number): { units: ManaUni
 }
 
 /** Fewest sources that clear `threshold` for `pips` of them by `seen` cards. */
-function sourcesNeeded(library: number, seen: number, pips: number, threshold: number): number {
-  for (let n = pips; n <= library; n++) {
+/**
+ * Sources needed to clear the bar, or null when that many cannot exist.
+ *
+ * The cap is the point. This used to walk all the way to `library` and return
+ * whatever it found, which for triple black on turn three in a 99 is 48 — in a
+ * deck that holds 41 lands. A target above the deck's own source ceiling is not
+ * a shortfall a decklist can close, and printing it as one is how the sheet
+ * came to tell a mono-black deck it was nine black sources short of black
+ * while the panel above it said the land count was fine.
+ */
+function sourcesNeeded(library: number, seen: number, pips: number, threshold: number, ceiling: number): number | null {
+  for (let n = pips; n <= ceiling; n++) {
     if (atLeast(library, n, seen, pips) >= threshold) return n;
   }
-  return library;
+  return null;
 }
 
 /**
@@ -440,6 +460,13 @@ export function manaReport(
   const all = deckSources(rows);
   /** What you draw: the command zone is not shuffled into it. */
   const sources = all.filter((s) => !s.fromCommandZone);
+  /**
+   * The most sources of any one colour this deck could possibly have: every
+   * source it runs, recoloured. Nothing a decklist edit can do beats it without
+   * adding cards, and adding cards is the *other* panel's lever. A target above
+   * this is unreachable and gets reported as a turn instead of as a shortfall.
+   */
+  const ceiling = sources.reduce((n, s) => n + s.copies, 0);
   const checks: CastCheck[] = [];
   const wanted = new Set<PipColor>();
   let unmodelled = 0;
@@ -480,10 +507,22 @@ export function manaReport(
 
     let worst: CastCheck | null = null;
     for (const g of groups.values()) {
-      const available = sources
-        .filter((s) => s.readyTurn <= turn && s.colors.some((c) => g.colors.includes(c)))
-        .reduce((n, s) => n + s.copies, 0);
+      const matching = sources.filter((s) => s.colors.some((c) => g.colors.includes(c)));
+      const countBy = (t: number) => matching.filter((s) => s.readyTurn <= t).reduce((n, s) => n + s.copies, 0);
+      const available = countBy(turn);
       const p = atLeast(library, Math.min(available, library), seen, g.pips);
+      // When it does clear, if it ever does. Sources come online over the turns
+      // and you see more cards, so this is monotone and the first hit is the
+      // answer. It is what the panel says in place of a shortfall it cannot
+      // close, and it is the "when" half of holding every card to its mana value.
+      let clearsAtTurn: number | null = null;
+      for (let t = turn; t <= MAX_CHECK_TURN; t++) {
+        const n = Math.min(countBy(t), library);
+        if (atLeast(library, n, cardsSeen(setup, t), g.pips) >= threshold) {
+          clearsAtTurn = t;
+          break;
+        }
+      }
       if (worst && p >= worst.p) continue;
       worst = {
         oracleId: o.oracleId,
@@ -494,7 +533,8 @@ export function manaReport(
         pips: g.pips,
         colors: g.colors,
         sources: available,
-        needed: sourcesNeeded(library, seen, g.pips, threshold),
+        needed: sourcesNeeded(library, seen, g.pips, threshold, ceiling),
+        clearsAtTurn,
         p,
         ok: p >= threshold,
         commander: r.board === 'commander',
@@ -543,12 +583,26 @@ export function manaReport(
   };
 }
 
-/** "2 white sources short for turn-4 {W}{W}" — the one line worth leading with. */
+/**
+ * The one line worth leading with, in whichever of its three shapes fits.
+ *
+ * "2 white sources short for turn-4 {W}{W}" is the useful one, and it is only
+ * honest when the deck could actually hold those two. Where the bar is above
+ * the deck's source ceiling there is no shortfall to name, so the line says
+ * when the card does come online instead of demanding lands that cannot exist.
+ */
 export function shortfallHeadline(check: CastCheck): string {
   const color = colorName(check.colors);
   if (check.uncastable) {
     const missing = check.missing.map((c) => colorName([c])).join(' or ');
     return `${check.name} needs ${missing || color} mana this deck doesn't make.`;
+  }
+  if (check.needed === null) {
+    const pips = `${check.pips} ${color} source${check.pips === 1 ? '' : 's'}`;
+    const when = check.clearsAtTurn
+      ? `It gets there on turn ${check.clearsAtTurn}.`
+      : `It doesn't get there inside ${MAX_CHECK_TURN} turns.`;
+    return `${check.name} wants ${pips} on turn ${check.turn}, which no manabase this size reaches. ${when}`;
   }
   const short = Math.max(1, check.needed - check.sources);
   return `${short} ${color} source${short === 1 ? '' : 's'} short for ${check.name} on turn ${check.turn}.`;

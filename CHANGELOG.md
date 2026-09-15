@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.156.0
+
+- **The card database now knows what your spells do, not just what they cost.** Every card that draws, discards, mills, surveils, scries or makes a Treasure when it resolves now carries those numbers. 1,483 cards out of 36,636 earned one.
+- **Nothing in the app reads it yet.** This is the groundwork for the next step: the simulator currently casts your draw spells as blanks, which is why the "How the game unfolds" charts say they are a floor. Shipping the card data first means the next release is a client update rather than another download.
+- **A card only gets a number when it is unconditional, when it happens the turn you cast it, and when it happens to you.** A combat trigger, an activated ability or a kicker gets nothing, and neither does a spell that draws your opponent a card. Most of what Tagger calls a draw card gets no number here, on purpose. Better to say we did not model something than to quietly make your deck look better than it is.
+- Brainstorm draws one card, not three.
+- **Expect a card-data update after this one, and a full one rather than the usual few kilobytes.** The new numbers touch every row.
+
 ## 0.155.0
 
 - **Deck stats now shows how the game actually unfolds.** Two charts over the first eight turns: how much mana you have against how much of it you spend, and how many cards you have seen against how many are still in your hand. Every other panel in that sheet answers a question about one card. This is the first one about the deck.

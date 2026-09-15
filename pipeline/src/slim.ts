@@ -19,7 +19,14 @@ import type {
   SealedPriceMap,
   SetTypeMap,
 } from '@mtg/shared';
-import { MANA_UNKNOWN, isMarkerCard, isVariantPrinting } from '@mtg/shared';
+import {
+  EFFECT_REPEATABLE,
+  EFFECT_TUTOR,
+  EFFECT_UNKNOWN,
+  MANA_UNKNOWN,
+  isMarkerCard,
+  isVariantPrinting,
+} from '@mtg/shared';
 import { getBulkEntry, getSetTypes, openBulkStream } from './scryfall.js';
 import { slimCard, type RawCard, type SlimResult } from './slimCard.js';
 import { buildSealedProducts } from './sealed.js';
@@ -27,6 +34,7 @@ import { fetchSealedUsdPrices } from './sealedPrices.js';
 import { fetchSealedEurPrices } from './cardmarketPrices.js';
 import { buildOracleTags } from './oracleTags.js';
 import { buildManaTagIndex, fetchProfileOf, grantsOf, manaProfileOf, type ManaTagIndex } from './manaProfile.js';
+import { buildEffectTagIndex, effectProfileOf, type EffectTagIndex } from './effectProfile.js';
 
 // Nightly card-DB pipeline (beta plan §3). Downloads Scryfall `default_cards`,
 // slims each card to ~18 fields, and emits:
@@ -125,6 +133,7 @@ function toOracleCard(
   tokenOracleIds: string[],
   tags: number[] | undefined,
   manaTags: ManaTagIndex | null,
+  effectTags: EffectTagIndex | null,
 ): OracleCard {
   const { printing, oracle } = rep;
   const manaInput = { typeLine: oracle.typeLine, oracleText: oracle.oracleText, produces: oracle.produces, tags };
@@ -132,6 +141,7 @@ function toOracleCard(
   // Read off the text, not the tags, and so not gated on the tag download.
   const fetch = fetchProfileOf(manaInput);
   const grants = grantsOf(manaInput);
+  const effect = effectTags ? effectProfileOf(manaInput, effectTags) : undefined;
   return {
     oracleId: printing.oracleId,
     name: oracle.name,
@@ -164,6 +174,10 @@ function toOracleCard(
     ...(mana ? { mana } : {}),
     ...(fetch ? { fetch } : {}),
     ...(grants ? { grants } : {}),
+    // Sparser still: ~4% of cards do something to your hand or library that we
+    // are willing to put a number on. See effectProfile.ts for why that is most
+    // of what a card can do rather than a shortfall.
+    ...(effect ? { effect } : {}),
   };
 }
 
@@ -279,6 +293,7 @@ async function main(): Promise<void> {
   // conditional-tapland split is the whole reason this is derivable), so
   // without a vocabulary there are none — same graceful degradation as `otag:`.
   const manaTags = tags ? buildManaTagIndex(tags.dictionary) : null;
+  const effectTags = tags ? buildEffectTagIndex(tags.dictionary) : null;
 
   const entry = await getBulkEntry(BULK_TYPE);
   console.log(`[pipeline] ${BULK_TYPE} updated_at=${entry.updated_at} size≈${(entry.compressed_size / 1e6).toFixed(0)}MB`);
@@ -357,7 +372,7 @@ async function main(): Promise<void> {
       tokenIds.add(oracleId);
       markerLinks++;
     }
-    return toOracleCard(rep, [...tokenIds].sort(), tags?.byOracleId.get(rep.printing.oracleId), manaTags);
+    return toOracleCard(rep, [...tokenIds].sort(), tags?.byOracleId.get(rep.printing.oracleId), manaTags, effectTags);
   });
   console.log(`[pipeline] linked ${markerLinks} marker-card references (emblems, counters, dungeons, …)`);
   const producers = oracleCards.filter((c) => c.produces).length;
@@ -373,6 +388,18 @@ async function main(): Promise<void> {
   console.log(
     `[pipeline] mana: ${narrowed.length} profiles make fewer colors than produced_mana claims, ` +
       `${granters.length} cards grant colors to your lands`,
+  );
+  const effects = oracleCards.filter((c) => c.effect);
+  const slot = (i: number) => effects.filter((c) => (c.effect![i] ?? 0) > 0).length;
+  const flagged = (bit: number) => effects.filter((c) => c.effect![0] & bit).length;
+  console.log(
+    `[pipeline] effects: ${effects.length} cards do something we can model — ` +
+      `${slot(1)} draw, ${slot(2)} discard, ${slot(3)} mill, ${slot(4)} surveil, ${slot(5)} scry, ` +
+      `${slot(6)} make Treasure`,
+  );
+  console.log(
+    `[pipeline] effects: ${flagged(EFFECT_UNKNOWN)} with an amount we can't model, ` +
+      `${flagged(EFFECT_REPEATABLE)} every turn rather than once, ${flagged(EFFECT_TUTOR)} tutors`,
   );
 
   // Chunked price-less artifacts (primary path).

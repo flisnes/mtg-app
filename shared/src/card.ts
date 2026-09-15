@@ -137,6 +137,17 @@ export interface OracleCard {
    * it, so the resolving happens where a decklist is in scope.
    */
   grants?: string;
+  /**
+   * What the card does to your hand, library and graveyard when it resolves:
+   * draw, discard, mill, surveil, scry and Treasure. See EffectProfileTuple.
+   * Omitted for the ~96% of cards that do none of it unconditionally, and
+   * absent on card DBs built before this field.
+   *
+   * `mana` says what a card puts into play; this says what it does to the rest
+   * of the game. Between them the simulator can play a turn out rather than
+   * only pay for one.
+   */
+  effect?: EffectProfileTuple;
 }
 
 /**
@@ -325,6 +336,107 @@ export function decodeManaProfile(tuple: ManaProfileTuple | undefined): ManaProf
  */
 export function sourceColors(profile: ManaProfile, produces: string | undefined): string {
   return profile.colors ?? produces ?? '';
+}
+
+/**
+ * The amounts in the profile are per *turn*, not once: Phyrexian Arena's "At
+ * the beginning of your upkeep, you draw a card". Every other profile fires
+ * once, the turn the card resolves.
+ */
+export const EFFECT_REPEATABLE = 1;
+/**
+ * At least one amount is a guess of what we could read, the way MANA_UNKNOWN
+ * is: "draw X cards", "mill cards equal to the number of Zombies you control".
+ * The counts are a floor. Consumers should say so rather than use them flat.
+ */
+export const EFFECT_UNKNOWN = 2;
+/**
+ * The cards come off a *search*, not off the top: Diabolic Intent, Treasure
+ * Mage. For hand size a tutor and a draw are the same card; for what ends up in
+ * that hand they are not remotely the same, and a simulator that draws the top
+ * card instead is under-selling every tutor in the deck. Flagged so it can say
+ * which way it erred.
+ */
+export const EFFECT_TUTOR = 4;
+/**
+ * The discard is "discard your hand" — Faithless Looting's bigger cousins — so
+ * `discard` is however many cards you are holding, not the number stored.
+ */
+export const EFFECT_WHOLE_HAND = 8;
+
+/**
+ * `[flags, draw, discard, mill, surveil, scry, treasure]`, positional for the
+ * same reason ManaProfileTuple is, and trimmed to its last non-zero slot: a
+ * cantrip is `[0, 1]` and that is most of the rows this field costs anything on.
+ *
+ *   flags     EFFECT_REPEATABLE | EFFECT_UNKNOWN | EFFECT_TUTOR |
+ *             EFFECT_WHOLE_HAND
+ *   draw      cards into your hand, tutors included
+ *   discard   cards out of it, as part of the same effect (a loot, a rummage,
+ *             an additional cost)
+ *   mill      cards from the top of *your* library into your graveyard
+ *   surveil   cards looked at, each of which may go to the graveyard
+ *   scry      cards looked at, each of which may go to the bottom
+ *   treasure  Treasure tokens created: one-shot mana of any color
+ *
+ * `flags` leads rather than trails so that a slot added later cannot move it,
+ * which is the whole reason ManaProfileTuple keeps its optional tail at the end.
+ *
+ * Everything here is what the card does to *you*, on the turn it resolves,
+ * unconditionally. An effect hanging off a combat trigger, an activated
+ * ability, a kicker or an "if", and an effect aimed at an opponent, is absent
+ * rather than guessed at — see the pipeline's derivation for why that direction
+ * is the safe one.
+ */
+export type EffectProfileTuple = [
+  flags: number,
+  draw?: number,
+  discard?: number,
+  mill?: number,
+  surveil?: number,
+  scry?: number,
+  treasure?: number,
+];
+
+/** EffectProfileTuple unpacked. */
+export interface EffectProfile {
+  /** Cards into hand. A tutor counts here too; see `tutor`. */
+  draw: number;
+  /** Cards out of hand as part of the same effect. See `wholeHand`. */
+  discard: number;
+  /** Cards from your library to your graveyard. */
+  mill: number;
+  /** Cards looked at, any of which may be binned. */
+  surveil: number;
+  /** Cards looked at, any of which may be bottomed. */
+  scry: number;
+  /** Treasure tokens: one-shot mana of any color. */
+  treasure: number;
+  /** The amounts are per turn rather than once. See EFFECT_REPEATABLE. */
+  repeatable: boolean;
+  /** At least one amount is a floor we could not read exactly. */
+  unknown: boolean;
+  /** The draw is a search of your library, not off the top. */
+  tutor: boolean;
+  /** `discard` means "your whole hand", whatever that is at the time. */
+  wholeHand: boolean;
+}
+
+export function decodeEffectProfile(tuple: EffectProfileTuple | undefined): EffectProfile | null {
+  if (!tuple) return null;
+  const [flags, draw, discard, mill, surveil, scry, treasure] = tuple;
+  return {
+    draw: draw ?? 0,
+    discard: discard ?? 0,
+    mill: mill ?? 0,
+    surveil: surveil ?? 0,
+    scry: scry ?? 0,
+    treasure: treasure ?? 0,
+    repeatable: !!(flags & EFFECT_REPEATABLE),
+    unknown: !!(flags & EFFECT_UNKNOWN),
+    tutor: !!(flags & EFFECT_TUTOR),
+    wholeHand: !!(flags & EFFECT_WHOLE_HAND),
+  };
 }
 
 /** The fetch can only find a *basic* land, so a shockland sharing the type is out of reach. */

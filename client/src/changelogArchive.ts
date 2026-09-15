@@ -1,4 +1,4 @@
-// The older half of the changelog (0.147.6 down to 0.98.0), split out of
+// The older half of the changelog (0.147.9 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,16 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.147.9',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Sealed products now open. Tap one in "Find sealed products with this card", or in the add sheet, to see a grid of the cards inside it in the printings it actually ships. The card you looked up is marked, and any card opens from there.',
+      },
+    ],
+  },
   {
     version: '0.147.8',
     changes: [

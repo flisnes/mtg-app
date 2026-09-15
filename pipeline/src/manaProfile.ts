@@ -16,6 +16,7 @@ import {
   MANA_TAPPED,
   MANA_UNKNOWN,
 } from '@mtg/shared';
+import { tagSubtrees } from './oracleTags.js';
 
 // Derives OracleCard.mana: how a card feeds the mana system, so the deck
 // analysis can sequence a turn instead of just counting cards. Runs here rather
@@ -54,36 +55,20 @@ export interface ManaTagIndex {
   extraLand: ReadonlySet<number>;
 }
 
-/**
- * Every index in a slug's subtree, the root included. Cards are tagged on the
- * leaves (Jungle Hollow carries `cycle-ktk-gainland`, not `tapland`), so
- * membership has to be tested against the closure, exactly as `otag:` does on
- * the client. Iterative and `seen`-guarded: the hierarchy is a DAG.
- */
-function subtree(dictionary: OracleTagDictionary, children: Map<number, number[]>, slug: string): Set<number> {
-  const root = dictionary.findIndex((e) => e[0] === slug);
-  const out = new Set<number>();
-  if (root < 0) return out;
-  const stack = [root];
-  while (stack.length) {
-    const id = stack.pop()!;
-    if (out.has(id)) continue;
-    out.add(id);
-    for (const kid of children.get(id) ?? []) stack.push(kid);
-  }
-  return out;
-}
+const MANA_SLUGS = [
+  'tapland',
+  'conditional-tapland',
+  'mana-rock',
+  'mana-dork',
+  'land-ramp',
+  'multi-land-ramp',
+  'ritual',
+  'extra-land',
+];
 
 export function buildManaTagIndex(dictionary: OracleTagDictionary): ManaTagIndex {
-  const children = new Map<number, number[]>();
-  dictionary.forEach((entry, i) => {
-    for (const parent of entry[1] ?? []) {
-      const kids = children.get(parent);
-      if (kids) kids.push(i);
-      else children.set(parent, [i]);
-    }
-  });
-  const of = (slug: string) => subtree(dictionary, children, slug);
+  const sets = tagSubtrees(dictionary, MANA_SLUGS);
+  const of = (slug: string) => sets.get(slug) ?? new Set<number>();
   return {
     tapland: of('tapland'),
     conditionalTapland: of('conditional-tapland'),

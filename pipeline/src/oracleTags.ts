@@ -245,3 +245,41 @@ export async function buildOracleTags(outDir: string, now = Date.now()): Promise
     stats: { source: 'network', fetchedAt, tags: dictionary.length, excluded, cards: byOracleId.size, taggings },
   };
 }
+
+/**
+ * Every index in a slug's subtree, the root included, for each slug asked for.
+ *
+ * Cards are tagged on the leaves — Jungle Hollow carries `cycle-ktk-gainland`,
+ * not `tapland` — so any membership test has to run against the closure,
+ * exactly as `otag:` does on the client. Iterative and `seen`-guarded, because
+ * the hierarchy is a DAG rather than a tree. A slug the vocabulary has never
+ * heard of yields an empty set rather than throwing: Tagger's vocabulary is
+ * community-maintained and a slug can be renamed out from under us, and a
+ * derivation quietly deriving nothing is easier to spot in the stats line than
+ * a nightly build that stops.
+ */
+export function tagSubtrees(dictionary: OracleTagDictionary, slugs: readonly string[]): Map<string, Set<number>> {
+  const children = new Map<number, number[]>();
+  dictionary.forEach((entry, i) => {
+    for (const parent of entry[1] ?? []) {
+      const kids = children.get(parent);
+      if (kids) kids.push(i);
+      else children.set(parent, [i]);
+    }
+  });
+  const out = new Map<string, Set<number>>();
+  for (const slug of slugs) {
+    const found = new Set<number>();
+    out.set(slug, found);
+    const root = dictionary.findIndex((e) => e[0] === slug);
+    if (root < 0) continue;
+    const stack = [root];
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (found.has(id)) continue;
+      found.add(id);
+      for (const kid of children.get(id) ?? []) stack.push(kid);
+    }
+  }
+  return out;
+}

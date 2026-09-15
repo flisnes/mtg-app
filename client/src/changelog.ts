@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.156.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'The card database now knows what your spells do, not just what they cost: how much they draw, discard, mill, surveil, scry or make in Treasure. Nothing reads it yet. It is what the simulator needs to stop casting your draw spells as blanks.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'Because every card in the database moved, your next card-DB refresh downloads the whole thing rather than the usual few kilobytes.',
+      },
+    ],
+  },
+  {
     version: '0.155.0',
     changes: [
       {
@@ -215,16 +230,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'The card sheet’s ⋯ menu has "Format legality": the seven formats we track with the card’s standing in each. Green legal, red banned, amber restricted, grey not legal.',
-      },
-    ],
-  },
-  {
-    version: '0.147.9',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Sealed products now open. Tap one in "Find sealed products with this card", or in the add sheet, to see a grid of the cards inside it in the printings it actually ships. The card you looked up is marked, and any card opens from there.',
       },
     ],
   },

@@ -1,9 +1,11 @@
 import {
   BASIC_LAND_TYPES,
+  decodeEffectProfile,
   decodeFetchProfile,
   decodeManaProfile,
   sourceColors,
   type DeckBoard,
+  type EffectProfile,
   type OracleCard,
 } from '@mtg/shared';
 import { parseManaCost, type ParsedCost, type PipColor } from './manaCost.js';
@@ -47,18 +49,20 @@ export function popcount(mask: number): number {
 /**
  * What a card does in a game of Magic, as far as the mana model can see.
  *
- *   land      a land you put down for your land drop
- *   fetch     a land that trades itself for another land out of the library
- *   rock      an artifact that taps for mana
- *   dork      a creature that taps for mana, and is summoning sick
- *   landramp  a spell that puts a land onto the battlefield
- *   spell     everything else, which is to say the cards you are trying to cast
+ *   land       a land you put down for your land drop
+ *   fetch      a land that trades itself for another land out of the library
+ *   rock       an artifact that taps for mana
+ *   dork       a creature that taps for mana, and is summoning sick
+ *   landramp   a spell that puts a land onto the battlefield
+ *   extraland  a permanent that lets you play more than one land a turn
+ *   spell      everything else, which is to say the cards you are trying to cast
  *
- * Rituals and extra-land effects are deliberately plain spells. A Dark Ritual
- * is not a source and an Exploration only matters if you are flooded; both are
- * still cards you draw and try to cast, they just do not feed the mana model.
+ * A ritual is deliberately a plain spell. A Dark Ritual is not a source, it is
+ * a card you spend to cast a bigger card, and the sequencer has nothing to
+ * spend the burst on: phase 9 gave Treasure a home because a Treasure keeps,
+ * and a ritual does not.
  */
-export type SimRole = 'land' | 'fetch' | 'rock' | 'dork' | 'landramp' | 'spell';
+export type SimRole = 'land' | 'fetch' | 'rock' | 'dork' | 'landramp' | 'extraland' | 'spell';
 
 export interface SimCard {
   oracleId: string;
@@ -98,6 +102,42 @@ export interface SimCard {
   copies: number;
   /** In the command zone: always available, never drawn. */
   commander: boolean;
+  /**
+   * What it does to your hand, library and graveyard on resolution, or null for
+   * the great majority of cards that do none of it unconditionally. Decoded
+   * here so the inner loop never touches a tuple. See EffectProfile.
+   */
+  effect: EffectProfile | null;
+}
+
+/**
+ * How much of the deck the simulator actually plays out, in copies.
+ *
+ * §11.4's point: every unmodelled card is an effect we fail to *apply*, never
+ * one we invent, so the trajectory curves come out systematically pessimistic
+ * and the bias is largest for the decks doing the most interesting things. The
+ * fix is not to model more cards, it is to say how many we modelled — which
+ * makes the pessimism visible instead of load-bearing, and doubles as this
+ * feature's own progress metric.
+ *
+ * "Blank" is not an accusation. A Lightning Bolt resolving as a blank is the
+ * model being right: it does nothing to your hand, your library or your mana.
+ * The number that matters is on top of this one and needs the oracle tags —
+ * see missedDrawCopies().
+ */
+export interface SimCoverage {
+  /** Copies in the library, the denominator everything else is out of. */
+  library: number;
+  /** Lands, which resolve by being put onto the battlefield and nothing else. */
+  lands: number;
+  /** Ramp: rocks, dorks, land ramp, fetches, extra land drops. */
+  mana: number;
+  /** Non-land cards carrying an effect profile the sequencer resolves. */
+  effects: number;
+  /** Of those, ones where at least one amount is a floor we could not read exactly. */
+  floored: number;
+  /** Everything else: cast, pays its cost, leaves your hand, does nothing. */
+  blanks: number;
 }
 
 export interface SimDeck {
@@ -108,6 +148,8 @@ export interface SimDeck {
   commanders: number[];
   /** False when the card DB predates the mana profile, which reads identically to "no mana". */
   hasManaData: boolean;
+  /** How much of the library the sequencer resolves rather than blanks. */
+  coverage: SimCoverage;
 }
 
 export interface DeckRow {
@@ -131,6 +173,10 @@ function roleOf(oracle: OracleCard, landFront: boolean, landAnywhere: boolean): 
   if (landAnywhere) return 'land';
   const kind = decodeManaProfile(oracle.mana)?.kind;
   if (kind === 'rock' || kind === 'dork' || kind === 'landramp') return kind;
+  // An Exploration is not a source and never was, which is why it sat in
+  // 'spell' until phase 9. What it is, is a second land drop every turn, and
+  // the sequencer has had a land-drop loop to hang that on since this phase.
+  if (kind === 'extraland') return 'extraland';
   return landFront ? 'land' : 'spell';
 }
 
@@ -204,6 +250,7 @@ export function buildSimDeck(rows: readonly DeckRow[]): SimDeck {
       grantMask: colorMask(o.grants),
       copies: r.board === 'main' ? r.quantity : 0,
       commander: r.board === 'commander',
+      effect: decodeEffectProfile(o.effect),
     });
 
     if (r.board === 'main') {
@@ -242,5 +289,17 @@ export function buildSimDeck(rows: readonly DeckRow[]): SimDeck {
     for (let c = 0; c < cards[i]!.copies; c++) library[at++] = i;
   }
 
-  return { cards, library, commanders, hasManaData: profiled > 0 };
+  const coverage: SimCoverage = { library: libraryCopies, lands: 0, mana: 0, effects: 0, floored: 0, blanks: 0 };
+  for (const card of cards) {
+    if (card.copies <= 0) continue;
+    if (card.role === 'land' || card.role === 'fetch') coverage.lands += card.copies;
+    else if (card.role !== 'spell') coverage.mana += card.copies;
+    else if (card.effect) coverage.effects += card.copies;
+    else coverage.blanks += card.copies;
+    // Counted apart from the buckets above, not instead of them: a Read the
+    // Bones is modelled *and* flagged, and both facts belong on the line.
+    if (card.effect?.unknown) coverage.floored += card.copies;
+  }
+
+  return { cards, library, commanders, hasManaData: profiled > 0, coverage };
 }

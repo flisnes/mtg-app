@@ -143,6 +143,22 @@ export async function loadOracleTags(): Promise<void> {
 }
 
 /**
+ * A tag and everything under it, as dictionary indices to test `OracleCard.tags`
+ * against, or null when the vocabulary is not loaded or has no such slug.
+ *
+ * The same closure `otag:` search resolves to, but handed over directly rather
+ * than through the query parser, because an unresolved `otag:draw` there falls
+ * back to a *name* search and quietly answers a different question. A caller
+ * that needs to know the difference between "no draw cards" and "we could not
+ * ask" has to get a null, and this is the only way to get one.
+ */
+export function oracleTagClosure(slug: string): ReadonlySet<number> | null {
+  if (!index) return null;
+  const id = index.bySlug.get(slug);
+  return id === undefined ? null : closure(index, id);
+}
+
+/**
  * Forget the loaded vocabulary so the next search fetches it again. Called
  * after a card-DB import: the tags artifact only appeared in the manifest with
  * v0.145.0, so a client that looked before the rebuilt DB was published cached

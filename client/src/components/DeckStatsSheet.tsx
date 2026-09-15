@@ -9,6 +9,8 @@ import { ManaFixPanel } from './ManaFixPanel.js';
 import { OnCurvePanel } from './OnCurvePanel.js';
 import { DeckTrajectory } from './DeckTrajectory.js';
 import { buildSimDeck } from '../analysis/simDeck.js';
+import { missedDrawCopies } from '../analysis/coverage.js';
+import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { defaultSimOptions } from '../analysis/simulate.js';
 import { useSimulation } from '../analysis/useSimulation.js';
 import { MulliganPanel } from './MulliganPanel.js';
@@ -114,6 +116,11 @@ export function DeckStatsSheet({
   const simOpts = useMemo(() => defaultSimOptions(format, onPlay), [format, onPlay]);
   const sim = useSimulation(simDeck, simOpts);
   const simResult = sim.kind === 'done' ? sim.result : sim.kind === 'running' ? sim.previous : undefined;
+  // How many of the deck's blanks the tags say should have drawn you something.
+  // Depends on `tagsReady` because the vocabulary loads off IndexedDB after the
+  // first render, and a memo that doesn't watch for it reports null forever.
+  const tagsReady = useOracleTags();
+  const missedDraw = useMemo(() => missedDrawCopies(rows), [rows, tagsReady]);
 
   return (
     <Sheet onClose={onClose} title={`Deck stats: ${name}`} className="deck-stats-sheet">
@@ -229,15 +236,7 @@ export function DeckStatsSheet({
           ) : !simResult ? (
             <p className="deck-stats-verdict sim-waiting">Dealing {simOpts.games.toLocaleString()} games…</p>
           ) : (
-            <>
-              <DeckTrajectory result={simResult} />
-              <p className="fine-print">
-                An average game, over {simResult.games.toLocaleString()} of them. Each turn it plays a land, then spends what it has:
-                ramp first, then the rest of the hand, priciest first. Everything that is not ramp resolves as a blank — a draw spell
-                that draws nothing, a Treasure that never appears — so every line here is a floor rather than an estimate, and the
-                decks it is least fair to are the ones doing the most.
-              </p>
-            </>
+            <DeckTrajectory result={simResult} coverage={simDeck.coverage} missedDraw={missedDraw} />
           )}
 
           <OnCurvePanel status={sim} opts={simOpts} hasManaData={simDeck.hasManaData} />

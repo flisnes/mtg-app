@@ -1,4 +1,4 @@
-// The older half of the changelog (0.147.9 down to 0.98.0), split out of
+// The older half of the changelog (0.148.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,16 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.148.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'The card sheet’s ⋯ menu has "Format legality": the seven formats we track with the card’s standing in each. Green legal, red banned, amber restricted, grey not legal.',
+      },
+    ],
+  },
   {
     version: '0.147.9',
     changes: [

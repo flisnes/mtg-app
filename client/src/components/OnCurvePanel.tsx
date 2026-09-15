@@ -156,8 +156,9 @@ function Report({
         A goldfish: nobody is across the table and the play pattern is fixed. It keeps a seven holding two to five lands, bottoms the
         spare land or the priciest spell, plays a land every turn (an untapped one when a card in hand costs exactly one more than it
         has, otherwise the tapland while it is free), cracks a fetch for the land that widens its colors, then spends the turn down:
-        ramp first and priciest first, then the rest of the hand, with a coin flip between equals. Everything that is not ramp resolves
-        as a blank, so a deck built on card selection, Treasure, rituals or cost reducers reads worse here than it plays.
+        ramp first and priciest first, then the rest of the hand, with a coin flip between equals. A spell that draws, loots, mills,
+        digs or makes Treasure now does it; a ritual, a cost reducer and every effect behind a trigger still resolve as nothing, so a
+        deck built on those reads worse here than it plays. How much of your deck that is, is on the line under the charts above.
       </p>
     </>
   );

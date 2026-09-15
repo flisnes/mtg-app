@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { SimCoverage } from '../analysis/simDeck.js';
 import type { SimResult } from '../analysis/simulate.js';
 
 // How the game unfolds, turn by turn — phase 7, and the first thing in this
@@ -38,7 +39,16 @@ interface Series {
   dashed: boolean;
 }
 
-export function DeckTrajectory({ result }: { result: SimResult }) {
+export function DeckTrajectory({
+  result,
+  coverage,
+  missedDraw,
+}: {
+  result: SimResult;
+  coverage: SimCoverage;
+  /** Draw-tagged copies that resolve as blanks, or null if the tags never loaded. */
+  missedDraw: number | null;
+}) {
   const turns = Math.min(CHART_TURNS, result.maxTurn);
   const mana: Series[] = [
     { name: 'available', values: result.manaByTurn, color: SERIES_A, dashed: false },
@@ -58,15 +68,62 @@ export function DeckTrajectory({ result }: { result: SimResult }) {
       <h4 className="deck-stats-head">Cards</h4>
       <TrendChart series={cards} turns={turns} unit="cards" />
       <p className="fine-print">{cardsNote(result, turns)}</p>
+
+      <p className="fine-print">
+        An average game, over {result.games.toLocaleString()} of them. Each turn it plays its land drops, then spends what it has:
+        ramp first, then the rest of the hand, priciest first, with a coin flip between cards it has no reason to prefer. The
+        policy is part of the answer, so when it changes between releases these lines move with it.
+      </p>
+      <p className="fine-print">{coverageNote(coverage, missedDraw)}</p>
     </>
   );
 }
 
 /**
- * The gap between the two mana lines, which is the point of the chart. It runs
- * wide on purpose and the reason has to be said out loud: a spell that draws
- * you a card resolves here as a blank, so nothing it would have bought is in
- * hand to spend the next turn's mana on.
+ * §11.4's coverage report, and the only thing on this panel that is about the
+ * model rather than about the deck.
+ *
+ * Every card the sequencer cannot read is an effect it fails to *apply*, never
+ * one it invents, so these curves are systematically pessimistic and the bias
+ * is worst for the decks doing the most interesting things. The fix is not to
+ * model more cards, it is to say how many were modelled, which turns the
+ * pessimism from something load-bearing into something a reader can price in.
+ *
+ * "Resolves as nothing" is not an accusation. A removal spell doing nothing to
+ * your hand, your library or your mana is the model being right about it. The
+ * sentence that follows is the one that matters.
+ */
+function coverageNote(c: SimCoverage, missedDraw: number | null): string {
+  const modelled = c.lands + c.mana + c.effects;
+  const parts: string[] = [];
+  if (c.mana > 0) parts.push(`${c.mana} that make mana`);
+  if (c.effects > 0) parts.push(`${c.effects} for what they do to your hand`);
+  const how = parts.length > 0 ? `: ${c.lands} lands, ${parts.join(', ')}` : `, all of them lands`;
+  const head = `Of ${c.library} cards in your library, this model plays out ${modelled}${how}.`;
+
+  const rest: string[] = [];
+  if (c.blanks > 0) {
+    rest.push(`The other ${c.blanks} are cast and resolve as nothing, which is the right answer for a removal spell.`);
+  }
+  if (missedDraw && missedDraw > 0) {
+    rest.push(
+      `${missedDraw} of them ${missedDraw === 1 ? 'is a card' : 'are cards'} the database calls a draw spell whose draw hangs off a trigger or a condition we don't read, so every line above is a floor rather than an estimate.`,
+    );
+  } else if (c.blanks > 0) {
+    rest.push('Anything they would have drawn you is missing from the lines above, so read them as a floor.');
+  }
+  if (c.floored > 0) {
+    rest.push(`${c.floored} of the amounts we do read are floors, the way a "draw X" has to be.`);
+  }
+  return [head, ...rest].join(' ');
+}
+
+/**
+ * The gap between the two mana lines, which is the point of the chart. Some of
+ * it is a real curve problem and some of it is still the model: the cards it
+ * cannot read resolve as blanks, so nothing they would have found is in hand to
+ * spend the next turn's mana on. The coverage line below says how much of the
+ * deck that is, so this note no longer has to guess at it.
  */
 function manaNote(result: SimResult, turns: number): string {
   let worstTurn = 1;
@@ -82,7 +139,7 @@ function manaNote(result: SimResult, turns: number): string {
     result.manaSpentByTurn[worstTurn] ?? 0,
   )} of it`;
   if (worstGap < 0.75) return `${at}, which is about as tight as a curve gets.`;
-  return `${at}. That gap is the widest in the game, and some of it is real: the rest is this model casting your draw spells as blanks, so nothing they would have found is in hand to spend it on.`;
+  return `${at}. That gap is the widest in the game, and some of it is real: the rest is the cards this model can't read, which cost you the mana and find you nothing.`;
 }
 
 function cardsNote(result: SimResult, turns: number): string {

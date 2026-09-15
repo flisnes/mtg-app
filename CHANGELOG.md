@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.157.0
+
+- **The simulator stops casting your draw spells as blanks.** A card that draws, loots, mills, surveils, scries or makes a Treasure now does it: the cards go into your hand, the Treasure goes onto the battlefield and pays for something, and the "How the game unfolds" charts move accordingly. A Phyrexian Arena keeps drawing every upkeep, a Temple scries as it enters, and an Exploration is a second land drop every turn instead of a card that does nothing.
+- **A Treasure keeps until you need it.** It is made untapped and spendable the same turn, and it is only sacrificed on a turn your spending actually reaches past your lands and rocks.
+- **New line under the charts: how much of your deck the model actually plays out.** "Of 100 cards in your library, this model plays out 70: 40 lands, 2 that make mana, 28 for what they do to your hand." It also names the cards it knows it is missing, using the same oracle tags the `otag:` search runs on: a draw spell whose draw hangs off a combat trigger is counted and said out loud rather than quietly left off the curve.
+- **The lines are still a floor, and now you can see by how much.** Everything the model cannot read costs you the mana and finds you nothing, which is the right answer for a removal spell and the wrong one for a deck built on triggers.
+- The simulator flips a coin wherever its policy has no real preference: which of two equally good lands to play, which of four identical lands to fetch. Hand order used to decide, and hand order is not a decision.
+
 ## 0.156.0
 
 - **The card database now knows what your spells do, not just what they cost.** Every card that draws, discards, mills, surveils, scries or makes a Treasure when it resolves now carries those numbers. 1,483 cards out of 36,636 earned one.

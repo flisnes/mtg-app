@@ -1,8 +1,8 @@
-import type { DeckFormat } from '@mtg/shared';
+import type { DeckFormat, EffectProfile } from '@mtg/shared';
 import { canPay, maxMatching, type ManaUnit, type UnitGroup } from './canPay.js';
 import { handSize } from './gameModel.js';
 import { KEEP_ANYTHING_AT } from './mulligan.js';
-import { makeRng, shuffle } from './rng.js';
+import { makeRng, shuffle, type Rng } from './rng.js';
 import { bindingPips, type ParsedCost, type Pip } from './manaCost.js';
 import { popcount, UNIT_BY_MASK, type SimCard, type SimDeck } from './simDeck.js';
 
@@ -41,6 +41,25 @@ const MAX_SOURCES = 64;
  */
 const MAX_CASTS_PER_TURN = 8;
 
+/**
+ * A Treasure taps for one mana of any colour — WUBRG, and not {C}, which is
+ * the one bit of MASK_BITS it does not light up.
+ */
+const TREASURE_MASK = 0b11111;
+
+/** Extra land drops honoured in a turn. Azusa and a friend is already a lot. */
+const MAX_EXTRA_LANDS = 4;
+
+/** Cards one effect may put into your hand. Guards a misread "draw X". */
+const MAX_DRAW_PER_EFFECT = 12;
+
+/**
+ * Room for the hand. Seven plus eight turns of draw steps never came near the
+ * old 96 and a deck full of card draw still does not, but every point that
+ * grows the hand now checks the bound rather than assuming it.
+ */
+const MAX_HAND = 128;
+
 /** Karsten's simulations ship a hand with fewer than two lands; so does this one. */
 export const DEFAULT_KEEP_MIN = 2;
 export const DEFAULT_KEEP_MAX = 5;
@@ -55,6 +74,15 @@ export interface SimOptions {
   keepMax: number;
   /** Off for the acceptance test, which needs the simulator to be the hypergeometric. */
   mulligan: boolean;
+  /**
+   * Resolve what a spell does, rather than casting it as a blank. Phase 9's
+   * master switch, and it is a switch for two reasons (§11.8). The phase 5
+   * acceptance test — mulligans off, one colour, no ramp, the sim agreeing with
+   * the exact hypergeometric — only passes with effects off, because a deck
+   * that draws extra cards is no longer the distribution the formula describes.
+   * And turning one family on at a time is how its contribution gets measured.
+   */
+  effects: boolean;
   seed: number;
 }
 
@@ -66,6 +94,7 @@ export const defaultSimOptions = (format: DeckFormat | undefined, onPlay: boolea
   keepMin: DEFAULT_KEEP_MIN,
   keepMax: DEFAULT_KEEP_MAX,
   mulligan: true,
+  effects: true,
   seed: 0x5eed,
 });
 
@@ -146,16 +175,16 @@ export interface SimResult {
   commanders: SimCardResult[];
   /** The distinct printed costs in the library, worst first. The report to act on. */
   costs: SimCostGroup[];
-  /** Mean mana available, indexed by turn. */
+  /** Mean mana available, indexed by turn. Treasures made this turn included. */
   manaByTurn: number[];
   /**
    * Mean mana actually spent on spells, indexed by turn. The gap against
    * `manaByTurn` is the thing no other panel in this sheet can see: mana you
-   * had and had nothing to do with. It runs high, because a spell that draws
-   * you a card resolves here as a blank and never buys you the next one.
+   * had and had nothing to do with. It still runs high, because the cards this
+   * model cannot read resolve as blanks and buy you nothing.
    */
   manaSpentByTurn: number[];
-  /** Mean cards off the top of the library by end of turn: the opener plus draws. */
+  /** Mean cards into your hand from the library by end of turn: the opener plus draws. */
   cardsSeenByTurn: number[];
   /** Mean cards left in hand at end of turn, after the turn's spells have left it. */
   handSizeByTurn: number[];
@@ -186,11 +215,13 @@ export function halfWidth(p: number, games: number): number {
  *      lands, else ship it. Bottom an excess land when the hand is more than
  *      half lands, otherwise the most expensive spell. Keep any five.
  *   2. Draw for turn, except turn one on the play.
- *   3. Play a land, always, if there is one. Which land: if something in hand
- *      costs exactly one more than the mana already online, take an untapped
- *      one; otherwise dump a tapland now, while it is free. Ties go to the land
- *      that adds a color you don't have, and a modal card stays in hand while a
- *      real land will do.
+ *   3. Play a land, always, if there is one, and one more for every extra land
+ *      drop you have in play. Which land: if something in hand costs exactly
+ *      one more than the mana already online, take an untapped one; otherwise
+ *      dump a tapland now, while it is free. Ties go to the land that adds a
+ *      color you don't have, a modal card stays in hand while a real land will
+ *      do, and a tie the policy is genuinely indifferent about is a coin flip
+ *      rather than hand order.
  *   4. A fetch goes and gets whichever land widens your colors most, and that
  *      land leaves the library. Eight fetches over one Island are one blue
  *      source here, the same as at the table.
@@ -201,9 +232,14 @@ export function halfWidth(p: number, games: number): number {
  *      the three-drop is a source next turn and cast after it is a card in
  *      hand; then the rest of the hand, priciest first, until the mana is gone.
  *      A tie between equals is a coin flip rather than decklist order.
- *   7. Everything that is not ramp resolves as a blank. It leaves your hand and
- *      it costs you the mana, and it does not draw, mill or make a Treasure.
- *      That is a one-directional error: every curve here is a floor.
+ *   7. A card the database has an effect profile for resolves it: cards into
+ *      hand, cards out of it, cards off the top into the graveyard, Treasures
+ *      onto the battlefield, and a dig that goes looking for a land only when
+ *      you have none. A Treasure is cracked the first turn the spending
+ *      actually reaches it. Everything else still resolves as a blank, which
+ *      is right for a Lightning Bolt and wrong for every draw spell whose draw
+ *      hangs off a trigger the pipeline would not read. So the curves are
+ *      still a floor, and `SimDeck.coverage` is how far off the floor they are.
  */
 export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: number) => void): SimResult {
   const cards = deck.cards;
@@ -236,8 +272,8 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
   const goalPips: Pip[][] = groupRep.map((i) => bindingPips(cards[i]!.cost!));
 
   const library = new Int32Array(deckSize);
-  const hand = new Int32Array(96);
-  const landChoices = new Int32Array(96);
+  const hand = new Int32Array(MAX_HAND);
+  const landChoices = new Int32Array(MAX_HAND);
   const srcMask = new Int32Array(MAX_SOURCES);
   const srcUnits = new Int32Array(MAX_SOURCES);
   const srcOnline = new Int32Array(MAX_SOURCES);
@@ -249,9 +285,31 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
   const srcIsLand = new Uint8Array(MAX_SOURCES);
   /** Which card it is, so a Karoo can hand one back to you. */
   const srcCard = new Int32Array(MAX_SOURCES);
+  /** A Treasure, so it can be sacrificed for the mana it just paid. */
+  const srcTreasure = new Uint8Array(MAX_SOURCES);
   const unitGroups: UnitGroup[] = [];
+  /** Permanents with a recurring effect, as card indices. Phyrexian Arena. */
+  const recurring = new Int32Array(MAX_SOURCES);
+  let recurLen = 0;
+  /** Land drops beyond the first, from an Exploration or an Azusa in play. */
+  let extraLands = 0;
   /** Sources on the battlefield. Lives out here so the pool builder can see it. */
   let srcLen = 0;
+  /**
+   * The hand and the library, out here for the same reason: the effect
+   * resolvers below move all four of these and closing over them beats
+   * threading them through five call signatures.
+   *
+   * `top` is the library pointer and `seen` is what reached your hand off it.
+   * They used to be the same number, and they stop being the same number the
+   * moment anything mills: a card binned off the top has left the library
+   * without you ever seeing it, and the cards chart is about what you hold.
+   */
+  let handLen = 0;
+  let libLen = 0;
+  let top = 0;
+  let seen = 0;
+  let colorsHeld = 0;
   /** Colors every land you control also makes, from an Urborg or a Lantern in play. */
   let grantMask = 0;
 
@@ -306,9 +364,23 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
     srcOneColor[srcLen] = card.oneColor ? 1 : 0;
     srcIsLand[srcLen] = card.role === 'land' || card.role === 'fetch' ? 1 : 0;
     srcCard[srcLen] = index;
+    srcTreasure[srcLen] = 0;
     srcLen++;
     grantMask |= card.grantMask;
     return true;
+  };
+
+  /** Swap-remove a source. The parallel arrays all move together or not at all. */
+  const dropSource = (at: number): void => {
+    srcLen--;
+    srcMask[at] = srcMask[srcLen]!;
+    srcUnits[at] = srcUnits[srcLen]!;
+    srcOnline[at] = srcOnline[srcLen]!;
+    srcExpires[at] = srcExpires[srcLen]!;
+    srcOneColor[at] = srcOneColor[srcLen]!;
+    srcIsLand[at] = srcIsLand[srcLen]!;
+    srcCard[at] = srcCard[srcLen]!;
+    srcTreasure[at] = srcTreasure[srcLen]!;
   };
 
   /**
@@ -340,17 +412,157 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
       }
       if (pick < 0) break;
       if (card.bounce) back = srcCard[pick]!;
-      srcLen--;
-      srcMask[pick] = srcMask[srcLen]!;
-      srcUnits[pick] = srcUnits[srcLen]!;
-      srcOnline[pick] = srcOnline[srcLen]!;
-      srcExpires[pick] = srcExpires[srcLen]!;
-      srcOneColor[pick] = srcOneColor[srcLen]!;
-      srcIsLand[pick] = srcIsLand[srcLen]!;
-      srcCard[pick] = srcCard[srcLen]!;
+      dropSource(pick);
     }
     return back;
   };
+  // --- Effect resolution (phase 9) -----------------------------------------
+  // What a card does when it resolves, as far as OracleCard.effect can say.
+  // Every one of these is written to err downward, because §11.4's whole point
+  // is that the curves are only honest while they are a floor.
+
+  /** Cards off the top into your hand. A tutor comes through here too, see below. */
+  const drawCards = (count: number): void => {
+    for (let k = 0; k < count; k++) {
+      if (top >= libLen || handLen >= hand.length) return;
+      hand[handLen++] = library[top++]!;
+      seen++;
+    }
+  };
+
+  /**
+   * Cards out of your hand. The commander is exempt: it is in `hand` as a
+   * bookkeeping convenience and discarding it would be a rules error, not a
+   * conservative approximation.
+   */
+  const discardCards = (count: number): void => {
+    for (let k = 0; k < count; k++) {
+      const pick = pickDiscard(cards, hand, handLen);
+      if (pick < 0) return;
+      hand[pick] = hand[--handLen]!;
+    }
+  };
+
+  /** Cards off the top into the graveyard. They leave the library; you never see them. */
+  const millCards = (count: number): void => {
+    for (let k = 0; k < count && top < libLen; k++) top++;
+  };
+
+  /**
+   * Scry and surveil, modelled as the one thing they are unambiguously for:
+   * not missing a land drop. Look at the top `count`; if you are holding no
+   * land at all, bring the first one you see to the top.
+   *
+   * It never digs for action, never bottoms anything and never bins anything,
+   * so it can only make the model less flooded and never more explosive — the
+   * floor direction. What it leaves out is surveil's whole distinguishing half,
+   * the graveyard, which is phase 10's chart and needs the yard modelled first.
+   */
+  const dig = (count: number): void => {
+    if (count <= 0 || top >= libLen) return;
+    for (let i = 0; i < handLen; i++) if (cards[hand[i]!]!.land) return;
+    const upto = Math.min(top + count, libLen);
+    for (let i = top; i < upto; i++) {
+      if (!cards[library[i]!]!.land) continue;
+      const found = library[i]!;
+      library[i] = library[top]!;
+      library[top] = found;
+      return;
+    }
+  };
+
+  /**
+   * Treasures onto the battlefield, usable the turn they are made.
+   *
+   * They go into the pool as well as onto the field, because `units` is what
+   * the payment solver is already holding this turn and a Treasure that cannot
+   * fix a colour until next turn is not a Treasure. What makes them keep rather
+   * than evaporate is the reconciliation after the spend loop: whatever the
+   * turn's spending actually dipped into gets sacrificed, and the rest is still
+   * there next turn. That is how anyone plays them — lands and rocks first,
+   * Treasure last, because the Treasure is the one that does not come back.
+   */
+  const makeTreasures = (count: number, turn: number): number => {
+    let made = 0;
+    for (let k = 0; k < count; k++) {
+      if (srcLen >= MAX_SOURCES) break;
+      srcMask[srcLen] = TREASURE_MASK;
+      srcUnits[srcLen] = 1;
+      srcOnline[srcLen] = turn;
+      srcExpires[srcLen] = 0;
+      srcOneColor[srcLen] = 0;
+      srcIsLand[srcLen] = 0;
+      srcCard[srcLen] = -1;
+      srcTreasure[srcLen] = 1;
+      srcLen++;
+      units.push(UNIT_BY_MASK[TREASURE_MASK]!);
+      colorsHeld |= TREASURE_MASK;
+      made++;
+    }
+    return made;
+  };
+
+  /** Treasures on the battlefield right now, cracked or not. */
+  const countTreasures = (): number => {
+    let n = 0;
+    for (let s = 0; s < srcLen; s++) if (srcTreasure[s]) n++;
+    return n;
+  };
+
+  /** Sacrifice `count` of them, newest first — they are interchangeable. */
+  const crackTreasures = (count: number): void => {
+    for (let k = 0; k < count; k++) {
+      let at = -1;
+      for (let s = srcLen - 1; s >= 0; s--) {
+        if (srcTreasure[s]) {
+          at = s;
+          break;
+        }
+      }
+      if (at < 0) return;
+      dropSource(at);
+    }
+  };
+
+  /**
+   * Resolve one card's effect, and return the mana it added to this turn.
+   *
+   * Order matters and it is the order the card is written in: you draw before
+   * you discard, so a loot can throw away the card it just found. Milling comes
+   * off the same top the draw did, and the dig happens last because it is about
+   * the *next* draw rather than this one.
+   *
+   * A tutor is resolved as a draw off the top, which is the one place here that
+   * is knowingly, badly wrong in the right direction: a Demonic Tutor finds the
+   * card that wins the game and this hands you a random one. EFFECT_TUTOR is on
+   * the profile so a later phase can do better; hand size is the same either
+   * way, which is what these charts read.
+   */
+  /**
+   * A permanent arrived, by land drop or by casting. A recurring effect joins
+   * the upkeep list and fires from *next* turn, because its trigger is an
+   * upkeep it has already missed; a one-shot one resolves now. Returns the mana
+   * it added to this turn, which only a Treasure ever does.
+   */
+  const enters = (index: number, card: SimCard, turn: number): number => {
+    const effect = card.effect;
+    if (!effect) return 0;
+    if (effect.repeatable) {
+      if (recurLen < recurring.length) recurring[recurLen++] = index;
+      return 0;
+    }
+    return resolveEffect(effect, turn);
+  };
+
+  const resolveEffect = (effect: EffectProfile, turn: number): number => {
+    drawCards(Math.min(effect.draw, MAX_DRAW_PER_EFFECT));
+    if (effect.wholeHand) discardCards(handLen);
+    else discardCards(effect.discard);
+    millCards(effect.mill);
+    dig(Math.max(effect.surveil, effect.scry));
+    return effect.treasure > 0 ? makeTreasures(effect.treasure, turn) : 0;
+  };
+
   const firstCast = new Int32Array(n);
   const firstHeld = new Int32Array(n);
   const firstPay = new Int32Array(groups);
@@ -381,11 +593,13 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
     firstPay.fill(0);
     srcLen = 0;
     grantMask = 0;
-    let colorsHeld = 0;
-    let handLen = 0;
-    /** Cards still in the library, which a fetch shrinks. */
-    let libLen = deckSize;
-    let top = 0;
+    recurLen = 0;
+    extraLands = 0;
+    colorsHeld = 0;
+    handLen = 0;
+    libLen = deckSize;
+    top = 0;
+    seen = 0;
 
     // --- The opener, and however many mulligans it takes ---------------------
     for (let m = 0; ; m++) {
@@ -415,6 +629,10 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
       }
       handSizeSum += handLen;
       if (handLen < 7) mulliganed++;
+      // Seven cards came off the library whether you kept them or not, which
+      // is what the cards chart counted before there was anything else to
+      // count and what it still counts now.
+      seen = top;
       break;
     }
     // The commander is a card you always have, from a zone you never draw, so
@@ -422,7 +640,21 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
     for (const c of deck.commanders) hand[handLen++] = c;
 
     for (let turn = 1; turn <= maxTurn; turn++) {
-      if (!(turn === 1 && opts.onPlay) && top < libLen) hand[handLen++] = library[top++]!;
+      // Upkeep, before the draw step, because that is where Phyrexian Arena
+      // sits and the difference is one card in your opener's worth of ordering.
+      // A recurring effect that makes Treasure makes it now, and the pool
+      // rebuild below picks it up off the battlefield rather than off the
+      // return value — which is why that return value is dropped here and
+      // added by hand only inside the spend loop, after the pool is fixed.
+      for (let r = 0; r < recurLen; r++) {
+        const effect = cards[recurring[r]!]!.effect;
+        if (effect) resolveEffect(effect, turn);
+      }
+
+      if (!(turn === 1 && opts.onPlay) && top < libLen && handLen < MAX_HAND) {
+        hand[handLen++] = library[top++]!;
+        seen++;
+      }
 
       // The mana already online, and the pool it makes, both of which the land
       // drop is a decision about.
@@ -443,34 +675,52 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
         goalCmc = card.cmc;
       }
 
-      // --- Land drop --------------------------------------------------------
-      // Candidates first, because most hands hold one land and one land is not
-      // a decision. Scoring costs a matching solve apiece and this skips it.
-      let candidates = 0;
-      let best = -1;
-      for (let i = 0; i < handLen; i++) {
-        if (!cards[hand[i]!]!.land) continue;
-        landChoices[candidates++] = i;
-        best = i;
-      }
-      if (candidates > 1) {
-        let bestScore = -1;
-        for (let c = 0; c < candidates; c++) {
-          const i = landChoices[c]!;
-          const score = landScore(cards[hand[i]!]!, colorsHeld, needUntapped, goal, units);
-          if (score > bestScore) {
-            bestScore = score;
+      // --- Land drops -------------------------------------------------------
+      // One, plus whatever an Exploration or an Azusa on the battlefield is
+      // worth. `needUntapped` and `goal` are read once for the turn rather than
+      // recomputed between drops: the second drop is a rare path and the first
+      // one is the one the choice matters for.
+      for (let drop = 0; drop <= extraLands; drop++) {
+        // Candidates first, because most hands hold one land and one land is
+        // not a decision. Scoring costs a matching solve apiece and this skips
+        // it.
+        let candidates = 0;
+        let best = -1;
+        for (let i = 0; i < handLen; i++) {
+          if (!cards[hand[i]!]!.land) continue;
+          landChoices[candidates++] = i;
+          best = i;
+        }
+        if (candidates > 1) {
+          let bestScore = -1;
+          let ties = 0;
+          for (let c = 0; c < candidates; c++) {
+            const i = landChoices[c]!;
+            const score = landScore(cards[hand[i]!]!, colorsHeld, needUntapped, goal, units);
+            if (score < bestScore) continue;
+            // §11.3: random where the policy is genuinely indifferent, and
+            // nowhere else. Two Islands score the same and it does not matter
+            // which one you play; letting hand order decide is free and wrong,
+            // because swap-removal makes that order anything but uniform.
+            if (score === bestScore) {
+              ties++;
+              if (rng.int(ties) !== 0) continue;
+            } else {
+              ties = 1;
+              bestScore = score;
+            }
             best = i;
           }
         }
-      }
-      if (best >= 0) {
-        landDrops[turn] = landDrops[turn]! + 1;
+        if (best < 0) break;
+        // The land-drop percentage is about the drop everybody gets, so an
+        // Azusa turn still counts once rather than three times.
+        if (drop === 0) landDrops[turn] = landDrops[turn]! + 1;
         const cardIndex = hand[best]!;
         const card = cards[cardIndex]!;
         hand[best] = hand[--handLen]!;
         if (card.role === 'fetch') {
-          const at = findLand(cards, library, top, libLen, colorsHeld, card.fetchTargets, goal, units);
+          const at = findLand(cards, library, top, libLen, colorsHeld, card.fetchTargets, goal, units, rng);
           if (at >= 0) {
             const index = library[at]!;
             const land = cards[index]!;
@@ -480,18 +730,26 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
               library[at] = library[--libLen]!;
               const back = payEntryCost(land);
               if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
+              if (opts.effects && land.effect) enters(index, land, turn);
             }
           }
         } else if (addSource(cardIndex, card, turn + (card.tapped === 'always' ? 1 : 0), turn)) {
           colorsHeld |= card.mask;
           const back = payEntryCost(card);
           if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
+          // A Temple scries as it enters, and half the taplands printed since
+          // Theros do something on the way in. Free, now that there is a
+          // resolver to call.
+          if (opts.effects && card.effect) enters(cardIndex, card, turn);
         }
       }
 
       // --- What could you pay for, with everything untapped -----------------
-      const available = buildPool(turn);
-      manaSum[turn] = manaSum[turn]! + available;
+      // Not const any more: a Treasure made mid-turn is mana this turn, and it
+      // has to reach both the spend loop's budget and the chart. Recorded after
+      // the turn rather than here, so the available line is never below the
+      // spent line — the trajectory chart's right-hand labels lean on that.
+      let available = buildPool(turn);
 
       // Which of the cards in hand the mana covers. Only cards in hand: the
       // manabase number this feeds is conditional on holding the card, so
@@ -584,7 +842,7 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
           // is Rampant Growth exactly and Nature's Lore a turn late, which is
           // the conservative half of the two.
           for (let k = 0; k < card.adds; k++) {
-            const at = findLand(cards, library, top, libLen, colorsHeld, null, goal, units);
+            const at = findLand(cards, library, top, libLen, colorsHeld, null, goal, units, rng);
             if (at < 0) break;
             const found = library[at]!;
             const land = cards[found]!;
@@ -598,15 +856,36 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
           // on top of that, so either way it pays for something from next turn.
         } else if (card.role === 'rock' || card.role === 'dork') {
           if (addSource(index, card, turn + 1, turn)) colorsHeld |= card.mask;
+        } else if (card.role === 'extraland') {
+          // From next turn, not this one: this turn's land drop already
+          // happened, above, and an Exploration cast after it does not rewind
+          // the turn. Conservative by exactly one land drop, once.
+          if (extraLands < MAX_EXTRA_LANDS) extraLands++;
         }
-        // Everything else resolves as a blank. It left your hand and it cost
-        // you the mana, and what it *does* is phase 9's problem. That is the
-        // one-directional error the panel has to own up to: a draw spell that
-        // does not draw makes every curve here a floor rather than an estimate.
+        // And what the card *does*, which until this phase was nothing at all.
+        // A Treasure made here is mana this turn, so the budget grows under the
+        // loop's feet — which is the point of a Treasure and the reason `left`
+        // is recomputed from `available` at the top of every pass.
+        if (opts.effects) available += enters(index, card, turn);
+        // A card with no effect profile still resolves as a blank. For a
+        // Lightning Bolt that is correct; for a draw spell whose draw hangs off
+        // a trigger the pipeline would not read, it is the floor §11.4 warned
+        // about, and SimDeck.coverage is what says how much of the deck it is.
       }
 
+      // --- Treasures, reconciled -------------------------------------------
+      // Lands and rocks are spent first and a Treasure only when the turn runs
+      // past them, which is both how the cards are played and the only reading
+      // that lets a Treasure keep. Whatever the spending reached, gets cracked.
+      const treasures = countTreasures();
+      if (treasures > 0) {
+        const permanent = available - treasures;
+        if (spent > permanent) crackTreasures(Math.min(treasures, spent - permanent));
+      }
+
+      manaSum[turn] = manaSum[turn]! + available;
       spentSum[turn] = spentSum[turn]! + spent;
-      seenSum[turn] = seenSum[turn]! + top;
+      seenSum[turn] = seenSum[turn]! + seen;
       handSum[turn] = handSum[turn]! + handLen;
     }
 
@@ -692,9 +971,11 @@ function findLand(
   targets: readonly number[] | null,
   goal: readonly Pip[] | null,
   pool: ManaUnit[],
+  rng: Rng,
 ): number {
   let best = -1;
   let bestScore = -1;
+  let ties = 0;
   for (let i = from; i < to; i++) {
     const index = library[i]!;
     const card = cards[index]!;
@@ -712,10 +993,18 @@ function findLand(
       pool.length -= worth;
     }
     const score = matched * 1000 + popcount(card.mask & ~colorsHeld) * 10 + (card.tapped === 'always' ? 0 : 1);
-    if (score > bestScore) {
+    if (score < bestScore) continue;
+    // Four Islands left in the library are four identical answers, and taking
+    // the first is taking a position in a shuffled array — which is uniform
+    // today and stops being uniform the moment a fetch swap-removes into it.
+    if (score === bestScore) {
+      ties++;
+      if (rng.int(ties) !== 0) continue;
+    } else {
+      ties = 1;
       bestScore = score;
-      best = i;
     }
+    best = i;
   }
   return best;
 }
@@ -734,6 +1023,52 @@ function pickBottom(cards: SimCard[], hand: Int32Array, handLen: number): number
   let best = -1;
   for (let i = 0; i < handLen; i++) {
     const card = cards[hand[i]!]!;
+    const score = flooded
+      ? card.land
+        ? card.tapped === 'always'
+          ? 3
+          : 2
+        : 0
+      : card.land
+        ? 0
+        : Math.ceil(card.cmc);
+    if (score > best) {
+      best = score;
+      pick = i;
+    }
+  }
+  return pick;
+}
+
+/**
+ * Which card a loot throws away. The same judgement as `pickBottom` — a spare
+ * land when you are flooded, otherwise the card you are least likely to reach —
+ * with one card exempt.
+ *
+ * The commander sits in `hand` because it is available from turn one and never
+ * drawn, which is a bookkeeping convenience and not a claim that it can be
+ * discarded. Throwing it away would not be a conservative approximation, it
+ * would be a rules error that makes the deck look worse for no reason.
+ *
+ * Returns -1 when there is nothing left to discard, which is what a Faithless
+ * Looting off an empty hand should do.
+ */
+function pickDiscard(cards: SimCard[], hand: Int32Array, handLen: number): number {
+  let lands = 0;
+  let any = false;
+  for (let i = 0; i < handLen; i++) {
+    const card = cards[hand[i]!]!;
+    if (card.commander) continue;
+    any = true;
+    if (card.land) lands++;
+  }
+  if (!any) return -1;
+  const flooded = lands * 2 > handLen;
+  let pick = -1;
+  let best = -1;
+  for (let i = 0; i < handLen; i++) {
+    const card = cards[hand[i]!]!;
+    if (card.commander) continue;
     const score = flooded
       ? card.land
         ? card.tapped === 'always'

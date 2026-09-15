@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.157.0',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'The simulator resolves your spells instead of casting them as blanks. Draw, loot, mill, surveil, scry and Treasure all happen now, a Phyrexian Arena keeps drawing every upkeep, and an Exploration is a second land drop rather than a dead card. The "How the game unfolds" charts move with it.',
+      },
+      {
+        kind: 'added',
+        text:
+          'A line under those charts saying how much of your deck the model actually plays out, and naming the draw spells it knows it is missing. The curves are still a floor, but now you can see how far off the floor they are.',
+      },
+    ],
+  },
+  {
     version: '0.156.0',
     changes: [
       {
@@ -220,16 +235,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'Sort by release date, on every card list. Your own lists order by the printing you hold; the card database orders by when the card first came out. While that sort is on, each card shows its release year.',
-      },
-    ],
-  },
-  {
-    version: '0.148.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'The card sheet’s ⋯ menu has "Format legality": the seven formats we track with the card’s standing in each. Green legal, red banned, amber restricted, grey not legal.',
       },
     ],
   },

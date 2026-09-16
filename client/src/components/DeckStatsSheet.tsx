@@ -8,6 +8,7 @@ import { ColorSourcesPanel } from './ColorSourcesPanel.js';
 import { ManaFixPanel } from './ManaFixPanel.js';
 import { OnCurvePanel } from './OnCurvePanel.js';
 import { DeckTrajectory } from './DeckTrajectory.js';
+import { GameTraceSheet } from './GameTraceSheet.js';
 import { buildSimDeck } from '../analysis/simDeck.js';
 import { missedDrawCopies } from '../analysis/coverage.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
@@ -112,6 +113,7 @@ export function DeckStatsSheet({
   // table are two readings of the same twenty thousand games, so they share a
   // worker and a play/draw toggle rather than each heating the phone on its own.
   const [onPlay, setOnPlay] = useState(true);
+  const [tracing, setTracing] = useState(false);
   const simDeck = useMemo(() => buildSimDeck(rows), [rows]);
   const simOpts = useMemo(() => defaultSimOptions(format, onPlay), [format, onPlay]);
   const sim = useSimulation(simDeck, simOpts);
@@ -238,6 +240,16 @@ export function DeckStatsSheet({
           ) : (
             <DeckTrajectory result={simResult} coverage={simDeck.coverage} missedDraw={missedDraw} />
           )}
+          {/* Averages are either right or invisibly wrong. This is the way to
+              check: the same sequencer, one game, written down. */}
+          {simDeck.hasManaData && simDeck.library.length > 0 && (
+            <button type="button" className="deck-stats-line" onClick={() => setTracing(true)}>
+              <span className="deck-stats-bits">
+                <span>Watch one game play out</span>
+              </span>
+              <Icon name="chevronRight" />
+            </button>
+          )}
 
           <OnCurvePanel status={sim} opts={simOpts} hasManaData={simDeck.hasManaData} />
 
@@ -253,6 +265,7 @@ export function DeckStatsSheet({
           </p>
         </>
       )}
+      {tracing && <GameTraceSheet deck={simDeck} opts={simOpts} onClose={() => setTracing(false)} />}
     </Sheet>
   );
 }

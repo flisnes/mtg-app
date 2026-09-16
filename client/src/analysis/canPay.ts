@@ -69,14 +69,56 @@ const SINGLE_UNIT: Record<PipColor, ManaUnit> = {
   C: { colors: ['C'] },
 };
 
+/** In a PaymentPlan: this unit was not tapped at all. */
+export const PAY_UNUSED = -1;
+/** In a PaymentPlan: this unit was tapped, and its color did not matter. */
+export const PAY_GENERIC = -2;
+
+/**
+ * Not "can you pay" but "how did you pay": one assignment of mana to symbols,
+ * for the goldfish trace to read back as "Island taps for {U}".
+ *
+ * Only the trace wants this. Every other caller asks the yes/no question, and
+ * an assignment costs an allocation per solve, so it is opt-in rather than
+ * always returned.
+ *
+ * `pool` is the units the solve actually settled on, in a documented order:
+ * every unit in `units`, in order, then each group's units in group order, with
+ * that group's chosen color. A caller that knows which source pushed which unit
+ * can therefore read the assignment straight back onto its battlefield.
+ */
+export interface PaymentPlan {
+  pool: ManaUnit[];
+  /** The pips that ended up paid in colored mana, in matching order. */
+  pips: Pip[];
+  /**
+   * For each entry in `pips`, its index in `cost.pips`. A caller that knows
+   * which spell contributed which symbols to a shared cost can therefore say
+   * which land paid for which spell, and the pips get reordered on the way
+   * through (fixed first, then whichever hybrids were paid in colour), so
+   * identity is not enough to recover it — two copies of Counterspell share one
+   * parsed cost and so share its Pip objects.
+   */
+  pipSlot: number[];
+  /** For each index in `pool`: an index into `pips`, PAY_GENERIC, or PAY_UNUSED. */
+  byUnit: Int32Array;
+}
+
+/** Enough to say "it worked" when nobody asked for the assignment. */
+const YES: PaymentPlan = { pool: [], pips: [], pipSlot: [], byUnit: new Int32Array(0) };
+
 /**
  * Maximum number of pips that can be matched to distinct units. Kuhn's
  * algorithm: for each pip, walk its options looking for a free unit, bumping
  * an already-matched pip along an augmenting path when one exists.
+ *
+ * `out`, when given, comes back holding the assignment it found: for each unit,
+ * the pip it was matched to, or -1.
  */
-export function maxMatching(pips: readonly Pip[], units: readonly ManaUnit[]): number {
+export function maxMatching(pips: readonly Pip[], units: readonly ManaUnit[], out?: Int32Array): number {
   /** For each unit, the pip currently assigned to it. */
-  const takenBy = new Int32Array(units.length).fill(-1);
+  const takenBy = out ?? new Int32Array(units.length);
+  takenBy.fill(-1);
   let matched = 0;
 
   const augment = (pip: number, seen: Uint8Array): boolean => {
@@ -110,46 +152,76 @@ export function maxMatching(pips: readonly Pip[], units: readonly ManaUnit[]): n
  * the groups, bounded by MAX_GROUP_COMBOS.
  */
 export function canPay(cost: ParsedCost, units: readonly ManaUnit[], groups: readonly UnitGroup[] = []): boolean {
-  if (groups.length === 0) return payableWith(cost, units);
+  return solve(cost, units, groups, false) !== null;
+}
 
-  /** Groups worth enumerating, and everything that resolved to plain units on sight. */
-  const live: UnitGroup[] = [];
-  const settled: ManaUnit[] = [...units];
+/**
+ * The same solve, made to show its working. Null when the cost cannot be paid,
+ * which is exactly when `canPay` is false — the two share every line below, so
+ * the trace can never claim a cast the simulator refused or refuse one it made.
+ */
+export function explainPayment(
+  cost: ParsedCost,
+  units: readonly ManaUnit[],
+  groups: readonly UnitGroup[] = [],
+): PaymentPlan | null {
+  return solve(cost, units, groups, true);
+}
+
+function solve(
+  cost: ParsedCost,
+  units: readonly ManaUnit[],
+  groups: readonly UnitGroup[],
+  wantPlan: boolean,
+): PaymentPlan | null {
+  if (groups.length === 0) return payableWith(cost, units, wantPlan);
+
+  /** Groups worth enumerating, by index, and the color each settled one took. */
+  const live: number[] = [];
+  const fixedColor: (ManaUnit | null)[] = groups.map(() => null);
   let combos = 1;
 
-  for (const group of groups) {
+  for (let g = 0; g < groups.length; g++) {
+    const group = groups[g]!;
     if (group.count <= 0) continue;
     const choices = group.colors.length;
     // No color to choose, or more enumeration than we are willing to do: the
     // units become colorless mana, which is the safe direction — they still pay
     // generic and they claim no pip.
     if (choices === 0 || combos * choices > MAX_GROUP_COMBOS) {
-      for (let i = 0; i < group.count; i++) settled.push(GENERIC_UNIT);
+      fixedColor[g] = GENERIC_UNIT;
       continue;
     }
     // One color is not a choice, it is just mana.
     if (choices === 1) {
-      const unit = SINGLE_UNIT[group.colors[0]!];
-      for (let i = 0; i < group.count; i++) settled.push(unit);
+      fixedColor[g] = SINGLE_UNIT[group.colors[0]!];
       continue;
     }
     combos *= choices;
-    live.push(group);
+    live.push(g);
   }
-  if (live.length === 0) return payableWith(cost, settled);
 
+  // The pool is always laid out `units` first, then each group's units in group
+  // order, whichever way the enumeration goes. Without that the assignment a
+  // plan hands back could not be mapped to the permanent that produced it.
   for (let combo = 0; combo < combos; combo++) {
-    const pool = [...settled];
+    const chosen = [...fixedColor];
     let rest = combo;
-    for (const group of live) {
-      const color = group.colors[rest % group.colors.length]!;
+    for (const g of live) {
+      const group = groups[g]!;
+      chosen[g] = SINGLE_UNIT[group.colors[rest % group.colors.length]!];
       rest = Math.floor(rest / group.colors.length);
-      const unit = SINGLE_UNIT[color];
-      for (let i = 0; i < group.count; i++) pool.push(unit);
     }
-    if (payableWith(cost, pool)) return true;
+    const pool: ManaUnit[] = [...units];
+    for (let g = 0; g < groups.length; g++) {
+      const unit = chosen[g];
+      if (!unit) continue;
+      for (let i = 0; i < groups[g]!.count; i++) pool.push(unit);
+    }
+    const plan = payableWith(cost, pool, wantPlan);
+    if (plan) return plan;
   }
-  return false;
+  return null;
 }
 
 /**
@@ -162,16 +234,25 @@ export function canPay(cost: ParsedCost, units: readonly ManaUnit[], groups: rea
  * Pips with a way out ({2/W}, Phyrexian) are tried both ways: paid in color
  * when the color is there, paid in generic (or life) when it isn't.
  */
-function payableWith(cost: ParsedCost, units: readonly ManaUnit[]): boolean {
+function payableWith(cost: ParsedCost, units: readonly ManaUnit[], wantPlan: boolean): PaymentPlan | null {
   const fixed = bindingPips(cost);
   const flexible = cost.pips.filter((p) => p.genericOut !== null);
+  // Where each of those sat in the printed cost. Only the trace reads it, so it
+  // is built only when a plan is wanted.
+  const fixedSlots: number[] = [];
+  const flexSlots: number[] = [];
+  if (wantPlan) {
+    for (let i = 0; i < cost.pips.length; i++) {
+      (cost.pips[i]!.genericOut === null ? fixedSlots : flexSlots).push(i);
+    }
+  }
 
   if (flexible.length === 0 || flexible.length > MAX_FLEXIBLE) {
     // Past the cap, and in the ordinary case, pay every flexible pip the cheap
     // way: generic (or, for Phyrexian, life). That is always available, so it
     // can only under-report castability, never over-report it.
     const generic = cost.generic + flexible.reduce((n, p) => n + (p.genericOut ?? 0), 0);
-    return feasible(fixed, generic, units);
+    return feasible(fixed, fixedSlots, generic, units, wantPlan);
   }
 
   // Which flexible pips to pay in colored mana is a real choice: paying {2/R}
@@ -179,21 +260,48 @@ function payableWith(cost: ParsedCost, units: readonly ManaUnit[]): boolean {
   // a {R} elsewhere in the cost might have needed. Small enough to just try all.
   for (let mask = 0; mask < 1 << flexible.length; mask++) {
     const pips = [...fixed];
+    const slots = wantPlan ? [...fixedSlots] : fixedSlots;
     let generic = cost.generic;
     for (let i = 0; i < flexible.length; i++) {
       const pip = flexible[i]!;
-      if (mask & (1 << i)) pips.push(pip);
-      else generic += pip.genericOut ?? 0;
+      if (mask & (1 << i)) {
+        pips.push(pip);
+        if (wantPlan) slots.push(flexSlots[i]!);
+      } else generic += pip.genericOut ?? 0;
     }
-    if (feasible(pips, generic, units)) return true;
+    const plan = feasible(pips, slots, generic, units, wantPlan);
+    if (plan) return plan;
   }
-  return false;
+  return null;
 }
 
-function feasible(pips: readonly Pip[], generic: number, units: readonly ManaUnit[]): boolean {
-  if (units.length < pips.length + generic) return false;
-  if (pips.length === 0) return true;
-  return maxMatching(pips, units) === pips.length;
+function feasible(
+  pips: readonly Pip[],
+  slots: readonly number[],
+  generic: number,
+  units: readonly ManaUnit[],
+  wantPlan: boolean,
+): PaymentPlan | null {
+  if (units.length < pips.length + generic) return null;
+  if (!wantPlan) {
+    if (pips.length === 0) return YES;
+    return maxMatching(pips, units) === pips.length ? YES : null;
+  }
+
+  const byUnit = new Int32Array(units.length).fill(PAY_UNUSED);
+  if (pips.length > 0 && maxMatching(pips, units, byUnit) !== pips.length) return null;
+  // Whatever the matching left over pays the generic. Which spares they are
+  // does not matter — a maximum matching leaves exactly as many as any other
+  // assignment of the same size — so take them in battlefield order, which
+  // reads as "tap the lands you have left" rather than as an arbitrary pick.
+  let owed = generic;
+  for (let u = 0; u < units.length && owed > 0; u++) {
+    if (byUnit[u] !== PAY_UNUSED) continue;
+    byUnit[u] = PAY_GENERIC;
+    owed--;
+  }
+  if (owed > 0) return null;
+  return { pool: [...units], pips: [...pips], pipSlot: [...slots], byUnit };
 }
 
 /**

@@ -7606,3 +7606,124 @@ a.seg {
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- The goldfish trace: one game, written down (GameTraceSheet) ---- */
+/* Same flex trap as .deck-stats-sheet — this is a tall sheet and on a phone
+   every child would otherwise be squashed to make it fit. It scrolls instead. */
+.trace-sheet > * {
+  flex-shrink: 0;
+}
+.trace-opener {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  margin-bottom: 0.75rem;
+  background: var(--surface);
+}
+.trace-opener-head {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin-bottom: 0.3rem;
+}
+.trace-cards {
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.trace-bottomed {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-top: 0.3rem;
+}
+.trace-turn {
+  margin-bottom: 0.9rem;
+}
+.trace-turn-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.25rem;
+}
+.trace-turn-mana {
+  text-transform: none;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.trace-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.trace-line {
+  display: flex;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  padding: 0.1rem 0;
+}
+/* A fixed column for the marker, so the text of every line starts in the same
+   place and a turn's shape reads before any of its words do. */
+.trace-mark {
+  flex: none;
+  width: 0.9rem;
+  text-align: center;
+  color: var(--text-dim);
+}
+.trace-cast > .trace-mark,
+.trace-cast {
+  color: var(--text);
+}
+.trace-cast {
+  font-weight: 600;
+}
+.trace-land > .trace-mark {
+  color: var(--accent);
+}
+.trace-draw > .trace-mark {
+  color: var(--accent);
+}
+.trace-note,
+.trace-mana {
+  color: var(--text-dim);
+}
+.trace-effect {
+  color: var(--text-dim);
+}
+/* The tap breakdown: one permanent per row, indented under the spell it paid
+   for, and never in the spell's own weight. */
+.trace-taps {
+  display: block;
+  font-weight: 400;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  margin-top: 0.1rem;
+}
+.trace-tap {
+  display: block;
+  padding-left: 0.6rem;
+}
+.trace-tap::before {
+  content: '· ';
+}
+.trace-hand {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.trace-again {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0.25rem 0 0.75rem;
+}

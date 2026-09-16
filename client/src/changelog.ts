@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.157.1',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          '"Watch one game play out", under the deck stats charts. One game, turn by turn: what it drew, which land it played and which it passed over, every permanent it tapped and what that mana paid for, and why it stopped casting. Deal another whenever you want.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'Treasures stayed around too long. One spent to fix a colour rather than to add a mana was never sacrificed. The trace is what caught it.',
+      },
+    ],
+  },
+  {
     version: '0.157.0',
     changes: [
       {
@@ -225,16 +240,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'The card database learned two new things about every card to make that work, so expect a card-data update after this one. Bigger than usual, just this once.',
-      },
-    ],
-  },
-  {
-    version: '0.148.1',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Sort by release date, on every card list. Your own lists order by the printing you hold; the card database orders by when the card first came out. While that sort is on, each card shows its release year.',
       },
     ],
   },

@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.157.1
+
+- **"Watch one game play out", under the deck stats charts.** One game, dealt and written down turn by turn: the opening hand, every card drawn, which land it played and which ones it turned down, every permanent it tapped and what each one paid for, what every spell did when it resolved, and why it stopped casting. "Deal another game" deals another.
+- **It is the same simulator, not a friendlier copy of it.** The trace runs the sequencer that produced every percentage in that sheet, with the game count set to one. An average is either right or invisibly wrong; this is how you tell which.
+- **Fixed: Treasures lived too long.** A Treasure spent on colour rather than on quantity was not being sacrificed, so a Lightning Bolt cast off a Treasure because your only untapped land was an Island kept the Treasure anyway. Found by reading the trace, which is what it is for.
+- Two copies of the same spell cast in one turn no longer both claim the whole turn's mana in the breakdown.
+
 ## 0.157.0
 
 - **The simulator stops casting your draw spells as blanks.** A card that draws, loots, mills, surveils, scries or makes a Treasure now does it: the cards go into your hand, the Treasure goes onto the battlefield and pays for something, and the "How the game unfolds" charts move accordingly. A Phyrexian Arena keeps drawing every upkeep, a Temple scries as it enters, and an Exploration is a second land drop every turn instead of a card that does nothing.

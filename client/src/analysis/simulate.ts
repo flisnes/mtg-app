@@ -1,5 +1,6 @@
 import type { DeckFormat, EffectProfile } from '@mtg/shared';
-import { canPay, maxMatching, type ManaUnit, type UnitGroup } from './canPay.js';
+import { canPay, explainPayment, maxMatching, PAY_GENERIC, PAY_UNUSED, type ManaUnit, type UnitGroup } from './canPay.js';
+import { newTraceSink, pipText, say, type GameTrace, type TraceLine, type TraceSink } from './trace.js';
 import { handSize } from './gameModel.js';
 import { KEEP_ANYTHING_AT } from './mulligan.js';
 import { makeRng, shuffle, type Rng } from './rng.js';
@@ -83,6 +84,13 @@ export interface SimOptions {
    * And turning one family on at a time is how its contribution gets measured.
    */
   effects: boolean;
+  /**
+   * Write the game down as it is played. One game only, on the main thread,
+   * for the goldfish trace. Off for every run that feeds a number: the
+   * bookkeeping is cheap but it is not free, and twenty thousand games of it
+   * would be twenty thousand transcripts nobody reads.
+   */
+  trace?: boolean;
   seed: number;
 }
 
@@ -241,7 +249,12 @@ export function halfWidth(p: number, games: number): number {
  *      hangs off a trigger the pipeline would not read. So the curves are
  *      still a floor, and `SimDeck.coverage` is how far off the floor they are.
  */
-export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: number) => void): SimResult {
+export function simulate(
+  deck: SimDeck,
+  opts: SimOptions,
+  onProgress?: (done: number) => void,
+  sink?: TraceSink,
+): SimResult {
   const cards = deck.cards;
   const n = cards.length;
   const maxTurn = opts.maxTurn;
@@ -328,6 +341,10 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
   const buildPool = (turn: number): number => {
     units.length = 0;
     unitGroups.length = 0;
+    if (sink) {
+      unitOwner.length = 0;
+      groupOwner.length = 0;
+    }
     let total = 0;
     for (let s = 0; s < srcLen; s++) {
       if (srcOnline[s]! > turn) continue;
@@ -336,10 +353,104 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
       const n = srcUnits[s]!;
       total += n;
       const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
-      if (srcOneColor[s] && n > 1) unitGroups.push({ colors: UNIT_BY_MASK[mask]!.colors, count: n });
-      else for (let u = 0; u < n; u++) units.push(UNIT_BY_MASK[mask]!);
+      if (srcOneColor[s] && n > 1) {
+        unitGroups.push({ colors: UNIT_BY_MASK[mask]!.colors, count: n });
+        if (sink) groupOwner.push(srcCard[s]!);
+      } else {
+        for (let u = 0; u < n; u++) {
+          units.push(UNIT_BY_MASK[mask]!);
+          if (sink) unitOwner.push(srcCard[s]!);
+        }
+      }
     }
     return total;
+  };
+
+  /**
+   * Which permanent pushed each unit and each group, as a *card* index rather
+   * than a battlefield slot. Slots are swap-removed — a Karoo bouncing a land,
+   * a Treasure being cracked — so a slot recorded when the pool was built can
+   * be someone else entirely by the time a trace line reads it. A card index
+   * never moves. Filled only under trace.
+   */
+  const unitOwner: number[] = [];
+  const groupOwner: number[] = [];
+  /** The cast lines of the turn being written, waiting for their tap breakdown. */
+  const castLines: { line: TraceLine; generic: number; pips: number }[] = [];
+
+  /** What a permanent is called, for a trace line. -1 is a Treasure token. */
+  const sourceName = (index: number): string => (index < 0 ? 'Treasure' : (cards[index]?.name ?? 'a source'));
+
+  /**
+   * Which permanent paid for which spell, worked out **once for the whole
+   * turn** and written back onto the cast lines afterwards.
+   *
+   * It has to be once. The sequencer's own decision is cumulative — every cost
+   * committed this turn folded into `paid` and re-solved — so a per-card solve
+   * against whatever was left over is a different question with a different
+   * answer, and the first draft of this made exactly that mistake: it showed a
+   * Lightning Bolt tapping a Treasure on a turn the sequencer had correctly
+   * decided no Treasure was needed. A trace that contradicts the model it is
+   * supposed to explain is worse than no trace.
+   *
+   * Generic mana has no owner in the solve, so it is handed out in cast order:
+   * the first spell's generic is paid before the second spell's. Any mana pays
+   * generic, so which units go where is arbitrary, and cast order is the
+   * arbitrary choice a reader can follow.
+   */
+  const attributeTaps = (
+    casts: { line: TraceLine; generic: number; pips: number }[],
+    pool: readonly ManaUnit[],
+    owners: readonly number[],
+  ): void => {
+    if (casts.length === 0) return;
+    const plan = explainPayment(paid, pool, unitGroups);
+    if (!plan) {
+      // The cumulative cost is payable (the sequencer just checked) but this
+      // particular ordering of hybrids did not hand back an assignment. Say so
+      // rather than invent one.
+      for (const c of casts) c.line.text += ` (no tap breakdown available)`;
+      return;
+    }
+    // Which *cast* each symbol of the folded cost came from. By position in the
+    // turn, never by card: two copies of Big Score in one turn are two casts and
+    // one card index, and keying this by the card gave both lines the whole
+    // turn's taps.
+    const owner: number[] = [];
+    for (let c = 0; c < casts.length; c++) for (let i = 0; i < casts[c]!.pips; i++) owner.push(c);
+    /** Generic still owed, per cast, drained in order. */
+    const owed = casts.map((c) => c.generic);
+    const taps: string[][] = casts.map(() => []);
+
+    for (let i = 0; i < plan.byUnit.length; i++) {
+      const use = plan.byUnit[i]!;
+      if (use === PAY_UNUSED) continue;
+      const name = sourceName(poolOwner(i, owners));
+      if (use === PAY_GENERIC) {
+        let at = owed.findIndex((n) => n > 0);
+        if (at < 0) at = casts.length - 1;
+        owed[at] = (owed[at] ?? 1) - 1;
+        taps[at]!.push(`${name} taps for generic`);
+        continue;
+      }
+      const at = owner[plan.pipSlot[use] ?? -1] ?? 0;
+      taps[at]!.push(`${name} taps for ${pipText(plan.pips[use]!.options)}`);
+    }
+    for (let c = 0; c < casts.length; c++) {
+      if (taps[c]!.length > 0) casts[c]!.line.taps = taps[c];
+    }
+  };
+
+  /** The permanent behind pool index `i`, plain units first and then the groups. */
+  const poolOwner = (i: number, owners: readonly number[]): number => {
+    if (i < owners.length) return owners[i]!;
+    let at = i - owners.length;
+    let g = 0;
+    while (g < unitGroups.length && at >= unitGroups[g]!.count) {
+      at -= unitGroups[g]!.count;
+      g++;
+    }
+    return groupOwner[g] ?? -1;
   };
 
   /**
@@ -421,12 +532,21 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
   // Every one of these is written to err downward, because §11.4's whole point
   // is that the curves are only honest while they are a floor.
 
+  // What the last resolveEffect() actually did, so the trace can say "drew
+  // Ponder and a Swamp" instead of "drew 2". Cleared per resolution; never
+  // touched at all when nothing is tracing.
+  const drewNames: string[] = [];
+  const discardedNames: string[] = [];
+  const milledNames: string[] = [];
+
   /** Cards off the top into your hand. A tutor comes through here too, see below. */
   const drawCards = (count: number): void => {
     for (let k = 0; k < count; k++) {
       if (top >= libLen || handLen >= hand.length) return;
-      hand[handLen++] = library[top++]!;
+      const index = library[top++]!;
+      hand[handLen++] = index;
       seen++;
+      if (sink) drewNames.push(cards[index]!.name);
     }
   };
 
@@ -439,13 +559,17 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
     for (let k = 0; k < count; k++) {
       const pick = pickDiscard(cards, hand, handLen);
       if (pick < 0) return;
+      if (sink) discardedNames.push(cards[hand[pick]!]!.name);
       hand[pick] = hand[--handLen]!;
     }
   };
 
   /** Cards off the top into the graveyard. They leave the library; you never see them. */
   const millCards = (count: number): void => {
-    for (let k = 0; k < count && top < libLen; k++) top++;
+    for (let k = 0; k < count && top < libLen; k++) {
+      if (sink) milledNames.push(cards[library[top]!]!.name);
+      top++;
+    }
   };
 
   /**
@@ -496,6 +620,7 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
       srcTreasure[srcLen] = 1;
       srcLen++;
       units.push(UNIT_BY_MASK[TREASURE_MASK]!);
+      if (sink) unitOwner.push(-1);
       colorsHeld |= TREASURE_MASK;
       made++;
     }
@@ -508,6 +633,55 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
     for (let s = 0; s < srcLen; s++) if (srcTreasure[s]) n++;
     return n;
   };
+
+  /**
+   * How many Treasures this turn actually had to crack.
+   *
+   * Quantity is the obvious half: spend more mana than your permanents make and
+   * the difference came out of Treasures. **Colour is the half the goldfish
+   * trace caught.** A Lightning Bolt cast off a Treasure because the only
+   * untapped land left was an Island costs you that Treasure exactly as much as
+   * a fourth mana would have, and a reconciliation that only compares totals
+   * lets it keep. That is the generous direction, which is the one direction
+   * §11.4 says this model is never allowed to be wrong in.
+   *
+   * So: rebuild the pool with no Treasures in it, then add them back one at a
+   * time until the turn's committed cost is payable again. Runs once a turn,
+   * and only on a turn that has Treasures at all.
+   */
+  const treasuresSpent = (turn: number, treasures: number): number => {
+    for (let k = 0; k <= treasures; k++) {
+      thrifty.length = 0;
+      thriftyOwner.length = 0;
+      for (let s = 0; s < srcLen; s++) {
+        if (srcTreasure[s]) continue;
+        if (srcOnline[s]! > turn) continue;
+        const expires = srcExpires[s]!;
+        if (expires > 0 && turn > expires) continue;
+        const n = srcUnits[s]!;
+        if (srcOneColor[s] && n > 1) continue; // already in unitGroups
+        const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
+        for (let u = 0; u < n; u++) {
+          thrifty.push(UNIT_BY_MASK[mask]!);
+          if (sink) thriftyOwner.push(srcCard[s]!);
+        }
+      }
+      for (let i = 0; i < k; i++) {
+        thrifty.push(UNIT_BY_MASK[TREASURE_MASK]!);
+        if (sink) thriftyOwner.push(-1);
+      }
+      if (canPay(paid, thrifty, unitGroups)) return k;
+    }
+    return treasures;
+  };
+  /**
+   * The pool `treasuresSpent` settled on: every permanent, and only as many
+   * Treasures as the turn genuinely had to crack. The trace attributes taps out
+   * of this rather than out of `units`, so the breakdown can never show four
+   * Treasures paying for a turn the model then charges two for.
+   */
+  const thrifty: ManaUnit[] = [];
+  const thriftyOwner: number[] = [];
 
   /** Sacrifice `count` of them, newest first — they are interchangeable. */
   const crackTreasures = (count: number): void => {
@@ -555,13 +729,33 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
   };
 
   const resolveEffect = (effect: EffectProfile, turn: number): number => {
+    if (sink) {
+      drewNames.length = 0;
+      discardedNames.length = 0;
+      milledNames.length = 0;
+    }
     drawCards(Math.min(effect.draw, MAX_DRAW_PER_EFFECT));
     if (effect.wholeHand) discardCards(handLen);
     else discardCards(effect.discard);
     millCards(effect.mill);
-    dig(Math.max(effect.surveil, effect.scry));
-    return effect.treasure > 0 ? makeTreasures(effect.treasure, turn) : 0;
+    const dug = Math.max(effect.surveil, effect.scry);
+    dig(dug);
+    const made = effect.treasure > 0 ? makeTreasures(effect.treasure, turn) : 0;
+    if (sink) {
+      const bits: string[] = [];
+      if (drewNames.length) bits.push(`${effect.tutor ? 'finds' : 'draws'} ${drewNames.join(', ')}`);
+      if (discardedNames.length) bits.push(`discards ${discardedNames.join(', ')}`);
+      if (milledNames.length) bits.push(`mills ${milledNames.join(', ')}`);
+      if (dug > 0) bits.push(`${effect.scry >= effect.surveil ? 'scry' : 'surveil'} ${dug}`);
+      if (made > 0) bits.push(`makes ${made} Treasure${made === 1 ? '' : 's'}`);
+      if (effect.unknown) bits.push('amount floored');
+      lastEffectText = bits.join(', ');
+    }
+    return made;
   };
+
+  /** What resolveEffect() just did, in one phrase, for the caller to attribute. */
+  let lastEffectText = '';
 
   const firstCast = new Int32Array(n);
   const firstHeld = new Int32Array(n);
@@ -624,11 +818,17 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
       // in the deck, and it is not coming back inside eight turns.
       while (handLen > keep) {
         const drop = pickBottom(cards, hand, handLen);
+        if (sink) sink.game.bottomed.push(cards[hand[drop]!]!.name);
         library[bottomAt++] = hand[drop]!;
         hand[drop] = hand[--handLen]!;
       }
       handSizeSum += handLen;
       if (handLen < 7) mulliganed++;
+      if (sink) {
+        sink.game.mulligans = m;
+        for (let i = 0; i < handLen; i++) sink.game.opener.push(cards[hand[i]!]!.name);
+        sink.game.opener.sort((a, b) => a.localeCompare(b));
+      }
       // Seven cards came off the library whether you kept them or not, which
       // is what the cards chart counted before there was anything else to
       // count and what it still counts now.
@@ -640,6 +840,11 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
     for (const c of deck.commanders) hand[handLen++] = c;
 
     for (let turn = 1; turn <= maxTurn; turn++) {
+      if (sink) {
+        sink.turn = { turn, lines: [], available: 0, spent: 0, hand: [] };
+        sink.game.turns.push(sink.turn);
+        castLines.length = 0;
+      }
       // Upkeep, before the draw step, because that is where Phyrexian Arena
       // sits and the difference is one card in your opener's worth of ordering.
       // A recurring effect that makes Treasure makes it now, and the pool
@@ -647,13 +852,20 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
       // return value — which is why that return value is dropped here and
       // added by hand only inside the spend loop, after the pool is fixed.
       for (let r = 0; r < recurLen; r++) {
-        const effect = cards[recurring[r]!]!.effect;
-        if (effect) resolveEffect(effect, turn);
+        const index = recurring[r]!;
+        const effect = cards[index]!.effect;
+        if (!effect) continue;
+        resolveEffect(effect, turn);
+        if (sink && lastEffectText) say(sink, 'effect', `Upkeep: ${cards[index]!.name} ${lastEffectText}`);
       }
 
       if (!(turn === 1 && opts.onPlay) && top < libLen && handLen < MAX_HAND) {
-        hand[handLen++] = library[top++]!;
+        const index = library[top++]!;
+        hand[handLen++] = index;
         seen++;
+        if (sink) say(sink, 'draw', `Draws ${cards[index]!.name}`);
+      } else if (sink && turn === 1 && opts.onPlay) {
+        say(sink, 'note', 'On the play, so no draw this turn');
       }
 
       // The mana already online, and the pool it makes, both of which the land
@@ -712,10 +924,29 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
             best = i;
           }
         }
-        if (best < 0) break;
+        if (best < 0) {
+          if (sink && drop === 0) say(sink, 'land', 'No land to play');
+          break;
+        }
         // The land-drop percentage is about the drop everybody gets, so an
         // Azusa turn still counts once rather than three times.
         if (drop === 0) landDrops[turn] = landDrops[turn]! + 1;
+        if (sink) {
+          const chosen = cards[hand[best]!]!;
+          // The lands it turned down, by name and distinct. A hand with three
+          // Mountains in it did not offer a choice worth reporting, and
+          // "plays Mountain over Mountain" reads as a bug rather than as a
+          // decision.
+          const others = new Set<string>();
+          for (let c = 0; c < candidates; c++) {
+            const name = cards[hand[landChoices[c]!]!]!.name;
+            if (name !== chosen.name) others.add(name);
+          }
+          const how = chosen.tapped === 'always' ? ' (enters tapped)' : '';
+          const over = others.size > 0 ? ` over ${[...others].join(', ')}` : '';
+          const extra = drop > 0 ? ' (extra land drop)' : '';
+          say(sink, 'land', `Plays ${chosen.name}${how}${over}${extra}`);
+        }
         const cardIndex = hand[best]!;
         const card = cards[cardIndex]!;
         hand[best] = hand[--handLen]!;
@@ -728,10 +959,16 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
             if (addSource(index, land, turn + (slow ? 1 : 0), turn)) {
               colorsHeld |= land.mask;
               library[at] = library[--libLen]!;
+              if (sink) say(sink, 'land', `Cracks for ${land.name}${slow ? ' (enters tapped)' : ''}`);
               const back = payEntryCost(land);
               if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
-              if (opts.effects && land.effect) enters(index, land, turn);
+              if (opts.effects && land.effect) {
+                enters(index, land, turn);
+                if (sink && lastEffectText) say(sink, 'effect', `${land.name} ${lastEffectText}`);
+              }
             }
+          } else if (sink) {
+            say(sink, 'land', 'Nothing left in the library to fetch');
           }
         } else if (addSource(cardIndex, card, turn + (card.tapped === 'always' ? 1 : 0), turn)) {
           colorsHeld |= card.mask;
@@ -740,7 +977,10 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
           // A Temple scries as it enters, and half the taplands printed since
           // Theros do something on the way in. Free, now that there is a
           // resolver to call.
-          if (opts.effects && card.effect) enters(cardIndex, card, turn);
+          if (opts.effects && card.effect) {
+            enters(cardIndex, card, turn);
+            if (sink && lastEffectText) say(sink, 'effect', `${card.name} ${lastEffectText}`);
+          }
         }
       }
 
@@ -750,6 +990,17 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
       // the turn rather than here, so the available line is never below the
       // spent line — the trajectory chart's right-hand labels lean on that.
       let available = buildPool(turn);
+      if (sink) {
+        const bits: string[] = [];
+        for (let u = 0; u < units.length; u++) {
+          bits.push(`${sourceName(unitOwner[u]!)} (${pipText(units[u]!.colors)})`);
+        }
+        for (let g = 0; g < unitGroups.length; g++) {
+          const grp = unitGroups[g]!;
+          bits.push(`${sourceName(groupOwner[g]!)} (${grp.count} of one of ${pipText(grp.colors)})`);
+        }
+        say(sink, 'mana', bits.length === 0 ? 'No mana available' : `${available} mana untapped: ${bits.join(', ')}`);
+      }
 
       // Which of the cards in hand the mana covers. Only cards in hand: the
       // manabase number this feeds is conditional on holding the card, so
@@ -817,7 +1068,20 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
           }
           pick = i;
         }
-        if (pick < 0) break;
+        if (pick < 0) {
+          if (sink && left > 0) {
+            let holding = 0;
+            for (let i = 0; i < handLen; i++) if (cards[hand[i]!]!.spell) holding++;
+            say(
+              sink,
+              'note',
+              holding > 0
+                ? `Stops with ${left} mana up: nothing left in hand costs ${left} or less`
+                : `Stops with ${left} mana up and no spell in hand`,
+            );
+          }
+          break;
+        }
         // Only now does the matching solver run, and only on the one card the
         // policy actually wants to cast.
         const index = hand[pick]!;
@@ -831,11 +1095,32 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
           // colors and re-scanning the hand for it costs more than it wins.
           paid.generic -= card.cost!.generic;
           paid.pips.length = before;
+          if (sink) {
+            say(
+              sink,
+              'note',
+              castLines.length > 0
+                ? `Stops: ${card.name} ${card.manaCost} is not payable in these colours alongside what is already cast`
+                : `Stops: ${card.name} ${card.manaCost} is not payable in these colours`,
+            );
+          }
           break;
         }
         paid.mana += card.cost!.mana;
         spent += card.cost!.mana;
         hand[pick] = hand[--handLen]!;
+        if (sink && sink.turn) {
+          const why = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp' ? ' (ramp first)' : '';
+          say(sink, 'cast', `Casts ${card.name} ${card.manaCost}${why}`);
+          // The taps arrive on this line later. The turn has to finish
+          // committing first, because there is only one cost to solve and it is
+          // the whole turn's.
+          castLines.push({
+            line: sink.turn.lines[sink.turn.lines.length - 1]!,
+            generic: card.cost!.generic,
+            pips: card.cost!.pips.length,
+          });
+        }
 
         if (card.role === 'landramp') {
           // What it fetches is a land out of the library, arriving tapped. That
@@ -849,24 +1134,46 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
             if (!addSource(found, land, turn + 1, turn)) break;
             colorsHeld |= land.mask;
             library[at] = library[--libLen]!;
+            if (sink) say(sink, 'mana', `Finds ${land.name}, which arrives tapped`);
             const back = payEntryCost(land);
             if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
           }
           // The mana that cast it has been spent, and a dork is summoning sick
           // on top of that, so either way it pays for something from next turn.
         } else if (card.role === 'rock' || card.role === 'dork') {
-          if (addSource(index, card, turn + 1, turn)) colorsHeld |= card.mask;
+          if (addSource(index, card, turn + 1, turn)) {
+            colorsHeld |= card.mask;
+            // A filter like Prophetic Prism profiles at zero net mana: it fixes
+            // colours and adds none. "Will add 0" is true and reads like a bug,
+            // so it says what the card is for instead.
+            if (sink) {
+              const colors = pipText(UNIT_BY_MASK[card.mask]!.colors);
+              say(
+                sink,
+                'mana',
+                card.adds > 0
+                  ? `${card.name} will add ${card.adds} ${colors} from next turn`
+                  : `${card.name} will filter mana into ${colors} from next turn, adding none`,
+              );
+            }
+          }
         } else if (card.role === 'extraland') {
           // From next turn, not this one: this turn's land drop already
           // happened, above, and an Exploration cast after it does not rewind
           // the turn. Conservative by exactly one land drop, once.
           if (extraLands < MAX_EXTRA_LANDS) extraLands++;
+          if (sink) say(sink, 'mana', 'An extra land drop every turn, from next turn');
         }
         // And what the card *does*, which until this phase was nothing at all.
         // A Treasure made here is mana this turn, so the budget grows under the
         // loop's feet — which is the point of a Treasure and the reason `left`
         // is recomputed from `available` at the top of every pass.
-        if (opts.effects) available += enters(index, card, turn);
+        if (opts.effects) {
+          available += enters(index, card, turn);
+          if (sink && card.effect) {
+            say(sink, 'effect', card.effect.repeatable ? `${card.name} will fire every upkeep from next turn` : `${card.name} ${lastEffectText || 'resolves'}`);
+          }
+        }
         // A card with no effect profile still resolves as a blank. For a
         // Lightning Bolt that is correct; for a draw spell whose draw hangs off
         // a trigger the pipeline would not read, it is the floor §11.4 warned
@@ -875,14 +1182,34 @@ export function simulate(deck: SimDeck, opts: SimOptions, onProgress?: (done: nu
 
       // --- Treasures, reconciled -------------------------------------------
       // Lands and rocks are spent first and a Treasure only when the turn runs
-      // past them, which is both how the cards are played and the only reading
-      // that lets a Treasure keep. Whatever the spending reached, gets cracked.
+      // past them, in quantity or in colour. Whatever the spending reached gets
+      // cracked; the rest is still there next turn, which is the whole reason a
+      // Treasure is worth more than a ritual.
+      //
+      // The trace's tap breakdown comes out of the same solve, which is why it
+      // waits until here: attributed against the full pool it would happily
+      // show four Treasures paying for a turn the model charges two for.
       const treasures = countTreasures();
-      if (treasures > 0) {
-        const permanent = available - treasures;
-        if (spent > permanent) crackTreasures(Math.min(treasures, spent - permanent));
+      let attributed = false;
+      if (treasures > 0 && spent > 0) {
+        const cracked = treasuresSpent(turn, treasures);
+        if (sink) {
+          attributeTaps(castLines, thrifty, thriftyOwner);
+          attributed = true;
+        }
+        if (cracked > 0) {
+          crackTreasures(cracked);
+          if (sink) say(sink, 'mana', `Sacrifices ${cracked} Treasure${cracked === 1 ? '' : 's'} to cover the turn`);
+        }
       }
+      if (sink && !attributed) attributeTaps(castLines, units, unitOwner);
 
+      if (sink && sink.turn) {
+        sink.turn.available = available;
+        sink.turn.spent = spent;
+        for (let i = 0; i < handLen; i++) sink.turn.hand.push(cards[hand[i]!]!.name);
+        sink.turn.hand.sort((a, b) => a.localeCompare(b));
+      }
       manaSum[turn] = manaSum[turn]! + available;
       spentSum[turn] = spentSum[turn]! + spent;
       seenSum[turn] = seenSum[turn]! + seen;
@@ -1245,6 +1572,24 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     meanHandSize: t.handSizeSum * per,
     deckOnCurve: weight > 0 ? weighted / weight : 0,
   };
+}
+
+/**
+ * Deal one game and write it down.
+ *
+ * It calls the same `simulate()` the charts do, with `games: 1` and a sink
+ * attached. That is the whole point: a trace produced by a second, friendlier
+ * implementation would agree with the real sequencer right up until the day it
+ * mattered, and the reason to show anybody a game at all is so they can catch
+ * this one being wrong.
+ *
+ * One game is microseconds, so this runs on the main thread. The twenty
+ * thousand behind the charts do not, and that is the only difference.
+ */
+export function traceGame(deck: SimDeck, opts: SimOptions, seed: number): GameTrace {
+  const sink = newTraceSink(seed);
+  simulate(deck, { ...opts, games: 1, seed, trace: true }, undefined, sink);
+  return sink.game;
 }
 
 // --- Worker protocol ---------------------------------------------------------

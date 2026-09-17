@@ -3,8 +3,10 @@ import {
   BEHAVIOR_AMOUNTS,
   BEHAVIOR_STEPS,
   BEHAVIOR_TRIGGERS,
+  BEHAVIOR_ZONES,
   CARD_BEHAVIOR_VERSION,
   MAX_BEHAVIOR_AMOUNT,
+  MAX_BEHAVIOR_QUERY,
   MAX_BEHAVIOR_RULES,
   MAX_BEHAVIOR_STEPS,
   behaviorFromEffect,
@@ -13,14 +15,17 @@ import {
   describeRule,
   type BehaviorAmountKind,
   type BehaviorRule,
+  type BehaviorStep,
   type BehaviorStepKind,
   type BehaviorTrigger,
+  type BehaviorZone,
   type CardBehavior,
   type EffectProfile,
 } from '@mtg/shared';
 import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
 import { setCardBehavior } from '../db/dataAccess.js';
+import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '../cardDb/querySyntax.js';
 import type { GroupRow } from '../analysis/groups.js';
 
 // "What does this card actually do?", answered by the person holding it.
@@ -86,6 +91,12 @@ function summaryOf(card: BehaviorCard): string {
   return lines.length > 0 ? lines.join('. ') : 'Do nothing';
 }
 
+/** How many of the deck's distinct cards a move step's criteria would find. */
+export interface DeckMatcher {
+  total: number;
+  count: (q: string) => number;
+}
+
 export function CardBehaviorSheet({
   deckId,
   deckName,
@@ -103,6 +114,33 @@ export function CardBehaviorSheet({
   const [openId, setOpenId] = useState<string | null>(null);
   const open = openId ? (cards.find((c) => c.oracleId === openId) ?? null) : null;
 
+  // The same query engine the search bar uses, pointed at this deck. It runs on
+  // every keystroke in the criteria box so a typo is a number that drops to
+  // zero rather than a rule that quietly does nothing eight turns deep in a
+  // simulation nobody can see into.
+  const matcher = useMemo<DeckMatcher>(() => {
+    const entries: SearchableEntry[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      const o = r.oracle;
+      if (!o || r.quantity <= 0) continue;
+      if (r.board !== 'main' && r.board !== 'commander') continue;
+      if (seen.has(o.oracleId) || isNotACard(o.typeLine)) continue;
+      seen.add(o.oracleId);
+      entries.push(toSearchableEntry(o));
+    }
+    return {
+      total: entries.length,
+      count: (q: string) => {
+        const compiled = compileCardQuery(q);
+        if (compiled.isEmpty) return entries.length;
+        let n = 0;
+        for (const e of entries) if (compiled.matches(e)) n++;
+        return n;
+      },
+    };
+  }, [rows]);
+
   return (
     <Sheet
       onClose={onClose}
@@ -110,7 +148,13 @@ export function CardBehaviorSheet({
       className="behavior-sheet"
     >
       {open ? (
-        <BehaviorEditor key={open.oracleId} deckId={deckId} card={open} onBack={() => setOpenId(null)} />
+        <BehaviorEditor
+          key={open.oracleId}
+          deckId={deckId}
+          card={open}
+          matcher={matcher}
+          onBack={() => setOpenId(null)}
+        />
       ) : (
         <BehaviorList cards={cards} onOpen={setOpenId} />
       )}
@@ -143,7 +187,8 @@ function BehaviorList({ cards, onOpen }: { cards: BehaviorCard[]; onOpen: (oracl
       <p className="fine-print">
         The card database reads oracle text conservatively: only what a card does unconditionally, on resolution, to you. Anything
         behind a trigger or an "if" reaches the simulator as a blank. Tell it what a card really does and it plays it out. A
-        behavior covers your hand, library and graveyard; lands still make their mana whatever it says here.
+        behavior covers your hand, library, graveyard and exile, and can move cards between them with the same search syntax the
+        card search uses. Lands still make their mana whatever it says here.
       </p>
       <Section title={`Your own (${authored.length})`} cards={authored} onOpen={onOpen} />
       <Section title={`Nothing read yet (${blank.length})`} cards={blank} onOpen={onOpen} />
@@ -188,7 +233,17 @@ function Section({ title, cards, onOpen }: { title: string; cards: BehaviorCard[
 
 const emptyStep = () => ({ op: 'draw' as BehaviorStepKind, x: { kind: 'fixed' as BehaviorAmountKind, n: 1 } });
 
-function BehaviorEditor({ deckId, card, onBack }: { deckId: string; card: BehaviorCard; onBack: () => void }) {
+function BehaviorEditor({
+  deckId,
+  card,
+  matcher,
+  onBack,
+}: {
+  deckId: string;
+  card: BehaviorCard;
+  matcher: DeckMatcher;
+  onBack: () => void;
+}) {
   // The draft opens on whatever is true now: your rules if you wrote some,
   // otherwise the card database's reading in the same grammar. Editing what we
   // read and writing your own are deliberately the same gesture — which is also
@@ -239,6 +294,7 @@ function BehaviorEditor({ deckId, card, onBack }: { deckId: string; card: Behavi
         <RuleEditor
           key={i}
           rule={rule}
+          matcher={matcher}
           onChange={(next) => edit(i, next)}
           onRemove={() => setRules(rules.filter((_r, k) => k !== i))}
         />
@@ -277,18 +333,52 @@ function BehaviorEditor({ deckId, card, onBack }: { deckId: string; card: Behavi
   );
 }
 
+/** How many cards in the deck a criteria string finds, live as it is typed. */
+function MatchNote({ q, matcher }: { q: string; matcher: DeckMatcher }) {
+  const trimmed = q.trim();
+  const n = useMemo(() => matcher.count(trimmed), [trimmed, matcher]);
+  if (!trimmed) return <span className="fine-print">Any of the {matcher.total} cards in this deck.</span>;
+  return (
+    <span className={`fine-print${n === 0 ? ' behavior-nomatch' : ''}`}>
+      {n === 0 ? 'Matches nothing in this deck.' : `Matches ${n} of ${matcher.total} cards in this deck.`}
+    </span>
+  );
+}
+
 function RuleEditor({
   rule,
+  matcher,
   onChange,
   onRemove,
 }: {
   rule: BehaviorRule;
+  matcher: DeckMatcher;
   onChange: (next: BehaviorRule) => void;
   onRemove: () => void;
 }) {
   const setStep = (i: number, next: BehaviorRule['steps'][number]) =>
     onChange({ ...rule, steps: rule.steps.map((s, k) => (k === i ? next : s)) });
   const trigger = BEHAVIOR_TRIGGERS.find((t) => t.id === rule.on);
+
+  /**
+   * Switching verbs carries over what still applies and drops what does not.
+   * The zones and the criteria only mean anything on a move, and "all that
+   * match" is bounded by a source zone that a draw step does not have.
+   */
+  const changeOp = (i: number, step: BehaviorStep, op: BehaviorStepKind) => {
+    if (op === 'move') {
+      setStep(i, { ...step, op, from: step.from ?? 'library', to: step.to ?? 'hand' });
+      return;
+    }
+    setStep(i, { op, x: step.x.kind === 'all' ? { kind: 'fixed', n: 1 } : step.x });
+  };
+
+  /** The two zones can never be the same one, so picking a clash swaps them. */
+  const changeZone = (i: number, step: BehaviorStep, end: 'from' | 'to', zone: BehaviorZone) => {
+    const other = end === 'from' ? 'to' : 'from';
+    const clash = step[other] === zone;
+    setStep(i, { ...step, [end]: zone, ...(clash ? { [other]: step[end] } : null) });
+  };
 
   return (
     <div className="behavior-rule">
@@ -313,68 +403,121 @@ function RuleEditor({
       </div>
       {trigger && <p className="fine-print">{trigger.hint}</p>}
 
-      {rule.steps.map((step, i) => (
-        <div className="behavior-step" key={i}>
-          {/* The verb on its own line and the number under it: three controls
-              abreast on a 393px phone truncates every one of them, and "X = cards
-              in your h" is not a choice anybody can make. */}
-          <label className="field behavior-op">
-            <select
-              value={step.op}
-              aria-label="What happens"
-              onChange={(e) => setStep(i, { ...step, op: e.target.value as BehaviorStepKind })}
-            >
-              {BEHAVIOR_STEPS.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="behavior-x">
-            <label className="field">
-              <select
-                value={step.x.kind}
-                aria-label="Where X comes from"
-                onChange={(e) => {
-                  const kind = e.target.value as BehaviorAmountKind;
-                  setStep(i, { ...step, x: kind === 'fixed' ? { kind, n: step.x.n ?? 1 } : { kind } });
-                }}
-              >
-                {BEHAVIOR_AMOUNTS.map((o) => (
+      {rule.steps.map((step, i) => {
+        const move = step.op === 'move';
+        return (
+          <div className={`behavior-step${move ? ' behavior-step-move' : ''}`} key={i}>
+            {/* The verb on its own line and the number under it: three controls
+                abreast on a 393px phone truncates every one of them, and "X = cards
+                in your h" is not a choice anybody can make. */}
+            <label className="field behavior-op">
+              <select value={step.op} aria-label="What happens" onChange={(e) => changeOp(i, step, e.target.value as BehaviorStepKind)}>
+                {BEHAVIOR_STEPS.map((o) => (
                   <option key={o.id} value={o.id}>
-                    X = {o.label}
+                    {o.label}
                   </option>
                 ))}
               </select>
             </label>
-            {step.x.kind === 'fixed' && (
-              <label className="field behavior-n">
-                <input
-                  type="number"
-                  min={0}
-                  max={MAX_BEHAVIOR_AMOUNT}
-                  inputMode="numeric"
-                  aria-label="How many"
-                  value={step.x.n ?? 0}
+            <div className="behavior-x">
+              <label className="field">
+                <select
+                  value={step.x.kind}
+                  aria-label="Where X comes from"
                   onChange={(e) => {
-                    const n = Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, Math.round(Number(e.target.value) || 0)));
-                    setStep(i, { ...step, x: { kind: 'fixed', n } });
+                    const kind = e.target.value as BehaviorAmountKind;
+                    setStep(i, { ...step, x: kind === 'fixed' ? { kind, n: step.x.n ?? 1 } : { kind } });
                   }}
-                />
+                >
+                  {BEHAVIOR_AMOUNTS.filter((o) => move || !o.moveOnly).map((o) => (
+                    <option key={o.id} value={o.id}>
+                      X = {o.label}
+                    </option>
+                  ))}
+                </select>
               </label>
+              {step.x.kind === 'fixed' && (
+                <label className="field behavior-n">
+                  <input
+                    type="number"
+                    min={0}
+                    max={MAX_BEHAVIOR_AMOUNT}
+                    inputMode="numeric"
+                    aria-label="How many"
+                    value={step.x.n ?? 0}
+                    onChange={(e) => {
+                      const n = Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, Math.round(Number(e.target.value) || 0)));
+                      setStep(i, { ...step, x: { kind: 'fixed', n } });
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+            {move && (
+              <>
+                <div className="behavior-zones">
+                  <label className="field">
+                    <select
+                      value={step.from ?? 'library'}
+                      aria-label="Move from"
+                      onChange={(e) => changeZone(i, step, 'from', e.target.value as BehaviorZone)}
+                    >
+                      {BEHAVIOR_ZONES.map((z) => (
+                        <option key={z.id} value={z.id}>
+                          From {z.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <select
+                      value={step.to ?? 'hand'}
+                      aria-label="Move to"
+                      onChange={(e) => changeZone(i, step, 'to', e.target.value as BehaviorZone)}
+                    >
+                      {BEHAVIOR_ZONES.map((z) => (
+                        <option key={z.id} value={z.id}>
+                          To {z.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="behavior-q">
+                  <label className="field">
+                    <input
+                      type="text"
+                      value={step.q ?? ''}
+                      maxLength={MAX_BEHAVIOR_QUERY}
+                      aria-label="Which cards"
+                      placeholder={'Any card, or t:basic, t:creature mv<=3, …'}
+                      onChange={(e) => setStep(i, { ...step, q: e.target.value })}
+                    />
+                  </label>
+                  <MatchNote q={step.q ?? ''} matcher={matcher} />
+                </div>
+              </>
             )}
+            <button
+              type="button"
+              className="behavior-drop"
+              onClick={() => onChange({ ...rule, steps: rule.steps.filter((_s, k) => k !== i) })}
+              aria-label="Remove this step"
+            >
+              <Icon name="close" />
+            </button>
           </div>
-          <button
-            type="button"
-            className="behavior-drop"
-            onClick={() => onChange({ ...rule, steps: rule.steps.filter((_s, k) => k !== i) })}
-            aria-label="Remove this step"
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-      ))}
+        );
+      })}
+
+      {rule.steps.some((s) => s.op === 'move') && (
+        <p className="fine-print">
+          Criteria use the card search syntax, matched against this deck: <code>t:basic</code>, <code>t:creature mv&lt;=3</code>,{' '}
+          <code>o:"draw a card"</code>. Leave it blank for any card. <code>set:</code> and <code>is:foil</code> are about a
+          printing, so they never match here. The battlefield only holds your mana sources, so moving off it finds lands and rocks
+          and nothing else, and anything moved onto it arrives tapped.
+        </p>
+      )}
 
       {rule.steps.length < MAX_BEHAVIOR_STEPS && (
         <button

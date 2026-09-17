@@ -1,5 +1,6 @@
 import {
   BASIC_LAND_TYPES,
+  collectBehaviorQueries,
   compileBehavior,
   decodeEffectProfile,
   decodeFetchProfile,
@@ -13,6 +14,7 @@ import {
 } from '@mtg/shared';
 import { parseManaCost, type ParsedCost, type PipColor } from './manaCost.js';
 import type { ManaUnit } from './canPay.js';
+import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
 
 // The deck, flattened into the shape the simulator wants: one entry per
 // distinct card, a library that is one number per copy, and every fact the turn
@@ -106,6 +108,13 @@ export interface SimCard {
   /** In the command zone: always available, never drawn. */
   commander: boolean;
   /**
+   * Stays on the battlefield once it resolves, so casting it does not put it in
+   * the graveyard. Read off the type line and nothing else — the sequencer does
+   * not track non-mana permanents, it only needs to know they are not in the
+   * yard, because a behavior can go looking there.
+   */
+  permanent: boolean;
+  /**
    * What it does to your hand, library and graveyard on resolution, or null for
    * the great majority of cards that do none of it unconditionally. Decoded
    * here so the inner loop never touches a tuple. See EffectProfile.
@@ -165,6 +174,20 @@ export interface SimCoverage {
   authored: number;
 }
 
+/**
+ * One move step's criteria, resolved against this deck.
+ *
+ * The Scryfall parser runs here, once per distinct criteria string per deck
+ * build, and what reaches the worker is a byte per card. That is the only
+ * arrangement that makes a query affordable: the alternative is parsing and
+ * matching inside a loop that runs twenty thousand games deep.
+ */
+export interface SimFilter {
+  q: string;
+  /** 1 where `cards[i]` matches. */
+  match: Uint8Array;
+}
+
 export interface SimDeck {
   cards: SimCard[];
   /** One entry per copy in the library: an index into `cards`. */
@@ -175,6 +198,8 @@ export interface SimDeck {
   hasManaData: boolean;
   /** How much of the library the sequencer resolves rather than blanks. */
   coverage: SimCoverage;
+  /** Every criteria string the deck's behaviors use, precompiled. Usually empty. */
+  filters: SimFilter[];
 }
 
 export interface DeckRow {
@@ -185,6 +210,8 @@ export interface DeckRow {
 
 const faces = (typeLine: string) => typeLine.split('//').map((f) => f.trim());
 const isLandFace = (face: string) => /\bLand\b/.test(face);
+/** The front face decides where a cast card ends up: on the battlefield, or in the yard. */
+const isPermanentFace = (face: string) => /\b(Creature|Artifact|Enchantment|Planeswalker|Battle|Land)\b/i.test(face);
 const isNotACard = (o: OracleCard) => {
   const t = o.typeLine.toLowerCase();
   return t.startsWith('token') || t.includes('emblem') || t === 'card';
@@ -219,6 +246,8 @@ interface LandInfo {
  */
 export function buildSimDeck(rows: readonly DeckRow[], behaviors?: ReadonlyMap<string, CardBehavior>): SimDeck {
   const cards: SimCard[] = [];
+  /** The card behind each entry of `cards`, kept only long enough to run the filters. */
+  const oracles: OracleCard[] = [];
   const byOracle = new Map<string, number>();
   const commanders: number[] = [];
   const landInfo: LandInfo[] = [];
@@ -280,9 +309,11 @@ export function buildSimDeck(rows: readonly DeckRow[], behaviors?: ReadonlyMap<s
       grantMask: colorMask(o.grants),
       copies: r.board === 'main' ? r.quantity : 0,
       commander: r.board === 'commander',
+      permanent: isPermanentFace(parts[0] ?? ''),
       effect: decodeEffectProfile(o.effect),
       behavior: compileBehavior(behaviors?.get(o.oracleId)),
     });
+    oracles.push(o);
 
     if (r.board === 'main') {
       libraryCopies += r.quantity;
@@ -333,5 +364,35 @@ export function buildSimDeck(rows: readonly DeckRow[], behaviors?: ReadonlyMap<s
     if (card.effect?.unknown && !card.behavior) coverage.floored += card.copies;
   }
 
-  return { cards, library, commanders, hasManaData: profiled > 0, coverage };
+  return { cards, library, commanders, hasManaData: profiled > 0, coverage, filters: buildFilters(cards, oracles) };
+}
+
+/**
+ * Turn every criteria string the deck's behaviors mention into a per-card
+ * bitmask, using the same query engine as the search bar. `t:basic` means in
+ * here exactly what it means up there, which is the only reason offering a
+ * query string at all is reasonable rather than cruel.
+ *
+ * Two terms cannot match and the editor says so: `set:` and `is:foil` are about
+ * a printing, and a simulated deck is a list of cards rather than a list of
+ * copies. A card that matches nothing is not an error — it is a deck where that
+ * step finds nothing, which is what the trace will show.
+ */
+function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[]): SimFilter[] {
+  const queries = new Set<string>();
+  for (const card of cards) collectBehaviorQueries(card.behavior, queries);
+  if (queries.size === 0) return [];
+  const entries = oracles.map((o) => toSearchableEntry(o));
+  const filters: SimFilter[] = [];
+  for (const q of queries) {
+    const compiled = compileCardQuery(q);
+    const match = new Uint8Array(cards.length);
+    // An empty query is every card, which is also what an absent one means, so
+    // the two agree rather than one of them quietly matching nothing.
+    for (let i = 0; i < entries.length; i++) {
+      if (compiled.isEmpty || compiled.matches(entries[i]!)) match[i] = 1;
+    }
+    filters.push({ q, match });
+  }
+  return filters;
 }

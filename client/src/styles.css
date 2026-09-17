@@ -7870,6 +7870,42 @@ a.seg {
 .behavior-step .behavior-n {
   flex: 0 0 4.75rem;
 }
+/* A move needs two more rows: the zones it goes between, and the criteria that
+   says which cards. Same single column, same remove button spanning the lot. */
+.behavior-step-move {
+  grid-template-areas:
+    'op drop'
+    'x drop'
+    'zones drop'
+    'q drop';
+}
+.behavior-zones {
+  grid-area: zones;
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.behavior-q {
+  grid-area: q;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.behavior-q input {
+  width: 100%;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.45rem;
+}
+.behavior-q .fine-print {
+  margin: 0;
+}
+.behavior-q code {
+  font-size: 0.95em;
+}
+.behavior-nomatch {
+  color: var(--danger);
+}
 .behavior-n input {
   width: 100%;
   font-size: 0.85rem;

@@ -1,4 +1,11 @@
-import { MAX_BEHAVIOR_AMOUNT, type BehaviorStep, type DeckFormat, type EffectProfile } from '@mtg/shared';
+import {
+  BEHAVIOR_ZONES,
+  MAX_BEHAVIOR_AMOUNT,
+  type BehaviorStep,
+  type BehaviorZone,
+  type DeckFormat,
+  type EffectProfile,
+} from '@mtg/shared';
 import { canPay, explainPayment, maxMatching, PAY_GENERIC, PAY_UNUSED, type ManaUnit, type UnitGroup } from './canPay.js';
 import { newTraceSink, pipText, say, type GameTrace, type TraceLine, type TraceSink } from './trace.js';
 import { handSize } from './gameModel.js';
@@ -60,6 +67,9 @@ const MAX_DRAW_PER_EFFECT = 12;
  * grows the hand now checks the bound rather than assuming it.
  */
 const MAX_HAND = 128;
+
+/** How a zone reads in a trace line: "to your graveyard". */
+const ZONE_PHRASE = new Map(BEHAVIOR_ZONES.map((z) => [z.id as string, z.phrase]));
 
 /** Karsten's simulations ship a hand with fewer than two lands; so does this one. */
 export const DEFAULT_KEEP_MIN = 2;
@@ -286,6 +296,22 @@ export function simulate(
 
   const library = new Int32Array(deckSize);
   const hand = new Int32Array(MAX_HAND);
+  /**
+   * The graveyard and exile, as card indices.
+   *
+   * Until a behavior could go looking in the yard nothing read it, so milling
+   * walked the library pointer past a card and that was the end of it. Now that
+   * "return every land from your graveyard" is a rule somebody can write, both
+   * zones have to be filled by *everything* that fills them: milling,
+   * discarding, a cracked fetch, a Lotus Field's own entry cost, and every
+   * spell that is not a permanent. A yard only half the game puts cards into is
+   * worse than no yard at all, because a rule written against it looks like it
+   * works.
+   */
+  const graveyard = new Int32Array(deckSize + MAX_HAND);
+  let gyLen = 0;
+  const exiled = new Int32Array(deckSize + MAX_HAND);
+  let exLen = 0;
   const landChoices = new Int32Array(MAX_HAND);
   const srcMask = new Int32Array(MAX_SOURCES);
   const srcUnits = new Int32Array(MAX_SOURCES);
@@ -522,7 +548,9 @@ export function simulate(
         }
       }
       if (pick < 0) break;
-      if (card.bounce) back = srcCard[pick]!;
+      const lost = srcCard[pick]!;
+      if (card.bounce) back = lost;
+      else bury(lost);
       dropSource(pick);
     }
     return back;
@@ -538,6 +566,12 @@ export function simulate(
   const drewNames: string[] = [];
   const discardedNames: string[] = [];
   const milledNames: string[] = [];
+  const movedNames: string[] = [];
+
+  /** A card lands in the yard. Treasure tokens (-1) have no card to put there. */
+  const bury = (index: number): void => {
+    if (index >= 0 && gyLen < graveyard.length) graveyard[gyLen++] = index;
+  };
 
   /** Cards off the top into your hand. A tutor comes through here too, see below. */
   const drawCards = (count: number): void => {
@@ -559,16 +593,19 @@ export function simulate(
     for (let k = 0; k < count; k++) {
       const pick = pickDiscard(cards, hand, handLen);
       if (pick < 0) return;
-      if (sink) discardedNames.push(cards[hand[pick]!]!.name);
+      const index = hand[pick]!;
+      if (sink) discardedNames.push(cards[index]!.name);
       hand[pick] = hand[--handLen]!;
+      bury(index);
     }
   };
 
   /** Cards off the top into the graveyard. They leave the library; you never see them. */
   const millCards = (count: number): void => {
     for (let k = 0; k < count && top < libLen; k++) {
-      if (sink) milledNames.push(cards[library[top]!]!.name);
-      top++;
+      const index = library[top++]!;
+      if (sink) milledNames.push(cards[index]!.name);
+      bury(index);
     }
   };
 
@@ -807,8 +844,16 @@ export function simulate(
       case 'lands':
         n = landsInPlay(turn);
         break;
+      case 'graveyard':
+        n = gyLen;
+        break;
       case 'turn':
         n = turn;
+        break;
+      case 'all':
+        // Bounded by the zone rather than by a number. This is only the ceiling
+        // the move loop stops at; it stops sooner the moment nothing matches.
+        n = MAX_BEHAVIOR_AMOUNT;
         break;
       default:
         // A kind this build has never heard of, off a newer device.
@@ -818,6 +863,168 @@ export function simulate(
         return 0;
     }
     return Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, n));
+  };
+
+  // --- Moving cards between zones ------------------------------------------
+  // One step covers tutoring, ramping a land out of the library, regrowth,
+  // bouncing, entombing and putting a card back, because all six are the same
+  // sentence with different zones in it. What narrows it to a particular card
+  // is a Scryfall query, matched against the deck once at build time and
+  // reaching the inner loop as a byte per card.
+
+  /** Nothing matches. What a criteria string no filter was built for gets. */
+  const NO_MATCH = new Uint8Array(0);
+  const filterMasks = new Map<string, Uint8Array>();
+  for (const f of deck.filters) filterMasks.set(f.q, f.match);
+
+  const accepts = (mask: Uint8Array | null, index: number): boolean => !mask || mask[index] === 1;
+
+  /**
+   * Pull one matching card out of a zone, or -1. The zone shrinks by one.
+   *
+   * The library is scanned from the top down, so an unfiltered move off it is a
+   * draw and a filtered one is a tutor that finds the topmost copy — which in a
+   * shuffled library is a uniformly random one. Every other zone is scanned in
+   * whatever order the sequencer happens to hold it, which is the honest answer
+   * for a goldfish: there is no opponent to play around and no reason to prefer
+   * one Mountain in the yard over another.
+   */
+  const takeFrom = (zone: BehaviorZone, mask: Uint8Array | null): number => {
+    switch (zone) {
+      case 'library':
+        for (let i = top; i < libLen; i++) {
+          const index = library[i]!;
+          if (!accepts(mask, index)) continue;
+          library[i] = library[--libLen]!;
+          return index;
+        }
+        return -1;
+      case 'hand':
+        for (let i = 0; i < handLen; i++) {
+          const index = hand[i]!;
+          // The commander sits in `hand` as bookkeeping, not as a card you may
+          // put wherever you like. Same exemption pickDiscard makes.
+          if (cards[index]!.commander || !accepts(mask, index)) continue;
+          hand[i] = hand[--handLen]!;
+          return index;
+        }
+        return -1;
+      case 'graveyard':
+        for (let i = 0; i < gyLen; i++) {
+          const index = graveyard[i]!;
+          if (!accepts(mask, index)) continue;
+          graveyard[i] = graveyard[--gyLen]!;
+          return index;
+        }
+        return -1;
+      case 'exile':
+        for (let i = 0; i < exLen; i++) {
+          const index = exiled[i]!;
+          if (!accepts(mask, index)) continue;
+          exiled[i] = exiled[--exLen]!;
+          return index;
+        }
+        return -1;
+      case 'battlefield':
+        // The battlefield here holds mana sources and nothing else, so this
+        // finds a land or a rock and never the creature somebody meant. Said
+        // out loud in the editor rather than discovered from a flat curve.
+        for (let s = 0; s < srcLen; s++) {
+          const index = srcCard[s]!;
+          if (index < 0 || !accepts(mask, index)) continue;
+          dropSource(s);
+          return index;
+        }
+        return -1;
+      default:
+        return -1;
+    }
+  };
+
+  /**
+   * A card put onto the battlefield by a move rather than played for the turn.
+   *
+   * A mana source becomes one, arriving **tapped** — the same call the landramp
+   * role already makes ("Rampant Growth exactly and Nature's Lore a turn late"),
+   * and the conservative half of the two cards that print this. An Exploration
+   * grants its extra drop from next turn, as it does when cast, because this
+   * turn's drop has already happened.
+   *
+   * Everything else arrives and is not tracked: a reanimated creature is a body
+   * this model has no room for. It really did leave the zone it was in, and it
+   * really does nothing here, which is the omission §11.4 asks for rather than
+   * the invention it forbids. It also does **not** fire its own behavior, which
+   * is the one place that would have to be a rules engine: a rule that puts
+   * cards onto the battlefield could reach cards whose rules do the same, and a
+   * goldfish is not where anyone should find out how deep that goes.
+   */
+  const enterBattlefield = (index: number, card: SimCard, turn: number): void => {
+    if (card.role === 'extraland') {
+      if (extraLands < MAX_EXTRA_LANDS) extraLands++;
+      return;
+    }
+    if (card.role === 'spell' || card.role === 'landramp') return;
+    if (!addSource(index, card, turn + 1, turn)) return;
+    colorsHeld |= card.mask;
+    const back = payEntryCost(card);
+    if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
+  };
+
+  /** Room for one more card in a zone. */
+  const roomIn = (zone: BehaviorZone): boolean => {
+    switch (zone) {
+      case 'hand':
+        return handLen < hand.length;
+      case 'graveyard':
+        return gyLen < graveyard.length;
+      case 'exile':
+        return exLen < exiled.length;
+      default:
+        return true;
+    }
+  };
+
+  const putTo = (index: number, zone: BehaviorZone, turn: number): void => {
+    switch (zone) {
+      case 'hand':
+        hand[handLen++] = index;
+        return;
+      case 'library':
+        // The bottom, never the top: putting a card back where you would next
+        // draw it is the generous reading and §11.4 does not allow one. Inside
+        // eight turns the bottom of a real library is the same as gone, which
+        // is also what the London mulligan's own bottoming means here — so a
+        // library with no spare slot simply loses the card, and that is the
+        // same statement rather than a different one.
+        if (libLen < library.length) library[libLen++] = index;
+        return;
+      case 'graveyard':
+        graveyard[gyLen++] = index;
+        return;
+      case 'exile':
+        exiled[exLen++] = index;
+        return;
+      case 'battlefield':
+        enterBattlefield(index, cards[index]!, turn);
+        return;
+    }
+  };
+
+  const moveCards = (step: BehaviorStep, count: number, turn: number): void => {
+    const from = step.from;
+    const to = step.to;
+    if (!from || !to || from === to) return;
+    const mask = step.q ? (filterMasks.get(step.q) ?? NO_MATCH) : null;
+    for (let k = 0; k < count; k++) {
+      if (!roomIn(to)) return;
+      const index = takeFrom(from, mask);
+      if (index < 0) return;
+      // `seen` is cards that reached your hand off the library, which is what
+      // the cards chart reads. A tutor counts; a regrowth does not.
+      if (from === 'library' && to === 'hand') seen++;
+      putTo(index, to, turn);
+      if (sink) movedNames.push(cards[index]!.name);
+    }
   };
 
   /**
@@ -860,6 +1067,15 @@ export function simulate(
           const t = makeTreasures(n, turn);
           made += t;
           if (sink && t > 0) bits.push(`makes ${t} Treasure${t === 1 ? '' : 's'}`);
+          break;
+        }
+        case 'move': {
+          if (sink) movedNames.length = 0;
+          moveCards(step, n, turn);
+          if (sink && movedNames.length) {
+            const where = ZONE_PHRASE.get(step.to ?? '') ?? 'somewhere';
+            bits.push(`moves ${movedNames.join(', ')} to ${where}`);
+          }
           break;
         }
       }
@@ -908,6 +1124,8 @@ export function simulate(
     libLen = deckSize;
     top = 0;
     seen = 0;
+    gyLen = 0;
+    exLen = 0;
 
     // --- The opener, and however many mulligans it takes ---------------------
     for (let m = 0; ; m++) {
@@ -1079,6 +1297,9 @@ export function simulate(
             if (addSource(index, land, turn + (slow ? 1 : 0), turn)) {
               colorsHeld |= land.mask;
               library[at] = library[--libLen]!;
+              // The fetch itself is sacrificed, which means the yard, which
+              // means a behavior can go and get it back.
+              bury(cardIndex);
               if (sink) say(sink, 'land', `Cracks for ${land.name}${slow ? ' (enters tapped)' : ''}`);
               const back = payEntryCost(land);
               if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
@@ -1301,6 +1522,13 @@ export function simulate(
             );
           }
         }
+        // And where the card itself ends up. A permanent stays out, as a source
+        // if it makes mana and as an untracked body if it does not; everything
+        // else is in the graveyard once it has resolved, which is where a
+        // behavior can go and find it. After the effect, not before, because a
+        // sorcery is on the stack while it resolves and a Regrowth that finds
+        // itself is a rules error rather than a rounding one.
+        if (!card.permanent) bury(index);
         // A card with no effect profile still resolves as a blank. For a
         // Lightning Bolt that is correct; for a draw spell whose draw hangs off
         // a trigger the pipeline would not read, it is the floor §11.4 warned

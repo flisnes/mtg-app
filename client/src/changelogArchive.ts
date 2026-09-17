@@ -1,4 +1,4 @@
-// The older half of the changelog (0.148.2 down to 0.98.0), split out of
+// The older half of the changelog (0.149.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,16 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.149.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Deck stats: the mana curve, your land count against Karsten’s rule of thumb for that curve, and what your tapped lands cost you in tempo. Open it from the line under the legality panel, or from the deck’s “...” menu.',
+      },
+    ],
+  },
   {
     version: '0.148.2',
     changes: [

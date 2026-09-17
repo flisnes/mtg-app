@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.158.1
+
+- **Card behavior can move cards between zones.** One new step, and it covers a lot of cards: tutoring is library to hand, ramp is library to battlefield, regrowth is graveyard to hand, a bounce is battlefield to hand, and "put it back" is hand to library. Pick the two zones and how many, and the simulator plays it out.
+- **Which cards it finds is a card-search query.** Leave it blank for any card, or write `t:basic`, `t:creature mv<=3`, `o:"draw a card"` — the same syntax the search bar takes, matched against the cards in this deck. The editor says how many it matches as you type, so a typo is a number that drops to zero rather than a rule that quietly does nothing.
+- **"All that match" is a count.** Return every land in your graveyard without guessing how many are down there.
+- **The simulator keeps a graveyard.** It had no use for one until a rule could go looking in it. Milling, discarding, a cracked fetch, a Lotus Field's own entry cost and every spell that is not a permanent all put a card there now, so what a rule finds in the yard is what should be in it.
+- Two honest limits, both said in the editor. The battlefield only holds your mana sources here, so moving a card off it finds a land or a rock and never a creature. And anything moved onto the battlefield arrives tapped, which is Rampant Growth exactly and Nature's Lore a turn late.
+
 ## 0.158.0
 
 - **Tell the simulator what a card actually does.** Deck stats now has a "Card behavior" section listing every card in the deck alongside what the model currently thinks it does. Most of them say "Do nothing", because the card database only reads what a card does unconditionally, on resolution, to you — anything behind a trigger or an "if" reaches the simulator as a blank. Pick a card and write the rule yourself.

@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.158.1',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Card behavior can move cards between zones. One step covers tutoring, ramping a land into play, regrowth, bouncing and putting a card back: pick a zone to take from, a zone to put it in, and how many. Which cards it finds is a card-search query, so `t:basic` means here what it means in the search bar, and the editor counts the matches in your deck as you type.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'The simulator keeps a graveyard now, filled by everything that fills one: milling, discarding, a cracked fetch, and every spell that is not a permanent. So a rule that goes looking in the yard finds what should be there.',
+      },
+    ],
+  },
+  {
     version: '0.158.0',
     changes: [
       {
@@ -230,16 +245,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'Draw odds in the deck stats sheet: the chance of drawing what you want by turn N. Pick a group with the search bar you already know (`type:land`, `otag:removal`, `cmc<=2`) or tap a preset, set how many copies you need, and read the curve from your opening hand to turn six.',
-      },
-    ],
-  },
-  {
-    version: '0.149.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Deck stats: the mana curve, your land count against Karsten’s rule of thumb for that curve, and what your tapped lands cost you in tempo. Open it from the line under the legality panel, or from the deck’s “...” menu.',
       },
     ],
   },

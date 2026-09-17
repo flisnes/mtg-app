@@ -34,11 +34,19 @@ import type { EffectProfile } from './card.js';
 /** When a rule fires. */
 export type BehaviorTrigger = 'play' | 'upkeep';
 
+/**
+ * Where a card can be. Five zones, and the battlefield is the lopsided one: the
+ * sequencer tracks the permanents that make mana and nothing else, so moving a
+ * card *onto* it is always meaningful and moving one *off* it only ever finds a
+ * land or a rock. The editor says so rather than pretending otherwise.
+ */
+export type BehaviorZone = 'library' | 'hand' | 'graveyard' | 'exile' | 'battlefield';
+
 /** What one step does. */
-export type BehaviorStepKind = 'draw' | 'mill' | 'discard' | 'scry' | 'surveil' | 'treasure';
+export type BehaviorStepKind = 'draw' | 'mill' | 'discard' | 'scry' | 'surveil' | 'treasure' | 'move';
 
 /** Where a step's number comes from. */
-export type BehaviorAmountKind = 'fixed' | 'hand' | 'lands' | 'turn';
+export type BehaviorAmountKind = 'fixed' | 'all' | 'hand' | 'lands' | 'graveyard' | 'turn';
 
 export interface BehaviorAmount {
   kind: BehaviorAmountKind;
@@ -49,6 +57,22 @@ export interface BehaviorAmount {
 export interface BehaviorStep {
   op: BehaviorStepKind;
   x: BehaviorAmount;
+  /** `move` only: where the cards come from. */
+  from?: BehaviorZone;
+  /** `move` only: where they end up. */
+  to?: BehaviorZone;
+  /**
+   * `move` only: a Scryfall query saying which cards qualify. Absent or empty
+   * means any card.
+   *
+   * Reusing the search syntax rather than inventing a picker is the whole trick
+   * here: `t:basic`, `t:creature mv<=3`, `o:"draw a card"` are all already
+   * written, already documented on the search screen, and already understood by
+   * anyone who has used the app for ten minutes. Matching happens once per deck
+   * build, against the cards in the deck, so the sequencer's inner loop only
+   * ever reads a precomputed bitmask.
+   */
+  q?: string;
 }
 
 export interface BehaviorRule {
@@ -81,6 +105,12 @@ export const MAX_BEHAVIOR_STEPS = 6;
  * are fixed-size.
  */
 export const MAX_BEHAVIOR_AMOUNT = 20;
+/**
+ * Characters in a move step's criteria. Long enough for anything worth writing
+ * (`t:creature mv<=3 -t:legendary` is 29) and short enough that a behavior row
+ * stays comfortably inside SYNC_MAX_ROW_BYTES.
+ */
+export const MAX_BEHAVIOR_QUERY = 120;
 
 /** One deck's answer for one card. Keyed `<deckId>:<oracleId>`, synced like any row. */
 export interface DeckBehavior {
@@ -134,6 +164,23 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'scry', label: 'Scry X', verb: 'scry' },
   { id: 'surveil', label: 'Surveil X', verb: 'surveil' },
   { id: 'treasure', label: 'Create X Treasures', verb: 'create' },
+  { id: 'move', label: 'Move X between zones', verb: 'move' },
+];
+
+export interface ZoneOption {
+  id: BehaviorZone;
+  /** For the picker. */
+  label: string;
+  /** For writing the rule out: "from your library". */
+  phrase: string;
+}
+
+export const BEHAVIOR_ZONES: readonly ZoneOption[] = [
+  { id: 'library', label: 'Library', phrase: 'your library' },
+  { id: 'hand', label: 'Hand', phrase: 'your hand' },
+  { id: 'graveyard', label: 'Graveyard', phrase: 'your graveyard' },
+  { id: 'battlefield', label: 'Battlefield', phrase: 'the battlefield' },
+  { id: 'exile', label: 'Exile', phrase: 'exile' },
 ];
 
 export interface AmountOption {
@@ -142,18 +189,23 @@ export interface AmountOption {
   label: string;
   /** For writing the rule out, where it follows the verb. */
   phrase: string;
+  /** Only means anything on a `move`, where the source zone bounds it. */
+  moveOnly?: boolean;
 }
 
 export const BEHAVIOR_AMOUNTS: readonly AmountOption[] = [
   { id: 'fixed', label: 'a fixed number', phrase: '' },
+  { id: 'all', label: 'all that match', phrase: 'all that match', moveOnly: true },
   { id: 'hand', label: 'cards in your hand', phrase: 'cards in your hand' },
   { id: 'lands', label: 'lands you control', phrase: 'lands you control' },
+  { id: 'graveyard', label: 'cards in your graveyard', phrase: 'cards in your graveyard' },
   { id: 'turn', label: 'the turn number', phrase: 'the turn number' },
 ];
 
 const TRIGGER_BY_ID = new Map(BEHAVIOR_TRIGGERS.map((t) => [t.id as string, t]));
 const STEP_BY_ID = new Map(BEHAVIOR_STEPS.map((s) => [s.id as string, s]));
 const AMOUNT_BY_ID = new Map(BEHAVIOR_AMOUNTS.map((a) => [a.id as string, a]));
+const ZONE_BY_ID = new Map(BEHAVIOR_ZONES.map((z) => [z.id as string, z]));
 
 // ---------------------------------------------------------------------------
 // Reading one out loud
@@ -177,6 +229,18 @@ export function describeStep(step: BehaviorStep): string {
   const computed = step.x.kind !== 'fixed';
   const count = computed ? 'X' : String(step.x.n ?? 0);
   const tail = computed ? ` (X = ${describeAmount(step.x)})` : '';
+  if (step.op === 'move') {
+    const from = ZONE_BY_ID.get(step.from ?? '')?.phrase ?? 'somewhere';
+    const to = ZONE_BY_ID.get(step.to ?? '')?.phrase ?? 'somewhere';
+    const filter = step.q ? ` matching ${step.q}` : '';
+    const where = ` from ${from} to ${to}`;
+    // "all that match" already says how many, so it does not want an "X = "
+    // trailer explaining a number nobody asked for.
+    if (step.x.kind === 'all') return `move everything${filter}${where}`;
+    const n = step.x.n ?? 0;
+    const cards = computed ? 'X cards' : `${n} card${n === 1 ? '' : 's'}`;
+    return `move ${cards}${filter}${where}${tail}`;
+  }
   if (step.op === 'treasure') {
     const many = computed || (step.x.n ?? 0) !== 1;
     return `${verb} ${count} Treasure${many ? 's' : ''}${tail}`;
@@ -262,10 +326,30 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     if (!bucket || !Array.isArray(rule.steps)) continue;
     for (const step of rule.steps) {
       if (!step || !STEP_BY_ID.has(step.op) || !step.x || !AMOUNT_BY_ID.has(step.x.kind)) continue;
+      if (step.op === 'move') {
+        // A move with no zones, or with the same zone twice, is not a move.
+        if (!step.from || !step.to || !ZONE_BY_ID.has(step.from) || !ZONE_BY_ID.has(step.to)) continue;
+        if (step.from === step.to) continue;
+      } else if (step.x.kind === 'all') {
+        // "All that match" is bounded by the zone it draws from, and only a
+        // move has one. "Draw all" would be MAX_BEHAVIOR_AMOUNT wearing a hat.
+        continue;
+      }
       bucket.push(step);
     }
   }
   return out.play.length > 0 || out.upkeep.length > 0 ? out : null;
+}
+
+/**
+ * Every distinct criteria string a compiled behavior uses, for the caller that
+ * has to turn them into per-card bitmasks. Lives here because the grammar is
+ * what knows which steps carry a query.
+ */
+export function collectBehaviorQueries(b: CompiledBehavior | null | undefined, into: Set<string>): void {
+  if (!b) return;
+  for (const step of b.play) if (step.q) into.add(step.q);
+  for (const step of b.upkeep) if (step.q) into.add(step.q);
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +389,17 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
       if (!isRecord(s) || typeof s.op !== 'string' || !STEP_BY_ID.has(s.op)) continue;
       const x = cleanAmount(s.x);
       if (!x) continue;
-      steps.push({ op: s.op as BehaviorStepKind, x });
+      const op = s.op as BehaviorStepKind;
+      if (op !== 'move') {
+        if (x.kind === 'all') continue;
+        steps.push({ op, x });
+        continue;
+      }
+      const from = typeof s.from === 'string' && ZONE_BY_ID.has(s.from) ? (s.from as BehaviorZone) : null;
+      const to = typeof s.to === 'string' && ZONE_BY_ID.has(s.to) ? (s.to as BehaviorZone) : null;
+      if (!from || !to || from === to) continue;
+      const q = typeof s.q === 'string' ? s.q.trim().slice(0, MAX_BEHAVIOR_QUERY) : '';
+      steps.push(q ? { op, x, from, to, q } : { op, x, from, to });
     }
     if (steps.length > 0) rules.push({ on: r.on as BehaviorTrigger, steps });
   }

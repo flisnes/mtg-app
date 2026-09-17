@@ -1,9 +1,12 @@
 import {
   BASIC_LAND_TYPES,
+  compileBehavior,
   decodeEffectProfile,
   decodeFetchProfile,
   decodeManaProfile,
   sourceColors,
+  type CardBehavior,
+  type CompiledBehavior,
   type DeckBoard,
   type EffectProfile,
   type OracleCard,
@@ -108,6 +111,16 @@ export interface SimCard {
    * here so the inner loop never touches a tuple. See EffectProfile.
    */
   effect: EffectProfile | null;
+  /**
+   * What the *user* says it does, which replaces `effect` rather than adding to
+   * it. Null for every card nobody has authored, which is nearly all of them.
+   *
+   * Replace and not merge, because the editor opens on `effect` rendered in the
+   * same grammar: editing what we read and writing your own are one gesture, so
+   * a saved behavior already contains whatever of the derived reading the user
+   * wanted to keep. Merging would double every step they left alone.
+   */
+  behavior: CompiledBehavior | null;
 }
 
 /**
@@ -138,6 +151,18 @@ export interface SimCoverage {
   floored: number;
   /** Everything else: cast, pays its cost, leaves your hand, does nothing. */
   blanks: number;
+  /**
+   * Copies playing out the way the user said rather than the way the card
+   * database read them. Counted apart from the buckets above, like `floored`,
+   * because an authored card is still a land or a spell.
+   *
+   * This is the one number on the report that points the other way. Everything
+   * else here exists because §11.4's unmodelled cards bias the curves *down*,
+   * so the panel can call them a floor. An authored behavior can bias them up,
+   * and a reader who cannot see how much of the deck is authored cannot price
+   * that in.
+   */
+  authored: number;
 }
 
 export interface SimDeck {
@@ -187,7 +212,12 @@ interface LandInfo {
   basic: boolean;
 }
 
-export function buildSimDeck(rows: readonly DeckRow[]): SimDeck {
+/**
+ * @param behaviors Authored behavior for this deck, by oracleId. Omitted by
+ * every caller that only wants the card database's reading — the goldfish trace
+ * and the stats sheet both pass one, the acceptance rig does not.
+ */
+export function buildSimDeck(rows: readonly DeckRow[], behaviors?: ReadonlyMap<string, CardBehavior>): SimDeck {
   const cards: SimCard[] = [];
   const byOracle = new Map<string, number>();
   const commanders: number[] = [];
@@ -251,6 +281,7 @@ export function buildSimDeck(rows: readonly DeckRow[]): SimDeck {
       copies: r.board === 'main' ? r.quantity : 0,
       commander: r.board === 'commander',
       effect: decodeEffectProfile(o.effect),
+      behavior: compileBehavior(behaviors?.get(o.oracleId)),
     });
 
     if (r.board === 'main') {
@@ -289,16 +320,17 @@ export function buildSimDeck(rows: readonly DeckRow[]): SimDeck {
     for (let c = 0; c < cards[i]!.copies; c++) library[at++] = i;
   }
 
-  const coverage: SimCoverage = { library: libraryCopies, lands: 0, mana: 0, effects: 0, floored: 0, blanks: 0 };
+  const coverage: SimCoverage = { library: libraryCopies, lands: 0, mana: 0, effects: 0, floored: 0, blanks: 0, authored: 0 };
   for (const card of cards) {
     if (card.copies <= 0) continue;
     if (card.role === 'land' || card.role === 'fetch') coverage.lands += card.copies;
     else if (card.role !== 'spell') coverage.mana += card.copies;
-    else if (card.effect) coverage.effects += card.copies;
+    else if (card.effect || card.behavior) coverage.effects += card.copies;
     else coverage.blanks += card.copies;
+    if (card.behavior) coverage.authored += card.copies;
     // Counted apart from the buckets above, not instead of them: a Read the
     // Bones is modelled *and* flagged, and both facts belong on the line.
-    if (card.effect?.unknown) coverage.floored += card.copies;
+    if (card.effect?.unknown && !card.behavior) coverage.floored += card.copies;
   }
 
   return { cards, library, commanders, hasManaData: profiled > 0, coverage };

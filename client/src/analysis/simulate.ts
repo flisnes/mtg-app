@@ -1,4 +1,4 @@
-import type { DeckFormat, EffectProfile } from '@mtg/shared';
+import { MAX_BEHAVIOR_AMOUNT, type BehaviorStep, type DeckFormat, type EffectProfile } from '@mtg/shared';
 import { canPay, explainPayment, maxMatching, PAY_GENERIC, PAY_UNUSED, type ManaUnit, type UnitGroup } from './canPay.js';
 import { newTraceSink, pipText, say, type GameTrace, type TraceLine, type TraceSink } from './trace.js';
 import { handSize } from './gameModel.js';
@@ -719,6 +719,17 @@ export function simulate(
    * it added to this turn, which only a Treasure ever does.
    */
   const enters = (index: number, card: SimCard, turn: number): number => {
+    // Authored behavior replaces the derived profile outright — see
+    // SimCard.behavior for why replace and not merge. A card carrying both an
+    // upkeep rule and a play rule does both: unlike EffectProfile, where
+    // `repeatable` is one flag over the whole thing, the rules are separate, so
+    // a card that draws on entry *and* every upkeep is one behavior.
+    const b = card.behavior;
+    if (b) {
+      if (b.upkeep.length > 0 && recurLen < recurring.length) recurring[recurLen++] = index;
+      if (sink) lastEffectText = '';
+      return b.play.length > 0 ? runSteps(b.play, turn) : 0;
+    }
     const effect = card.effect;
     if (!effect) return 0;
     if (effect.repeatable) {
@@ -756,6 +767,109 @@ export function simulate(
 
   /** What resolveEffect() just did, in one phrase, for the caller to attribute. */
   let lastEffectText = '';
+
+  // --- Authored behavior ----------------------------------------------------
+  // The same zone movers, driven by the user's rules instead of the card
+  // database's reading. Nothing new happens to the game state here: what a
+  // behavior buys is *order* and *arithmetic* — a loot that discards before it
+  // draws, a draw whose number is the size of your hand — over a grammar the
+  // editor can offer without lying about what gets executed.
+
+  /** Lands on the battlefield right now, for the `lands` amount. */
+  const landsInPlay = (turn: number): number => {
+    let n = 0;
+    for (let s = 0; s < srcLen; s++) {
+      if (!srcIsLand[s]) continue;
+      const expires = srcExpires[s]!;
+      if (expires > 0 && turn > expires) continue;
+      n++;
+    }
+    return n;
+  };
+
+  /**
+   * A step's number, clamped both ends.
+   *
+   * The ceiling is the guard that makes state-reading amounts safe to offer: a
+   * hand of forty in a deck that draws its whole library would otherwise ask
+   * drawCards() for forty, and `hand` is a fixed-size array. It is the same cap
+   * MAX_DRAW_PER_EFFECT is for a misread "draw X", for the same reason.
+   */
+  const behaviorAmount = (step: BehaviorStep, turn: number): number => {
+    let n: number;
+    switch (step.x.kind) {
+      case 'fixed':
+        n = step.x.n ?? 0;
+        break;
+      case 'hand':
+        n = handLen;
+        break;
+      case 'lands':
+        n = landsInPlay(turn);
+        break;
+      case 'turn':
+        n = turn;
+        break;
+      default:
+        // A kind this build has never heard of, off a newer device.
+        // compileBehavior drops those, so reaching here means the grammar grew
+        // without this switch; zero is the omission the rest of the model is
+        // built on.
+        return 0;
+    }
+    return Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, n));
+  };
+
+  /**
+   * Run a rule's steps in the order they were authored, and return the mana
+   * they added to this turn.
+   *
+   * Every amount is read *as its step runs*, not once up front, which is what
+   * makes a sequence worth having: "discard your hand, then draw cards equal to
+   * the cards in your hand" is a very short rule, and this resolves it the way
+   * the card would.
+   */
+  const runSteps = (steps: readonly BehaviorStep[], turn: number): number => {
+    const bits: string[] = [];
+    let made = 0;
+    for (const step of steps) {
+      const n = behaviorAmount(step, turn);
+      if (n <= 0) continue;
+      switch (step.op) {
+        case 'draw':
+          if (sink) drewNames.length = 0;
+          drawCards(n);
+          if (sink && drewNames.length) bits.push(`draws ${drewNames.join(', ')}`);
+          break;
+        case 'discard':
+          if (sink) discardedNames.length = 0;
+          discardCards(n);
+          if (sink && discardedNames.length) bits.push(`discards ${discardedNames.join(', ')}`);
+          break;
+        case 'mill':
+          if (sink) milledNames.length = 0;
+          millCards(n);
+          if (sink && milledNames.length) bits.push(`mills ${milledNames.join(', ')}`);
+          break;
+        case 'scry':
+        case 'surveil':
+          dig(n);
+          if (sink) bits.push(`${step.op} ${n}`);
+          break;
+        case 'treasure': {
+          const t = makeTreasures(n, turn);
+          made += t;
+          if (sink && t > 0) bits.push(`makes ${t} Treasure${t === 1 ? '' : 's'}`);
+          break;
+        }
+      }
+    }
+    if (sink) lastEffectText = bits.join(', ');
+    return made;
+  };
+
+  /** Does anything happen when this resolves, from either source? */
+  const resolves = (card: SimCard): boolean => !!card.behavior || !!card.effect;
 
   const firstCast = new Int32Array(n);
   const firstHeld = new Int32Array(n);
@@ -853,10 +967,16 @@ export function simulate(
       // added by hand only inside the spend loop, after the pool is fixed.
       for (let r = 0; r < recurLen; r++) {
         const index = recurring[r]!;
-        const effect = cards[index]!.effect;
-        if (!effect) continue;
-        resolveEffect(effect, turn);
-        if (sink && lastEffectText) say(sink, 'effect', `Upkeep: ${cards[index]!.name} ${lastEffectText}`);
+        const card = cards[index]!;
+        if (card.behavior) {
+          if (card.behavior.upkeep.length === 0) continue;
+          runSteps(card.behavior.upkeep, turn);
+        } else if (card.effect) {
+          resolveEffect(card.effect, turn);
+        } else {
+          continue;
+        }
+        if (sink && lastEffectText) say(sink, 'effect', `Upkeep: ${card.name} ${lastEffectText}`);
       }
 
       if (!(turn === 1 && opts.onPlay) && top < libLen && handLen < MAX_HAND) {
@@ -962,7 +1082,7 @@ export function simulate(
               if (sink) say(sink, 'land', `Cracks for ${land.name}${slow ? ' (enters tapped)' : ''}`);
               const back = payEntryCost(land);
               if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
-              if (opts.effects && land.effect) {
+              if (opts.effects && resolves(land)) {
                 enters(index, land, turn);
                 if (sink && lastEffectText) say(sink, 'effect', `${land.name} ${lastEffectText}`);
               }
@@ -977,7 +1097,7 @@ export function simulate(
           // A Temple scries as it enters, and half the taplands printed since
           // Theros do something on the way in. Free, now that there is a
           // resolver to call.
-          if (opts.effects && card.effect) {
+          if (opts.effects && resolves(card)) {
             enters(cardIndex, card, turn);
             if (sink && lastEffectText) say(sink, 'effect', `${card.name} ${lastEffectText}`);
           }
@@ -1170,8 +1290,15 @@ export function simulate(
         // is recomputed from `available` at the top of every pass.
         if (opts.effects) {
           available += enters(index, card, turn);
-          if (sink && card.effect) {
-            say(sink, 'effect', card.effect.repeatable ? `${card.name} will fire every upkeep from next turn` : `${card.name} ${lastEffectText || 'resolves'}`);
+          if (sink && resolves(card)) {
+            // A behavior with an upkeep rule and no play rule is the same shape
+            // as a repeatable profile: nothing happened now, something will.
+            const recurs = card.behavior ? card.behavior.play.length === 0 : card.effect!.repeatable;
+            say(
+              sink,
+              'effect',
+              recurs ? `${card.name} will fire every upkeep from next turn` : `${card.name} ${lastEffectText || 'resolves'}`,
+            );
           }
         }
         // A card with no effect profile still resolves as a blank. For a

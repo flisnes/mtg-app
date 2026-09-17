@@ -115,6 +115,15 @@ function coverageNote(c: SimCoverage, missedDraw: number | null): string {
   if (c.floored > 0) {
     rest.push(`${c.floored} of the amounts we do read are floors, the way a "draw X" has to be.`);
   }
+  // The one line here that points the other way, and the reason it has to be
+  // said out loud: everything above is an argument that the curves are
+  // pessimistic. An authored card plays out exactly as written, so for this
+  // deck they stop being a pure floor, and only the reader can price that in.
+  if (c.authored > 0) {
+    rest.push(
+      `${c.authored} card${c.authored === 1 ? '' : 's'} play out the way you told them to rather than the way we read them, so the lines above are only as good as your own reading of those.`,
+    );
+  }
   return [head, ...rest].join(' ');
 }
 

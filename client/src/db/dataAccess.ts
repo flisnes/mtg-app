@@ -1,4 +1,5 @@
 import {
+  deckBehaviorId,
   normalizeCardTags,
   normalizeSpecialConditions,
   prefsCompatible,
@@ -7,12 +8,14 @@ import {
   specialKey,
 } from '@mtg/shared';
 import type {
+  CardBehavior,
   CollectionEntry,
   Condition,
   ContainerEmblem,
   ContainerKind,
   CopyPrefs,
   Deck,
+  DeckBehavior,
   DeckBoard,
   DeckCard,
   DeckFolder,
@@ -213,7 +216,7 @@ const WISHLIST_TABLES = [db.wishlist, db.events, db.outbox];
 // db.collection is in scope because filing a copy stamps the copy (see
 // touchNamedCopies): moving cardboard into or out of a container is an edit to
 // that piece of cardboard, and "Last edited" sorts on the row's own updatedAt.
-const DECK_TABLES = [db.decks, db.deckCards, db.collection, db.events, db.outbox];
+const DECK_TABLES = [db.decks, db.deckCards, db.deckBehaviors, db.collection, db.events, db.outbox];
 
 export interface AddToCollectionInput {
   oracleId: string;
@@ -1135,10 +1138,51 @@ export async function deleteDeck(id: string): Promise<void> {
       });
     }
     await db.deckCards.where('deckId').equals(id).delete();
+    // Authored behavior belongs to the deck, so it goes with it. Tombstoned one
+    // by one rather than dropped locally: a row nobody deletes on the server is
+    // a row that comes back on the next pull.
+    const behaviors = await db.deckBehaviors.where('deckId').equals(id).toArray();
+    for (const b of behaviors) await stageDelete('deckBehaviors', b.id);
+    await db.deckBehaviors.where('deckId').equals(id).delete();
     await db.decks.delete(id);
     await stageDelete('decks', id);
     // Deleting the container unfiles everything that was in it.
     await touchNamedCopies(cards, now);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Card behavior. What the user says a card does in this deck, overriding the
+// card database's reading of its oracle text. See shared/src/behavior.ts.
+// ---------------------------------------------------------------------------
+
+/** Every authored behavior in one deck, as a map the sim deck builder can take. */
+export async function deckBehaviorMap(deckId: string): Promise<Map<string, CardBehavior>> {
+  const rows = await db.deckBehaviors.where('deckId').equals(deckId).toArray();
+  return new Map(rows.map((r) => [r.oracleId, r.behavior]));
+}
+
+/**
+ * Write one card's behavior, or clear it with null.
+ *
+ * Clearing stores nothing rather than an empty rule list: "this card does
+ * nothing" and "we never asked" are the same instruction to the sequencer, and
+ * only one of them should count towards the authored number on the coverage
+ * line.
+ */
+export async function setCardBehavior(deckId: string, oracleId: string, behavior: CardBehavior | null): Promise<void> {
+  const rowId = deckBehaviorId(deckId, oracleId);
+  await db.transaction('rw', [db.deckBehaviors, db.outbox], async () => {
+    if (!behavior || behavior.rules.length === 0) {
+      const existing = await db.deckBehaviors.get(rowId);
+      if (!existing) return;
+      await db.deckBehaviors.delete(rowId);
+      await stageDelete('deckBehaviors', rowId);
+      return;
+    }
+    const row: DeckBehavior = { id: rowId, deckId, oracleId, behavior, updatedAt: Date.now() };
+    await db.deckBehaviors.put(row);
+    await stagePut('deckBehaviors', row);
   });
 }
 
@@ -3018,6 +3062,7 @@ export async function replaceAllUserData(data: Omit<TransferPayload, 'version'>)
       // deckFolders was serialized and sanitized but never restored, so a
       // transfer silently unfiled every deck on the receiving device.
       db.deckFolders.bulkAdd(data.deckFolders),
+      db.deckBehaviors.bulkAdd(data.deckBehaviors),
       db.trades.bulkAdd(data.trades),
       db.priceHistories.bulkAdd(data.priceHistories),
       db.sealedPriceHistories.bulkAdd(data.sealedPriceHistories),

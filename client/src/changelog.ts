@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.158.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Tell the simulator what a card actually does. Deck stats → Card behavior lists every card in the deck with what the model currently thinks it does ("Do nothing" for most of them), and you pick: when played or each upkeep, then draw / mill / discard / scry / surveil / make Treasures, with X a fixed number or the cards in your hand, the lands you control or the turn number. Steps run in the order you write them, so a loot that discards first draws for a smaller hand.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Cards you author are counted on the coverage line under the charts. The curves stop being a pure floor once you have told the model something, and the panel says how many cards that is rather than quietly changing what the numbers mean.',
+      },
+    ],
+  },
+  {
     version: '0.157.1',
     changes: [
       {
@@ -225,21 +240,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'Deck stats: the mana curve, your land count against Karsten’s rule of thumb for that curve, and what your tapped lands cost you in tempo. Open it from the line under the legality panel, or from the deck’s “...” menu.',
-      },
-    ],
-  },
-  {
-    version: '0.148.2',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Search by the mana a card makes. `produces:g` finds anything that taps for green, `produces:wu` wants both colors, `produces>=3` finds your fixing. Plus `is:tapland` for the lands that always enter tapped (not the ones that only sometimes do), `is:untappedsource` for the ones that don’t, and `is:manasource` for anything that taps for mana.',
-      },
-      {
-        kind: 'changed',
-        text:
-          'The card database learned two new things about every card to make that work, so expect a card-data update after this one. Bigger than usual, just this once.',
       },
     ],
   },

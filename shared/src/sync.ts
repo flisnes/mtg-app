@@ -15,6 +15,7 @@ export const SYNC_TABLES = [
   'decks',
   'deckCards',
   'deckFolders',
+  'deckBehaviors',
   'trades',
   'events',
 ] as const;
@@ -110,6 +111,9 @@ export const SYNC_MAX_ROW_BYTES: Record<SyncTable, number> = {
   decks: 16_000,
   deckCards: 4_000,
   deckFolders: 4_000,
+  // MAX_BEHAVIOR_RULES x MAX_BEHAVIOR_STEPS of the widest step shape is a shade
+  // over 1 KB, so this is the usual generous headroom over what can be written.
+  deckBehaviors: 4_000,
   trades: 256_000,
   events: 4_000,
 };

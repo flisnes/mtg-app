@@ -101,6 +101,7 @@ const TABLES = {
   decks: db.decks,
   deckCards: db.deckCards,
   deckFolders: db.deckFolders,
+  deckBehaviors: db.deckBehaviors,
   trades: db.trades,
   events: db.events,
 } as const;

@@ -11,11 +11,13 @@ import {
   USER_EVENT_KINDS,
   normalizeCardTags,
   normalizeSpecialConditions,
+  sanitizeCardBehavior,
   sanitizeContainerEmblem,
   type CollectionEntry,
   type Condition,
   type ContainerKind,
   type Deck,
+  type DeckBehavior,
   type DeckBoard,
   type DeckCard,
   type DeckFolder,
@@ -57,6 +59,8 @@ export interface TransferPayload {
   decks: Deck[];
   deckCards: DeckCard[];
   deckFolders: DeckFolder[];
+  /** Authored card behavior, per deck. Absent from senders older than the feature -> []. */
+  deckBehaviors: DeckBehavior[];
   trades: Trade[];
   priceHistories: PriceHistory[];
   /** Sealed-shelf price readings. Absent from senders older than the feature → []. */
@@ -87,6 +91,7 @@ export async function exportUserData(): Promise<TransferPayload> {
       decks: await db.decks.toArray(),
       deckCards: await db.deckCards.toArray(),
       deckFolders: await db.deckFolders.toArray(),
+      deckBehaviors: await db.deckBehaviors.toArray(),
       trades: await db.trades.toArray(),
       priceHistories: await db.priceHistories.toArray(),
       sealedPriceHistories: await db.sealedPriceHistories.toArray(),
@@ -127,6 +132,7 @@ const CAPS = {
   decks: 2_000,
   deckCards: 200_000,
   deckFolders: 500,
+  deckBehaviors: 100_000,
   trades: 10_000,
   priceHistories: 100_000,
   sealedPriceHistories: 20_000,
@@ -291,6 +297,28 @@ export function sanitizeDeckFolderRow(raw: unknown): DeckFolder | null {
   };
 }
 
+/**
+ * An authored behavior row. The behavior itself is validated by
+ * sanitizeCardBehavior, which is strict all the way down rather than
+ * preserve-what-you-cannot-name: see its note for why that is the safe
+ * direction here and the opposite one everywhere else in this file.
+ *
+ * A row whose behavior does not survive is dropped whole. An empty behavior is
+ * how "no behavior" is stored anyway (the row is deleted), so keeping the row
+ * with nothing in it would only make a deck look authored when it is not.
+ */
+export function sanitizeDeckBehaviorRow(raw: unknown): DeckBehavior | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const rowId = id(r.id);
+  const deckId = id(r.deckId);
+  const oracleId = id(r.oracleId);
+  if (!rowId || !deckId || !oracleId) return null;
+  const behavior = sanitizeCardBehavior(r.behavior);
+  if (!behavior) return null;
+  return { id: rowId, deckId, oracleId, behavior, updatedAt: ts(r.updatedAt) };
+}
+
 export function sanitizeDeckCardRow(raw: unknown): DeckCard | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
@@ -435,6 +463,9 @@ const KNOWN_KEYS: Record<SyncTable, Record<string, true>> = {
   deckFolders: {
     id: true, name: true, createdAt: true, updatedAt: true,
   } satisfies Record<keyof Required<DeckFolder>, true>,
+  deckBehaviors: {
+    id: true, deckId: true, oracleId: true, behavior: true, updatedAt: true,
+  } satisfies Record<keyof Required<DeckBehavior>, true>,
   trades: {
     id: true, completedAt: true, partner: true, given: true, received: true,
   } satisfies Record<keyof Required<Trade>, true>,
@@ -508,6 +539,7 @@ const SYNC_SANITIZERS: Record<SyncTable, (raw: unknown) => { id: string } | null
   decks: sanitizeDeckRow,
   deckCards: sanitizeDeckCardRow,
   deckFolders: sanitizeDeckFolderRow,
+  deckBehaviors: sanitizeDeckBehaviorRow,
   trades: sanitizeTradeRow,
   events: sanitizeEventRow,
 };
@@ -616,6 +648,18 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
     }
   }
 
+  // Authored behavior, keyed to a deck that survived. A behavior for a deck
+  // that did not is dropped rather than kept as an orphan: nothing would ever
+  // read it and nothing would ever delete it.
+  const deckBehaviors: DeckBehavior[] = [];
+  const behaviorIds = new Set<string>();
+  for (const r of rows(p.deckBehaviors, CAPS.deckBehaviors)) {
+    const row = sanitizeDeckBehaviorRow(r);
+    if (!row || behaviorIds.has(row.id) || !deckIds.has(row.deckId)) continue;
+    behaviorIds.add(row.id);
+    deckBehaviors.push(row);
+  }
+
   // Trade history: lines re-sanitized with the trade-offer sanitizer.
   const trades: Trade[] = [];
   const tradeIds = new Set<string>();
@@ -716,6 +760,7 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
     decks,
     deckCards,
     deckFolders,
+    deckBehaviors,
     trades,
     priceHistories,
     sealedPriceHistories,

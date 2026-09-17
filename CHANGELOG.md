@@ -2,6 +2,15 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.158.0
+
+- **Tell the simulator what a card actually does.** Deck stats now has a "Card behavior" section listing every card in the deck alongside what the model currently thinks it does. Most of them say "Do nothing", because the card database only reads what a card does unconditionally, on resolution, to you — anything behind a trigger or an "if" reaches the simulator as a blank. Pick a card and write the rule yourself.
+- **Two dropdowns, in the order you want them.** A trigger (when played, or each of your upkeeps), then a sequence of steps: draw, mill, discard, scry, surveil, or create Treasures. Each step's X is a fixed number or something the game knows — the cards in your hand, the lands you control, the turn number. The steps run in the order you wrote them, so a loot that discards before it draws draws for a smaller hand, and the simulator plays it out that way.
+- **The editor opens on what the card database already read.** A card it understands shows up pre-filled in the same grammar: Bedlam Reveler opens as "draw 3, then discard X (X = cards in your hand)". Change a step and it becomes yours; "Back to the database" puts it back.
+- **Behaviors are saved with the deck and sync between your devices.** The same card in a different deck keeps its own answer.
+- **The coverage line under the charts counts them.** Everything else it says is an argument that the curves are pessimistic; a card you authored can push them the other way. So it ends with how many cards play out your way, and the graph stays as honest as it was.
+- Not yet: attacking, dying, being discarded, casting from the graveyard, and anything that reads the battlefield (sacrifice, flicker, "the greatest power among creatures"). Those need game state the simulator does not keep yet, and nothing is offered in the editor that it cannot actually play out.
+
 ## 0.157.1
 
 - **"Watch one game play out", under the deck stats charts.** One game, dealt and written down turn by turn: the opening hand, every card drawn, which land it played and which ones it turned down, every permanent it tapped and what each one paid for, what every spell did when it resolved, and why it stopped casting. "Deal another game" deals another.

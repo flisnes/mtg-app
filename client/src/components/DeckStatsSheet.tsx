@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import type { DeckFormat } from '@mtg/shared';
+import { useLiveQuery } from 'dexie-react-hooks';
+import type { CardBehavior, DeckFormat } from '@mtg/shared';
 import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
 import { CURVE_MAX, TAX_TURNS, type DeckManaStats } from '../deck/manaStats.js';
@@ -9,8 +10,10 @@ import { ManaFixPanel } from './ManaFixPanel.js';
 import { OnCurvePanel } from './OnCurvePanel.js';
 import { DeckTrajectory } from './DeckTrajectory.js';
 import { GameTraceSheet } from './GameTraceSheet.js';
+import { CardBehaviorSheet } from './CardBehaviorSheet.js';
 import { buildSimDeck } from '../analysis/simDeck.js';
 import { missedDrawCopies } from '../analysis/coverage.js';
+import { deckBehaviorMap } from '../db/dataAccess.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { defaultSimOptions } from '../analysis/simulate.js';
 import { useSimulation } from '../analysis/useSimulation.js';
@@ -31,6 +34,16 @@ import type { PlacementIndex } from '../db/usePlacements.js';
 
 const one = (n: number) => n.toFixed(1);
 const plural = (n: number) => (n === 1 ? '' : 's');
+
+/** Stable identity for the first render, before the live query has answered. */
+const EMPTY_BEHAVIORS: ReadonlyMap<string, CardBehavior> = new Map();
+
+/** The headline on the behavior line: what is worth going in there for. */
+function behaviorNote(coverage: { blanks: number; authored: number }): string {
+  if (coverage.authored > 0) return `${coverage.authored} card${plural(coverage.authored)} play out your way`;
+  if (coverage.blanks > 0) return `${coverage.blanks} resolve as nothing`;
+  return 'every card is modelled';
+}
 
 /** One tappable line under the legality panel: the headline, and the way in. */
 export function DeckStatsLine({ stats, onOpen }: { stats: DeckManaStats; onOpen: () => void }) {
@@ -114,7 +127,12 @@ export function DeckStatsSheet({
   // worker and a play/draw toggle rather than each heating the phone on its own.
   const [onPlay, setOnPlay] = useState(true);
   const [tracing, setTracing] = useState(false);
-  const simDeck = useMemo(() => buildSimDeck(rows), [rows]);
+  const [behaviorsOpen, setBehaviorsOpen] = useState(false);
+  // What the user said their cards do, which overrides the card database's
+  // reading of them. Live, so saving a behavior re-runs the simulation behind
+  // the sheet the editor is sitting on.
+  const behaviors = useLiveQuery(() => deckBehaviorMap(deckId), [deckId]);
+  const simDeck = useMemo(() => buildSimDeck(rows, behaviors), [rows, behaviors]);
   const simOpts = useMemo(() => defaultSimOptions(format, onPlay), [format, onPlay]);
   const sim = useSimulation(simDeck, simOpts);
   const simResult = sim.kind === 'done' ? sim.result : sim.kind === 'running' ? sim.previous : undefined;
@@ -251,6 +269,14 @@ export function DeckStatsSheet({
             </button>
           )}
 
+          <button type="button" className="deck-stats-line" onClick={() => setBehaviorsOpen(true)}>
+            <span className="deck-stats-bits">
+              <span>Card behavior</span>
+              <span className="deck-stats-tone tone-ok">{behaviorNote(simDeck.coverage)}</span>
+            </span>
+            <Icon name="chevronRight" />
+          </button>
+
           <OnCurvePanel status={sim} opts={simOpts} hasManaData={simDeck.hasManaData} />
 
           <DrawOddsPanel rows={rows} format={format} />
@@ -266,6 +292,15 @@ export function DeckStatsSheet({
         </>
       )}
       {tracing && <GameTraceSheet deck={simDeck} opts={simOpts} onClose={() => setTracing(false)} />}
+      {behaviorsOpen && (
+        <CardBehaviorSheet
+          deckId={deckId}
+          deckName={name}
+          rows={rows}
+          behaviors={behaviors ?? EMPTY_BEHAVIORS}
+          onClose={() => setBehaviorsOpen(false)}
+        />
+      )}
     </Sheet>
   );
 }

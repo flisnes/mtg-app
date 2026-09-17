@@ -7,6 +7,7 @@ import type {
   Deck,
   DeckCard,
   DeckFolder,
+  DeckBehavior,
   Trade,
   Setting,
   PriceHistory,
@@ -37,6 +38,8 @@ export class MtgDatabase extends Dexie {
   decks!: Table<Deck, string>;
   deckCards!: Table<DeckCard, string>;
   deckFolders!: Table<DeckFolder, string>;
+  /** Per-deck "what this card actually does", authored by the user. */
+  deckBehaviors!: Table<DeckBehavior, string>;
   trades!: Table<Trade, string>;
   settings!: Table<Setting, string>;
   priceHistories!: Table<PriceHistory, string>;
@@ -237,6 +240,16 @@ export class MtgDatabase extends Dexie {
     // v16: the Scryfall Tagger oracle-tag vocabulary behind `otag:` search.
     // One row, same lazy-fetch-and-cache shape as setTypes.
     this.version(16).stores({ oracleTags: 'key' });
+
+    // v17 (card behavior): what the user says a card does, per deck. Its own
+    // table rather than a field on the deck or the slot: a deck row would make
+    // two devices editing two different cards a last-write-wins race, and a
+    // slot is the wrong owner because one oracleId can hold several of them
+    // (main plus sideboard, or two printings) and nothing says which wins. The
+    // id is `<deckId>:<oracleId>`, so authoring the same card twice is an
+    // overwrite by construction. Indexed by deckId, because the stats sheet
+    // asks for one deck's worth every time it opens.
+    this.version(17).stores({ deckBehaviors: 'id, deckId, oracleId' });
   }
 }
 
@@ -255,6 +268,7 @@ export const USER_DATA_TABLES = [
   db.decks,
   db.deckCards,
   db.deckFolders,
+  db.deckBehaviors,
   db.trades,
   db.priceHistories,
   db.sealedPriceHistories,

@@ -7727,3 +7727,173 @@ a.seg {
   width: 100%;
   margin: 0.25rem 0 0.75rem;
 }
+
+/* ---- Card behavior: what the user says a card does (CardBehaviorSheet) ---- */
+/* Same flex trap as .deck-stats-sheet and .trace-sheet: a tall sheet whose
+   children would otherwise be squashed to fit 90dvh. It scrolls instead. */
+.behavior-sheet > * {
+  flex-shrink: 0;
+}
+.behavior-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.behavior-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem;
+  color: var(--text);
+}
+.behavior-row > svg {
+  flex: none;
+  color: var(--text-dim);
+}
+.behavior-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.behavior-row-name {
+  font-size: 0.9rem;
+}
+.behavior-row-qty {
+  color: var(--text-dim);
+  margin-right: 0.3rem;
+  font-variant-numeric: tabular-nums;
+}
+/* The behavior sentence, which is the thing worth scanning down the list for.
+   One line: a rule long enough to wrap is a rule you open the card to read. */
+.behavior-row-what {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.behavior-tag {
+  flex: none;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+}
+.behavior-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  align-self: flex-start;
+  padding: 0.3rem 0.5rem 0.3rem 0.3rem;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+/* One trigger and its steps, boxed so a card with two of them reads as two
+   rules rather than as one long column of dropdowns. */
+.behavior-rule {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem;
+  margin-bottom: 0.5rem;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.behavior-rule > p {
+  margin: 0;
+}
+.behavior-rule-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.behavior-rule-head .seg-row {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+.behavior-rule-head .seg {
+  padding: 0.35rem 0.3rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+/* The verb on one row, where X comes from on the next, and the remove button
+   spanning both. Three controls abreast is what a 393px phone cannot do: it
+   truncated every label, and "X = cards in your h" is not a choice anyone can
+   make. Two rows, full width each, and every option reads. */
+.behavior-step {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'op drop'
+    'x drop';
+  gap: 0.35rem;
+  align-items: center;
+}
+.behavior-op {
+  grid-area: op;
+}
+.behavior-x {
+  grid-area: x;
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.behavior-step .behavior-drop {
+  grid-area: drop;
+}
+.behavior-step .field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.behavior-step .field select {
+  width: 100%;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.45rem;
+}
+.behavior-step .behavior-n {
+  flex: 0 0 4.75rem;
+}
+.behavior-n input {
+  width: 100%;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.45rem;
+  font-variant-numeric: tabular-nums;
+}
+.behavior-drop {
+  flex: none;
+  padding: 0.3rem;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  line-height: 0;
+}
+.behavior-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  align-self: flex-start;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.82rem;
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}

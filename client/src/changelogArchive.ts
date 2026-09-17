@@ -1,4 +1,4 @@
-// The older half of the changelog (0.148.1 down to 0.98.0), split out of
+// The older half of the changelog (0.148.2 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,21 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.148.2',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Search by the mana a card makes. `produces:g` finds anything that taps for green, `produces:wu` wants both colors, `produces>=3` finds your fixing. Plus `is:tapland` for the lands that always enter tapped (not the ones that only sometimes do), `is:untappedsource` for the ones that don’t, and `is:manasource` for anything that taps for mana.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'The card database learned two new things about every card to make that work, so expect a card-data update after this one. Bigger than usual, just this once.',
+      },
+    ],
+  },
   {
     version: '0.148.1',
     changes: [

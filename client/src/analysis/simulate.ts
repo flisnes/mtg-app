@@ -69,8 +69,8 @@ const MAX_DRAW_PER_EFFECT = 12;
  */
 const MAX_HAND = 128;
 
-/** How a zone reads in a trace line: "to your graveyard". */
-const ZONE_PHRASE = new Map(BEHAVIOR_ZONES.map((z) => [z.id as string, z.phrase]));
+/** How a zone reads in a trace line as a destination: "to the top of your library". */
+const ZONE_PHRASE = new Map(BEHAVIOR_ZONES.map((z) => [z.id as string, z.into ?? z.phrase]));
 
 /** Karsten's simulations ship a hand with fewer than two lands; so does this one. */
 export const DEFAULT_KEEP_MIN = 2;
@@ -263,6 +263,11 @@ export function halfWidth(p: number, games: number): number {
  *      is right for a Lightning Bolt and wrong for every draw spell whose draw
  *      hangs off a trigger the pipeline would not read. So the curves are
  *      still a floor, and `SimDeck.coverage` is how far off the floor they are.
+ *   8. A card put back into the library lands in a **random** spot, because a
+ *      shuffle is what a deck is. The top and the bottom are separate
+ *      destinations and go where they say, and more than one card sent to
+ *      either arrives in a random order rather than in whatever order the zone
+ *      it came from happened to hold it.
  */
 export function simulate(
   deck: SimDeck,
@@ -299,7 +304,17 @@ export function simulate(
   /** The colored pips of each cost, for scoring a land drop against it. */
   const goalPips: Pip[][] = groupRep.map((i) => bindingPips(cards[i]!.cost!));
 
-  const library = new Int32Array(deckSize);
+  /**
+   * The library, with room above the deck size for cards put *back* into it.
+   *
+   * It used to be exactly `deckSize`, which quietly made "put a card on the
+   * bottom of your library" a no-op in every deck without a fetch: `libLen`
+   * only ever shrank when a tutor or a fetch pulled a card out, so there was
+   * never a spare slot to write into and the card was dropped. The headroom is
+   * the fix, and MAX_HAND is comfortably past anything a hand and a graveyard
+   * can hand back inside eight turns.
+   */
+  const library = new Int32Array(deckSize + MAX_HAND);
   const hand = new Int32Array(MAX_HAND);
   /**
    * The graveyard and exile, as card indices.
@@ -352,6 +367,13 @@ export function simulate(
   let handLen = 0;
   let libLen = 0;
   let top = 0;
+  /**
+   * How far down the front of the array the London mulligan's bottomed cards
+   * reach. Everything from here to `top` is dead space left by the opener, and
+   * that is where a card put on *top* of the library goes — so this is the line
+   * it must not cross, or a bottomed card gets overwritten by one.
+   */
+  let libFloor = 0;
   let seen = 0;
   let colorsHeld = 0;
   /** Colors every land you control also makes, from an Urborg or a Lantern in play. */
@@ -766,11 +788,15 @@ export function simulate(
     // upkeep rule and a play rule does both: unlike EffectProfile, where
     // `repeatable` is one flag over the whole thing, the rules are separate, so
     // a card that draws on entry *and* every upkeep is one behavior.
+    selfPlaced = false;
     const b = card.behavior;
     if (b) {
-      if (b.upkeep.length > 0 && recurLen < recurring.length) recurring[recurLen++] = index;
       if (sink) lastEffectText = '';
-      return b.play.length > 0 ? runSteps(b.play, turn) : 0;
+      const made = b.play.length > 0 ? runSteps(b.play, turn, index) : 0;
+      // The upkeep list is joined *after* the play rules have run, because a
+      // card whose play rule exiled it is not on the battlefield to trigger.
+      if (b.upkeep.length > 0 && !selfPlaced && recurLen < recurring.length) recurring[recurLen++] = index;
+      return made;
     }
     const effect = card.effect;
     if (!effect) return 0;
@@ -1005,19 +1031,52 @@ export function simulate(
     }
   };
 
+  /**
+   * Slide a card into the library at position `at`, somewhere in `[top, libLen]`.
+   *
+   * Whatever was sitting there is pushed to the very bottom rather than shifted
+   * down, which is O(1) instead of O(n) and costs nothing statistically: the
+   * live library is a uniformly random permutation, and for any fixed position
+   * this map is a bijection on permutations, so what comes out is uniformly
+   * random too. That argument is exactly why it is *not* used for the top,
+   * where the card sitting there may be one a scry or an earlier tutor put
+   * there on purpose.
+   */
+  const insertInLibrary = (index: number, at: number): void => {
+    // No room is the same statement as the bottom of a real library: the card
+    // is in the deck and it is not coming back inside eight turns.
+    if (libLen >= library.length) return;
+    if (at < libLen) {
+      library[libLen] = library[at]!;
+      library[at] = index;
+    } else {
+      library[libLen] = index;
+    }
+    libLen++;
+  };
+
   const putTo = (index: number, zone: BehaviorZone, turn: number): void => {
     switch (zone) {
       case 'hand':
         hand[handLen++] = index;
         return;
       case 'library':
-        // The bottom, never the top: putting a card back where you would next
-        // draw it is the generous reading and §11.4 does not allow one. Inside
-        // eight turns the bottom of a real library is the same as gone, which
-        // is also what the London mulligan's own bottoming means here — so a
-        // library with no spare slot simply loses the card, and that is the
-        // same statement rather than a different one.
-        if (libLen < library.length) library[libLen++] = index;
+        // A random spot, which is what "shuffle it into your library" means
+        // once the deck is a bag of cards rather than an ordered list. The
+        // range is inclusive at both ends: the top and the bottom are both
+        // places a shuffle can land it.
+        insertInLibrary(index, top + rng.int(libLen - top + 1));
+        return;
+      case 'librarytop':
+        // Back up the draw pointer into the dead space the opener left, so the
+        // card is genuinely the next one drawn and nothing already on top has
+        // to move. Only when there is dead space left to back into — otherwise
+        // it displaces the current top card, which is the rare, imprecise path.
+        if (top > libFloor) library[--top] = index;
+        else insertInLibrary(index, top);
+        return;
+      case 'librarybottom':
+        insertInLibrary(index, libLen);
         return;
       case 'graveyard':
         graveyard[gyLen++] = index;
@@ -1028,6 +1087,26 @@ export function simulate(
       case 'battlefield':
         enterBattlefield(index, cards[index]!, turn);
         return;
+    }
+  };
+
+  /**
+   * Cards on their way to the top or the bottom of the library, held back so
+   * they can be put in a random order.
+   *
+   * Two cards going to the top arrive in the order the source zone happened to
+   * hold them, which is an order nobody chose and the model has no business
+   * caring about. Shuffling them is the honest reading of "put them back in any
+   * order" and it is what you would do at a table with no information.
+   */
+  const stack: number[] = [];
+
+  const shuffleStack = (): void => {
+    for (let i = stack.length - 1; i > 0; i--) {
+      const j = rng.int(i + 1);
+      const t = stack[i]!;
+      stack[i] = stack[j]!;
+      stack[j] = t;
     }
   };
 
@@ -1044,15 +1123,44 @@ export function simulate(
       // resolving it. Nothing in here parses anything.
       if (filter?.varies) base = behaviorAmount(step.qx ?? ZERO_AMOUNT, turn) * n;
     }
+    // A stack of cards going to one end of the library goes in a random order,
+    // so they are collected first and placed once the step knows how many
+    // there were.
+    const ordered = to === 'librarytop' || to === 'librarybottom';
+    if (ordered) stack.length = 0;
     for (let k = 0; k < count; k++) {
-      if (!roomIn(to)) return;
+      if (!roomIn(to)) break;
       const index = takeFrom(from, mask, base);
-      if (index < 0) return;
+      if (index < 0) break;
       // `seen` is cards that reached your hand off the library, which is what
       // the cards chart reads. A tutor counts; a regrowth does not.
       if (from === 'library' && to === 'hand') seen++;
-      putTo(index, to, turn);
+      if (ordered) stack.push(index);
+      else putTo(index, to, turn);
       if (sink) movedNames.push(cards[index]!.name);
+    }
+    if (ordered) {
+      shuffleStack();
+      for (const index of stack) putTo(index, to, turn);
+    }
+  };
+
+  // --- The card talking about itself ---------------------------------------
+
+  /**
+   * The card holding the rule put itself somewhere, so wherever it would have
+   * gone on its own — the graveyard, for a spell that has finished resolving —
+   * is not where it is. Read by the caster and by the upkeep loop; set by the
+   * one step that can set it.
+   */
+  let selfPlaced = false;
+
+  /** Take a card off the battlefield, if it is a source there. */
+  const unsource = (index: number): void => {
+    for (let s = 0; s < srcLen; s++) {
+      if (srcCard[s] !== index) continue;
+      dropSource(s);
+      return;
     }
   };
 
@@ -1064,11 +1172,29 @@ export function simulate(
    * makes a sequence worth having: "discard your hand, then draw cards equal to
    * the cards in your hand" is a very short rule, and this resolves it the way
    * the card would.
+   *
+   * @param self The card these rules belong to, for a `self` step to move.
    */
-  const runSteps = (steps: readonly BehaviorStep[], turn: number): number => {
+  const runSteps = (steps: readonly BehaviorStep[], turn: number, self: number): number => {
     const bits: string[] = [];
     let made = 0;
     for (const step of steps) {
+      // A `self` step moves one card and it is not one you chose, so it reads
+      // no amount at all — an `x` on it would be a control with one setting.
+      if (step.op === 'self') {
+        const to = step.to;
+        if (!to || self < 0 || selfPlaced || !roomIn(to)) continue;
+        // Off the battlefield first, so a rock that sacrifices itself stops
+        // making mana rather than making it from the graveyard.
+        unsource(self);
+        putTo(self, to, turn);
+        selfPlaced = true;
+        if (sink) {
+          const where = ZONE_PHRASE.get(to) ?? 'somewhere';
+          bits.push(`puts itself ${to === 'battlefield' ? 'onto' : 'into'} ${where}`);
+        }
+        continue;
+      }
       const n = behaviorAmount(step.x, turn);
       if (n <= 0) continue;
       switch (step.op) {
@@ -1162,7 +1288,7 @@ export function simulate(
       shuffle(library, deckSize, rng);
       libLen = deckSize;
       top = 0;
-      let bottomAt = 0;
+      libFloor = 0;
       handLen = Math.min(7, deckSize);
       for (let i = 0; i < handLen; i++) hand[i] = library[top++]!;
 
@@ -1180,7 +1306,7 @@ export function simulate(
       while (handLen > keep) {
         const drop = pickBottom(cards, hand, handLen);
         if (sink) sink.game.bottomed.push(cards[hand[drop]!]!.name);
-        library[bottomAt++] = hand[drop]!;
+        library[libFloor++] = hand[drop]!;
         hand[drop] = hand[--handLen]!;
       }
       handSizeSum += handLen;
@@ -1218,15 +1344,22 @@ export function simulate(
         // Nothing was cast to get here, so there is no X to read. An upkeep
         // three turns after the spell is not the moment the mana went in.
         xSpent = 0;
+        selfPlaced = false;
         if (card.behavior) {
           if (card.behavior.upkeep.length === 0) continue;
-          runSteps(card.behavior.upkeep, turn);
+          runSteps(card.behavior.upkeep, turn, index);
         } else if (card.effect) {
           resolveEffect(card.effect, turn);
         } else {
           continue;
         }
         if (sink && lastEffectText) say(sink, 'effect', `Upkeep: ${card.name} ${lastEffectText}`);
+        // A permanent that put itself somewhere else has left the battlefield,
+        // so it comes off the list rather than triggering from the graveyard.
+        if (selfPlaced) {
+          recurring[r] = recurring[--recurLen]!;
+          r--;
+        }
       }
 
       if (!(turn === 1 && opts.onPlay) && top < libLen && handLen < MAX_HAND) {
@@ -1601,7 +1734,11 @@ export function simulate(
         // behavior can go and find it. After the effect, not before, because a
         // sorcery is on the stack while it resolves and a Regrowth that finds
         // itself is a rules error rather than a rounding one.
-        if (!card.permanent) bury(index);
+        //
+        // Unless it said otherwise: a `self` step is the card naming its own
+        // destination, which is the whole of "exile this card instead" and of
+        // a Green Sun's Zenith shuffling back in.
+        if (!card.permanent && !(opts.effects && selfPlaced)) bury(index);
         // A card with no effect profile still resolves as a blank. For a
         // Lightning Bolt that is correct; for a draw spell whose draw hangs off
         // a trigger the pipeline would not read, it is the floor §11.4 warned

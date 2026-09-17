@@ -7879,6 +7879,13 @@ a.seg {
     'zones drop'
     'q drop';
 }
+/* "Put this card into a zone" has no amount to pick, so the destination takes
+   the row the number would have used. */
+.behavior-step-self {
+  grid-template-areas:
+    'op drop'
+    'zones drop';
+}
 .behavior-zones {
   grid-area: zones;
   display: flex;

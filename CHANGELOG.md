@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.158.3
+
+- **Top of library and bottom of library are zones now.** A tutor that puts the card on top rather than in your hand, an effect that stacks your graveyard back onto the deck, a card sent to the bottom: all of it is the same move step with a different destination.
+- **A card can talk about itself.** The new "Put this card into a zone" step is the card naming where it ends up: exile itself on resolution instead of going to the graveyard, or shuffle back into the library the way Green Sun's Zenith does. On a permanent it also takes the card off the battlefield, so anything it was doing there stops.
+- **Into the library on its own means a random spot.** That is what shuffling a card back in comes to, and it is the honest answer: a card put back is neither your next draw nor gone forever. Top and bottom go exactly where they say.
+- **Several cards sent to the top or the bottom arrive in a random order.** Nothing decided which of them went first, so nothing here pretends otherwise.
+- Fixed: moving a card back into the library used to lose it in any deck without a fetchland, because there was nowhere in the simulator's library to put it. It goes back in now.
+
 ## 0.158.2
 
 - **Card behavior criteria can read X.** Write `[X]` anywhere a number goes and a dropdown appears asking what it is worth: the mana you spent on X, the cards in your hand, the lands you control, the turn number. So `t:creature mv<=[X]` returns the creatures your X actually reached. `[X-1]` and `[X+2]` work as well, and nothing goes below zero.

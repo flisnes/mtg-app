@@ -35,15 +35,22 @@ import type { EffectProfile } from './card.js';
 export type BehaviorTrigger = 'play' | 'upkeep';
 
 /**
- * Where a card can be. Five zones, and the battlefield is the lopsided one: the
- * sequencer tracks the permanents that make mana and nothing else, so moving a
- * card *onto* it is always meaningful and moving one *off* it only ever finds a
- * land or a rock. The editor says so rather than pretending otherwise.
+ * Where a card can be. The battlefield is the lopsided one: the sequencer
+ * tracks the permanents that make mana and nothing else, so moving a card
+ * *onto* it is always meaningful and moving one *off* it only ever finds a land
+ * or a rock. The editor says so rather than pretending otherwise.
+ *
+ * The library is three entries rather than one, because *where* in it is the
+ * whole difference between a Mystical Tutor and a shuffle. `library` on its own
+ * is a random spot, which is what "shuffle it in" means once the deck is a bag
+ * of cards; the other two go where they say. Both are destinations only —
+ * nothing in Magic reaches into the bottom of your library, and "the top card"
+ * as a *source* is already what an unfiltered move off `library` gives you.
  */
-export type BehaviorZone = 'library' | 'hand' | 'graveyard' | 'exile' | 'battlefield';
+export type BehaviorZone = 'library' | 'librarytop' | 'librarybottom' | 'hand' | 'graveyard' | 'exile' | 'battlefield';
 
 /** What one step does. */
-export type BehaviorStepKind = 'draw' | 'mill' | 'discard' | 'scry' | 'surveil' | 'treasure' | 'move';
+export type BehaviorStepKind = 'draw' | 'mill' | 'discard' | 'scry' | 'surveil' | 'treasure' | 'move' | 'self';
 
 /** Where a step's number comes from. */
 export type BehaviorAmountKind = 'fixed' | 'all' | 'hand' | 'lands' | 'graveyard' | 'turn' | 'xpaid';
@@ -56,10 +63,11 @@ export interface BehaviorAmount {
 
 export interface BehaviorStep {
   op: BehaviorStepKind;
+  /** Ignored by `self`, which moves one card and that card is not up to you. */
   x: BehaviorAmount;
   /** `move` only: where the cards come from. */
   from?: BehaviorZone;
-  /** `move` only: where they end up. */
+  /** `move` and `self`: where they end up. */
   to?: BehaviorZone;
   /**
    * `move` only: a Scryfall query saying which cards qualify. Absent or empty
@@ -216,23 +224,41 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'surveil', label: 'Surveil X', verb: 'surveil' },
   { id: 'treasure', label: 'Create X Treasures', verb: 'create' },
   { id: 'move', label: 'Move X between zones', verb: 'move' },
+  { id: 'self', label: 'Put this card into a zone', verb: 'put' },
 ];
 
 export interface ZoneOption {
   id: BehaviorZone;
   /** For the picker. */
   label: string;
-  /** For writing the rule out: "from your library". */
+  /** For the picker, where being the destination changes what it means. */
+  toLabel?: string;
+  /** For writing the rule out as a source: "from your library". */
   phrase: string;
+  /** For writing it out as a destination, where that reads differently. */
+  into?: string;
+  /** Nothing is ever taken from here, so it is offered as a destination only. */
+  toOnly?: boolean;
 }
 
 export const BEHAVIOR_ZONES: readonly ZoneOption[] = [
-  { id: 'library', label: 'Library', phrase: 'your library' },
+  {
+    id: 'library',
+    label: 'Library',
+    toLabel: 'Library (random spot)',
+    phrase: 'your library',
+    into: 'a random spot in your library',
+  },
+  { id: 'librarytop', label: 'Top of library', phrase: 'your library', into: 'the top of your library', toOnly: true },
+  { id: 'librarybottom', label: 'Bottom of library', phrase: 'your library', into: 'the bottom of your library', toOnly: true },
   { id: 'hand', label: 'Hand', phrase: 'your hand' },
   { id: 'graveyard', label: 'Graveyard', phrase: 'your graveyard' },
   { id: 'battlefield', label: 'Battlefield', phrase: 'the battlefield' },
   { id: 'exile', label: 'Exile', phrase: 'exile' },
 ];
+
+/** The zones a `move` can take cards out of. */
+export const BEHAVIOR_FROM_ZONES: readonly ZoneOption[] = BEHAVIOR_ZONES.filter((z) => !z.toOnly);
 
 export interface AmountOption {
   id: BehaviorAmountKind;
@@ -282,14 +308,26 @@ export function describeAmount(x: BehaviorAmount): string {
  * the same way the editor's own dropdown does means the sentence and the
  * control you set it with say the identical thing.
  */
+/** A destination zone as it reads after "to": "the top of your library". */
+function intoPhrase(zone: BehaviorZone | undefined): string {
+  const z = ZONE_BY_ID.get(zone ?? '');
+  return z?.into ?? z?.phrase ?? 'somewhere';
+}
+
+/** Cards go *into* every zone but the battlefield, which they go *onto*. */
+const intoPrep = (zone: BehaviorZone | undefined): string => (zone === 'battlefield' ? 'onto' : 'into');
+
 export function describeStep(step: BehaviorStep): string {
   const verb = STEP_BY_ID.get(step.op)?.verb ?? step.op;
   const computed = step.x.kind !== 'fixed';
   const count = computed ? 'X' : String(step.x.n ?? 0);
   const tail = computed ? ` (X = ${describeAmount(step.x)})` : '';
+  // The one step that is about the card holding the rule rather than about the
+  // cards it can reach, so it has no count and no criteria to read out.
+  if (step.op === 'self') return `put this card ${intoPrep(step.to)} ${intoPhrase(step.to)}`;
   if (step.op === 'move') {
     const from = ZONE_BY_ID.get(step.from ?? '')?.phrase ?? 'somewhere';
-    const to = ZONE_BY_ID.get(step.to ?? '')?.phrase ?? 'somewhere';
+    const to = intoPhrase(step.to);
     const filter = step.q ? ` matching ${step.q}` : '';
     const where = ` from ${from} to ${to}`;
     // What the query's own placeholder is worth, named separately from the
@@ -387,10 +425,12 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     if (!bucket || !Array.isArray(rule.steps)) continue;
     for (const step of rule.steps) {
       if (!step || !STEP_BY_ID.has(step.op) || !step.x || !AMOUNT_BY_ID.has(step.x.kind)) continue;
-      if (step.op === 'move') {
+      if (step.op === 'self') {
+        if (!step.to || !ZONE_BY_ID.has(step.to)) continue;
+      } else if (step.op === 'move') {
         // A move with no zones, or with the same zone twice, is not a move.
         if (!step.from || !step.to || !ZONE_BY_ID.has(step.from) || !ZONE_BY_ID.has(step.to)) continue;
-        if (step.from === step.to) continue;
+        if (step.from === step.to || ZONE_BY_ID.get(step.from)!.toOnly) continue;
         if (step.qx && (!AMOUNT_BY_ID.has(step.qx.kind) || step.qx.kind === 'all')) continue;
       } else if (step.x.kind === 'all') {
         // "All that match" is bounded by the zone it draws from, and only a
@@ -449,17 +489,25 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
     const steps: BehaviorStep[] = [];
     for (const s of r.steps.slice(0, MAX_BEHAVIOR_STEPS)) {
       if (!isRecord(s) || typeof s.op !== 'string' || !STEP_BY_ID.has(s.op)) continue;
+      const op = s.op as BehaviorStepKind;
+      const from = typeof s.from === 'string' && ZONE_BY_ID.has(s.from) ? (s.from as BehaviorZone) : null;
+      const to = typeof s.to === 'string' && ZONE_BY_ID.has(s.to) ? (s.to as BehaviorZone) : null;
+      if (op === 'self') {
+        // One card, and it is the card the rule is on, so the amount is not a
+        // choice anybody makes. Normalized rather than kept, so two saves of
+        // the same rule are the same bytes.
+        if (!to) continue;
+        steps.push({ op, x: { kind: 'fixed', n: 1 }, to });
+        continue;
+      }
       const x = cleanAmount(s.x);
       if (!x) continue;
-      const op = s.op as BehaviorStepKind;
       if (op !== 'move') {
         if (x.kind === 'all') continue;
         steps.push({ op, x });
         continue;
       }
-      const from = typeof s.from === 'string' && ZONE_BY_ID.has(s.from) ? (s.from as BehaviorZone) : null;
-      const to = typeof s.to === 'string' && ZONE_BY_ID.has(s.to) ? (s.to as BehaviorZone) : null;
-      if (!from || !to || from === to) continue;
+      if (!from || !to || from === to || ZONE_BY_ID.get(from)!.toOnly) continue;
       const q = typeof s.q === 'string' ? s.q.trim().slice(0, MAX_BEHAVIOR_QUERY) : '';
       if (!q) {
         steps.push({ op, x, from, to });

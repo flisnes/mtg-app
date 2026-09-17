@@ -32,6 +32,25 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.158.3',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Card behavior can put cards on the top or the bottom of your library, and a card can talk about itself. A tutor that puts the card on top, a spell that exiles itself instead of hitting the graveyard, a Green Sun\'s Zenith that shuffles back in: all one step now.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'A card put into the library on its own lands in a random spot, which is what shuffling it back in means. Top and bottom go where they say, and several cards sent to either arrive in a random order.',
+      },
+      {
+        kind: 'fixed',
+        text: 'Moving a card back into the library used to drop it in most decks. It goes back in now.',
+      },
+    ],
+  },
+  {
     version: '0.158.2',
     changes: [
       {
@@ -241,15 +260,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Taplands count from turn two and mana rocks from a turn after you could cast them, so the count is what you can actually tap, not what is in the list.',
-      },
-    ],
-  },
-  {
-    version: '0.150.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'The deck stats charts were flat on a phone. The mana curve and the draw-odds chart both collapsed to their axis labels whenever the sheet was taller than the screen. Both stand up again.',
       },
     ],
   },

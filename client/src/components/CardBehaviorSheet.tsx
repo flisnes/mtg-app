@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   BEHAVIOR_AMOUNTS,
+  BEHAVIOR_FROM_ZONES,
   BEHAVIOR_STEPS,
   BEHAVIOR_TRIGGERS,
   BEHAVIOR_ZONES,
@@ -478,17 +479,33 @@ function RuleEditor({
    */
   const changeOp = (i: number, step: BehaviorStep, op: BehaviorStepKind) => {
     if (op === 'move') {
-      setStep(i, { ...step, op, from: step.from ?? 'library', to: step.to ?? 'hand' });
+      const from = step.from && BEHAVIOR_FROM_ZONES.some((z) => z.id === step.from) ? step.from : 'library';
+      setStep(i, { ...step, op, from, to: step.to === from ? 'hand' : (step.to ?? 'hand') });
+      return;
+    }
+    if (op === 'self') {
+      // One card, no criteria, and the amount is not a choice — see the step's
+      // own note below. Exile is the default because self-exile is the case
+      // this exists for.
+      setStep(i, { op, x: { kind: 'fixed', n: 1 }, to: step.to ?? 'exile' });
       return;
     }
     setStep(i, { op, x: step.x.kind === 'all' ? { kind: 'fixed', n: 1 } : step.x });
   };
 
-  /** The two zones can never be the same one, so picking a clash swaps them. */
+  /**
+   * The two zones can never be the same one, so picking a clash pushes the
+   * other end somewhere else. Not always a swap: the top and the bottom of the
+   * library are destinations only, so a clash on the destination end falls back
+   * to the first source zone that is not the one just picked.
+   */
   const changeZone = (i: number, step: BehaviorStep, end: 'from' | 'to', zone: BehaviorZone) => {
-    const other = end === 'from' ? 'to' : 'from';
-    const clash = step[other] === zone;
-    setStep(i, { ...step, [end]: zone, ...(clash ? { [other]: step[end] } : null) });
+    if (end === 'from') {
+      setStep(i, { ...step, from: zone, to: step.to === zone ? (step.from ?? 'hand') : step.to });
+      return;
+    }
+    const from = step.from === zone ? BEHAVIOR_FROM_ZONES.find((z) => z.id !== zone)?.id : step.from;
+    setStep(i, { ...step, to: zone, from });
   };
 
   return (
@@ -516,8 +533,9 @@ function RuleEditor({
 
       {rule.steps.map((step, i) => {
         const move = step.op === 'move';
+        const self = step.op === 'self';
         return (
-          <div className={`behavior-step${move ? ' behavior-step-move' : ''}`} key={i}>
+          <div className={`behavior-step${move ? ' behavior-step-move' : ''}${self ? ' behavior-step-self' : ''}`} key={i}>
             {/* The verb on its own line and the number under it: three controls
                 abreast on a 393px phone truncates every one of them, and "X = cards
                 in your h" is not a choice anybody can make. */}
@@ -530,12 +548,33 @@ function RuleEditor({
                 ))}
               </select>
             </label>
-            <AmountPicker
-              value={step.x}
-              label="Where X comes from"
-              offer={(o) => (move || !o.moveOnly) && (!o.needsX || xAvailable)}
-              onChange={(x) => setStep(i, { ...step, x })}
-            />
+            {/* A `self` step moves one card and that card is this one, so an
+                amount picker on it would be a control with a single setting. */}
+            {!self && (
+              <AmountPicker
+                value={step.x}
+                label="Where X comes from"
+                offer={(o) => (move || !o.moveOnly) && (!o.needsX || xAvailable)}
+                onChange={(x) => setStep(i, { ...step, x })}
+              />
+            )}
+            {self && (
+              <div className="behavior-zones">
+                <label className="field">
+                  <select
+                    value={step.to ?? 'exile'}
+                    aria-label="Where this card goes"
+                    onChange={(e) => setStep(i, { ...step, to: e.target.value as BehaviorZone })}
+                  >
+                    {BEHAVIOR_ZONES.map((z) => (
+                      <option key={z.id} value={z.id}>
+                        Into {z.toLabel ?? z.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
             {move && (
               <>
                 <div className="behavior-zones">
@@ -545,7 +584,7 @@ function RuleEditor({
                       aria-label="Move from"
                       onChange={(e) => changeZone(i, step, 'from', e.target.value as BehaviorZone)}
                     >
-                      {BEHAVIOR_ZONES.map((z) => (
+                      {BEHAVIOR_FROM_ZONES.map((z) => (
                         <option key={z.id} value={z.id}>
                           From {z.label}
                         </option>
@@ -560,7 +599,7 @@ function RuleEditor({
                     >
                       {BEHAVIOR_ZONES.map((z) => (
                         <option key={z.id} value={z.id}>
-                          To {z.label}
+                          To {z.toLabel ?? z.label}
                         </option>
                       ))}
                     </select>
@@ -612,6 +651,20 @@ function RuleEditor({
           <code>o:"draw a card"</code>. Leave it blank for any card. <code>set:</code> and <code>is:foil</code> are about a
           printing, so they never match here. The battlefield only holds your mana sources, so moving off it finds lands and rocks
           and nothing else, and anything moved onto it arrives tapped.
+        </p>
+      )}
+      {rule.steps.some((s) => (s.op === 'move' || s.op === 'self') && (s.to ?? '').startsWith('library')) && (
+        <p className="fine-print">
+          Into the library on its own means a random spot, which is what shuffling a card back in comes to. Top and bottom go
+          where they say. Send more than one card to either and they arrive in a random order, because nothing decided which went
+          first. Only the library is ever searched from the top down, so it is also the only zone you can take cards out of.
+        </p>
+      )}
+      {rule.steps.some((s) => s.op === 'self') && (
+        <p className="fine-print">
+          "Put this card into a zone" is the card talking about itself, and it happens instead of where the card would otherwise
+          go: a spell that exiles itself rather than hitting the graveyard, or one that shuffles back into the library. On a
+          permanent it also takes the card off the battlefield, so anything it was doing there stops.
         </p>
       )}
       {rule.steps.some((s) => s.op === 'move' && queryHasX(s.q)) && (

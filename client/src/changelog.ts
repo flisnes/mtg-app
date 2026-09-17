@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.158.4',
+    changes: [
+      {
+        kind: 'fixed',
+        text:
+          'Ramp spells were ramping twice once you wrote a rule for them. Harrow, Into the North, Three Visits and the rest are read as land ramp off the mana data, not the oracle text, so the card behavior screen filed them under "nothing read yet" and the simulator fetched a land anyway. They now say what the database reads, and your own rule replaces it instead of stacking on top.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'A move step with criteria took the topmost match in your library rather than a random one, so the copy that left was always the copy you would have drawn soonest. Worth about 6% of a ramp deck\'s mana by turn six.',
+      },
+    ],
+  },
+  {
     version: '0.158.3',
     changes: [
       {
@@ -247,19 +262,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Evolving Wilds and the other fetches that cost you a turn count from turn two, and show up in the tapland tax where they used to slip past it.',
-      },
-    ],
-  },
-  {
-    version: '0.151.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Colored sources, in the deck stats sheet. It counts what taps for each of your colors and names the card your mana lets down worst: "2 white sources short for Wrath of God on turn 4". A card your deck makes no mana for at all reads "never".',
-      },
-      {
-        kind: 'added',
-        text: 'Taplands count from turn two and mana rocks from a turn after you could cast them, so the count is what you can actually tap, not what is in the list.',
       },
     ],
   },

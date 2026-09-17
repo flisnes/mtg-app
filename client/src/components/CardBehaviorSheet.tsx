@@ -13,7 +13,9 @@ import {
   X_VARIANTS,
   behaviorFromEffect,
   decodeEffectProfile,
+  decodeManaProfile,
   describeBehavior,
+  describeLandRamp,
   describeRule,
   queryHasX,
   substituteQueryX,
@@ -54,9 +56,17 @@ interface BehaviorCard {
   hasX: boolean;
   /** What the card database reads, or null when it reads nothing. */
   derived: EffectProfile | null;
+  /**
+   * The other half of the database's reading: land ramp, off the mana profile
+   * rather than the effect profile. A phrase, not rules — see describeLandRamp.
+   */
+  ramp: string | null;
   /** What the user said, or null when they have not said anything. */
   authored: CardBehavior | null;
 }
+
+/** "When you play it", straight out of the catalog so it is said in one place. */
+const PLAY_LEAD = BEHAVIOR_TRIGGERS.find((t) => t.id === 'play')!.lead;
 
 const isNotACard = (typeLine: string) => {
   const t = typeLine.toLowerCase();
@@ -87,6 +97,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       copies: r.quantity,
       hasX: /\{X\}/i.test(o.manaCost ?? ''),
       derived: decodeEffectProfile(o.effect),
+      ramp: describeLandRamp(decodeManaProfile(o.mana)),
       authored: behaviors.get(o.oracleId) ?? null,
     });
   }
@@ -96,7 +107,11 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
 /** The line under a card's name in the list. */
 function summaryOf(card: BehaviorCard): string {
   const lines = describeBehavior(card.authored ?? behaviorFromEffect(card.derived));
-  return lines.length > 0 ? lines.join('. ') : 'Do nothing';
+  if (lines.length > 0) return lines.join('. ');
+  // A Harrow used to read "Do nothing" here while the simulator was ramping off
+  // it, which is exactly the card somebody then writes out by hand.
+  if (card.ramp) return `${PLAY_LEAD}: ${card.ramp}`;
+  return 'Do nothing';
 }
 
 /** How many of the deck's distinct cards a move step's criteria would find. */
@@ -202,8 +217,8 @@ export function CardBehaviorSheet({
  */
 function BehaviorList({ cards, onOpen }: { cards: BehaviorCard[]; onOpen: (oracleId: string) => void }) {
   const authored = cards.filter((c) => c.authored);
-  const blank = cards.filter((c) => !c.authored && !c.derived);
-  const read = cards.filter((c) => !c.authored && c.derived);
+  const blank = cards.filter((c) => !c.authored && !c.derived && !c.ramp);
+  const read = cards.filter((c) => !c.authored && (c.derived || c.ramp));
 
   if (cards.length === 0) {
     return <p className="fine-print">Nothing in the mainboard yet.</p>;
@@ -215,7 +230,8 @@ function BehaviorList({ cards, onOpen }: { cards: BehaviorCard[]; onOpen: (oracl
         The card database reads oracle text conservatively: only what a card does unconditionally, on resolution, to you. Anything
         behind a trigger or an "if" reaches the simulator as a blank. Tell it what a card really does and it plays it out. A
         behavior covers your hand, library, graveyard and exile, and can move cards between them with the same search syntax the
-        card search uses. Lands still make their mana whatever it says here.
+        card search uses. Your rules replace what the database read the card as <em>doing</em>; what the card <em>is</em> stays, so
+        lands still make their mana whatever it says here.
       </p>
       <Section title={`Your own (${authored.length})`} cards={authored} onOpen={onOpen} />
       <Section title={`Nothing read yet (${blank.length})`} cards={blank} onOpen={onOpen} />
@@ -310,7 +326,18 @@ function BehaviorEditor({
           {card.derived.tutor && ' The database calls this a tutor; the simulator resolves one as a draw off the top either way.'}
         </p>
       )}
-      {!card.derived && !card.authored && (
+      {/* Land ramp is read off the mana profile rather than the oracle text, so
+          it never appeared in the rules below and the card looked blank. It is
+          not editable here, but what replaces it has to be said out loud. */}
+      {card.ramp && (
+        <p className="fine-print">
+          The card database already reads this one as land ramp: <em>{card.ramp}</em>. It does not say <em>which</em> land, so the
+          simulator takes whichever one best fixes your colours. Write your own rule and it replaces that reading, so put the ramp
+          in as a step if you want it. What the card <em>is</em> stays either way: a land still makes its mana, a rock still taps
+          for it, and an extra land drop is still an extra land drop.
+        </p>
+      )}
+      {!card.derived && !card.ramp && !card.authored && (
         <p className="fine-print">
           The card database reads nothing unconditional off this one, so it currently resolves as a blank. Add a rule and it stops
           being one.
@@ -340,8 +367,15 @@ function BehaviorEditor({
       )}
 
       <h4 className="deck-stats-head">Plays out as</h4>
+      {/* With no rules of your own, what plays out is whatever the database
+          read — which for a ramp spell is not nothing, and saying "blank" here
+          is what sends someone off to write a rule the card already had. */}
       <p className="deck-stats-verdict">
-        {preview.length > 0 ? preview.map(describeRule).join('. ') : 'Nothing. This card resolves as a blank.'}
+        {preview.length > 0
+          ? preview.map(describeRule).join('. ')
+          : card.ramp
+            ? `${PLAY_LEAD}: ${card.ramp}, read from the card`
+            : 'Nothing. This card resolves as a blank.'}
       </p>
 
       <div className="sheet-actions">

@@ -1,4 +1,4 @@
-// The older half of the changelog (0.150.1 down to 0.98.0), split out of
+// The older half of the changelog (0.151.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,19 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.151.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Colored sources, in the deck stats sheet. It counts what taps for each of your colors and names the card your mana lets down worst: "2 white sources short for Wrath of God on turn 4". A card your deck makes no mana for at all reads "never".',
+      },
+      {
+        kind: 'added',
+        text: 'Taplands count from turn two and mana rocks from a turn after you could cast them, so the count is what you can actually tap, not what is in the list.',
+      },
+    ],
+  },
   {
     version: '0.150.1',
     changes: [

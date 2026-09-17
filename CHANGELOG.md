@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.158.4
+
+- **Fixed: ramp spells ramped twice once you wrote a rule for them.** Harrow, Into the North, Nature's Lore, Three Visits and the rest are read as land ramp off the card's mana data, not off its oracle text. The card behavior screen only ever showed the oracle-text half, so it filed them under "nothing read yet" and said they do nothing, while the simulator was quietly fetching a land off them. Write your own rule and both fired: the database's guess first, then yours.
+- **Those cards now say what the database already reads**, in the same voice as everything else: "put 1 land from your library onto the battlefield, tapped". They sit under "read from the card" where they belong.
+- **Your rules replace that reading rather than adding to it**, the same as they always have for draw and discard, and the editor says so on the card. What the card *is* still stays: a land makes its mana, a rock taps for it, an extra land drop is still an extra land drop.
+- Worth writing one anyway: the database records how many lands a ramp spell finds but never *which*, so the simulator takes whatever best fixes your colours. That is how Into the North ends up fetching an Urza's Saga. A rule with `t:snow t:land` on it fetches what the card actually fetches.
+- **Fixed: a move step with criteria took the topmost match in your library instead of a random one.** The copy that left was always the copy you would have drawn soonest, which quietly starved every later draw. About 6% of a ramp deck's mana by turn six.
+
 ## 0.158.3
 
 - **Top of library and bottom of library are zones now.** A tutor that puts the card on top rather than in your hand, an effect that stacks your graveyard back onto the deck, a card sent to the bottom: all of it is the same move step with a different destination.

@@ -929,23 +929,43 @@ export function simulate(
   /**
    * Pull one matching card out of a zone, or -1. The zone shrinks by one.
    *
-   * The library is scanned from the top down, so an unfiltered move off it is a
-   * draw and a filtered one is a tutor that finds the topmost copy — which in a
-   * shuffled library is a uniformly random one. Every other zone is scanned in
-   * whatever order the sequencer happens to hold it, which is the honest answer
-   * for a goldfish: there is no opponent to play around and no reason to prefer
-   * one Mountain in the yard over another.
+   * An unfiltered move off the library is a draw and takes the top card. A
+   * filtered one is a *search*, and it takes a **uniformly random** match
+   * rather than the topmost one — which is not the same thing and was worth
+   * 6% of a ramp deck's mana. Taking the nearest copy means the copy that
+   * leaves your library is always the one you would have drawn soonest, so
+   * every later draw is biased against it; at a real table you take a copy and
+   * shuffle, and all of them are the same copy. `findLand` has always sampled
+   * its ties this way, and the two disagreeing is how this surfaced.
+   *
+   * Every other zone is scanned in whatever order the sequencer happens to hold
+   * it, which is the honest answer for a goldfish: there is no opponent to play
+   * around and no reason to prefer one Mountain in the yard over another.
    */
   const takeFrom = (zone: BehaviorZone, mask: Uint8Array | null, base: number): number => {
     switch (zone) {
-      case 'library':
-        for (let i = top; i < libLen; i++) {
-          const index = library[i]!;
-          if (!accepts(mask, base, index)) continue;
-          library[i] = library[--libLen]!;
+      case 'library': {
+        if (!mask) {
+          if (top >= libLen) return -1;
+          const index = library[top]!;
+          library[top] = library[--libLen]!;
           return index;
         }
-        return -1;
+        // Reservoir sampling over the matches, so the choice is uniform among
+        // them without building a list to shuffle. Same trick as the land drop's
+        // tie-break, for the same reason.
+        let pick = -1;
+        let matches = 0;
+        for (let i = top; i < libLen; i++) {
+          if (!accepts(mask, base, library[i]!)) continue;
+          matches++;
+          if (rng.int(matches) === 0) pick = i;
+        }
+        if (pick < 0) return -1;
+        const index = library[pick]!;
+        library[pick] = library[--libLen]!;
+        return index;
+      }
       case 'hand':
         for (let i = 0; i < handLen; i++) {
           const index = hand[i]!;
@@ -1669,10 +1689,21 @@ export function simulate(
           });
         }
 
-        if (card.role === 'landramp') {
+        // An authored play rule *is* what the card does, and a behavior
+        // replaces the derived reading rather than adding to it — see
+        // SimCard.behavior. Land ramp is a derived reading like any other, it
+        // just comes off the mana profile instead of the effect profile, and
+        // nothing was enforcing that until an Into the North written out by
+        // hand fetched an Urza's Saga first and then did what it was told.
+        const authored = opts.effects && !!card.behavior && card.behavior.play.length > 0;
+        if (card.role === 'landramp' && !authored) {
           // What it fetches is a land out of the library, arriving tapped. That
           // is Rampant Growth exactly and Nature's Lore a turn late, which is
-          // the conservative half of the two.
+          // the conservative half of the two. What it is *allowed* to fetch is
+          // not modelled at all — the profile records how many lands, never
+          // which — so this takes the land that best fixes your colours and a
+          // deck with a Snow-Covered Forest package gets whatever is in there.
+          // Writing the criteria out is exactly what a behavior is for.
           for (let k = 0; k < card.adds; k++) {
             const at = findLand(cards, library, top, libLen, colorsHeld, null, goal, units, rng);
             if (at < 0) break;

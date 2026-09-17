@@ -1,4 +1,4 @@
-import type { EffectProfile } from './card.js';
+import type { EffectProfile, ManaProfile } from './card.js';
 
 // Card behavior: what the *user* says a card does, when the pipeline's oracle
 // reading says nothing useful.
@@ -396,6 +396,32 @@ export function behaviorFromEffect(effect: EffectProfile | null | undefined): Ca
   fixed('treasure', effect.treasure);
   if (steps.length === 0) return null;
   return { v: CARD_BEHAVIOR_VERSION, rules: [{ on: effect.repeatable ? 'upkeep' : 'play', steps }] };
+}
+
+/**
+ * The land ramp the *mana* profile reads, as a phrase in this grammar's voice,
+ * or null for every card that is not land ramp.
+ *
+ * A card's derived reading comes from two pipeline fields with two different
+ * jobs: `effect` is what it does to your hand and library, `mana` is what it
+ * does to your mana. Only the first had a rendering here, so a Rampant Growth
+ * showed up in the editor as "do nothing" while the simulator was quietly
+ * ramping off it — which is how someone ends up writing the ramp out by hand
+ * and getting it twice.
+ *
+ * Deliberately a *phrase* and not a `CardBehavior`. The sequencer's derived
+ * ramp searches for the land that best fixes your colours; a `move` step takes
+ * a random matching one. Rendering this as editable rules would break
+ * `behaviorFromEffect`'s promise that opening the editor and pressing Save
+ * changes nothing, so it says what the database read and leaves the writing to
+ * the user.
+ */
+export function describeLandRamp(mana: ManaProfile | null | undefined): string | null {
+  if (!mana || mana.kind !== 'landramp') return null;
+  const n = Math.max(1, mana.adds);
+  // Always tapped, whatever the flag says: that is what the sequencer does with
+  // one, and this has to describe the model rather than the card.
+  return `put ${n} land${n === 1 ? '' : 's'} from your library onto the battlefield, tapped`;
 }
 
 // ---------------------------------------------------------------------------

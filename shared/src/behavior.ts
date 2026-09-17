@@ -46,7 +46,7 @@ export type BehaviorZone = 'library' | 'hand' | 'graveyard' | 'exile' | 'battlef
 export type BehaviorStepKind = 'draw' | 'mill' | 'discard' | 'scry' | 'surveil' | 'treasure' | 'move';
 
 /** Where a step's number comes from. */
-export type BehaviorAmountKind = 'fixed' | 'all' | 'hand' | 'lands' | 'graveyard' | 'turn';
+export type BehaviorAmountKind = 'fixed' | 'all' | 'hand' | 'lands' | 'graveyard' | 'turn' | 'xpaid';
 
 export interface BehaviorAmount {
   kind: BehaviorAmountKind;
@@ -71,9 +71,53 @@ export interface BehaviorStep {
    * anyone who has used the app for ten minutes. Matching happens once per deck
    * build, against the cards in the deck, so the sequencer's inner loop only
    * ever reads a precomputed bitmask.
+   *
+   * May contain `[X]` (see `queryHasX`), which is the one thing here that is
+   * not Scryfall syntax. Square brackets mean nothing to the real parser, so
+   * the borrowed language stays borrowed.
    */
   q?: string;
+  /**
+   * `move` only, and only when `q` holds an `[X]`: what that placeholder is
+   * worth. A second amount rather than a second vocabulary — the query says
+   * *where* the number goes and this says *what it is*, which is §12.1's split
+   * applied one level down.
+   */
+  qx?: BehaviorAmount;
 }
+
+// ---------------------------------------------------------------------------
+// The [X] placeholder
+// ---------------------------------------------------------------------------
+
+/**
+ * `[X]`, `[X+1]`, `[X - 2]`. An offset and nothing more.
+ *
+ * Deliberately not an expression language. The cards that exist say X, X-1 and
+ * X+1; multiplication and nesting would buy none of them and cost an evaluator,
+ * precedence rules and error messages pointing into the middle of a string.
+ * Square brackets because Scryfall has no use for them, so a query carrying one
+ * is unambiguously ours.
+ */
+const X_TOKEN = /\[\s*[Xx]\s*(?:([+-])\s*(\d+))?\s*\]/;
+const X_TOKEN_ALL = new RegExp(X_TOKEN.source, 'g');
+
+export function queryHasX(q: string | null | undefined): boolean {
+  return !!q && X_TOKEN.test(q);
+}
+
+/**
+ * The query with every placeholder replaced by a number, ready for the ordinary
+ * card-query parser. Clamped at zero: `[X-2]` with X of 1 must not hand the
+ * parser `mv<=-1`.
+ */
+export function substituteQueryX(q: string, x: number): string {
+  return q.replace(X_TOKEN_ALL, (_m, sign: string | undefined, digits: string | undefined) => {
+    const offset = digits ? Number(digits) * (sign === '-' ? -1 : 1) : 0;
+    return String(Math.max(0, x + offset));
+  });
+}
+
 
 export interface BehaviorRule {
   on: BehaviorTrigger;
@@ -111,6 +155,13 @@ export const MAX_BEHAVIOR_AMOUNT = 20;
  * stays comfortably inside SYNC_MAX_ROW_BYTES.
  */
 export const MAX_BEHAVIOR_QUERY = 120;
+/**
+ * How many values of `[X]` a filter has to be compiled for. The placeholder is
+ * filled by an amount and every amount is clamped to MAX_BEHAVIOR_AMOUNT, so
+ * the whole range is twenty-one bitmasks — which is what keeps a runtime value
+ * out of the simulator's inner loop. That bound now earns its keep twice.
+ */
+export const X_VARIANTS = MAX_BEHAVIOR_AMOUNT + 1;
 
 /** One deck's answer for one card. Keyed `<deckId>:<oracleId>`, synced like any row. */
 export interface DeckBehavior {
@@ -191,11 +242,18 @@ export interface AmountOption {
   phrase: string;
   /** Only means anything on a `move`, where the source zone bounds it. */
   moveOnly?: boolean;
+  /**
+   * Only means anything on a `play` rule, and only on a card whose printed cost
+   * has an `{X}` in it. An upkeep three turns later is not the moment the mana
+   * went in, and §12.2 says an option that cannot fire does not get offered.
+   */
+  needsX?: boolean;
 }
 
 export const BEHAVIOR_AMOUNTS: readonly AmountOption[] = [
   { id: 'fixed', label: 'a fixed number', phrase: '' },
   { id: 'all', label: 'all that match', phrase: 'all that match', moveOnly: true },
+  { id: 'xpaid', label: 'the mana you spent on X', phrase: 'the mana you spent on X', needsX: true },
   { id: 'hand', label: 'cards in your hand', phrase: 'cards in your hand' },
   { id: 'lands', label: 'lands you control', phrase: 'lands you control' },
   { id: 'graveyard', label: 'cards in your graveyard', phrase: 'cards in your graveyard' },
@@ -234,12 +292,15 @@ export function describeStep(step: BehaviorStep): string {
     const to = ZONE_BY_ID.get(step.to ?? '')?.phrase ?? 'somewhere';
     const filter = step.q ? ` matching ${step.q}` : '';
     const where = ` from ${from} to ${to}`;
+    // What the query's own placeholder is worth, named separately from the
+    // count because they are two different numbers on the same step.
+    const plug = step.q && queryHasX(step.q) ? `, with [X] = ${describeAmount(step.qx ?? { kind: 'fixed', n: 0 })}` : '';
     // "all that match" already says how many, so it does not want an "X = "
     // trailer explaining a number nobody asked for.
-    if (step.x.kind === 'all') return `move everything${filter}${where}`;
+    if (step.x.kind === 'all') return `move everything${filter}${where}${plug}`;
     const n = step.x.n ?? 0;
     const cards = computed ? 'X cards' : `${n} card${n === 1 ? '' : 's'}`;
-    return `move ${cards}${filter}${where}${tail}`;
+    return `move ${cards}${filter}${where}${tail}${plug}`;
   }
   if (step.op === 'treasure') {
     const many = computed || (step.x.n ?? 0) !== 1;
@@ -330,6 +391,7 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
         // A move with no zones, or with the same zone twice, is not a move.
         if (!step.from || !step.to || !ZONE_BY_ID.has(step.from) || !ZONE_BY_ID.has(step.to)) continue;
         if (step.from === step.to) continue;
+        if (step.qx && (!AMOUNT_BY_ID.has(step.qx.kind) || step.qx.kind === 'all')) continue;
       } else if (step.x.kind === 'all') {
         // "All that match" is bounded by the zone it draws from, and only a
         // move has one. "Draw all" would be MAX_BEHAVIOR_AMOUNT wearing a hat.
@@ -399,7 +461,14 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
       const to = typeof s.to === 'string' && ZONE_BY_ID.has(s.to) ? (s.to as BehaviorZone) : null;
       if (!from || !to || from === to) continue;
       const q = typeof s.q === 'string' ? s.q.trim().slice(0, MAX_BEHAVIOR_QUERY) : '';
-      steps.push(q ? { op, x, from, to, q } : { op, x, from, to });
+      if (!q) {
+        steps.push({ op, x, from, to });
+        continue;
+      }
+      // `qx` only means something when the query has somewhere to put it, and
+      // "all that match" is a count rather than a number, so it cannot fill one.
+      const qx = queryHasX(q) ? cleanAmount(s.qx) : null;
+      steps.push(qx && qx.kind !== 'all' ? { op, x, from, to, q, qx } : { op, x, from, to, q });
     }
     if (steps.length > 0) rules.push({ on: r.on as BehaviorTrigger, steps });
   }

@@ -1,4 +1,4 @@
-// The older half of the changelog (0.149.0 down to 0.98.0), split out of
+// The older half of the changelog (0.150.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,16 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.150.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Draw odds in the deck stats sheet: the chance of drawing what you want by turn N. Pick a group with the search bar you already know (`type:land`, `otag:removal`, `cmc<=2`) or tap a preset, set how many copies you need, and read the curve from your opening hand to turn six.',
+      },
+    ],
+  },
   {
     version: '0.149.0',
     changes: [

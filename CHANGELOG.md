@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.158.2
+
+- **Card behavior criteria can read X.** Write `[X]` anywhere a number goes and a dropdown appears asking what it is worth: the mana you spent on X, the cards in your hand, the lands you control, the turn number. So `t:creature mv<=[X]` returns the creatures your X actually reached. `[X-1]` and `[X+2]` work as well, and nothing goes below zero.
+- **Square brackets because the card search has no use for them.** Everything else in the box is still ordinary search syntax, matched against your deck. The editor now reports a range as you type, `matches 1 to 9 of 11 cards in this deck, depending on X`, so you can see the query is sensible at both ends.
+- **The simulator pays for X now.** It used to read a Fireball as a one-mana spell and leave the rest of the turn unspent, which is part of why the "mana available" and "mana spent" lines sat so far apart. X spells are cast last in the turn and take whatever is left over, so casting one never costs you a cheaper spell.
+- **An X spell with no spare mana is held rather than cast.** Spending a Fireball for zero uses the card up and buys nothing. It waits for a turn with mana to put into it, which is what you would do.
+- "The mana you spent on X" is only offered on a "when played" rule of a card whose cost actually has an X in it. An upkeep three turns later is not the moment the mana went in, and a dropdown that can only ever say zero is worse than one that is not there.
+
 ## 0.158.1
 
 - **Card behavior can move cards between zones.** One new step, and it covers a lot of cards: tutoring is library to hand, ramp is library to battlefield, regrowth is graveyard to hand, a bounce is battlefield to hand, and "put it back" is hand to library. Pick the two zones and how many, and the simulator plays it out.

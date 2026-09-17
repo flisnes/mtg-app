@@ -7900,6 +7900,12 @@ a.seg {
 .behavior-q .fine-print {
   margin: 0;
 }
+.behavior-q .behavior-x {
+  margin-top: 0.1rem;
+}
+.behavior-plug-lead {
+  margin-top: 0.25rem;
+}
 .behavior-q code {
   font-size: 0.95em;
 }

@@ -1,6 +1,7 @@
 import {
   BEHAVIOR_ZONES,
   MAX_BEHAVIOR_AMOUNT,
+  type BehaviorAmount,
   type BehaviorStep,
   type BehaviorZone,
   type DeckFormat,
@@ -12,7 +13,7 @@ import { handSize } from './gameModel.js';
 import { KEEP_ANYTHING_AT } from './mulligan.js';
 import { makeRng, shuffle, type Rng } from './rng.js';
 import { bindingPips, type ParsedCost, type Pip } from './manaCost.js';
-import { popcount, UNIT_BY_MASK, type SimCard, type SimDeck } from './simDeck.js';
+import { popcount, UNIT_BY_MASK, type SimCard, type SimDeck, type SimFilter } from './simDeck.js';
 
 // The simulator: phase 5, and the only engine here that can answer a question
 // about the *order* you drew things in.
@@ -249,7 +250,11 @@ export function halfWidth(p: number, games: number): number {
  *   6. Spend the turn. Ramp first, priciest first, because a Signet cast before
  *      the three-drop is a source next turn and cast after it is a card in
  *      hand; then the rest of the hand, priciest first, until the mana is gone.
- *      A tie between equals is a coin flip rather than decklist order.
+ *      A tie between equals is a coin flip rather than decklist order. An X
+ *      spell goes **last** of all, and X is then whatever the turn has left
+ *      over, which is what a player does with it and costs nothing precisely
+ *      because it goes last. It is held rather than cast when nothing is left
+ *      over, because a Fireball for zero spends the card and buys nothing.
  *   7. A card the database has an effect profile for resolves it: cards into
  *      hand, cards out of it, cards off the top into the graveyard, Treasures
  *      onto the battlefield, and a dig that goes looking for a land only when
@@ -832,11 +837,11 @@ export function simulate(
    * drawCards() for forty, and `hand` is a fixed-size array. It is the same cap
    * MAX_DRAW_PER_EFFECT is for a misread "draw X", for the same reason.
    */
-  const behaviorAmount = (step: BehaviorStep, turn: number): number => {
+  const behaviorAmount = (x: BehaviorAmount, turn: number): number => {
     let n: number;
-    switch (step.x.kind) {
+    switch (x.kind) {
       case 'fixed':
-        n = step.x.n ?? 0;
+        n = x.n ?? 0;
         break;
       case 'hand':
         n = handLen;
@@ -849,6 +854,11 @@ export function simulate(
         break;
       case 'turn':
         n = turn;
+        break;
+      case 'xpaid':
+        // Set by the cast that is resolving right now, and zero everywhere
+        // else. An upkeep three turns later is not the moment the mana went in.
+        n = xSpent;
         break;
       case 'all':
         // Bounded by the zone rather than by a number. This is only the ceiling
@@ -874,10 +884,21 @@ export function simulate(
 
   /** Nothing matches. What a criteria string no filter was built for gets. */
   const NO_MATCH = new Uint8Array(0);
-  const filterMasks = new Map<string, Uint8Array>();
-  for (const f of deck.filters) filterMasks.set(f.q, f.match);
+  const filterFor = new Map<string, SimFilter>();
+  for (const f of deck.filters) filterFor.set(f.q, f);
 
-  const accepts = (mask: Uint8Array | null, index: number): boolean => !mask || mask[index] === 1;
+  /**
+   * The mana that went into the `{X}` of the spell resolving right now, so a
+   * rule on a Fireball can read what it was cast for. Zero for everything that
+   * is not that: land drops, upkeeps, and every spell without an X.
+   */
+  let xSpent = 0;
+
+  /** An absent `qx`: the placeholder is worth nothing until someone says otherwise. */
+  const ZERO_AMOUNT: BehaviorAmount = { kind: 'fixed', n: 0 };
+
+  /** `base` is the row of a stacked `[X]` bitmask, and zero for every other query. */
+  const accepts = (mask: Uint8Array | null, base: number, index: number): boolean => !mask || mask[base + index] === 1;
 
   /**
    * Pull one matching card out of a zone, or -1. The zone shrinks by one.
@@ -889,12 +910,12 @@ export function simulate(
    * for a goldfish: there is no opponent to play around and no reason to prefer
    * one Mountain in the yard over another.
    */
-  const takeFrom = (zone: BehaviorZone, mask: Uint8Array | null): number => {
+  const takeFrom = (zone: BehaviorZone, mask: Uint8Array | null, base: number): number => {
     switch (zone) {
       case 'library':
         for (let i = top; i < libLen; i++) {
           const index = library[i]!;
-          if (!accepts(mask, index)) continue;
+          if (!accepts(mask, base, index)) continue;
           library[i] = library[--libLen]!;
           return index;
         }
@@ -904,7 +925,7 @@ export function simulate(
           const index = hand[i]!;
           // The commander sits in `hand` as bookkeeping, not as a card you may
           // put wherever you like. Same exemption pickDiscard makes.
-          if (cards[index]!.commander || !accepts(mask, index)) continue;
+          if (cards[index]!.commander || !accepts(mask, base, index)) continue;
           hand[i] = hand[--handLen]!;
           return index;
         }
@@ -912,7 +933,7 @@ export function simulate(
       case 'graveyard':
         for (let i = 0; i < gyLen; i++) {
           const index = graveyard[i]!;
-          if (!accepts(mask, index)) continue;
+          if (!accepts(mask, base, index)) continue;
           graveyard[i] = graveyard[--gyLen]!;
           return index;
         }
@@ -920,7 +941,7 @@ export function simulate(
       case 'exile':
         for (let i = 0; i < exLen; i++) {
           const index = exiled[i]!;
-          if (!accepts(mask, index)) continue;
+          if (!accepts(mask, base, index)) continue;
           exiled[i] = exiled[--exLen]!;
           return index;
         }
@@ -931,7 +952,7 @@ export function simulate(
         // out loud in the editor rather than discovered from a flat curve.
         for (let s = 0; s < srcLen; s++) {
           const index = srcCard[s]!;
-          if (index < 0 || !accepts(mask, index)) continue;
+          if (index < 0 || !accepts(mask, base, index)) continue;
           dropSource(s);
           return index;
         }
@@ -1014,10 +1035,18 @@ export function simulate(
     const from = step.from;
     const to = step.to;
     if (!from || !to || from === to) return;
-    const mask = step.q ? (filterMasks.get(step.q) ?? NO_MATCH) : null;
+    let mask: Uint8Array | null = null;
+    let base = 0;
+    if (step.q) {
+      const filter = filterFor.get(step.q);
+      mask = filter ? filter.match : NO_MATCH;
+      // A `[X]` query was compiled once per value of X, so picking the row *is*
+      // resolving it. Nothing in here parses anything.
+      if (filter?.varies) base = behaviorAmount(step.qx ?? ZERO_AMOUNT, turn) * n;
+    }
     for (let k = 0; k < count; k++) {
       if (!roomIn(to)) return;
-      const index = takeFrom(from, mask);
+      const index = takeFrom(from, mask, base);
       if (index < 0) return;
       // `seen` is cards that reached your hand off the library, which is what
       // the cards chart reads. A tutor counts; a regrowth does not.
@@ -1040,7 +1069,7 @@ export function simulate(
     const bits: string[] = [];
     let made = 0;
     for (const step of steps) {
-      const n = behaviorAmount(step, turn);
+      const n = behaviorAmount(step.x, turn);
       if (n <= 0) continue;
       switch (step.op) {
         case 'draw':
@@ -1186,6 +1215,9 @@ export function simulate(
       for (let r = 0; r < recurLen; r++) {
         const index = recurring[r]!;
         const card = cards[index]!;
+        // Nothing was cast to get here, so there is no X to read. An upkeep
+        // three turns after the spell is not the moment the mana went in.
+        xSpent = 0;
         if (card.behavior) {
           if (card.behavior.upkeep.length === 0) continue;
           runSteps(card.behavior.upkeep, turn);
@@ -1304,6 +1336,7 @@ export function simulate(
               const back = payEntryCost(land);
               if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
               if (opts.effects && resolves(land)) {
+                xSpent = 0;
                 enters(index, land, turn);
                 if (sink && lastEffectText) say(sink, 'effect', `${land.name} ${lastEffectText}`);
               }
@@ -1319,6 +1352,7 @@ export function simulate(
           // Theros do something on the way in. Free, now that there is a
           // resolver to call.
           if (opts.effects && resolves(card)) {
+            xSpent = 0;
             enters(cardIndex, card, turn);
             if (sink && lastEffectText) say(sink, 'effect', `${card.name} ${lastEffectText}`);
           }
@@ -1395,8 +1429,19 @@ export function simulate(
           // cannot be paid whatever colors it wants, and skipping it here is
           // what keeps the solver off nine tenths of the hand.
           if (card.cost.mana > left) continue;
+          // An X spell with nothing left over for X is a card you hold, not a
+          // card you cast. Spending a Fireball for zero uses the card up and
+          // buys nothing, which is not the conservative direction — it is just
+          // worse play. Holding it is what happens at a table, and it is what
+          // makes "the mana you spent on X" a number worth reading.
+          if (card.cost.hasX && card.cost.mana >= left) continue;
           const ramp = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp';
-          const rank = (ramp ? 1000 : 0) + card.cost.mana;
+          // An X spell goes last, under every fixed cost, because X is going to
+          // take whatever the turn has left and a Fireball cast first would end
+          // the turn on its own. Cast last it costs nothing: the mana it eats
+          // had nowhere else to go. The +100 keeps every rank non-negative,
+          // which `pickRank` starting at -1 depends on.
+          const rank = (ramp ? 1000 : 0) + (card.cost.hasX ? 0 : 100) + card.cost.mana;
           if (rank < pickRank) continue;
           // Reservoir sampling over the ties, so the choice is uniform among
           // equals without building a list to shuffle.
@@ -1450,15 +1495,43 @@ export function simulate(
         paid.mana += card.cost!.mana;
         spent += card.cost!.mana;
         hand[pick] = hand[--handLen]!;
+
+        // --- X ----------------------------------------------------------
+        // Until this point {X} was worth nothing: manaCost.ts records `hasX`
+        // and adds zero, so a Fireball was a one-mana spell and six mana sat
+        // there unspent. X now takes whatever the turn has left, which is what
+        // a player does with it and what the `manaSpentByTurn` line has been
+        // overstating the gap on for every deck that plays one.
+        xSpent = 0;
+        if (card.cost!.hasX) {
+          const rest = available - spent;
+          if (rest > 0) {
+            paid.generic += rest;
+            if (canPay(paid, units, unitGroups)) {
+              paid.mana += rest;
+              spent += rest;
+              xSpent = rest;
+            } else {
+              // Cannot actually happen — generic is payable by anything — but
+              // committing mana the solver won't confirm is the one thing this
+              // loop is not allowed to do.
+              paid.generic -= rest;
+            }
+          }
+        }
+
         if (sink && sink.turn) {
           const why = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp' ? ' (ramp first)' : '';
-          say(sink, 'cast', `Casts ${card.name} ${card.manaCost}${why}`);
+          const forX = card.cost!.hasX ? ` with X = ${xSpent}` : '';
+          say(sink, 'cast', `Casts ${card.name} ${card.manaCost}${forX}${why}`);
           // The taps arrive on this line later. The turn has to finish
           // committing first, because there is only one cost to solve and it is
           // the whole turn's.
           castLines.push({
             line: sink.turn.lines[sink.turn.lines.length - 1]!,
-            generic: card.cost!.generic,
+            // X is generic mana like any other, so the tap breakdown has to
+            // account for it or the line shows five lands paying for two.
+            generic: card.cost!.generic + xSpent,
             pips: card.cost!.pips.length,
           });
         }

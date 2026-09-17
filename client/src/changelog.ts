@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.158.2',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Card behavior criteria can read X. Write `[X]` anywhere a number goes, like `t:creature mv<=[X]`, and pick what it is worth from the dropdown that appears: the mana you spent on X, the cards in your hand, the lands you control. `[X-1]` and `[X+2]` work too. The editor shows the range it matches as you type.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'The simulator now pays for X. It used to treat a Fireball as a one-mana spell and leave the rest of the turn unspent. X spells are cast last, take whatever mana is left over, and are held rather than cast for nothing. Expect the "mana spent" line to sit closer to the "mana available" line in any deck that plays one.',
+      },
+    ],
+  },
+  {
     version: '0.158.1',
     changes: [
       {
@@ -235,16 +250,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'The deck stats charts were flat on a phone. The mana curve and the draw-odds chart both collapsed to their axis labels whenever the sheet was taller than the screen. Both stand up again.',
-      },
-    ],
-  },
-  {
-    version: '0.150.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Draw odds in the deck stats sheet: the chance of drawing what you want by turn N. Pick a group with the search bar you already know (`type:land`, `otag:removal`, `cmc<=2`) or tap a preset, set how many copies you need, and read the curve from your opening hand to turn six.',
       },
     ],
   },

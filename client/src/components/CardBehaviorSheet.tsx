@@ -9,10 +9,14 @@ import {
   MAX_BEHAVIOR_QUERY,
   MAX_BEHAVIOR_RULES,
   MAX_BEHAVIOR_STEPS,
+  X_VARIANTS,
   behaviorFromEffect,
   decodeEffectProfile,
   describeBehavior,
   describeRule,
+  queryHasX,
+  substituteQueryX,
+  type BehaviorAmount,
   type BehaviorAmountKind,
   type BehaviorRule,
   type BehaviorStep,
@@ -45,6 +49,8 @@ interface BehaviorCard {
   oracleId: string;
   name: string;
   copies: number;
+  /** An `{X}` in the printed cost, so "the mana you spent on X" is a real number. */
+  hasX: boolean;
   /** What the card database reads, or null when it reads nothing. */
   derived: EffectProfile | null;
   /** What the user said, or null when they have not said anything. */
@@ -78,6 +84,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       oracleId: o.oracleId,
       name: o.name,
       copies: r.quantity,
+      hasX: /\{X\}/i.test(o.manaCost ?? ''),
       derived: decodeEffectProfile(o.effect),
       authored: behaviors.get(o.oracleId) ?? null,
     });
@@ -94,7 +101,8 @@ function summaryOf(card: BehaviorCard): string {
 /** How many of the deck's distinct cards a move step's criteria would find. */
 export interface DeckMatcher {
   total: number;
-  count: (q: string) => number;
+  /** A range rather than a number, because a `[X]` query has one answer per X. */
+  count: (q: string) => { min: number; max: number; varies: boolean };
 }
 
 export function CardBehaviorSheet({
@@ -129,14 +137,32 @@ export function CardBehaviorSheet({
       seen.add(o.oracleId);
       entries.push(toSearchableEntry(o));
     }
+    const one = (q: string) => {
+      const compiled = compileCardQuery(q);
+      if (compiled.isEmpty) return entries.length;
+      let n = 0;
+      for (const e of entries) if (compiled.matches(e)) n++;
+      return n;
+    };
     return {
       total: entries.length,
       count: (q: string) => {
-        const compiled = compileCardQuery(q);
-        if (compiled.isEmpty) return entries.length;
-        let n = 0;
-        for (const e of entries) if (compiled.matches(e)) n++;
-        return n;
+        if (!queryHasX(q)) {
+          const n = one(q);
+          return { min: n, max: n, varies: false };
+        }
+        // Twenty-one parses per keystroke, over a deck's worth of cards. It is
+        // the same enumeration buildSimDeck does, and the point is the same:
+        // the range tells you the query is sane at both ends of X, which one
+        // number picked out of the middle would not.
+        let min = Infinity;
+        let max = 0;
+        for (let x = 0; x < X_VARIANTS; x++) {
+          const n = one(substituteQueryX(q, x));
+          if (n < min) min = n;
+          if (n > max) max = n;
+        }
+        return { min: min === Infinity ? 0 : min, max, varies: true };
       },
     };
   }, [rows]);
@@ -295,6 +321,7 @@ function BehaviorEditor({
           key={i}
           rule={rule}
           matcher={matcher}
+          hasX={card.hasX}
           onChange={(next) => edit(i, next)}
           onRemove={() => setRules(rules.filter((_r, k) => k !== i))}
         />
@@ -333,14 +360,71 @@ function BehaviorEditor({
   );
 }
 
+/**
+ * The "X = …" picker, plus the number box when X is a fixed one. Used twice on
+ * a move step: once for how many cards to move, once for what the query's own
+ * `[X]` is worth. Two different numbers, one vocabulary.
+ */
+function AmountPicker({
+  value,
+  label,
+  offer,
+  onChange,
+}: {
+  value: BehaviorAmount;
+  label: string;
+  /** Which of the catalog's amounts make sense here. */
+  offer: (o: (typeof BEHAVIOR_AMOUNTS)[number]) => boolean;
+  onChange: (next: BehaviorAmount) => void;
+}) {
+  return (
+    <div className="behavior-x">
+      <label className="field">
+        <select
+          value={value.kind}
+          aria-label={label}
+          onChange={(e) => {
+            const kind = e.target.value as BehaviorAmountKind;
+            onChange(kind === 'fixed' ? { kind, n: value.n ?? 1 } : { kind });
+          }}
+        >
+          {BEHAVIOR_AMOUNTS.filter(offer).map((o) => (
+            <option key={o.id} value={o.id}>
+              X = {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {value.kind === 'fixed' && (
+        <label className="field behavior-n">
+          <input
+            type="number"
+            min={0}
+            max={MAX_BEHAVIOR_AMOUNT}
+            inputMode="numeric"
+            aria-label="How many"
+            value={value.n ?? 0}
+            onChange={(e) => {
+              const n = Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, Math.round(Number(e.target.value) || 0)));
+              onChange({ kind: 'fixed', n });
+            }}
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
 /** How many cards in the deck a criteria string finds, live as it is typed. */
 function MatchNote({ q, matcher }: { q: string; matcher: DeckMatcher }) {
   const trimmed = q.trim();
-  const n = useMemo(() => matcher.count(trimmed), [trimmed, matcher]);
+  const hit = useMemo(() => matcher.count(trimmed), [trimmed, matcher]);
   if (!trimmed) return <span className="fine-print">Any of the {matcher.total} cards in this deck.</span>;
+  if (hit.max === 0) return <span className="fine-print behavior-nomatch">Matches nothing in this deck.</span>;
+  const how = hit.varies && hit.min !== hit.max ? `${hit.min} to ${hit.max}` : String(hit.max);
   return (
-    <span className={`fine-print${n === 0 ? ' behavior-nomatch' : ''}`}>
-      {n === 0 ? 'Matches nothing in this deck.' : `Matches ${n} of ${matcher.total} cards in this deck.`}
+    <span className="fine-print">
+      Matches {how} of {matcher.total} cards in this deck{hit.varies && hit.min !== hit.max ? ', depending on X' : ''}.
     </span>
   );
 }
@@ -348,17 +432,44 @@ function MatchNote({ q, matcher }: { q: string; matcher: DeckMatcher }) {
 function RuleEditor({
   rule,
   matcher,
+  hasX,
   onChange,
   onRemove,
 }: {
   rule: BehaviorRule;
   matcher: DeckMatcher;
+  /** The card's printed cost has an `{X}`. */
+  hasX: boolean;
   onChange: (next: BehaviorRule) => void;
   onRemove: () => void;
 }) {
   const setStep = (i: number, next: BehaviorRule['steps'][number]) =>
     onChange({ ...rule, steps: rule.steps.map((s, k) => (k === i ? next : s)) });
   const trigger = BEHAVIOR_TRIGGERS.find((t) => t.id === rule.on);
+  /** "The mana you spent on X" is a number only while the cast is resolving. */
+  const xAvailable = hasX && rule.on === 'play';
+
+  /**
+   * Moving a rule off `play` takes its X with it, so any amount reading one
+   * becomes a fixed zero rather than a select with nothing selected in it.
+   */
+  const changeTrigger = (on: BehaviorTrigger) => {
+    if (on === 'play' || !hasX) {
+      onChange({ ...rule, on });
+      return;
+    }
+    const drop = (a: BehaviorAmount | undefined): BehaviorAmount | undefined =>
+      a?.kind === 'xpaid' ? { kind: 'fixed', n: 0 } : a;
+    onChange({
+      ...rule,
+      on,
+      steps: rule.steps.map((s) => {
+        const x = drop(s.x) ?? s.x;
+        const qx = drop(s.qx);
+        return qx ? { ...s, x, qx } : { ...s, x };
+      }),
+    });
+  };
 
   /**
    * Switching verbs carries over what still applies and drops what does not.
@@ -391,7 +502,7 @@ function RuleEditor({
               className={`seg${rule.on === t.id ? ' seg-active' : ''}`}
               role="radio"
               aria-checked={rule.on === t.id}
-              onClick={() => onChange({ ...rule, on: t.id as BehaviorTrigger })}
+              onClick={() => changeTrigger(t.id as BehaviorTrigger)}
             >
               {t.label}
             </button>
@@ -419,40 +530,12 @@ function RuleEditor({
                 ))}
               </select>
             </label>
-            <div className="behavior-x">
-              <label className="field">
-                <select
-                  value={step.x.kind}
-                  aria-label="Where X comes from"
-                  onChange={(e) => {
-                    const kind = e.target.value as BehaviorAmountKind;
-                    setStep(i, { ...step, x: kind === 'fixed' ? { kind, n: step.x.n ?? 1 } : { kind } });
-                  }}
-                >
-                  {BEHAVIOR_AMOUNTS.filter((o) => move || !o.moveOnly).map((o) => (
-                    <option key={o.id} value={o.id}>
-                      X = {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {step.x.kind === 'fixed' && (
-                <label className="field behavior-n">
-                  <input
-                    type="number"
-                    min={0}
-                    max={MAX_BEHAVIOR_AMOUNT}
-                    inputMode="numeric"
-                    aria-label="How many"
-                    value={step.x.n ?? 0}
-                    onChange={(e) => {
-                      const n = Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, Math.round(Number(e.target.value) || 0)));
-                      setStep(i, { ...step, x: { kind: 'fixed', n } });
-                    }}
-                  />
-                </label>
-              )}
-            </div>
+            <AmountPicker
+              value={step.x}
+              label="Where X comes from"
+              offer={(o) => (move || !o.moveOnly) && (!o.needsX || xAvailable)}
+              onChange={(x) => setStep(i, { ...step, x })}
+            />
             {move && (
               <>
                 <div className="behavior-zones">
@@ -495,6 +578,19 @@ function RuleEditor({
                     />
                   </label>
                   <MatchNote q={step.q ?? ''} matcher={matcher} />
+                  {/* The control appears because the query asked for it. No
+                      placeholder, no dropdown, and nothing to explain away. */}
+                  {queryHasX(step.q) && (
+                    <>
+                      <span className="fine-print behavior-plug-lead">[X] in that query is:</span>
+                      <AmountPicker
+                        value={step.qx ?? { kind: 'fixed', n: 0 }}
+                        label="What [X] in the criteria is worth"
+                        offer={(o) => !o.moveOnly && (!o.needsX || xAvailable)}
+                        onChange={(qx) => setStep(i, { ...step, qx })}
+                      />
+                    </>
+                  )}
                 </div>
               </>
             )}
@@ -516,6 +612,13 @@ function RuleEditor({
           <code>o:"draw a card"</code>. Leave it blank for any card. <code>set:</code> and <code>is:foil</code> are about a
           printing, so they never match here. The battlefield only holds your mana sources, so moving off it finds lands and rocks
           and nothing else, and anything moved onto it arrives tapped.
+        </p>
+      )}
+      {rule.steps.some((s) => s.op === 'move' && queryHasX(s.q)) && (
+        <p className="fine-print">
+          <code>[X]</code> is the one thing here the card search does not know. Write it anywhere a number goes, say what it is
+          worth below, and <code>mv&lt;=[X]</code> becomes <code>mv&lt;=5</code> as the rule resolves. <code>[X-1]</code> and{' '}
+          <code>[X+2]</code> work too; nothing fancier does, and nothing goes below zero.
         </p>
       )}
 

@@ -5,7 +5,10 @@ import {
   decodeEffectProfile,
   decodeFetchProfile,
   decodeManaProfile,
+  queryHasX,
   sourceColors,
+  substituteQueryX,
+  X_VARIANTS,
   type CardBehavior,
   type CompiledBehavior,
   type DeckBoard,
@@ -184,8 +187,14 @@ export interface SimCoverage {
  */
 export interface SimFilter {
   q: string;
-  /** 1 where `cards[i]` matches. */
+  /**
+   * 1 where `cards[i]` matches. One row of `cards.length` normally; when
+   * `varies`, `X_VARIANTS` rows stacked, so the value of `[X]` indexes a row
+   * and the lookup is still a single byte.
+   */
   match: Uint8Array;
+  /** The query holds an `[X]`, so `match` is a stack rather than a row. */
+  varies: boolean;
 }
 
 export interface SimDeck {
@@ -383,16 +392,33 @@ function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[])
   for (const card of cards) collectBehaviorQueries(card.behavior, queries);
   if (queries.size === 0) return [];
   const entries = oracles.map((o) => toSearchableEntry(o));
+  const n = cards.length;
   const filters: SimFilter[] = [];
-  for (const q of queries) {
-    const compiled = compileCardQuery(q);
-    const match = new Uint8Array(cards.length);
+
+  /** One row of the bitmask, for one fully-resolved query string. */
+  const fill = (match: Uint8Array, base: number, resolved: string) => {
+    const compiled = compileCardQuery(resolved);
     // An empty query is every card, which is also what an absent one means, so
     // the two agree rather than one of them quietly matching nothing.
     for (let i = 0; i < entries.length; i++) {
-      if (compiled.isEmpty || compiled.matches(entries[i]!)) match[i] = 1;
+      if (compiled.isEmpty || compiled.matches(entries[i]!)) match[base + i] = 1;
     }
-    filters.push({ q, match });
+  };
+
+  for (const q of queries) {
+    if (!queryHasX(q)) {
+      const match = new Uint8Array(n);
+      fill(match, 0, q);
+      filters.push({ q, match, varies: false });
+      continue;
+    }
+    // `mv<=[X]` has no single answer, so it gets twenty-one of them. The
+    // placeholder is filled by an amount and amounts are clamped to
+    // MAX_BEHAVIOR_AMOUNT, so the range is closed and small enough to just
+    // enumerate — which is what keeps the parser out of the game loop.
+    const match = new Uint8Array(X_VARIANTS * n);
+    for (let x = 0; x < X_VARIANTS; x++) fill(match, x * n, substituteQueryX(q, x));
+    filters.push({ q, match, varies: true });
   }
   return filters;
 }

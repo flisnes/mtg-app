@@ -52,13 +52,39 @@ export type BehaviorZone = 'library' | 'librarytop' | 'librarybottom' | 'hand' |
 /** What one step does. */
 export type BehaviorStepKind = 'draw' | 'mill' | 'discard' | 'scry' | 'surveil' | 'treasure' | 'move' | 'self';
 
-/** Where a step's number comes from. */
-export type BehaviorAmountKind = 'fixed' | 'all' | 'hand' | 'lands' | 'graveyard' | 'turn' | 'xpaid';
+/**
+ * Where a step's number comes from.
+ *
+ * `prev` is the odd one: it reads no game state at all, only what the step
+ * before it actually did. Windfall is "discard your hand, then draw that many",
+ * and every amount here is read as its own step runs, so the second `hand`
+ * would be zero — correct arithmetic, wrong card. This is the number that step
+ * reached, carried forward one place.
+ */
+export type BehaviorAmountKind = 'fixed' | 'all' | 'prev' | 'hand' | 'library' | 'lands' | 'graveyard' | 'turn' | 'xpaid';
+
+/**
+ * Arithmetic on an amount, so "half your library" and "that many minus one" are
+ * writable without a new amount kind for each of them.
+ *
+ * One operator and one number, applied once, and no nesting. That covers Dark
+ * Deal (X - 1), Peer Into the Abyss (X / 2) and the double-up effects; an
+ * expression language would cover a handful more and cost a parser, precedence
+ * rules and errors pointing into the middle of a formula.
+ */
+export type BehaviorAmountOp = '+' | '-' | '*' | '/';
 
 export interface BehaviorAmount {
   kind: BehaviorAmountKind;
   /** The number, for `fixed` only. Ignored (and unset) on every other kind. */
   n?: number;
+  /**
+   * An adjustment applied after the kind is read. Never set on `fixed` (that is
+   * just a different number) or on `all` (a ceiling, not a count).
+   */
+  op?: BehaviorAmountOp;
+  /** The right-hand side of `op`, at least 1. Absent exactly when `op` is. */
+  by?: number;
 }
 
 export interface BehaviorStep {
@@ -274,30 +300,78 @@ export interface AmountOption {
    * went in, and §12.2 says an option that cannot fire does not get offered.
    */
   needsX?: boolean;
+  /** There has to be a step before this one for it to read anything. */
+  needsPrev?: boolean;
+  /** Arithmetic on it would say nothing: see BehaviorAmount.op. */
+  noAdjust?: boolean;
 }
 
 export const BEHAVIOR_AMOUNTS: readonly AmountOption[] = [
-  { id: 'fixed', label: 'a fixed number', phrase: '' },
-  { id: 'all', label: 'all that match', phrase: 'all that match', moveOnly: true },
+  { id: 'fixed', label: 'a fixed number', phrase: '', noAdjust: true },
+  { id: 'all', label: 'all that match', phrase: 'all that match', moveOnly: true, noAdjust: true },
+  { id: 'prev', label: 'the previous X', phrase: 'the previous X', needsPrev: true },
   { id: 'xpaid', label: 'the mana you spent on X', phrase: 'the mana you spent on X', needsX: true },
   { id: 'hand', label: 'cards in your hand', phrase: 'cards in your hand' },
+  { id: 'library', label: 'cards in your library', phrase: 'cards in your library' },
   { id: 'lands', label: 'lands you control', phrase: 'lands you control' },
   { id: 'graveyard', label: 'cards in your graveyard', phrase: 'cards in your graveyard' },
   { id: 'turn', label: 'the turn number', phrase: 'the turn number' },
 ];
 
+export interface AmountOpOption {
+  id: BehaviorAmountOp;
+  /** For the picker, where a word is easier to hit and easier to read than a glyph. */
+  label: string;
+  /** For writing the rule out, where the glyph is shorter than the word. */
+  sign: string;
+}
+
+export const BEHAVIOR_AMOUNT_OPS: readonly AmountOpOption[] = [
+  { id: '+', label: 'plus', sign: '+' },
+  { id: '-', label: 'minus', sign: '-' },
+  { id: '*', label: 'times', sign: '×' },
+  { id: '/', label: 'divided by', sign: '÷' },
+];
+
 const TRIGGER_BY_ID = new Map(BEHAVIOR_TRIGGERS.map((t) => [t.id as string, t]));
 const STEP_BY_ID = new Map(BEHAVIOR_STEPS.map((s) => [s.id as string, s]));
 const AMOUNT_BY_ID = new Map(BEHAVIOR_AMOUNTS.map((a) => [a.id as string, a]));
+const OP_BY_ID = new Map(BEHAVIOR_AMOUNT_OPS.map((o) => [o.id as string, o]));
 const ZONE_BY_ID = new Map(BEHAVIOR_ZONES.map((z) => [z.id as string, z]));
 
 // ---------------------------------------------------------------------------
 // Reading one out loud
 // ---------------------------------------------------------------------------
 
+/**
+ * An amount's adjustment applied to the number its kind read.
+ *
+ * Division rounds **down**, which is both what every card that halves something
+ * prints and the direction §11.4 wants: a model that rounds up is a model that
+ * over-promises. An op this build does not recognize cannot reach here —
+ * compileBehavior drops the step and sanitizeCardBehavior drops the adjustment
+ * — so the fallthrough is the unmodified number rather than a guess.
+ */
+export function applyAmountOp(value: number, x: BehaviorAmount): number {
+  if (!x.op || !x.by) return value;
+  switch (x.op) {
+    case '+':
+      return value + x.by;
+    case '-':
+      return value - x.by;
+    case '*':
+      return value * x.by;
+    case '/':
+      return Math.floor(value / x.by);
+    default:
+      return value;
+  }
+}
+
 export function describeAmount(x: BehaviorAmount): string {
-  if (x.kind === 'fixed') return String(x.n ?? 0);
-  return AMOUNT_BY_ID.get(x.kind)?.phrase ?? '?';
+  const base = x.kind === 'fixed' ? String(x.n ?? 0) : (AMOUNT_BY_ID.get(x.kind)?.phrase ?? '?');
+  if (!x.op || !x.by) return base;
+  return `${base} ${OP_BY_ID.get(x.op)?.sign ?? x.op} ${x.by}`;
 }
 
 /**
@@ -443,6 +517,15 @@ export interface CompiledBehavior {
   upkeep: BehaviorStep[];
 }
 
+/**
+ * An amount this build can execute end to end. An unknown *op* is dropped with
+ * the whole step rather than ignored, because ignoring one runs the number
+ * unmodified: a "÷ 2" this build has never heard of would double what the
+ * author asked for, which is the one direction §11.4 does not allow.
+ */
+const knownAmount = (x: BehaviorAmount | undefined | null): boolean =>
+  !!x && AMOUNT_BY_ID.has(x.kind) && (!x.op || OP_BY_ID.has(x.op));
+
 export function compileBehavior(b: CardBehavior | null | undefined): CompiledBehavior | null {
   if (!b || b.v !== CARD_BEHAVIOR_VERSION || !Array.isArray(b.rules)) return null;
   const out: CompiledBehavior = { play: [], upkeep: [] };
@@ -450,14 +533,14 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     const bucket = rule?.on === 'play' ? out.play : rule?.on === 'upkeep' ? out.upkeep : null;
     if (!bucket || !Array.isArray(rule.steps)) continue;
     for (const step of rule.steps) {
-      if (!step || !STEP_BY_ID.has(step.op) || !step.x || !AMOUNT_BY_ID.has(step.x.kind)) continue;
+      if (!step || !STEP_BY_ID.has(step.op) || !knownAmount(step.x)) continue;
       if (step.op === 'self') {
         if (!step.to || !ZONE_BY_ID.has(step.to)) continue;
       } else if (step.op === 'move') {
         // A move with no zones, or with the same zone twice, is not a move.
         if (!step.from || !step.to || !ZONE_BY_ID.has(step.from) || !ZONE_BY_ID.has(step.to)) continue;
         if (step.from === step.to || ZONE_BY_ID.get(step.from)!.toOnly) continue;
-        if (step.qx && (!AMOUNT_BY_ID.has(step.qx.kind) || step.qx.kind === 'all')) continue;
+        if (step.qx && (!knownAmount(step.qx) || step.qx.kind === 'all')) continue;
       } else if (step.x.kind === 'all') {
         // "All that match" is bounded by the zone it draws from, and only a
         // move has one. "Draw all" would be MAX_BEHAVIOR_AMOUNT wearing a hat.
@@ -492,9 +575,22 @@ function cleanAmount(raw: unknown): BehaviorAmount | null {
   if (!isRecord(raw)) return null;
   const kind = raw.kind;
   if (typeof kind !== 'string' || !AMOUNT_BY_ID.has(kind)) return null;
-  if (kind !== 'fixed') return { kind: kind as BehaviorAmountKind };
-  const n = typeof raw.n === 'number' && Number.isFinite(raw.n) ? Math.round(raw.n) : 0;
-  return { kind: 'fixed', n: Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, n)) };
+  if (kind === 'fixed') {
+    const n = typeof raw.n === 'number' && Number.isFinite(raw.n) ? Math.round(raw.n) : 0;
+    return { kind: 'fixed', n: Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, n)) };
+  }
+  const out: BehaviorAmount = { kind: kind as BehaviorAmountKind };
+  // An adjustment of zero is not an adjustment, and an amount the catalog says
+  // takes none never keeps one. Both are dropped rather than stored, so saving
+  // the same rule twice is the same bytes — §12.3's promise, one level down.
+  if (!AMOUNT_BY_ID.get(kind)!.noAdjust && typeof raw.op === 'string' && OP_BY_ID.has(raw.op)) {
+    const by = typeof raw.by === 'number' && Number.isFinite(raw.by) ? Math.round(raw.by) : 0;
+    if (by >= 1) {
+      out.op = raw.op as BehaviorAmountOp;
+      out.by = Math.min(MAX_BEHAVIOR_AMOUNT, by);
+    }
+  }
+  return out;
 }
 
 /**

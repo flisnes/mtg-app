@@ -1,4 +1,4 @@
-// The older half of the changelog (0.151.0 down to 0.98.0), split out of
+// The older half of the changelog (0.151.1 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,19 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.151.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Fetchlands count as colored sources. They tap for nothing, so the new colored-source report could not see them at all, and an eight-fetch manabase read far worse than it plays. A fetch now counts for every color of every land it could actually find in your deck.',
+      },
+      {
+        kind: 'changed',
+        text: 'Evolving Wilds and the other fetches that cost you a turn count from turn two, and show up in the tapland tax where they used to slip past it.',
+      },
+    ],
+  },
   {
     version: '0.151.0',
     changes: [

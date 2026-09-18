@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.158.5',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Card behavior can now say "the previous X": the number the step before it actually reached. That is what a Windfall needs, since the hand it draws for is already in the graveyard by the time it draws.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Any amount can be adjusted: plus, minus, times or divided by a number. Dark Deal is the previous X minus 1, Peer Into the Abyss is your library divided by 2. "Cards in your library" is a new amount too.',
+      },
+    ],
+  },
+  {
     version: '0.158.4',
     changes: [
       {
@@ -249,19 +264,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'The keep rule is a search, same as the draw-odds group. Two to five lands is the default; two to five untapped sources, or one cheap spell, is a stepper and a query away.',
-      },
-    ],
-  },
-  {
-    version: '0.151.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Fetchlands count as colored sources. They tap for nothing, so the new colored-source report could not see them at all, and an eight-fetch manabase read far worse than it plays. A fetch now counts for every color of every land it could actually find in your deck.',
-      },
-      {
-        kind: 'changed',
-        text: 'Evolving Wilds and the other fetches that cost you a turn count from turn two, and show up in the tapland tax where they used to slip past it.',
       },
     ],
   },

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   BEHAVIOR_AMOUNTS,
+  BEHAVIOR_AMOUNT_OPS,
   BEHAVIOR_FROM_ZONES,
   BEHAVIOR_STEPS,
   BEHAVIOR_TRIGGERS,
@@ -21,6 +22,7 @@ import {
   substituteQueryX,
   type BehaviorAmount,
   type BehaviorAmountKind,
+  type BehaviorAmountOp,
   type BehaviorRule,
   type BehaviorStep,
   type BehaviorStepKind,
@@ -399,6 +401,12 @@ function BehaviorEditor({
  * The "X = …" picker, plus the number box when X is a fixed one. Used twice on
  * a move step: once for how many cards to move, once for what the query's own
  * `[X]` is worth. Two different numbers, one vocabulary.
+ *
+ * A computed amount gets a second row: an operator and a number, so "half your
+ * library" and "that many minus one" are writable without an amount kind per
+ * card. It is a second row rather than a third control on the first one for the
+ * same reason the verb and the amount are on separate lines — three selects
+ * abreast on a 393px phone truncates all three.
  */
 function AmountPicker({
   value,
@@ -412,39 +420,90 @@ function AmountPicker({
   offer: (o: (typeof BEHAVIOR_AMOUNTS)[number]) => boolean;
   onChange: (next: BehaviorAmount) => void;
 }) {
+  const adjustable = !BEHAVIOR_AMOUNTS.find((o) => o.id === value.kind)?.noAdjust;
   return (
     <div className="behavior-x">
-      <label className="field">
-        <select
-          value={value.kind}
-          aria-label={label}
-          onChange={(e) => {
-            const kind = e.target.value as BehaviorAmountKind;
-            onChange(kind === 'fixed' ? { kind, n: value.n ?? 1 } : { kind });
-          }}
-        >
-          {BEHAVIOR_AMOUNTS.filter(offer).map((o) => (
-            <option key={o.id} value={o.id}>
-              X = {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {value.kind === 'fixed' && (
-        <label className="field behavior-n">
-          <input
-            type="number"
-            min={0}
-            max={MAX_BEHAVIOR_AMOUNT}
-            inputMode="numeric"
-            aria-label="How many"
-            value={value.n ?? 0}
+      <div className="behavior-x-row">
+        <label className="field">
+          <select
+            value={value.kind}
+            aria-label={label}
             onChange={(e) => {
-              const n = Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, Math.round(Number(e.target.value) || 0)));
-              onChange({ kind: 'fixed', n });
+              const kind = e.target.value as BehaviorAmountKind;
+              // Switching to a kind that takes no adjustment drops the one that
+              // was there, rather than parking it somewhere it cannot be seen
+              // or removed.
+              if (BEHAVIOR_AMOUNTS.find((o) => o.id === kind)?.noAdjust) {
+                onChange(kind === 'fixed' ? { kind, n: value.n ?? 1 } : { kind });
+                return;
+              }
+              onChange(value.op && value.by ? { kind, op: value.op, by: value.by } : { kind });
             }}
-          />
+          >
+            {/* Whatever is already selected stays listed even when it no
+                longer qualifies — delete the first step of a rule and the
+                second one's "previous X" would otherwise leave a select with
+                nothing in it, unreadable and unfixable. */}
+            {BEHAVIOR_AMOUNTS.filter((o) => offer(o) || o.id === value.kind).map((o) => (
+              <option key={o.id} value={o.id}>
+                X = {o.label}
+              </option>
+            ))}
+          </select>
         </label>
+        {value.kind === 'fixed' && (
+          <label className="field behavior-n">
+            <input
+              type="number"
+              min={0}
+              max={MAX_BEHAVIOR_AMOUNT}
+              inputMode="numeric"
+              aria-label="How many"
+              value={value.n ?? 0}
+              onChange={(e) => {
+                const n = Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, Math.round(Number(e.target.value) || 0)));
+                onChange({ kind: 'fixed', n });
+              }}
+            />
+          </label>
+        )}
+      </div>
+      {adjustable && (
+        <div className="behavior-x-row behavior-x-adjust">
+          <label className="field behavior-opsel">
+            <select
+              value={value.op ?? ''}
+              aria-label={`${label}, adjusted`}
+              onChange={(e) => {
+                const op = e.target.value as BehaviorAmountOp | '';
+                onChange(op ? { kind: value.kind, op, by: value.by ?? 1 } : { kind: value.kind });
+              }}
+            >
+              <option value="">exactly that</option>
+              {BEHAVIOR_AMOUNT_OPS.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {value.op && (
+            <label className="field behavior-n">
+              <input
+                type="number"
+                min={1}
+                max={MAX_BEHAVIOR_AMOUNT}
+                inputMode="numeric"
+                aria-label="Adjust by how much"
+                value={value.by ?? 1}
+                onChange={(e) => {
+                  const by = Math.max(1, Math.min(MAX_BEHAVIOR_AMOUNT, Math.round(Number(e.target.value) || 1)));
+                  onChange({ ...value, by });
+                }}
+              />
+            </label>
+          )}
+        </div>
       )}
     </div>
   );
@@ -588,7 +647,7 @@ function RuleEditor({
               <AmountPicker
                 value={step.x}
                 label="Where X comes from"
-                offer={(o) => (move || !o.moveOnly) && (!o.needsX || xAvailable)}
+                offer={(o) => (move || !o.moveOnly) && (!o.needsX || xAvailable) && (!o.needsPrev || i > 0)}
                 onChange={(x) => setStep(i, { ...step, x })}
               />
             )}
@@ -659,7 +718,7 @@ function RuleEditor({
                       <AmountPicker
                         value={step.qx ?? { kind: 'fixed', n: 0 }}
                         label="What [X] in the criteria is worth"
-                        offer={(o) => !o.moveOnly && (!o.needsX || xAvailable)}
+                        offer={(o) => !o.moveOnly && (!o.needsX || xAvailable) && (!o.needsPrev || i > 0)}
                         onChange={(qx) => setStep(i, { ...step, qx })}
                       />
                     </>
@@ -699,6 +758,20 @@ function RuleEditor({
           "Put this card into a zone" is the card talking about itself, and it happens instead of where the card would otherwise
           go: a spell that exiles itself rather than hitting the graveyard, or one that shuffles back into the library. On a
           permanent it also takes the card off the battlefield, so anything it was doing there stops.
+        </p>
+      )}
+      {rule.steps.some((s) => s.x.kind === 'prev' || s.qx?.kind === 'prev') && (
+        <p className="fine-print">
+          "The previous X" is what the step before it actually reached, not what it asked for. That is what makes a Windfall
+          writable: discard X where X is your hand, then draw the previous X. A step that found less than it wanted hands on the
+          smaller number, and the first step of a rule has nothing before it, so it reads zero.
+        </p>
+      )}
+      {rule.steps.some((s) => !!s.x.op || !!s.qx?.op) && (
+        <p className="fine-print">
+          The adjustment runs on the real number before it is capped, so half a 99-card library is 49 and not half of the cap.
+          Dividing rounds down, the way every card that halves something prints it. Any one step still moves at most{' '}
+          {MAX_BEHAVIOR_AMOUNT} cards.
         </p>
       )}
       {rule.steps.some((s) => s.op === 'move' && queryHasX(s.q)) && (

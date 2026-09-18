@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.158.5
+
+- **Added: "the previous X".** Windfall, Scapeshift, Dark Deal and the rest all say "do something to X cards, then do something else to that many", and until now the second X was read fresh: discard your hand, then draw for a hand that is already in the graveyard, so you drew nothing. A step can now read the number the step before it reached.
+- It is the number that step *actually* reached, not the number it asked for. A search that finds nothing hands on nothing, and the first step of a rule has nothing before it, so it reads zero.
+- **Added: arithmetic on any amount.** Pick plus, minus, times or divided by, and a number. Dark Deal is "discard your hand, then draw the previous X minus 1". Peer Into the Abyss is "draw cards in your library divided by 2". Dividing rounds down, the way the cards print it.
+- **Added: "cards in your library" as an amount**, since half of it is the thing several cards want.
+- The adjustment runs on the real number before the twenty-card ceiling, so half a 99-card library is 49 and then capped, not half of the cap.
+
 ## 0.158.4
 
 - **Fixed: ramp spells ramped twice once you wrote a rule for them.** Harrow, Into the North, Nature's Lore, Three Visits and the rest are read as land ramp off the card's mana data, not off its oracle text. The card behavior screen only ever showed the oracle-text half, so it filed them under "nothing read yet" and said they do nothing, while the simulator was quietly fetching a land off them. Write your own rule and both fired: the database's guess first, then yours.

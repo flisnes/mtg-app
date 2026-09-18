@@ -7849,11 +7849,32 @@ a.seg {
 .behavior-op {
   grid-area: op;
 }
+/* Where X comes from on one row and the adjustment on the next, for the same
+   reason the verb got its own line: "X = cards in your graveyard" needs the
+   whole width, and "divided by 2" needs almost none of it. */
 .behavior-x {
   grid-area: x;
   display: flex;
+  flex-direction: column;
   gap: 0.35rem;
   min-width: 0;
+}
+.behavior-x-row {
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+}
+/* Two short controls, left-aligned, rather than an operator select stretched
+   across the sheet because there was room. Indented off a rule, because a
+   full-width row between two steps reads as a step of its own and this one is
+   a modifier on the line above it. */
+.behavior-x-adjust {
+  justify-content: flex-start;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border);
+}
+.behavior-x-adjust .behavior-opsel {
+  flex: 0 0 8.5rem;
 }
 .behavior-step .behavior-drop {
   grid-area: drop;

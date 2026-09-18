@@ -1,4 +1,5 @@
 import {
+  applyAmountOp,
   BEHAVIOR_ZONES,
   MAX_BEHAVIOR_AMOUNT,
   type BehaviorAmount,
@@ -600,15 +601,24 @@ export function simulate(
     if (index >= 0 && gyLen < graveyard.length) graveyard[gyLen++] = index;
   };
 
-  /** Cards off the top into your hand. A tutor comes through here too, see below. */
-  const drawCards = (count: number): void => {
+  /**
+   * Cards off the top into your hand. A tutor comes through here too, see below.
+   *
+   * Returns how many actually moved, which is what "the previous X" reads: a
+   * draw-7 off a library of three drew three, and the step after it has no
+   * business being told seven.
+   */
+  const drawCards = (count: number): number => {
+    let drawn = 0;
     for (let k = 0; k < count; k++) {
-      if (top >= libLen || handLen >= hand.length) return;
+      if (top >= libLen || handLen >= hand.length) break;
       const index = library[top++]!;
       hand[handLen++] = index;
       seen++;
+      drawn++;
       if (sink) drewNames.push(cards[index]!.name);
     }
+    return drawn;
   };
 
   /**
@@ -616,24 +626,30 @@ export function simulate(
    * bookkeeping convenience and discarding it would be a rules error, not a
    * conservative approximation.
    */
-  const discardCards = (count: number): void => {
+  const discardCards = (count: number): number => {
+    let discarded = 0;
     for (let k = 0; k < count; k++) {
       const pick = pickDiscard(cards, hand, handLen);
-      if (pick < 0) return;
+      if (pick < 0) break;
       const index = hand[pick]!;
       if (sink) discardedNames.push(cards[index]!.name);
       hand[pick] = hand[--handLen]!;
       bury(index);
+      discarded++;
     }
+    return discarded;
   };
 
   /** Cards off the top into the graveyard. They leave the library; you never see them. */
-  const millCards = (count: number): void => {
+  const millCards = (count: number): number => {
+    let milled = 0;
     for (let k = 0; k < count && top < libLen; k++) {
       const index = library[top++]!;
       if (sink) milledNames.push(cards[index]!.name);
       bury(index);
+      milled++;
     }
+    return milled;
   };
 
   /**
@@ -856,12 +872,26 @@ export function simulate(
   };
 
   /**
+   * What the step before this one actually did, for a `prev` amount to read.
+   *
+   * "What it did", not "what it asked for": a draw-7 that found three cards
+   * hands on three. The number the step *wanted* is available and would be
+   * easier, and it is the wrong one — it would let a step that failed feed a
+   * step that then succeeds, which is exactly the invention §11.4 forbids.
+   */
+  let lastAmount = 0;
+
+  /**
    * A step's number, clamped both ends.
    *
    * The ceiling is the guard that makes state-reading amounts safe to offer: a
    * hand of forty in a deck that draws its whole library would otherwise ask
    * drawCards() for forty, and `hand` is a fixed-size array. It is the same cap
    * MAX_DRAW_PER_EFFECT is for a misread "draw X", for the same reason.
+   *
+   * The adjustment runs *before* the clamp, not after. "Half your library" in a
+   * 99-card deck wants 49 and gets the ceiling; clamping first would ask for
+   * half of twenty, which is a number nothing on the card ever mentions.
    */
   const behaviorAmount = (x: BehaviorAmount, turn: number): number => {
     let n: number;
@@ -869,8 +899,14 @@ export function simulate(
       case 'fixed':
         n = x.n ?? 0;
         break;
+      case 'prev':
+        n = lastAmount;
+        break;
       case 'hand':
         n = handLen;
+        break;
+      case 'library':
+        n = libLen - top;
         break;
       case 'lands':
         n = landsInPlay(turn);
@@ -898,7 +934,7 @@ export function simulate(
         // built on.
         return 0;
     }
-    return Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, n));
+    return Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, applyAmountOp(n, x)));
   };
 
   // --- Moving cards between zones ------------------------------------------
@@ -1130,10 +1166,11 @@ export function simulate(
     }
   };
 
-  const moveCards = (step: BehaviorStep, count: number, turn: number): void => {
+  /** Returns how many cards actually made the trip, for `prev` to read. */
+  const moveCards = (step: BehaviorStep, count: number, turn: number): number => {
     const from = step.from;
     const to = step.to;
-    if (!from || !to || from === to) return;
+    if (!from || !to || from === to) return 0;
     let mask: Uint8Array | null = null;
     let base = 0;
     if (step.q) {
@@ -1148,10 +1185,12 @@ export function simulate(
     // there were.
     const ordered = to === 'librarytop' || to === 'librarybottom';
     if (ordered) stack.length = 0;
+    let moved = 0;
     for (let k = 0; k < count; k++) {
       if (!roomIn(to)) break;
       const index = takeFrom(from, mask, base);
       if (index < 0) break;
+      moved++;
       // `seen` is cards that reached your hand off the library, which is what
       // the cards chart reads. A tutor counts; a regrowth does not.
       if (from === 'library' && to === 'hand') seen++;
@@ -1163,6 +1202,7 @@ export function simulate(
       shuffleStack();
       for (const index of stack) putTo(index, to, turn);
     }
+    return moved;
   };
 
   // --- The card talking about itself ---------------------------------------
@@ -1191,13 +1231,19 @@ export function simulate(
    * Every amount is read *as its step runs*, not once up front, which is what
    * makes a sequence worth having: "discard your hand, then draw cards equal to
    * the cards in your hand" is a very short rule, and this resolves it the way
-   * the card would.
+   * the card would — which is to say, drawing nothing, because the hand it is
+   * counting has just gone to the graveyard. A Windfall wants the number that
+   * step *reached*, and that is what `lastAmount` and the `prev` amount are.
    *
    * @param self The card these rules belong to, for a `self` step to move.
    */
   const runSteps = (steps: readonly BehaviorStep[], turn: number, self: number): number => {
     const bits: string[] = [];
     let made = 0;
+    // A rule's first step has no step before it, so "the previous X" is zero
+    // and the step does nothing. Reset per rule rather than per game: an
+    // upkeep trigger three turns later is not reading the cast that made it.
+    lastAmount = 0;
     for (const step of steps) {
       // A `self` step moves one card and it is not one you chose, so it reads
       // no amount at all — an `x` on it would be a control with one setting.
@@ -1213,40 +1259,52 @@ export function simulate(
           const where = ZONE_PHRASE.get(to) ?? 'somewhere';
           bits.push(`puts itself ${to === 'battlefield' ? 'onto' : 'into'} ${where}`);
         }
+        // Deliberately leaves `lastAmount` alone. A self step carries no
+        // number, so "the previous X" reads past it to the last step that did
+        // — which is what a Green Sun's Zenith wants.
         continue;
       }
       const n = behaviorAmount(step.x, turn);
-      if (n <= 0) continue;
+      if (n <= 0) {
+        lastAmount = 0;
+        continue;
+      }
+      // What the step actually managed, which is what the next one may read.
+      let did = n;
       switch (step.op) {
         case 'draw':
           if (sink) drewNames.length = 0;
-          drawCards(n);
+          did = drawCards(n);
           if (sink && drewNames.length) bits.push(`draws ${drewNames.join(', ')}`);
           break;
         case 'discard':
           if (sink) discardedNames.length = 0;
-          discardCards(n);
+          did = discardCards(n);
           if (sink && discardedNames.length) bits.push(`discards ${discardedNames.join(', ')}`);
           break;
         case 'mill':
           if (sink) milledNames.length = 0;
-          millCards(n);
+          did = millCards(n);
           if (sink && milledNames.length) bits.push(`mills ${milledNames.join(', ')}`);
           break;
         case 'scry':
         case 'surveil':
+          // The one step with no count to report back: dig looks at `n` cards
+          // and may reorder none of them, and "how many you looked at" is the
+          // number the card would have said.
           dig(n);
           if (sink) bits.push(`${step.op} ${n}`);
           break;
         case 'treasure': {
           const t = makeTreasures(n, turn);
           made += t;
+          did = t;
           if (sink && t > 0) bits.push(`makes ${t} Treasure${t === 1 ? '' : 's'}`);
           break;
         }
         case 'move': {
           if (sink) movedNames.length = 0;
-          moveCards(step, n, turn);
+          did = moveCards(step, n, turn);
           if (sink && movedNames.length) {
             const where = ZONE_PHRASE.get(step.to ?? '') ?? 'somewhere';
             bits.push(`moves ${movedNames.join(', ')} to ${where}`);
@@ -1254,6 +1312,7 @@ export function simulate(
           break;
         }
       }
+      lastAmount = did;
     }
     if (sink) lastEffectText = bits.join(', ');
     return made;

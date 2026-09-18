@@ -7803,6 +7803,18 @@ a.seg {
   color: var(--accent);
   font-size: 0.85rem;
 }
+/* The card being written about. Capped rather than full-bleed: a card at the
+   full width of the sheet is 340px tall on a phone and pushes the first
+   dropdown off the screen, and this only has to be big enough to read the type
+   line and the rules box off. */
+.behavior-art {
+  display: block;
+  align-self: center;
+  width: min(100%, 230px);
+  aspect-ratio: 488 / 680;
+  border-radius: 10px;
+  margin-bottom: 0.2rem;
+}
 /* One trigger and its steps, boxed so a card with two of them reads as two
    rules rather than as one long column of dropdowns. */
 .behavior-rule {
@@ -7849,32 +7861,15 @@ a.seg {
 .behavior-op {
   grid-area: op;
 }
-/* Where X comes from on one row and the adjustment on the next, for the same
-   reason the verb got its own line: "X = cards in your graveyard" needs the
-   whole width, and "divided by 2" needs almost none of it. */
+/* Where X comes from, an operator, and a number, all on one row. It fits only
+   because the operator select holds a single glyph and the amount labels are
+   the short forms ("X = your graveyard"); the full phrase belongs to the
+   sentence the rule is written out as, which has the whole sheet to say it. */
 .behavior-x {
   grid-area: x;
   display: flex;
-  flex-direction: column;
   gap: 0.35rem;
   min-width: 0;
-}
-.behavior-x-row {
-  display: flex;
-  gap: 0.35rem;
-  min-width: 0;
-}
-/* Two short controls, left-aligned, rather than an operator select stretched
-   across the sheet because there was room. Indented off a rule, because a
-   full-width row between two steps reads as a step of its own and this one is
-   a modifier on the line above it. */
-.behavior-x-adjust {
-  justify-content: flex-start;
-  padding-left: 0.6rem;
-  border-left: 2px solid var(--border);
-}
-.behavior-x-adjust .behavior-opsel {
-  flex: 0 0 8.5rem;
 }
 .behavior-step .behavior-drop {
   grid-area: drop;
@@ -7889,7 +7884,15 @@ a.seg {
   padding: 0.4rem 0.45rem;
 }
 .behavior-step .behavior-n {
-  flex: 0 0 4.75rem;
+  flex: 0 0 4.2rem;
+}
+.behavior-step .behavior-opsel {
+  flex: 0 0 3.6rem;
+}
+.behavior-step .behavior-opsel select {
+  padding-left: 0.35rem;
+  padding-right: 0.2rem;
+  text-align: center;
 }
 /* A move needs two more rows: the zones it goes between, and the criteria that
    says which cards. Same single column, same remove button spanning the lot. */

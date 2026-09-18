@@ -32,6 +32,26 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.158.6',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'The twenty-card ceiling on what one behavior step can do is gone. "Draw half your library" in a 99-card deck really is 49 cards now, so the curve for a Peer Into the Abyss deck is the curve for a deck that contains one.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Division comes in two flavours: rounded down and rounded up, because the cards print both. The operator now sits next to the amount as a symbol, blank until you pick one.',
+      },
+      {
+        kind: 'added',
+        text:
+          'The card behavior editor shows the card. Writing a rule means reading the card, and reading it off a name alone was a memory test.',
+      },
+    ],
+  },
+  {
     version: '0.158.5',
     changes: [
       {
@@ -251,19 +271,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'fixed',
         text:
           'Split, adventure and modal cards had both halves of their printed cost added together, so an Adventure creature costing {W} was checked as if it cost {1}{W}{W} and read as uncastable.',
-      },
-    ],
-  },
-  {
-    version: '0.152.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Opening hand, in the deck stats sheet. How often your deck hands you a keepable seven, how many cards you start with on average, and what each opening hand is worth: a one-lander is 18% to have three lands by turn three, a two-lander 66%.',
-      },
-      {
-        kind: 'added',
-        text: 'The keep rule is a search, same as the draw-odds group. Two to five lands is the default; two to five untapped sources, or one cheap spell, is a stepper and a query away.',
       },
     ],
   },

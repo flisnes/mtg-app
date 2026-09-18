@@ -11,6 +11,7 @@ import {
   MAX_BEHAVIOR_QUERY,
   MAX_BEHAVIOR_RULES,
   MAX_BEHAVIOR_STEPS,
+  MAX_QUERY_X,
   X_VARIANTS,
   behaviorFromEffect,
   decodeEffectProfile,
@@ -65,6 +66,11 @@ interface BehaviorCard {
   ramp: string | null;
   /** What the user said, or null when they have not said anything. */
   authored: CardBehavior | null;
+  /**
+   * The card itself, shown above the editor. Writing a rule means reading the
+   * card, and reading it off a name alone is a memory test nobody asked for.
+   */
+  image: string | null;
 }
 
 /** "When you play it", straight out of the catalog so it is said in one place. */
@@ -101,6 +107,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       derived: decodeEffectProfile(o.effect),
       ramp: describeLandRamp(decodeManaProfile(o.mana)),
       authored: behaviors.get(o.oracleId) ?? null,
+      image: o.imageNormal ?? o.imageSmall ?? null,
     });
   }
   return [...byOracle.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -321,6 +328,11 @@ function BehaviorEditor({
         <span>All cards</span>
       </button>
 
+      {/* The card, because a rule is written by reading one. Sized so the type
+          line and the rules box are legible on a phone without pushing the
+          first dropdown two screens down. */}
+      {card.image && <img className="behavior-art" src={card.image} alt={card.name} loading="lazy" />}
+
       {card.derived && !card.authored && (
         <p className="fine-print">
           Read off this card's oracle text. Change anything below and it becomes yours instead.
@@ -402,11 +414,12 @@ function BehaviorEditor({
  * a move step: once for how many cards to move, once for what the query's own
  * `[X]` is worth. Two different numbers, one vocabulary.
  *
- * A computed amount gets a second row: an operator and a number, so "half your
+ * A computed amount also gets an operator and a number beside it, so "half your
  * library" and "that many minus one" are writable without an amount kind per
- * card. It is a second row rather than a third control on the first one for the
- * same reason the verb and the amount are on separate lines — three selects
- * abreast on a 393px phone truncates all three.
+ * card. Three controls abreast at 393px is the thing the step layout already
+ * learned not to do; it works here only because the operator is one glyph wide
+ * and the amount labels were shortened to match ("X = your graveyard", with the
+ * full phrase kept for the sentence the rule is written out as).
  */
 function AmountPicker({
   value,
@@ -423,87 +436,86 @@ function AmountPicker({
   const adjustable = !BEHAVIOR_AMOUNTS.find((o) => o.id === value.kind)?.noAdjust;
   return (
     <div className="behavior-x">
-      <div className="behavior-x-row">
-        <label className="field">
-          <select
-            value={value.kind}
-            aria-label={label}
+      <label className="field">
+        <select
+          value={value.kind}
+          aria-label={label}
+          onChange={(e) => {
+            const kind = e.target.value as BehaviorAmountKind;
+            // Switching to a kind that takes no adjustment drops the one that
+            // was there, rather than parking it somewhere it cannot be seen
+            // or removed.
+            if (BEHAVIOR_AMOUNTS.find((o) => o.id === kind)?.noAdjust) {
+              onChange(kind === 'fixed' ? { kind, n: value.n ?? 1 } : { kind });
+              return;
+            }
+            onChange(value.op && value.by ? { kind, op: value.op, by: value.by } : { kind });
+          }}
+        >
+          {/* Whatever is already selected stays listed even when it no longer
+              qualifies — delete the first step of a rule and the second one's
+              "previous X" would otherwise leave a select with nothing in it,
+              unreadable and unfixable. */}
+          {BEHAVIOR_AMOUNTS.filter((o) => offer(o) || o.id === value.kind).map((o) => (
+            <option key={o.id} value={o.id}>
+              X = {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {value.kind === 'fixed' && (
+        <label className="field behavior-n">
+          <input
+            type="number"
+            min={0}
+            max={MAX_BEHAVIOR_AMOUNT}
+            inputMode="numeric"
+            aria-label="How many"
+            value={value.n ?? 0}
             onChange={(e) => {
-              const kind = e.target.value as BehaviorAmountKind;
-              // Switching to a kind that takes no adjustment drops the one that
-              // was there, rather than parking it somewhere it cannot be seen
-              // or removed.
-              if (BEHAVIOR_AMOUNTS.find((o) => o.id === kind)?.noAdjust) {
-                onChange(kind === 'fixed' ? { kind, n: value.n ?? 1 } : { kind });
-                return;
-              }
-              onChange(value.op && value.by ? { kind, op: value.op, by: value.by } : { kind });
+              const n = Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, Math.round(Number(e.target.value) || 0)));
+              onChange({ kind: 'fixed', n });
+            }}
+          />
+        </label>
+      )}
+      {/* Blank until someone picks one, which is also what it means: take the
+          number as it comes. The number box appears with the operator rather
+          than sitting there empty, so an unadjusted amount is two controls. */}
+      {adjustable && (
+        <label className="field behavior-opsel">
+          <select
+            value={value.op ?? ''}
+            aria-label={`${label}, adjusted`}
+            onChange={(e) => {
+              const op = e.target.value as BehaviorAmountOp | '';
+              onChange(op ? { kind: value.kind, op, by: value.by ?? 1 } : { kind: value.kind });
             }}
           >
-            {/* Whatever is already selected stays listed even when it no
-                longer qualifies — delete the first step of a rule and the
-                second one's "previous X" would otherwise leave a select with
-                nothing in it, unreadable and unfixable. */}
-            {BEHAVIOR_AMOUNTS.filter((o) => offer(o) || o.id === value.kind).map((o) => (
+            <option value=""></option>
+            {BEHAVIOR_AMOUNT_OPS.map((o) => (
               <option key={o.id} value={o.id}>
-                X = {o.label}
+                {o.symbol}
               </option>
             ))}
           </select>
         </label>
-        {value.kind === 'fixed' && (
-          <label className="field behavior-n">
-            <input
-              type="number"
-              min={0}
-              max={MAX_BEHAVIOR_AMOUNT}
-              inputMode="numeric"
-              aria-label="How many"
-              value={value.n ?? 0}
-              onChange={(e) => {
-                const n = Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, Math.round(Number(e.target.value) || 0)));
-                onChange({ kind: 'fixed', n });
-              }}
-            />
-          </label>
-        )}
-      </div>
-      {adjustable && (
-        <div className="behavior-x-row behavior-x-adjust">
-          <label className="field behavior-opsel">
-            <select
-              value={value.op ?? ''}
-              aria-label={`${label}, adjusted`}
-              onChange={(e) => {
-                const op = e.target.value as BehaviorAmountOp | '';
-                onChange(op ? { kind: value.kind, op, by: value.by ?? 1 } : { kind: value.kind });
-              }}
-            >
-              <option value="">exactly that</option>
-              {BEHAVIOR_AMOUNT_OPS.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {value.op && (
-            <label className="field behavior-n">
-              <input
-                type="number"
-                min={1}
-                max={MAX_BEHAVIOR_AMOUNT}
-                inputMode="numeric"
-                aria-label="Adjust by how much"
-                value={value.by ?? 1}
-                onChange={(e) => {
-                  const by = Math.max(1, Math.min(MAX_BEHAVIOR_AMOUNT, Math.round(Number(e.target.value) || 1)));
-                  onChange({ ...value, by });
-                }}
-              />
-            </label>
-          )}
-        </div>
+      )}
+      {adjustable && value.op && (
+        <label className="field behavior-n">
+          <input
+            type="number"
+            min={1}
+            max={MAX_BEHAVIOR_AMOUNT}
+            inputMode="numeric"
+            aria-label="Adjust by how much"
+            value={value.by ?? 1}
+            onChange={(e) => {
+              const by = Math.max(1, Math.min(MAX_BEHAVIOR_AMOUNT, Math.round(Number(e.target.value) || 1)));
+              onChange({ ...value, by });
+            }}
+          />
+        </label>
       )}
     </div>
   );
@@ -769,16 +781,16 @@ function RuleEditor({
       )}
       {rule.steps.some((s) => !!s.x.op || !!s.qx?.op) && (
         <p className="fine-print">
-          The adjustment runs on the real number before it is capped, so half a 99-card library is 49 and not half of the cap.
-          Dividing rounds down, the way every card that halves something prints it. Any one step still moves at most{' '}
-          {MAX_BEHAVIOR_AMOUNT} cards.
+          <code>÷</code> rounds down and <code>÷↑</code> rounds up, because the cards print both. Nothing is capped: half a
+          99-card library really is 49 cards, and a step stops only when the zone it is working on runs out.
         </p>
       )}
       {rule.steps.some((s) => s.op === 'move' && queryHasX(s.q)) && (
         <p className="fine-print">
           <code>[X]</code> is the one thing here the card search does not know. Write it anywhere a number goes, say what it is
           worth below, and <code>mv&lt;=[X]</code> becomes <code>mv&lt;=5</code> as the rule resolves. <code>[X-1]</code> and{' '}
-          <code>[X+2]</code> work too; nothing fancier does, and nothing goes below zero.
+          <code>[X+2]</code> work too; nothing fancier does, and nothing goes below zero. This one <em>is</em> capped, at{' '}
+          {MAX_QUERY_X}: the query is compiled once per value of X before the game starts, so the range has to be a short one.
         </p>
       )}
 

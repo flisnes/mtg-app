@@ -1,4 +1,4 @@
-// The older half of the changelog (0.151.1 down to 0.98.0), split out of
+// The older half of the changelog (0.152.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,19 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.152.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Opening hand, in the deck stats sheet. How often your deck hands you a keepable seven, how many cards you start with on average, and what each opening hand is worth: a one-lander is 18% to have three lands by turn three, a two-lander 66%.',
+      },
+      {
+        kind: 'added',
+        text: 'The keep rule is a search, same as the draw-odds group. Two to five lands is the default; two to five untapped sources, or one cheap spell, is a stepper and a query away.',
+      },
+    ],
+  },
   {
     version: '0.151.1',
     changes: [

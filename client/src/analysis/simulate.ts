@@ -1,7 +1,7 @@
 import {
   applyAmountOp,
   BEHAVIOR_ZONES,
-  MAX_BEHAVIOR_AMOUNT,
+  MAX_QUERY_X,
   type BehaviorAmount,
   type BehaviorStep,
   type BehaviorZone,
@@ -882,16 +882,15 @@ export function simulate(
   let lastAmount = 0;
 
   /**
-   * A step's number, clamped both ends.
+   * A step's number. Floored at zero and **not** capped at the top.
    *
-   * The ceiling is the guard that makes state-reading amounts safe to offer: a
-   * hand of forty in a deck that draws its whole library would otherwise ask
-   * drawCards() for forty, and `hand` is a fixed-size array. It is the same cap
-   * MAX_DRAW_PER_EFFECT is for a misread "draw X", for the same reason.
-   *
-   * The adjustment runs *before* the clamp, not after. "Half your library" in a
-   * 99-card deck wants 49 and gets the ceiling; clamping first would ask for
-   * half of twenty, which is a number nothing on the card ever mentions.
+   * It used to be capped at MAX_BEHAVIOR_AMOUNT, which was a guard against the
+   * fixed-size zone arrays and turned out to be redundant: every one of them
+   * checks its own bound anyway (drawCards stops at the end of the library and
+   * the size of your hand, moveCards stops the moment nothing matches,
+   * makeTreasures stops at MAX_SOURCES). What the cap actually did was make
+   * "draw half your library" mean twenty, so a deck with a Peer Into the Abyss
+   * in it got the curve of a deck without one.
    */
   const behaviorAmount = (x: BehaviorAmount, turn: number): number => {
     let n: number;
@@ -924,8 +923,9 @@ export function simulate(
         break;
       case 'all':
         // Bounded by the zone rather than by a number. This is only the ceiling
-        // the move loop stops at; it stops sooner the moment nothing matches.
-        n = MAX_BEHAVIOR_AMOUNT;
+        // the move loop stops at; it stops sooner the moment nothing matches,
+        // and no zone here is bigger than the library's backing array.
+        n = library.length;
         break;
       default:
         // A kind this build has never heard of, off a newer device.
@@ -934,7 +934,7 @@ export function simulate(
         // built on.
         return 0;
     }
-    return Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, applyAmountOp(n, x)));
+    return Math.max(0, applyAmountOp(n, x));
   };
 
   // --- Moving cards between zones ------------------------------------------
@@ -1177,8 +1177,10 @@ export function simulate(
       const filter = filterFor.get(step.q);
       mask = filter ? filter.match : NO_MATCH;
       // A `[X]` query was compiled once per value of X, so picking the row *is*
-      // resolving it. Nothing in here parses anything.
-      if (filter?.varies) base = behaviorAmount(step.qx ?? ZERO_AMOUNT, turn) * n;
+      // resolving it. Nothing in here parses anything. Clamped to MAX_QUERY_X
+      // rather than left to the amount's own range: this is a row index into a
+      // table with X_VARIANTS rows, and an amount is no longer bounded by it.
+      if (filter?.varies) base = Math.min(MAX_QUERY_X, behaviorAmount(step.qx ?? ZERO_AMOUNT, turn)) * n;
     }
     // A stack of cards going to one end of the library goes in a random order,
     // so they are collected first and placed once the step knows how many

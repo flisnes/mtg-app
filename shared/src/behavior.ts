@@ -71,8 +71,13 @@ export type BehaviorAmountKind = 'fixed' | 'all' | 'prev' | 'hand' | 'library' |
  * Deal (X - 1), Peer Into the Abyss (X / 2) and the double-up effects; an
  * expression language would cover a handful more and cost a parser, precedence
  * rules and errors pointing into the middle of a formula.
+ *
+ * Division is two operators rather than one with a rounding flag. Magic prints
+ * both — "half, rounded down" on Peer Into the Abyss, "half, rounded up" on
+ * Fire Covenant — and a separate flag would be a control that only appears for
+ * one of five operators, which is a worse dropdown than five entries.
  */
-export type BehaviorAmountOp = '+' | '-' | '*' | '/';
+export type BehaviorAmountOp = '+' | '-' | '*' | '/' | '/^';
 
 export interface BehaviorAmount {
   kind: BehaviorAmountKind;
@@ -177,12 +182,18 @@ export const MAX_BEHAVIOR_RULES = 4;
 /** Steps in one rule. */
 export const MAX_BEHAVIOR_STEPS = 6;
 /**
- * The ceiling on any one step, authored or computed. It is a guard rather than
- * a rules statement: an amount that reads the game state can run away (a hand
- * of forty in a deck that draws its whole library), and the sequencer's arrays
- * are fixed-size.
+ * The ceiling on a number somebody **types**: a `fixed` amount, or the `by` of
+ * an adjustment. Ninety-nine because that is a Commander deck, and a rule
+ * saying "draw 99" is a rule about a real game rather than a typo.
+ *
+ * It used to cap *computed* amounts too, and that was a lie with a number on
+ * it: "draw half your library" in a 99-card deck came out as twenty, so the
+ * curve for a Peer Into the Abyss deck was the curve for a deck that does not
+ * contain one. The sequencer's zones all guard their own bounds — drawCards
+ * stops at the end of the library and the size of your hand, moveCards stops
+ * when nothing matches — so the cap was never what made them safe.
  */
-export const MAX_BEHAVIOR_AMOUNT = 20;
+export const MAX_BEHAVIOR_AMOUNT = 99;
 /**
  * Characters in a move step's criteria. Long enough for anything worth writing
  * (`t:creature mv<=3 -t:legendary` is 29) and short enough that a behavior row
@@ -190,12 +201,23 @@ export const MAX_BEHAVIOR_AMOUNT = 20;
  */
 export const MAX_BEHAVIOR_QUERY = 120;
 /**
- * How many values of `[X]` a filter has to be compiled for. The placeholder is
- * filled by an amount and every amount is clamped to MAX_BEHAVIOR_AMOUNT, so
- * the whole range is twenty-one bitmasks — which is what keeps a runtime value
- * out of the simulator's inner loop. That bound now earns its keep twice.
+ * The ceiling on `[X]` inside a move step's criteria, which is a different
+ * number from MAX_BEHAVIOR_AMOUNT and has to stay one.
+ *
+ * A query with an `[X]` is compiled once per value of X into a stack of
+ * bitmasks, so this bound is paid in memory and in parses-per-keystroke rather
+ * than in accuracy. Twenty covers `mv<=[X]` on every card ever printed; letting
+ * it follow the typed ceiling to 99 would make the stack five times taller to
+ * hold rows nothing can match.
  */
-export const X_VARIANTS = MAX_BEHAVIOR_AMOUNT + 1;
+export const MAX_QUERY_X = 20;
+
+/**
+ * How many values of `[X]` a filter is compiled for: the closed range
+ * 0..MAX_QUERY_X. That is what keeps a runtime value out of the simulator's
+ * inner loop — picking the row *is* resolving the query.
+ */
+export const X_VARIANTS = MAX_QUERY_X + 1;
 
 /** One deck's answer for one card. Keyed `<deckId>:<oracleId>`, synced like any row. */
 export interface DeckBehavior {
@@ -306,31 +328,40 @@ export interface AmountOption {
   noAdjust?: boolean;
 }
 
+/**
+ * `label` is deliberately terser than `phrase`. The picker sits on one row
+ * beside an operator and a number on a 393px phone, so "X = your graveyard"
+ * fits where "X = cards in your graveyard" would truncate; the sentence the
+ * rule is written out as has the whole width and says it in full.
+ */
 export const BEHAVIOR_AMOUNTS: readonly AmountOption[] = [
-  { id: 'fixed', label: 'a fixed number', phrase: '', noAdjust: true },
+  { id: 'fixed', label: 'a number', phrase: '', noAdjust: true },
   { id: 'all', label: 'all that match', phrase: 'all that match', moveOnly: true, noAdjust: true },
   { id: 'prev', label: 'the previous X', phrase: 'the previous X', needsPrev: true },
-  { id: 'xpaid', label: 'the mana you spent on X', phrase: 'the mana you spent on X', needsX: true },
-  { id: 'hand', label: 'cards in your hand', phrase: 'cards in your hand' },
-  { id: 'library', label: 'cards in your library', phrase: 'cards in your library' },
-  { id: 'lands', label: 'lands you control', phrase: 'lands you control' },
-  { id: 'graveyard', label: 'cards in your graveyard', phrase: 'cards in your graveyard' },
+  { id: 'xpaid', label: 'the X you paid', phrase: 'the mana you spent on X', needsX: true },
+  { id: 'hand', label: 'your hand', phrase: 'cards in your hand' },
+  { id: 'library', label: 'your library', phrase: 'cards in your library' },
+  { id: 'lands', label: 'your lands', phrase: 'lands you control' },
+  { id: 'graveyard', label: 'your graveyard', phrase: 'cards in your graveyard' },
   { id: 'turn', label: 'the turn number', phrase: 'the turn number' },
 ];
 
 export interface AmountOpOption {
   id: BehaviorAmountOp;
-  /** For the picker, where a word is easier to hit and easier to read than a glyph. */
-  label: string;
-  /** For writing the rule out, where the glyph is shorter than the word. */
+  /** The picker shows this alone, so it has to be one glyph wide and obvious. */
+  symbol: string;
+  /** For writing the rule out. */
   sign: string;
+  /** What follows the number in prose, where the symbol on its own is ambiguous. */
+  tail?: string;
 }
 
 export const BEHAVIOR_AMOUNT_OPS: readonly AmountOpOption[] = [
-  { id: '+', label: 'plus', sign: '+' },
-  { id: '-', label: 'minus', sign: '-' },
-  { id: '*', label: 'times', sign: '×' },
-  { id: '/', label: 'divided by', sign: '÷' },
+  { id: '+', symbol: '+', sign: '+' },
+  { id: '-', symbol: '-', sign: '-' },
+  { id: '*', symbol: '×', sign: '×' },
+  { id: '/', symbol: '÷', sign: '÷', tail: ', rounded down' },
+  { id: '/^', symbol: '÷↑', sign: '÷', tail: ', rounded up' },
 ];
 
 const TRIGGER_BY_ID = new Map(BEHAVIOR_TRIGGERS.map((t) => [t.id as string, t]));
@@ -346,11 +377,11 @@ const ZONE_BY_ID = new Map(BEHAVIOR_ZONES.map((z) => [z.id as string, z]));
 /**
  * An amount's adjustment applied to the number its kind read.
  *
- * Division rounds **down**, which is both what every card that halves something
- * prints and the direction §11.4 wants: a model that rounds up is a model that
- * over-promises. An op this build does not recognize cannot reach here —
- * compileBehavior drops the step and sanitizeCardBehavior drops the adjustment
- * — so the fallthrough is the unmodified number rather than a guess.
+ * The two division operators are the whole reason this is a switch rather than
+ * a lookup: `/` floors and `/^` ceils, and which one a card wants is printed on
+ * it. An op this build does not recognize cannot reach here — compileBehavior
+ * drops the step and sanitizeCardBehavior drops the adjustment — so the
+ * fallthrough is the unmodified number rather than a guess.
  */
 export function applyAmountOp(value: number, x: BehaviorAmount): number {
   if (!x.op || !x.by) return value;
@@ -363,6 +394,8 @@ export function applyAmountOp(value: number, x: BehaviorAmount): number {
       return value * x.by;
     case '/':
       return Math.floor(value / x.by);
+    case '/^':
+      return Math.ceil(value / x.by);
     default:
       return value;
   }
@@ -371,7 +404,8 @@ export function applyAmountOp(value: number, x: BehaviorAmount): number {
 export function describeAmount(x: BehaviorAmount): string {
   const base = x.kind === 'fixed' ? String(x.n ?? 0) : (AMOUNT_BY_ID.get(x.kind)?.phrase ?? '?');
   if (!x.op || !x.by) return base;
-  return `${base} ${OP_BY_ID.get(x.op)?.sign ?? x.op} ${x.by}`;
+  const op = OP_BY_ID.get(x.op);
+  return `${base} ${op?.sign ?? x.op} ${x.by}${op?.tail ?? ''}`;
 }
 
 /**

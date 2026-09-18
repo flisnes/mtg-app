@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.158.6
+
+- **Changed: the twenty-card ceiling on a behavior step is gone.** It used to cap every amount the rule computed, which meant "draw half your library" in a 99-card deck came out as twenty cards, and a deck with a Peer Into the Abyss in it got the curve of a deck without one. Nothing is capped now. A step stops when the zone it is working on runs out, which is the only limit the game has either.
+- **Added: dividing rounds two ways.** `÷` rounds down and `÷↑` rounds up, because the cards print both. Peer Into the Abyss is one, Fire Covenant is the other.
+- **Changed: the operator sits beside the amount instead of under it**, as a symbol rather than a word, and blank until you pick one. Amount labels are the short forms now ("X = your graveyard") so all three controls fit on one line; the sentence the rule is written out as still says it in full.
+- **Added: the card behavior editor shows the card.** Writing a rule means reading the card, and reading it off a name alone was a memory test.
+- The `[X]` placeholder inside a move step's criteria is still capped, at 20. That one is compiled once per value of X before the game starts, so the range has to stay short, and the editor now says so.
+
 ## 0.158.5
 
 - **Added: "the previous X".** Windfall, Scapeshift, Dark Deal and the rest all say "do something to X cards, then do something else to that many", and until now the second X was read fresh: discard your hand, then draw for a hand that is already in the graveyard, so you drew nothing. A step can now read the number the step before it reached.

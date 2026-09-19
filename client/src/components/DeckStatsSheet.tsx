@@ -8,6 +8,7 @@ import { DrawOddsPanel } from './DrawOddsPanel.js';
 import { ColorSourcesPanel } from './ColorSourcesPanel.js';
 import { ManaFixPanel } from './ManaFixPanel.js';
 import { OnCurvePanel } from './OnCurvePanel.js';
+import { ContributionsSheet } from './ContributionsSheet.js';
 import { DeckTrajectory } from './DeckTrajectory.js';
 import { GameTraceSheet } from './GameTraceSheet.js';
 import { CardBehaviorSheet } from './CardBehaviorSheet.js';
@@ -15,7 +16,7 @@ import { buildSimDeck } from '../analysis/simDeck.js';
 import { missedDrawCopies } from '../analysis/coverage.js';
 import { deckBehaviorMap } from '../db/dataAccess.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
-import { defaultSimOptions } from '../analysis/simulate.js';
+import { defaultSimOptions, type SimContribution, type SimResult } from '../analysis/simulate.js';
 import { useSimulation } from '../analysis/useSimulation.js';
 import { MulliganPanel } from './MulliganPanel.js';
 import { librarySize, type GroupRow } from '../analysis/groups.js';
@@ -43,6 +44,27 @@ function behaviorNote(coverage: { blanks: number; authored: number }): string {
   if (coverage.authored > 0) return `${coverage.authored} card${plural(coverage.authored)} play out your way`;
   if (coverage.blanks > 0) return `${coverage.blanks} resolve as nothing`;
   return 'every card is modelled';
+}
+
+/**
+ * Who is doing the most on the chip, which is the reason to tap the line. The
+ * bigger of the two lenses wins the label rather than mana always taking it: in
+ * a deck built around a draw engine, naming the best Forest would be the app
+ * looking straight past the thing the deck is about.
+ */
+function contribNote(result: SimResult): string {
+  let best: SimContribution | undefined;
+  let bestShare = 0;
+  const manaAll = result.manaByTurn.slice(1).reduce((a, b) => a + b, 0);
+  const cardsAll = result.contributions.reduce((sum, c) => sum + c.cards, 0);
+  for (const c of result.contributions) {
+    const share = Math.max(manaAll > 0 ? c.mana / manaAll : 0, cardsAll > 0 ? c.cards / cardsAll : 0);
+    if (share > bestShare) {
+      bestShare = share;
+      best = c;
+    }
+  }
+  return best ? `${best.name} leads` : `${result.contributions.length} cards pull their weight`;
 }
 
 /** One tappable line under the legality panel: the headline, and the way in. */
@@ -127,6 +149,7 @@ export function DeckStatsSheet({
   // worker and a play/draw toggle rather than each heating the phone on its own.
   const [onPlay, setOnPlay] = useState(true);
   const [tracing, setTracing] = useState(false);
+  const [contribOpen, setContribOpen] = useState(false);
   const [behaviorsOpen, setBehaviorsOpen] = useState(false);
   // What the user said their cards do, which overrides the card database's
   // reading of them. Live, so saving a behavior re-runs the simulation behind
@@ -258,6 +281,19 @@ export function DeckStatsSheet({
           ) : (
             <DeckTrajectory result={simResult} coverage={simDeck.coverage} missedDraw={missedDraw} />
           )}
+          {/* The other question about an average: which of the ninety-nine
+              produced it. Only offered when somebody in there did something,
+              which for a deck of nothing but basics and removal is nobody. */}
+          {simResult && simResult.contributions.length > 0 && (
+            <button type="button" className="deck-stats-line" onClick={() => setContribOpen(true)}>
+              <span className="deck-stats-bits">
+                <span>What each card is worth</span>
+                <span className="deck-stats-tone tone-ok">{contribNote(simResult)}</span>
+              </span>
+              <Icon name="chevronRight" />
+            </button>
+          )}
+
           {/* Averages are either right or invisibly wrong. This is the way to
               check: the same sequencer, one game, written down. */}
           {simDeck.hasManaData && simDeck.library.length > 0 && (
@@ -291,6 +327,7 @@ export function DeckStatsSheet({
           </p>
         </>
       )}
+      {contribOpen && simResult && <ContributionsSheet result={simResult} onClose={() => setContribOpen(false)} />}
       {tracing && <GameTraceSheet deck={simDeck} opts={simOpts} onClose={() => setTracing(false)} />}
       {behaviorsOpen && (
         <CardBehaviorSheet

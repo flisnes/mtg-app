@@ -1,4 +1,4 @@
-// The older half of the changelog (0.153.1 down to 0.98.0), split out of
+// The older half of the changelog (0.154.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,20 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.154.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          "Deck stats now tells you what to do about a colored-source shortfall, out of the cards you already own. \"Two white sources short\" becomes \"+2 Tundra, 2 spare in Binder: Duals\", and one tap files them into the deck. Cards another deck is holding are named but never suggested.",
+      },
+      {
+        kind: 'fixed',
+        text: "The On curve panel's play/draw toggle was squashed to a hairline on a phone.",
+      },
+    ],
+  },
   {
     version: '0.153.2',
     changes: [

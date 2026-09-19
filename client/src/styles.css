@@ -7980,3 +7980,81 @@ a.seg {
   color: var(--text);
   margin-bottom: 0.5rem;
 }
+
+/* ---- Who made the trajectory lines (ContributionsSheet) ---- */
+/* The same flex trap as .deck-stats-sheet and .trace-sheet: a tall sheet whose
+   children would otherwise be squashed to fit a phone rather than scrolled. */
+.contrib-sheet > * {
+  flex-shrink: 0;
+}
+.contrib-rows {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.contrib-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+/* Wide enough for a real card name and no wider: the bar is the thing being
+   compared, so it keeps the rest of the row. Long names ellipsise rather than
+   wrap, which would break the row rhythm the comparison rests on. */
+.contrib-name {
+  flex: none;
+  width: 10.5rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contrib-copies {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.contrib-track {
+  flex: 1;
+  height: 0.6rem;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.contrib-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+/* The two lenses take the trajectory chart's two series colours, so a bar here
+   reads as a slice of the line it came from rather than as a new palette. */
+.contrib-mana {
+  background: linear-gradient(90deg, var(--accent), rgba(124, 108, 255, 0.45));
+}
+.contrib-cards {
+  background: linear-gradient(90deg, #c98230, rgba(201, 130, 48, 0.45));
+}
+.contrib-v {
+  flex: none;
+  min-width: 3.2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* Only the multi-copy rows grow a second line, which in most decks is the
+   basics and nothing else. */
+.contrib-each {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+@media (max-width: 400px) {
+  .contrib-name {
+    width: 7.5rem;
+  }
+}

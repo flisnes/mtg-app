@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.159.1
+
+- **Added: what each card in your deck is actually worth.** A new line under the trajectory charts splits both curves up by the card that made them: which of your cards put that mana online, and which of them found you those cards. Sol Ring, your ramp spells and every land get a mana number; your draw spells and any engine you have written out get a cards number.
+- A land another card went and got belongs to the card that got it, so a Cultivate is worth the two turns of Forest it bought you rather than nothing at all, and ramp you cast early is worth more than the same spell cast late.
+- Cards a trigger drew go to the permanent that triggered. Cast an Opt with an Archmage Emeritus out and each of them is credited the card it drew.
+- The numbers are what happened, not what you would lose by cutting the card. Those are different whenever two cards work together, and only the first kind adds up: every row is a slice of the line on the chart above it.
+- Decks with a lot of basics also show what one copy is worth, so a Forest can be compared with a Sol Ring rather than just outnumbering it.
+
 ## 0.159.0
 
 - **Added: two triggers that watch the rest of the game.** "When another permanent enters" and "when you cast another spell", both on a permanent sitting on the battlefield, and both narrowed by the same search syntax the card search uses. `t:land` is landfall, `t:instant or t:sorcery` is magecraft, `t:creature` is a Beast Whisperer. Leave the box blank and anything wakes the rule.

@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.159.1',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'What each card in your deck is worth. A new line under the trajectory charts splits both curves up by the card that made them, so you can see which of your cards puts your mana online and which of them finds you your cards. A land another card fetched counts for the card that fetched it, and a card drawn off a trigger counts for the permanent that triggered.',
+      },
+    ],
+  },
+  {
     version: '0.159.0',
     changes: [
       {
@@ -262,20 +272,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'fixed',
         text:
           'The colored-source report used to ask for more sources than a deck that size could hold, so a mono-black deck was told it was short of black. Where the target is out of reach it now tells you which turn the card comes online instead.',
-      },
-    ],
-  },
-  {
-    version: '0.154.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          "Deck stats now tells you what to do about a colored-source shortfall, out of the cards you already own. \"Two white sources short\" becomes \"+2 Tundra, 2 spare in Binder: Duals\", and one tap files them into the deck. Cards another deck is holding are named but never suggested.",
-      },
-      {
-        kind: 'fixed',
-        text: "The On curve panel's play/draw toggle was squashed to a hairline on a phone.",
       },
     ],
   },

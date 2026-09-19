@@ -195,6 +195,39 @@ export interface SimCostGroup {
   sample: number;
 }
 
+/**
+ * One card's share of the two trajectory lines — phase 13.
+ *
+ * This is **accounting, not a counterfactual.** It says what happened in the
+ * games that were played: whose rule drew the card, whose permanent made the
+ * mana. It does not say what would happen if you cut the card, and the two are
+ * different numbers whenever cards work together. Play an Opt with an Archmage
+ * Emeritus out and the accounting hands each of them one card, because each of
+ * them drew one. Cut the Opt and you lose two, because the trigger goes with
+ * it. Marginal contributions do not add up and this does, which is the whole
+ * reason it is the one being reported: every row here is a slice of a line on
+ * the chart above it.
+ *
+ * The one place the accounting is knowingly generous: a land another card went
+ * and got is credited to the card that got it, for as long as it is on the
+ * battlefield. Skyshroud Claim owns its two Forests forever. Some of that mana
+ * would have turned up anyway off the top of your library, so a deck full of
+ * fetches and land tutors reads high.
+ */
+export interface SimContribution {
+  oracleId: string;
+  name: string;
+  copies: number;
+  /** Mean mana available on turn t that this card's sources made, indexed by turn. */
+  manaByTurn: number[];
+  /** Mean cards drawn off the library by turn t by this card's rules. Cumulative. */
+  cardsByTurn: number[];
+  /** `manaByTurn` summed over every charted turn: the mana it was worth all game. */
+  mana: number;
+  /** `cardsByTurn` at the last charted turn. */
+  cards: number;
+}
+
 export interface SimResult {
   games: number;
   maxTurn: number;
@@ -229,6 +262,16 @@ export interface SimResult {
   meanHandSize: number;
   /** Copy-weighted mean of `onCurvePay`: how often this manabase is ready on time. */
   deckOnCurve: number;
+  /**
+   * Who made the two lines above, worth-most first. Only cards that contributed
+   * something: a Lightning Bolt makes no mana and draws nothing, and a row of
+   * zeroes for every removal spell in the deck would bury the ones that matter.
+   */
+  contributions: SimContribution[];
+  /** Cards seen by turn t that came off the opener, mulligans included. */
+  seenFromOpener: number[];
+  /** Cards seen by turn t that came off the draw step. */
+  seenFromDrawStep: number[];
 }
 
 /**
@@ -359,6 +402,14 @@ export function simulate(
   const srcIsLand = new Uint8Array(MAX_SOURCES);
   /** Which card it is, so a Karoo can hand one back to you. */
   const srcCard = new Int32Array(MAX_SOURCES);
+  /**
+   * Which card *put it there*, which is not the same question and is the whole
+   * of §13's mana credit. A land you played from hand answers itself. A Forest
+   * a Skyshroud Claim went and got answers Skyshroud Claim, for as long as the
+   * Forest is on the battlefield, because the Forest is in the library in the
+   * game where you never drew the Claim.
+   */
+  const srcBy = new Int32Array(MAX_SOURCES);
   /** A Treasure, so it can be sacrificed for the mana it just paid. */
   const srcTreasure = new Uint8Array(MAX_SOURCES);
   const unitGroups: UnitGroup[] = [];
@@ -425,6 +476,17 @@ export function simulate(
    */
   let libFloor = 0;
   let seen = 0;
+  /**
+   * Who is responsible for what happens next — §13's card credit, and the only
+   * new piece of state the accounting needed.
+   *
+   * Set to the card holding the rule for as long as that rule is running, which
+   * makes a draw inside a magecraft trigger credit Archmage Emeritus and the
+   * draw inside Opt's own rule credit Opt. -1 is the game itself: your opener
+   * and your draw step belong to nobody, and crediting them to a card would put
+   * seven cards against whichever one happened to be resolving.
+   */
+  let creditTo = -1;
   let colorsHeld = 0;
   /** Colors every land you control also makes, from an Urborg or a Lantern in play. */
   let grantMask = 0;
@@ -441,7 +503,7 @@ export function simulate(
    * its colors into every land, which is the one place this model was too mean
    * rather than too kind.
    */
-  const buildPool = (turn: number): number => {
+  const buildPool = (turn: number, credit = false): number => {
     units.length = 0;
     unitGroups.length = 0;
     if (sink) {
@@ -455,6 +517,10 @@ export function simulate(
       if (expires > 0 && turn > expires) continue;
       const n = srcUnits[s]!;
       total += n;
+      // In the same walk that produces the number, so the two can never
+      // disagree about which sources were online. This runs on the land-drop
+      // rehearsal too, which is why it is a flag and not a second loop.
+      if (credit) creditMana(srcBy[s]!, turn, n);
       const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
       if (srcOneColor[s] && n > 1) {
         unitGroups.push({ colors: UNIT_BY_MASK[mask]!.colors, count: n });
@@ -566,7 +632,7 @@ export function simulate(
    * as a plain spell and never reaches the battlefield here, so the simulator
    * misses it where the colored-source report, which is deck-relative, does not.
    */
-  const addSource = (index: number, card: SimCard, online: number, turn: number): boolean => {
+  const addSource = (index: number, card: SimCard, online: number, turn: number, by: number): boolean => {
     if (srcLen >= MAX_SOURCES) return false;
     srcMask[srcLen] = card.mask;
     srcUnits[srcLen] = card.adds;
@@ -578,6 +644,7 @@ export function simulate(
     srcOneColor[srcLen] = card.oneColor ? 1 : 0;
     srcIsLand[srcLen] = card.role === 'land' || card.role === 'fetch' ? 1 : 0;
     srcCard[srcLen] = index;
+    srcBy[srcLen] = by;
     srcTreasure[srcLen] = 0;
     srcLen++;
     grantMask |= card.grantMask;
@@ -660,6 +727,7 @@ export function simulate(
     srcOneColor[at] = srcOneColor[srcLen]!;
     srcIsLand[at] = srcIsLand[srcLen]!;
     srcCard[at] = srcCard[srcLen]!;
+    srcBy[at] = srcBy[srcLen]!;
     srcTreasure[at] = srcTreasure[srcLen]!;
   };
 
@@ -733,6 +801,7 @@ export function simulate(
       drawn++;
       if (sink) drewNames.push(cards[index]!.name);
     }
+    creditSeen(creditTo, drawn);
     return drawn;
   };
 
@@ -812,6 +881,7 @@ export function simulate(
       srcOneColor[srcLen] = 0;
       srcIsLand[srcLen] = 0;
       srcCard[srcLen] = -1;
+      srcBy[srcLen] = creditTo;
       srcTreasure[srcLen] = 1;
       srcLen++;
       units.push(UNIT_BY_MASK[TREASURE_MASK]!);
@@ -819,6 +889,10 @@ export function simulate(
       colorsHeld |= TREASURE_MASK;
       made++;
     }
+    // Only the ones the pool walk has already gone past: see `poolCredited`.
+    // On every later turn the Treasure is an ordinary source and the walk finds
+    // it, still carrying the index of whatever made it.
+    if (poolCredited) creditMana(creditTo, turn, made);
     return made;
   };
 
@@ -959,13 +1033,19 @@ export function simulate(
       if (recurLen < recurring.length) recurring[recurLen++] = index;
       return 0;
     }
-    return resolveEffect(effect, turn);
+    return resolveEffect(effect, turn, index);
   };
 
   /** Does this card do anything on the way in, having not been cast? */
   const entersDoing = (card: SimCard): boolean => !!card.behavior && card.behavior.etb.length > 0 && card.permanent;
 
-  const resolveEffect = (effect: EffectProfile, turn: number): number => {
+  const resolveEffect = (effect: EffectProfile, turn: number, self: number): number => {
+    // The derived path never reaches `runSteps`, so it sets the credit itself.
+    // Nothing inside here can nest — a profile is one card's own reading and
+    // fires no watchers — so a plain assignment is enough, but the restore
+    // still matters: the spend loop resolves the next card after this returns.
+    const outerCredit = creditTo;
+    creditTo = self;
     if (sink) {
       drewNames.length = 0;
       discardedNames.length = 0;
@@ -988,6 +1068,7 @@ export function simulate(
       if (effect.unknown) bits.push('amount floored');
       lastEffectText = bits.join(', ');
     }
+    creditTo = outerCredit;
     return made;
   };
 
@@ -1270,7 +1351,7 @@ export function simulate(
    * cards whose rules do the same; the answer to that is a depth counter, not a
    * whole missing trigger.
    */
-  const enterBattlefield = (index: number, card: SimCard, turn: number): void => {
+  const enterBattlefield = (index: number, card: SimCard, turn: number, by: number): void => {
     if (card.role === 'extraland') {
       if (extraLands < MAX_EXTRA_LANDS) extraLands++;
       addPermanent(index, card, turn);
@@ -1301,10 +1382,10 @@ export function simulate(
       // go and get it. Nothing to find means you would not have cracked it, so
       // it sits there instead, untracked and making no mana, which is what a
       // fetch with no targets is worth.
-      else if (crack(card, turn, turn + 1)) bury(index);
+      else if (crack(card, turn, turn + 1, index)) bury(index);
       return;
     }
-    if (!addSource(index, card, turn + 1, turn)) return;
+    if (!addSource(index, card, turn + 1, turn, by)) return;
     colorsHeld |= card.mask;
     const back = payEntryCost(card);
     if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
@@ -1322,7 +1403,7 @@ export function simulate(
    * The fetch itself is left where it is: the land drop buries it and the move
    * path has its own reason to, and they are not the same reason.
    */
-  const crack = (card: SimCard, turn: number, online: number): boolean => {
+  const crack = (card: SimCard, turn: number, online: number, by: number): boolean => {
     const at = findLand(cards, library, top, libLen, colorsHeld, card.fetchTargets, turnGoal, units, rng);
     if (at < 0) {
       if (sink) say(sink, 'land', 'Nothing left in the library to fetch');
@@ -1331,7 +1412,7 @@ export function simulate(
     const found = library[at]!;
     const land = cards[found]!;
     const slow = card.tapped === 'always' || land.tapped === 'always';
-    if (!addSource(found, land, Math.max(online, turn + (slow ? 1 : 0)), turn)) return false;
+    if (!addSource(found, land, Math.max(online, turn + (slow ? 1 : 0)), turn, by)) return false;
     colorsHeld |= land.mask;
     library[at] = library[--libLen]!;
     if (sink) say(sink, 'land', `Cracks for ${land.name}${slow ? ' (enters tapped)' : ''}`);
@@ -1581,7 +1662,9 @@ export function simulate(
         exiled[exLen++] = index;
         return;
       case 'battlefield':
-        enterBattlefield(index, cards[index]!, turn);
+        // Whatever rule moved it is what put it there, so that is who its mana
+        // belongs to: a reanimated Sol Ring is the reanimation spell's two mana.
+        enterBattlefield(index, cards[index]!, turn, creditTo);
         return;
     }
   };
@@ -1652,7 +1735,10 @@ export function simulate(
     }
     for (const index of taken) {
       if (sink) movedNames.push(cards[index]!.name);
-      enterBattlefield(index, cards[index]!, turn);
+      // A flicker is the one arrival that credits the card itself. It was
+      // already yours and already making this mana; blinking it is not the
+      // flicker spell going and getting you a Sol Ring.
+      enterBattlefield(index, cards[index]!, turn, index);
     }
     return taken.length;
   };
@@ -1685,7 +1771,10 @@ export function simulate(
       moved++;
       // `seen` is cards that reached your hand off the library, which is what
       // the cards chart reads. A tutor counts; a regrowth does not.
-      if (from === 'library' && to === 'hand') seen++;
+      if (from === 'library' && to === 'hand') {
+        seen++;
+        creditSeen(creditTo, 1);
+      }
       if (ordered) stack.push(index);
       else putTo(index, to, turn);
       if (sink) movedNames.push(cards[index]!.name);
@@ -1735,6 +1824,13 @@ export function simulate(
   const runSteps = (steps: readonly BehaviorStep[], turn: number, self: number): number => {
     const bits: string[] = [];
     let made = 0;
+    // Saved and restored rather than assigned, because a step here can wake a
+    // watcher whose own rule runs to completion inside this one: a landfall
+    // trigger nested under the rule that made the land. The inner rule's draws
+    // are the watcher's, and the outer rule's remaining steps are still the
+    // outer card's once it returns.
+    const outerCredit = creditTo;
+    creditTo = self;
     // A rule's first step has no step before it, so "the previous X" is zero
     // and the step does nothing. Reset per rule rather than per game: an
     // upkeep trigger three turns later is not reading the cast that made it.
@@ -1819,6 +1915,7 @@ export function simulate(
       lastAmount = did;
     }
     if (sink) lastEffectText = bits.join(', ');
+    creditTo = outerCredit;
     return made;
   };
 
@@ -1843,6 +1940,61 @@ export function simulate(
   /** Cards still in hand at end of turn, once the turn's spells have left it. */
   const handSum = new Float64Array(stride);
   const landDrops = new Uint32Array(stride);
+
+  // --- Card credit (phase 13) ------------------------------------------------
+  // The two trajectory lines, decomposed by which card in the deck put each
+  // point there. Both decompositions are exact: they sum back to `manaSum` and
+  // `seenSum` respectively, which is the property that lets the panel read as a
+  // breakdown of a chart rather than a second opinion about it.
+
+  /** manaCredit[card * stride + turn]: mana available that turn off this card's sources. */
+  const manaCredit = new Float64Array(n * stride);
+  /** seenCredit[card * stride + turn]: cards in hand *by* that turn this card drew. */
+  const seenCredit = new Float64Array(n * stride);
+  /** This game's running count per card, flushed into `seenCredit` each turn. */
+  const gameSeen = new Float64Array(n);
+  /**
+   * Which cards have drawn anything this game, so the per-turn flush is a walk
+   * over the handful of cards that did something and not over the whole deck.
+   * Twenty thousand games times eight turns times a hundred cards is sixteen
+   * million writes to save a few hundred.
+   */
+  const touched = new Int32Array(n);
+  const touchedFlag = new Uint8Array(n);
+  let touchedLen = 0;
+  /** The opener, which is no card's doing, and every mulligan you shipped. */
+  const openerSeen = new Float64Array(stride);
+  /** The draw step, same. Together these are most of the cards line. */
+  const drawStepSeen = new Float64Array(stride);
+  let gameOpener = 0;
+  let gameDrawStep = 0;
+  /**
+   * Has this turn's pool been counted into `manaCredit` yet?
+   *
+   * `available` is built once by `buildPool` and then grown by Treasures made
+   * mid-spend, and the credit has to follow it exactly or the breakdown stops
+   * summing. So the pool walk credits every source it counts, and
+   * `makeTreasures` credits only the Treasures made after that walk — the ones
+   * `available +=` picks up. A Treasure made at upkeep is already on the
+   * battlefield when the walk happens and must not be counted twice.
+   */
+  let poolCredited = false;
+
+  /** Every mana source this card has on the battlefield is worth this much to it. */
+  const creditMana = (by: number, turn: number, units: number): void => {
+    if (by >= 0) manaCredit[by * stride + turn] = manaCredit[by * stride + turn]! + units;
+  };
+
+  /** Every cards-seen decomposition site funnels through here. */
+  const creditSeen = (by: number, count: number): void => {
+    if (by < 0 || count <= 0) return;
+    gameSeen[by] = gameSeen[by]! + count;
+    if (!touchedFlag[by]) {
+      touchedFlag[by] = 1;
+      touched[touchedLen++] = by;
+    }
+  };
+
   /** Every cost committed this turn, folded into one, so partial spends add up. */
   const paid: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [], faces: 1 };
   let handSizeSum = 0;
@@ -1863,6 +2015,13 @@ export function simulate(
     libLen = deckSize;
     top = 0;
     seen = 0;
+    for (let i = 0; i < touchedLen; i++) {
+      gameSeen[touched[i]!] = 0;
+      touchedFlag[touched[i]!] = 0;
+    }
+    touchedLen = 0;
+    gameDrawStep = 0;
+    creditTo = -1;
     gyLen = 0;
     exLen = 0;
 
@@ -1904,6 +2063,10 @@ export function simulate(
       // is what the cards chart counted before there was anything else to
       // count and what it still counts now.
       seen = top;
+      // Every card the opener cost you, mulligans included, and none of it
+      // anybody's doing. `top` rather than `handLen`: a hand you shipped came
+      // off the library too, which is what this line has always counted.
+      gameOpener = top;
       break;
     }
     // The commander is a card you always have, from a zone you never draw, so
@@ -1911,6 +2074,10 @@ export function simulate(
     for (const c of deck.commanders) hand[handLen++] = c;
 
     for (let turn = 1; turn <= maxTurn; turn++) {
+      // A Treasure made at upkeep is on the battlefield before this turn's pool
+      // walk and gets its credit from there. Reset before the upkeep triggers
+      // run, not after.
+      poolCredited = false;
       if (sink) {
         sink.turn = { turn, lines: [], available: 0, spent: 0, hand: [] };
         sink.game.turns.push(sink.turn);
@@ -1933,7 +2100,7 @@ export function simulate(
           if (card.behavior.upkeep.length === 0) continue;
           runSteps(card.behavior.upkeep, turn, index);
         } else if (card.effect) {
-          resolveEffect(card.effect, turn);
+          resolveEffect(card.effect, turn, index);
         } else {
           continue;
         }
@@ -1950,6 +2117,7 @@ export function simulate(
         const index = library[top++]!;
         hand[handLen++] = index;
         seen++;
+        gameDrawStep++;
         if (sink) say(sink, 'draw', `Draws ${cards[index]!.name}`);
       } else if (sink && turn === 1 && opts.onPlay) {
         say(sink, 'note', 'On the play, so no draw this turn');
@@ -2052,12 +2220,12 @@ export function simulate(
             sayEffect(lastEffectText ? `${card.name} ${lastEffectText}` : '');
           }
           // And then what it is, unless you wrote that out yourself.
-          if (!authored && crack(card, turn, turn) && !placed) {
+          if (!authored && crack(card, turn, turn, cardIndex) && !placed) {
             // Sacrificed, which means the yard, which means a behavior can go
             // and get it back.
             bury(cardIndex);
           }
-        } else if (addSource(cardIndex, card, turn + (card.tapped === 'always' ? 1 : 0), turn)) {
+        } else if (addSource(cardIndex, card, turn + (card.tapped === 'always' ? 1 : 0), turn, cardIndex)) {
           colorsHeld |= card.mask;
           const back = payEntryCost(card);
           if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
@@ -2080,7 +2248,8 @@ export function simulate(
       // has to reach both the spend loop's budget and the chart. Recorded after
       // the turn rather than here, so the available line is never below the
       // spent line — the trajectory chart's right-hand labels lean on that.
-      let available = buildPool(turn);
+      let available = buildPool(turn, true);
+      poolCredited = true;
       if (sink) {
         const bits: string[] = [];
         for (let u = 0; u < units.length; u++) {
@@ -2278,7 +2447,7 @@ export function simulate(
             if (at < 0) break;
             const found = library[at]!;
             const land = cards[found]!;
-            if (!addSource(found, land, turn + 1, turn)) break;
+            if (!addSource(found, land, turn + 1, turn, index)) break;
             colorsHeld |= land.mask;
             library[at] = library[--libLen]!;
             if (sink) say(sink, 'mana', `Finds ${land.name}, which arrives tapped`);
@@ -2294,7 +2463,7 @@ export function simulate(
           // The mana that cast it has been spent, and a dork is summoning sick
           // on top of that, so either way it pays for something from next turn.
         } else if (card.role === 'rock' || card.role === 'dork') {
-          if (addSource(index, card, turn + 1, turn)) {
+          if (addSource(index, card, turn + 1, turn, index)) {
             colorsHeld |= card.mask;
             // A filter like Prophetic Prism profiles at zero net mana: it fixes
             // colours and adds none. "Will add 0" is true and reads like a bug,
@@ -2411,6 +2580,16 @@ export function simulate(
       spentSum[turn] = spentSum[turn]! + spent;
       seenSum[turn] = seenSum[turn]! + seen;
       handSum[turn] = handSum[turn]! + handLen;
+      // `seen` is cumulative within a game, so its decomposition has to be too:
+      // this is a snapshot of every card's running total, taken once a turn.
+      // `manaCredit` needs no equivalent because mana available is a rate, and
+      // the pool walk already wrote this turn's.
+      openerSeen[turn] = openerSeen[turn]! + gameOpener;
+      drawStepSeen[turn] = drawStepSeen[turn]! + gameDrawStep;
+      for (let i = 0; i < touchedLen; i++) {
+        const c = touched[i]!;
+        seenCredit[c * stride + turn] = seenCredit[c * stride + turn]! + gameSeen[c]!;
+      }
     }
 
     for (let i = 0; i < n; i++) {
@@ -2434,6 +2613,10 @@ export function simulate(
     seenSum,
     handSum,
     landDrops,
+    manaCredit,
+    seenCredit,
+    openerSeen,
+    drawStepSeen,
     handSizeSum,
     mulliganed,
   });
@@ -2620,6 +2803,10 @@ interface Tallies {
   seenSum: Float64Array;
   handSum: Float64Array;
   landDrops: Uint32Array;
+  manaCredit: Float64Array;
+  seenCredit: Float64Array;
+  openerSeen: Float64Array;
+  drawStepSeen: Float64Array;
   handSizeSum: number;
   mulliganed: number;
 }
@@ -2754,12 +2941,49 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
   costs.sort((a, b) => worstFirst(a, b) || a.manaCost.localeCompare(b.manaCost));
   for (const row of costs) row.names.sort((a, b) => a.localeCompare(b));
 
+  // --- Who made the lines (phase 13) ----------------------------------------
+  // Every card with a non-zero share of either chart, in one list. Mana and
+  // cards stay in separate fields rather than being added together: they are
+  // different units, and a ranking that summed them would be inventing an
+  // exchange rate between a Forest and a Divination.
+  const contributions: SimContribution[] = [];
+  for (let i = 0; i < deck.cards.length; i++) {
+    const card = deck.cards[i]!;
+    const manaByTurn = [0];
+    const cardsByTurn = [0];
+    let mana = 0;
+    for (let turn = 1; turn < stride; turn++) {
+      const m = t.manaCredit[i * stride + turn]! * per;
+      manaByTurn.push(m);
+      mana += m;
+      cardsByTurn.push(t.seenCredit[i * stride + turn]! * per);
+    }
+    const seenAt = cardsByTurn[stride - 1] ?? 0;
+    // A tenth of a mana over eight turns is a rounding artefact wearing a card
+    // name. The panel's smallest readable step is 0.1, so anything under half
+    // of that would render as "0.0" next to a name, which reads as a bug.
+    if (mana < 0.05 && seenAt < 0.05) continue;
+    contributions.push({
+      oracleId: card.oracleId,
+      name: card.name,
+      copies: card.copies + (card.commander ? 1 : 0),
+      manaByTurn,
+      cardsByTurn,
+      mana,
+      cards: seenAt,
+    });
+  }
+  contributions.sort((a, b) => b.mana + b.cards - (a.mana + a.cards) || a.name.localeCompare(b.name));
+
   return {
     games,
     maxTurn: opts.maxTurn,
     cards: results,
     commanders,
     costs,
+    contributions,
+    seenFromOpener: [...t.openerSeen].map((sum) => sum * per),
+    seenFromDrawStep: [...t.drawStepSeen].map((sum) => sum * per),
     manaByTurn: [...manaSum].map((sum) => sum * per),
     manaSpentByTurn: [...spentSum].map((sum) => sum * per),
     cardsSeenByTurn: [...seenSum].map((sum) => sum * per),

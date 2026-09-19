@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.159.0
+
+- **Added: two triggers that watch the rest of the game.** "When another permanent enters" and "when you cast another spell", both on a permanent sitting on the battlefield, and both narrowed by the same search syntax the card search uses. `t:land` is landfall, `t:instant or t:sorcery` is magecraft, `t:creature` is a Beast Whisperer. Leave the box blank and anything wakes the rule.
+- **Added: most deck engines are now writable.** Every trigger before this one fired on something happening to the card holding the rule. These fire on something happening to a card that is not it, which is what an engine is: a permanent that draws, ramps, mills or makes Treasure every time it sees what it is waiting for. The trajectory curves counted all of that as a blank before.
+- A cast trigger fires before the spell it saw resolves, so an Archmage Emeritus draws off a Windfall before the Windfall empties your hand, and a Storm-Kiln Artist's Treasure is mana you can spend that same turn. Lands are played rather than cast, so they never wake one.
+- A permanent arriving wakes the watchers however it got there: played, cast, fetched off a crack, found by land ramp, flickered, or dragged out of the graveyard. A card never wakes itself, and neither does a second copy of it.
+- Triggers chain two deep and stop, so a landfall rule that puts a land onto the battlefield ramps twice rather than forever.
+
 ## 0.158.8
 
 - **Added: the simulator tracks the permanents you control, not just the ones that make mana.** For nine phases the battlefield was a list of lands and rocks, which is why "sacrifice a creature" quietly found a land and a reanimated creature arrived nowhere at all. Every permanent is on it now.

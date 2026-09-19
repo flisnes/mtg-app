@@ -604,8 +604,12 @@ function RuleEditor({
    * becomes a fixed zero rather than a select with nothing selected in it.
    */
   const changeTrigger = (on: BehaviorTrigger) => {
+    // The criteria belongs to the moment, not to the rule: move off a watched
+    // trigger and there is nothing for it to narrow, so it goes rather than
+    // sitting in the row invisibly and coming back on the way past.
+    const q = BEHAVIOR_TRIGGERS.find((t) => t.id === on)?.watches ? rule.q : undefined;
     if (on === 'play' || !hasX) {
-      onChange({ ...rule, on });
+      onChange({ ...rule, on, q });
       return;
     }
     const drop = (a: BehaviorAmount | undefined): BehaviorAmount | undefined =>
@@ -613,6 +617,7 @@ function RuleEditor({
     onChange({
       ...rule,
       on,
+      q,
       steps: rule.steps.map((s) => {
         const x = drop(s.x) ?? s.x;
         const qx = drop(s.qx);
@@ -689,6 +694,32 @@ function RuleEditor({
         </button>
       </div>
       {trigger && <p className="fine-print">{trigger.hint}</p>}
+
+      {/* A watched trigger's criteria: which cards wake the rule. Above the
+          steps rather than beside them, because it says *when* this happens and
+          the steps say what. Landfall is one word in a box. */}
+      {trigger?.watches && (
+        <div className="behavior-q behavior-watch">
+          <label className="field">
+            <input
+              type="text"
+              value={rule.q ?? ''}
+              maxLength={MAX_BEHAVIOR_QUERY}
+              aria-label="Which cards wake this"
+              placeholder={rule.on === 'cast' ? 'Any spell, or t:instant or t:sorcery, …' : 'Any permanent, or t:land, t:creature, …'}
+              onChange={(e) => onChange({ ...rule, q: e.target.value })}
+            />
+          </label>
+          <MatchNote q={rule.q ?? ''} matcher={matcher} />
+          {/* The examples live in the trigger's hint, right above this. What is
+              left is what that hint does not say: where the syntax comes from,
+              what blank means, and where the chain stops. */}
+          <p className="fine-print">
+            Card search syntax, matched against this deck, same as a move step's. Blank means anything wakes it. Triggers chain
+            two deep, so an engine that feeds itself stops rather than spinning.
+          </p>
+        </div>
+      )}
 
       {rule.steps.map((step, i) => {
         const move = step.op === 'move';

@@ -7943,6 +7943,13 @@ a.seg {
 .behavior-q code {
   font-size: 0.95em;
 }
+/* The criteria that wakes a watched trigger. Same box as a step's, but it sits
+   in the rule's own column rather than in the step grid, so the grid-area it
+   inherits has to go. */
+.behavior-watch {
+  grid-area: auto;
+  padding: 0 0.1rem 0.2rem;
+}
 .behavior-nomatch {
   color: var(--danger);
 }

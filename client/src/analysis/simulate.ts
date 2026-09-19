@@ -1130,6 +1130,18 @@ export function simulate(
    * thousand games to find out there is nothing to fire.
    */
   const anyAttackers = cards.some((c) => c.creature && !!c.behavior && c.behavior.attack.length > 0);
+  /**
+   * The same question for the two watched triggers, and the same answer: almost
+   * no deck has one, and a deck that does not must not pay a scan of the
+   * battlefield on every cast and every permanent that arrives, twenty thousand
+   * games deep.
+   *
+   * Only permanents count. A rule on a sorcery is one that could never be on
+   * the battlefield to see anything, which the editor already refuses to offer
+   * and this refuses to look for.
+   */
+  const anyCastWatchers = cards.some((c) => c.permanent && !!c.behavior && c.behavior.cast.length > 0);
+  const anyEnterWatchers = cards.some((c) => c.permanent && !!c.behavior && c.behavior.enters.length > 0);
 
   /**
    * The mana that went into the `{X}` of the spell resolving right now, so a
@@ -1263,6 +1275,7 @@ export function simulate(
       if (extraLands < MAX_EXTRA_LANDS) extraLands++;
       addPermanent(index, card, turn);
       fireEntry(index, card, turn);
+      fireArrival(index, card, turn);
       return;
     }
     if (card.role === 'spell' || card.role === 'landramp') {
@@ -1271,6 +1284,7 @@ export function simulate(
       // for" — which is exactly the room the permanent list is.
       if (card.permanent) addPermanent(index, card, turn);
       fireEntry(index, card, turn);
+      fireArrival(index, card, turn);
       return;
     }
     // A fetch is not a land that taps for five colours. Its mask is the union
@@ -1295,6 +1309,7 @@ export function simulate(
     const back = payEntryCost(card);
     if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
     fireEntry(index, card, turn);
+    fireArrival(index, card, turn);
   };
 
   /**
@@ -1328,6 +1343,10 @@ export function simulate(
       fireEntry(found, land, turn);
       sayEffect('');
     }
+    // A land entered the battlefield, which is landfall whether you played it,
+    // cracked for it or reanimated it. After the library slot has been closed
+    // up above, because a watcher can go looking in there.
+    fireArrival(found, land, turn);
     return true;
   };
 
@@ -1348,10 +1367,17 @@ export function simulate(
     const wasPlaced = selfPlaced;
     const wasAmount = lastAmount;
     const wasText = lastEffectText;
+    const wasX = xSpent;
     const wasMoved = sink ? movedNames.slice() : null;
+    // Nothing was cast to get *here*, whatever was cast to get to the rule this
+    // is standing inside. A landfall trigger is not the moment somebody's {X}
+    // was paid, and a magecraft rule reading `xpaid` off the spell it saw would
+    // be reading a number that belongs to a different card.
+    xSpent = 0;
     triggerDepth++;
     runSteps(steps, turn, index);
     triggerDepth--;
+    xSpent = wasX;
     // Queued rather than said, because we are standing in the middle of the
     // rule that caused this and its own line has not been written yet. Saying
     // it here puts the reanimated creature's draw above the reanimation.
@@ -1418,6 +1444,61 @@ export function simulate(
    */
   const fireDeath = (index: number, card: SimCard, turn: number): void => {
     if (card.behavior) fireNested(index, card, turn, card.behavior.death);
+  };
+
+  /** Does the card that caused an event match what a watched rule is looking for? */
+  const watched = (q: string | undefined, subject: number): boolean => {
+    if (!q) return true;
+    const filter = filterFor.get(q);
+    // A criteria no filter was built for matches nothing, same as a move step's
+    // does. Rule criteria never carry an `[X]` (sanitizeCardBehavior resolves
+    // one away), so there is only ever the one row to read.
+    return !!filter && filter.match[subject] === 1;
+  };
+
+  /**
+   * Something happened to one card, and every permanent watching for it goes
+   * off. This is the whole of landfall, magecraft, Beast Whisperer and the rest
+   * of what a deck calls its engine.
+   *
+   * The watchers are collected before any of them fires, for the reason the
+   * attacker list is: a rule that makes a permanent mid-trigger must not hand
+   * it a trigger it was never around for, and a rule that sacrifices one must
+   * not shorten the list underneath the loop.
+   *
+   * `enters` skips any permanent that *is* the card that just arrived, which is
+   * what "another permanent" means and also what stops a rule waking itself
+   * forever. Two copies of the same card are one card index here, so the first
+   * copy sleeps through the second one landing — an omission, and the cheap
+   * side of it: nothing that watches permanents arrive is a card you play two
+   * of and also a card that matches its own criteria.
+   */
+  const fireWatchers = (which: 'cast' | 'enters', subject: number, turn: number): void => {
+    if (!opts.effects || triggerDepth >= MAX_TRIGGER_DEPTH) return;
+    const outermost = triggerDepth === 0;
+    // A list of its own rather than the shared `stack`, which a rule fired
+    // below will borrow and empty.
+    const woken: { index: number; steps: readonly BehaviorStep[] }[] = [];
+    for (let p = 0; p < permLen; p++) {
+      const index = permCard[p]!;
+      if (which === 'enters' && index === subject) continue;
+      const rules = cards[index]!.behavior?.[which];
+      if (!rules || rules.length === 0 || !stillOut(p, turn)) continue;
+      for (const rule of rules) if (watched(rule.q, subject)) woken.push({ index, steps: rule.steps });
+    }
+    for (const w of woken) fireNested(w.index, cards[w.index]!, turn, w.steps);
+    // Drained here rather than left for whatever says the next effect line: the
+    // event that woke these has already been written down, so the triggers
+    // belong under it and not under the next card to resolve.
+    if (outermost && woken.length > 0) sayEffect('');
+  };
+
+  /**
+   * A permanent arrived under your control. Its own entry rules fire elsewhere
+   * (`fireEntry`); this is everyone else noticing.
+   */
+  const fireArrival = (index: number, card: SimCard, turn: number): void => {
+    if (anyEnterWatchers && card.permanent) fireWatchers('enters', index, turn);
   };
 
   /**
@@ -1988,6 +2069,9 @@ export function simulate(
             enters(cardIndex, card, turn, true);
             sayEffect(lastEffectText ? `${card.name} ${lastEffectText}` : '');
           }
+          // And the land drop everybody else was waiting for. This is landfall's
+          // main road: the other arrivals are fetches, ramp and reanimation.
+          fireArrival(cardIndex, card, turn);
         }
       }
 
@@ -2168,6 +2252,12 @@ export function simulate(
           });
         }
 
+        // Cast triggers, and they go off *before* the spell does — which is
+        // both the rule and the reason they are worth writing. An Archmage
+        // Emeritus draws off the Windfall before the Windfall empties your
+        // hand, and a Storm-Kiln Artist's Treasure is mana this turn.
+        if (anyCastWatchers) fireWatchers('cast', index, turn);
+
         // An authored play rule *is* what the card does, and a behavior
         // replaces the derived reading rather than adding to it — see
         // SimCard.behavior. Land ramp is a derived reading like any other, it
@@ -2199,6 +2289,7 @@ export function simulate(
             // played rule and its derived reading both stay out.
             fireEntry(found, land, turn);
             sayEffect('');
+            fireArrival(found, land, turn);
           }
           // The mana that cast it has been spent, and a dork is summoning sick
           // on top of that, so either way it pays for something from next turn.
@@ -2243,12 +2334,23 @@ export function simulate(
           if (sink && resolves(card)) {
             // A behavior with an upkeep rule and no play rule is the same shape
             // as a repeatable profile: nothing happened now, something will.
-            const recurs = card.behavior
-              ? card.behavior.play.length === 0 && card.behavior.etb.length === 0
-              : card.effect!.repeatable;
-            sayEffect(recurs ? `${card.name} will fire every upkeep from next turn` : `${card.name} ${lastEffectText || 'resolves'}`);
+            const b = card.behavior;
+            const later = b ? b.play.length === 0 && b.etb.length === 0 : card.effect!.repeatable;
+            // *What* will, though, is now two different promises. A watcher does
+            // not fire on a clock, it fires on the next thing you do, and
+            // telling someone their Tatyova triggers at upkeep is the trace
+            // contradicting the rule they just wrote.
+            const when =
+              b && b.upkeep.length === 0 && (b.cast.length > 0 || b.enters.length > 0)
+                ? 'is watching, and fires when it sees what it is waiting for'
+                : 'will fire every upkeep from next turn';
+            sayEffect(later ? `${card.name} ${when}` : `${card.name} ${lastEffectText || 'resolves'}`);
           }
         }
+        // And everyone watching it arrive. After its own rules, which is the
+        // order a card you cast does them in, and not at all if one of them
+        // sent it somewhere other than the battlefield.
+        if (!selfPlaced) fireArrival(index, card, turn);
         // And where the card itself ends up. A permanent stays out, as a source
         // if it makes mana and as an untracked body if it does not; everything
         // else is in the graveyard once it has resolved, which is where a

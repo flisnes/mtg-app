@@ -48,8 +48,22 @@ import { BASIC_LAND_TYPES, type EffectProfile, type FetchProfile, type ManaProfi
  * before it for the same reason: the sequencer tracked the permanents that make
  * mana and nothing else, so it had no idea a creature was on the battlefield,
  * let alone whether it was summoning sick or what killed it.
+ *
+ * `cast` and `enters` are the two *watched* triggers, and they are a different
+ * shape from the other five: the rest fire on something happening to the card
+ * holding the rule, these fire on something happening to a card that is not it.
+ * A permanent sitting on the battlefield watches the game go by and does
+ * something each time it sees what it is looking for — which is most of what a
+ * deck's engine is, and none of which was writable before them. Which cards
+ * count is a criteria string on the rule (`BehaviorRule.q`), so landfall is
+ * `enters` with `t:land` and Archmage Emeritus is `cast` with
+ * `t:instant or t:sorcery`.
  */
-export type BehaviorTrigger = 'play' | 'etb' | 'attack' | 'death' | 'upkeep';
+export type BehaviorTrigger = 'play' | 'etb' | 'attack' | 'death' | 'upkeep' | 'cast' | 'enters';
+
+/** The triggers that watch other cards, and so carry a criteria of their own. */
+export const WATCHED_TRIGGERS = ['cast', 'enters'] as const;
+export type WatchedTrigger = (typeof WATCHED_TRIGGERS)[number];
 
 /**
  * Where a card can be. The battlefield is the lopsided one: the sequencer
@@ -197,6 +211,16 @@ export interface BehaviorRule {
   on: BehaviorTrigger;
   /** Resolved in order, which is the whole point: a loot draws before it discards. */
   steps: BehaviorStep[];
+  /**
+   * `cast` and `enters` only: which cards wake this rule, as a Scryfall query.
+   * Absent or empty is any of them.
+   *
+   * The same syntax a `move` step narrows with, pointed at the event instead of
+   * at a zone — one language for "which cards" wherever the question comes up.
+   * No `[X]` here, though: a watched rule is woken by something happening, not
+   * resolved with a number, so there is nothing for a placeholder to read.
+   */
+  q?: string;
 }
 
 /**
@@ -212,8 +236,13 @@ export interface CardBehavior {
 
 export const CARD_BEHAVIOR_VERSION = 1;
 
-/** Rules on one card: one per trigger, and nothing real wants all five. */
-export const MAX_BEHAVIOR_RULES = 5;
+/**
+ * Rules on one card. One per trigger and nothing real wants all of them, but
+ * the watched triggers break that arithmetic: two `cast` rules watching two
+ * different criteria are two rules on the same moment, which is a Storm-Kiln
+ * Artist that also cares about creatures.
+ */
+export const MAX_BEHAVIOR_RULES = 7;
 /** Steps in one rule. */
 export const MAX_BEHAVIOR_STEPS = 6;
 /**
@@ -281,6 +310,13 @@ export interface TriggerOption {
    * §12.2's lie: authored, saved, and silently doing nothing every game.
    */
   needs?: 'permanent' | 'creature';
+  /**
+   * It fires on something happening to a *different* card, so the rule carries
+   * a criteria saying which cards count. The editor shows a box for it, the
+   * compiler keeps it per rule rather than merging the steps, and the sequencer
+   * matches it against the card that caused the event.
+   */
+  watches?: boolean;
 }
 
 export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
@@ -316,6 +352,22 @@ export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
     label: 'At each of your upkeeps',
     lead: 'At each of your upkeeps',
     hint: 'Fires every turn from the one after it lands. For permanents that stay on the battlefield.',
+  },
+  {
+    id: 'cast',
+    label: 'When you cast another spell',
+    lead: 'Whenever you cast another spell',
+    hint: 'Every time, while this permanent is on the battlefield, and before the spell it saw resolves. Narrow it below: t:instant or t:sorcery is Archmage Emeritus, t:creature is Beast Whisperer. Lands are played rather than cast, so they never wake this.',
+    needs: 'permanent',
+    watches: true,
+  },
+  {
+    id: 'enters',
+    label: 'When another permanent enters',
+    lead: 'Whenever another permanent you control enters',
+    hint: 'However it got there: played, cast, fetched, flickered or reanimated. Narrow it below: t:land is landfall, t:creature is Guardian Project. This card never wakes itself, and neither does a second copy of it.',
+    needs: 'permanent',
+    watches: true,
   },
 ];
 
@@ -528,9 +580,23 @@ export function describeStep(step: BehaviorStep): string {
   return `${verb} ${count}${tail}`;
 }
 
+/**
+ * What wakes a rule, as a phrase: "When you play it", or "Whenever you cast
+ * another spell matching t:instant".
+ *
+ * A watched trigger's criteria belongs here rather than beside the steps,
+ * because it says *when*, not *what* — the same string on a `move` step would
+ * be saying which cards to take.
+ */
+export function describeTrigger(rule: BehaviorRule): string {
+  const t = TRIGGER_BY_ID.get(rule.on);
+  const lead = t?.lead ?? rule.on;
+  return t?.watches && rule.q ? `${lead} matching ${rule.q}` : lead;
+}
+
 /** One rule as a sentence: "When you play it: draw 2, then discard 1". */
 export function describeRule(rule: BehaviorRule): string {
-  const lead = TRIGGER_BY_ID.get(rule.on)?.lead ?? rule.on;
+  const lead = describeTrigger(rule);
   if (rule.steps.length === 0) return `${lead}: nothing`;
   const bits = rule.steps.map(describeStep);
   const last = bits.pop()!;
@@ -646,12 +712,26 @@ export function describeFetch(fetch: FetchProfile | null | undefined): string | 
  * the whole behavior — would make one unknown step delete a card's whole
  * reading on the older device.
  */
+export interface WatchRule {
+  /** Which cards wake it. Absent is any of them. */
+  q?: string;
+  steps: BehaviorStep[];
+}
+
 export interface CompiledBehavior {
   play: BehaviorStep[];
   etb: BehaviorStep[];
   attack: BehaviorStep[];
   death: BehaviorStep[];
   upkeep: BehaviorStep[];
+  /**
+   * The watched triggers, and the one pair that stays a *list of rules* rather
+   * than flattening into a list of steps. Every other trigger is one moment, so
+   * two rules on it are one longer rule; these two are "whenever you see X",
+   * and two of them on one card are two different X's.
+   */
+  cast: WatchRule[];
+  enters: WatchRule[];
 }
 
 /**
@@ -665,10 +745,14 @@ const knownAmount = (x: BehaviorAmount | undefined | null): boolean =>
 
 export function compileBehavior(b: CardBehavior | null | undefined): CompiledBehavior | null {
   if (!b || b.v !== CARD_BEHAVIOR_VERSION || !Array.isArray(b.rules)) return null;
-  const out: CompiledBehavior = { play: [], etb: [], attack: [], death: [], upkeep: [] };
+  const out: CompiledBehavior = { play: [], etb: [], attack: [], death: [], upkeep: [], cast: [], enters: [] };
   for (const rule of b.rules) {
-    const bucket = rule && TRIGGER_BY_ID.has(rule.on) ? out[rule.on] : null;
-    if (!bucket || !Array.isArray(rule.steps)) continue;
+    const trigger = rule ? TRIGGER_BY_ID.get(rule.on) : undefined;
+    if (!trigger || !Array.isArray(rule.steps)) continue;
+    // A watched trigger's steps are collected on their own and filed with the
+    // criteria that wakes them; every other trigger appends to its one bucket,
+    // which is what it has always done.
+    const bucket: BehaviorStep[] = trigger.watches ? [] : out[rule.on as Exclude<BehaviorTrigger, WatchedTrigger>];
     for (const step of rule.steps) {
       if (!step || !STEP_BY_ID.has(step.op) || !knownAmount(step.x)) continue;
       if (step.op === 'self') {
@@ -689,10 +773,20 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
       }
       bucket.push(step);
     }
+    if (trigger.watches && bucket.length > 0) {
+      const q = typeof rule.q === 'string' ? rule.q.trim() : '';
+      out[rule.on as WatchedTrigger].push(q ? { q, steps: bucket } : { steps: bucket });
+    }
   }
-  return out.play.length > 0 || out.etb.length > 0 || out.attack.length > 0 || out.death.length > 0 || out.upkeep.length > 0
-    ? out
-    : null;
+  const fires =
+    out.play.length > 0 ||
+    out.etb.length > 0 ||
+    out.attack.length > 0 ||
+    out.death.length > 0 ||
+    out.upkeep.length > 0 ||
+    out.cast.length > 0 ||
+    out.enters.length > 0;
+  return fires ? out : null;
 }
 
 /**
@@ -704,6 +798,15 @@ export function collectBehaviorQueries(b: CompiledBehavior | null | undefined, i
   if (!b) return;
   for (const steps of [b.play, b.etb, b.attack, b.death, b.upkeep]) {
     for (const step of steps) if (step.q) into.add(step.q);
+  }
+  // A watched rule has two kinds of criteria on it: the one that says which
+  // cards wake it, and whatever its own steps narrow with. Both compile the
+  // same way and both come out as a byte per card.
+  for (const rules of [b.cast, b.enters]) {
+    for (const rule of rules) {
+      if (rule.q) into.add(rule.q);
+      for (const step of rule.steps) if (step.q) into.add(step.q);
+    }
   }
 }
 
@@ -788,7 +891,15 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
       if (!from || !to || from === to || ZONE_BY_ID.get(from)!.toOnly) continue;
       steps.push({ op, x, from, to, ...narrowed });
     }
-    if (steps.length > 0) rules.push({ on: r.on as BehaviorTrigger, steps });
+    if (steps.length === 0) continue;
+    const on = r.on as BehaviorTrigger;
+    // A watched trigger's own criteria. `[X]` is resolved to zero rather than
+    // kept: a watched rule is woken by an event rather than resolved with a
+    // number, so a placeholder here has nothing to read and would otherwise
+    // cost twenty-one compiled rows nobody ever indexes into.
+    const watch = TRIGGER_BY_ID.get(on)!.watches && typeof r.q === 'string' ? r.q.trim().slice(0, MAX_BEHAVIOR_QUERY) : '';
+    const q = watch && queryHasX(watch) ? substituteQueryX(watch, 0) : watch;
+    rules.push(q ? { on, q, steps } : { on, steps });
   }
   return rules.length > 0 ? { v: CARD_BEHAVIOR_VERSION, rules } : null;
 }

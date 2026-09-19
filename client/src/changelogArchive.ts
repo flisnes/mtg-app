@@ -9,6 +9,26 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.153.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text:
+          "The mana model counted a lot of cards as sources that are not. Caged Sun, Mirari's Wake, Vorinclex and every Treasure-maker cause mana without making any, and were being counted as mana rocks. Nykthos and the Cave and Gate lands were counted as six-color sources when their free ability makes one colorless.",
+      },
+      {
+        kind: 'fixed',
+        text:
+          "Urborg, Yavimaya and Chromatic Lantern now make every land in your deck a source of what they grant, which is the one thing the mana report was under-counting. Lotus Field makes three of one color rather than one of each, costs you the two lands it eats, and Urza's Saga and the depletion lands stop producing when they run out.",
+      },
+      {
+        kind: 'changed',
+        text:
+          'Because every card in the database moved, your next card-DB refresh downloads the whole thing rather than the usual few kilobytes.',
+      },
+    ],
+  },
+  {
     version: '0.153.1',
     changes: [
       {

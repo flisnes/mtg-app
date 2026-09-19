@@ -60,11 +60,19 @@ const TREASURE_MASK = 0b11111;
 /** Extra land drops honoured in a turn. Azusa and a friend is already a lot. */
 const MAX_EXTRA_LANDS = 4;
 /**
- * How many entry triggers can be stacked on top of each other. A rule that puts
- * a card onto the battlefield can reach a card whose rule does the same, and
- * two is one level deeper than any card worth modelling goes.
+ * How many triggers can be stacked on top of each other. A rule that puts a
+ * card onto the battlefield can reach a card whose rule does the same, and a
+ * sacrifice can reach a death trigger that sacrifices something else. Two is
+ * one level deeper than any card worth modelling goes.
  */
-const MAX_ENTRY_DEPTH = 2;
+const MAX_TRIGGER_DEPTH = 2;
+
+/**
+ * Room for the permanents you control, which is a longer list than the mana
+ * sources: every creature, every enchantment and every artifact is on it, and
+ * only some of those tap for anything.
+ */
+const MAX_PERMANENTS = 128;
 
 /** Cards one effect may put into your hand. Guards a misread "draw X". */
 const MAX_DRAW_PER_EFFECT = 12;
@@ -354,12 +362,33 @@ export function simulate(
   /** A Treasure, so it can be sacrificed for the mana it just paid. */
   const srcTreasure = new Uint8Array(MAX_SOURCES);
   const unitGroups: UnitGroup[] = [];
+  /**
+   * The battlefield, as permanents rather than as mana.
+   *
+   * `srcCard` and friends are the *mana* view: what taps, for how much, from
+   * when. It has always been a subset, and for nine phases it was the only
+   * view, which is why "sacrifice a creature" found a land and "creatures you
+   * control" could not be asked at all. This list is every card that stays on
+   * the battlefield, mana or not, and the two are kept in step at the one place
+   * a permanent arrives (`addSource` and `addPermanent`) and the one place it
+   * leaves (`leavePlay`).
+   *
+   * Card *indices*, so two copies of the same card are two entries with the
+   * same number in them — the same convention `srcCard` has always used, and
+   * the reason `leavePlay` removes the first match rather than all of them.
+   */
+  const permCard = new Int32Array(MAX_PERMANENTS);
+  /** The turn it arrived, so summoning sickness is `permSince === turn`. */
+  const permSince = new Int32Array(MAX_PERMANENTS);
+  /** Last turn it is still around, or 0 for "it does not go away". */
+  const permUntil = new Int32Array(MAX_PERMANENTS);
+  let permLen = 0;
   /** Permanents with a recurring effect, as card indices. Phyrexian Arena. */
   const recurring = new Int32Array(MAX_SOURCES);
   let recurLen = 0;
   /** Land drops beyond the first, from an Exploration or an Azusa in play. */
   let extraLands = 0;
-  /** Entry-trigger lines waiting for the rule that caused them to be written. */
+  /** Trigger lines waiting for the rule that caused them to be written. */
   const pendingEntry: string[] = [];
   /**
    * The cost the turn's land drop is being chosen for, hoisted out of the turn
@@ -368,11 +397,11 @@ export function simulate(
    */
   let turnGoal: readonly Pip[] | null = null;
   /**
-   * How many entry triggers deep we are. A rule that puts a card onto the
-   * battlefield can reach a card whose rule does the same; this is the whole
-   * answer to that, and two is one more level than any real card needs.
+   * How many triggers deep we are. A rule that puts a card onto the battlefield
+   * can reach a card whose rule does the same; this is the whole answer to
+   * that, and two is one more level than any real card needs.
    */
-  let entryDepth = 0;
+  let triggerDepth = 0;
   /** Sources on the battlefield. Lives out here so the pool builder can see it. */
   let srcLen = 0;
   /**
@@ -552,7 +581,73 @@ export function simulate(
     srcTreasure[srcLen] = 0;
     srcLen++;
     grantMask |= card.grantMask;
+    // Every mana source that is a real card is also a permanent, and this is
+    // the one place that has to remember it. A Treasure comes through here with
+    // index -1 and is deliberately not one: it is a token, and a rule that
+    // could sacrifice it would be sacrificing the same mana twice.
+    if (index >= 0) addPermanent(index, card, turn);
     return true;
+  };
+
+  /**
+   * File a card on the battlefield. Idempotent is exactly what this must *not*
+   * be: two Islands are two entries carrying the same card index.
+   */
+  const addPermanent = (index: number, card: SimCard, turn: number): void => {
+    if (permLen >= MAX_PERMANENTS) return;
+    permCard[permLen] = index;
+    permSince[permLen] = turn;
+    permUntil[permLen] = card.life > 0 ? turn + card.life - 1 : 0;
+    permLen++;
+  };
+
+  /**
+   * Take a card off the battlefield, mana view and permanent view together.
+   * True if it was actually there, which is what tells a `self` step whether it
+   * just sacrificed something or merely discarded it.
+   */
+  const leavePlay = (index: number): boolean => {
+    unsource(index);
+    unrecur(index);
+    for (let p = 0; p < permLen; p++) {
+      if (permCard[p] !== index) continue;
+      dropPermanent(p);
+      return true;
+    }
+    return false;
+  };
+
+  /** The same, for a caller that already knows which slot it picked. */
+  const dropPermanent = (at: number): void => {
+    permLen--;
+    permCard[at] = permCard[permLen]!;
+    permSince[at] = permSince[permLen]!;
+    permUntil[at] = permUntil[permLen]!;
+  };
+
+  /**
+   * And off the upkeep list, because a Phyrexian Arena somebody sacrificed does
+   * not keep drawing. Only `selfPlaced` used to reach this, and a card could
+   * only place itself; now a rule can sacrifice any permanent it can name, so
+   * the same bookkeeping has to happen from the other direction.
+   *
+   * Removing by swap can make the upkeep loop skip an entry if this fires from
+   * inside it. That is a permanent missing one trigger, which is the omission
+   * §11.4 asks for; the alternative — leaving a dead card on the list — is one
+   * drawing cards from the graveyard forever, which is the other kind.
+   */
+  const unrecur = (index: number): void => {
+    for (let r = 0; r < recurLen; r++) {
+      if (recurring[r] !== index) continue;
+      recurring[r] = recurring[--recurLen]!;
+      return;
+    }
+  };
+
+  /** Still around this turn: a Lotus Petal's slot outlives the Petal. */
+  const stillOut = (p: number, turn: number): boolean => {
+    const until = permUntil[p]!;
+    return until === 0 || turn <= until;
   };
 
   /** Swap-remove a source. The parallel arrays all move together or not at all. */
@@ -918,6 +1013,34 @@ export function simulate(
     return n;
   };
 
+  /** Creatures on the battlefield right now, for the `creatures` amount. */
+  const creaturesInPlay = (turn: number): number => {
+    let n = 0;
+    for (let p = 0; p < permLen; p++) {
+      if (!cards[permCard[p]!]!.creature || !stillOut(p, turn)) continue;
+      n++;
+    }
+    return n;
+  };
+
+  /**
+   * The greatest printed power among them, for Disciple of Freyalise — the card
+   * that started §12 and the last thing on its list to become writable.
+   *
+   * Printed, not current: nothing here counters, equips, or puts a +1/+1 on
+   * anything, so the number is a floor rather than a reading of the board. A
+   * deck of Llanowar Elves and one Craterhoof reads the Craterhoof's 5.
+   */
+  const greatestPower = (turn: number): number => {
+    let best = 0;
+    for (let p = 0; p < permLen; p++) {
+      const card = cards[permCard[p]!]!;
+      if (!card.creature || !stillOut(p, turn) || card.power <= best) continue;
+      best = card.power;
+    }
+    return best;
+  };
+
   /**
    * What the step before this one actually did, for a `prev` amount to read.
    *
@@ -957,6 +1080,12 @@ export function simulate(
       case 'lands':
         n = landsInPlay(turn);
         break;
+      case 'creatures':
+        n = creaturesInPlay(turn);
+        break;
+      case 'power':
+        n = greatestPower(turn);
+        break;
       case 'graveyard':
         n = gyLen;
         break;
@@ -995,6 +1124,12 @@ export function simulate(
   const NO_MATCH = new Uint8Array(0);
   const filterFor = new Map<string, SimFilter>();
   for (const f of deck.filters) filterFor.set(f.q, f);
+  /**
+   * Does any card in the deck care about attacking? Almost none do, and combat
+   * is otherwise a scan of the battlefield every turn of every one of twenty
+   * thousand games to find out there is nothing to fire.
+   */
+  const anyAttackers = cards.some((c) => c.creature && !!c.behavior && c.behavior.attack.length > 0);
 
   /**
    * The mana that went into the `{X}` of the spell resolving right now, so a
@@ -1025,7 +1160,7 @@ export function simulate(
    * it, which is the honest answer for a goldfish: there is no opponent to play
    * around and no reason to prefer one Mountain in the yard over another.
    */
-  const takeFrom = (zone: BehaviorZone, mask: Uint8Array | null, base: number): number => {
+  const takeFrom = (zone: BehaviorZone, mask: Uint8Array | null, base: number, turn: number): number => {
     switch (zone) {
       case 'library': {
         if (!mask) {
@@ -1075,17 +1210,32 @@ export function simulate(
           return index;
         }
         return -1;
-      case 'battlefield':
-        // The battlefield here holds mana sources and nothing else, so this
-        // finds a land or a rock and never the creature somebody meant. Said
-        // out loud in the editor rather than discovered from a flat curve.
-        for (let s = 0; s < srcLen; s++) {
-          const index = srcCard[s]!;
-          if (index < 0 || !accepts(mask, base, index)) continue;
-          dropSource(s);
-          return index;
+      case 'battlefield': {
+        // Every permanent, not just the ones that tap for mana. Until the
+        // permanent list existed this searched `srcCard`, so "sacrifice a
+        // creature" found a land and a deck full of creatures behaved as though
+        // the battlefield were empty.
+        //
+        // Reservoir sampling rather than the first match, for the same reason
+        // the library does it: which of four creatures you sacrifice is not
+        // decided by the order they happened to be played in.
+        let pick = -1;
+        let matches = 0;
+        for (let p = 0; p < permLen; p++) {
+          const index = permCard[p]!;
+          if (!stillOut(p, turn) || !accepts(mask, base, index)) continue;
+          matches++;
+          if (rng.int(matches) === 0) pick = p;
         }
-        return -1;
+        if (pick < 0) return -1;
+        const index = permCard[pick]!;
+        // The slot it picked, not the first slot carrying that card index:
+        // two copies are two slots and only one of them is leaving.
+        dropPermanent(pick);
+        unsource(index);
+        unrecur(index);
+        return index;
+      }
       default:
         return -1;
     }
@@ -1111,10 +1261,15 @@ export function simulate(
   const enterBattlefield = (index: number, card: SimCard, turn: number): void => {
     if (card.role === 'extraland') {
       if (extraLands < MAX_EXTRA_LANDS) extraLands++;
+      addPermanent(index, card, turn);
       fireEntry(index, card, turn);
       return;
     }
     if (card.role === 'spell' || card.role === 'landramp') {
+      // It makes no mana and it is still on the battlefield. A reanimated
+      // creature used to arrive nowhere at all — "a body this model has no room
+      // for" — which is exactly the room the permanent list is.
+      if (card.permanent) addPermanent(index, card, turn);
       fireEntry(index, card, turn);
       return;
     }
@@ -1177,26 +1332,26 @@ export function simulate(
   };
 
   /**
-   * One card's `etb` rules, fired from somewhere that is already mid-rule.
+   * One card's rules, fired from somewhere that is already mid-rule: a creature
+   * arriving in the middle of a reanimation, a permanent dying in the middle of
+   * the sacrifice that killed it.
    *
    * Everything here is about being re-entrant. `selfPlaced` and `lastAmount`
-   * belong to the rule that is running, and a card arriving in the middle of it
-   * must not answer "did it move itself?" or "what was the previous X?" on that
-   * rule's behalf. The depth counter is the other half: a rule that puts a card
-   * onto the battlefield can reach a card whose rule does the same, and a
+   * belong to the rule that is running, and a card triggering in the middle of
+   * it must not answer "did it move itself?" or "what was the previous X?" on
+   * that rule's behalf. The depth counter is the other half: a rule that puts a
+   * card onto the battlefield can reach a card whose rule does the same, and a
    * goldfish is not where anyone should find out how deep that goes.
    */
-  const fireEntry = (index: number, card: SimCard, turn: number): void => {
-    if (!opts.effects || entryDepth >= MAX_ENTRY_DEPTH) return;
-    const b = card.behavior;
-    if (!b || b.etb.length === 0 || !card.permanent) return;
+  const fireNested = (index: number, card: SimCard, turn: number, steps: readonly BehaviorStep[]): void => {
+    if (!opts.effects || steps.length === 0 || triggerDepth >= MAX_TRIGGER_DEPTH) return;
     const wasPlaced = selfPlaced;
     const wasAmount = lastAmount;
     const wasText = lastEffectText;
     const wasMoved = sink ? movedNames.slice() : null;
-    entryDepth++;
-    runSteps(b.etb, turn, index);
-    entryDepth--;
+    triggerDepth++;
+    runSteps(steps, turn, index);
+    triggerDepth--;
     // Queued rather than said, because we are standing in the middle of the
     // rule that caused this and its own line has not been written yet. Saying
     // it here puts the reanimated creature's draw above the reanimation.
@@ -1208,6 +1363,61 @@ export function simulate(
       movedNames.length = 0;
       for (const name of wasMoved) movedNames.push(name);
     }
+  };
+
+  /**
+   * Combat, which exists here for exactly one reason: the `attack` trigger.
+   *
+   * There is nobody across the table, so there is nothing to decide. Every
+   * creature that can attack does, nothing blocks, nothing dies, and no damage
+   * is counted anywhere — a goldfish has no life total to take it. What that
+   * leaves is the trigger, which is a real draw engine on a real card (Edric,
+   * Ohran Frostfang, Toski) and until now was worth nothing at all because the
+   * sequencer did not know a creature was on the battlefield.
+   *
+   * Summoning sickness is `permSince === turn`, and it is the one rule of
+   * combat this model has. A creature flickered this turn is sick again,
+   * because it really is a new object.
+   *
+   * The attackers are collected before any of them trigger. A rule that makes a
+   * creature mid-combat must not hand it an attack it was never declared for,
+   * and a rule that sacrifices one must not shorten the list underneath the
+   * loop.
+   */
+  const attackWith = (turn: number): void => {
+    if (!opts.effects || !anyAttackers) return;
+    // A list of its own rather than the shared `stack`, which a rule fired
+    // below will borrow and empty.
+    const attackers: number[] = [];
+    for (let p = 0; p < permLen; p++) {
+      const index = permCard[p]!;
+      const card = cards[index]!;
+      if (!card.creature || !stillOut(p, turn) || permSince[p]! >= turn) continue;
+      if (!card.behavior || card.behavior.attack.length === 0) continue;
+      attackers.push(index);
+    }
+    for (const index of attackers) {
+      const card = cards[index]!;
+      xSpent = 0;
+      selfPlaced = false;
+      lastAmount = 0;
+      runSteps(card.behavior!.attack, turn, index);
+      sayEffect(lastEffectText ? `Attacks with ${card.name}: ${lastEffectText}` : '');
+    }
+  };
+
+  /** It arrived on the battlefield without being cast. */
+  const fireEntry = (index: number, card: SimCard, turn: number): void => {
+    if (card.permanent && card.behavior) fireNested(index, card, turn, card.behavior.etb);
+  };
+
+  /**
+   * It left the battlefield for the graveyard, which in this model means a rule
+   * sacrificed it. Called only where a card is known to have been in play, so
+   * a discard and a mill are not deaths.
+   */
+  const fireDeath = (index: number, card: SimCard, turn: number): void => {
+    if (card.behavior) fireNested(index, card, turn, card.behavior.death);
   };
 
   /**
@@ -1316,6 +1526,56 @@ export function simulate(
   };
 
   /** Returns how many cards actually made the trip, for `prev` to read. */
+  /**
+   * Take permanents off the battlefield and put them straight back, which fires
+   * every entry rule again.
+   *
+   * A `move` cannot express this: `compileBehavior` refuses a step whose two
+   * zones are the same one, because for every other pair that is a typo. Here
+   * it is the whole point, so it is its own verb.
+   *
+   * Collected first and returned after, so a flicker of two permanents cannot
+   * pick the same one twice, and so a rule that arrives on the way back in
+   * cannot find the flickered card sitting in a zone it never went to.
+   * Summoning sickness resets, because the creature really is a new object.
+   */
+  const flickerPermanents = (step: BehaviorStep, count: number, turn: number): number => {
+    let mask: Uint8Array | null = null;
+    let base = 0;
+    if (step.q) {
+      const filter = filterFor.get(step.q);
+      mask = filter ? filter.match : NO_MATCH;
+      if (filter?.varies) base = Math.min(MAX_QUERY_X, behaviorAmount(step.qx ?? ZERO_AMOUNT, turn)) * n;
+    }
+    // A local list, not the shared `stack`: putting one of these back can fire
+    // an entry rule whose own move step borrows `stack` and empties it, and
+    // this loop would then be iterating an array that had vanished underneath
+    // it. The allocation is once per flicker step, which nothing casts in a
+    // hot loop.
+    const taken: number[] = [];
+    for (let k = 0; k < count; k++) {
+      let pick = -1;
+      let matches = 0;
+      for (let p = 0; p < permLen; p++) {
+        const index = permCard[p]!;
+        if (!stillOut(p, turn) || !accepts(mask, base, index)) continue;
+        matches++;
+        if (rng.int(matches) === 0) pick = p;
+      }
+      if (pick < 0) break;
+      const index = permCard[pick]!;
+      dropPermanent(pick);
+      unsource(index);
+      unrecur(index);
+      taken.push(index);
+    }
+    for (const index of taken) {
+      if (sink) movedNames.push(cards[index]!.name);
+      enterBattlefield(index, cards[index]!, turn);
+    }
+    return taken.length;
+  };
+
   const moveCards = (step: BehaviorStep, count: number, turn: number): number => {
     const from = step.from;
     const to = step.to;
@@ -1339,7 +1599,7 @@ export function simulate(
     let moved = 0;
     for (let k = 0; k < count; k++) {
       if (!roomIn(to)) break;
-      const index = takeFrom(from, mask, base);
+      const index = takeFrom(from, mask, base, turn);
       if (index < 0) break;
       moved++;
       // `seen` is cards that reached your hand off the library, which is what
@@ -1348,6 +1608,9 @@ export function simulate(
       if (ordered) stack.push(index);
       else putTo(index, to, turn);
       if (sink) movedNames.push(cards[index]!.name);
+      // Off the battlefield and into the yard is what dying is here. Nothing
+      // across the table kills anything, so a sacrifice is the only way in.
+      if (from === 'battlefield' && to === 'graveyard') fireDeath(index, cards[index]!, turn);
     }
     if (ordered) {
       shuffleStack();
@@ -1402,10 +1665,13 @@ export function simulate(
         const to = step.to;
         if (!to || self < 0 || selfPlaced || !roomIn(to)) continue;
         // Off the battlefield first, so a rock that sacrifices itself stops
-        // making mana rather than making it from the graveyard.
-        unsource(self);
+        // making mana rather than making it from the graveyard. Whether it was
+        // *on* the battlefield is the difference between a sacrifice and a
+        // discard, and only the first one is a death.
+        const wasOut = leavePlay(self);
         putTo(self, to, turn);
         selfPlaced = true;
+        if (wasOut && to === 'graveyard') fireDeath(self, cards[self]!, turn);
         if (sink) {
           const where = ZONE_PHRASE.get(to) ?? 'somewhere';
           bits.push(`puts itself ${to === 'battlefield' ? 'onto' : 'into'} ${where}`);
@@ -1462,6 +1728,12 @@ export function simulate(
           }
           break;
         }
+        case 'flicker': {
+          if (sink) movedNames.length = 0;
+          did = flickerPermanents(step, n, turn);
+          if (sink && movedNames.length) bits.push(`flickers ${movedNames.join(', ')}`);
+          break;
+        }
       }
       lastAmount = did;
     }
@@ -1501,6 +1773,7 @@ export function simulate(
     firstHeld.fill(0);
     firstPay.fill(0);
     srcLen = 0;
+    permLen = 0;
     grantMask = 0;
     recurLen = 0;
     extraLands = 0;
@@ -1957,6 +2230,14 @@ export function simulate(
         // A Treasure made here is mana this turn, so the budget grows under the
         // loop's feet — which is the point of a Treasure and the reason `left`
         // is recomputed from `available` at the top of every pass.
+        // On the battlefield before it resolves, which is the order the real
+        // thing happens in and the order its own entry rule needs: a creature
+        // whose arrival sacrifices a creature can sacrifice itself, and a
+        // Panharmonicon-shaped rule counting creatures counts this one.
+        //
+        // Only the roles that did not already go through addSource above: a
+        // rock and a dork are filed there, with their mana.
+        if (card.permanent && card.role !== 'rock' && card.role !== 'dork') addPermanent(index, card, turn);
         if (opts.effects) {
           available += enters(index, card, turn, true);
           if (sink && resolves(card)) {
@@ -1984,6 +2265,15 @@ export function simulate(
         // a trigger the pipeline would not read, it is the floor §11.4 warned
         // about, and SimDeck.coverage is what says how much of the deck it is.
       }
+
+      // --- Combat ----------------------------------------------------------
+      // After the turn's spells, because the creature you just cast is not
+      // attacking with them and the one you reanimated might be. Before the
+      // Treasure reconciliation, so a trigger that makes one is counted this
+      // turn. A card an attack trigger draws is a card you cannot cast until
+      // next turn, which is the post-combat main phase this model does not
+      // have, and the omission §11.4 asks for rather than the other kind.
+      attackWith(turn);
 
       // --- Treasures, reconciled -------------------------------------------
       // Lands and rocks are spent first and a Treasure only when the turn runs

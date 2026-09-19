@@ -1,4 +1,4 @@
-// The older half of the changelog (0.153.0 down to 0.98.0), split out of
+// The older half of the changelog (0.153.1 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,16 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.153.1',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'Your commander leads the On curve panel now, with its own chart. It waits in the command zone rather than in your library, so the odds of casting it on turn four are purely about your mana, and every game in the run counts toward the number.',
+      },
+    ],
+  },
   {
     version: '0.153.0',
     changes: [

@@ -43,8 +43,13 @@ import { BASIC_LAND_TYPES, type EffectProfile, type FetchProfile, type ManaProfi
  *
  * So: `play` is the cast, `etb` is the arrival, and a permanent cast from your
  * hand does both in that order.
+ *
+ * `attack` and `death` arrived with the permanent list. Both were unwritable
+ * before it for the same reason: the sequencer tracked the permanents that make
+ * mana and nothing else, so it had no idea a creature was on the battlefield,
+ * let alone whether it was summoning sick or what killed it.
  */
-export type BehaviorTrigger = 'play' | 'etb' | 'upkeep';
+export type BehaviorTrigger = 'play' | 'etb' | 'attack' | 'death' | 'upkeep';
 
 /**
  * Where a card can be. The battlefield is the lopsided one: the sequencer
@@ -61,8 +66,15 @@ export type BehaviorTrigger = 'play' | 'etb' | 'upkeep';
  */
 export type BehaviorZone = 'library' | 'librarytop' | 'librarybottom' | 'hand' | 'graveyard' | 'exile' | 'battlefield';
 
-/** What one step does. */
-export type BehaviorStepKind = 'draw' | 'mill' | 'discard' | 'scry' | 'surveil' | 'treasure' | 'move' | 'self';
+/**
+ * What one step does.
+ *
+ * `flicker` is a `move` that would be illegal as one: off the battlefield and
+ * straight back onto it, which `compileBehavior` refuses for every other step
+ * because a move from a zone to itself is not a move. It is its own verb
+ * because what it is *for* is the re-entry, not the travel.
+ */
+export type BehaviorStepKind = 'draw' | 'mill' | 'discard' | 'scry' | 'surveil' | 'treasure' | 'move' | 'flicker' | 'self';
 
 /**
  * Where a step's number comes from.
@@ -73,7 +85,18 @@ export type BehaviorStepKind = 'draw' | 'mill' | 'discard' | 'scry' | 'surveil' 
  * would be zero — correct arithmetic, wrong card. This is the number that step
  * reached, carried forward one place.
  */
-export type BehaviorAmountKind = 'fixed' | 'all' | 'prev' | 'hand' | 'library' | 'lands' | 'graveyard' | 'turn' | 'xpaid';
+export type BehaviorAmountKind =
+  | 'fixed'
+  | 'all'
+  | 'prev'
+  | 'hand'
+  | 'library'
+  | 'lands'
+  | 'creatures'
+  | 'power'
+  | 'graveyard'
+  | 'turn'
+  | 'xpaid';
 
 /**
  * Arithmetic on an amount, so "half your library" and "that many minus one" are
@@ -189,8 +212,8 @@ export interface CardBehavior {
 
 export const CARD_BEHAVIOR_VERSION = 1;
 
-/** Rules on one card. Four triggers' worth is already more than any real card. */
-export const MAX_BEHAVIOR_RULES = 4;
+/** Rules on one card: one per trigger, and nothing real wants all five. */
+export const MAX_BEHAVIOR_RULES = 5;
 /** Steps in one rule. */
 export const MAX_BEHAVIOR_STEPS = 6;
 /**
@@ -253,30 +276,44 @@ export interface TriggerOption {
   lead: string;
   hint: string;
   /**
-   * Only offered on a card that can actually be on the battlefield. A sorcery
-   * never enters one, so a rule hung there would be §12.2's lie: authored,
-   * saved, and silently doing nothing every game.
+   * What the card has to be for this moment to exist. A sorcery never enters
+   * the battlefield and never attacks, so a rule hung on either would be
+   * §12.2's lie: authored, saved, and silently doing nothing every game.
    */
-  permanentOnly?: boolean;
+  needs?: 'permanent' | 'creature';
 }
 
 export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
   {
     id: 'play',
-    label: 'When played',
+    label: 'When you play it',
     lead: 'When you play it',
     hint: 'Resolves once, the turn you cast it from your hand or put it down as a land. Not when it arrives any other way.',
   },
   {
     id: 'etb',
-    label: 'When it enters',
+    label: 'When it enters the battlefield',
     lead: 'When it enters the battlefield',
-    hint: 'However it got there: cast, played as a land, fetched, or brought back out of the graveyard. A permanent you cast does this after its played rule.',
-    permanentOnly: true,
+    hint: 'However it got there: cast, played as a land, fetched, flickered, or brought back out of the graveyard. A permanent you cast does this after its played rule.',
+    needs: 'permanent',
+  },
+  {
+    id: 'attack',
+    label: 'When it attacks',
+    lead: 'Whenever it attacks',
+    hint: 'Every turn it can. Nobody blocks, nothing dies in combat and no damage is counted, so this trigger is the only thing an attack is worth here. A creature cannot attack the turn it arrives.',
+    needs: 'creature',
+  },
+  {
+    id: 'death',
+    label: 'When it dies',
+    lead: 'When it dies',
+    hint: 'Leaving the battlefield for the graveyard, which in this model means a rule sacrificed it. Nothing on the other side of the table is killing anything.',
+    needs: 'permanent',
   },
   {
     id: 'upkeep',
-    label: 'Each upkeep',
+    label: 'At each of your upkeeps',
     lead: 'At each of your upkeeps',
     hint: 'Fires every turn from the one after it lands. For permanents that stay on the battlefield.',
   },
@@ -297,6 +334,7 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'surveil', label: 'Surveil X', verb: 'surveil' },
   { id: 'treasure', label: 'Create X Treasures', verb: 'create' },
   { id: 'move', label: 'Move X between zones', verb: 'move' },
+  { id: 'flicker', label: 'Flicker X permanents', verb: 'flicker' },
   { id: 'self', label: 'Put this card into a zone', verb: 'put' },
 ];
 
@@ -367,6 +405,8 @@ export const BEHAVIOR_AMOUNTS: readonly AmountOption[] = [
   { id: 'hand', label: 'your hand', phrase: 'cards in your hand' },
   { id: 'library', label: 'your library', phrase: 'cards in your library' },
   { id: 'lands', label: 'your lands', phrase: 'lands you control' },
+  { id: 'creatures', label: 'your creatures', phrase: 'creatures you control' },
+  { id: 'power', label: 'the greatest power', phrase: 'the greatest power among creatures you control' },
   { id: 'graveyard', label: 'your graveyard', phrase: 'cards in your graveyard' },
   { id: 'turn', label: 'the turn number', phrase: 'the turn number' },
 ];
@@ -472,6 +512,14 @@ export function describeStep(step: BehaviorStep): string {
     const n = step.x.n ?? 0;
     const cards = computed ? 'X cards' : `${n} card${n === 1 ? '' : 's'}`;
     return `move ${cards}${filter}${where}${tail}${plug}`;
+  }
+  if (step.op === 'flicker') {
+    const filter = step.q ? ` matching ${step.q}` : '';
+    const plug = step.q && queryHasX(step.q) ? `, with [X] = ${describeAmount(step.qx ?? { kind: 'fixed', n: 0 })}` : '';
+    if (step.x.kind === 'all') return `flicker every permanent you control${filter}${plug}`;
+    const n = step.x.n ?? 0;
+    const what = computed ? 'X permanents' : `${n} permanent${n === 1 ? '' : 's'}`;
+    return `flicker ${what} you control${filter}${tail}${plug}`;
   }
   if (step.op === 'treasure') {
     const many = computed || (step.x.n ?? 0) !== 1;
@@ -601,6 +649,8 @@ export function describeFetch(fetch: FetchProfile | null | undefined): string | 
 export interface CompiledBehavior {
   play: BehaviorStep[];
   etb: BehaviorStep[];
+  attack: BehaviorStep[];
+  death: BehaviorStep[];
   upkeep: BehaviorStep[];
 }
 
@@ -615,10 +665,9 @@ const knownAmount = (x: BehaviorAmount | undefined | null): boolean =>
 
 export function compileBehavior(b: CardBehavior | null | undefined): CompiledBehavior | null {
   if (!b || b.v !== CARD_BEHAVIOR_VERSION || !Array.isArray(b.rules)) return null;
-  const out: CompiledBehavior = { play: [], etb: [], upkeep: [] };
+  const out: CompiledBehavior = { play: [], etb: [], attack: [], death: [], upkeep: [] };
   for (const rule of b.rules) {
-    const bucket =
-      rule?.on === 'play' ? out.play : rule?.on === 'etb' ? out.etb : rule?.on === 'upkeep' ? out.upkeep : null;
+    const bucket = rule && TRIGGER_BY_ID.has(rule.on) ? out[rule.on] : null;
     if (!bucket || !Array.isArray(rule.steps)) continue;
     for (const step of rule.steps) {
       if (!step || !STEP_BY_ID.has(step.op) || !knownAmount(step.x)) continue;
@@ -629,6 +678,10 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
         if (!step.from || !step.to || !ZONE_BY_ID.has(step.from) || !ZONE_BY_ID.has(step.to)) continue;
         if (step.from === step.to || ZONE_BY_ID.get(step.from)!.toOnly) continue;
         if (step.qx && (!knownAmount(step.qx) || step.qx.kind === 'all')) continue;
+      } else if (step.op === 'flicker') {
+        // Both ends are the battlefield and neither is a choice, so there are
+        // no zones to check. The criteria still is one.
+        if (step.qx && (!knownAmount(step.qx) || step.qx.kind === 'all')) continue;
       } else if (step.x.kind === 'all') {
         // "All that match" is bounded by the zone it draws from, and only a
         // move has one. "Draw all" would be MAX_BEHAVIOR_AMOUNT wearing a hat.
@@ -637,7 +690,9 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
       bucket.push(step);
     }
   }
-  return out.play.length > 0 || out.etb.length > 0 || out.upkeep.length > 0 ? out : null;
+  return out.play.length > 0 || out.etb.length > 0 || out.attack.length > 0 || out.death.length > 0 || out.upkeep.length > 0
+    ? out
+    : null;
 }
 
 /**
@@ -647,9 +702,9 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
  */
 export function collectBehaviorQueries(b: CompiledBehavior | null | undefined, into: Set<string>): void {
   if (!b) return;
-  for (const step of b.play) if (step.q) into.add(step.q);
-  for (const step of b.etb) if (step.q) into.add(step.q);
-  for (const step of b.upkeep) if (step.q) into.add(step.q);
+  for (const steps of [b.play, b.etb, b.attack, b.death, b.upkeep]) {
+    for (const step of steps) if (step.q) into.add(step.q);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -713,21 +768,25 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
       }
       const x = cleanAmount(s.x);
       if (!x) continue;
-      if (op !== 'move') {
+      if (op !== 'move' && op !== 'flicker') {
         if (x.kind === 'all') continue;
         steps.push({ op, x });
         continue;
       }
-      if (!from || !to || from === to || ZONE_BY_ID.get(from)!.toOnly) continue;
+      // The criteria, and the amount filling any `[X]` in it. `qx` only means
+      // something when the query has somewhere to put it, and "all that match"
+      // is a count rather than a number, so it cannot fill one.
       const q = typeof s.q === 'string' ? s.q.trim().slice(0, MAX_BEHAVIOR_QUERY) : '';
-      if (!q) {
-        steps.push({ op, x, from, to });
+      const qx = q && queryHasX(q) ? cleanAmount(s.qx) : null;
+      const narrowed = qx && qx.kind !== 'all' ? { q, qx } : q ? { q } : {};
+      if (op === 'flicker') {
+        // Both ends are the battlefield, so a flicker has no zones to store.
+        // "All that match" is bounded by the battlefield, which it does have.
+        steps.push({ op, x, ...narrowed });
         continue;
       }
-      // `qx` only means something when the query has somewhere to put it, and
-      // "all that match" is a count rather than a number, so it cannot fill one.
-      const qx = queryHasX(q) ? cleanAmount(s.qx) : null;
-      steps.push(qx && qx.kind !== 'all' ? { op, x, from, to, q, qx } : { op, x, from, to, q });
+      if (!from || !to || from === to || ZONE_BY_ID.get(from)!.toOnly) continue;
+      steps.push({ op, x, from, to, ...narrowed });
     }
     if (steps.length > 0) rules.push({ on: r.on as BehaviorTrigger, steps });
   }

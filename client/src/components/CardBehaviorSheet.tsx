@@ -81,6 +81,8 @@ interface BehaviorCard {
    * one — see TriggerOption.permanentOnly.
    */
   permanent: boolean;
+  /** And a creature, which is the one that can attack. */
+  creature: boolean;
 }
 
 /** "When you play it", straight out of the catalog so it is said in one place. */
@@ -89,6 +91,7 @@ const PLAY_LEAD = BEHAVIOR_TRIGGERS.find((t) => t.id === 'play')!.lead;
 /** The front face decides it: a Murder never enters anything. */
 const isPermanent = (typeLine: string) =>
   /\b(Creature|Artifact|Enchantment|Planeswalker|Battle|Land)\b/i.test(typeLine.split('//')[0] ?? '');
+const isCreature = (typeLine: string) => /\bCreature\b/i.test(typeLine.split('//')[0] ?? '');
 
 const isNotACard = (typeLine: string) => {
   const t = typeLine.toLowerCase();
@@ -126,6 +129,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       authored: behaviors.get(o.oracleId) ?? null,
       image: o.imageNormal ?? o.imageSmall ?? null,
       permanent: isPermanent(o.typeLine),
+      creature: isCreature(o.typeLine),
     });
   }
   return [...byOracle.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -391,6 +395,7 @@ function BehaviorEditor({
           matcher={matcher}
           hasX={card.hasX}
           permanent={card.permanent}
+          creature={card.creature}
           onChange={(next) => edit(i, next)}
           onRemove={() => setRules(rules.filter((_r, k) => k !== i))}
         />
@@ -567,6 +572,7 @@ function RuleEditor({
   matcher,
   hasX,
   permanent,
+  creature,
   onChange,
   onRemove,
 }: {
@@ -576,6 +582,8 @@ function RuleEditor({
   hasX: boolean;
   /** The card can be on the battlefield, so "when it enters" is offered. */
   permanent: boolean;
+  /** And it can attack, which is a shorter list than that. */
+  creature: boolean;
   onChange: (next: BehaviorRule) => void;
   onRemove: () => void;
 }) {
@@ -585,7 +593,9 @@ function RuleEditor({
   // A trigger the card cannot have is hidden, unless the rule is already on it:
   // a type line read one way today and another way tomorrow must not silently
   // orphan a rule somebody wrote.
-  const triggers = BEHAVIOR_TRIGGERS.filter((t) => !t.permanentOnly || permanent || rule.on === t.id);
+  const triggers = BEHAVIOR_TRIGGERS.filter(
+    (t) => !t.needs || rule.on === t.id || (t.needs === 'creature' ? creature : permanent),
+  );
   /** "The mana you spent on X" is a number only while the cast is resolving. */
   const xAvailable = hasX && rule.on === 'play';
 
@@ -617,6 +627,13 @@ function RuleEditor({
    * match" is bounded by a source zone that a draw step does not have.
    */
   const changeOp = (i: number, step: BehaviorStep, op: BehaviorStepKind) => {
+    if (op === 'flicker') {
+      // The criteria and any `[X]` in it carry over from a move; the zones do
+      // not, because a flicker does not have any.
+      const { from: _from, to: _to, ...rest } = step;
+      setStep(i, { ...rest, op });
+      return;
+    }
     if (op === 'move') {
       const from = step.from && BEHAVIOR_FROM_ZONES.some((z) => z.id === step.from) ? step.from : 'library';
       setStep(i, { ...step, op, from, to: step.to === from ? 'hand' : (step.to ?? 'hand') });
@@ -650,20 +667,23 @@ function RuleEditor({
   return (
     <div className="behavior-rule">
       <div className="behavior-rule-head">
-        <div className="seg-row" role="radiogroup" aria-label="When this happens">
-          {triggers.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={`seg${rule.on === t.id ? ' seg-active' : ''}`}
-              role="radio"
-              aria-checked={rule.on === t.id}
-              onClick={() => changeTrigger(t.id as BehaviorTrigger)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {/* A dropdown and not the segmented row it used to be. Two triggers fit
+            abreast on a 393px phone and three just did; five is 60px apiece,
+            which is "Each up" and "When it e". Same control as every other
+            choice in this editor, which is the other half of the argument. */}
+        <label className="field behavior-trigger">
+          <select
+            value={rule.on}
+            aria-label="When this happens"
+            onChange={(e) => changeTrigger(e.target.value as BehaviorTrigger)}
+          >
+            {triggers.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="button" className="behavior-drop" onClick={onRemove} aria-label="Remove this trigger">
           <Icon name="trash" />
         </button>
@@ -672,9 +692,13 @@ function RuleEditor({
 
       {rule.steps.map((step, i) => {
         const move = step.op === 'move';
+        const flicker = step.op === 'flicker';
         const self = step.op === 'self';
+        // Both of them narrow what they reach with a criteria box; only a move
+        // has two zones to pick.
+        const narrows = move || flicker;
         return (
-          <div className={`behavior-step${move ? ' behavior-step-move' : ''}${self ? ' behavior-step-self' : ''}`} key={i}>
+          <div className={`behavior-step${narrows ? ' behavior-step-move' : ''}${self ? ' behavior-step-self' : ''}`} key={i}>
             {/* The verb on its own line and the number under it: three controls
                 abreast on a 393px phone truncates every one of them, and "X = cards
                 in your h" is not a choice anybody can make. */}
@@ -693,7 +717,7 @@ function RuleEditor({
               <AmountPicker
                 value={step.x}
                 label="Where X comes from"
-                offer={(o) => (move || !o.moveOnly) && (!o.needsX || xAvailable) && (!o.needsPrev || i > 0)}
+                offer={(o) => (narrows || !o.moveOnly) && (!o.needsX || xAvailable) && (!o.needsPrev || i > 0)}
                 onChange={(x) => setStep(i, { ...step, x })}
               />
             )}
@@ -714,63 +738,65 @@ function RuleEditor({
                 </label>
               </div>
             )}
+            {/* Only a move picks zones. A flicker's two ends are both the
+                battlefield, which is what makes it a different verb. */}
             {move && (
-              <>
-                <div className="behavior-zones">
-                  <label className="field">
-                    <select
-                      value={step.from ?? 'library'}
-                      aria-label="Move from"
-                      onChange={(e) => changeZone(i, step, 'from', e.target.value as BehaviorZone)}
-                    >
-                      {BEHAVIOR_FROM_ZONES.map((z) => (
-                        <option key={z.id} value={z.id}>
-                          From {z.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <select
-                      value={step.to ?? 'hand'}
-                      aria-label="Move to"
-                      onChange={(e) => changeZone(i, step, 'to', e.target.value as BehaviorZone)}
-                    >
-                      {BEHAVIOR_ZONES.map((z) => (
-                        <option key={z.id} value={z.id}>
-                          To {z.toLabel ?? z.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="behavior-q">
-                  <label className="field">
-                    <input
-                      type="text"
-                      value={step.q ?? ''}
-                      maxLength={MAX_BEHAVIOR_QUERY}
-                      aria-label="Which cards"
-                      placeholder={'Any card, or t:basic, t:creature mv<=3, …'}
-                      onChange={(e) => setStep(i, { ...step, q: e.target.value })}
+              <div className="behavior-zones">
+                <label className="field">
+                  <select
+                    value={step.from ?? 'library'}
+                    aria-label="Move from"
+                    onChange={(e) => changeZone(i, step, 'from', e.target.value as BehaviorZone)}
+                  >
+                    {BEHAVIOR_FROM_ZONES.map((z) => (
+                      <option key={z.id} value={z.id}>
+                        From {z.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <select
+                    value={step.to ?? 'hand'}
+                    aria-label="Move to"
+                    onChange={(e) => changeZone(i, step, 'to', e.target.value as BehaviorZone)}
+                  >
+                    {BEHAVIOR_ZONES.map((z) => (
+                      <option key={z.id} value={z.id}>
+                        To {z.toLabel ?? z.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+            {narrows && (
+              <div className="behavior-q">
+                <label className="field">
+                  <input
+                    type="text"
+                    value={step.q ?? ''}
+                    maxLength={MAX_BEHAVIOR_QUERY}
+                    aria-label="Which cards"
+                    placeholder={flicker ? 'Any permanent, or t:creature, …' : 'Any card, or t:basic, t:creature mv<=3, …'}
+                    onChange={(e) => setStep(i, { ...step, q: e.target.value })}
+                  />
+                </label>
+                <MatchNote q={step.q ?? ''} matcher={matcher} />
+                {/* The control appears because the query asked for it. No
+                    placeholder, no dropdown, and nothing to explain away. */}
+                {queryHasX(step.q) && (
+                  <>
+                    <span className="fine-print behavior-plug-lead">[X] in that query is:</span>
+                    <AmountPicker
+                      value={step.qx ?? { kind: 'fixed', n: 0 }}
+                      label="What [X] in the criteria is worth"
+                      offer={(o) => !o.moveOnly && (!o.needsX || xAvailable) && (!o.needsPrev || i > 0)}
+                      onChange={(qx) => setStep(i, { ...step, qx })}
                     />
-                  </label>
-                  <MatchNote q={step.q ?? ''} matcher={matcher} />
-                  {/* The control appears because the query asked for it. No
-                      placeholder, no dropdown, and nothing to explain away. */}
-                  {queryHasX(step.q) && (
-                    <>
-                      <span className="fine-print behavior-plug-lead">[X] in that query is:</span>
-                      <AmountPicker
-                        value={step.qx ?? { kind: 'fixed', n: 0 }}
-                        label="What [X] in the criteria is worth"
-                        offer={(o) => !o.moveOnly && (!o.needsX || xAvailable) && (!o.needsPrev || i > 0)}
-                        onChange={(qx) => setStep(i, { ...step, qx })}
-                      />
-                    </>
-                  )}
-                </div>
-              </>
+                  </>
+                )}
+              </div>
             )}
             <button
               type="button"
@@ -784,12 +810,19 @@ function RuleEditor({
         );
       })}
 
-      {rule.steps.some((s) => s.op === 'move') && (
+      {rule.steps.some((s) => s.op === 'move' || s.op === 'flicker') && (
         <p className="fine-print">
           Criteria use the card search syntax, matched against this deck: <code>t:basic</code>, <code>t:creature mv&lt;=3</code>,{' '}
           <code>o:"draw a card"</code>. Leave it blank for any card. <code>set:</code> and <code>is:foil</code> are about a
-          printing, so they never match here. The battlefield only holds your mana sources, so moving off it finds lands and rocks
-          and nothing else, and anything moved onto it arrives tapped.
+          printing, so they never match here. The battlefield holds every permanent you control now, creatures included, so a
+          sacrifice can go and find one; anything moved onto it arrives tapped.
+        </p>
+      )}
+      {rule.steps.some((s) => s.op === 'flicker') && (
+        <p className="fine-print">
+          A flicker takes permanents off the battlefield and puts them straight back, which fires everything they do on the way
+          in. What it costs is what they were already doing: the mana arrives tapped again, and a creature is summoning sick
+          again, so it cannot attack this turn.
         </p>
       )}
       {rule.steps.some((s) => (s.op === 'move' || s.op === 'self') && (s.to ?? '').startsWith('library')) && (

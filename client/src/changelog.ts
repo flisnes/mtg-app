@@ -32,6 +32,26 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.158.8',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'The simulator knows what is on your battlefield, not just what taps for mana. A sacrifice can go and find a creature, and "X = your creatures" and "X = the greatest power" are amounts you can pick.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Two more triggers: "when it attacks" and "when it dies". There is a combat step now, with no blockers, no damage and no life total. Nothing attacks the turn it arrives.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Flicker a permanent and everything it does on the way in happens again. The trigger picker is a dropdown now, because five of them will not sit abreast on a phone.',
+      },
+    ],
+  },
+  {
     version: '0.158.7',
     changes: [
       {
@@ -261,16 +281,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'Because every card in the database moved, your next card-DB refresh downloads the whole thing rather than the usual few kilobytes.',
-      },
-    ],
-  },
-  {
-    version: '0.153.1',
-    changes: [
-      {
-        kind: 'changed',
-        text:
-          'Your commander leads the On curve panel now, with its own chart. It waits in the command zone rather than in your library, so the odds of casting it on turn four are purely about your mana, and every game in the run counts toward the number.',
       },
     ],
   },

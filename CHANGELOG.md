@@ -2,6 +2,16 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.158.8
+
+- **Added: the simulator tracks the permanents you control, not just the ones that make mana.** For nine phases the battlefield was a list of lands and rocks, which is why "sacrifice a creature" quietly found a land and a reanimated creature arrived nowhere at all. Every permanent is on it now.
+- **Added: two amounts that needed it.** "X = your creatures" and "X = the greatest power among creatures you control", which is the second half of the Disciple of Freyalise this whole feature started from. Power is the printed number, so nothing counts a counter that was never put on.
+- **Added: "when it attacks" and "when it dies".** There is a combat step now, and it is a small one on purpose: nobody blocks, nothing dies in combat, no damage is counted and there is no life total anywhere. What it is for is the trigger, which on an Edric or a Toski is a real draw engine the curves were reading as a blank. Nothing attacks the turn it arrives.
+- **Added: flicker.** Take permanents off the battlefield and put them straight back, and everything they do on the way in happens again. What it costs is what they were already doing: the mana comes back tapped and a creature is summoning sick again.
+- **Changed: the trigger picker is a dropdown.** Three fitted across a phone and five is sixty pixels apiece, which spells "When it e".
+- **Fixed: a permanent somebody sacrificed stops doing what it did every upkeep.** Until now only a card could take itself off the battlefield, so nothing could reach a Phyrexian Arena but the Arena.
+- **Fixed: the two zone pickers on a move step wrap instead of truncating.** "From Battlefiel" is not a zone.
+
 ## 0.158.7
 
 - **Added: "when played" is now two triggers, "when played" and "when it enters".** They are the same moment for most cards and two different ones for the cards that matter. A creature reanimated out of the graveyard was never cast, so it fires only the second; a permanent you cast from your hand fires both, in that order. Sorceries and instants are only offered the first, because they never enter anything.

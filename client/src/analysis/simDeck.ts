@@ -118,6 +118,18 @@ export interface SimCard {
    */
   permanent: boolean;
   /**
+   * It is a creature on the front face, so it can attack and a rule can go
+   * looking for it. Read off the type line for the same reason `permanent` is:
+   * nothing here animates a Dryad Arbor or turns a Gideon sideways.
+   */
+  creature: boolean;
+  /**
+   * Printed power, or zero. `*` and `X` read as zero rather than as a guess,
+   * which is the omission §11.4 asks for: "the greatest power among creatures
+   * you control" comes out low on a deck full of them, never high.
+   */
+  power: number;
+  /**
    * What it does to your hand, library and graveyard on resolution, or null for
    * the great majority of cards that do none of it unconditionally. Decoded
    * here so the inner loop never touches a tuple. See EffectProfile.
@@ -221,6 +233,13 @@ const faces = (typeLine: string) => typeLine.split('//').map((f) => f.trim());
 const isLandFace = (face: string) => /\bLand\b/.test(face);
 /** The front face decides where a cast card ends up: on the battlefield, or in the yard. */
 const isPermanentFace = (face: string) => /\b(Creature|Artifact|Enchantment|Planeswalker|Battle|Land)\b/i.test(face);
+const isCreatureFace = (face: string) => /\bCreature\b/i.test(face);
+/** Printed power as a number. A `*` or an `X` is worth nothing rather than a guess. */
+const powerOf = (raw: string | null | undefined): number => {
+  if (!raw) return 0;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
 const isNotACard = (o: OracleCard) => {
   const t = o.typeLine.toLowerCase();
   return t.startsWith('token') || t.includes('emblem') || t === 'card';
@@ -319,6 +338,8 @@ export function buildSimDeck(rows: readonly DeckRow[], behaviors?: ReadonlyMap<s
       copies: r.board === 'main' ? r.quantity : 0,
       commander: r.board === 'commander',
       permanent: isPermanentFace(parts[0] ?? ''),
+      creature: isCreatureFace(parts[0] ?? ''),
+      power: powerOf(o.power),
       effect: decodeEffectProfile(o.effect),
       behavior: compileBehavior(behaviors?.get(o.oracleId)),
     });

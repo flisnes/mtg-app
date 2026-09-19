@@ -7835,15 +7835,11 @@ a.seg {
   align-items: center;
   gap: 0.4rem;
 }
-.behavior-rule-head .seg-row {
-  margin-bottom: 0;
-  flex: 1;
+/* Was a segmented row until there were five triggers to choose between. Three
+   fitted at 393px and five is sixty pixels apiece, which spells "When it e". */
+.behavior-rule-head .behavior-trigger {
+  flex: 1 1 auto;
   min-width: 0;
-}
-.behavior-rule-head .seg {
-  padding: 0.35rem 0.3rem;
-  font-size: 0.8rem;
-  white-space: nowrap;
 }
 /* The verb on one row, where X comes from on the next, and the remove button
    spanning both. Three controls abreast is what a 393px phone cannot do: it
@@ -7913,8 +7909,15 @@ a.seg {
 .behavior-zones {
   grid-area: zones;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
   min-width: 0;
+}
+/* Wrap rather than clip. "From Battlefield" and "To Graveyard" abreast is a
+   couple of pixels over what a 393px phone has, and the half-word that came
+   out of it ("From Battlefiel") is the one thing a zone picker must not do. */
+.behavior-zones .field {
+  flex: 1 1 9.5rem;
 }
 .behavior-q {
   grid-area: q;

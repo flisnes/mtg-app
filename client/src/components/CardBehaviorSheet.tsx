@@ -15,8 +15,10 @@ import {
   X_VARIANTS,
   behaviorFromEffect,
   decodeEffectProfile,
+  decodeFetchProfile,
   decodeManaProfile,
   describeBehavior,
+  describeFetch,
   describeLandRamp,
   describeRule,
   queryHasX,
@@ -64,6 +66,8 @@ interface BehaviorCard {
    * rather than the effect profile. A phrase, not rules — see describeLandRamp.
    */
   ramp: string | null;
+  /** And the third: a fetchland's search, off the fetch profile. Same deal. */
+  fetch: string | null;
   /** What the user said, or null when they have not said anything. */
   authored: CardBehavior | null;
   /**
@@ -71,10 +75,20 @@ interface BehaviorCard {
    * card, and reading it off a name alone is a memory test nobody asked for.
    */
   image: string | null;
+  /**
+   * The front face is something that stays on the battlefield, so "when it
+   * enters" is a moment this card actually has. A sorcery does not get offered
+   * one — see TriggerOption.permanentOnly.
+   */
+  permanent: boolean;
 }
 
 /** "When you play it", straight out of the catalog so it is said in one place. */
 const PLAY_LEAD = BEHAVIOR_TRIGGERS.find((t) => t.id === 'play')!.lead;
+
+/** The front face decides it: a Murder never enters anything. */
+const isPermanent = (typeLine: string) =>
+  /\b(Creature|Artifact|Enchantment|Planeswalker|Battle|Land)\b/i.test(typeLine.split('//')[0] ?? '');
 
 const isNotACard = (typeLine: string) => {
   const t = typeLine.toLowerCase();
@@ -106,8 +120,12 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       hasX: /\{X\}/i.test(o.manaCost ?? ''),
       derived: decodeEffectProfile(o.effect),
       ramp: describeLandRamp(decodeManaProfile(o.mana)),
+      // Only when it makes no mana of its own. A Krosan Verge taps for {C} and
+      // the sequencer files it as the colorless land it is, search dropped.
+      fetch: o.produces ? null : describeFetch(decodeFetchProfile(o.fetch)),
       authored: behaviors.get(o.oracleId) ?? null,
       image: o.imageNormal ?? o.imageSmall ?? null,
+      permanent: isPermanent(o.typeLine),
     });
   }
   return [...byOracle.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -120,6 +138,7 @@ function summaryOf(card: BehaviorCard): string {
   // A Harrow used to read "Do nothing" here while the simulator was ramping off
   // it, which is exactly the card somebody then writes out by hand.
   if (card.ramp) return `${PLAY_LEAD}: ${card.ramp}`;
+  if (card.fetch) return `${PLAY_LEAD}: ${card.fetch}`;
   return 'Do nothing';
 }
 
@@ -351,7 +370,14 @@ function BehaviorEditor({
           for it, and an extra land drop is still an extra land drop.
         </p>
       )}
-      {!card.derived && !card.ramp && !card.authored && (
+      {card.fetch && (
+        <p className="fine-print">
+          The card database already reads this one as a fetchland: <em>{card.fetch}</em>. It does not say <em>which</em> land, so
+          the simulator takes whichever one best fixes your colours. Write your own rule and it replaces that search, so put it in
+          as a step if you want it. Until this release a rule written here never fired at all.
+        </p>
+      )}
+      {!card.derived && !card.ramp && !card.fetch && !card.authored && (
         <p className="fine-print">
           The card database reads nothing unconditional off this one, so it currently resolves as a blank. Add a rule and it stops
           being one.
@@ -364,6 +390,7 @@ function BehaviorEditor({
           rule={rule}
           matcher={matcher}
           hasX={card.hasX}
+          permanent={card.permanent}
           onChange={(next) => edit(i, next)}
           onRemove={() => setRules(rules.filter((_r, k) => k !== i))}
         />
@@ -387,8 +414,8 @@ function BehaviorEditor({
       <p className="deck-stats-verdict">
         {preview.length > 0
           ? preview.map(describeRule).join('. ')
-          : card.ramp
-            ? `${PLAY_LEAD}: ${card.ramp}, read from the card`
+          : card.ramp || card.fetch
+            ? `${PLAY_LEAD}: ${card.ramp ?? card.fetch}, read from the card`
             : 'Nothing. This card resolves as a blank.'}
       </p>
 
@@ -539,6 +566,7 @@ function RuleEditor({
   rule,
   matcher,
   hasX,
+  permanent,
   onChange,
   onRemove,
 }: {
@@ -546,12 +574,18 @@ function RuleEditor({
   matcher: DeckMatcher;
   /** The card's printed cost has an `{X}`. */
   hasX: boolean;
+  /** The card can be on the battlefield, so "when it enters" is offered. */
+  permanent: boolean;
   onChange: (next: BehaviorRule) => void;
   onRemove: () => void;
 }) {
   const setStep = (i: number, next: BehaviorRule['steps'][number]) =>
     onChange({ ...rule, steps: rule.steps.map((s, k) => (k === i ? next : s)) });
   const trigger = BEHAVIOR_TRIGGERS.find((t) => t.id === rule.on);
+  // A trigger the card cannot have is hidden, unless the rule is already on it:
+  // a type line read one way today and another way tomorrow must not silently
+  // orphan a rule somebody wrote.
+  const triggers = BEHAVIOR_TRIGGERS.filter((t) => !t.permanentOnly || permanent || rule.on === t.id);
   /** "The mana you spent on X" is a number only while the cast is resolving. */
   const xAvailable = hasX && rule.on === 'play';
 
@@ -617,7 +651,7 @@ function RuleEditor({
     <div className="behavior-rule">
       <div className="behavior-rule-head">
         <div className="seg-row" role="radiogroup" aria-label="When this happens">
-          {BEHAVIOR_TRIGGERS.map((t) => (
+          {triggers.map((t) => (
             <button
               key={t.id}
               type="button"

@@ -1,4 +1,4 @@
-// The older half of the changelog (0.152.0 down to 0.98.0), split out of
+// The older half of the changelog (0.153.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,26 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.153.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'On curve, in the deck stats sheet. It deals twenty thousand games, mulligans them and plays the land drops out in order, so it can tell a tapland played on turn one from the same tapland on turn three. Pick any card and see how often your mana actually pays for it by each turn.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Fetchlands now take the land they find out of the library, so eight fetches over a single Island count as one blue source, the same as at the table.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'Split, adventure and modal cards had both halves of their printed cost added together, so an Adventure creature costing {W} was checked as if it cost {1}{W}{W} and read as uncastable.',
+      },
+    ],
+  },
   {
     version: '0.152.0',
     changes: [

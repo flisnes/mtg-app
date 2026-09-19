@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.158.7
+
+- **Added: "when played" is now two triggers, "when played" and "when it enters".** They are the same moment for most cards and two different ones for the cards that matter. A creature reanimated out of the graveyard was never cast, so it fires only the second; a permanent you cast from your hand fires both, in that order. Sorceries and instants are only offered the first, because they never enter anything.
+- **Fixed: a rule written on a fetchland fires.** It never did. The land-drop path resolved the land the fetch *found* and never the fetch itself, so a behavior authored on a Flooded Strand was a rule you could write, save and never once see happen. Like land ramp, an authored rule replaces the search rather than adding to it, and the editor now says so before you write one.
+- **Fixed: a fetchland put onto the battlefield any other way cracks for a land.** Reanimate one and the simulator used to read it as a land that taps for every colour it could have gone and got. It sacrifices itself and finds a real land now, and one with nothing left to find is worth what it is: nothing.
+- **Changed: the card database's fetchland reading shows up in the behavior editor.** A Fabled Passage used to sit in the list under "do nothing" while the simulator cracked it every game, the same gap land ramp had before v0.158.4.
+
 ## 0.158.6
 
 - **Changed: the twenty-card ceiling on a behavior step is gone.** It used to cap every amount the rule computed, which meant "draw half your library" in a 99-card deck came out as twenty cards, and a deck with a Peer Into the Abyss in it got the curve of a deck without one. Nothing is capped now. A step stops when the zone it is working on runs out, which is the only limit the game has either.

@@ -59,6 +59,12 @@ const TREASURE_MASK = 0b11111;
 
 /** Extra land drops honoured in a turn. Azusa and a friend is already a lot. */
 const MAX_EXTRA_LANDS = 4;
+/**
+ * How many entry triggers can be stacked on top of each other. A rule that puts
+ * a card onto the battlefield can reach a card whose rule does the same, and
+ * two is one level deeper than any card worth modelling goes.
+ */
+const MAX_ENTRY_DEPTH = 2;
 
 /** Cards one effect may put into your hand. Guards a misread "draw X". */
 const MAX_DRAW_PER_EFFECT = 12;
@@ -353,6 +359,20 @@ export function simulate(
   let recurLen = 0;
   /** Land drops beyond the first, from an Exploration or an Azusa in play. */
   let extraLands = 0;
+  /** Entry-trigger lines waiting for the rule that caused them to be written. */
+  const pendingEntry: string[] = [];
+  /**
+   * The cost the turn's land drop is being chosen for, hoisted out of the turn
+   * loop so a fetch cracked mid-rule aims at the same thing a fetch cracked on
+   * your land drop does. Null before the first drop of the game.
+   */
+  let turnGoal: readonly Pip[] | null = null;
+  /**
+   * How many entry triggers deep we are. A rule that puts a card onto the
+   * battlefield can reach a card whose rule does the same; this is the whole
+   * answer to that, and two is one more level than any real card needs.
+   */
+  let entryDepth = 0;
   /** Sources on the battlefield. Lives out here so the pool builder can see it. */
   let srcLen = 0;
   /**
@@ -793,12 +813,17 @@ export function simulate(
    * way, which is what these charts read.
    */
   /**
-   * A permanent arrived, by land drop or by casting. A recurring effect joins
-   * the upkeep list and fires from *next* turn, because its trigger is an
-   * upkeep it has already missed; a one-shot one resolves now. Returns the mana
-   * it added to this turn, which only a Treasure ever does.
+   * A card arrived, and `cast` says how. True is the card leaving your hand
+   * under its own power — a spell resolving, a land going down for the turn.
+   * False is everything else: the land a fetch went and got, a creature a move
+   * step pulled out of the graveyard. The difference is which rules fire.
+   *
+   * A recurring effect joins the upkeep list and fires from *next* turn,
+   * because its trigger is an upkeep it has already missed; a one-shot one
+   * resolves now. Returns the mana it added to this turn, which only a Treasure
+   * ever does.
    */
-  const enters = (index: number, card: SimCard, turn: number): number => {
+  const enters = (index: number, card: SimCard, turn: number, cast: boolean): number => {
     // Authored behavior replaces the derived profile outright — see
     // SimCard.behavior for why replace and not merge. A card carrying both an
     // upkeep rule and a play rule does both: unlike EffectProfile, where
@@ -808,12 +833,31 @@ export function simulate(
     const b = card.behavior;
     if (b) {
       if (sink) lastEffectText = '';
-      const made = b.play.length > 0 ? runSteps(b.play, turn, index) : 0;
+      let made = 0;
+      let text = '';
+      if (cast && b.play.length > 0) {
+        made += runSteps(b.play, turn, index);
+        if (sink) text = lastEffectText;
+      }
+      // Then the arrival, in that order, because that is the order a card you
+      // cast does them in. Not if the cast rule already sent it somewhere else:
+      // a spell that exiled itself never reached the battlefield to enter it.
+      if (b.etb.length > 0 && card.permanent && !selfPlaced) {
+        made += runSteps(b.etb, turn, index);
+        if (sink) text = text && lastEffectText ? `${text}, then ${lastEffectText}` : text || lastEffectText;
+      }
+      if (sink) lastEffectText = text;
       // The upkeep list is joined *after* the play rules have run, because a
       // card whose play rule exiled it is not on the battlefield to trigger.
       if (b.upkeep.length > 0 && !selfPlaced && recurLen < recurring.length) recurring[recurLen++] = index;
       return made;
     }
+    // A derived reading is "what happens when this resolves", and nothing in
+    // the profile says which half of that is a cast trigger and which is an
+    // entry one. Firing it for a card that was never cast would invent a
+    // Divination's two cards for a reanimation spell, which is the direction
+    // §11.4 forbids. The `etb` rule above is how you say otherwise.
+    if (!cast) return 0;
     const effect = card.effect;
     if (!effect) return 0;
     if (effect.repeatable) {
@@ -822,6 +866,9 @@ export function simulate(
     }
     return resolveEffect(effect, turn);
   };
+
+  /** Does this card do anything on the way in, having not been cast? */
+  const entersDoing = (card: SimCard): boolean => !!card.behavior && card.behavior.etb.length > 0 && card.permanent;
 
   const resolveEffect = (effect: EffectProfile, turn: number): number => {
     if (sink) {
@@ -1055,22 +1102,124 @@ export function simulate(
    *
    * Everything else arrives and is not tracked: a reanimated creature is a body
    * this model has no room for. It really did leave the zone it was in, and it
-   * really does nothing here, which is the omission §11.4 asks for rather than
-   * the invention it forbids. It also does **not** fire its own behavior, which
-   * is the one place that would have to be a rules engine: a rule that puts
-   * cards onto the battlefield could reach cards whose rules do the same, and a
-   * goldfish is not where anyone should find out how deep that goes.
+   * really does nothing here unless it says so — which is what an `etb` rule
+   * is, and the reason this path fires one. That used to be refused outright on
+   * the grounds that a rule putting cards onto the battlefield could reach
+   * cards whose rules do the same; the answer to that is a depth counter, not a
+   * whole missing trigger.
    */
   const enterBattlefield = (index: number, card: SimCard, turn: number): void => {
     if (card.role === 'extraland') {
       if (extraLands < MAX_EXTRA_LANDS) extraLands++;
+      fireEntry(index, card, turn);
       return;
     }
-    if (card.role === 'spell' || card.role === 'landramp') return;
+    if (card.role === 'spell' || card.role === 'landramp') {
+      fireEntry(index, card, turn);
+      return;
+    }
+    // A fetch is not a land that taps for five colours. Its mask is the union
+    // of what it could go and *get* (see buildSimDeck), which is exactly right
+    // for deciding which land drop widens your colours and exactly wrong as a
+    // mana source — and reanimating a Flooded Strand was reading it as the
+    // second thing. It cracks here the same way it cracks off a land drop.
+    if (card.role === 'fetch') {
+      // An authored rule replaces the crack outright, the same way it replaces
+      // land ramp: writing "find a Forest" by hand and getting that *plus* the
+      // derived search is the Into the North bug with a land type on it.
+      if (entersDoing(card)) fireEntry(index, card, turn);
+      // Cracked means sacrificed, so the yard, which is where a later rule can
+      // go and get it. Nothing to find means you would not have cracked it, so
+      // it sits there instead, untracked and making no mana, which is what a
+      // fetch with no targets is worth.
+      else if (crack(card, turn, turn + 1)) bury(index);
+      return;
+    }
     if (!addSource(index, card, turn + 1, turn)) return;
     colorsHeld |= card.mask;
     const back = payEntryCost(card);
     if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
+    fireEntry(index, card, turn);
+  };
+
+  /**
+   * Sacrifice a fetch for the best land in the library. `online` is the turn
+   * the land starts paying for things, which is the one difference between
+   * cracking it on your land drop (this turn, unless either half enters tapped)
+   * and cracking it any other way (next turn, like every other move onto the
+   * battlefield). True if it found something.
+   *
+   * The fetch itself is left where it is: the land drop buries it and the move
+   * path has its own reason to, and they are not the same reason.
+   */
+  const crack = (card: SimCard, turn: number, online: number): boolean => {
+    const at = findLand(cards, library, top, libLen, colorsHeld, card.fetchTargets, turnGoal, units, rng);
+    if (at < 0) {
+      if (sink) say(sink, 'land', 'Nothing left in the library to fetch');
+      return false;
+    }
+    const found = library[at]!;
+    const land = cards[found]!;
+    const slow = card.tapped === 'always' || land.tapped === 'always';
+    if (!addSource(found, land, Math.max(online, turn + (slow ? 1 : 0)), turn)) return false;
+    colorsHeld |= land.mask;
+    library[at] = library[--libLen]!;
+    if (sink) say(sink, 'land', `Cracks for ${land.name}${slow ? ' (enters tapped)' : ''}`);
+    const back = payEntryCost(land);
+    if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
+    // The land was put onto the battlefield, not played, so only its entry
+    // rules fire. Its derived reading is a resolution reading and stays out.
+    if (opts.effects && entersDoing(land)) {
+      fireEntry(found, land, turn);
+      sayEffect('');
+    }
+    return true;
+  };
+
+  /**
+   * One card's `etb` rules, fired from somewhere that is already mid-rule.
+   *
+   * Everything here is about being re-entrant. `selfPlaced` and `lastAmount`
+   * belong to the rule that is running, and a card arriving in the middle of it
+   * must not answer "did it move itself?" or "what was the previous X?" on that
+   * rule's behalf. The depth counter is the other half: a rule that puts a card
+   * onto the battlefield can reach a card whose rule does the same, and a
+   * goldfish is not where anyone should find out how deep that goes.
+   */
+  const fireEntry = (index: number, card: SimCard, turn: number): void => {
+    if (!opts.effects || entryDepth >= MAX_ENTRY_DEPTH) return;
+    const b = card.behavior;
+    if (!b || b.etb.length === 0 || !card.permanent) return;
+    const wasPlaced = selfPlaced;
+    const wasAmount = lastAmount;
+    const wasText = lastEffectText;
+    const wasMoved = sink ? movedNames.slice() : null;
+    entryDepth++;
+    runSteps(b.etb, turn, index);
+    entryDepth--;
+    // Queued rather than said, because we are standing in the middle of the
+    // rule that caused this and its own line has not been written yet. Saying
+    // it here puts the reanimated creature's draw above the reanimation.
+    if (sink && lastEffectText) pendingEntry.push(`${card.name} ${lastEffectText}`);
+    selfPlaced = wasPlaced;
+    lastAmount = wasAmount;
+    lastEffectText = wasText;
+    if (wasMoved) {
+      movedNames.length = 0;
+      for (const name of wasMoved) movedNames.push(name);
+    }
+  };
+
+  /**
+   * One card's effect line, and then every entry trigger it set off, in the
+   * order they happened. The queue is drained here and nowhere else, so a
+   * resolution that fires nothing costs a length check.
+   */
+  const sayEffect = (text: string): void => {
+    if (!sink) return;
+    if (text) say(sink, 'effect', text);
+    for (const line of pendingEntry) say(sink, 'effect', line);
+    pendingEntry.length = 0;
   };
 
   /** Room for one more card in a zone. */
@@ -1434,7 +1583,7 @@ export function simulate(
         } else {
           continue;
         }
-        if (sink && lastEffectText) say(sink, 'effect', `Upkeep: ${card.name} ${lastEffectText}`);
+        sayEffect(lastEffectText ? `Upkeep: ${card.name} ${lastEffectText}` : '');
         // A permanent that put itself somewhere else has left the battlefield,
         // so it comes off the list rather than triggering from the graveyard.
         if (selfPlaced) {
@@ -1470,6 +1619,7 @@ export function simulate(
         goal = goalPips[g]!;
         goalCmc = card.cmc;
       }
+      turnGoal = goal;
 
       // --- Land drops -------------------------------------------------------
       // One, plus whatever an Exploration or an Azusa on the battlefield is
@@ -1535,28 +1685,23 @@ export function simulate(
         const card = cards[cardIndex]!;
         hand[best] = hand[--handLen]!;
         if (card.role === 'fetch') {
-          const at = findLand(cards, library, top, libLen, colorsHeld, card.fetchTargets, goal, units, rng);
-          if (at >= 0) {
-            const index = library[at]!;
-            const land = cards[index]!;
-            const slow = card.tapped === 'always' || land.tapped === 'always';
-            if (addSource(index, land, turn + (slow ? 1 : 0), turn)) {
-              colorsHeld |= land.mask;
-              library[at] = library[--libLen]!;
-              // The fetch itself is sacrificed, which means the yard, which
-              // means a behavior can go and get it back.
-              bury(cardIndex);
-              if (sink) say(sink, 'land', `Cracks for ${land.name}${slow ? ' (enters tapped)' : ''}`);
-              const back = payEntryCost(land);
-              if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
-              if (opts.effects && resolves(land)) {
-                xSpent = 0;
-                enters(index, land, turn);
-                if (sink && lastEffectText) say(sink, 'effect', `${land.name} ${lastEffectText}`);
-              }
-            }
-          } else if (sink) {
-            say(sink, 'land', 'Nothing left in the library to fetch');
+          // The fetch was *played*, so the fetch's own rule fires — and until
+          // this release it never did. This path resolved the land it found and
+          // nothing else, so a behavior authored on a Flooded Strand was a rule
+          // you could write, save and never see happen.
+          const authored = opts.effects && !!card.behavior && (card.behavior.play.length > 0 || card.behavior.etb.length > 0);
+          let placed = false;
+          if (opts.effects && resolves(card)) {
+            xSpent = 0;
+            enters(cardIndex, card, turn, true);
+            placed = selfPlaced;
+            sayEffect(lastEffectText ? `${card.name} ${lastEffectText}` : '');
+          }
+          // And then what it is, unless you wrote that out yourself.
+          if (!authored && crack(card, turn, turn) && !placed) {
+            // Sacrificed, which means the yard, which means a behavior can go
+            // and get it back.
+            bury(cardIndex);
           }
         } else if (addSource(cardIndex, card, turn + (card.tapped === 'always' ? 1 : 0), turn)) {
           colorsHeld |= card.mask;
@@ -1567,8 +1712,8 @@ export function simulate(
           // resolver to call.
           if (opts.effects && resolves(card)) {
             xSpent = 0;
-            enters(cardIndex, card, turn);
-            if (sink && lastEffectText) say(sink, 'effect', `${card.name} ${lastEffectText}`);
+            enters(cardIndex, card, turn, true);
+            sayEffect(lastEffectText ? `${card.name} ${lastEffectText}` : '');
           }
         }
       }
@@ -1756,7 +1901,7 @@ export function simulate(
         // just comes off the mana profile instead of the effect profile, and
         // nothing was enforcing that until an Into the North written out by
         // hand fetched an Urza's Saga first and then did what it was told.
-        const authored = opts.effects && !!card.behavior && card.behavior.play.length > 0;
+        const authored = opts.effects && !!card.behavior && (card.behavior.play.length > 0 || card.behavior.etb.length > 0);
         if (card.role === 'landramp' && !authored) {
           // What it fetches is a land out of the library, arriving tapped. That
           // is Rampant Growth exactly and Nature's Lore a turn late, which is
@@ -1776,6 +1921,11 @@ export function simulate(
             if (sink) say(sink, 'mana', `Finds ${land.name}, which arrives tapped`);
             const back = payEntryCost(land);
             if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
+            // It entered the battlefield, so anything it does on the way in
+            // does it here too. A land found this way was never played, so its
+            // played rule and its derived reading both stay out.
+            fireEntry(found, land, turn);
+            sayEffect('');
           }
           // The mana that cast it has been spent, and a dork is summoning sick
           // on top of that, so either way it pays for something from next turn.
@@ -1808,16 +1958,14 @@ export function simulate(
         // loop's feet — which is the point of a Treasure and the reason `left`
         // is recomputed from `available` at the top of every pass.
         if (opts.effects) {
-          available += enters(index, card, turn);
+          available += enters(index, card, turn, true);
           if (sink && resolves(card)) {
             // A behavior with an upkeep rule and no play rule is the same shape
             // as a repeatable profile: nothing happened now, something will.
-            const recurs = card.behavior ? card.behavior.play.length === 0 : card.effect!.repeatable;
-            say(
-              sink,
-              'effect',
-              recurs ? `${card.name} will fire every upkeep from next turn` : `${card.name} ${lastEffectText || 'resolves'}`,
-            );
+            const recurs = card.behavior
+              ? card.behavior.play.length === 0 && card.behavior.etb.length === 0
+              : card.effect!.repeatable;
+            sayEffect(recurs ? `${card.name} will fire every upkeep from next turn` : `${card.name} ${lastEffectText || 'resolves'}`);
           }
         }
         // And where the card itself ends up. A permanent stays out, as a source

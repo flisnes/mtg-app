@@ -1,4 +1,4 @@
-import type { EffectProfile, ManaProfile } from './card.js';
+import { BASIC_LAND_TYPES, type EffectProfile, type FetchProfile, type ManaProfile } from './card.js';
 
 // Card behavior: what the *user* says a card does, when the pipeline's oracle
 // reading says nothing useful.
@@ -31,8 +31,20 @@ import type { EffectProfile, ManaProfile } from './card.js';
 //     an error in the other direction. It stays allowed and it stays visible —
 //     SimCoverage.authored is the number, and the coverage line says it out loud.
 
-/** When a rule fires. */
-export type BehaviorTrigger = 'play' | 'upkeep';
+/**
+ * When a rule fires.
+ *
+ * `play` and `etb` are the same moment for most cards and two different moments
+ * for the ones that matter. Casting is something you do from your hand; entering
+ * the battlefield is something the card does, and it can do it without you
+ * having cast anything at all. A Solemn Simulacrum reanimated out of the
+ * graveyard still fetches a land; a Reanimate does not draw the cards the
+ * creature's cast trigger would have.
+ *
+ * So: `play` is the cast, `etb` is the arrival, and a permanent cast from your
+ * hand does both in that order.
+ */
+export type BehaviorTrigger = 'play' | 'etb' | 'upkeep';
 
 /**
  * Where a card can be. The battlefield is the lopsided one: the sequencer
@@ -240,6 +252,12 @@ export interface TriggerOption {
   /** How the rule reads when it is written out. */
   lead: string;
   hint: string;
+  /**
+   * Only offered on a card that can actually be on the battlefield. A sorcery
+   * never enters one, so a rule hung there would be §12.2's lie: authored,
+   * saved, and silently doing nothing every game.
+   */
+  permanentOnly?: boolean;
 }
 
 export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
@@ -247,7 +265,14 @@ export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
     id: 'play',
     label: 'When played',
     lead: 'When you play it',
-    hint: 'Resolves once, the turn you cast it or put it down.',
+    hint: 'Resolves once, the turn you cast it from your hand or put it down as a land. Not when it arrives any other way.',
+  },
+  {
+    id: 'etb',
+    label: 'When it enters',
+    lead: 'When it enters the battlefield',
+    hint: 'However it got there: cast, played as a land, fetched, or brought back out of the graveyard. A permanent you cast does this after its played rule.',
+    permanentOnly: true,
   },
   {
     id: 'upkeep',
@@ -532,6 +557,33 @@ export function describeLandRamp(mana: ManaProfile | null | undefined): string |
   return `put ${n} land${n === 1 ? '' : 's'} from your library onto the battlefield, tapped`;
 }
 
+/**
+ * What the *fetch* profile reads, as a phrase, or null for anything that is not
+ * a fetchland. The third derived reading, and the third one that had no voice
+ * in the editor: a Flooded Strand showed up as "do nothing" while the sequencer
+ * was cracking it every game.
+ *
+ * Same shape and same reason as describeLandRamp: a phrase rather than rules,
+ * because the sequencer picks the land that best fixes your colours and a
+ * `move` step takes a random matching one. Rendering it as editable steps would
+ * break behaviorFromEffect's promise that opening the editor and pressing Save
+ * changes nothing.
+ */
+export function describeFetch(fetch: FetchProfile | null | undefined): string | null {
+  if (!fetch) return null;
+  const types = [...fetch.types].map((letter) => BASIC_LAND_TYPES[letter]).filter((t): t is string => !!t);
+  if (types.length === 0) return null;
+  // All five is "a land", which is what the card says and four words shorter
+  // than listing them. Anything less names the types, because on a Windswept
+  // Heath that is the whole card.
+  const what = types.length === 5 ? 'land' : types.join(' or ');
+  // Only 'always'. A conditional tapland is untapped as far as the sequencer is
+  // concerned, and this describes the model rather than the card — same call
+  // describeLandRamp makes in the other direction.
+  const how = fetch.tapped === 'always' ? ', tapped' : '';
+  return `sacrifice it and put ${fetch.basicOnly ? 'a basic' : 'a'} ${what} from your library onto the battlefield${how}`;
+}
+
 // ---------------------------------------------------------------------------
 // Compiling, for the simulator
 // ---------------------------------------------------------------------------
@@ -548,6 +600,7 @@ export function describeLandRamp(mana: ManaProfile | null | undefined): string |
  */
 export interface CompiledBehavior {
   play: BehaviorStep[];
+  etb: BehaviorStep[];
   upkeep: BehaviorStep[];
 }
 
@@ -562,9 +615,10 @@ const knownAmount = (x: BehaviorAmount | undefined | null): boolean =>
 
 export function compileBehavior(b: CardBehavior | null | undefined): CompiledBehavior | null {
   if (!b || b.v !== CARD_BEHAVIOR_VERSION || !Array.isArray(b.rules)) return null;
-  const out: CompiledBehavior = { play: [], upkeep: [] };
+  const out: CompiledBehavior = { play: [], etb: [], upkeep: [] };
   for (const rule of b.rules) {
-    const bucket = rule?.on === 'play' ? out.play : rule?.on === 'upkeep' ? out.upkeep : null;
+    const bucket =
+      rule?.on === 'play' ? out.play : rule?.on === 'etb' ? out.etb : rule?.on === 'upkeep' ? out.upkeep : null;
     if (!bucket || !Array.isArray(rule.steps)) continue;
     for (const step of rule.steps) {
       if (!step || !STEP_BY_ID.has(step.op) || !knownAmount(step.x)) continue;
@@ -583,7 +637,7 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
       bucket.push(step);
     }
   }
-  return out.play.length > 0 || out.upkeep.length > 0 ? out : null;
+  return out.play.length > 0 || out.etb.length > 0 || out.upkeep.length > 0 ? out : null;
 }
 
 /**
@@ -594,6 +648,7 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
 export function collectBehaviorQueries(b: CompiledBehavior | null | undefined, into: Set<string>): void {
   if (!b) return;
   for (const step of b.play) if (step.q) into.add(step.q);
+  for (const step of b.etb) if (step.q) into.add(step.q);
   for (const step of b.upkeep) if (step.q) into.add(step.q);
 }
 

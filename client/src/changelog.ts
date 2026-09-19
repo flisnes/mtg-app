@@ -32,6 +32,26 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.158.7',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          '"When played" has split into "when played" and "when it enters". A creature dragged back out of the graveyard was never cast, so only the second one fires for it, and a permanent you hard-cast does both.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'A rule written on a fetchland now actually fires. The simulator was resolving the land it found and never the fetch itself, so a behavior authored on a Flooded Strand was a rule you could write, save, and never once see happen.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'A fetchland put onto the battlefield some other way cracks for a land instead of sitting there as a land that taps for every colour it could have found.',
+      },
+    ],
+  },
+  {
     version: '0.158.6',
     changes: [
       {
@@ -251,26 +271,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'Your commander leads the On curve panel now, with its own chart. It waits in the command zone rather than in your library, so the odds of casting it on turn four are purely about your mana, and every game in the run counts toward the number.',
-      },
-    ],
-  },
-  {
-    version: '0.153.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'On curve, in the deck stats sheet. It deals twenty thousand games, mulligans them and plays the land drops out in order, so it can tell a tapland played on turn one from the same tapland on turn three. Pick any card and see how often your mana actually pays for it by each turn.',
-      },
-      {
-        kind: 'added',
-        text:
-          'Fetchlands now take the land they find out of the library, so eight fetches over a single Island count as one blue source, the same as at the table.',
-      },
-      {
-        kind: 'fixed',
-        text:
-          'Split, adventure and modal cards had both halves of their printed cost added together, so an Adventure creature costing {W} was checked as if it cost {1}{W}{W} and read as uncastable.',
       },
     ],
   },

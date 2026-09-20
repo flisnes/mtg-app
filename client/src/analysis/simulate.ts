@@ -1,6 +1,7 @@
 import {
   applyAmountOp,
   BEHAVIOR_ZONES,
+  manaStepColors,
   MAX_QUERY_X,
   type BehaviorAmount,
   type BehaviorStep,
@@ -14,7 +15,7 @@ import { handSize } from './gameModel.js';
 import { KEEP_ANYTHING_AT } from './mulligan.js';
 import { makeRng, shuffle, type Rng } from './rng.js';
 import { bindingPips, type ParsedCost, type Pip } from './manaCost.js';
-import { popcount, UNIT_BY_MASK, type SimCard, type SimDeck, type SimFilter } from './simDeck.js';
+import { colorMask, popcount, UNIT_BY_MASK, type SimCard, type SimDeck, type SimFilter } from './simDeck.js';
 
 // The simulator: phase 5, and the only engine here that can answer a question
 // about the *order* you drew things in.
@@ -1200,6 +1201,36 @@ export function simulate(
   /** Does this card do anything on the way in, having not been cast? */
   const entersDoing = (card: SimCard): boolean => !!card.behavior && card.behavior.etb.length > 0 && card.permanent;
 
+  /**
+   * Has the user written over what the card database read this card as *doing*?
+   *
+   * A behavior replaces the derived reading rather than adding to it — see
+   * SimCard.behavior — and four of the five derived readings live on the mana
+   * profile rather than the effect profile: land ramp, a fetchland's search, a
+   * ritual's burst, and an Exploration's extra land drop. Only the first two
+   * enforced it, so an Exploration written out by hand kept its free land drop
+   * on top of whatever the rule said, and there was no way at all to say a card
+   * does *not* do the thing we read off it.
+   *
+   * What the card *is* is untouched by this. A Llanowar Elves with a rule on it
+   * still taps for green, and a land still makes its mana: those are the type
+   * line, not a reading of the text.
+   */
+  const replacesDerived = (card: SimCard): boolean =>
+    opts.effects && !!card.behavior && (card.behavior.play.length > 0 || card.behavior.etb.length > 0);
+
+  /**
+   * Is this card a burst the sequencer will go out of its way to cast?
+   *
+   * Three conditions, and they have to be asked together everywhere or the
+   * sequencer casts a ritual it has decided is not one. It has to be filed as a
+   * ritual, it has to be up on the deal (a Jeska's Will whose amount floors at
+   * one against a cost of three is an ordinary spell), and its reading has to
+   * still be the card database's rather than something the user wrote over it.
+   */
+  const castsAsRitual = (card: SimCard): boolean =>
+    card.role === 'ritual' && !!card.cost && card.adds > card.cost.mana && !replacesDerived(card);
+
   const resolveEffect = (effect: EffectProfile, turn: number, self: number): number => {
     // The derived path never reaches `runSteps`, so it sets the credit itself.
     // Nothing inside here can nest — a profile is one card's own reading and
@@ -1496,13 +1527,53 @@ export function simulate(
   };
 
   /**
+   * Mana a permanent that arrived **untapped** mid-turn puts into the pool the
+   * payment solver is already holding, added here and nowhere else.
+   *
+   * `buildPool` runs once, at the top of the turn. A source that lands after it
+   * is invisible until the next one, which for a tapped arrival is exactly
+   * right and for an untapped one is the whole difference between the two. So
+   * the units go in by hand, the same way a ritual's and a Treasure's do.
+   */
+  const openUnits = (index: number, card: SimCard, turn: number, by: number): number => {
+    const count = card.adds;
+    if (count <= 0) return 0;
+    const mask = card.role === 'land' || card.role === 'fetch' ? card.mask | grantMask : card.mask;
+    const unit = UNIT_BY_MASK[mask]!;
+    if (card.oneColor && count > 1) {
+      unitGroups.push({ colors: unit.colors, count });
+      if (sink) groupOwner.push(index);
+    } else {
+      for (let u = 0; u < count; u++) {
+        units.push(unit);
+        if (sink) unitOwner.push(index);
+      }
+    }
+    // Same dance as addPoolMana: only mana made after the pool walk went past
+    // is credited by hand here.
+    if (poolCredited) creditMana(by, turn, count);
+    return count;
+  };
+
+  /**
+   * Mana the rules running right now put into the turn by dropping a source
+   * onto an untapped battlefield. Read as a delta across a whole rule rather
+   * than returned up through `putTo`, because the four call sites between here
+   * and the step that caused it all have a different number to return.
+   */
+  let entryMana = 0;
+
+  /**
    * A card put onto the battlefield by a move rather than played for the turn.
    *
-   * A mana source becomes one, arriving **tapped** — the same call the landramp
-   * role already makes ("Rampant Growth exactly and Nature's Lore a turn late"),
-   * and the conservative half of the two cards that print this. An Exploration
-   * grants its extra drop from next turn, as it does when cast, because this
-   * turn's drop has already happened.
+   * A mana source becomes one, arriving **tapped** unless the step that moved
+   * it says otherwise — the same call the landramp role makes ("Rampant Growth
+   * exactly and Nature's Lore a turn late"), and the conservative half of the
+   * two cards that print this. `untapped` is the other half: a Sakura-Tribe
+   * Scout's land pays for something the turn it lands, and until the step could
+   * say so the grammar had one answer for a question with two. An Exploration
+   * grants its extra drop from next turn either way, because this turn's land
+   * drop has already happened.
    *
    * Everything else arrives and is not tracked: a reanimated creature is a body
    * this model has no room for. It really did leave the zone it was in, and it
@@ -1512,15 +1583,20 @@ export function simulate(
    * cards whose rules do the same; the answer to that is a depth counter, not a
    * whole missing trigger.
    */
-  const enterBattlefield = (index: number, card: SimCard, turn: number, by: number): void => {
-    if (card.role === 'extraland') {
-      if (extraLands < MAX_EXTRA_LANDS) extraLands++;
+  const enterBattlefield = (index: number, card: SimCard, turn: number, by: number, untapped = false): void => {
+    if (card.role === 'extraland' && !replacesDerived(card)) {
+      extraLands = Math.min(MAX_EXTRA_LANDS, extraLands + Math.max(1, card.adds));
       addPermanent(index, card, turn);
       fireEntry(index, card, turn);
       fireArrival(index, card, turn);
       return;
     }
-    if (card.role === 'spell' || card.role === 'landramp') {
+    // Everything whose mana is a thing it *does* rather than a thing it *is*,
+    // which is to say everything that does not tap for mana sitting there. A
+    // ritual is on this list because a Dark Ritual reanimated onto the
+    // battlefield is a card in an illegal zone, not a three-mana rock; an
+    // extraland reaches it only when a rule has replaced its reading, above.
+    if (card.role === 'spell' || card.role === 'landramp' || card.role === 'ritual' || card.role === 'extraland') {
       // It makes no mana and it is still on the battlefield. A reanimated
       // creature used to arrive nowhere at all — "a body this model has no room
       // for" — which is exactly the room the permanent list is.
@@ -1546,10 +1622,13 @@ export function simulate(
       else if (crack(card, turn, turn + 1, index)) bury(index);
       return;
     }
-    if (!addSource(index, card, turn + 1, turn, by)) return;
+    if (!addSource(index, card, untapped ? turn : turn + 1, turn, by)) return;
     colorsHeld |= card.mask;
     const back = payEntryCost(card);
     if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
+    // Online this turn means online *now*, and the turn's pool was built before
+    // this rule started running.
+    if (untapped) entryMana += openUnits(index, card, turn, by);
     fireEntry(index, card, turn);
     fireArrival(index, card, turn);
   };
@@ -1793,7 +1872,7 @@ export function simulate(
     libLen++;
   };
 
-  const putTo = (index: number, zone: BehaviorZone, turn: number): void => {
+  const putTo = (index: number, zone: BehaviorZone, turn: number, untapped = false): void => {
     switch (zone) {
       case 'hand':
         hand[handLen++] = index;
@@ -1825,7 +1904,7 @@ export function simulate(
       case 'battlefield':
         // Whatever rule moved it is what put it there, so that is who its mana
         // belongs to: a reanimated Sol Ring is the reanimation spell's two mana.
-        enterBattlefield(index, cards[index]!, turn, creditTo);
+        enterBattlefield(index, cards[index]!, turn, creditTo, untapped);
         return;
     }
   };
@@ -1937,7 +2016,7 @@ export function simulate(
         creditSeen(creditTo, 1);
       }
       if (ordered) stack.push(index);
-      else putTo(index, to, turn);
+      else putTo(index, to, turn, step.untapped);
       if (sink) movedNames.push(cards[index]!.name);
       // Off the battlefield and into the yard is what dying is here. Nothing
       // across the table kills anything, so a sacrifice is the only way in.
@@ -1988,6 +2067,11 @@ export function simulate(
   const runSteps = (steps: readonly BehaviorStep[], turn: number, self: number): number => {
     const bits: string[] = [];
     let made = 0;
+    // A source dropped onto an untapped battlefield is mana this turn, and the
+    // step that dropped it is four calls away from here with a different number
+    // to return. Measured as a delta over the whole rule rather than plumbed
+    // back through all four.
+    const entryBefore = entryMana;
     // Saved and restored rather than assigned, because a step here can wake a
     // watcher whose own rule runs to completion inside this one: a landfall
     // trigger nested under the rule that made the land. The inner rule's draws
@@ -2010,7 +2094,7 @@ export function simulate(
         // *on* the battlefield is the difference between a sacrifice and a
         // discard, and only the first one is a death.
         const wasOut = leavePlay(self);
-        putTo(self, to, turn);
+        putTo(self, to, turn, step.untapped);
         selfPlaced = true;
         if (wasOut && to === 'graveyard') fireDeath(self, cards[self]!, turn);
         if (sink) {
@@ -2061,14 +2145,15 @@ export function simulate(
           break;
         }
         case 'mana': {
-          // Any color, which is what the grammar offers and all it offers: a
-          // colored ritual comes off the mana profile with its real colors and
-          // needs no rule. Weaker than the Treasure step sitting above it,
-          // because this is gone at end of turn and a Treasure is not.
-          const m = addPoolMana(n, TREASURE_MASK, false, turn, creditTo);
+          // The colors the rule named, or WUBRG when it named none — which is
+          // what this step was before the picker existed and still is by
+          // default. Weaker than the Treasure step sitting above it, because
+          // this is gone at end of turn and a Treasure is not.
+          const mask = colorMask(manaStepColors(step));
+          const m = addPoolMana(n, mask, !!step.oneColor, turn, creditTo);
           made += m;
           did = m;
-          if (sink && m > 0) bits.push(`adds ${m} mana`);
+          if (sink && m > 0) bits.push(`adds ${m} ${pipText(UNIT_BY_MASK[mask]!.colors)}`);
           break;
         }
         case 'move': {
@@ -2091,7 +2176,7 @@ export function simulate(
     }
     if (sink) lastEffectText = bits.join(', ');
     creditTo = outerCredit;
-    return made;
+    return made + (entryMana - entryBefore);
   };
 
   /** Does anything happen when this resolves, from either source? */
@@ -2182,7 +2267,7 @@ export function simulate(
   //
   // Everything here is dead weight in a deck with no ritual in it, so it is
   // gated on one flag read once.
-  const hasRituals = cards.some((c) => c.role === 'ritual' && c.cost !== null && c.adds > c.cost.mana);
+  const hasRituals = cards.some(castsAsRitual);
   /** The turn's pool with every castable ritual in hand cast into it. */
   const boosted: ManaUnit[] = [];
   const boostedGroups: UnitGroup[] = [];
@@ -2209,7 +2294,7 @@ export function simulate(
     let any = false;
     for (let i = 0; i < handLen; i++) {
       const card = cards[hand[i]!]!;
-      if (card.role !== 'ritual' || !card.cost || card.adds <= card.cost.mana) continue;
+      if (!castsAsRitual(card) || !card.cost) continue;
       const before = ritualCost.pips.length;
       ritualCost.generic += card.cost.generic;
       for (const pip of card.cost.pips) ritualCost.pips.push(pip);
@@ -2263,7 +2348,7 @@ export function simulate(
     let best: ParsedCost | null = null;
     for (let i = 0; i < handLen; i++) {
       const card = cards[hand[i]!]!;
-      if (!card.spell || !card.cost || card.role === 'ritual') continue;
+      if (!card.spell || !card.cost || castsAsRitual(card)) continue;
       if (card.cost.mana < available + 2) continue;
       if (best && card.cost.mana <= best.mana) continue;
       if (canPay(card.cost, units, unitGroups)) continue;
@@ -2582,7 +2667,7 @@ export function simulate(
           // already inside `boosted`, and letting it pay for itself out of its
           // own burst is the one circularity this has to refuse.
           if (canPay(cost, units, unitGroups)) firstPay[g] = turn;
-          else if (withRituals && cards[index]!.role !== 'ritual' && payableWithRituals(cost)) firstPay[g] = turn;
+          else if (withRituals && !castsAsRitual(cards[index]!) && payableWithRituals(cost)) firstPay[g] = turn;
         }
         if (firstPay[g] !== 0) firstCast[index] = turn;
       }
@@ -2637,7 +2722,7 @@ export function simulate(
           // still lands in the pool when it resolves, it just does not get to
           // jump the queue or answer to `ritualGoal`, which is somebody else's
           // burst.
-          const burst = card.role === 'ritual' && card.adds > card.cost.mana;
+          const burst = castsAsRitual(card);
           const ramp = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp' || burst;
           if (burst && !ritualNeeded(ritualGoal)) continue;
           // An X spell goes last, under every fixed cost, because X is going to
@@ -2729,7 +2814,7 @@ export function simulate(
             card.role === 'rock' ||
             card.role === 'dork' ||
             card.role === 'landramp' ||
-            (card.role === 'ritual' && card.adds > card.cost!.mana);
+            castsAsRitual(card);
           const why = rampFirst ? ' (ramp first)' : '';
           const forX = card.cost!.hasX ? ` with X = ${xSpent}` : '';
           say(sink, 'cast', `Casts ${card.name} ${card.manaCost}${forX}${why}`);
@@ -2758,7 +2843,7 @@ export function simulate(
         // just comes off the mana profile instead of the effect profile, and
         // nothing was enforcing that until an Into the North written out by
         // hand fetched an Urza's Saga first and then did what it was told.
-        const authored = opts.effects && !!card.behavior && (card.behavior.play.length > 0 || card.behavior.etb.length > 0);
+        const authored = replacesDerived(card);
         if (card.role === 'landramp' && !authored) {
           // What it fetches is a land out of the library, arriving tapped. That
           // is Rampant Growth exactly and Nature's Lore a turn late, which is
@@ -2804,7 +2889,7 @@ export function simulate(
               );
             }
           }
-        } else if (card.role === 'ritual') {
+        } else if (card.role === 'ritual' && !authored) {
           // This turn's mana, in this turn's pool, so the passes below this one
           // can spend it. The colors are the profile's, not any-color: a Dark
           // Ritual makes black and a deck that cannot use black mana does not
@@ -2815,12 +2900,16 @@ export function simulate(
             const colors = pipText(UNIT_BY_MASK[card.mask]!.colors);
             say(sink, 'mana', `${card.name} adds ${burst} ${colors} to the pool, this turn only`);
           }
-        } else if (card.role === 'extraland') {
+        } else if (card.role === 'extraland' && !authored) {
           // From next turn, not this one: this turn's land drop already
           // happened, above, and an Exploration cast after it does not rewind
           // the turn. Conservative by exactly one land drop, once.
-          if (extraLands < MAX_EXTRA_LANDS) extraLands++;
-          if (sink) say(sink, 'mana', 'An extra land drop every turn, from next turn');
+          const was = extraLands;
+          extraLands = Math.min(MAX_EXTRA_LANDS, extraLands + Math.max(1, card.adds));
+          const got = extraLands - was;
+          if (sink && got > 0) {
+            say(sink, 'mana', `${got} extra land drop${got === 1 ? '' : 's'} every turn, from next turn`);
+          }
         }
         // And what the card *does*, which until this phase was nothing at all.
         // A Treasure made here is mana this turn, so the budget grows under the

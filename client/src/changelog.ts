@@ -32,6 +32,26 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.159.4',
+    changes: [
+      {
+        kind: 'fixed',
+        text:
+          'Cards like Arboreal Grazer no longer hand you an extra land drop every turn. The card database was reading anything that puts a land onto the battlefield as an Exploration; it now wants the card to actually say "on each of your turns". Azusa correctly grants two.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'Every effect the simulator gives a card is now listed in the card behavior editor, including extra land drops and what a land, rock or mana creature taps for. Writing your own rule replaces the derived reading outright, so you can say a card does not do the thing we read off it.',
+      },
+      {
+        kind: 'added',
+        text:
+          'A move onto the battlefield can now arrive untapped, so a land put into play by a rule pays for something that turn. An "Add X mana" step can now name its colors: one color, a few, or any.',
+      },
+    ],
+  },
+  {
     version: '0.159.3',
     changes: [
       {
@@ -247,21 +267,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'fixed',
         text:
           'Treasures stayed around too long. One spent to fix a colour rather than to add a mana was never sacrificed. The trace is what caught it.',
-      },
-    ],
-  },
-  {
-    version: '0.157.0',
-    changes: [
-      {
-        kind: 'changed',
-        text:
-          'The simulator resolves your spells instead of casting them as blanks. Draw, loot, mill, surveil, scry and Treasure all happen now, a Phyrexian Arena keeps drawing every upkeep, and an Exploration is a second land drop rather than a dead card. The "How the game unfolds" charts move with it.',
-      },
-      {
-        kind: 'added',
-        text:
-          'A line under those charts saying how much of your deck the model actually plays out, and naming the draw spells it knows it is missing. The curves are still a floor, but now you can see how far off the floor they are.',
       },
     ],
   },

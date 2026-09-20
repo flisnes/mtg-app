@@ -3,6 +3,7 @@ import {
   BEHAVIOR_AMOUNTS,
   BEHAVIOR_AMOUNT_OPS,
   BEHAVIOR_FROM_ZONES,
+  BEHAVIOR_MANA_COLORS,
   BEHAVIOR_STEPS,
   BEHAVIOR_TRIGGERS,
   BEHAVIOR_ZONES,
@@ -18,11 +19,16 @@ import {
   decodeFetchProfile,
   decodeManaProfile,
   describeBehavior,
+  describeExtraLand,
   describeFetch,
   describeLandRamp,
+  describeManaSource,
   describeRitual,
   describeRule,
+  manaStepColors,
+  normalizeManaColors,
   queryHasX,
+  sanitizeCardBehavior,
   substituteQueryX,
   type BehaviorAmount,
   type BehaviorAmountKind,
@@ -37,6 +43,7 @@ import {
 } from '@mtg/shared';
 import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
+import { ManaCost } from './ManaCost.js';
 import { setCardBehavior } from '../db/dataAccess.js';
 import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '../cardDb/querySyntax.js';
 import type { GroupRow } from '../analysis/groups.js';
@@ -71,6 +78,20 @@ interface BehaviorCard {
   fetch: string | null;
   /** And the fourth: a ritual's burst, off the mana profile. Same deal again. */
   ritual: string | null;
+  /**
+   * And the fifth: extra land drops, off the mana profile. The last of the five
+   * to get a line here, and the one that most needed one — an Arboreal Grazer
+   * read as an Exploration sat in this list saying "Do nothing" while the
+   * simulator handed it a land drop every turn for the rest of the game.
+   */
+  extraLand: string | null;
+  /**
+   * And what the card *is*: a land, a rock, a mana creature. The one reading a
+   * rule written here does not replace, listed anyway because every effect the
+   * simulator gives a card belongs on this screen — including the ones nobody
+   * gets to argue with.
+   */
+  source: string | null;
   /** What the user said, or null when they have not said anything. */
   authored: CardBehavior | null;
   /**
@@ -130,6 +151,8 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       // the sequencer files it as the colorless land it is, search dropped.
       fetch: o.produces ? null : describeFetch(decodeFetchProfile(o.fetch)),
       ritual: describeRitual(decodeManaProfile(o.mana), o.produces),
+      extraLand: describeExtraLand(decodeManaProfile(o.mana)),
+      source: describeManaSource(decodeManaProfile(o.mana), o.produces),
       authored: behaviors.get(o.oracleId) ?? null,
       image: o.imageNormal ?? o.imageSmall ?? null,
       permanent: isPermanent(o.typeLine),
@@ -148,7 +171,28 @@ function summaryOf(card: BehaviorCard): string {
   if (card.ramp) return `${PLAY_LEAD}: ${card.ramp}`;
   if (card.fetch) return `${PLAY_LEAD}: ${card.fetch}`;
   if (card.ritual) return `${PLAY_LEAD}: ${card.ritual}`;
+  if (card.extraLand) return `${PLAY_LEAD}: ${card.extraLand}`;
+  // No lead on this one: a Forest taps for green whenever you like, which is
+  // not a thing that happens when you play it.
+  if (card.source) return card.source;
   return 'Do nothing';
+}
+
+/**
+ * The "Plays out as" line: the draft if there is one, otherwise whatever the
+ * card database read.
+ *
+ * Every derived reading, not the three that happened to be listed. Saying
+ * "blank" under an Exploration is exactly what sends someone off to write a
+ * rule the card already had — which was the whole complaint, one screen up.
+ */
+function playsOutAs(card: BehaviorCard, preview: readonly BehaviorRule[]): string {
+  if (preview.length > 0) return preview.map(describeRule).join('. ');
+  const derived = card.ramp ?? card.fetch ?? card.ritual ?? card.extraLand;
+  if (derived) return `${PLAY_LEAD}: ${derived}, read from the card`;
+  // A Forest is not a blank, it is a Forest. The line under this one says so.
+  if (card.source) return 'Nothing beyond what it is.';
+  return 'Nothing. This card resolves as a blank.';
 }
 
 /** How many of the deck's distinct cards a move step's criteria would find. */
@@ -253,9 +297,13 @@ export function CardBehaviorSheet({
  * the way of the two that do.
  */
 function BehaviorList({ cards, onOpen }: { cards: BehaviorCard[]; onOpen: (oracleId: string) => void }) {
+  // Every derived reading, not some of them. A fetchland and an Exploration
+  // were both missing from this test, so both sat under "Nothing read yet"
+  // with a line underneath saying what had in fact been read off them.
+  const isRead = (c: BehaviorCard) => !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source);
   const authored = cards.filter((c) => c.authored);
-  const blank = cards.filter((c) => !c.authored && !c.derived && !c.ramp && !c.ritual);
-  const read = cards.filter((c) => !c.authored && (c.derived || c.ramp || c.ritual));
+  const blank = cards.filter((c) => !c.authored && !isRead(c));
+  const read = cards.filter((c) => !c.authored && isRead(c));
 
   if (cards.length === 0) {
     return <p className="fine-print">Nothing in the mainboard yet.</p>;
@@ -313,6 +361,35 @@ function Section({ title, cards, onOpen }: { title: string; cards: BehaviorCard[
 
 const emptyStep = () => ({ op: 'draw' as BehaviorStepKind, x: { kind: 'fixed' as BehaviorAmountKind, n: 1 } });
 
+/**
+ * The step without a flag that no longer applies, rather than with it set to
+ * `undefined`. A key carrying undefined survives every spread it meets and
+ * disappears only at JSON.stringify, which is one save later than the place
+ * anybody looking at the draft would expect it to be gone.
+ */
+function without(step: BehaviorStep, ...keys: (keyof BehaviorStep)[]): BehaviorStep {
+  const out = { ...step };
+  for (const key of keys) delete out[key];
+  return out;
+}
+
+/**
+ * One color ticked or unticked on a `mana` step.
+ *
+ * Unticking the last one is refused rather than obeyed: an empty `colors` is
+ * how "any color" is *stored*, so obeying it would turn "only black" into "all
+ * five" — the opposite of what the tap asked for. "All one color" goes with the
+ * second-to-last tick, because one color on offer is already one color.
+ */
+function toggleManaColor(step: BehaviorStep, letter: string): BehaviorStep {
+  const now = manaStepColors(step);
+  const raw = now.includes(letter) ? [...now].filter((c) => c !== letter).join('') : now + letter;
+  if (!raw) return step;
+  const colors = normalizeManaColors(raw);
+  const next = colors ? { ...step, colors } : without(step, 'colors');
+  return colors.length === 1 ? without(next, 'oneColor') : next;
+}
+
 function BehaviorEditor({
   deckId,
   card,
@@ -337,7 +414,12 @@ function BehaviorEditor({
   const save = async () => {
     setSaving(true);
     const kept = rules.filter((r) => r.steps.length > 0);
-    await setCardBehavior(deckId, card.oracleId, kept.length > 0 ? { v: CARD_BEHAVIOR_VERSION, rules: kept } : null);
+    // Through the same sanitizer a row off another device goes through, so the
+    // stored bytes are normalized the one way: colors in WUBRGC order, flags
+    // dropped where they say nothing, all five colors written as none at all.
+    // Saving the same rule twice has to be the same row.
+    const clean = kept.length > 0 ? sanitizeCardBehavior({ v: CARD_BEHAVIOR_VERSION, rules: kept }) : null;
+    await setCardBehavior(deckId, card.oracleId, clean);
     onBack();
   };
 
@@ -375,8 +457,8 @@ function BehaviorEditor({
         <p className="fine-print">
           The card database already reads this one as land ramp: <em>{card.ramp}</em>. It does not say <em>which</em> land, so the
           simulator takes whichever one best fixes your colours. Write your own rule and it replaces that reading, so put the ramp
-          in as a step if you want it. What the card <em>is</em> stays either way: a land still makes its mana, a rock still taps
-          for it, and an extra land drop is still an extra land drop.
+          in as a step if you want it. What the card <em>is</em> stays either way: a land still makes its mana and a rock still
+          taps for it.
         </p>
       )}
       {card.fetch && (
@@ -394,7 +476,22 @@ function BehaviorEditor({
           back; a step adds mana of any color, where the card database keeps the colors the card prints.
         </p>
       )}
-      {!card.derived && !card.ramp && !card.fetch && !card.ritual && !card.authored && (
+      {card.extraLand && (
+        <p className="fine-print">
+          The card database already reads this one as extra land drops: <em>{card.extraLand}</em>. It is worth a drop only while
+          you have a spare land in hand, which is a fact about the game and not about the card, so the coverage line counts it
+          apart from the ramp it sums. Write your own rule and it replaces that reading entirely, which is how you say a card does
+          not do this.
+        </p>
+      )}
+      {card.source && (
+        <p className="fine-print">
+          What this card <em>is</em>: <em>{card.source}</em>. That comes off the type line and the printed ability rather than
+          off a reading of the text, so a rule written here does not replace it — a Llanowar Elves taps for green whatever else
+          you tell it to do. It is listed so that everything the simulator gives this card is in one place.
+        </p>
+      )}
+      {!card.derived && !card.ramp && !card.fetch && !card.ritual && !card.extraLand && !card.source && !card.authored && (
         <p className="fine-print">
           The card database reads nothing unconditional off this one, so it currently resolves as a blank. Add a rule and it stops
           being one.
@@ -429,13 +526,10 @@ function BehaviorEditor({
       {/* With no rules of your own, what plays out is whatever the database
           read — which for a ramp spell is not nothing, and saying "blank" here
           is what sends someone off to write a rule the card already had. */}
-      <p className="deck-stats-verdict">
-        {preview.length > 0
-          ? preview.map(describeRule).join('. ')
-          : card.ramp || card.fetch || card.ritual
-            ? `${PLAY_LEAD}: ${card.ramp ?? card.fetch ?? card.ritual}, read from the card`
-            : 'Nothing. This card resolves as a blank.'}
-      </p>
+      <p className="deck-stats-verdict">{playsOutAs(card, preview)}</p>
+      {/* What the card *is* is not replaced by anything written above, so it is
+          said on its own line rather than folded into the sentence. */}
+      {card.source && <p className="fine-print">{card.source}, whatever the rules above say.</p>}
 
       <div className="sheet-actions">
         {card.authored && (
@@ -566,6 +660,30 @@ function AmountPicker({
   );
 }
 
+/**
+ * How a card arrives on the battlefield, for the two steps that can put one
+ * there.
+ *
+ * Tapped is the default because it is what every such step did before this
+ * existed, and because it is the conservative half: a Sol Ring that arrives
+ * untapped pays for something the turn it lands, and a model that assumed so
+ * everywhere would be reading the generous half of two cards that both print.
+ */
+function TapPicker({ step, onChange }: { step: BehaviorStep; onChange: (next: BehaviorStep) => void }) {
+  return (
+    <label className="field">
+      <select
+        value={step.untapped ? 'untapped' : 'tapped'}
+        aria-label="How it arrives"
+        onChange={(e) => onChange(e.target.value === 'untapped' ? { ...step, untapped: true } : without(step, 'untapped'))}
+      >
+        <option value="tapped">Arrives tapped</option>
+        <option value="untapped">Arrives untapped</option>
+      </select>
+    </label>
+  );
+}
+
 /** How many cards in the deck a criteria string finds, live as it is typed. */
 function MatchNote({ q, matcher }: { q: string; matcher: DeckMatcher }) {
   const trimmed = q.trim();
@@ -645,26 +763,31 @@ function RuleEditor({
    * match" is bounded by a source zone that a draw step does not have.
    */
   const changeOp = (i: number, step: BehaviorStep, op: BehaviorStepKind) => {
+    // The colors belong to the one verb that makes mana, and nothing else can
+    // read them. Dropped on the way out rather than kept invisibly and revived
+    // on the way past.
+    const base = without(step, 'colors', 'oneColor');
     if (op === 'flicker') {
       // The criteria and any `[X]` in it carry over from a move; the zones do
-      // not, because a flicker does not have any.
-      const { from: _from, to: _to, ...rest } = step;
-      setStep(i, { ...rest, op });
+      // not, because a flicker does not have any, and neither does how it lands.
+      setStep(i, { ...without(base, 'from', 'to', 'untapped'), op });
       return;
     }
     if (op === 'move') {
-      const from = step.from && BEHAVIOR_FROM_ZONES.some((z) => z.id === step.from) ? step.from : 'library';
-      setStep(i, { ...step, op, from, to: step.to === from ? 'hand' : (step.to ?? 'hand') });
+      const from = base.from && BEHAVIOR_FROM_ZONES.some((z) => z.id === base.from) ? base.from : 'library';
+      const to = base.to === from ? 'hand' : (base.to ?? 'hand');
+      setStep(i, { ...base, op, from, to, ...(to === 'battlefield' && base.untapped ? { untapped: true } : {}) });
       return;
     }
     if (op === 'self') {
       // One card, no criteria, and the amount is not a choice — see the step's
       // own note below. Exile is the default because self-exile is the case
       // this exists for.
-      setStep(i, { op, x: { kind: 'fixed', n: 1 }, to: step.to ?? 'exile' });
+      const to = base.to ?? 'exile';
+      setStep(i, { op, x: { kind: 'fixed', n: 1 }, to, ...(to === 'battlefield' && base.untapped ? { untapped: true } : {}) });
       return;
     }
-    setStep(i, { op, x: step.x.kind === 'all' ? { kind: 'fixed', n: 1 } : step.x });
+    setStep(i, { op, x: base.x.kind === 'all' ? { kind: 'fixed', n: 1 } : base.x });
   };
 
   /**
@@ -679,7 +802,10 @@ function RuleEditor({
       return;
     }
     const from = step.from === zone ? BEHAVIOR_FROM_ZONES.find((z) => z.id !== zone)?.id : step.from;
-    setStep(i, { ...step, to: zone, from });
+    // Only the battlefield has two ways to arrive, so moving the destination
+    // anywhere else takes the answer with it.
+    const base = zone === 'battlefield' ? step : without(step, 'untapped');
+    setStep(i, { ...base, to: zone, from });
   };
 
   return (
@@ -738,11 +864,19 @@ function RuleEditor({
         const move = step.op === 'move';
         const flicker = step.op === 'flicker';
         const self = step.op === 'self';
+        const mana = step.op === 'mana';
         // Both of them narrow what they reach with a criteria box; only a move
         // has two zones to pick.
         const narrows = move || flicker;
+        // The one destination with two ways to arrive, and the only place the
+        // question is worth asking.
+        const lands = (move || self) && step.to === 'battlefield';
+        const colors = manaStepColors(step);
         return (
-          <div className={`behavior-step${narrows ? ' behavior-step-move' : ''}${self ? ' behavior-step-self' : ''}`} key={i}>
+          <div
+            className={`behavior-step${narrows ? ' behavior-step-move' : ''}${self ? ' behavior-step-self' : ''}${mana ? ' behavior-step-mana' : ''}`}
+            key={i}
+          >
             {/* The verb on its own line and the number under it: three controls
                 abreast on a 393px phone truncates every one of them, and "X = cards
                 in your h" is not a choice anybody can make. */}
@@ -780,6 +914,7 @@ function RuleEditor({
                     ))}
                   </select>
                 </label>
+                {lands && <TapPicker step={step} onChange={(next) => setStep(i, next)} />}
               </div>
             )}
             {/* Only a move picks zones. A flicker's two ends are both the
@@ -812,6 +947,48 @@ function RuleEditor({
                     ))}
                   </select>
                 </label>
+                {lands && <TapPicker step={step} onChange={(next) => setStep(i, next)} />}
+              </div>
+            )}
+            {mana && (
+              <div className="behavior-colors">
+                <div className="behavior-swatches" role="group" aria-label="Which colors this mana can be">
+                  {BEHAVIOR_MANA_COLORS.map((c) => {
+                    const on = colors.includes(c.id);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className={`behavior-swatch${on ? ' is-on' : ''}`}
+                        aria-pressed={on}
+                        aria-label={c.label}
+                        onClick={() => setStep(i, toggleManaColor(step, c.id))}
+                      >
+                        <ManaCost cost={c.symbol} />
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Only with something to choose between. One color on offer is
+                    already all of one color, and a checkbox that cannot change
+                    the answer is §12.2's lie wearing a tick box. */}
+                {colors.length > 1 && (
+                  <label className="behavior-check">
+                    <input
+                      type="checkbox"
+                      checked={!!step.oneColor}
+                      onChange={(e) => setStep(i, e.target.checked ? { ...step, oneColor: true } : without(step, 'oneColor'))}
+                    />
+                    <span>All of it the same color</span>
+                  </label>
+                )}
+                <span className="fine-print">
+                  {colors.length === 1
+                    ? 'Every mana this adds is that color, the way a Dark Ritual adds three black.'
+                    : step.oneColor
+                      ? 'One color, picked as it resolves, and all of the mana is that one — a Lotus Field, not a Burnt Offering.'
+                      : 'Each mana can be any of these, picked as it is spent. All five is any color, which is the default.'}
+                </span>
               </div>
             )}
             {narrows && (
@@ -859,14 +1036,14 @@ function RuleEditor({
           Criteria use the card search syntax, matched against this deck: <code>t:basic</code>, <code>t:creature mv&lt;=3</code>,{' '}
           <code>o:"draw a card"</code>. Leave it blank for any card. <code>set:</code> and <code>is:foil</code> are about a
           printing, so they never match here. The battlefield holds every permanent you control now, creatures included, so a
-          sacrifice can go and find one; anything moved onto it arrives tapped.
+          sacrifice can go and find one; how a card lands there is the picker beside the zones.
         </p>
       )}
       {rule.steps.some((s) => s.op === 'mana') && (
         <p className="fine-print">
           "Add X mana" is your mana pool, not a permanent: the mana is there for the rest of the turn you make it and gone at the
-          end of it, spent or not. It is any color, which a Treasure is too, but a Treasure keeps and this does not. Use it for
-          the mana that evaporates, like a landfall trigger, and the Treasure step for the mana that waits.
+          end of it, spent or not. A Treasure is the same mana with a keep attached, so use this for the mana that evaporates —
+          a landfall trigger, a ritual — and the Treasure step for the mana that waits.
         </p>
       )}
       {rule.steps.some((s) => s.op === 'flicker') && (

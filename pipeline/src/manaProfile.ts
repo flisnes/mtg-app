@@ -394,6 +394,35 @@ const PUTS_LAND_IN_PLAY = /onto the battlefield/i;
 const FETCHES_TAPPED = /onto the battlefield tapped/i;
 
 /**
+ * An Exploration, and nothing that merely looks like one.
+ *
+ * The `extra-land` tag is the loosest of the eight: 162 cards carry it, and
+ * only about thirty of them actually let you play more lands. The rest put a
+ * land onto the battlefield some other way — Arboreal Grazer out of your hand,
+ * Elvish Rejuvenator off the top five — which Tagger files under the same
+ * heading because the *outcome* rhymes. It does not play alike at all: the
+ * simulator's `extraland` is a permanent granting a land drop every turn for
+ * the rest of the game, so reading one off a Grazer invents seven land drops
+ * out of a 1/2 with reach.
+ *
+ * So the tag decides the family and the text decides membership, which is rule
+ * 1 of this file pointed at the one tag that needed it. "On each of your turns"
+ * is the whole discriminator: a card that says "this turn" is a one-shot the
+ * sequencer could not honour anyway — its land drop for the turn has already
+ * happened by the time the spell resolves.
+ *
+ * "Additional" is optional only because Fastbond does not print it: "you may
+ * play any number of lands on each of your turns" is the same card said the
+ * other way round. The tag still has to agree, which is what keeps that
+ * looseness from reaching anything else.
+ */
+const EXTRA_LAND_DROP =
+  /play (?:up to )?(an|one|two|three|four|five|x|any number of) (?:additional )?lands?[^.\n]*(?:on|during) each of (?:your|their) turns/i;
+
+/** How many extra drops it grants. Azusa is two, and everything else printed is one. */
+const EXTRA_LAND_COUNTS: Record<string, number> = { an: 1, one: 1, two: 2, three: 3, four: 4, five: 5 };
+
+/**
  * "This land enters tapped with two depletion counters on it", and the ability
  * removes one to pay. Two activations and it sacrifices itself, so an
  * eight-turn simulation that models Peat Bog as a permanent credits it with
@@ -584,8 +613,13 @@ export function manaProfileOf(card: ManaProfileInput, index: ManaTagIndex): Mana
   // hand, which is a property of the game state and not of the card. Recorded
   // so the UI can list it, flagged so nobody sums it. Checked before landramp
   // because Tagger files these under both.
-  if (tagged(index.extraLand)) {
-    return [kindOf('extraland'), 1, MANA_UNKNOWN];
+  const extra = tagged(index.extraLand) ? EXTRA_LAND_DROP.exec(card.oracleText ?? '') : null;
+  if (extra) {
+    // "X additional lands" and "any number of" are a number off the board, so
+    // they keep the floor of 1 the flag already implies. The flag itself is set
+    // either way: what an extra drop is *worth* depends on holding a spare
+    // land, which is unknowable from the card and always has been.
+    return [kindOf('extraland'), EXTRA_LAND_COUNTS[extra[1]!.toLowerCase()] ?? 1, MANA_UNKNOWN];
   }
   // Ramp that fetches cardboard rather than tapping for mana, so it has no
   // `produces` of its own: what it makes is whatever land it finds.

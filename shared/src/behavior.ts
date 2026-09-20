@@ -1,4 +1,4 @@
-import { BASIC_LAND_TYPES, sourceColors, type EffectProfile, type FetchProfile, type ManaProfile } from './card.js';
+import { BASIC_LAND_TYPES, MANA_LETTERS, sourceColors, type EffectProfile, type FetchProfile, type ManaProfile } from './card.js';
 
 // Card behavior: what the *user* says a card does, when the pipeline's oracle
 // reading says nothing useful.
@@ -92,10 +92,11 @@ export type BehaviorZone = 'library' | 'librarytop' | 'librarybottom' | 'hand' |
  * end of it. A Treasure is the same burst with a keep attached, which is why
  * this is the weaker of the two and why it is offered anyway — a Lotus Cobra's
  * landfall mana evaporates, and writing it as a Treasure would hand the deck a
- * permanent it never had. The mana is any color, because the alternative is a
- * five-checkbox control on a step whose whole job is one number; the colored
- * rituals the pipeline already reads (Dark Ritual) keep their real colors and
- * need no rule written for them.
+ * permanent it never had. Its colors are a choice, because the three cards you
+ * would write one for want three different answers: a Dark Ritual makes
+ * {B}{B}{B}, a Lotus Cobra makes one mana of any color, and a Burnt Offering
+ * makes black and red in whatever mix you like. Choosing nothing is any color,
+ * which is what the step used to be and still is by default.
  */
 export type BehaviorStepKind =
   | 'draw'
@@ -191,6 +192,36 @@ export interface BehaviorStep {
    * applied one level down.
    */
   qx?: BehaviorAmount;
+  /**
+   * `move` and `self`, and only onto the battlefield: it arrives **untapped**,
+   * so a mana source pays for something the turn it lands.
+   *
+   * Absent is tapped, which is what every such move has always done and the
+   * conservative half of the two cards that print this. The flag is the way
+   * round it is because a Sakura-Tribe Scout putting a land into play untapped
+   * is the rarer card and the one that needs saying; writing the default down
+   * would put a `tapped: true` on every row that already means it.
+   */
+  untapped?: true;
+  /**
+   * `mana` only: which colors it makes, as WUBRGC letters. Absent is any color,
+   * which is what the step meant before there was anything to say.
+   *
+   * A string rather than an array because it is stored per deck per card and
+   * "BR" is four bytes where `["B","R"]` is eleven. Normalized by
+   * `sanitizeCardBehavior` into MANA_LETTERS order, so the same three checkboxes
+   * always save the same bytes.
+   */
+  colors?: string;
+  /**
+   * `mana` only: all of it has to be the **same** color, chosen once from
+   * `colors`. Lotus Field's three mana of any one color, and the same flag
+   * MANA_ONE_COLOR is on the mana profile for the same reason — expanded as
+   * independent units it would pay {W}{U}{B}, a cost the card cannot pay.
+   *
+   * Only meaningful with more than one color on offer and more than one mana.
+   */
+  oneColor?: true;
 }
 
 // ---------------------------------------------------------------------------
@@ -410,6 +441,53 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'self', label: 'Put this card into a zone', verb: 'put' },
 ];
 
+export interface ManaColorOption {
+  /** A letter of MANA_LETTERS. */
+  id: string;
+  /** For the picker, which is six round buttons wide on a phone. */
+  symbol: string;
+  label: string;
+}
+
+/**
+ * The colors a `mana` step can be told to make, WUBRG plus colorless.
+ *
+ * Colorless is on the list because it is a real answer and a different one: a
+ * Cabal Ritual's cousin that adds {C}{C} pays generic costs and no pip, which
+ * the simulator already models (a land with no nameable color does exactly
+ * this) and which "any color" would quietly overstate.
+ */
+export const BEHAVIOR_MANA_COLORS: readonly ManaColorOption[] = [
+  { id: 'W', symbol: '{W}', label: 'White' },
+  { id: 'U', symbol: '{U}', label: 'Blue' },
+  { id: 'B', symbol: '{B}', label: 'Black' },
+  { id: 'R', symbol: '{R}', label: 'Red' },
+  { id: 'G', symbol: '{G}', label: 'Green' },
+  { id: 'C', symbol: '{C}', label: 'Colorless' },
+];
+
+/** The five colors, which is what "any color" means and what an empty `colors` is. */
+export const ANY_COLOR = 'WUBRG';
+
+/**
+ * A `colors` string as it is stored: MANA_LETTERS order, no duplicates, nothing
+ * that is not a mana letter, and empty for "any color".
+ *
+ * All five colors normalizes *away* rather than being kept, so the picker with
+ * everything ticked and the picker with nothing ticked save the same bytes —
+ * they mean the same thing, and two spellings of one rule is the sort of thing
+ * that makes a sync diff for no reason.
+ */
+export function normalizeManaColors(raw: string | null | undefined): string {
+  if (!raw) return '';
+  let out = '';
+  for (const letter of MANA_LETTERS) if (raw.toUpperCase().includes(letter)) out += letter;
+  return out === ANY_COLOR ? '' : out;
+}
+
+/** What a `mana` step actually makes, with the empty string resolved. */
+export const manaStepColors = (step: BehaviorStep): string => normalizeManaColors(step.colors) || ANY_COLOR;
+
 export interface ZoneOption {
   id: BehaviorZone;
   /** For the picker. */
@@ -562,6 +640,15 @@ function intoPhrase(zone: BehaviorZone | undefined): string {
 /** Cards go *into* every zone but the battlefield, which they go *onto*. */
 const intoPrep = (zone: BehaviorZone | undefined): string => (zone === 'battlefield' ? 'onto' : 'into');
 
+/**
+ * How it lands, for the one destination where that is a question. Said out loud
+ * on both settings rather than only on the unusual one: the default used to be
+ * silent and always tapped, which read as an oversight in the sentence and
+ * surprised anyone who expected a reanimated Sol Ring to pay for something.
+ */
+const tappedPhrase = (step: BehaviorStep): string =>
+  step.to === 'battlefield' ? (step.untapped ? ', untapped' : ', tapped') : '';
+
 export function describeStep(step: BehaviorStep): string {
   const verb = STEP_BY_ID.get(step.op)?.verb ?? step.op;
   const computed = step.x.kind !== 'fixed';
@@ -569,10 +656,10 @@ export function describeStep(step: BehaviorStep): string {
   const tail = computed ? ` (X = ${describeAmount(step.x)})` : '';
   // The one step that is about the card holding the rule rather than about the
   // cards it can reach, so it has no count and no criteria to read out.
-  if (step.op === 'self') return `put this card ${intoPrep(step.to)} ${intoPhrase(step.to)}`;
+  if (step.op === 'self') return `put this card ${intoPrep(step.to)} ${intoPhrase(step.to)}${tappedPhrase(step)}`;
   if (step.op === 'move') {
     const from = ZONE_BY_ID.get(step.from ?? '')?.phrase ?? 'somewhere';
-    const to = intoPhrase(step.to);
+    const to = intoPhrase(step.to) + tappedPhrase(step);
     const filter = step.q ? ` matching ${step.q}` : '';
     const where = ` from ${from} to ${to}`;
     // What the query's own placeholder is worth, named separately from the
@@ -597,7 +684,18 @@ export function describeStep(step: BehaviorStep): string {
     const many = computed || (step.x.n ?? 0) !== 1;
     return `${verb} ${count} Treasure${many ? 's' : ''}${tail}`;
   }
-  if (step.op === 'mana') return `${verb} ${count} mana of any color to your mana pool${tail}`;
+  if (step.op === 'mana') {
+    // Phrased the way describeRitual phrases the pipeline's own reading, so a
+    // Dark Ritual you wrote out by hand and a Dark Ritual we read off the card
+    // say the same sentence.
+    const colors = manaStepColors(step);
+    const symbols = [...colors].map((c) => `{${c}}`).join('');
+    const any = colors === ANY_COLOR;
+    if (colors.length === 1) return `${verb} ${count} ${symbols} to your mana pool${tail}`;
+    const what = any ? 'any color' : symbols;
+    if (step.oneColor) return `${verb} ${count} mana of any one of ${any ? symbols : what} to your mana pool${tail}`;
+    return `${verb} ${count} mana of ${what} to your mana pool${tail}`;
+  }
   return `${verb} ${count}${tail}`;
 }
 
@@ -690,6 +788,73 @@ export function describeLandRamp(mana: ManaProfile | null | undefined): string |
   // Always tapped, whatever the flag says: that is what the sequencer does with
   // one, and this has to describe the model rather than the card.
   return `put ${n} land${n === 1 ? '' : 's'} from your library onto the battlefield, tapped`;
+}
+
+/**
+ * What the card *is*, for the three kinds that sit on the battlefield and tap:
+ * a land, a rock, a mana creature. Null for everything else.
+ *
+ * The odd one out among the readings here, because it is the only one a rule
+ * written in the editor does not replace. A Llanowar Elves taps for green
+ * whatever anybody writes on it — that is its type line and its printed
+ * ability, not a reading of its text that might be wrong.
+ *
+ * It gets a line anyway, and that is the whole point: every effect the
+ * simulator gives a card should be readable in one place, including the ones
+ * you cannot argue with. A Lotus Cobra used to sit in that list saying "do
+ * nothing" while the sequencer tapped it for a mana of any colour every turn
+ * from the one after it landed, which is a model somebody is entitled to see.
+ */
+export function describeManaSource(mana: ManaProfile | null | undefined, produces: string | undefined): string | null {
+  if (!mana) return null;
+  if (mana.kind !== 'land' && mana.kind !== 'rock' && mana.kind !== 'dork') return null;
+  const colors = sourceColors(mana, produces);
+  const symbols = [...colors].map((c) => `{${c}}`).join('');
+  const n = Math.max(0, mana.adds);
+  // A utility land that taps for nothing still costs a land drop, which is the
+  // only thing the sequencer knows about it.
+  if (n === 0 || colors.length === 0) {
+    const what = n === 0 ? 'Taps for nothing' : `Taps for ${n} mana that pays only generic costs`;
+    return mana.kind === 'land' && mana.tapped === 'always' ? `Arrives tapped. ${what}` : what;
+  }
+  const what =
+    colors.length === 1
+      ? `Taps for ${symbols.repeat(n)}`
+      : mana.oneColor && n > 1
+        ? `Taps for ${n} mana of any one of ${symbols}`
+        : `Taps for ${n} mana of ${colors.length >= 5 ? 'any color' : symbols}`;
+  // Only 'always'. A conditional tapland is untapped as far as the sequencer is
+  // concerned, the same call describeFetch makes.
+  const lead = mana.tapped === 'always' ? 'Arrives tapped. ' : '';
+  // Summoning sickness, which is the whole difference between a dork and a rock
+  // and the reason they are two kinds rather than one with a type line.
+  const tail = mana.kind === 'dork' ? ', from the turn after it arrives' : '';
+  return `${lead}${what}${tail}`;
+}
+
+/**
+ * The extra land drops the mana profile reads, as a phrase, or null for
+ * everything that is not an Exploration.
+ *
+ * The fifth derived reading and the last one with no voice, which is how an
+ * Arboreal Grazer came to sit in the editor saying "do nothing" while the
+ * sequencer handed it a land drop every turn for the rest of the game. The
+ * misreading is fixed upstream — the pipeline now wants the card to actually
+ * say "on each of your turns" — but the *silence* was the worse half: a wrong
+ * effect you can see is a bug report, and a wrong effect you cannot see is a
+ * deck report nobody can explain.
+ *
+ * Same shape and same reason as the three below it: a phrase, not rules,
+ * because the grammar has no step that grants a land drop and inventing one
+ * that only ever appears on thirty cards would be a worse dropdown than a
+ * sentence.
+ */
+export function describeExtraLand(mana: ManaProfile | null | undefined): string | null {
+  if (!mana || mana.kind !== 'extraland') return null;
+  const n = Math.max(1, mana.adds);
+  // From the turn after it lands, which is what the sequencer does with one:
+  // this turn's land drop has already happened by the time it resolves.
+  return `play ${n} additional land${n === 1 ? '' : 's'} on each of your turns, from next turn`;
 }
 
 /**
@@ -906,16 +1071,30 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
       const op = s.op as BehaviorStepKind;
       const from = typeof s.from === 'string' && ZONE_BY_ID.has(s.from) ? (s.from as BehaviorZone) : null;
       const to = typeof s.to === 'string' && ZONE_BY_ID.has(s.to) ? (s.to as BehaviorZone) : null;
+      // How it lands, on the one destination that has two ways to. Kept only
+      // where it means something, so a step moving cards to the graveyard never
+      // stores an answer to a question nobody asked it.
+      const landing = to === 'battlefield' && s.untapped === true ? { untapped: true as const } : {};
       if (op === 'self') {
         // One card, and it is the card the rule is on, so the amount is not a
         // choice anybody makes. Normalized rather than kept, so two saves of
         // the same rule are the same bytes.
         if (!to) continue;
-        steps.push({ op, x: { kind: 'fixed', n: 1 }, to });
+        steps.push({ op, x: { kind: 'fixed', n: 1 }, to, ...landing });
         continue;
       }
       const x = cleanAmount(s.x);
       if (!x) continue;
+      if (op === 'mana') {
+        if (x.kind === 'all') continue;
+        // All five colors and no colors at all are the same rule, so they are
+        // the same bytes — see normalizeManaColors. "All of one color" says
+        // nothing when there is only one on offer, so it is dropped there too.
+        const colors = normalizeManaColors(typeof s.colors === 'string' ? s.colors : '');
+        const one = s.oneColor === true && (colors === '' || colors.length > 1) ? { oneColor: true as const } : {};
+        steps.push({ op, x, ...(colors ? { colors } : {}), ...one });
+        continue;
+      }
       if (op !== 'move' && op !== 'flicker') {
         if (x.kind === 'all') continue;
         steps.push({ op, x });
@@ -934,7 +1113,7 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
         continue;
       }
       if (!from || !to || from === to || ZONE_BY_ID.get(from)!.toOnly) continue;
-      steps.push({ op, x, from, to, ...narrowed });
+      steps.push({ op, x, from, to, ...narrowed, ...landing });
     }
     if (steps.length === 0) continue;
     const on = r.on as BehaviorTrigger;

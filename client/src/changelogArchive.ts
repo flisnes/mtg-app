@@ -9,6 +9,21 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.157.0',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'The simulator resolves your spells instead of casting them as blanks. Draw, loot, mill, surveil, scry and Treasure all happen now, a Phyrexian Arena keeps drawing every upkeep, and an Exploration is a second land drop rather than a dead card. The "How the game unfolds" charts move with it.',
+      },
+      {
+        kind: 'added',
+        text:
+          'A line under those charts saying how much of your deck the model actually plays out, and naming the draw spells it knows it is missing. The curves are still a floor, but now you can see how far off the floor they are.',
+      },
+    ],
+  },
+  {
     version: '0.156.0',
     changes: [
       {

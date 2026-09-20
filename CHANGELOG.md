@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.159.4
+
+- **Fixed: cards that put a land into play are no longer read as an Exploration.** Arboreal Grazer, Burgeoning, Sakura-Tribe Scout and about 130 others carried a tag broad enough to cover both, so the simulator handed each of them an extra land drop every turn for the rest of the game. The card database now wants the card to actually say "on each of your turns", and reads the rest as the one-shot ramp they are. Azusa correctly grants two drops rather than one.
+- **Changed: every effect the simulator gives a card is now listed in the card behavior editor.** Extra land drops had no line at all, so an Arboreal Grazer sat there saying "do nothing" while the sequencer was playing it as an Exploration. What a land, a rock or a mana creature taps for is listed too, so a Lotus Cobra no longer reads as a blank.
+- **Changed: writing your own rule now replaces every derived reading, not some of them.** Land ramp and fetchlands already worked this way; rituals and extra land drops did not, so a card you wrote out by hand kept doing the thing we read off it as well. Writing a rule is now how you say a card does not do something. What a card *is* still stays: a land makes its mana whatever you write on it.
+- **Added: a move onto the battlefield can arrive untapped.** Every such step used to arrive tapped with no way to say otherwise. A Sakura-Tribe Scout's land now pays for something the turn it lands, and the rule reads back saying which it is.
+- **Added: an "Add X mana" step can name its colors.** One color for a Dark Ritual, a couple for a Burnt Offering, or all of them for a Lotus Cobra, plus an "all of it the same color" tick for the Lotus Field case. Leaving it alone is any color, same as before.
+
 ## 0.159.3
 
 - **Added: rituals put mana in your mana pool, and the simulator spends it.** Dark Ritual, Pyretic Ritual, Seething Song and everything else the card database reads as burst mana used to resolve as a blank. The mana is now real: it lands in your pool the turn you cast it, the rest of the turn can spend it, and it is gone at the end of the turn whether you used it or not.

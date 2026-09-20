@@ -7900,11 +7900,63 @@ a.seg {
     'q drop';
 }
 /* "Put this card into a zone" has no amount to pick, so the destination takes
-   the row the number would have used. */
+   the row the number would have used. A `self` step can still land on the
+   battlefield, which adds the tapped picker to the zones row. */
 .behavior-step-self {
   grid-template-areas:
     'op drop'
     'zones drop';
+}
+/* "Add X mana" needs one more row: which colors, and whether all of it has to
+   be the same one. */
+.behavior-step-mana {
+  grid-template-areas:
+    'op drop'
+    'x drop'
+    'colors drop';
+}
+.behavior-colors {
+  grid-area: colors;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.behavior-colors .fine-print {
+  margin: 0;
+}
+.behavior-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+/* Six of these across a 393px phone, so they are the pip and nothing else. The
+   unticked ones stay legible rather than greying out to a guess: which colors
+   are *off* is half the answer the control is giving. */
+.behavior-swatch {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.4rem;
+  line-height: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  opacity: 0.4;
+}
+.behavior-swatch.is-on {
+  opacity: 1;
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+.behavior-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+.behavior-check input {
+  flex: none;
+  margin: 0;
 }
 .behavior-zones {
   grid-area: zones;

@@ -302,12 +302,15 @@ export function halfWidth(p: number, games: number): number {
  *   4. A fetch goes and gets whichever land widens your colors most, and that
  *      land leaves the library. Eight fetches over one Island are one blue
  *      source here, the same as at the table.
- *   5. Record every card in hand you could pay for with everything untapped.
- *      Taken *before* any mana is spent, because the card you are asking about
- *      is the card you would have spent it on.
+ *   5. Record every card in hand you could pay for with everything untapped,
+ *      plus whatever the rituals in hand would add to that. Taken *before* any
+ *      mana is spent, because the card you are asking about is the card you
+ *      would have spent it on.
  *   6. Spend the turn. Ramp first, priciest first, because a Signet cast before
  *      the three-drop is a source next turn and cast after it is a card in
- *      hand; then the rest of the hand, priciest first, until the mana is gone.
+ *      hand; a ritual counts as ramp for the same reason, and is cast only when
+ *      something else in hand is waiting on exactly the mana it makes. Then the
+ *      rest of the hand, priciest first, until the mana is gone.
  *      A tie between equals is a coin flip rather than decklist order. An X
  *      spell goes **last** of all, and X is then whatever the turn has left
  *      over, which is what a player does with it and costs nothing precisely
@@ -315,9 +318,10 @@ export function halfWidth(p: number, games: number): number {
  *      over, because a Fireball for zero spends the card and buys nothing.
  *   7. A card the database has an effect profile for resolves it: cards into
  *      hand, cards out of it, cards off the top into the graveyard, Treasures
- *      onto the battlefield, and a dig that goes looking for a land only when
- *      you have none. A Treasure is cracked the first turn the spending
- *      actually reaches it. Everything else still resolves as a blank, which
+ *      onto the battlefield, mana into your mana pool, and a dig that goes
+ *      looking for a land only when you have none. A Treasure is cracked the
+ *      first turn the spending actually reaches it; mana in the pool is gone at
+ *      the end of the turn whether you spent it or not. Everything else still resolves as a blank, which
  *      is right for a Lightning Bolt and wrong for every draw spell whose draw
  *      hangs off a trigger the pipeline would not read. So the curves are
  *      still a floor, and `SimDeck.coverage` is how far off the floor they are.
@@ -412,6 +416,18 @@ export function simulate(
   const srcBy = new Int32Array(MAX_SOURCES);
   /** A Treasure, so it can be sacrificed for the mana it just paid. */
   const srcTreasure = new Uint8Array(MAX_SOURCES);
+  /**
+   * Floating mana: a ritual's burst, or a landfall trigger's, sitting in your
+   * mana pool for this turn and gone at the end of it.
+   *
+   * Filed with the sources because `units` is what the payment solver reads and
+   * this is mana the solver has to see. Flagged because it is not on the
+   * battlefield and never was: nothing sacrifices it, nothing bounces it,
+   * `landsInPlay` does not count it, and `emptyPool` takes the slot back when
+   * the turn ends whether the mana was spent or not. That last line is the
+   * whole difference between a ritual and a Treasure.
+   */
+  const srcFloating = new Uint8Array(MAX_SOURCES);
   const unitGroups: UnitGroup[] = [];
   /**
    * The battlefield, as permanents rather than as mana.
@@ -522,13 +538,14 @@ export function simulate(
       // rehearsal too, which is why it is a flag and not a second loop.
       if (credit) creditMana(srcBy[s]!, turn, n);
       const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
+      const owner = srcFloating[s] ? floatOwner(srcCard[s]!) : srcCard[s]!;
       if (srcOneColor[s] && n > 1) {
         unitGroups.push({ colors: UNIT_BY_MASK[mask]!.colors, count: n });
-        if (sink) groupOwner.push(srcCard[s]!);
+        if (sink) groupOwner.push(owner);
       } else {
         for (let u = 0; u < n; u++) {
           units.push(UNIT_BY_MASK[mask]!);
-          if (sink) unitOwner.push(srcCard[s]!);
+          if (sink) unitOwner.push(owner);
         }
       }
     }
@@ -544,11 +561,35 @@ export function simulate(
    */
   const unitOwner: number[] = [];
   const groupOwner: number[] = [];
-  /** The cast lines of the turn being written, waiting for their tap breakdown. */
-  const castLines: { line: TraceLine; generic: number; pips: number }[] = [];
+  /**
+   * The cast lines of the turn being written, waiting for their tap breakdown.
+   * `card` is what was cast, so a floating unit can be told apart from the
+   * spell that made it.
+   */
+  interface CastLine {
+    line: TraceLine;
+    card: number;
+    generic: number;
+    pips: number;
+  }
+  const castLines: CastLine[] = [];
+
+  /**
+   * Who a unit in the pool belongs to, as the trace wants to say it.
+   *
+   * A plain card index is a permanent that taps. -1 is a Treasure token, which
+   * is nobody's card. Anything below that is *floating mana* made by a card,
+   * encoded rather than given a parallel array because `unitOwner` is rebuilt
+   * every turn in the pool walk and a second array would have to be kept in
+   * step with it at four sites instead of one.
+   */
+  const floatOwner = (index: number): number => -2 - index;
+  const isFloating = (owner: number): boolean => owner <= -2;
+  const ownerCard = (owner: number): number => (owner <= -2 ? -2 - owner : owner);
 
   /** What a permanent is called, for a trace line. -1 is a Treasure token. */
-  const sourceName = (index: number): string => (index < 0 ? 'Treasure' : (cards[index]?.name ?? 'a source'));
+  const sourceName = (owner: number): string =>
+    owner === -1 ? 'Treasure' : (cards[ownerCard(owner)]?.name ?? 'a source');
 
   /**
    * Which permanent paid for which spell, worked out **once for the whole
@@ -567,11 +608,7 @@ export function simulate(
    * generic, so which units go where is arbitrary, and cast order is the
    * arbitrary choice a reader can follow.
    */
-  const attributeTaps = (
-    casts: { line: TraceLine; generic: number; pips: number }[],
-    pool: readonly ManaUnit[],
-    owners: readonly number[],
-  ): void => {
+  const attributeTaps = (casts: CastLine[], pool: readonly ManaUnit[], owners: readonly number[]): void => {
     if (casts.length === 0) return;
     const plan = explainPayment(paid, pool, unitGroups);
     if (!plan) {
@@ -589,25 +626,83 @@ export function simulate(
     for (let c = 0; c < casts.length; c++) for (let i = 0; i < casts[c]!.pips; i++) owner.push(c);
     /** Generic still owed, per cast, drained in order. */
     const owed = casts.map((c) => c.generic);
-    const taps: string[][] = casts.map(() => []);
+    /** One row per unit the plan actually spent: which unit, on which cast. */
+    const spent: { unit: number; at: number; label: string }[] = [];
 
     for (let i = 0; i < plan.byUnit.length; i++) {
       const use = plan.byUnit[i]!;
       if (use === PAY_UNUSED) continue;
-      const name = sourceName(poolOwner(i, owners));
       if (use === PAY_GENERIC) {
         let at = owed.findIndex((n) => n > 0);
         if (at < 0) at = casts.length - 1;
         owed[at] = (owed[at] ?? 1) - 1;
-        taps[at]!.push(`${name} taps for generic`);
+        spent.push({ unit: i, at, label: 'generic' });
         continue;
       }
       const at = owner[plan.pipSlot[use] ?? -1] ?? 0;
-      taps[at]!.push(`${name} taps for ${pipText(plan.pips[use]!.options)}`);
+      spent.push({ unit: i, at, label: pipText(plan.pips[use]!.options) });
+    }
+
+    // --- mana nobody had yet ----------------------------------------------
+    // The solver sees one cost and one pool for the whole turn, so it will
+    // happily hand a Dark Ritual its own {B} back out of the {B}{B}{B} that
+    // Dark Ritual made. The *decision* is sound — the cast was solved against
+    // the pool as it stood, before the burst — but the breakdown would be a
+    // sequence nobody could have played, and a trace that contradicts the
+    // model is the one thing this function exists not to do.
+    //
+    // So: a floating unit assigned to its own maker, or to anything cast
+    // before it, swaps with a unit of the same colors spent later. Same colors
+    // is what makes the swap free — two interchangeable units changing places
+    // is the same payment — and a ritual makes the colors it costs, which is
+    // why so narrow a rule covers the case it was written for.
+    const madeAt = (unit: number): number => {
+      const who = poolOwner(unit, owners);
+      if (!isFloating(who)) return -1;
+      const card = ownerCard(who);
+      for (let c = 0; c < casts.length; c++) if (casts[c]!.card === card) return c;
+      return -1;
+    };
+    const sig = (unit: number): string => poolColors(unit, pool).join('');
+    for (let k = 0; k < spent.length; k++) {
+      const e = spent[k]!;
+      const made = madeAt(e.unit);
+      if (made < 0 || e.at > made) continue;
+      for (let m = 0; m < spent.length; m++) {
+        const f = spent[m]!;
+        if (f.at <= e.at || sig(f.unit) !== sig(e.unit)) continue;
+        const moved = madeAt(f.unit);
+        if (moved >= 0 && e.at <= moved) continue;
+        const tmp = e.unit;
+        e.unit = f.unit;
+        f.unit = tmp;
+        break;
+      }
+    }
+
+    const taps: string[][] = casts.map(() => []);
+    for (const e of spent) {
+      const who = poolOwner(e.unit, owners);
+      // Nothing taps for floating mana: it is already in the pool, and a line
+      // saying a Dark Ritual tapped for black is a line about a permanent that
+      // is not there.
+      taps[e.at]!.push(`${sourceName(who)} ${isFloating(who) ? 'adds' : 'taps for'} ${e.label}`);
     }
     for (let c = 0; c < casts.length; c++) {
       if (taps[c]!.length > 0) casts[c]!.line.taps = taps[c];
     }
+  };
+
+  /** What pool index `i` can pay, walked the same way poolOwner walks it. */
+  const poolColors = (i: number, pool: readonly ManaUnit[]): readonly string[] => {
+    if (i < pool.length) return pool[i]!.colors;
+    let at = i - pool.length;
+    let g = 0;
+    while (g < unitGroups.length && at >= unitGroups[g]!.count) {
+      at -= unitGroups[g]!.count;
+      g++;
+    }
+    return unitGroups[g]?.colors ?? [];
   };
 
   /** The permanent behind pool index `i`, plain units first and then the groups. */
@@ -646,6 +741,7 @@ export function simulate(
     srcCard[srcLen] = index;
     srcBy[srcLen] = by;
     srcTreasure[srcLen] = 0;
+    srcFloating[srcLen] = 0;
     srcLen++;
     grantMask |= card.grantMask;
     // Every mana source that is a real card is also a permanent, and this is
@@ -729,6 +825,7 @@ export function simulate(
     srcCard[at] = srcCard[srcLen]!;
     srcBy[at] = srcBy[srcLen]!;
     srcTreasure[at] = srcTreasure[srcLen]!;
+    srcFloating[at] = srcFloating[srcLen]!;
   };
 
   /**
@@ -883,6 +980,7 @@ export function simulate(
       srcCard[srcLen] = -1;
       srcBy[srcLen] = creditTo;
       srcTreasure[srcLen] = 1;
+      srcFloating[srcLen] = 0;
       srcLen++;
       units.push(UNIT_BY_MASK[TREASURE_MASK]!);
       if (sink) unitOwner.push(-1);
@@ -930,9 +1028,10 @@ export function simulate(
         const n = srcUnits[s]!;
         if (srcOneColor[s] && n > 1) continue; // already in unitGroups
         const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
+        const owner = srcFloating[s] ? floatOwner(srcCard[s]!) : srcCard[s]!;
         for (let u = 0; u < n; u++) {
           thrifty.push(UNIT_BY_MASK[mask]!);
-          if (sink) thriftyOwner.push(srcCard[s]!);
+          if (sink) thriftyOwner.push(owner);
         }
       }
       for (let i = 0; i < k; i++) {
@@ -951,6 +1050,68 @@ export function simulate(
    */
   const thrifty: ManaUnit[] = [];
   const thriftyOwner: number[] = [];
+
+  /**
+   * Mana straight into your mana pool: a Dark Ritual's {B}{B}{B}, a Lotus
+   * Cobra's landfall trigger. Returns how much it actually put there.
+   *
+   * Into `units` as well as into the source list, for the same reason a
+   * Treasure goes into both: `units` is the pool the payment solver is holding
+   * *this turn*, and mana that cannot be spent until the next rebuild is not
+   * mana anybody would call a ritual.
+   *
+   * What makes it a ritual rather than a Treasure is the expiry. It lasts this
+   * turn and no longer, spent or not, so there is no reconciliation to do at
+   * the end of it — `emptyPool` throws the slot away either way. That is also
+   * why the sequencer has to be choosier about casting one than about making a
+   * Treasure: see `ritualHasUse`.
+   */
+  const addPoolMana = (count: number, mask: number, oneColor: boolean, turn: number, by: number): number => {
+    if (count <= 0 || srcLen >= MAX_SOURCES) return 0;
+    const grouped = oneColor && count > 1;
+    srcMask[srcLen] = mask;
+    srcUnits[srcLen] = count;
+    srcOnline[srcLen] = turn;
+    // Last turn it works is this one, so the next pool walk skips it even if
+    // the sweep below has not run yet.
+    srcExpires[srcLen] = turn;
+    srcOneColor[srcLen] = grouped ? 1 : 0;
+    srcIsLand[srcLen] = 0;
+    srcCard[srcLen] = by;
+    srcBy[srcLen] = by;
+    srcTreasure[srcLen] = 0;
+    srcFloating[srcLen] = 1;
+    srcLen++;
+    const unit = UNIT_BY_MASK[mask]!;
+    if (grouped) {
+      unitGroups.push({ colors: unit.colors, count });
+      if (sink) groupOwner.push(floatOwner(by));
+    } else {
+      for (let u = 0; u < count; u++) {
+        units.push(unit);
+        if (sink) unitOwner.push(floatOwner(by));
+      }
+    }
+    // Same dance as makeTreasures: the pool walk credits what it counted, so
+    // only mana made *after* that walk is credited by hand here.
+    if (poolCredited) creditMana(by, turn, count);
+    return count;
+  };
+
+  /**
+   * End of turn: the mana pool empties. Use it or lose it, which is the one
+   * rule of Magic this whole mechanism exists to model.
+   *
+   * Compacts forward rather than walking backwards, because `dropSource` is a
+   * swap-remove and a backwards walk over a shrinking array is a bug waiting
+   * for the second floating source in a turn.
+   */
+  const emptyPool = (): void => {
+    for (let s = 0; s < srcLen; ) {
+      if (srcFloating[s]) dropSource(s);
+      else s++;
+    }
+  };
 
   /** Sacrifice `count` of them, newest first — they are interchangeable. */
   const crackTreasures = (count: number): void => {
@@ -1802,7 +1963,10 @@ export function simulate(
   /** Take a card off the battlefield, if it is a source there. */
   const unsource = (index: number): void => {
     for (let s = 0; s < srcLen; s++) {
-      if (srcCard[s] !== index) continue;
+      // Floating mana carries the index of whatever made it, and it is not the
+      // card: a rule that sacrifices a Lotus Cobra must not sacrifice the mana
+      // its last landfall trigger put in the pool instead.
+      if (srcCard[s] !== index || srcFloating[s]) continue;
       dropSource(s);
       return;
     }
@@ -1894,6 +2058,17 @@ export function simulate(
           made += t;
           did = t;
           if (sink && t > 0) bits.push(`makes ${t} Treasure${t === 1 ? '' : 's'}`);
+          break;
+        }
+        case 'mana': {
+          // Any color, which is what the grammar offers and all it offers: a
+          // colored ritual comes off the mana profile with its real colors and
+          // needs no rule. Weaker than the Treasure step sitting above it,
+          // because this is gone at end of turn and a Treasure is not.
+          const m = addPoolMana(n, TREASURE_MASK, false, turn, creditTo);
+          made += m;
+          did = m;
+          if (sink && m > 0) bits.push(`adds ${m} mana`);
           break;
         }
         case 'move': {
@@ -1997,6 +2172,126 @@ export function simulate(
 
   /** Every cost committed this turn, folded into one, so partial spends add up. */
   const paid: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [], faces: 1 };
+
+  // --- Rituals, and the pay question -----------------------------------------
+  // A ritual in hand is mana you have not spent yet, and the manabase question
+  // — "of the games where you held this card, how often could you pay for it" —
+  // has to know that or it disagrees with the spend loop below, which happily
+  // casts the four-drop off a Dark Ritual and then reports the four-drop as
+  // unpayable. Not a generosity: it is the same answer the sequencer acts on.
+  //
+  // Everything here is dead weight in a deck with no ritual in it, so it is
+  // gated on one flag read once.
+  const hasRituals = cards.some((c) => c.role === 'ritual' && c.cost !== null && c.adds > c.cost.mana);
+  /** The turn's pool with every castable ritual in hand cast into it. */
+  const boosted: ManaUnit[] = [];
+  const boostedGroups: UnitGroup[] = [];
+  /** What casting them costs, to be folded in alongside whatever you asked about. */
+  const ritualCost: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [], faces: 1 };
+  const probe: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [], faces: 1 };
+
+  /**
+   * Cast every ritual in hand, on paper, and report whether any of them went.
+   *
+   * Greedy and in hand order: a ritual joins if its own cost is still payable
+   * alongside the ones already in, and then its mana joins the pool. Greedy is
+   * enough because a ritual that pays for itself never makes another one
+   * harder to cast — it only ever adds units.
+   */
+  const buildRitualPool = (): boolean => {
+    ritualCost.generic = 0;
+    ritualCost.pips.length = 0;
+    ritualCost.mana = 0;
+    boosted.length = 0;
+    boostedGroups.length = 0;
+    for (const u of units) boosted.push(u);
+    for (const g of unitGroups) boostedGroups.push(g);
+    let any = false;
+    for (let i = 0; i < handLen; i++) {
+      const card = cards[hand[i]!]!;
+      if (card.role !== 'ritual' || !card.cost || card.adds <= card.cost.mana) continue;
+      const before = ritualCost.pips.length;
+      ritualCost.generic += card.cost.generic;
+      for (const pip of card.cost.pips) ritualCost.pips.push(pip);
+      if (!canPay(ritualCost, boosted, boostedGroups)) {
+        ritualCost.generic -= card.cost.generic;
+        ritualCost.pips.length = before;
+        continue;
+      }
+      ritualCost.mana += card.cost.mana;
+      const unit = UNIT_BY_MASK[card.mask]!;
+      if (card.oneColor && card.adds > 1) boostedGroups.push({ colors: unit.colors, count: card.adds });
+      else for (let u = 0; u < card.adds; u++) boosted.push(unit);
+      any = true;
+    }
+    return any;
+  };
+
+  /** Could you pay for this if you spent the rituals first? */
+  const payableWithRituals = (cost: ParsedCost): boolean => {
+    probe.generic = ritualCost.generic + cost.generic;
+    probe.pips.length = 0;
+    for (const pip of ritualCost.pips) probe.pips.push(pip);
+    for (const pip of cost.pips) probe.pips.push(pip);
+    probe.mana = ritualCost.mana + cost.mana;
+    return canPay(probe, boosted, boostedGroups);
+  };
+
+  /**
+   * The spell this turn's rituals are *for*, or null when they are for nothing.
+   *
+   * A ritual cast into nothing is a card thrown away for mana that evaporates,
+   * and a sequencer that throws them away reports mana it never had a use for —
+   * the generous direction, which §11.4 does not allow. So the burst needs a
+   * target before any of it is made, and the target is the most expensive thing
+   * in hand that the rituals put in reach and the lands do not. Most expensive
+   * because that is what anybody rituals into: the payoff, not the filler.
+   *
+   * The `available + 2` floor is the other half, and it is what stops a deck of
+   * two-drops burning twelve Dark Rituals on turn one to cast the two-drop it
+   * would have cast on turn two anyway. A ritual is not spent to gain a single
+   * land drop; the spell it buys has to be further out of reach than the land
+   * you are about to draw.
+   *
+   * Answered against the same boosted pool the pay question uses, so the two
+   * are reading the same hand. They still part company on the `available + 2`
+   * floor, and deliberately: `payByTurn` asks whether you *could*, which on a
+   * turn-three four-drop is yes, and the sequencer asks whether you *would*,
+   * which on a turn-three four-drop is no, because turn four casts it for free.
+   */
+  const ritualTarget = (available: number): ParsedCost | null => {
+    let best: ParsedCost | null = null;
+    for (let i = 0; i < handLen; i++) {
+      const card = cards[hand[i]!]!;
+      if (!card.spell || !card.cost || card.role === 'ritual') continue;
+      if (card.cost.mana < available + 2) continue;
+      if (best && card.cost.mana <= best.mana) continue;
+      if (canPay(card.cost, units, unitGroups)) continue;
+      if (!payableWithRituals(card.cost)) continue;
+      best = card.cost;
+    }
+    return best;
+  };
+
+  /**
+   * Is the turn still short of the spell the rituals are for?
+   *
+   * Asked against everything already committed, which is what makes a chain
+   * work and what stops it running long: two Dark Rituals into a turn-one
+   * four-drop is two passes through here, and the third ritual never goes
+   * because by then the cost solves.
+   */
+  const goalProbe: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [], faces: 1 };
+  const ritualNeeded = (goal: ParsedCost | null): boolean => {
+    if (!goal) return false;
+    goalProbe.generic = paid.generic + goal.generic;
+    goalProbe.pips.length = 0;
+    for (const pip of paid.pips) goalProbe.pips.push(pip);
+    for (const pip of goal.pips) goalProbe.pips.push(pip);
+    goalProbe.mana = paid.mana + goal.mana;
+    return !canPay(goalProbe, units, unitGroups);
+  };
+
   let handSizeSum = 0;
   let mulliganed = 0;
   const games = deckSize > 0 ? opts.games : 0;
@@ -2270,6 +2565,10 @@ export function simulate(
       // solve per cost per game is enough. `payStamp` covers the rest: two
       // cards in hand at the same cost are one question.
       const stamp = game * stride + turn;
+      // The pool plus whatever the rituals in hand would add to it, built once
+      // for the turn. False in every deck without one, and in every game where
+      // none of them is castable yet.
+      const withRituals = opts.effects && hasRituals ? buildRitualPool() : false;
       for (let i = 0; i < handLen; i++) {
         const index = hand[i]!;
         const g = groupOf[index]!;
@@ -2278,7 +2577,12 @@ export function simulate(
         if (firstCast[index] !== 0) continue;
         if (firstPay[g] === 0 && payStamp[g] !== stamp) {
           payStamp[g] = stamp;
-          if (canPay(cards[index]!.cost!, units, unitGroups)) firstPay[g] = turn;
+          const cost = cards[index]!.cost!;
+          // The ritual's own row is asked the plain question only: it is
+          // already inside `boosted`, and letting it pay for itself out of its
+          // own burst is the one circularity this has to refuse.
+          if (canPay(cost, units, unitGroups)) firstPay[g] = turn;
+          else if (withRituals && cards[index]!.role !== 'ritual' && payableWithRituals(cost)) firstPay[g] = turn;
         }
         if (firstPay[g] !== 0) firstCast[index] = turn;
       }
@@ -2300,6 +2604,9 @@ export function simulate(
       paid.generic = 0;
       paid.pips.length = 0;
       paid.mana = 0;
+      // What the turn's rituals are for, read off the hand the pay question
+      // just finished asking about. Null in every deck that holds none.
+      const ritualGoal = withRituals ? ritualTarget(available) : null;
       let spent = 0;
       for (let cast = 0; cast < MAX_CASTS_PER_TURN; cast++) {
         const left = available - spent;
@@ -2320,7 +2627,19 @@ export function simulate(
           // worse play. Holding it is what happens at a table, and it is what
           // makes "the mana you spent on X" a number worth reading.
           if (card.cost.hasX && card.cost.mana >= left) continue;
-          const ramp = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp';
+          // A ritual is ramp for one turn, so it is ramp for the ordering that
+          // matters: cast before the spell it is paying for, or the burst is
+          // gone by the time anything wants it.
+          //
+          // Only while it is actually up on the deal. A Jeska's Will reads as a
+          // ritual and its amount is a floor of one against a cost of three, so
+          // it is filed as one and sequenced as an ordinary spell — the mana
+          // still lands in the pool when it resolves, it just does not get to
+          // jump the queue or answer to `ritualGoal`, which is somebody else's
+          // burst.
+          const burst = card.role === 'ritual' && card.adds > card.cost.mana;
+          const ramp = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp' || burst;
+          if (burst && !ritualNeeded(ritualGoal)) continue;
           // An X spell goes last, under every fixed cost, because X is going to
           // take whatever the turn has left and a Fireball cast first would end
           // the turn on its own. Cast last it costs nothing: the mana it eats
@@ -2406,7 +2725,12 @@ export function simulate(
         }
 
         if (sink && sink.turn) {
-          const why = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp' ? ' (ramp first)' : '';
+          const rampFirst =
+            card.role === 'rock' ||
+            card.role === 'dork' ||
+            card.role === 'landramp' ||
+            (card.role === 'ritual' && card.adds > card.cost!.mana);
+          const why = rampFirst ? ' (ramp first)' : '';
           const forX = card.cost!.hasX ? ` with X = ${xSpent}` : '';
           say(sink, 'cast', `Casts ${card.name} ${card.manaCost}${forX}${why}`);
           // The taps arrive on this line later. The turn has to finish
@@ -2414,6 +2738,7 @@ export function simulate(
           // the whole turn's.
           castLines.push({
             line: sink.turn.lines[sink.turn.lines.length - 1]!,
+            card: index,
             // X is generic mana like any other, so the tap breakdown has to
             // account for it or the line shows five lands paying for two.
             generic: card.cost!.generic + xSpent,
@@ -2478,6 +2803,17 @@ export function simulate(
                   : `${card.name} will filter mana into ${colors} from next turn, adding none`,
               );
             }
+          }
+        } else if (card.role === 'ritual') {
+          // This turn's mana, in this turn's pool, so the passes below this one
+          // can spend it. The colors are the profile's, not any-color: a Dark
+          // Ritual makes black and a deck that cannot use black mana does not
+          // get to pretend otherwise.
+          const burst = addPoolMana(card.adds, card.mask, card.oneColor, turn, index);
+          available += burst;
+          if (sink && burst > 0) {
+            const colors = pipText(UNIT_BY_MASK[card.mask]!.colors);
+            say(sink, 'mana', `${card.name} adds ${burst} ${colors} to the pool, this turn only`);
           }
         } else if (card.role === 'extraland') {
           // From next turn, not this one: this turn's land drop already
@@ -2569,6 +2905,11 @@ export function simulate(
         }
       }
       if (sink && !attributed) attributeTaps(castLines, units, unitOwner);
+
+      // And the mana pool empties. After the Treasure reconciliation, because
+      // that solve wants the floating mana in the pool it is comparing against
+      // — a turn paid for by a ritual must not crack a Treasure for it.
+      emptyPool();
 
       if (sink && sink.turn) {
         sink.turn.available = available;

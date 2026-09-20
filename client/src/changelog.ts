@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.159.3',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Rituals now put mana in your mana pool and the simulator spends it. A Dark Ritual used to resolve as a blank; it is now three black mana for the rest of that turn, gone at the end of it. The sequencer only casts one when something in hand is waiting on it.',
+      },
+      {
+        kind: 'added',
+        text:
+          'An "Add X mana" step for card behavior, for the mana that evaporates at end of turn. A landfall trigger that adds a mana is now writable; the Treasure step is still there for the mana that keeps.',
+      },
+    ],
+  },
+  {
     version: '0.159.2',
     changes: [
       {
@@ -247,21 +262,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'A line under those charts saying how much of your deck the model actually plays out, and naming the draw spells it knows it is missing. The curves are still a floor, but now you can see how far off the floor they are.',
-      },
-    ],
-  },
-  {
-    version: '0.156.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'The card database now knows what your spells do, not just what they cost: how much they draw, discard, mill, surveil, scry or make in Treasure. Nothing reads it yet. It is what the simulator needs to stop casting your draw spells as blanks.',
-      },
-      {
-        kind: 'changed',
-        text:
-          'Because every card in the database moved, your next card-DB refresh downloads the whole thing rather than the usual few kilobytes.',
       },
     ],
   },

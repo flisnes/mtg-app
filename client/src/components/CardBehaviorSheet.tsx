@@ -20,6 +20,7 @@ import {
   describeBehavior,
   describeFetch,
   describeLandRamp,
+  describeRitual,
   describeRule,
   queryHasX,
   substituteQueryX,
@@ -68,6 +69,8 @@ interface BehaviorCard {
   ramp: string | null;
   /** And the third: a fetchland's search, off the fetch profile. Same deal. */
   fetch: string | null;
+  /** And the fourth: a ritual's burst, off the mana profile. Same deal again. */
+  ritual: string | null;
   /** What the user said, or null when they have not said anything. */
   authored: CardBehavior | null;
   /**
@@ -126,6 +129,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       // Only when it makes no mana of its own. A Krosan Verge taps for {C} and
       // the sequencer files it as the colorless land it is, search dropped.
       fetch: o.produces ? null : describeFetch(decodeFetchProfile(o.fetch)),
+      ritual: describeRitual(decodeManaProfile(o.mana), o.produces),
       authored: behaviors.get(o.oracleId) ?? null,
       image: o.imageNormal ?? o.imageSmall ?? null,
       permanent: isPermanent(o.typeLine),
@@ -143,6 +147,7 @@ function summaryOf(card: BehaviorCard): string {
   // it, which is exactly the card somebody then writes out by hand.
   if (card.ramp) return `${PLAY_LEAD}: ${card.ramp}`;
   if (card.fetch) return `${PLAY_LEAD}: ${card.fetch}`;
+  if (card.ritual) return `${PLAY_LEAD}: ${card.ritual}`;
   return 'Do nothing';
 }
 
@@ -249,8 +254,8 @@ export function CardBehaviorSheet({
  */
 function BehaviorList({ cards, onOpen }: { cards: BehaviorCard[]; onOpen: (oracleId: string) => void }) {
   const authored = cards.filter((c) => c.authored);
-  const blank = cards.filter((c) => !c.authored && !c.derived && !c.ramp);
-  const read = cards.filter((c) => !c.authored && (c.derived || c.ramp));
+  const blank = cards.filter((c) => !c.authored && !c.derived && !c.ramp && !c.ritual);
+  const read = cards.filter((c) => !c.authored && (c.derived || c.ramp || c.ritual));
 
   if (cards.length === 0) {
     return <p className="fine-print">Nothing in the mainboard yet.</p>;
@@ -381,7 +386,15 @@ function BehaviorEditor({
           as a step if you want it. Until this release a rule written here never fired at all.
         </p>
       )}
-      {!card.derived && !card.ramp && !card.fetch && !card.authored && (
+      {card.ritual && (
+        <p className="fine-print">
+          The card database already reads this one as a ritual: <em>{card.ritual}</em>. The mana lands in your mana pool for the
+          turn you cast it and is gone at the end of it, so the simulator only casts it when something else in hand is waiting on
+          exactly that much mana. Write your own rule and it replaces that reading, so put an "Add X mana" step in if you want it
+          back; a step adds mana of any color, where the card database keeps the colors the card prints.
+        </p>
+      )}
+      {!card.derived && !card.ramp && !card.fetch && !card.ritual && !card.authored && (
         <p className="fine-print">
           The card database reads nothing unconditional off this one, so it currently resolves as a blank. Add a rule and it stops
           being one.
@@ -419,8 +432,8 @@ function BehaviorEditor({
       <p className="deck-stats-verdict">
         {preview.length > 0
           ? preview.map(describeRule).join('. ')
-          : card.ramp || card.fetch
-            ? `${PLAY_LEAD}: ${card.ramp ?? card.fetch}, read from the card`
+          : card.ramp || card.fetch || card.ritual
+            ? `${PLAY_LEAD}: ${card.ramp ?? card.fetch ?? card.ritual}, read from the card`
             : 'Nothing. This card resolves as a blank.'}
       </p>
 
@@ -847,6 +860,13 @@ function RuleEditor({
           <code>o:"draw a card"</code>. Leave it blank for any card. <code>set:</code> and <code>is:foil</code> are about a
           printing, so they never match here. The battlefield holds every permanent you control now, creatures included, so a
           sacrifice can go and find one; anything moved onto it arrives tapped.
+        </p>
+      )}
+      {rule.steps.some((s) => s.op === 'mana') && (
+        <p className="fine-print">
+          "Add X mana" is your mana pool, not a permanent: the mana is there for the rest of the turn you make it and gone at the
+          end of it, spent or not. It is any color, which a Treasure is too, but a Treasure keeps and this does not. Use it for
+          the mana that evaporates, like a landfall trigger, and the Treasure step for the mana that waits.
         </p>
       )}
       {rule.steps.some((s) => s.op === 'flicker') && (

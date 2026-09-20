@@ -1,4 +1,4 @@
-import { BASIC_LAND_TYPES, type EffectProfile, type FetchProfile, type ManaProfile } from './card.js';
+import { BASIC_LAND_TYPES, sourceColors, type EffectProfile, type FetchProfile, type ManaProfile } from './card.js';
 
 // Card behavior: what the *user* says a card does, when the pipeline's oracle
 // reading says nothing useful.
@@ -87,8 +87,27 @@ export type BehaviorZone = 'library' | 'librarytop' | 'librarybottom' | 'hand' |
  * straight back onto it, which `compileBehavior` refuses for every other step
  * because a move from a zone to itself is not a move. It is its own verb
  * because what it is *for* is the re-entry, not the travel.
+ *
+ * `mana` is the mana pool: mana you have *now*, this turn, that is gone at the
+ * end of it. A Treasure is the same burst with a keep attached, which is why
+ * this is the weaker of the two and why it is offered anyway — a Lotus Cobra's
+ * landfall mana evaporates, and writing it as a Treasure would hand the deck a
+ * permanent it never had. The mana is any color, because the alternative is a
+ * five-checkbox control on a step whose whole job is one number; the colored
+ * rituals the pipeline already reads (Dark Ritual) keep their real colors and
+ * need no rule written for them.
  */
-export type BehaviorStepKind = 'draw' | 'mill' | 'discard' | 'scry' | 'surveil' | 'treasure' | 'move' | 'flicker' | 'self';
+export type BehaviorStepKind =
+  | 'draw'
+  | 'mill'
+  | 'discard'
+  | 'scry'
+  | 'surveil'
+  | 'treasure'
+  | 'mana'
+  | 'move'
+  | 'flicker'
+  | 'self';
 
 /**
  * Where a step's number comes from.
@@ -385,6 +404,7 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'scry', label: 'Scry X', verb: 'scry' },
   { id: 'surveil', label: 'Surveil X', verb: 'surveil' },
   { id: 'treasure', label: 'Create X Treasures', verb: 'create' },
+  { id: 'mana', label: 'Add X mana', verb: 'add' },
   { id: 'move', label: 'Move X between zones', verb: 'move' },
   { id: 'flicker', label: 'Flicker X permanents', verb: 'flicker' },
   { id: 'self', label: 'Put this card into a zone', verb: 'put' },
@@ -577,6 +597,7 @@ export function describeStep(step: BehaviorStep): string {
     const many = computed || (step.x.n ?? 0) !== 1;
     return `${verb} ${count} Treasure${many ? 's' : ''}${tail}`;
   }
+  if (step.op === 'mana') return `${verb} ${count} mana of any color to your mana pool${tail}`;
   return `${verb} ${count}${tail}`;
 }
 
@@ -669,6 +690,30 @@ export function describeLandRamp(mana: ManaProfile | null | undefined): string |
   // Always tapped, whatever the flag says: that is what the sequencer does with
   // one, and this has to describe the model rather than the card.
   return `put ${n} land${n === 1 ? '' : 's'} from your library onto the battlefield, tapped`;
+}
+
+/**
+ * The *ritual* the mana profile reads, as a phrase, or null for every card that
+ * is not one. The fourth derived reading, and the fourth one that showed up in
+ * the editor as "do nothing" while the sequencer was casting it.
+ *
+ * Same shape and same reason as describeLandRamp: a phrase rather than rules,
+ * because the grammar's own `mana` step adds mana of any color and a Dark
+ * Ritual adds {B}{B}{B}. Rendering it as editable steps would quietly widen the
+ * card's colors the moment somebody opened the editor and pressed Save.
+ */
+export function describeRitual(mana: ManaProfile | null | undefined, produces: string | undefined): string | null {
+  if (!mana || mana.kind !== 'ritual') return null;
+  const n = Math.max(1, mana.adds);
+  const colors = sourceColors(mana, produces);
+  const symbols = [...colors].map((c) => `{${c}}`).join('');
+  // No nameable color at all is MANA_OPPONENT, and a goldfish has no opponents.
+  // The mana is still mana; it just cannot pay a pip.
+  if (colors.length === 0) return `add ${n} mana that pays only generic costs`;
+  if (colors.length === 1) return `add ${symbols.repeat(n)} to your mana pool`;
+  if (mana.oneColor) return `add ${n} mana of any one of ${symbols} to your mana pool`;
+  const what = colors.length >= 5 ? 'any color' : symbols;
+  return `add ${n} mana of ${what} to your mana pool`;
 }
 
 /**

@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.159.3
+
+- **Added: rituals put mana in your mana pool, and the simulator spends it.** Dark Ritual, Pyretic Ritual, Seething Song and everything else the card database reads as burst mana used to resolve as a blank. The mana is now real: it lands in your pool the turn you cast it, the rest of the turn can spend it, and it is gone at the end of the turn whether you used it or not.
+- The sequencer only casts one when something else in hand is waiting on it, and not to gain a single land drop. A ritual chain into a turn-one payoff does happen; twelve rituals burned on the two-drop you would have cast next turn anyway does not.
+- "Of the games where you held this card, how often could you pay for it" now counts the rituals in your hand too, so the on-curve table and the trajectory charts read the same hand.
+- **Added: an "Add X mana" step for card behavior.** For the mana that evaporates, like a landfall trigger. The Treasure step is still there for the mana that waits.
+- Dark Ritual and friends show up in the card behavior editor as read from the card instead of "do nothing".
+
 ## 0.159.2
 
 - **Changed: "What each card is worth" now scores one copy, not the pile.** Twenty basics stacked into one number buried everything else in the list, which only told you that you run twenty basics. Every row is now what a single copy is worth, so a Forest is judged against a Sol Ring instead of outnumbering it. Rows with more than one copy still show what all of them come to.

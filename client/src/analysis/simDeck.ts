@@ -63,14 +63,17 @@ export function popcount(mask: number): number {
  *   dork       a creature that taps for mana, and is summoning sick
  *   landramp   a spell that puts a land onto the battlefield
  *   extraland  a permanent that lets you play more than one land a turn
+ *   ritual     a spell that puts mana straight into your mana pool
  *   spell      everything else, which is to say the cards you are trying to cast
  *
- * A ritual is deliberately a plain spell. A Dark Ritual is not a source, it is
- * a card you spend to cast a bigger card, and the sequencer has nothing to
- * spend the burst on: phase 9 gave Treasure a home because a Treasure keeps,
- * and a ritual does not.
+ * A ritual used to be a plain spell, on the grounds that the sequencer had
+ * nothing to spend the burst on. It does now: the pool is mana this turn, the
+ * spend loop reads it, and a ritual is only cast when something in hand is
+ * waiting on exactly the mana it makes. What still separates it from a Treasure
+ * is that it does not keep, which is why the two are different things here and
+ * not one with a flag.
  */
-export type SimRole = 'land' | 'fetch' | 'rock' | 'dork' | 'landramp' | 'extraland' | 'spell';
+export type SimRole = 'land' | 'fetch' | 'rock' | 'dork' | 'landramp' | 'extraland' | 'ritual' | 'spell';
 
 export interface SimCard {
   oracleId: string;
@@ -253,6 +256,10 @@ function roleOf(oracle: OracleCard, landFront: boolean, landAnywhere: boolean): 
   if (landAnywhere) return 'land';
   const kind = decodeManaProfile(oracle.mana)?.kind;
   if (kind === 'rock' || kind === 'dork' || kind === 'landramp') return kind;
+  // Burst mana. A plain spell until the sequencer had a mana pool to put it in;
+  // see SimRole. The colors and the amount are already on the mana profile, so
+  // nothing here reads text.
+  if (kind === 'ritual') return 'ritual';
   // An Exploration is not a source and never was, which is why it sat in
   // 'spell' until phase 9. What it is, is a second land drop every turn, and
   // the sequencer has had a land-drop loop to hang that on since this phase.

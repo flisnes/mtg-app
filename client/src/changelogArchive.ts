@@ -1,4 +1,4 @@
-// The older half of the changelog (0.155.0 down to 0.98.0), split out of
+// The older half of the changelog (0.156.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,21 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.156.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'The card database now knows what your spells do, not just what they cost: how much they draw, discard, mill, surveil, scry or make in Treasure. Nothing reads it yet. It is what the simulator needs to stop casting your draw spells as blanks.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'Because every card in the database moved, your next card-DB refresh downloads the whole thing rather than the usual few kilobytes.',
+      },
+    ],
+  },
   {
     version: '0.155.0',
     changes: [

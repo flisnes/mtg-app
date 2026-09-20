@@ -58,7 +58,10 @@ function contribNote(result: SimResult): string {
   const manaAll = result.manaByTurn.slice(1).reduce((a, b) => a + b, 0);
   const cardsAll = result.contributions.reduce((sum, c) => sum + c.cards, 0);
   for (const c of result.contributions) {
-    const share = Math.max(manaAll > 0 ? c.mana / manaAll : 0, cardsAll > 0 ? c.cards / cardsAll : 0);
+    // Per copy, the same as the panel: a chip reading "Forest leads" is the app
+    // telling you that you run a lot of Forests.
+    const copies = Math.max(1, c.copies);
+    const share = Math.max(manaAll > 0 ? c.mana / copies / manaAll : 0, cardsAll > 0 ? c.cards / copies / cardsAll : 0);
     if (share > bestShare) {
       bestShare = share;
       best = c;

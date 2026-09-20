@@ -1,4 +1,4 @@
-// The older half of the changelog (0.154.0 down to 0.98.0), split out of
+// The older half of the changelog (0.155.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,26 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.155.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Deck stats has a new "How the game unfolds" section: mana available against mana spent, and cards seen against cards in hand, charted over the first eight turns. The gap between what you have and what you spend is the part worth looking at.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'The simulator now spends the whole turn instead of casting one ramp spell and stopping. Ramp first, then the rest of the hand, priciest first.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'The colored-source report used to ask for more sources than a deck that size could hold, so a mono-black deck was told it was short of black. Where the target is out of reach it now tells you which turn the card comes online instead.',
+      },
+    ],
+  },
   {
     version: '0.154.0',
     changes: [

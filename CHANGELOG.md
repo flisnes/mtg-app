@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.159.2
+
+- **Changed: "What each card is worth" now scores one copy, not the pile.** Twenty basics stacked into one number buried everything else in the list, which only told you that you run twenty basics. Every row is now what a single copy is worth, so a Forest is judged against a Sol Ring instead of outnumbering it. Rows with more than one copy still show what all of them come to.
+- Values show two decimals, because per-copy numbers bunch up and at one decimal half the list looked like ties in an order nothing explained.
+
 ## 0.159.1
 
 - **Added: what each card in your deck is actually worth.** A new line under the trajectory charts splits both curves up by the card that made them: which of your cards put that mana online, and which of them found you those cards. Sol Ring, your ramp spells and every land get a mana number; your draw spells and any engine you have written out get a cards number.

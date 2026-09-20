@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.159.2',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'What each card is worth now scores one copy rather than the whole stack. Twenty basics added together buried every other card in the list and only told you that you run twenty basics. A Forest is now judged against a Sol Ring, and rows with several copies still show what all of them come to.',
+      },
+    ],
+  },
+  {
     version: '0.159.1',
     changes: [
       {
@@ -252,26 +262,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'Because every card in the database moved, your next card-DB refresh downloads the whole thing rather than the usual few kilobytes.',
-      },
-    ],
-  },
-  {
-    version: '0.155.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Deck stats has a new "How the game unfolds" section: mana available against mana spent, and cards seen against cards in hand, charted over the first eight turns. The gap between what you have and what you spend is the part worth looking at.',
-      },
-      {
-        kind: 'changed',
-        text:
-          'The simulator now spends the whole turn instead of casting one ramp spell and stopping. Ramp first, then the rest of the hand, priciest first.',
-      },
-      {
-        kind: 'fixed',
-        text:
-          'The colored-source report used to ask for more sources than a deck that size could hold, so a mono-black deck was told it was short of black. Where the target is out of reach it now tells you which turn the card comes online instead.',
       },
     ],
   },

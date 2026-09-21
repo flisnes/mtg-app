@@ -7613,6 +7613,118 @@ a.seg {
 .trace-sheet > * {
   flex-shrink: 0;
 }
+/* A sticky child cannot leave its containing block, which is the sheet's
+   *content* box — so with .sheet's 1rem of top padding the board pinned a
+   rem short of the top and a strip of turn text scrolled through the gap
+   above it. The padding moves onto the title instead, which is the only
+   child that wants it. */
+.trace-sheet {
+  padding-top: 0;
+}
+.trace-sheet > .sheet-name {
+  padding-top: 1rem;
+}
+/* The board, pinned. Scrolling the turns below is what advances it, so it has
+   to stay put while they move — sticky against .sheet, which is the scroll
+   container every sheet in the app already is. Opaque, or the turn text reads
+   straight through the cards. */
+.trace-board {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+  padding: 0.35rem 0 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.trace-board-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin-bottom: 0.35rem;
+}
+.trace-board-numbers {
+  text-transform: none;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+/* One row of the battlefield. It scrolls sideways rather than wrapping: a
+   turn-eight board is twenty piles wide, and a board that grows downwards
+   would push the story it is explaining off the screen. */
+.trace-row {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+  margin-bottom: 0.25rem;
+  scrollbar-width: thin;
+}
+.trace-row-empty {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  padding: 0.55rem 0;
+}
+.trace-pile {
+  position: relative;
+  flex: none;
+  width: 54px;
+  aspect-ratio: 5 / 7;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.trace-pile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* A card the database has no scan for still takes a slot on the board. */
+.trace-pile-name {
+  display: block;
+  padding: 0.2rem;
+  font-size: 0.55rem;
+  line-height: 1.2;
+  color: var(--text-dim);
+  overflow: hidden;
+}
+.trace-pile-token {
+  border-style: dashed;
+}
+/* Two copies look like two cards: the stack shows behind the top one. */
+.trace-pile-many {
+  box-shadow:
+    2px -2px 0 -1px var(--surface),
+    2px -2px 0 0 var(--border);
+}
+.trace-pile-count {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  min-width: 1.05rem;
+  padding: 0 0.15rem;
+  border-radius: 4px 0 0 0;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 0.65rem;
+  line-height: 1.2rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.trace-zone-tabs {
+  margin-top: 0.1rem;
+}
+.trace-zone-tabs .seg {
+  font-size: 0.72rem;
+  padding: 0.25rem 0.3rem;
+}
+
 .trace-opener {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -7733,6 +7845,20 @@ a.seg {
    children would otherwise be squashed to fit 90dvh. It scrolls instead. */
 .behavior-sheet > * {
   flex-shrink: 0;
+}
+/* The play-style pickers. One per row rather than three abreast: the label
+   under each is a sentence, and a sentence in a third of a phone is four
+   lines of two words. */
+.behavior-policy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+.behavior-policy-hint {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-dim);
 }
 .behavior-list {
   list-style: none;

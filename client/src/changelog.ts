@@ -32,6 +32,26 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.160.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          '"Watch one game play out" now shows the board in card images: permanents on the top row, lands on the bottom, copies stacked with a count. It follows you as you scroll the turns, and buttons open your hand, graveyard and exile. Every line of the turn-by-turn text is still there under it.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Play style, under Card behavior. Pick how the simulator spends a turn (ramp first, card draw first, creatures first, or cheapest first), who attacks (only when it triggers something, everything, or nobody), and whether instants get cast or held up. Every number in the stats sheet moves with it.',
+      },
+      {
+        kind: 'added',
+        text:
+          'A damage chart, for the decks that deal any. It counts what an opponent would have taken, combat and spells apart, and there is a new "Deal X damage" step so you can write a burn spell out by hand.',
+      },
+    ],
+  },
+  {
     version: '0.159.4',
     changes: [
       {
@@ -252,21 +272,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'Cards you author are counted on the coverage line under the charts. The curves stop being a pure floor once you have told the model something, and the panel says how many cards that is rather than quietly changing what the numbers mean.',
-      },
-    ],
-  },
-  {
-    version: '0.157.1',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          '"Watch one game play out", under the deck stats charts. One game, turn by turn: what it drew, which land it played and which it passed over, every permanent it tapped and what that mana paid for, and why it stopped casting. Deal another whenever you want.',
-      },
-      {
-        kind: 'fixed',
-        text:
-          'Treasures stayed around too long. One spent to fix a colour rather than to add a mana was never sacrificed. The trace is what caught it.',
       },
     ],
   },

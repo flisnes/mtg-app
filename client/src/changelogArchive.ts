@@ -1,4 +1,4 @@
-// The older half of the changelog (0.156.0 down to 0.98.0), split out of
+// The older half of the changelog (0.157.1 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,21 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.157.1',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          '"Watch one game play out", under the deck stats charts. One game, turn by turn: what it drew, which land it played and which it passed over, every permanent it tapped and what that mana paid for, and why it stopped casting. Deal another whenever you want.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'Treasures stayed around too long. One spent to fix a colour rather than to add a mana was never sacrificed. The trace is what caught it.',
+      },
+    ],
+  },
   {
     version: '0.157.0',
     changes: [

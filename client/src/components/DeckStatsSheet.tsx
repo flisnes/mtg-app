@@ -16,7 +16,16 @@ import { buildSimDeck } from '../analysis/simDeck.js';
 import { missedDrawCopies } from '../analysis/coverage.js';
 import { deckBehaviorMap } from '../db/dataAccess.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
-import { defaultSimOptions, type SimContribution, type SimResult } from '../analysis/simulate.js';
+import {
+  COMBAT_POLICIES,
+  DEFAULT_POLICY,
+  INTERACTION_POLICIES,
+  SPEND_POLICIES,
+  defaultSimOptions,
+  type SimContribution,
+  type SimPolicy,
+  type SimResult,
+} from '../analysis/simulate.js';
 import { useSimulation } from '../analysis/useSimulation.js';
 import { MulliganPanel } from './MulliganPanel.js';
 import { librarySize, type GroupRow } from '../analysis/groups.js';
@@ -38,6 +47,35 @@ const plural = (n: number) => (n === 1 ? '' : 's');
 
 /** Stable identity for the first render, before the live query has answered. */
 const EMPTY_BEHAVIORS: ReadonlyMap<string, CardBehavior> = new Map();
+
+/**
+ * How the simulator plays *this* deck, remembered per deck.
+ *
+ * localStorage rather than the deck row, and that is a judgement rather than a
+ * shortcut: this is a lens you look at the deck through, not a fact about the
+ * decklist. Nobody trading a deck wants your sequencing preferences with it,
+ * and a synced field costs a schema change, a sanitizer and a repair on every
+ * older device — for a setting you change while staring at the chart it moves.
+ */
+const policyKey = (deckId: string) => `sim-policy:${deckId}`;
+
+function loadPolicy(deckId: string): SimPolicy {
+  try {
+    const raw = localStorage.getItem(policyKey(deckId));
+    if (!raw) return DEFAULT_POLICY;
+    const saved = JSON.parse(raw) as Partial<SimPolicy>;
+    // Merged over the default rather than trusted: a policy saved by a later
+    // release may name a spend order this build has never heard of, and the
+    // simulator would then quietly fall through to "ramp" without saying so.
+    return {
+      spend: SPEND_POLICIES.some((o) => o.id === saved.spend) ? saved.spend! : DEFAULT_POLICY.spend,
+      combat: COMBAT_POLICIES.some((o) => o.id === saved.combat) ? saved.combat! : DEFAULT_POLICY.combat,
+      interaction: INTERACTION_POLICIES.some((o) => o.id === saved.interaction) ? saved.interaction! : DEFAULT_POLICY.interaction,
+    };
+  } catch {
+    return DEFAULT_POLICY;
+  }
+}
 
 /** The headline on the behavior line: what is worth going in there for. */
 function behaviorNote(coverage: { blanks: number; authored: number }): string {
@@ -154,12 +192,24 @@ export function DeckStatsSheet({
   const [tracing, setTracing] = useState(false);
   const [contribOpen, setContribOpen] = useState(false);
   const [behaviorsOpen, setBehaviorsOpen] = useState(false);
+  // How the sequencer plays this deck. Set on the card-behavior screen, where
+  // the rest of "what happens in a simulated game" is already decided.
+  const [policy, setPolicy] = useState<SimPolicy>(() => loadPolicy(deckId));
+  const savePolicy = (next: SimPolicy) => {
+    setPolicy(next);
+    try {
+      localStorage.setItem(policyKey(deckId), JSON.stringify(next));
+    } catch {
+      // A private window with storage off still gets the setting for this
+      // session; losing it on close beats refusing to change it.
+    }
+  };
   // What the user said their cards do, which overrides the card database's
   // reading of them. Live, so saving a behavior re-runs the simulation behind
   // the sheet the editor is sitting on.
   const behaviors = useLiveQuery(() => deckBehaviorMap(deckId), [deckId]);
   const simDeck = useMemo(() => buildSimDeck(rows, behaviors), [rows, behaviors]);
-  const simOpts = useMemo(() => defaultSimOptions(format, onPlay), [format, onPlay]);
+  const simOpts = useMemo(() => ({ ...defaultSimOptions(format, onPlay), ...policy }), [format, onPlay, policy]);
   const sim = useSimulation(simDeck, simOpts);
   const simResult = sim.kind === 'done' ? sim.result : sim.kind === 'running' ? sim.previous : undefined;
   // How many of the deck's blanks the tags say should have drawn you something.
@@ -338,6 +388,8 @@ export function DeckStatsSheet({
           deckName={name}
           rows={rows}
           behaviors={behaviors ?? EMPTY_BEHAVIORS}
+          policy={policy}
+          onPolicy={savePolicy}
           onClose={() => setBehaviorsOpen(false)}
         />
       )}

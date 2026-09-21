@@ -97,6 +97,12 @@ export type BehaviorZone = 'library' | 'librarytop' | 'librarybottom' | 'hand' |
  * {B}{B}{B}, a Lotus Cobra makes one mana of any color, and a Burnt Offering
  * makes black and red in whatever mix you like. Choosing nothing is any color,
  * which is what the step used to be and still is by default.
+ *
+ * `damage` is the one step with nothing on this side of the table to show for
+ * it: a Lightning Bolt changes no zone you control. It exists because the
+ * simulator now counts what a deck is doing *to* somebody, and a burn spell
+ * that resolves as a blank makes an aggro deck read as a pile of lands. No
+ * target, because a goldfish has exactly one.
  */
 export type BehaviorStepKind =
   | 'draw'
@@ -106,6 +112,7 @@ export type BehaviorStepKind =
   | 'surveil'
   | 'treasure'
   | 'mana'
+  | 'damage'
   | 'move'
   | 'flicker'
   | 'self';
@@ -436,6 +443,7 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'surveil', label: 'Surveil X', verb: 'surveil' },
   { id: 'treasure', label: 'Create X Treasures', verb: 'create' },
   { id: 'mana', label: 'Add X mana', verb: 'add' },
+  { id: 'damage', label: 'Deal X damage', verb: 'deal' },
   { id: 'move', label: 'Move X between zones', verb: 'move' },
   { id: 'flicker', label: 'Flicker X permanents', verb: 'flicker' },
   { id: 'self', label: 'Put this card into a zone', verb: 'put' },
@@ -683,6 +691,12 @@ export function describeStep(step: BehaviorStep): string {
   if (step.op === 'treasure') {
     const many = computed || (step.x.n ?? 0) !== 1;
     return `${verb} ${count} Treasure${many ? 's' : ''}${tail}`;
+  }
+  if (step.op === 'damage') {
+    // No target: a goldfish has one opponent and nothing to aim at. The step
+    // says how much damage leaves your side of the table, which is the only
+    // half of it the simulator can count.
+    return `${verb} ${count} damage${tail}`;
   }
   if (step.op === 'mana') {
     // Phrased the way describeRitual phrases the pipeline's own reading, so a

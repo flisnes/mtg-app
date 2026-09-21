@@ -10,7 +10,16 @@ import {
   type EffectProfile,
 } from '@mtg/shared';
 import { canPay, explainPayment, maxMatching, PAY_GENERIC, PAY_UNUSED, type ManaUnit, type UnitGroup } from './canPay.js';
-import { newTraceSink, pipText, say, type GameTrace, type TraceLine, type TraceSink } from './trace.js';
+import {
+  newTraceSink,
+  pipText,
+  say,
+  type BoardPile,
+  type BoardState,
+  type GameTrace,
+  type TraceLine,
+  type TraceSink,
+} from './trace.js';
 import { handSize } from './gameModel.js';
 import { KEEP_ANYTHING_AT } from './mulligan.js';
 import { makeRng, shuffle, type Rng } from './rng.js';
@@ -85,12 +94,69 @@ const MAX_DRAW_PER_EFFECT = 12;
  */
 const MAX_HAND = 128;
 
+/** The board before a turn has written one. Shared and frozen: nothing mutates a board. */
+const EMPTY_BOARD: BoardState = Object.freeze({
+  lands: [],
+  permanents: [],
+  treasures: 0,
+  hand: [],
+  graveyard: [],
+  exile: [],
+}) as BoardState;
+
 /** How a zone reads in a trace line as a destination: "to the top of your library". */
 const ZONE_PHRASE = new Map(BEHAVIOR_ZONES.map((z) => [z.id as string, z.into ?? z.phrase]));
+
+/**
+ * The widest cost the spend order distinguishes. Above this every spell is
+ * "the expensive one", which keeps a mana value out of the tier bits above it
+ * — 100 for a fixed cost, 1000 for ramp, 2000 for whatever the policy wants.
+ */
+const CURVE_SPAN = 99;
 
 /** Karsten's simulations ship a hand with fewer than two lands; so does this one. */
 export const DEFAULT_KEEP_MIN = 2;
 export const DEFAULT_KEEP_MAX = 5;
+
+/**
+ * How the sequencer spends a turn, which is the one thing about this model
+ * that was never a fact about the deck.
+ *
+ * Until now there was exactly one policy — ramp first, then the priciest
+ * thing in hand — and it is the right one for the deck it was written for and
+ * wrong for the two next to it. An aggro deck casting a Signet over a two-drop
+ * is not playing aggro; a draw-go deck tapping out every turn is not holding
+ * anything up. The numbers upstairs are only worth reading if the policy that
+ * produced them is the one you would have played, so it is a control rather
+ * than a constant.
+ *
+ *   ramp       ramp first, priciest first. What this always did.
+ *   draw       anything that draws you a card first, then ramp, then the rest.
+ *   creatures  bodies first. The aggro ordering: the board before the engine.
+ *   curve      cheapest first, so the turn fits as many spells in as it can.
+ */
+export type SpendPolicy = 'ramp' | 'draw' | 'creatures' | 'curve';
+
+/**
+ * Who attacks.
+ *
+ *   triggers  only creatures whose rule fires on attack. What combat was for
+ *             before there was a damage number, and still the cheap answer.
+ *   all       every creature that can, every turn. Nothing blocks.
+ *   none      nobody. A combo deck's creatures are not there to attack.
+ */
+export type CombatPolicy = 'triggers' | 'all' | 'none';
+
+/**
+ * What happens to the instants in your hand.
+ *
+ *   cast  they go in the spend loop with everything else. What this always did.
+ *   hold  they stay in hand and the mana stays up. There is nobody across the
+ *         table to cast them at, so holding one really does mean never casting
+ *         it — which is the honest reading of "I keep two mana open", not a
+ *         defect. The mana it costs shows up as the gap on the mana chart.
+ */
+export type InteractionPolicy = 'cast' | 'hold';
 
 export interface SimOptions {
   games: number;
@@ -118,8 +184,53 @@ export interface SimOptions {
    * would be twenty thousand transcripts nobody reads.
    */
   trace?: boolean;
+  /** How the turn is spent. See SpendPolicy. */
+  spend: SpendPolicy;
+  /** Who attacks. See CombatPolicy. */
+  combat: CombatPolicy;
+  /** Whether instants get cast or held up. See InteractionPolicy. */
+  interaction: InteractionPolicy;
   seed: number;
 }
+
+/** The three knobs, on their own, for the UI that sets them and the deck that stores them. */
+export interface SimPolicy {
+  spend: SpendPolicy;
+  combat: CombatPolicy;
+  interaction: InteractionPolicy;
+}
+
+/** The policy every deck starts on: what the simulator did before it was a choice. */
+export const DEFAULT_POLICY: SimPolicy = { spend: 'ramp', combat: 'triggers', interaction: 'cast' };
+
+/**
+ * The pickers, written here rather than in the sheet, because a label that
+ * disagrees with the sequencer is worse than no label: the whole argument for
+ * showing a policy is that it is the one that produced the numbers.
+ */
+export interface PolicyOption<T> {
+  id: T;
+  label: string;
+  hint: string;
+}
+
+export const SPEND_POLICIES: readonly PolicyOption<SpendPolicy>[] = [
+  { id: 'ramp', label: 'Ramp first, then greedily', hint: 'Rocks, dorks and land ramp before anything else, then the priciest spell the turn can pay for.' },
+  { id: 'draw', label: 'Card draw first', hint: 'Anything that puts cards in your hand jumps the queue, then ramp, then the rest.' },
+  { id: 'creatures', label: 'Creatures first', hint: 'Bodies before the engine. The aggro ordering: a two-drop on turn two beats a Signet.' },
+  { id: 'curve', label: 'Cheapest first', hint: 'Fit as many spells into the turn as the mana holds, rather than the one biggest.' },
+];
+
+export const COMBAT_POLICIES: readonly PolicyOption<CombatPolicy>[] = [
+  { id: 'triggers', label: 'Only when it triggers something', hint: 'A creature swings if attacking is what wakes its rule. Nobody else bothers.' },
+  { id: 'all', label: 'Everything attacks', hint: 'Every creature that can, does, every turn. Nothing blocks, so all of it connects.' },
+  { id: 'none', label: 'Nobody attacks', hint: 'The creatures are here for something other than combat.' },
+];
+
+export const INTERACTION_POLICIES: readonly PolicyOption<InteractionPolicy>[] = [
+  { id: 'cast', label: 'Cast instants on sight', hint: 'An instant is a spell like any other and goes in the spend order with them.' },
+  { id: 'hold', label: 'Hold instants up', hint: 'Instants stay in hand and their mana stays untapped. Nobody is across the table to cast them at, so the cost shows as unspent mana.' },
+];
 
 export const defaultSimOptions = (format: DeckFormat | undefined, onPlay: boolean): SimOptions => ({
   games: DEFAULT_GAMES,
@@ -130,6 +241,7 @@ export const defaultSimOptions = (format: DeckFormat | undefined, onPlay: boolea
   keepMax: DEFAULT_KEEP_MAX,
   mulligan: true,
   effects: true,
+  ...DEFAULT_POLICY,
   seed: 0x5eed,
 });
 
@@ -269,6 +381,22 @@ export interface SimResult {
    * zeroes for every removal spell in the deck would bury the ones that matter.
    */
   contributions: SimContribution[];
+  /**
+   * Mean damage an opponent had taken by end of turn t, cumulative.
+   *
+   * "Could have taken": nothing blocks, nothing gains life and nobody is
+   * actually there, so this is the ceiling a goldfish reaches rather than a
+   * clock. It is still the only number in this sheet that is about the deck's
+   * *plan* instead of its mana, and a deck whose line is flat on turn six is
+   * telling you something the curve cannot.
+   */
+  damageByTurn: number[];
+  /** Of that, the half that came from creatures attacking. */
+  combatDamageByTurn: number[];
+  /** Mean combat damage over the whole game. */
+  combatDamage: number;
+  /** Mean damage from everything else: burn, drain, a rule that says so. */
+  otherDamage: number;
   /** Cards seen by turn t that came off the opener, mulligans included. */
   seenFromOpener: number[];
   /** Cards seen by turn t that came off the draw step. */
@@ -307,11 +435,15 @@ export function halfWidth(p: number, games: number): number {
  *      plus whatever the rituals in hand would add to that. Taken *before* any
  *      mana is spent, because the card you are asking about is the card you
  *      would have spent it on.
- *   6. Spend the turn. Ramp first, priciest first, because a Signet cast before
- *      the three-drop is a source next turn and cast after it is a card in
- *      hand; a ritual counts as ramp for the same reason, and is cast only when
- *      something else in hand is waiting on exactly the mana it makes. Then the
- *      rest of the hand, priciest first, until the mana is gone.
+ *   6. Spend the turn, in whatever order `opts.spend` asks for. The default is
+ *      ramp first, priciest first, because a Signet cast before the three-drop
+ *      is a source next turn and cast after it is a card in hand; a ritual
+ *      counts as ramp for the same reason, and is cast only when something else
+ *      in hand is waiting on exactly the mana it makes. Then the rest of the
+ *      hand, priciest first, until the mana is gone. The other three policies
+ *      move one class of card in front of ramp (`draw`, `creatures`) or invert
+ *      the priciest-first rule (`curve`); `opts.interaction` can hold the
+ *      instants back entirely, mana and all.
  *      A tie between equals is a coin flip rather than decklist order. An X
  *      spell goes **last** of all, and X is then whatever the turn has left
  *      over, which is what a player does with it and costs nothing precisely
@@ -331,6 +463,10 @@ export function halfWidth(p: number, games: number): number {
  *      destinations and go where they say, and more than one card sent to
  *      either arrives in a random order rather than in whatever order the zone
  *      it came from happened to hold it.
+ *   9. Then combat, per `opts.combat`. Nothing blocks and nothing dies, so an
+ *      attack is a trigger and a number: the attackers' printed power, added
+ *      to whatever damage the turn's spells dealt. Summoning sickness is the
+ *      one rule of it this model has.
  */
 export function simulate(
   deck: SimDeck,
@@ -344,6 +480,12 @@ export function simulate(
   const stride = maxTurn + 1;
   const rng = makeRng(opts.seed);
   const deckSize = deck.library.length;
+  // Read once. They are strings on an options object and this is the innermost
+  // loop in the file.
+  const spendDraw = opts.spend === 'draw';
+  const spendCreatures = opts.spend === 'creatures';
+  const spendCurve = opts.spend === 'curve';
+  const holding = opts.interaction === 'hold';
 
   // Cards sharing a printed cost share an answer, so the payment solver runs
   // once per distinct cost per turn rather than once per card. That is also
@@ -1414,6 +1556,24 @@ export function simulate(
    * and this refuses to look for.
    */
   const anyCastWatchers = cards.some((c) => c.permanent && !!c.behavior && c.behavior.cast.length > 0);
+  /**
+   * Does this card put cards in your hand, by either reading of it? The `draw`
+   * spend policy's whole question, answered once per deck rather than once per
+   * card per turn per game.
+   *
+   * An authored behavior replaces the derived profile everywhere else, so it
+   * replaces it here too: a card somebody wrote out as "do nothing" is not a
+   * draw spell because the pipeline once thought it was.
+   */
+  const drawsCards = cards.map((c) => {
+    if (c.behavior) {
+      for (const steps of [c.behavior.play, c.behavior.etb, c.behavior.attack, c.behavior.upkeep]) {
+        if (steps.some((step) => step.op === 'draw')) return true;
+      }
+      return c.behavior.cast.some((r) => r.steps.some((step) => step.op === 'draw'));
+    }
+    return (c.effect?.draw ?? 0) > 0;
+  });
   const anyEnterWatchers = cards.some((c) => c.permanent && !!c.behavior && c.behavior.enters.length > 0);
 
   /**
@@ -1713,14 +1873,18 @@ export function simulate(
   };
 
   /**
-   * Combat, which exists here for exactly one reason: the `attack` trigger.
+   * Combat: the `attack` trigger, and the damage number.
    *
-   * There is nobody across the table, so there is nothing to decide. Every
-   * creature that can attack does, nothing blocks, nothing dies, and no damage
-   * is counted anywhere — a goldfish has no life total to take it. What that
-   * leaves is the trigger, which is a real draw engine on a real card (Edric,
-   * Ohran Frostfang, Toski) and until now was worth nothing at all because the
-   * sequencer did not know a creature was on the battlefield.
+   * There is nobody across the table, so there is nothing to decide. Whoever
+   * the policy declares, attacks; nothing blocks and nothing dies. What that
+   * leaves is two things. The trigger, which is a real draw engine on a real
+   * card (Edric, Ohran Frostfang, Toski). And the printed power of everyone
+   * who swung, which is the ceiling a goldfish reaches rather than a clock —
+   * every point of it would have to get past a blocker at a real table.
+   *
+   * Under `triggers` only the creatures with a rule attack, so the damage is
+   * theirs alone. That is not a shortfall to apologise for: it is the same
+   * board the trigger policy was already declaring, counted.
    *
    * Summoning sickness is `permSince === turn`, and it is the one rule of
    * combat this model has. A creature flickered this turn is sick again,
@@ -1732,23 +1896,39 @@ export function simulate(
    * loop.
    */
   const attackWith = (turn: number): void => {
-    if (!opts.effects || !anyAttackers) return;
+    if (opts.combat === 'none') return;
+    const everyone = opts.combat === 'all';
+    // A deck with no attack trigger in it still has a board to swing with when
+    // the policy says so; when it does not, there is nothing here to find and
+    // the scan is skipped the way it always was.
+    if (!everyone && (!opts.effects || !anyAttackers)) return;
     // A list of its own rather than the shared `stack`, which a rule fired
     // below will borrow and empty.
     const attackers: number[] = [];
+    let power = 0;
     for (let p = 0; p < permLen; p++) {
       const index = permCard[p]!;
       const card = cards[index]!;
       if (!card.creature || !stillOut(p, turn) || permSince[p]! >= turn) continue;
-      if (!card.behavior || card.behavior.attack.length === 0) continue;
+      const triggers = opts.effects && !!card.behavior && card.behavior.attack.length > 0;
+      if (!everyone && !triggers) continue;
       attackers.push(index);
+      power += card.power;
+    }
+    if (attackers.length === 0) return;
+    // Declared before any of them resolves anything, which is both the rule and
+    // what keeps a trigger that makes a creature from handing it an attack.
+    dealDamage(power, true);
+    if (sink && power > 0) {
+      say(sink, 'effect', `Attacks with ${attackers.length} creature${attackers.length === 1 ? '' : 's'} for ${power}`);
     }
     for (const index of attackers) {
       const card = cards[index]!;
+      if (!opts.effects || !card.behavior || card.behavior.attack.length === 0) continue;
       xSpent = 0;
       selfPlaced = false;
       lastAmount = 0;
-      runSteps(card.behavior!.attack, turn, index);
+      runSteps(card.behavior.attack, turn, index);
       sayEffect(lastEffectText ? `Attacks with ${card.name}: ${lastEffectText}` : '');
     }
   };
@@ -2156,6 +2336,13 @@ export function simulate(
           if (sink && m > 0) bits.push(`adds ${m} ${pipText(UNIT_BY_MASK[mask]!.colors)}`);
           break;
         }
+        case 'damage':
+          // Nothing on this side of the table changes, which is why this is
+          // the one step with no zone to report and no `did` worth adjusting:
+          // a goldfish opponent takes every point it is dealt.
+          dealDamage(n, false);
+          if (sink) bits.push(`deals ${n} damage`);
+          break;
         case 'move': {
           if (sink) movedNames.length = 0;
           did = moveCards(step, n, turn);
@@ -2229,6 +2416,31 @@ export function simulate(
   let gameOpener = 0;
   let gameDrawStep = 0;
   /**
+   * Damage an opponent could have taken, by end of turn, cumulative — and the
+   * combat half of it on its own, because the two answer different questions
+   * about a deck. A flat combat line under a rising total is a deck that wins
+   * off spells; the reverse is a deck that needs its creatures to connect.
+   */
+  const damageSum = new Float64Array(stride);
+  const combatSum = new Float64Array(stride);
+  /** This game's running totals, flushed into the two above at end of turn. */
+  let gameDamage = 0;
+  let gameCombat = 0;
+
+  /**
+   * Damage leaving your side of the table.
+   *
+   * Nobody is across it, so there is nothing to reduce, redirect or block, and
+   * no life total to run out. That makes this a ceiling rather than a clock,
+   * and the panel that reads it says so. Split at the source rather than
+   * afterwards because "combat" is the half a chump block would have eaten.
+   */
+  const dealDamage = (n: number, combat: boolean): void => {
+    if (n <= 0) return;
+    gameDamage += n;
+    if (combat) gameCombat += n;
+  };
+  /**
    * Has this turn's pool been counted into `manaCredit` yet?
    *
    * `available` is built once by `buildPool` and then grown by Treasures made
@@ -2239,6 +2451,50 @@ export function simulate(
    * battlefield when the walk happens and must not be counted twice.
    */
   let poolCredited = false;
+
+  /**
+   * Where every card is, right now, as the goldfish trace wants to draw it.
+   *
+   * Only ever called under `sink`, which is once per turn of one game — so it
+   * allocates freely and does a linear scan per pile rather than carrying an
+   * index nothing else would read. A board is a couple of dozen cards.
+   *
+   * Piles rather than tiles: four Islands are one stack with a 4 on it, which
+   * is how they sit on a real table and the only way a turn-eight battlefield
+   * fits on a phone.
+   */
+  const pileUp = (into: BoardPile[], index: number): void => {
+    for (const p of into) {
+      if (p.card !== index) continue;
+      p.count++;
+      return;
+    }
+    into.push({ card: index, count: 1 });
+  };
+
+  const snapshot = (turn: number): BoardState => {
+    const byName = (a: BoardPile, b: BoardPile) => cards[a.card]!.name.localeCompare(cards[b.card]!.name);
+    const zone = (from: Int32Array, len: number): BoardPile[] => {
+      const out: BoardPile[] = [];
+      for (let i = 0; i < len; i++) pileUp(out, from[i]!);
+      return out.sort(byName);
+    };
+    const lands: BoardPile[] = [];
+    const permanents: BoardPile[] = [];
+    for (let p = 0; p < permLen; p++) {
+      if (!stillOut(p, turn)) continue;
+      const index = permCard[p]!;
+      pileUp(cards[index]!.land ? lands : permanents, index);
+    }
+    return {
+      lands: lands.sort(byName),
+      permanents: permanents.sort(byName),
+      treasures: countTreasures(),
+      hand: zone(hand, handLen),
+      graveyard: zone(graveyard, gyLen),
+      exile: zone(exiled, exLen),
+    };
+  };
 
   /** Every mana source this card has on the battlefield is worth this much to it. */
   const creditMana = (by: number, turn: number, units: number): void => {
@@ -2404,6 +2660,8 @@ export function simulate(
     creditTo = -1;
     gyLen = 0;
     exLen = 0;
+    gameDamage = 0;
+    gameCombat = 0;
 
     // --- The opener, and however many mulligans it takes ---------------------
     for (let m = 0; ; m++) {
@@ -2458,8 +2716,9 @@ export function simulate(
       // walk and gets its credit from there. Reset before the upkeep triggers
       // run, not after.
       poolCredited = false;
+      const damageBefore = gameDamage;
       if (sink) {
-        sink.turn = { turn, lines: [], available: 0, spent: 0, hand: [] };
+        sink.turn = { turn, lines: [], available: 0, spent: 0, damage: 0, board: EMPTY_BOARD };
         sink.game.turns.push(sink.turn);
         castLines.length = 0;
       }
@@ -2693,6 +2952,8 @@ export function simulate(
       // just finished asking about. Null in every deck that holds none.
       const ritualGoal = withRituals ? ritualTarget(available) : null;
       let spent = 0;
+      /** How many instants the turn refused to cast, for the trace's last word. */
+      let held = 0;
       for (let cast = 0; cast < MAX_CASTS_PER_TURN; cast++) {
         const left = available - spent;
         if (left <= 0) break;
@@ -2725,12 +2986,26 @@ export function simulate(
           const burst = castsAsRitual(card);
           const ramp = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp' || burst;
           if (burst && !ritualNeeded(ritualGoal)) continue;
+          // Held up, which in a goldfish means never cast. See InteractionPolicy.
+          if (holding && card.instant) continue;
+          // What the policy came for, ahead of ramp, because a deck that wants
+          // its two-drop on turn two wants it more than it wants a Signet.
+          const favored = spendDraw ? drawsCards[hand[i]!]! : spendCreatures ? card.creature : false;
           // An X spell goes last, under every fixed cost, because X is going to
           // take whatever the turn has left and a Fireball cast first would end
           // the turn on its own. Cast last it costs nothing: the mana it eats
           // had nowhere else to go. The +100 keeps every rank non-negative,
           // which `pickRank` starting at -1 depends on.
-          const rank = (ramp ? 1000 : 0) + (card.cost.hasX ? 0 : 100) + card.cost.mana;
+          //
+          // Size is normally priciest-first: the four-drop you can only cast
+          // this turn goes before the one-drop you can cast any turn. Under
+          // `curve` it is inverted, so the turn fits as many spells into the
+          // mana as it holds, which is the whole of what a low-curve deck is
+          // trying to do. Clamped to CURVE_SPAN either way so a twelve-drop can
+          // never climb into the tier above it.
+          const size = Math.min(card.cost.mana, CURVE_SPAN);
+          const rank =
+            (ramp ? 1000 : 0) + (favored ? 2000 : 0) + (card.cost.hasX ? 0 : 100) + (spendCurve ? CURVE_SPAN - size : size);
           if (rank < pickRank) continue;
           // Reservoir sampling over the ties, so the choice is uniform among
           // equals without building a list to shuffle.
@@ -2744,15 +3019,25 @@ export function simulate(
           pick = i;
         }
         if (pick < 0) {
+          if (holding) {
+            // Only the ones it could actually have cast. "Holding up a
+            // Cryptic Command on turn two" is not a decision anybody made.
+            for (let i = 0; i < handLen; i++) {
+              const card = cards[hand[i]!]!;
+              if (card.instant && card.cost && card.cost.mana <= left) held++;
+            }
+          }
           if (sink && left > 0) {
-            let holding = 0;
-            for (let i = 0; i < handLen; i++) if (cards[hand[i]!]!.spell) holding++;
+            let inHand = 0;
+            for (let i = 0; i < handLen; i++) if (cards[hand[i]!]!.spell) inHand++;
             say(
               sink,
               'note',
-              holding > 0
-                ? `Stops with ${left} mana up: nothing left in hand costs ${left} or less`
-                : `Stops with ${left} mana up and no spell in hand`,
+              held > 0
+                ? `Keeps ${left} mana up, holding ${held} instant${held === 1 ? '' : 's'}`
+                : inHand > 0
+                  ? `Stops with ${left} mana up: nothing left in hand costs ${left} or less`
+                  : `Stops with ${left} mana up and no spell in hand`,
             );
           }
           break;
@@ -3003,9 +3288,13 @@ export function simulate(
       if (sink && sink.turn) {
         sink.turn.available = available;
         sink.turn.spent = spent;
-        for (let i = 0; i < handLen; i++) sink.turn.hand.push(cards[hand[i]!]!.name);
-        sink.turn.hand.sort((a, b) => a.localeCompare(b));
+        sink.turn.damage = gameDamage - damageBefore;
+        // After the Treasures are reconciled and the pool is empty, so the
+        // board drawn here is the board you would be looking at when you pass.
+        sink.turn.board = snapshot(turn);
       }
+      damageSum[turn] = damageSum[turn]! + gameDamage;
+      combatSum[turn] = combatSum[turn]! + gameCombat;
       manaSum[turn] = manaSum[turn]! + available;
       spentSum[turn] = spentSum[turn]! + spent;
       seenSum[turn] = seenSum[turn]! + seen;
@@ -3043,6 +3332,8 @@ export function simulate(
     seenSum,
     handSum,
     landDrops,
+    damageSum,
+    combatSum,
     manaCredit,
     seenCredit,
     openerSeen,
@@ -3233,6 +3524,8 @@ interface Tallies {
   seenSum: Float64Array;
   handSum: Float64Array;
   landDrops: Uint32Array;
+  damageSum: Float64Array;
+  combatSum: Float64Array;
   manaCredit: Float64Array;
   seenCredit: Float64Array;
   openerSeen: Float64Array;
@@ -3405,6 +3698,12 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
   }
   contributions.sort((a, b) => b.mana + b.cards - (a.mana + a.cards) || a.name.localeCompare(b.name));
 
+  // Already cumulative in the loop — the tally writes the running total each
+  // turn — so these only have to be averaged. The split reads off the last
+  // charted turn, which is where both lines have finished climbing.
+  const damage = [...t.damageSum].map((sum) => sum * per);
+  const combat = [...t.combatSum].map((sum) => sum * per);
+
   return {
     games,
     maxTurn: opts.maxTurn,
@@ -3419,6 +3718,10 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     cardsSeenByTurn: [...seenSum].map((sum) => sum * per),
     handSizeByTurn: [...handSum].map((sum) => sum * per),
     landDropByTurn: [...landDrops].map((count) => count * per),
+    damageByTurn: damage,
+    combatDamageByTurn: combat,
+    combatDamage: combat[opts.maxTurn] ?? 0,
+    otherDamage: (damage[opts.maxTurn] ?? 0) - (combat[opts.maxTurn] ?? 0),
     pMulligan: t.mulliganed * per,
     meanHandSize: t.handSizeSum * per,
     deckOnCurve: weight > 0 ? weighted / weight : 0,

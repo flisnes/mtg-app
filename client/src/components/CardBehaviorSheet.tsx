@@ -47,6 +47,13 @@ import { ManaCost } from './ManaCost.js';
 import { setCardBehavior } from '../db/dataAccess.js';
 import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '../cardDb/querySyntax.js';
 import type { GroupRow } from '../analysis/groups.js';
+import {
+  COMBAT_POLICIES,
+  INTERACTION_POLICIES,
+  SPEND_POLICIES,
+  type PolicyOption,
+  type SimPolicy,
+} from '../analysis/simulate.js';
 
 // "What does this card actually do?", answered by the person holding it.
 //
@@ -207,12 +214,17 @@ export function CardBehaviorSheet({
   deckName,
   rows,
   behaviors,
+  policy,
+  onPolicy,
   onClose,
 }: {
   deckId: string;
   deckName: string;
   rows: readonly GroupRow[];
   behaviors: ReadonlyMap<string, CardBehavior>;
+  /** How the sequencer plays the deck. The other half of "what does this card do". */
+  policy: SimPolicy;
+  onPolicy: (policy: SimPolicy) => void;
   onClose: () => void;
 }) {
   const cards = useMemo(() => behaviorCards(rows, behaviors), [rows, behaviors]);
@@ -279,7 +291,7 @@ export function CardBehaviorSheet({
           onBack={() => setOpenId(null)}
         />
       ) : (
-        <BehaviorList cards={cards} onOpen={setOpenId} />
+        <BehaviorList cards={cards} policy={policy} onPolicy={onPolicy} onOpen={setOpenId} />
       )}
     </Sheet>
   );
@@ -296,7 +308,17 @@ export function CardBehaviorSheet({
  * card database already reads, which needs no attention and should not be in
  * the way of the two that do.
  */
-function BehaviorList({ cards, onOpen }: { cards: BehaviorCard[]; onOpen: (oracleId: string) => void }) {
+function BehaviorList({
+  cards,
+  policy,
+  onPolicy,
+  onOpen,
+}: {
+  cards: BehaviorCard[];
+  policy: SimPolicy;
+  onPolicy: (policy: SimPolicy) => void;
+  onOpen: (oracleId: string) => void;
+}) {
   // Every derived reading, not some of them. A fetchland and an Exploration
   // were both missing from this test, so both sat under "Nothing read yet"
   // with a line underneath saying what had in fact been read off them.
@@ -311,6 +333,8 @@ function BehaviorList({ cards, onOpen }: { cards: BehaviorCard[]; onOpen: (oracl
 
   return (
     <>
+      <PolicyPicker policy={policy} onPolicy={onPolicy} />
+      <h4 className="deck-stats-head">What each card does</h4>
       <p className="fine-print">
         The card database reads oracle text conservatively: only what a card does unconditionally, on resolution, to you. Anything
         behind a trigger or an "if" reaches the simulator as a blank. Tell it what a card really does and it plays it out. A
@@ -326,6 +350,79 @@ function BehaviorList({ cards, onOpen }: { cards: BehaviorCard[]; onOpen: (oracl
         coverage line under the charts says how many, so the number stays honest either way.
       </p>
     </>
+  );
+}
+
+/**
+ * How the simulator plays the deck, as three dropdowns.
+ *
+ * It lives on this screen rather than beside the charts because it is the same
+ * question the rest of the screen asks, one level up. Down there you tell the
+ * sequencer what a card does; up here you tell it what you would do with the
+ * cards. A deck whose every card is written out perfectly and is then played
+ * back-to-front is still not your deck.
+ *
+ * Three controls and no more. Every one of them changes a number somebody is
+ * going to quote, so each has to be a sentence you could defend at a table —
+ * which is also why the chosen one says what it means underneath rather than
+ * hiding the explanation in a tooltip nobody on a phone can reach.
+ */
+function PolicyPicker({ policy, onPolicy }: { policy: SimPolicy; onPolicy: (policy: SimPolicy) => void }) {
+  return (
+    <>
+      <h4 className="deck-stats-head">How it plays the deck</h4>
+      <div className="behavior-policy">
+        <PolicyField
+          label="Spend the turn"
+          value={policy.spend}
+          options={SPEND_POLICIES}
+          onChange={(spend) => onPolicy({ ...policy, spend })}
+        />
+        <PolicyField
+          label="Combat"
+          value={policy.combat}
+          options={COMBAT_POLICIES}
+          onChange={(combat) => onPolicy({ ...policy, combat })}
+        />
+        <PolicyField
+          label="Interaction"
+          value={policy.interaction}
+          options={INTERACTION_POLICIES}
+          onChange={(interaction) => onPolicy({ ...policy, interaction })}
+        />
+      </div>
+      <p className="fine-print">
+        The goldfish has no opponent, so these are about your own sequencing and nothing else. Change one and every number in the
+        stats sheet moves with it, which is the point: a percentage is only worth reading under a policy you would have played.
+      </p>
+    </>
+  );
+}
+
+function PolicyField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: readonly PolicyOption<T>[];
+  onChange: (value: T) => void;
+}) {
+  const chosen = options.find((o) => o.id === value);
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {chosen && <span className="behavior-policy-hint">{chosen.hint}</span>}
+    </label>
   );
 }
 

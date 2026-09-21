@@ -26,14 +26,47 @@ export interface TraceLine {
   taps?: string[];
 }
 
+/**
+ * A pile of one card, which is how a board is actually laid out: four Islands
+ * are one stack with a 4 on it, not four tiles in a row. Card *indices* into
+ * `SimDeck.cards`, so the sheet can reach the name and the face without the
+ * trace carrying either.
+ */
+export interface BoardPile {
+  card: number;
+  count: number;
+}
+
+/**
+ * Where every card was at the end of a turn.
+ *
+ * Taken as a snapshot rather than derived from the lines, because the lines
+ * are a story and this is a position: a card that was drawn, cast, sacrificed
+ * and regrown appears four times up there and once down here, which is the
+ * one of the two a reader can check against their own board.
+ */
+export interface BoardState {
+  /** Lands on the battlefield, the bottom row. */
+  lands: BoardPile[];
+  /** Everything else on the battlefield, the top row. */
+  permanents: BoardPile[];
+  /** Treasure tokens, which are nobody's card and so have no pile of their own. */
+  treasures: number;
+  hand: BoardPile[];
+  graveyard: BoardPile[];
+  exile: BoardPile[];
+}
+
 export interface TraceTurn {
   turn: number;
   lines: TraceLine[];
   /** Mana on the battlefield this turn, Treasures made this turn included. */
   available: number;
   spent: number;
-  /** Cards in hand at end of turn, by name, commander included. */
-  hand: string[];
+  /** Damage this turn could have done to an opponent, combat and otherwise. */
+  damage: number;
+  /** Where everything was when the turn ended. */
+  board: BoardState;
 }
 
 export interface GameTrace {

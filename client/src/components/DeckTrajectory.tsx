@@ -58,6 +58,13 @@ export function DeckTrajectory({
     { name: 'seen', values: result.cardsSeenByTurn, color: SERIES_A, dashed: false },
     { name: 'in hand', values: result.handSizeByTurn, color: SERIES_B, dashed: true },
   ];
+  // Only for the decks that deal any. A flat pair of zeroes under a combo deck
+  // is a chart that says nothing and takes a screenful to say it.
+  const dealt = result.damageByTurn[turns] ?? 0;
+  const damage: Series[] = [
+    { name: 'total', values: result.damageByTurn, color: SERIES_A, dashed: false },
+    { name: 'combat', values: result.combatDamageByTurn, color: SERIES_B, dashed: true },
+  ];
 
   return (
     <>
@@ -69,10 +76,18 @@ export function DeckTrajectory({
       <TrendChart series={cards} turns={turns} unit="cards" />
       <p className="fine-print">{cardsNote(result, turns)}</p>
 
+      {dealt > 0 && (
+        <>
+          <h4 className="deck-stats-head">Damage</h4>
+          <TrendChart series={damage} turns={turns} unit="damage" />
+          <p className="fine-print">{damageNote(result, turns)}</p>
+        </>
+      )}
+
       <p className="fine-print">
-        An average game, over {result.games.toLocaleString()} of them. Each turn it plays its land drops, then spends what it has:
-        ramp first, then the rest of the hand, priciest first, with a coin flip between cards it has no reason to prefer. The
-        policy is part of the answer, so when it changes between releases these lines move with it.
+        An average game, over {result.games.toLocaleString()} of them. Each turn it plays its land drops, then spends what it has
+        in whatever order the play style under Card behavior asks for, with a coin flip between cards it has no reason to prefer.
+        The policy is part of the answer, so changing it moves every line here.
       </p>
       <p className="fine-print">{coverageNote(coverage, missedDraw)}</p>
     </>
@@ -125,6 +140,27 @@ function coverageNote(c: SimCoverage, missedDraw: number | null): string {
     );
   }
   return [head, ...rest].join(' ');
+}
+
+/**
+ * What the damage chart is and, more to the point, what it is not.
+ *
+ * Nobody blocks, nothing gains life and there is no life total to run out, so
+ * this is the ceiling a goldfish reaches and never a clock. Said plainly every
+ * time, because "deals 21 by turn six" is exactly the sort of number that gets
+ * quoted with the word "goldfish" left off.
+ */
+function damageNote(result: SimResult, turns: number): string {
+  const total = result.damageByTurn[turns] ?? 0;
+  const combat = result.combatDamageByTurn[turns] ?? 0;
+  const other = Math.max(0, total - combat);
+  const split =
+    combat > 0.05 && other > 0.05
+      ? `${one(combat)} of it in combat and ${one(other)} from everything else`
+      : combat > other
+        ? 'all of it in combat'
+        : 'none of it in combat';
+  return `An opponent is down ${one(total)} by turn ${turns}, ${split}. Nothing blocks and nobody gains life here, so that is the ceiling rather than a clock, and only the cards this model can read are swinging or burning, so it is a low ceiling.`;
 }
 
 /**

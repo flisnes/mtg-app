@@ -133,6 +133,18 @@ export interface SimCard {
    */
   power: number;
   /**
+   * An instant on the front face, so the interaction policy can hold it up.
+   * Off the type line like `permanent` and `creature`: nothing here knows what
+   * a card is *for*, only when you are allowed to cast it.
+   */
+  instant: boolean;
+  /**
+   * The card's face, for the goldfish trace's battlefield. Small rather than
+   * normal: a board row is a dozen tiles a hundred pixels wide, and the normal
+   * scan is six times the bytes for pixels nobody sees.
+   */
+  image: string | null;
+  /**
    * What it does to your hand, library and graveyard on resolution, or null for
    * the great majority of cards that do none of it unconditionally. Decoded
    * here so the inner loop never touches a tuple. See EffectProfile.
@@ -237,6 +249,8 @@ const isLandFace = (face: string) => /\bLand\b/.test(face);
 /** The front face decides where a cast card ends up: on the battlefield, or in the yard. */
 const isPermanentFace = (face: string) => /\b(Creature|Artifact|Enchantment|Planeswalker|Battle|Land)\b/i.test(face);
 const isCreatureFace = (face: string) => /\bCreature\b/i.test(face);
+/** An instant, which is the one card type you are allowed to hold up. */
+const isInstantFace = (face: string) => /\bInstant\b/i.test(face);
 /** Printed power as a number. A `*` or an `X` is worth nothing rather than a guess. */
 const powerOf = (raw: string | null | undefined): number => {
   if (!raw) return 0;
@@ -347,6 +361,8 @@ export function buildSimDeck(rows: readonly DeckRow[], behaviors?: ReadonlyMap<s
       permanent: isPermanentFace(parts[0] ?? ''),
       creature: isCreatureFace(parts[0] ?? ''),
       power: powerOf(o.power),
+      instant: isInstantFace(parts[0] ?? ''),
+      image: o.imageSmall ?? o.imageNormal ?? null,
       effect: decodeEffectProfile(o.effect),
       behavior: compileBehavior(behaviors?.get(o.oracleId)),
     });

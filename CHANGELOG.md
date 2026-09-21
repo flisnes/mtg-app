@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.160.0
+
+- **Added: the goldfish trace shows the board, in card images.** "Watch one game play out" now pins a battlefield above the turn-by-turn text: permanents on the top row, lands on the bottom, and copies of the same card stacked into one pile with a count on it. Scrolling the turns is what advances it: read down and the board plays forward with you. Buttons under it open your hand, graveyard and exile for the same turn. Every line of text that was there before is still there.
+- **Added: play style, on the Card behavior screen.** Three dropdowns saying how the simulator plays your deck, because the one hard-coded policy was right for one kind of deck and wrong for the two next to it. *Spend the turn*: ramp first (what it always did), card draw first, creatures first, or cheapest first so the turn fits in as many spells as it can. *Combat*: only creatures whose rule fires on attack (what it always did), everything attacks, or nobody does. *Interaction*: cast instants on sight, or hold them up and leave the mana untapped. It is remembered per deck on this device, and every number in the stats sheet moves with it.
+- **Added: damage.** A third trajectory chart, shown for any deck that deals some, counting what an opponent would have taken by each turn, with combat damage and everything else kept apart, because a deck whose combat line is flat under a rising total wins in a different way from one where it is not. Nothing blocks and nobody gains life, so it is a ceiling rather than a clock, and the line under the chart says so.
+- **Added: a "Deal X damage" step in the card behavior editor**, so a burn spell can be written out by hand like everything else. It is the only step with nothing on your side of the table to show for it, which is why it needed one.
+
 ## 0.159.4
 
 - **Fixed: cards that put a land into play are no longer read as an Exploration.** Arboreal Grazer, Burgeoning, Sakura-Tribe Scout and about 130 others carried a tag broad enough to cover both, so the simulator handed each of them an extra land drop every turn for the rest of the game. The card database now wants the card to actually say "on each of your turns", and reads the rest as the one-shot ramp they are. Azusa correctly grants two drops rather than one.

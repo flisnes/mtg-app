@@ -32,6 +32,26 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.161.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'The colored-source panel now shows what was actually on the battlefield. The counts at the top assume every copy in your deck is in play at once; the new block under them counts the sources the simulation really had, per color, on the turn you pick. A deck with a Yavimaya is told it has 40 green sources, and told two rows later that 2.3 of its 4.0 sources make green on turn four.',
+      },
+      {
+        kind: 'added',
+        text:
+          'A fourth tile on the deck stats sheet, saying how many of your cards the model plays out rather than resolving as nothing.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'The Card behavior line leads with unread draw spells now, instead of counting every removal spell as a card that does nothing.',
+      },
+    ],
+  },
+  {
     version: '0.160.0',
     changes: [
       {
@@ -242,36 +262,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'The simulator now pays for X. It used to treat a Fireball as a one-mana spell and leave the rest of the turn unspent. X spells are cast last, take whatever mana is left over, and are held rather than cast for nothing. Expect the "mana spent" line to sit closer to the "mana available" line in any deck that plays one.',
-      },
-    ],
-  },
-  {
-    version: '0.158.1',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Card behavior can move cards between zones. One step covers tutoring, ramping a land into play, regrowth, bouncing and putting a card back: pick a zone to take from, a zone to put it in, and how many. Which cards it finds is a card-search query, so `t:basic` means here what it means in the search bar, and the editor counts the matches in your deck as you type.',
-      },
-      {
-        kind: 'changed',
-        text:
-          'The simulator keeps a graveyard now, filled by everything that fills one: milling, discarding, a cracked fetch, and every spell that is not a permanent. So a rule that goes looking in the yard finds what should be there.',
-      },
-    ],
-  },
-  {
-    version: '0.158.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Tell the simulator what a card actually does. Deck stats → Card behavior lists every card in the deck with what the model currently thinks it does ("Do nothing" for most of them), and you pick: when played or each upkeep, then draw / mill / discard / scry / surveil / make Treasures, with X a fixed number or the cards in your hand, the lands you control or the turn number. Steps run in the order you write them, so a loot that discards first draws for a smaller hand.',
-      },
-      {
-        kind: 'added',
-        text:
-          'Cards you author are counted on the coverage line under the charts. The curves stop being a pure floor once you have told the model something, and the panel says how many cards that is rather than quietly changing what the numbers mean.',
       },
     ],
   },

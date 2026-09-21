@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.161.0
+
+- **Added: the colored-source panel now shows what was actually on the battlefield.** The counts at the top of it assume every copy in your deck is in play at once, which is why five paragraphs of small print under them explain the ways that is not true. A new block under the chips counts the sources the simulation really had, per color, on the turn you pick. A deck with 19 Forests, 20 utility lands and a Yavimaya is told it has 40 green sources, and told two rows later that 2.3 of its 4.0 sources make green on turn four. Both numbers are true and the second is the one you play with.
+- A fetchland counts as whatever it went and got, a Yavimaya or a Chromatic Lantern only widens your lands once it is in play, and a filter land makes nothing on its own. None of the assumptions the printed count has to make apply here.
+- Expect the early turns to read high and settle. The simulation plays the land that most widens your colors first, so turn one is your best land far more often than the decklist suggests, and the turns after drift back toward what the deck holds.
+- **Added: a fourth tile on the deck stats sheet**, saying how many of your cards the model plays out rather than resolving as nothing. Now that simulated numbers are starting to answer questions the flat counts used to, how much of the deck we can read is worth knowing before you read the rest of the sheet.
+- **Changed: the Card behavior line now leads with unread draw spells.** It used to lead with "N resolve as nothing", which counts every removal spell you own and is the model being right about them. The number worth a tap is the one costing you something: cards the database calls draw spells whose draw we cannot read.
+
 ## 0.160.0
 
 - **Added: the goldfish trace shows the board, in card images.** "Watch one game play out" now pins a battlefield above the turn-by-turn text: permanents on the top row, lands on the bottom, and copies of the same card stacked into one pile with a count on it. Scrolling the turns is what advances it: read down and the board plays forward with you. Buttons under it open your hand, graveyard and exile for the same turn. Every line of text that was there before is still there.

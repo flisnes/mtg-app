@@ -77,8 +77,18 @@ function loadPolicy(deckId: string): SimPolicy {
   }
 }
 
-/** The headline on the behavior line: what is worth going in there for. */
-function behaviorNote(coverage: { blanks: number; authored: number }): string {
+/**
+ * The headline on the behavior line: what is worth going in there for.
+ *
+ * The draw gap leads when there is one (§14.8). `blanks` counts every removal
+ * spell in the deck and a removal spell resolving as nothing is the model being
+ * right, so it is the wrong thing to put first: it reads as a complaint about
+ * cards that work. `missedDraw` is the subset the tags say should have drawn
+ * you something and did not, which is the only one of the three that is
+ * actually costing the curves anything, and the only one worth a tap.
+ */
+function behaviorNote(coverage: { blanks: number; authored: number }, missedDraw: number | null): string {
+  if (missedDraw && missedDraw > 0) return `${missedDraw} draw card${plural(missedDraw)} unread`;
   if (coverage.authored > 0) return `${coverage.authored} card${plural(coverage.authored)} play out your way`;
   if (coverage.blanks > 0) return `${coverage.blanks} resolve as nothing`;
   return 'every card is modelled';
@@ -217,6 +227,11 @@ export function DeckStatsSheet({
   // first render, and a memo that doesn't watch for it reports null forever.
   const tagsReady = useOracleTags();
   const missedDraw = useMemo(() => missedDrawCopies(rows), [rows, tagsReady]);
+  // Lands, mana sources and cards with an effect the sequencer resolves. The
+  // same arithmetic `coverageNote` does, because the tile and the paragraph
+  // explaining it disagreeing would be worse than either of them being absent.
+  const { lands: covLands, mana: covMana, effects: covEffects } = simDeck.coverage;
+  const modelled = covLands + covMana + covEffects;
 
   return (
     <Sheet onClose={onClose} title={`Deck stats: ${name}`} className="deck-stats-sheet">
@@ -236,6 +251,17 @@ export function DeckStatsSheet({
             <div className="deck-stat">
               <strong>{one(stats.avgMv)}</strong>
               <span>Avg mana value</span>
+            </div>
+            {/* §14.8: once the simulated numbers start answering questions the
+                static panels used to, how much of the deck the model can read
+                is the confidence gauge for the whole sheet, and it has no
+                business being fine print three panels down. Untoned on
+                purpose — a deck of removal reads low and is being modelled
+                correctly, so a colour here would be an accusation. The
+                trajectory's coverage note is where the nuance lives. */}
+            <div className="deck-stat">
+              <strong>{modelled}</strong>
+              <span>of {simDeck.coverage.library} read</span>
             </div>
           </div>
 
@@ -284,7 +310,7 @@ export function DeckStatsSheet({
             <p className="fine-print">Your card database predates this data. Refresh it from About to see which of your lands enter tapped.</p>
           )}
 
-          <ColorSourcesPanel report={report} />
+          <ColorSourcesPanel report={report} sim={simResult ?? null} />
 
           <ManaFixPanel
             report={report}
@@ -361,7 +387,9 @@ export function DeckStatsSheet({
           <button type="button" className="deck-stats-line" onClick={() => setBehaviorsOpen(true)}>
             <span className="deck-stats-bits">
               <span>Card behavior</span>
-              <span className="deck-stats-tone tone-ok">{behaviorNote(simDeck.coverage)}</span>
+              <span className={`deck-stats-tone tone-${missedDraw && missedDraw > 0 ? 'warn' : 'ok'}`}>
+                {behaviorNote(simDeck.coverage, missedDraw)}
+              </span>
             </span>
             <Icon name="chevronRight" />
           </button>

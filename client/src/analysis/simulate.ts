@@ -24,7 +24,7 @@ import { handSize } from './gameModel.js';
 import { KEEP_ANYTHING_AT } from './mulligan.js';
 import { makeRng, shuffle, type Rng } from './rng.js';
 import { bindingPips, type ParsedCost, type Pip } from './manaCost.js';
-import { colorMask, popcount, UNIT_BY_MASK, type SimCard, type SimDeck, type SimFilter } from './simDeck.js';
+import { colorMask, MASK_BITS, popcount, UNIT_BY_MASK, type SimCard, type SimDeck, type SimFilter } from './simDeck.js';
 
 // The simulator: phase 5, and the only engine here that can answer a question
 // about the *order* you drew things in.
@@ -44,6 +44,9 @@ import { colorMask, popcount, UNIT_BY_MASK, type SimCard, type SimDeck, type Sim
 
 /** Turns simulated. Eight covers a seven-drop's own curve and stops there. */
 export const SIM_MAX_TURN = 8;
+
+/** W, U, B, R, G, C — the pip colors a source can be counted against. */
+const COLORS = MASK_BITS.length;
 
 /** Enough games that a percentage point is real, few enough to finish on a phone. */
 export const DEFAULT_GAMES = 20000;
@@ -370,6 +373,26 @@ export interface SimResult {
   handSizeByTurn: number[];
   /** P(you had a land to play), indexed by turn. */
   landDropByTurn: number[];
+  /**
+   * Mean sources on the battlefield making each color, `[color][turn]` over
+   * `WUBRGC`, sampled after the land drop and before the turn's mana is spent
+   * (§14.4: that is the moment the question "can I pay this pip" is asked, and
+   * sampling after the casting would report the leftovers).
+   *
+   * This is the colored-source count as the game actually produced it, against
+   * `manaSources`' count of every copy in the deck as though all of it were in
+   * play at once. The two part company hardest on exactly the cards the static
+   * count has to guess about: a Yavimaya makes every land green *in the games
+   * where it is on the battlefield*, and this is the only number that knows how
+   * many of those there were.
+   */
+  sourcesByTurn: number[][];
+  /**
+   * Mean sources on the battlefield that turn, any color. The denominator: a
+   * green count of 2.4 means one thing beside 4.5 sources and another beside
+   * 2.5, and the share is what exposes a manabase leaning on a granter.
+   */
+  sourcesInPlayByTurn: number[];
   /** P(the game started below seven cards). */
   pMulligan: number;
   meanHandSize: number;
@@ -676,11 +699,31 @@ export function simulate(
       if (expires > 0 && turn > expires) continue;
       const n = srcUnits[s]!;
       total += n;
+      const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
       // In the same walk that produces the number, so the two can never
       // disagree about which sources were online. This runs on the land-drop
       // rehearsal too, which is why it is a flag and not a second loop.
-      if (credit) creditMana(srcBy[s]!, turn, n);
-      const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
+      if (credit) {
+        creditMana(srcBy[s]!, turn, n);
+        // §14: the colored-source count, measured rather than assumed.
+        //
+        // Counted in *sources* and not in mana units, because the printed
+        // count this sits beside is in sources: a Sol Ring is one colorless
+        // source there and has to be one here, or the two numbers are in
+        // different currencies and the comparison is a trick.
+        //
+        // `mask` is the same one the payment solver is about to be handed,
+        // grant and all, which is the whole point. A land only reads as green
+        // off a Yavimaya that is on the battlefield right now, in this game, on
+        // this turn. Floating mana is skipped: a Dark Ritual is this turn's
+        // pool, not a permanent that taps.
+        if (!srcFloating[s]) {
+          sourcesInPlay[turn] = sourcesInPlay[turn]! + 1;
+          for (let c = 0; c < COLORS; c++) {
+            if (mask & (1 << c)) sourceSum[c * stride + turn] = sourceSum[c * stride + turn]! + 1;
+          }
+        }
+      }
       const owner = srcFloating[s] ? floatOwner(srcCard[s]!) : srcCard[s]!;
       if (srcOneColor[s] && n > 1) {
         unitGroups.push({ colors: UNIT_BY_MASK[mask]!.colors, count: n });
@@ -2387,6 +2430,14 @@ export function simulate(
   /** Cards still in hand at end of turn, once the turn's spells have left it. */
   const handSum = new Float64Array(stride);
   const landDrops = new Uint32Array(stride);
+  /**
+   * sourceSum[color * stride + turn]: sources on the battlefield that turn able
+   * to make that color, over `WUBRGC`. Written in the pool walk, so what is
+   * counted here is exactly what the payment solver was handed.
+   */
+  const sourceSum = new Float64Array(COLORS * stride);
+  /** Sources on the battlefield that turn, any color: the share's denominator. */
+  const sourcesInPlay = new Float64Array(stride);
 
   // --- Card credit (phase 13) ------------------------------------------------
   // The two trajectory lines, decomposed by which card in the deck put each
@@ -3332,6 +3383,8 @@ export function simulate(
     seenSum,
     handSum,
     landDrops,
+    sourceSum,
+    sourcesInPlay,
     damageSum,
     combatSum,
     manaCredit,
@@ -3524,6 +3577,8 @@ interface Tallies {
   seenSum: Float64Array;
   handSum: Float64Array;
   landDrops: Uint32Array;
+  sourceSum: Float64Array;
+  sourcesInPlay: Float64Array;
   damageSum: Float64Array;
   combatSum: Float64Array;
   manaCredit: Float64Array;
@@ -3535,7 +3590,7 @@ interface Tallies {
 }
 
 function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): SimResult {
-  const { castAt, heldAt, groupOf, stride, manaSum, spentSum, seenSum, handSum, landDrops } = t;
+  const { castAt, heldAt, groupOf, stride, manaSum, spentSum, seenSum, handSum, landDrops, sourceSum, sourcesInPlay } = t;
   const per = games > 0 ? 1 / games : 0;
 
   /** A first-turn histogram turned into "by turn t", which is what anyone reads. */
@@ -3718,6 +3773,10 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     cardsSeenByTurn: [...seenSum].map((sum) => sum * per),
     handSizeByTurn: [...handSum].map((sum) => sum * per),
     landDropByTurn: [...landDrops].map((count) => count * per),
+    sourcesByTurn: Array.from({ length: COLORS }, (_c, color) =>
+      Array.from({ length: stride }, (_t, turn) => sourceSum[color * stride + turn]! * per),
+    ),
+    sourcesInPlayByTurn: [...sourcesInPlay].map((sum) => sum * per),
     damageByTurn: damage,
     combatDamageByTurn: combat,
     combatDamage: combat[opts.maxTurn] ?? 0,

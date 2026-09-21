@@ -1,4 +1,4 @@
-// The older half of the changelog (0.157.1 down to 0.98.0), split out of
+// The older half of the changelog (0.158.1 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,36 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.158.1',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Card behavior can move cards between zones. One step covers tutoring, ramping a land into play, regrowth, bouncing and putting a card back: pick a zone to take from, a zone to put it in, and how many. Which cards it finds is a card-search query, so `t:basic` means here what it means in the search bar, and the editor counts the matches in your deck as you type.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'The simulator keeps a graveyard now, filled by everything that fills one: milling, discarding, a cracked fetch, and every spell that is not a permanent. So a rule that goes looking in the yard finds what should be there.',
+      },
+    ],
+  },
+  {
+    version: '0.158.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Tell the simulator what a card actually does. Deck stats → Card behavior lists every card in the deck with what the model currently thinks it does ("Do nothing" for most of them), and you pick: when played or each upkeep, then draw / mill / discard / scry / surveil / make Treasures, with X a fixed number or the cards in your hand, the lands you control or the turn number. Steps run in the order you write them, so a loot that discards first draws for a smaller hand.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Cards you author are counted on the coverage line under the charts. The curves stop being a pure floor once you have told the model something, and the panel says how many cards that is rather than quietly changing what the numbers mean.',
+      },
+    ],
+  },
   {
     version: '0.157.1',
     changes: [

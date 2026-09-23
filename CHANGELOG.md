@@ -2,6 +2,16 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.167.0
+
+- **Changed: the Model tab tells you where to start.** It used to list every card that does nothing in one alphabetical run, so the draw engine worth writing sat between a Murder and a vanilla 3/3. Now it opens on *Write these first*: every card doing nothing yet that Scryfall's tags call draw, ramp, a tutor or an engine (card advantage, recursion, repeatable tokens), each with a chip saying which. Your commander leads, then draw and ramp (what Flow and Mana measure), then tutors and engines, cheapest first. Everything else that does nothing, which is right for removal and plain creatures, folds away under *Right as nothing*, and *From the card's text* folds too.
+- **Changed: "to check" counts that list.** The chip at the top, the Model verdict and the Overview's Model row now count every card in *Write these first*, not only draw cards.
+
+## 0.167.0
+
+- **Changed: the Model tab tells you where to start.** It used to list every card that does nothing in one alphabetical run, so the draw engine worth writing sat between a Murder and a vanilla 3/3. Now it opens on *Write these first*: every card doing nothing yet that Scryfall's tags call draw, ramp, a tutor or an engine (card advantage, recursion, repeatable tokens), each with a chip saying which. Your commander leads, then draw and ramp (what Flow and Mana measure), then tutors and engines, cheapest first. Everything else that does nothing, which is right for removal and plain creatures, folds away under *Right as nothing*, and *From the card's text* folds too.
+- **Changed: "to check" counts that list.** The chip at the top, the Model verdict and the Overview's Model row now count every card in *Write these first*, not only draw cards.
+
 ## 0.166.0
 
 - **Added: the cards doing nothing are in Who does the work.** The list used to show only cards the simulator could measure, so a draw engine it can't read yet (a Korvold, a card that draws off a trigger) was simply missing, and the chart above quietly came out low. Now every card the database calls draw or ramp that plays out as nothing in the simulator is listed at 0, in amber, under the cards that did the work: draw cards under *Cards*, ramp under *Mana*. Your commander counts too. Tap one to go straight to its editor on the Model tab. The row on the Flow tab says how many there are.

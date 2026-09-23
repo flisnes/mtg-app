@@ -60,14 +60,8 @@ export function idleEngines(rows: readonly DeckRow[], deck: SimDeck): IdleEngine
   const draw = oracleTagClosure(DRAW_SLUG);
   const ramp = oracleTagClosure(RAMP_SLUG);
   if (!draw && !ramp) return null;
-  const tags = new Map<string, readonly number[]>();
-  for (const r of rows) if (r.oracle?.tags) tags.set(r.oracle.oracleId, r.oracle.tags);
   const out: IdleEngines = { mana: [], cards: [] };
-  for (const card of deck.cards) {
-    if (card.role !== 'spell' || card.effect || card.behavior) continue;
-    if (card.copies <= 0 && !card.commander) continue;
-    const t = tags.get(card.oracleId);
-    if (!t) continue;
+  for (const { card, tags: t } of blankSpells(rows, deck)) {
     const idle: IdleEngine = { oracleId: card.oracleId, name: card.name, copies: card.copies, commander: card.commander };
     if (draw && t.some((i) => draw.has(i))) out.cards.push(idle);
     if (ramp && t.some((i) => ramp.has(i))) out.mana.push(idle);
@@ -75,6 +69,88 @@ export function idleEngines(rows: readonly DeckRow[], deck: SimDeck): IdleEngine
   const byName = (a: IdleEngine, b: IdleEngine) => a.name.localeCompare(b.name);
   out.cards.sort(byName);
   out.mana.sort(byName);
+  return out;
+}
+
+/**
+ * The spells the sequencer resolves as nothing, with their tags. Shared by
+ * the two questions below so "doing nothing" means one thing on both tabs.
+ */
+function* blankSpells(rows: readonly DeckRow[], deck: SimDeck) {
+  const tags = new Map<string, readonly number[]>();
+  for (const r of rows) if (r.oracle?.tags) tags.set(r.oracle.oracleId, r.oracle.tags);
+  for (const card of deck.cards) {
+    if (card.role !== 'spell' || card.effect || card.behavior) continue;
+    if (card.copies <= 0 && !card.commander) continue;
+    const t = tags.get(card.oracleId);
+    if (t) yield { card, tags: t };
+  }
+}
+
+/**
+ * Why a card is in the Model tab's queue, in the order the queue ranks them.
+ * Draw and ramp first because Flow and Mana measure exactly those; a tutor or
+ * an engine moves the plan, which the simulator only half sees until E1.
+ */
+export type QueueReason = 'draw' | 'ramp' | 'tutor' | 'engine';
+const QUEUE_RANK: Record<QueueReason, number> = { draw: 0, ramp: 1, tutor: 2, engine: 3 };
+
+/**
+ * Tags that make a card an engine for the queue: card advantage that is not a
+ * draw (impulse, regrowth), repeatable tokens, and recursion. A Grave Titan
+ * resolving as a 6/6 and nothing else is a gap; a Murder resolving as nothing
+ * is the model being right.
+ */
+const ENGINE_SLUGS = ['card-advantage', 'repeatable-token-generator', 'recursion'];
+const TUTOR_SLUG = 'tutor';
+
+/** One card worth writing a rule for, and why it made the list. */
+export interface QueueCard extends IdleEngine {
+  reason: QueueReason;
+}
+
+/**
+ * The cards worth modelling first (rebuild plan C1), or null when the tag
+ * vocabulary is not there to ask.
+ *
+ * Same test as idleEngines, wider net: a spell the tags say should be doing
+ * work and the simulator plays as nothing. Ranked by what writing it moves:
+ * the commander first (every game has it), then by reason, then cheaper
+ * first (cast earlier, so it is working for more of the turns we measure),
+ * then more copies.
+ */
+export function modelQueue(rows: readonly DeckRow[], deck: SimDeck): QueueCard[] | null {
+  const lists: [QueueReason, ReadonlySet<number> | null][] = [
+    ['draw', oracleTagClosure(DRAW_SLUG)],
+    ['ramp', oracleTagClosure(RAMP_SLUG)],
+    ['tutor', oracleTagClosure(TUTOR_SLUG)],
+    ['engine', union(ENGINE_SLUGS.map(oracleTagClosure))],
+  ];
+  if (lists.every(([, set]) => !set)) return null;
+  const mv = new Map<string, number>();
+  for (const r of rows) if (r.oracle) mv.set(r.oracle.oracleId, r.oracle.cmc);
+  const out: QueueCard[] = [];
+  for (const { card, tags: t } of blankSpells(rows, deck)) {
+    const hit = lists.find(([, set]) => set && t.some((i) => set.has(i)));
+    if (!hit) continue;
+    out.push({ oracleId: card.oracleId, name: card.name, copies: card.copies, commander: card.commander, reason: hit[0] });
+  }
+  const cost = (c: QueueCard) => mv.get(c.oracleId) ?? 0;
+  return out.sort(
+    (a, b) =>
+      Number(b.commander) - Number(a.commander) ||
+      QUEUE_RANK[a.reason] - QUEUE_RANK[b.reason] ||
+      cost(a) - cost(b) ||
+      b.copies - a.copies ||
+      a.name.localeCompare(b.name),
+  );
+}
+
+function union(sets: (ReadonlySet<number> | null)[]): ReadonlySet<number> | null {
+  const present = sets.filter((s): s is ReadonlySet<number> => !!s);
+  if (present.length === 0) return null;
+  const out = new Set<number>();
+  for (const s of present) for (const i of s) out.add(i);
   return out;
 }
 

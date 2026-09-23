@@ -47,6 +47,7 @@ import { setCardBehavior } from '../db/dataAccess.js';
 import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '../cardDb/querySyntax.js';
 import type { GroupRow } from '../analysis/groups.js';
 import { HowWorked } from './HowWorked.js';
+import type { QueueCard, QueueReason } from '../analysis/coverage.js';
 import {
   COMBAT_POLICIES,
   INTERACTION_POLICIES,
@@ -217,6 +218,7 @@ export function CardBehaviorPanel({
   onPolicy,
   openId,
   onOpenId,
+  queue,
 }: {
   deckId: string;
   rows: readonly GroupRow[];
@@ -227,6 +229,8 @@ export function CardBehaviorPanel({
   /** The card in the editor. Held by the page so another tab can open one. */
   openId: string | null;
   onOpenId: (oracleId: string | null) => void;
+  /** Blank cards worth writing, best first, or null with no tag vocabulary. */
+  queue: readonly QueueCard[] | null;
 }) {
   const cards = useMemo(() => behaviorCards(rows, behaviors), [rows, behaviors]);
   const setOpenId = onOpenId;
@@ -301,7 +305,7 @@ export function CardBehaviorPanel({
           onBack={() => setOpenId(null)}
         />
       ) : (
-        <BehaviorList cards={cards} policy={policy} onPolicy={onPolicy} onOpen={setOpenId} />
+        <BehaviorList cards={cards} queue={queue} policy={policy} onPolicy={onPolicy} onOpen={setOpenId} />
       )}
     </div>
   );
@@ -311,20 +315,30 @@ export function CardBehaviorPanel({
 // The list
 // ---------------------------------------------------------------------------
 
+/** The chip on a queued row: why it is worth writing. */
+const REASON_LABEL: Record<QueueReason, string> = { draw: 'draws', ramp: 'ramps', tutor: 'tutors', engine: 'engine' };
+
 /**
- * Three sections rather than one alphabetical run. Your own work first because
- * it is the thing you came back to change, then the cards that do nothing
- * because they are the whole reason this screen exists, then everything the
- * card database already reads, which needs no attention and should not be in
- * the way of the two that do.
+ * A queue, then the rest. The queue (rebuild plan C1) is the cards the tags say
+ * should be drawing, ramping, tutoring or building something and the simulator
+ * plays as nothing, best first, because that is the only list on this screen
+ * that moves a number. Your own work next, since it is what you came back to
+ * change. The two lists that need no attention fold away: blanks the tags have
+ * nothing to say about (removal, beaters, which do nothing here and should
+ * not), and everything the card database already reads.
+ *
+ * With no tag vocabulary there is no queue to build, so the blanks stay open
+ * under one heading as before: we cannot tell which of them are fine.
  */
 function BehaviorList({
   cards,
+  queue,
   policy,
   onPolicy,
   onOpen,
 }: {
   cards: BehaviorCard[];
+  queue: readonly QueueCard[] | null;
   policy: SimPolicy;
   onPolicy: (policy: SimPolicy) => void;
   onOpen: (oracleId: string) => void;
@@ -336,6 +350,19 @@ function BehaviorList({
   const authored = cards.filter((c) => c.authored);
   const blank = cards.filter((c) => !c.authored && !isRead(c));
   const read = cards.filter((c) => !c.authored && isRead(c));
+  // In the queue's order, not the list's. Only blanks: the queue is built off
+  // the simulator's deck and this list off the rows, and a card the two
+  // disagree about is better left where the list put it than shown twice.
+  const byId = new Map(blank.map((c) => [c.oracleId, c]));
+  const reasons = new Map<string, QueueReason>();
+  const queued: BehaviorCard[] = [];
+  for (const q of queue ?? []) {
+    const c = byId.get(q.oracleId);
+    if (!c || reasons.has(q.oracleId)) continue;
+    reasons.set(q.oracleId, q.reason);
+    queued.push(c);
+  }
+  const quiet = blank.filter((c) => !reasons.has(c.oracleId));
 
   if (cards.length === 0) {
     return <p className="fine-print">Nothing in the mainboard yet.</p>;
@@ -358,10 +385,28 @@ function BehaviorList({
           Cards you write play out exactly as written, so for this deck the curves stop being a pure floor. The chip at the top
           says how many of your cards the simulator plays out.
         </p>
+        {queue && (
+          <p className="fine-print">
+            "Write these first" is every card that does nothing yet and that Scryfall's tags call draw, ramp, a tutor or an engine
+            (card advantage, recursion, repeatable tokens). Your commander leads, since every game has it. Then draw and ramp, which
+            Flow and Mana measure directly, then tutors and engines, cheapest first because a card cast early works for more of the
+            turns counted.
+          </p>
+        )}
       </HowWorked>
-      <Section title={`Yours (${authored.length})`} cards={authored} onOpen={onOpen} />
-      <Section title={`Does nothing yet (${blank.length})`} cards={blank} onOpen={onOpen} />
-      <Section title={`From the card's text (${read.length})`} cards={read} onOpen={onOpen} />
+      {queue ? (
+        <>
+          <Section title={`Write these first (${queued.length})`} cards={queued} reasons={reasons} onOpen={onOpen} />
+          <Section title={`Yours (${authored.length})`} cards={authored} onOpen={onOpen} />
+          <Section title={`Right as nothing (${quiet.length})`} cards={quiet} onOpen={onOpen} folded />
+        </>
+      ) : (
+        <>
+          <Section title={`Yours (${authored.length})`} cards={authored} onOpen={onOpen} />
+          <Section title={`Does nothing yet (${blank.length})`} cards={blank} onOpen={onOpen} />
+        </>
+      )}
+      <Section title={`From the card's text (${read.length})`} cards={read} onOpen={onOpen} folded />
     </>
   );
 }
@@ -439,13 +484,27 @@ function PolicyField<T extends string>({
   );
 }
 
-function Section({ title, cards, onOpen }: { title: string; cards: BehaviorCard[]; onOpen: (oracleId: string) => void }) {
+function Section({
+  title,
+  cards,
+  reasons,
+  folded,
+  onOpen,
+}: {
+  title: string;
+  cards: BehaviorCard[];
+  /** Why each card is queued, shown as a chip on the row. */
+  reasons?: ReadonlyMap<string, QueueReason>;
+  /** Behind a disclosure: a list you only open to look something up. */
+  folded?: boolean;
+  onOpen: (oracleId: string) => void;
+}) {
   if (cards.length === 0) return null;
-  return (
-    <>
-      <h4 className="deck-stats-head">{title}</h4>
-      <ul className="behavior-list">
-        {cards.map((card) => (
+  const list = (
+    <ul className="behavior-list">
+      {cards.map((card) => {
+        const reason = reasons?.get(card.oracleId);
+        return (
           <li key={card.oracleId}>
             <button type="button" className="behavior-row" onClick={() => onOpen(card.oracleId)}>
               <span className="behavior-row-text">
@@ -456,11 +515,26 @@ function Section({ title, cards, onOpen }: { title: string; cards: BehaviorCard[
                 <span className="behavior-row-what">{summaryOf(card)}</span>
               </span>
               {card.authored && <span className="behavior-tag">yours</span>}
+              {reason && <span className="behavior-tag behavior-tag-why">{REASON_LABEL[reason]}</span>}
               <Icon name="chevronRight" />
             </button>
           </li>
-        ))}
-      </ul>
+        );
+      })}
+    </ul>
+  );
+  if (folded) {
+    return (
+      <details className="behavior-fold">
+        <summary className="deck-stats-head">{title}</summary>
+        {list}
+      </details>
+    );
+  }
+  return (
+    <>
+      <h4 className="deck-stats-head">{title}</h4>
+      {list}
     </>
   );
 }

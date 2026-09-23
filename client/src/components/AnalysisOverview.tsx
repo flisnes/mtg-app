@@ -211,8 +211,8 @@ function flowAnswer(result: SimResult | undefined, hasManaData: boolean, games: 
 
 /**
  * How far to trust the two rows above. Every card the model cannot read is an
- * effect it fails to apply, so the numbers are a floor, and the draw cards it
- * misses are the part of that floor worth a tap.
+ * effect it fails to apply, so the numbers are a floor, and the queue (cards
+ * the tags say draw, ramp, tutor or build) is the part of that floor worth a tap.
  */
 function modelAnswer(c: SimCoverage, toCheck: number): Answer {
   const modelled = c.lands + c.mana + c.effects;
@@ -221,8 +221,8 @@ function modelAnswer(c: SimCoverage, toCheck: number): Answer {
     return {
       tone: 'warn',
       status: `${toCheck} to check`,
-      text: `${head} ${toCheck} draw card${plural(toCheck)} ${toCheck === 1 ? 'does' : 'do'} nothing yet, so Flow is a floor.`,
-      next: 'Write what they do.',
+      text: `${head} ${toCheck} card${plural(toCheck)} that should draw, ramp or build ${toCheck === 1 ? 'does' : 'do'} nothing yet, so the numbers are a floor.`,
+      next: 'Write what they do, top of the list first.',
     };
   }
   const rest = c.blanks > 0 ? ` The other ${c.blanks} do nothing, which is right for removal.` : '';

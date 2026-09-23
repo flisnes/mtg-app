@@ -1,4 +1,4 @@
-// The older half of the changelog (0.158.5 down to 0.98.0), split out of
+// The older half of the changelog (0.158.7 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,26 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.158.7',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          '"When played" has split into "when played" and "when it enters". A creature dragged back out of the graveyard was never cast, so only the second one fires for it, and a permanent you hard-cast does both.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'A rule written on a fetchland now actually fires. The simulator was resolving the land it found and never the fetch itself, so a behavior authored on a Flooded Strand was a rule you could write, save, and never once see happen.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'A fetchland put onto the battlefield some other way cracks for a land instead of sitting there as a land that taps for every colour it could have found.',
+      },
+    ],
+  },
   {
     version: '0.158.6',
     changes: [

@@ -15,7 +15,7 @@ import { CardBehaviorPanel } from './CardBehaviorPanel.js';
 import { AnalysisOverview } from './AnalysisOverview.js';
 import { HowWorked } from './HowWorked.js';
 import { buildSimDeck } from '../analysis/simDeck.js';
-import { idleEngines, missedDrawCopies, type IdleEngines } from '../analysis/coverage.js';
+import { idleEngines, missedDrawCopies, modelQueue, type IdleEngines } from '../analysis/coverage.js';
 import { deckBehaviorMap } from '../db/dataAccess.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import {
@@ -106,15 +106,15 @@ function loadKeepRule(deckId: string): KeepRule {
 /**
  * The headline on the behavior line: what is worth going in there for.
  *
- * The draw gap leads when there is one (§14.8). `blanks` counts every removal
- * spell in the deck and a removal spell resolving as nothing is the model being
- * right, so it is the wrong thing to put first: it reads as a complaint about
- * cards that work. `missedDraw` is the subset the tags say should have drawn
- * you something and did not, which is the only one of the three that is
- * actually costing the curves anything, and the only one worth a tap.
+ * The queue leads when there is one (rebuild plan C1). `blanks` counts every
+ * removal spell in the deck and a removal spell resolving as nothing is the
+ * model being right, so it is the wrong thing to put first: it reads as a
+ * complaint about cards that work. The queue is the subset the tags say should
+ * be drawing, ramping, tutoring or building something, which is the part
+ * actually costing the numbers anything, and the only part worth a tap.
  */
-function behaviorNote(coverage: { blanks: number; authored: number }, missedDraw: number | null): string {
-  if (missedDraw && missedDraw > 0) return `${missedDraw} draw card${plural(missedDraw)} doing nothing yet: write what they do below`;
+function behaviorNote(coverage: { blanks: number; authored: number }, queued: number): string {
+  if (queued > 0) return `${queued} card${plural(queued)} worth writing first: the tags say they do something, the simulator plays them as nothing`;
   if (coverage.authored > 0) return `${coverage.authored} card${plural(coverage.authored)} play out the way you wrote them`;
   if (coverage.blanks > 0) return `${coverage.blanks} cards do nothing in the simulator, which is right for removal`;
   return 'The simulator plays out every card';
@@ -316,12 +316,14 @@ export function DeckAnalysis({
   // the built deck, so a card with a behavior on it drops out of both.
   const idle = useMemo(() => idleEngines(rows, simDeck), [rows, simDeck, tagsReady]);
   const missedDraw = useMemo(() => missedDrawCopies(idle), [idle]);
+  // The Model tab's queue, which is also what the coverage chip counts.
+  const queue = useMemo(() => modelQueue(rows, simDeck), [rows, simDeck, tagsReady]);
   // Lands, mana sources and cards with an effect the sequencer resolves. The
   // same arithmetic `coverageNote` does, because the chip and the paragraph
   // explaining it disagreeing would be worse than either of them being absent.
   const { lands: covLands, mana: covMana, effects: covEffects } = simDeck.coverage;
   const modelled = covLands + covMana + covEffects;
-  const toCheck = missedDraw ?? 0;
+  const toCheck = queue?.length ?? 0;
 
   // The bar's height, for the card editor to scroll clear of it. Measured
   // rather than guessed, because the chips wrap differently on every phone.
@@ -537,7 +539,7 @@ export function DeckAnalysis({
 
         {tab === 'model' && (
           <>
-            <p className={`deck-stats-verdict${toCheck > 0 ? ' tone-warn' : ''}`}>{behaviorNote(simDeck.coverage, missedDraw)}.</p>
+            <p className={`deck-stats-verdict${toCheck > 0 ? ' tone-warn' : ''}`}>{behaviorNote(simDeck.coverage, toCheck)}.</p>
             <CardBehaviorPanel
               deckId={deckId}
               rows={rows}
@@ -546,6 +548,7 @@ export function DeckAnalysis({
               onPolicy={savePolicy}
               openId={modelCard}
               onOpenId={setModelCard}
+              queue={queue}
             />
           </>
         )}

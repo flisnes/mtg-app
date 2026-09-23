@@ -1,4 +1,4 @@
-// The older half of the changelog (0.158.8 down to 0.98.0), split out of
+// The older half of the changelog (0.159.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,21 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.159.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Two triggers that watch the rest of the game: "when another permanent enters" and "when you cast another spell". Say which cards count with the same search syntax as everywhere else, so t:land is landfall, t:instant or t:sorcery is magecraft, and t:creature is a Beast Whisperer.',
+      },
+      {
+        kind: 'added',
+        text:
+          'That makes most deck engines writable. A permanent sitting on the battlefield can draw, ramp, mill or make Treasure every time it sees what it is waiting for, and the curves finally count it.',
+      },
+    ],
+  },
   {
     version: '0.158.8',
     changes: [

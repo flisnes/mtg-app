@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.169.0
+
+- **Added: rules travel between your decks.** A card you already wrote a rule for in another deck now offers that rule when you open it on the Model tab, with the deck it came from. *Use this* copies it into the editor; save to keep it. The other deck's rule stays as it is. In the list, such a card says which deck has a rule and what it does, and one that would otherwise fold away under *Right as nothing* gets its own section, *Written in your other decks*, so it doesn't hide. Several decks with the same rule show as one offer.
+
 ## 0.168.0
 
 - **Added: saving a rule shows what it did.** Writing what a card does used to send you back to the list with no sign anything changed. Now a panel at the bottom says, before and after: how many cards the card draws or how much mana it makes per game, and whichever deck numbers moved (commander on time, mana on turn 6, cards seen and screw or flood by turn 6). Both runs deal the same shuffles, so the difference is the rule and not luck. *Undo* puts the old rule back. A quick look over 2,000 games comes first, the full 20,000 right after.

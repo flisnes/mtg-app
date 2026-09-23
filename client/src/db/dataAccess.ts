@@ -1162,6 +1162,44 @@ export async function deckBehaviorMap(deckId: string): Promise<Map<string, CardB
   return new Map(rows.map((r) => [r.oracleId, r.behavior]));
 }
 
+/** One card's rule as another deck wrote it, with every deck that wrote the same one. */
+export interface BorrowableBehavior {
+  behavior: CardBehavior;
+  /** Deck names, most recently written first. */
+  decks: string[];
+  updatedAt: number;
+}
+
+/**
+ * Rules the user wrote for the same card in their other decks (rebuild plan
+ * C4), by oracleId. Identical rules from several decks are one offer: the rows
+ * are stored through the sanitizer, so the same rule is the same bytes.
+ */
+export async function otherDeckBehaviors(deckId: string): Promise<Map<string, BorrowableBehavior[]>> {
+  const [rows, decks] = await Promise.all([db.deckBehaviors.toArray(), db.decks.toArray()]);
+  const names = new Map(decks.map((d) => [d.id, d.name]));
+  const out = new Map<string, BorrowableBehavior[]>();
+  const byKey = new Map<string, BorrowableBehavior>();
+  for (const r of [...rows].sort((a, b) => b.updatedAt - a.updatedAt)) {
+    if (r.deckId === deckId) continue;
+    const name = names.get(r.deckId);
+    // A row whose deck has not synced down yet has nobody to credit.
+    if (name === undefined) continue;
+    const key = `${r.oracleId}\n${JSON.stringify(r.behavior)}`;
+    const seen = byKey.get(key);
+    if (seen) {
+      if (!seen.decks.includes(name)) seen.decks.push(name);
+      continue;
+    }
+    const offer: BorrowableBehavior = { behavior: r.behavior, decks: [name], updatedAt: r.updatedAt };
+    byKey.set(key, offer);
+    const list = out.get(r.oracleId);
+    if (list) list.push(offer);
+    else out.set(r.oracleId, [offer]);
+  }
+  return out;
+}
+
 /**
  * Write one card's behavior, or clear it with null.
  *

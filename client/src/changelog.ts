@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.169.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'A card you already wrote a rule for in another deck offers that rule in its editor. One tap copies it in; save to keep it.',
+      },
+    ],
+  },
+  {
     version: '0.168.0',
     changes: [
       {
@@ -208,21 +217,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'What each card in your deck is worth. A new line under the trajectory charts splits both curves up by the card that made them, so you can see which of your cards puts your mana online and which of them finds you your cards. A land another card fetched counts for the card that fetched it, and a card drawn off a trigger counts for the permanent that triggered.',
-      },
-    ],
-  },
-  {
-    version: '0.159.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Two triggers that watch the rest of the game: "when another permanent enters" and "when you cast another spell". Say which cards count with the same search syntax as everywhere else, so t:land is landfall, t:instant or t:sorcery is magecraft, and t:creature is a Beast Whisperer.',
-      },
-      {
-        kind: 'added',
-        text:
-          'That makes most deck engines writable. A permanent sitting on the battlefield can draw, ramp, mill or make Treasure every time it sees what it is waiting for, and the curves finally count it.',
       },
     ],
   },

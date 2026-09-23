@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import {
   BEHAVIOR_AMOUNTS,
   BEHAVIOR_AMOUNT_OPS,
@@ -44,7 +45,7 @@ import {
 } from '@mtg/shared';
 import { Icon } from './icons.js';
 import { ManaCost } from './ManaCost.js';
-import { setCardBehavior } from '../db/dataAccess.js';
+import { otherDeckBehaviors, setCardBehavior, type BorrowableBehavior } from '../db/dataAccess.js';
 import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '../cardDb/querySyntax.js';
 import type { GroupRow } from '../analysis/groups.js';
 import { HowWorked } from './HowWorked.js';
@@ -205,6 +206,14 @@ function playsOutAs(card: BehaviorCard, preview: readonly BehaviorRule[]): strin
   return 'Nothing. In the simulator this card does nothing.';
 }
 
+const NO_OFFERS: ReadonlyMap<string, BorrowableBehavior[]> = new Map();
+
+/** "Elves", "Elves and Gruul", "Elves and 2 more". */
+function deckNames(decks: readonly string[]): string {
+  if (decks.length <= 2) return decks.join(' and ');
+  return `${decks[0]} and ${decks.length - 1} more`;
+}
+
 /** How many of the deck's distinct cards a move step's criteria would find. */
 export interface DeckMatcher {
   total: number;
@@ -244,6 +253,9 @@ export function CardBehaviorPanel({
   onWatch: (oracleId: string) => void;
 }) {
   const cards = useMemo(() => behaviorCards(rows, behaviors), [rows, behaviors]);
+  // Rules for these cards in the user's other decks (rebuild plan C4). Live,
+  // so a rule written in one tab is on offer in the other.
+  const borrowable = useLiveQuery(() => otherDeckBehaviors(deckId), [deckId]) ?? NO_OFFERS;
   const setOpenId = onOpenId;
   const open = openId ? (cards.find((c) => c.oracleId === openId) ?? null) : null;
 
@@ -317,9 +329,17 @@ export function CardBehaviorPanel({
           onSaved={onSaved}
           fires={fires?.filter((f) => f.oracleId === open.oracleId)}
           onWatch={() => onWatch(open.oracleId)}
+          offers={borrowable.get(open.oracleId) ?? []}
         />
       ) : (
-        <BehaviorList cards={cards} queue={queue} policy={policy} onPolicy={onPolicy} onOpen={setOpenId} />
+        <BehaviorList
+          cards={cards}
+          queue={queue}
+          policy={policy}
+          onPolicy={onPolicy}
+          onOpen={setOpenId}
+          borrowable={borrowable}
+        />
       )}
     </div>
   );
@@ -350,12 +370,15 @@ function BehaviorList({
   policy,
   onPolicy,
   onOpen,
+  borrowable,
 }: {
   cards: BehaviorCard[];
   queue: readonly QueueCard[] | null;
   policy: SimPolicy;
   onPolicy: (policy: SimPolicy) => void;
   onOpen: (oracleId: string) => void;
+  /** Rules for the same card in the user's other decks. */
+  borrowable: ReadonlyMap<string, BorrowableBehavior[]>;
 }) {
   // Every derived reading, not some of them. A fetchland and an Exploration
   // were both missing from this test, so both sat under "Nothing read yet"
@@ -376,7 +399,10 @@ function BehaviorList({
     reasons.set(q.oracleId, q.reason);
     queued.push(c);
   }
-  const quiet = blank.filter((c) => !reasons.has(c.oracleId));
+  // A blank you already wrote in another deck is one tap from done, so it does
+  // not fold away with the blanks that need nothing.
+  const elsewhere = blank.filter((c) => !reasons.has(c.oracleId) && borrowable.has(c.oracleId));
+  const quiet = blank.filter((c) => !reasons.has(c.oracleId) && !borrowable.has(c.oracleId));
 
   if (cards.length === 0) {
     return <p className="fine-print">Nothing in the mainboard yet.</p>;
@@ -410,17 +436,23 @@ function BehaviorList({
       </HowWorked>
       {queue ? (
         <>
-          <Section title={`Write these first (${queued.length})`} cards={queued} reasons={reasons} onOpen={onOpen} />
+          <Section title={`Write these first (${queued.length})`} cards={queued} reasons={reasons} onOpen={onOpen} borrowable={borrowable} />
+          <Section
+            title={`Written in your other decks (${elsewhere.length})`}
+            cards={elsewhere}
+            onOpen={onOpen}
+            borrowable={borrowable}
+          />
           <Section title={`Yours (${authored.length})`} cards={authored} onOpen={onOpen} />
-          <Section title={`Right as nothing (${quiet.length})`} cards={quiet} onOpen={onOpen} folded />
+          <Section title={`Right as nothing (${quiet.length})`} cards={quiet} onOpen={onOpen} borrowable={borrowable} folded />
         </>
       ) : (
         <>
           <Section title={`Yours (${authored.length})`} cards={authored} onOpen={onOpen} />
-          <Section title={`Does nothing yet (${blank.length})`} cards={blank} onOpen={onOpen} />
+          <Section title={`Does nothing yet (${blank.length})`} cards={blank} onOpen={onOpen} borrowable={borrowable} />
         </>
       )}
-      <Section title={`From the card's text (${read.length})`} cards={read} onOpen={onOpen} folded />
+      <Section title={`From the card's text (${read.length})`} cards={read} onOpen={onOpen} borrowable={borrowable} folded />
     </>
   );
 }
@@ -504,6 +536,7 @@ function Section({
   reasons,
   folded,
   onOpen,
+  borrowable,
 }: {
   title: string;
   cards: BehaviorCard[];
@@ -512,12 +545,15 @@ function Section({
   /** Behind a disclosure: a list you only open to look something up. */
   folded?: boolean;
   onOpen: (oracleId: string) => void;
+  /** Only passed for cards without a rule here: the line under the name says what another deck wrote. */
+  borrowable?: ReadonlyMap<string, BorrowableBehavior[]>;
 }) {
   if (cards.length === 0) return null;
   const list = (
     <ul className="behavior-list">
       {cards.map((card) => {
         const reason = reasons?.get(card.oracleId);
+        const offer = card.authored ? undefined : borrowable?.get(card.oracleId)?.[0];
         return (
           <li key={card.oracleId}>
             <button type="button" className="behavior-row" onClick={() => onOpen(card.oracleId)}>
@@ -526,7 +562,13 @@ function Section({
                   {card.copies > 1 && <span className="behavior-row-qty">{card.copies}×</span>}
                   {card.name}
                 </span>
-                <span className="behavior-row-what">{summaryOf(card)}</span>
+                {offer ? (
+                  <span className="behavior-row-what behavior-row-offer">
+                    In {deckNames(offer.decks)}: {describeBehavior(offer.behavior).join('. ')}
+                  </span>
+                ) : (
+                  <span className="behavior-row-what">{summaryOf(card)}</span>
+                )}
               </span>
               {card.authored && <span className="behavior-tag">yours</span>}
               {reason && <span className="behavior-tag behavior-tag-why">{REASON_LABEL[reason]}</span>}
@@ -596,6 +638,7 @@ function BehaviorEditor({
   onSaved,
   fires,
   onWatch,
+  offers,
 }: {
   deckId: string;
   card: BehaviorCard;
@@ -604,6 +647,8 @@ function BehaviorEditor({
   onSaved: (oracleId: string, name: string, before: CardBehavior | null, cleared: boolean) => void;
   fires: readonly SimRuleFires[] | undefined;
   onWatch: () => void;
+  /** This card's rules in the user's other decks, newest first. */
+  offers: readonly BorrowableBehavior[];
 }) {
   // The draft opens on whatever is true now: your rules if you wrote some,
   // otherwise the card database's reading in the same grammar. Editing what we
@@ -637,6 +682,10 @@ function BehaviorEditor({
   };
 
   const preview = rules.filter((r) => r.steps.length > 0);
+  // What this deck already saved is not an offer, however many decks share it.
+  const saved = card.authored ? JSON.stringify(card.authored.rules) : null;
+  const shown = offers.filter((o) => JSON.stringify(o.behavior.rules) !== saved);
+  const drafted = JSON.stringify(preview);
 
   return (
     <>
@@ -696,6 +745,35 @@ function BehaviorEditor({
           The card database finds nothing on this card it can play out, so in the simulator it does nothing. Add a rule and it
           will.
         </p>
+      )}
+
+      {shown.length > 0 && (
+        <>
+          <h4 className="deck-stats-head">From your other decks</h4>
+          <ul className="behavior-offers">
+            {shown.map((o, i) => {
+              const inDraft = JSON.stringify(o.behavior.rules) === drafted;
+              return (
+                <li key={i}>
+                  <span className="behavior-offer-text">
+                    <span className="behavior-offer-deck">{deckNames(o.decks)}</span>
+                    <span>{describeBehavior(o.behavior).join('. ')}</span>
+                  </span>
+                  <button
+                    type="button"
+                    disabled={inDraft}
+                    onClick={() => setRules(o.behavior.rules.map((r) => ({ ...r, steps: [...r.steps] })))}
+                  >
+                    {inDraft ? 'In the draft' : 'Use this'}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="fine-print">
+            Copies it into the draft below. Save to keep it; the other deck's rule stays as it is.
+          </p>
+        </>
       )}
 
       {rules.map((rule, i) => (

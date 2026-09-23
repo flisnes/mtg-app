@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.172.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Some cards now come with their rule already written (Craterhoof, Ashaya, Everflowing Chalice, Beast Whisperer and about 45 more), one tap away in the Model tab. Other cards get a starting point from their tags, like "Landfall: draw a card".',
+      },
+    ],
+  },
+  {
     version: '0.171.0',
     changes: [
       {
@@ -206,21 +216,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'A move onto the battlefield can now arrive untapped, so a land put into play by a rule pays for something that turn. An "Add X mana" step can now name its colors: one color, a few, or any.',
-      },
-    ],
-  },
-  {
-    version: '0.159.3',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Rituals now put mana in your mana pool and the simulator spends it. A Dark Ritual used to resolve as a blank; it is now three black mana for the rest of that turn, gone at the end of it. The sequencer only casts one when something in hand is waiting on it.',
-      },
-      {
-        kind: 'added',
-        text:
-          'An "Add X mana" step for card behavior, for the mana that evaporates at end of turn. A landfall trigger that adds a mana is now writable; the Treasure step is still there for the mana that keeps.',
       },
     ],
   },

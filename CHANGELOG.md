@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.172.0
+
+- **Added: rules you don't have to write.** About 50 well-known cards the card database can't read now come with a rule already written for them: Craterhoof Behemoth, Ashaya, Everflowing Chalice, Rampaging Baloths, Beast Whisperer, Guardian Project, Primeval Titan, Grave Titan, the enchantresses, Reliquary Tower and more. Open one on the Model tab and *Written for this card* offers it; *Use this*, then save. In the list, such a card shows the rule under its name, and one that would fold away under *Right as nothing* is listed under *Ready to use* instead (which also holds rules from your other decks). They are written to err low: Welcoming Vampire's "once each turn" and similar clauses were left out rather than guessed.
+- **Added: starting points.** A card nobody has written a rule for gets up to three from what Scryfall's tags say it does: *Landfall: draw a card*, *Casting an instant or sorcery draws*, *Each upkeep: create a token*, *Your creatures get +1/+1* and so on. The trigger is the part the tags know; the number is a guess, so check it against the card before you save.
+- **Fixed:** a rule with only a *Cast it another way* option and no triggers was thrown away on save.
+
 ## 0.171.0
 
 - **Added: card rules can describe what a card becomes, not only what it does.** The Model tab's card editor has new kinds of rule and step:

@@ -63,6 +63,8 @@ import type { GroupRow } from '../analysis/groups.js';
 import { HowWorked } from './HowWorked.js';
 import { PolicySpread } from './PolicySpread.js';
 import type { QueueCard, QueueReason } from '../analysis/coverage.js';
+import { prewritten, templatesFor, type Template } from '../analysis/behaviorTemplates.js';
+import { oracleTagClosure } from '../cardDb/oracleTags.js';
 import {
   COMBAT_POLICIES,
   INTERACTION_POLICIES,
@@ -132,6 +134,10 @@ interface BehaviorCard {
   permanent: boolean;
   /** And a creature, which is the one that can attack. */
   creature: boolean;
+  /** Scryfall tag indices, for the starting points (rebuild plan C5). */
+  tags: readonly number[];
+  /** A rule somebody already wrote for this card, shipped with the app (C5). */
+  prewritten: CardBehavior | null;
 }
 
 /** "When you play it", straight out of the catalog so it is said in one place. */
@@ -182,6 +188,8 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       image: o.imageNormal ?? o.imageSmall ?? null,
       permanent: isPermanent(o.typeLine),
       creature: isCreature(o.typeLine),
+      tags: o.tags ?? [],
+      prewritten: prewritten(o.name),
     });
   }
   return [...byOracle.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -429,10 +437,12 @@ function BehaviorList({
     reasons.set(q.oracleId, q.reason);
     queued.push(c);
   }
-  // A blank you already wrote in another deck is one tap from done, so it does
-  // not fold away with the blanks that need nothing.
-  const elsewhere = blank.filter((c) => !reasons.has(c.oracleId) && borrowable.has(c.oracleId));
-  const quiet = blank.filter((c) => !reasons.has(c.oracleId) && !borrowable.has(c.oracleId));
+  // A blank you already wrote in another deck, or one that ships with a rule
+  // written for it, is one tap from done, so it does not fold away with the
+  // blanks that need nothing.
+  const ready = (c: BehaviorCard) => borrowable.has(c.oracleId) || !!c.prewritten;
+  const elsewhere = blank.filter((c) => !reasons.has(c.oracleId) && ready(c));
+  const quiet = blank.filter((c) => !reasons.has(c.oracleId) && !ready(c));
 
   if (cards.length === 0) {
     return <p className="fine-print">Nothing in the mainboard yet.</p>;
@@ -466,15 +476,20 @@ function BehaviorList({
             turns counted.
           </p>
         )}
+        <p className="fine-print">
+          Some cards come with a rule already written for them, and a card you wrote in another deck brings that rule along.
+          Either is one tap in the card's editor. Nothing is used until you save it.
+        </p>
       </HowWorked>
       {queue ? (
         <>
-          <Section title={`Write these first (${queued.length})`} cards={queued} reasons={reasons} onOpen={onOpen} borrowable={borrowable} />
+          <Section title={`Write these first (${queued.length})`} cards={queued} reasons={reasons} onOpen={onOpen} borrowable={borrowable} suggest />
           <Section
-            title={`Written in your other decks (${elsewhere.length})`}
+            title={`Ready to use (${elsewhere.length})`}
             cards={elsewhere}
             onOpen={onOpen}
             borrowable={borrowable}
+            suggest
           />
           <Section title={`Yours (${authored.length})`} cards={authored} onOpen={onOpen} />
           <Section title={`Right as nothing (${quiet.length})`} cards={quiet} onOpen={onOpen} borrowable={borrowable} folded />
@@ -482,7 +497,7 @@ function BehaviorList({
       ) : (
         <>
           <Section title={`Yours (${authored.length})`} cards={authored} onOpen={onOpen} />
-          <Section title={`Does nothing yet (${blank.length})`} cards={blank} onOpen={onOpen} borrowable={borrowable} />
+          <Section title={`Does nothing yet (${blank.length})`} cards={blank} onOpen={onOpen} borrowable={borrowable} suggest />
         </>
       )}
       <Section title={`From the card's text (${read.length})`} cards={read} onOpen={onOpen} borrowable={borrowable} folded />
@@ -570,6 +585,7 @@ function Section({
   folded,
   onOpen,
   borrowable,
+  suggest,
 }: {
   title: string;
   cards: BehaviorCard[];
@@ -580,6 +596,8 @@ function Section({
   onOpen: (oracleId: string) => void;
   /** Only passed for cards without a rule here: the line under the name says what another deck wrote. */
   borrowable?: ReadonlyMap<string, BorrowableBehavior[]>;
+  /** Blanks: a card's pre-written rule, when it has one, replaces "Do nothing" under its name. */
+  suggest?: boolean;
 }) {
   if (cards.length === 0) return null;
   const list = (
@@ -587,6 +605,7 @@ function Section({
       {cards.map((card) => {
         const reason = reasons?.get(card.oracleId);
         const offer = card.authored ? undefined : borrowable?.get(card.oracleId)?.[0];
+        const ready = suggest && !card.authored && !offer ? card.prewritten : null;
         return (
           <li key={card.oracleId}>
             <button type="button" className="behavior-row" onClick={() => onOpen(card.oracleId)}>
@@ -599,6 +618,8 @@ function Section({
                   <span className="behavior-row-what behavior-row-offer">
                     In {deckNames(offer.decks)}: {describeBehavior(offer.behavior).join('. ')}
                   </span>
+                ) : ready ? (
+                  <span className="behavior-row-what behavior-row-offer">Written for it: {describeBehavior(ready).join('. ')}</span>
                 ) : (
                   <span className="behavior-row-what">{summaryOf(card)}</span>
                 )}
@@ -723,6 +744,15 @@ function BehaviorEditor({
   const drafted = shapeOf({ rules: preview, cast });
   /** A kicker in the draft, so "the times it was kicked" is a number worth offering. */
   const kicker = cast.some((o) => o.kind === 'kicker' || o.kind === 'multikicker');
+  // Rebuild plan C5. The pre-written rule, unless it is what this deck saved.
+  const pre = card.prewritten && shapeOf(card.prewritten) !== saved ? card.prewritten : null;
+  // Starting points only for a card nobody has written: with a rule of yours or
+  // a pre-written one, a guess from the tags is a step backwards.
+  const starts: Template[] = card.authored || card.prewritten ? [] : templatesFor(card, oracleTagClosure);
+  const use = (b: CardBehavior) => {
+    setRules(b.rules.map((r) => ({ ...r, steps: [...r.steps] })));
+    setCast((b.cast ?? []).map((c) => ({ ...c })));
+  };
 
   return (
     <>
@@ -784,34 +814,34 @@ function BehaviorEditor({
         </p>
       )}
 
+      {pre && (
+        <>
+          <h4 className="deck-stats-head">Written for this card</h4>
+          <OfferList offers={[{ head: 'Ships with the app', behavior: pre }]} drafted={drafted} onUse={use} />
+          <p className="fine-print">
+            Read off the card by hand, erring low where the card does more than a rule can say. Copies it into the draft below;
+            save to keep it.
+          </p>
+        </>
+      )}
+
       {shown.length > 0 && (
         <>
           <h4 className="deck-stats-head">From your other decks</h4>
-          <ul className="behavior-offers">
-            {shown.map((o, i) => {
-              const inDraft = shapeOf(o.behavior) === drafted;
-              return (
-                <li key={i}>
-                  <span className="behavior-offer-text">
-                    <span className="behavior-offer-deck">{deckNames(o.decks)}</span>
-                    <span>{describeBehavior(o.behavior).join('. ')}</span>
-                  </span>
-                  <button
-                    type="button"
-                    disabled={inDraft}
-                    onClick={() => {
-                      setRules(o.behavior.rules.map((r) => ({ ...r, steps: [...r.steps] })));
-                      setCast((o.behavior.cast ?? []).map((c) => ({ ...c })));
-                    }}
-                  >
-                    {inDraft ? 'In the draft' : 'Use this'}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <OfferList offers={shown.map((o) => ({ head: deckNames(o.decks), behavior: o.behavior }))} drafted={drafted} onUse={use} />
           <p className="fine-print">
             Copies it into the draft below. Save to keep it; the other deck's rule stays as it is.
+          </p>
+        </>
+      )}
+
+      {starts.length > 0 && (
+        <>
+          <h4 className="deck-stats-head">Start from</h4>
+          <OfferList offers={starts.map((t) => ({ head: t.label, behavior: t.behavior }))} drafted={drafted} onUse={use} />
+          <p className="fine-print">
+            Picked from what Scryfall's tags say the card does. The trigger is the part they know; the number is a guess, so read
+            the card and fix it before you save.
           </p>
         </>
       )}
@@ -877,6 +907,40 @@ function BehaviorEditor({
         </button>
       </div>
     </>
+  );
+}
+
+/**
+ * Rules on offer, each one tap from the draft: pre-written, from another deck,
+ * or a starting point. The button says when the draft already holds it.
+ */
+function OfferList({
+  offers,
+  drafted,
+  onUse,
+}: {
+  offers: readonly { head: string; behavior: CardBehavior }[];
+  /** The draft's shape, to tell which offer it already is. */
+  drafted: string;
+  onUse: (behavior: CardBehavior) => void;
+}) {
+  return (
+    <ul className="behavior-offers">
+      {offers.map((o, i) => {
+        const inDraft = shapeOf(o.behavior) === drafted;
+        return (
+          <li key={i}>
+            <span className="behavior-offer-text">
+              <span className="behavior-offer-deck">{o.head}</span>
+              <span>{describeBehavior(o.behavior).join('. ')}</span>
+            </span>
+            <button type="button" disabled={inDraft} onClick={() => onUse(o.behavior)}>
+              {inDraft ? 'In the draft' : 'Use this'}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

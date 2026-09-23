@@ -9,6 +9,21 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.159.3',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Rituals now put mana in your mana pool and the simulator spends it. A Dark Ritual used to resolve as a blank; it is now three black mana for the rest of that turn, gone at the end of it. The sequencer only casts one when something in hand is waiting on it.',
+      },
+      {
+        kind: 'added',
+        text:
+          'An "Add X mana" step for card behavior, for the mana that evaporates at end of turn. A landfall trigger that adds a mana is now writable; the Treasure step is still there for the mana that keeps.',
+      },
+    ],
+  },
+  {
     version: '0.159.2',
     changes: [
       {

@@ -1211,7 +1211,7 @@ export async function otherDeckBehaviors(deckId: string): Promise<Map<string, Bo
 export async function setCardBehavior(deckId: string, oracleId: string, behavior: CardBehavior | null): Promise<void> {
   const rowId = deckBehaviorId(deckId, oracleId);
   await db.transaction('rw', [db.deckBehaviors, db.outbox], async () => {
-    if (!behavior || behavior.rules.length === 0) {
+    if (!behavior || (behavior.rules.length === 0 && !behavior.cast?.length)) {
       const existing = await db.deckBehaviors.get(rowId);
       if (!existing) return;
       await db.deckBehaviors.delete(rowId);

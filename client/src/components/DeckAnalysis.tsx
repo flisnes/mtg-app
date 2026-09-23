@@ -14,7 +14,9 @@ import { GameTraceSheet } from './GameTraceSheet.js';
 import { CardBehaviorPanel } from './CardBehaviorPanel.js';
 import { AnalysisOverview } from './AnalysisOverview.js';
 import { HowWorked } from './HowWorked.js';
-import { buildSimDeck } from '../analysis/simDeck.js';
+import { changeLines, ModelChangeToast } from './ModelChangeToast.js';
+import { setCardBehavior } from '../db/dataAccess.js';
+import { buildSimDeck, type SimDeck } from '../analysis/simDeck.js';
 import { idleEngines, missedDrawCopies, modelQueue, type IdleEngines } from '../analysis/coverage.js';
 import { deckBehaviorMap } from '../db/dataAccess.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
@@ -46,6 +48,27 @@ import type { PlacementIndex } from '../db/usePlacements.js';
 
 const one = (n: number) => n.toFixed(1);
 const plural = (n: number) => (n === 1 ? '' : 's');
+
+/**
+ * A rule just saved, and the run it is measured against (rebuild plan C2).
+ * `baseDeck` is the deck the baseline was dealt for: any run on a different
+ * deck is the after. `optsKey` is the settings both have to share, or the
+ * comparison is between two different games and says nothing about the rule.
+ */
+interface ModelChange {
+  oracleId: string;
+  name: string;
+  /** What to put back on Undo. */
+  before: CardBehavior | null;
+  cleared: boolean;
+  baseDeck: SimDeck;
+  baseQuick?: SimResult;
+  baseFull?: SimResult;
+  optsKey: string;
+}
+
+/** How long the toast stays once the full run has answered. */
+const CHANGE_TOAST_MS = 15000;
 
 /** Stable identity for the first render, before the live query has answered. */
 const EMPTY_BEHAVIORS: ReadonlyMap<string, CardBehavior> = new Map();
@@ -278,7 +301,9 @@ export function DeckAnalysis({
     }
   };
 
-  const [tracing, setTracing] = useState(false);
+  // The trace sheet, open or not, and the card it picks out when a rule's
+  // "Watch it in a game" opened it.
+  const [tracing, setTracing] = useState<{ focus: string | null } | null>(null);
   const [contribOpen, setContribOpen] = useState(false);
   // The card open in the Model tab's editor, lifted here so a row in "Who does
   // the work" can open one from the Flow tab.
@@ -309,6 +334,50 @@ export function DeckAnalysis({
   );
   const sim = useSimulation(simDeck, simOpts);
   const simResult = sim.kind === 'done' ? sim.result : sim.kind === 'running' ? sim.previous : undefined;
+
+  // Before/after on save. The baseline is whatever the current deck has dealt
+  // so far; the after is the first run on any other deck.
+  const [change, setChange] = useState<ModelChange | null>(null);
+  const optsKey = JSON.stringify(simOpts);
+  const onModelSaved = (oracleId: string, name: string, before: CardBehavior | null, cleared: boolean) => {
+    const base = sim.kind === 'done' || sim.kind === 'running' ? sim : null;
+    setChange({
+      oracleId,
+      name,
+      before,
+      cleared,
+      baseDeck: base?.deck ?? simDeck,
+      baseQuick: base?.quick,
+      baseFull: base?.kind === 'done' ? base.result : undefined,
+      optsKey,
+    });
+  };
+  // A play/draw flip or a policy change mid-toast makes the before and after
+  // different games. Better no comparison than a wrong one.
+  useEffect(() => {
+    if (change && change.optsKey !== optsKey) setChange(null);
+  }, [change, optsKey]);
+  const after = change && (sim.kind === 'done' || sim.kind === 'running') && sim.deck !== change.baseDeck ? sim : null;
+  const afterFull = after?.kind === 'done' ? after.result : undefined;
+  // Full against full when both exist; quick against quick otherwise, which is
+  // the same seed's first games on both sides.
+  const pair: [SimResult, SimResult] | null =
+    change && afterFull && change.baseFull
+      ? [change.baseFull, afterFull]
+      : change && after?.quick && change.baseQuick
+        ? [change.baseQuick, after.quick]
+        : null;
+  const finalPair = !!(change && afterFull && change.baseFull);
+  useEffect(() => {
+    if (!finalPair) return;
+    const t = setTimeout(() => setChange(null), CHANGE_TOAST_MS);
+    return () => clearTimeout(t);
+  }, [finalPair, change]);
+  const undoChange = () => {
+    if (!change) return;
+    setChange(null);
+    void setCardBehavior(deckId, change.oracleId, change.before);
+  };
   // How many of the deck's blanks the tags say should have drawn you something.
   // Depends on `tagsReady` because the vocabulary loads off IndexedDB after the
   // first render, and a memo that doesn't watch for it reports null forever.
@@ -523,7 +592,7 @@ export function DeckAnalysis({
             {/* Averages are either right or invisibly wrong. This is the way to
                 check: the same sequencer, one game, written down. */}
             {simDeck.hasManaData && simDeck.library.length > 0 && (
-              <button type="button" className="deck-stats-line" onClick={() => setTracing(true)}>
+              <button type="button" className="deck-stats-line" onClick={() => setTracing({ focus: null })}>
                 <span className="deck-stats-bits">
                   <span>Watch one game play out</span>
                 </span>
@@ -549,6 +618,9 @@ export function DeckAnalysis({
               openId={modelCard}
               onOpenId={setModelCard}
               queue={queue}
+              onSaved={onModelSaved}
+              fires={simResult?.fires}
+              onWatch={(oracleId) => setTracing({ focus: oracleId })}
             />
           </>
         )}
@@ -573,7 +645,18 @@ export function DeckAnalysis({
           }}
         />
       )}
-      {tracing && <GameTraceSheet deck={simDeck} opts={simOpts} onClose={() => setTracing(false)} />}
+      {change && (
+        <ModelChangeToast
+          name={change.name}
+          cleared={change.cleared}
+          lines={pair ? changeLines(change.oracleId, pair[0], pair[1]) : null}
+          games={pair ? pair[1].games : null}
+          final={finalPair}
+          onUndo={undoChange}
+          onClose={() => setChange(null)}
+        />
+      )}
+      {tracing && <GameTraceSheet deck={simDeck} opts={simOpts} focus={tracing.focus} onClose={() => setTracing(null)} />}
     </div>
   );
 }

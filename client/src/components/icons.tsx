@@ -8,6 +8,7 @@ import type { ReactElement, SVGProps } from 'react';
 
 export type IconName =
   | 'collection'
+  | 'play'
   | 'decks'
   | 'binder'
   | 'box'
@@ -237,6 +238,7 @@ const PATHS: Record<IconName, ReactElement> = {
     </>
   ),
   // Circular arrows — refresh / reload.
+  play: <polygon points="6 4 20 12 6 20 6 4" />,
   refresh: (
     <>
       <polyline points="23 4 23 10 17 10" />

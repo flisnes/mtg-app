@@ -28,6 +28,7 @@ import {
   manaStepColors,
   normalizeManaColors,
   queryHasX,
+  compileBehavior,
   sanitizeCardBehavior,
   substituteQueryX,
   type BehaviorAmount,
@@ -54,6 +55,7 @@ import {
   SPEND_POLICIES,
   type PolicyOption,
   type SimPolicy,
+  type SimRuleFires,
 } from '../analysis/simulate.js';
 
 // "What does this card actually do?", answered by the person holding it.
@@ -219,6 +221,9 @@ export function CardBehaviorPanel({
   openId,
   onOpenId,
   queue,
+  onSaved,
+  fires,
+  onWatch,
 }: {
   deckId: string;
   rows: readonly GroupRow[];
@@ -231,6 +236,12 @@ export function CardBehaviorPanel({
   onOpenId: (oracleId: string | null) => void;
   /** Blank cards worth writing, best first, or null with no tag vocabulary. */
   queue: readonly QueueCard[] | null;
+  /** A rule was written or cleared: what was there before, for Undo. */
+  onSaved: (oracleId: string, name: string, before: CardBehavior | null, cleared: boolean) => void;
+  /** How often each saved trigger ran in the last run, or undefined before one. */
+  fires: readonly SimRuleFires[] | undefined;
+  /** Open one game with this card's lines picked out. */
+  onWatch: (oracleId: string) => void;
 }) {
   const cards = useMemo(() => behaviorCards(rows, behaviors), [rows, behaviors]);
   const setOpenId = onOpenId;
@@ -303,6 +314,9 @@ export function CardBehaviorPanel({
           card={open}
           matcher={matcher}
           onBack={() => setOpenId(null)}
+          onSaved={onSaved}
+          fires={fires?.filter((f) => f.oracleId === open.oracleId)}
+          onWatch={() => onWatch(open.oracleId)}
         />
       ) : (
         <BehaviorList cards={cards} queue={queue} policy={policy} onPolicy={onPolicy} onOpen={setOpenId} />
@@ -579,11 +593,17 @@ function BehaviorEditor({
   card,
   matcher,
   onBack,
+  onSaved,
+  fires,
+  onWatch,
 }: {
   deckId: string;
   card: BehaviorCard;
   matcher: DeckMatcher;
   onBack: () => void;
+  onSaved: (oracleId: string, name: string, before: CardBehavior | null, cleared: boolean) => void;
+  fires: readonly SimRuleFires[] | undefined;
+  onWatch: () => void;
 }) {
   // The draft opens on whatever is true now: your rules if you wrote some,
   // otherwise the card database's reading in the same grammar. Editing what we
@@ -604,12 +624,15 @@ function BehaviorEditor({
     // Saving the same rule twice has to be the same row.
     const clean = kept.length > 0 ? sanitizeCardBehavior({ v: CARD_BEHAVIOR_VERSION, rules: kept }) : null;
     await setCardBehavior(deckId, card.oracleId, clean);
+    // Saving what was already there changes nothing, and a toast saying so is noise.
+    if (JSON.stringify(clean) !== JSON.stringify(card.authored)) onSaved(card.oracleId, card.name, card.authored, clean === null);
     onBack();
   };
 
   const reset = async () => {
     setSaving(true);
     await setCardBehavior(deckId, card.oracleId, null);
+    if (card.authored) onSaved(card.oracleId, card.name, card.authored, true);
     onBack();
   };
 
@@ -707,6 +730,17 @@ function BehaviorEditor({
       {/* What the card *is* is not replaced by anything written above, so it is
           said on its own line rather than folded into the sentence. */}
       {card.source && <p className="fine-print">{card.source}, whatever the rules above say.</p>}
+      {card.authored && fires && fires.length > 0 && (
+        <FiringCounts
+          authored={card.authored}
+          fires={fires}
+          edited={JSON.stringify(preview) !== JSON.stringify(card.authored.rules)}
+        />
+      )}
+      <button type="button" className="behavior-watch" onClick={onWatch}>
+        <Icon name="play" />
+        <span>Watch it in a game</span>
+      </button>
 
       <div className="sheet-actions">
         {card.authored && (
@@ -721,6 +755,49 @@ function BehaviorEditor({
           Save
         </button>
       </div>
+    </>
+  );
+}
+
+const firePct = (p: number) => (p > 0 && p < 0.005 ? 'under 1%' : `${Math.round(p * 100)}%`);
+
+/**
+ * How often each saved trigger ran (rebuild plan C3), which is the question a
+ * rule nobody can see fire leaves open. Rules on one plain trigger run as one
+ * list, so they are one line here; a watched trigger's rules are one line each,
+ * named by what they watch for. Read off the saved rules, because those are the
+ * ones the run dealt.
+ */
+function FiringCounts({
+  authored,
+  fires,
+  edited,
+}: {
+  authored: CardBehavior;
+  fires: readonly SimRuleFires[];
+  edited: boolean;
+}) {
+  const compiled = compileBehavior(authored);
+  const lines = fires.map((f) => {
+    const lead = BEHAVIOR_TRIGGERS.find((t) => t.id === f.on)?.lead ?? f.on;
+    const q = f.watch !== undefined && (f.on === 'cast' || f.on === 'enters') ? compiled?.[f.on][f.watch]?.q : undefined;
+    const label = q ? `${lead} (${q})` : lead;
+    // Once a game is the usual answer for a play rule and says nothing twice.
+    const times = f.perGame >= 1.05 ? `, ${f.perGame.toFixed(1)} times a game` : '';
+    return { key: `${f.on}:${f.watch ?? ''}`, label, text: f.games > 0 ? `${firePct(f.games)} of games${times}` : 'never', never: f.games === 0 };
+  });
+  return (
+    <>
+      <h4 className="deck-stats-head">How often it fires</h4>
+      <ul className="behavior-fires">
+        {lines.map((l) => (
+          <li key={l.key} className={l.never ? 'tone-warn' : undefined}>
+            <span>{l.label}</span>
+            <strong>{l.text}</strong>
+          </li>
+        ))}
+      </ul>
+      {edited && <p className="fine-print">For the saved rules. Save these and the games are dealt again.</p>}
     </>
   );
 }

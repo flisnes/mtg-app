@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.168.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Saving a card rule shows what it changed: its own draws or mana, and any deck number that moved, before and after. Undo puts the old rule back. A quick answer comes first, the full 20,000 games right after.',
+      },
+      {
+        kind: 'added',
+        text:
+          'The card editor says how often each saved trigger fired, and Watch it in a game deals a game with that card in it and shows only its lines.',
+      },
+    ],
+  },
+  {
     version: '0.167.0',
     changes: [
       {
@@ -208,26 +223,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'That makes most deck engines writable. A permanent sitting on the battlefield can draw, ramp, mill or make Treasure every time it sees what it is waiting for, and the curves finally count it.',
-      },
-    ],
-  },
-  {
-    version: '0.158.8',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'The simulator knows what is on your battlefield, not just what taps for mana. A sacrifice can go and find a creature, and "X = your creatures" and "X = the greatest power" are amounts you can pick.',
-      },
-      {
-        kind: 'added',
-        text:
-          'Two more triggers: "when it attacks" and "when it dies". There is a combat step now, with no blockers, no damage and no life total. Nothing attacks the turn it arrives.',
-      },
-      {
-        kind: 'added',
-        text:
-          'Flicker a permanent and everything it does on the way in happens again. The trigger picker is a dropdown now, because five of them will not sit abreast on a phone.',
       },
     ],
   },

@@ -1,4 +1,4 @@
-// The older half of the changelog (0.158.7 down to 0.98.0), split out of
+// The older half of the changelog (0.158.8 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,26 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.158.8',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'The simulator knows what is on your battlefield, not just what taps for mana. A sacrifice can go and find a creature, and "X = your creatures" and "X = the greatest power" are amounts you can pick.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Two more triggers: "when it attacks" and "when it dies". There is a combat step now, with no blockers, no damage and no life total. Nothing attacks the turn it arrives.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Flicker a permanent and everything it does on the way in happens again. The trigger picker is a dropdown now, because five of them will not sit abreast on a phone.',
+      },
+    ],
+  },
   {
     version: '0.158.7',
     changes: [

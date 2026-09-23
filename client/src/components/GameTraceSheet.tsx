@@ -3,7 +3,7 @@ import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
 import { traceGame, type SimOptions } from '../analysis/simulate.js';
 import type { SimCard, SimDeck } from '../analysis/simDeck.js';
-import type { BoardPile, BoardState, TraceKind } from '../analysis/trace.js';
+import type { BoardPile, BoardState, GameTrace, TraceKind } from '../analysis/trace.js';
 
 // One game, read start to finish.
 //
@@ -41,20 +41,63 @@ const ZONES: { id: ZoneId; label: string }[] = [
   { id: 'exile', label: 'Exile' },
 ];
 
+/** How many deals to try for a game the focused card shows up in. One game is cheap. */
+const FOCUS_TRIES = 40;
+
+const randomSeed = () => (Math.random() * 0x7fffffff) | 0;
+
+/** The names a trace line calls a card by: the full name, and a split card's front. */
+function namesOf(card: SimCard | undefined): string[] {
+  if (!card) return [];
+  const front = card.name.split(' // ')[0]!;
+  return front === card.name ? [card.name] : [card.name, front];
+}
+
+const mentions = (text: string, names: readonly string[]) => names.some((n) => text.includes(n));
+
+/** Does the card do anything in this game, beyond sitting in the opener. */
+function appearsIn(trace: GameTrace, names: readonly string[]): boolean {
+  return trace.turns.some((t) => t.lines.some((l) => mentions(l.text, names)));
+}
+
+/**
+ * A seed whose game has the card in it (rebuild plan C3). A one-of in a
+ * ninety-nine is missing from most games, and watching eight turns of
+ * somebody else's deck to find out the rule never fired is the wait this skips.
+ * Gives up after a few dozen deals and shows the last one, which says so.
+ */
+function dealWith(deck: SimDeck, opts: SimOptions, names: readonly string[]): number {
+  let seed = randomSeed();
+  if (names.length === 0) return seed;
+  for (let i = 0; i < FOCUS_TRIES; i++) {
+    if (appearsIn(traceGame(deck, opts, seed), names)) return seed;
+    seed = randomSeed();
+  }
+  return seed;
+}
+
 export function GameTraceSheet({
   deck,
   opts,
+  focus = null,
   onClose,
 }: {
   deck: SimDeck;
   opts: SimOptions;
+  /** A card to pick out: its lines marked, the rest foldable, the deal chosen to include it. */
+  focus?: string | null;
   onClose: () => void;
 }) {
+  const focusCard = focus ? deck.cards.find((c) => c.oracleId === focus) : undefined;
+  const names = useMemo(() => namesOf(focusCard), [focusCard]);
+  const [only, setOnly] = useState(true);
   // A fresh seed per deal. Not the simulation's own seed: that one is fixed so
   // the charts do not shuffle themselves every render, and a trace you cannot
   // re-deal is a trace that shows you one hand forever.
-  const [seed, setSeed] = useState(() => (Math.random() * 0x7fffffff) | 0);
+  const [seed, setSeed] = useState(() => dealWith(deck, opts, names));
   const trace = useMemo(() => traceGame(deck, opts, seed), [deck, opts, seed]);
+  const filtering = names.length > 0 && only;
+  const found = names.length === 0 || appearsIn(trace, names);
   // Which turn the board is showing: whichever one your reading has reached.
   const [at, setAt] = useState(1);
   const [zone, setZone] = useState<ZoneId | null>(null);
@@ -129,6 +172,22 @@ export function GameTraceSheet({
         seed {trace.seed}. Scroll the turns and the board plays forward with you.
       </p>
 
+      {focusCard && (
+        <div className="trace-focus">
+          {found ? (
+            <label className="trace-focus-toggle">
+              <input type="checkbox" checked={only} onChange={(e) => setOnly(e.target.checked)} />
+              <span>Only lines about {focusCard.name}</span>
+            </label>
+          ) : (
+            <p className="fine-print">
+              {focusCard.name} did nothing in {FOCUS_TRIES} deals in a row. It may be rarely drawn, or its rule may never get the
+              chance to fire.
+            </p>
+          )}
+        </div>
+      )}
+
       {shown && (
         <div className="trace-board">
           <div className="trace-board-head">
@@ -179,8 +238,11 @@ export function GameTraceSheet({
               </span>
             </h4>
             <ol className="trace-lines">
-              {turn.lines.map((line, i) => (
-                <li key={i} className={`trace-line trace-${line.kind}`}>
+              {turn.lines.map((line, i) => {
+                const hit = names.length > 0 && mentions(line.text, names);
+                if (filtering && found && !hit) return null;
+                return (
+                <li key={i} className={`trace-line trace-${line.kind}${hit ? ' trace-hit' : ''}`}>
                   <span className="trace-mark" aria-hidden="true">
                     {MARK[line.kind]}
                   </span>
@@ -197,14 +259,15 @@ export function GameTraceSheet({
                     )}
                   </span>
                 </li>
-              ))}
+                );
+              })}
             </ol>
-            <p className="trace-hand">{handLine(deck.cards, turn.board)}</p>
+            {!(filtering && found) && <p className="trace-hand">{handLine(deck.cards, turn.board)}</p>}
           </section>
         ))}
       </div>
 
-      <button type="button" className="trace-again" onClick={() => setSeed((Math.random() * 0x7fffffff) | 0)}>
+      <button type="button" className="trace-again" onClick={() => setSeed(dealWith(deck, opts, names))}>
         <Icon name="refresh" />
         Deal another game
       </button>

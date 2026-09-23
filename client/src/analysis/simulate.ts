@@ -5,6 +5,7 @@ import {
   MAX_QUERY_X,
   type BehaviorAmount,
   type BehaviorStep,
+  type BehaviorTrigger,
   type BehaviorZone,
   type DeckFormat,
   type EffectProfile,
@@ -50,6 +51,12 @@ const COLORS = MASK_BITS.length;
 
 /** Enough games that a percentage point is real, few enough to finish on a phone. */
 export const DEFAULT_GAMES = 20000;
+/**
+ * The first look (rebuild plan C2). Same seed, so these are the first two
+ * thousand games of the full run, and a before/after pair of them shares its
+ * draws: the difference is the change, not the shuffle.
+ */
+export const QUICK_GAMES = 2000;
 
 /** How often the simulator reports progress, in games. */
 const PROGRESS_EVERY = 2000;
@@ -400,6 +407,22 @@ export interface SimContribution {
   cards: number;
 }
 
+/**
+ * One card's trigger, counted. Rules on the same plain trigger are one list of
+ * steps by the time they run (see CompiledBehavior), so they share a count; a
+ * watched trigger's rules each get their own, `watch` being its place in the
+ * card's `cast` or `enters` list.
+ */
+export interface SimRuleFires {
+  oracleId: string;
+  on: BehaviorTrigger;
+  watch?: number;
+  /** P(it ran at least once in the game). */
+  games: number;
+  /** Mean times it ran per game. */
+  perGame: number;
+}
+
 export interface SimResult {
   games: number;
   maxTurn: number;
@@ -484,6 +507,12 @@ export interface SimResult {
    * zeroes for every removal spell in the deck would bury the ones that matter.
    */
   contributions: SimContribution[];
+  /**
+   * How often each authored trigger ran (rebuild plan C3), one entry per
+   * trigger that has steps, whether or not it ever fired: a rule at zero is the
+   * one worth being told about.
+   */
+  fires: SimRuleFires[];
   /**
    * Mean damage an opponent had taken by end of turn t, cumulative.
    *
@@ -580,6 +609,30 @@ export function simulate(
 ): SimResult {
   const cards = deck.cards;
   const n = cards.length;
+  // The firing counts (rebuild plan C3), keyed by the compiled step list
+  // itself: every rule reaches `runSteps` as one of these arrays, so the
+  // identity is the trigger and no call site has to say which one it is.
+  const fireSlot = new Map<readonly BehaviorStep[], number>();
+  const fireMeta: { card: number; on: BehaviorTrigger; watch?: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const b = cards[i]!.behavior;
+    if (!b) continue;
+    for (const on of ['play', 'etb', 'attack', 'death', 'upkeep'] as const) {
+      if (b[on].length === 0) continue;
+      fireSlot.set(b[on], fireMeta.length);
+      fireMeta.push({ card: i, on });
+    }
+    for (const on of ['cast', 'enters'] as const) {
+      b[on].forEach((rule, watch) => {
+        fireSlot.set(rule.steps, fireMeta.length);
+        fireMeta.push({ card: i, on, watch });
+      });
+    }
+  }
+  const fireCount = new Float64Array(fireMeta.length);
+  const fireGames = new Float64Array(fireMeta.length);
+  const fireSeen = new Int32Array(fireMeta.length).fill(-1);
+  let gameNo = 0;
   const maxTurn = opts.maxTurn;
   const stride = maxTurn + 1;
   const rng = makeRng(opts.seed);
@@ -2400,6 +2453,14 @@ export function simulate(
    * @param self The card these rules belong to, for a `self` step to move.
    */
   const runSteps = (steps: readonly BehaviorStep[], turn: number, self: number): number => {
+    const slot = fireSlot.get(steps);
+    if (slot !== undefined) {
+      fireCount[slot]!++;
+      if (fireSeen[slot] !== gameNo) {
+        fireSeen[slot] = gameNo;
+        fireGames[slot]!++;
+      }
+    }
     const bits: string[] = [];
     let made = 0;
     // A source dropped onto an untapped battlefield is mana this turn, and the
@@ -2831,6 +2892,7 @@ export function simulate(
   const games = deckSize > 0 ? opts.games : 0;
 
   for (let game = 0; game < games; game++) {
+    gameNo = game;
     firstCast.fill(0);
     firstHeld.fill(0);
     firstPay.fill(0);
@@ -3560,7 +3622,15 @@ export function simulate(
     if (onProgress && (game + 1) % PROGRESS_EVERY === 0) onProgress(game + 1);
   }
 
-  return summarise(deck, opts, games, {
+  const perGame = games > 0 ? 1 / games : 0;
+  const fires: SimRuleFires[] = fireMeta.map((m, slot) => ({
+    oracleId: cards[m.card]!.oracleId,
+    on: m.on,
+    ...(m.watch !== undefined && { watch: m.watch }),
+    games: fireGames[slot]! * perGame,
+    perGame: fireCount[slot]! * perGame,
+  }));
+  const summary = summarise(deck, opts, games, {
     castAt,
     heldAt,
     limitAt,
@@ -3589,6 +3659,7 @@ export function simulate(
     handSizeSum,
     mulliganed,
   });
+  return { ...summary, fires };
 }
 
 /**
@@ -3792,7 +3863,7 @@ interface Tallies {
   mulliganed: number;
 }
 
-function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): SimResult {
+function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): Omit<SimResult, 'fires'> {
   const { castAt, heldAt, groupOf, stride, manaSum, spentSum, seenSum, handSum, landDrops, sourceSum, sourcesInPlay } = t;
   const per = games > 0 ? 1 / games : 0;
 
@@ -3976,6 +4047,7 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
   }
   contributions.sort((a, b) => b.mana + b.cards - (a.mana + a.cards) || a.name.localeCompare(b.name));
 
+
   // Already cumulative in the loop — the tally writes the running total each
   // turn — so these only have to be averaged. The split reads off the last
   // charted turn, which is where both lines have finished climbing.
@@ -4054,5 +4126,7 @@ export interface SimRequest {
 
 export type SimResponse =
   | { type: 'progress'; done: number; total: number }
+  /** The quick pass: the first `QUICK_GAMES` of the same seed, in a fraction of the time. */
+  | { type: 'quick'; result: SimResult }
   | { type: 'done'; result: SimResult }
   | { type: 'error'; message: string };

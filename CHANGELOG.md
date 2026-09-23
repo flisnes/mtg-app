@@ -2,10 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
-## 0.167.0
+## 0.168.0
 
-- **Changed: the Model tab tells you where to start.** It used to list every card that does nothing in one alphabetical run, so the draw engine worth writing sat between a Murder and a vanilla 3/3. Now it opens on *Write these first*: every card doing nothing yet that Scryfall's tags call draw, ramp, a tutor or an engine (card advantage, recursion, repeatable tokens), each with a chip saying which. Your commander leads, then draw and ramp (what Flow and Mana measure), then tutors and engines, cheapest first. Everything else that does nothing, which is right for removal and plain creatures, folds away under *Right as nothing*, and *From the card's text* folds too.
-- **Changed: "to check" counts that list.** The chip at the top, the Model verdict and the Overview's Model row now count every card in *Write these first*, not only draw cards.
+- **Added: saving a rule shows what it did.** Writing what a card does used to send you back to the list with no sign anything changed. Now a panel at the bottom says, before and after: how many cards the card draws or how much mana it makes per game, and whichever deck numbers moved (commander on time, mana on turn 6, cards seen and screw or flood by turn 6). Both runs deal the same shuffles, so the difference is the rule and not luck. *Undo* puts the old rule back. A quick look over 2,000 games comes first, the full 20,000 right after.
+- **Added: how often it fires.** The card editor now lists each saved trigger with the share of games it fired in, and how many times a game when it is more than once. A trigger that never fired says *never*, in amber.
+- **Added: watch it in a game.** A button in the card editor deals a game the card actually shows up in and shows only its lines. Untick the box to see the whole game with its lines highlighted.
+- **Changed: every result arrives faster.** The simulator answers from its first 2,000 games before finishing the rest, so flipping play and draw or changing the play style updates in a fraction of the time.
 
 ## 0.167.0
 

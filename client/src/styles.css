@@ -8525,3 +8525,131 @@ a.seg {
 .how-worked-body p {
   margin: 0;
 }
+
+/* ---- Before/after on a saved rule (deck analysis, rebuild plan C2) ---- */
+/* The toast stack's spot, but it holds buttons and a table, so it takes taps
+   and gets a card's corners rather than a pill's. */
+.model-toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--tab-h) + var(--safe-bottom) + 12px);
+  width: min(26rem, calc(100vw - 32px));
+  z-index: var(--z-top);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+.model-toast-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.model-toast-head strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-toast-undo {
+  padding: 0.25rem 0.7rem;
+  font-weight: 600;
+}
+.model-toast-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  padding: 0 0.25rem;
+}
+.model-toast-note {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+.model-toast-lines {
+  border-collapse: collapse;
+  width: 100%;
+}
+.model-toast-lines th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--text-dim);
+  padding: 0.1rem 0.5rem 0.1rem 0;
+}
+.model-toast-lines td {
+  text-align: right;
+  padding: 0.1rem 0 0.1rem 0.35rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.model-toast-lines td:last-child {
+  font-weight: 700;
+}
+.model-toast-lines td.tone-ok {
+  color: var(--ok);
+}
+.model-toast-lines td.tone-bad {
+  color: var(--danger);
+}
+
+/* ---- Firing counts and "watch it in a game" (rebuild plan C3) ---- */
+.behavior-watch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+}
+.behavior-watch svg {
+  width: 14px;
+  height: 14px;
+}
+.behavior-fires {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+.behavior-fires li {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+.behavior-fires li span {
+  color: var(--text-dim);
+  min-width: 0;
+}
+.behavior-fires li strong {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.behavior-fires li.tone-warn strong {
+  color: #e6a23c;
+}
+.trace-focus-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+}
+.trace-line.trace-hit {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 4px;
+}

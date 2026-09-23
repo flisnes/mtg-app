@@ -37,7 +37,7 @@ const DEFAULT_TURN = 4;
 const pct = (p: number) => `${Math.round(p * 100)}%`;
 const one = (n: number) => n.toFixed(1);
 
-export function ColorSourcesPanel({ report, sim }: { report: ManaReport; sim: SimResult | null }) {
+export function ColorSourcesPanel({ report, sim, onPlay }: { report: ManaReport; sim: SimResult | null; onPlay: boolean }) {
   return (
     <>
       <h3 className="deck-stats-head">Colored sources</h3>
@@ -109,7 +109,7 @@ export function ColorSourcesPanel({ report, sim }: { report: ManaReport; sim: Si
           )}
           <p className="fine-print">
             Each card is held to its mana value as the turn to cast it, at a 90% bar, worked out exactly for a library of{' '}
-            {report.library} on the play with no mulligans. Karsten's published tables ask two to four fewer, because his simulations get
+            {report.library} {onPlay ? 'on the play' : 'on the draw'} with no mulligans. Karsten's published tables ask two to four fewer, because his simulations get
             to mulligan for a source. Lands that always enter tapped count from turn two, rocks and dorks a turn after you could cast them.
             Colors are checked one at a time, so a two-color card can pass both halves and still stumble on the draw that gives you one of
             each.

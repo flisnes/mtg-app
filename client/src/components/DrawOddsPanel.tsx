@@ -39,12 +39,11 @@ const MAX_COPIES = 6;
 const pct = (p: number) => `${Math.round(p * 100)}%`;
 const turnLabel = (turn: number) => (turn === 0 ? 'Open' : String(turn));
 
-export function DrawOddsPanel({ rows, format }: { rows: readonly GroupRow[]; format: DeckFormat | undefined }) {
+export function DrawOddsPanel({ rows, format, onPlay }: { rows: readonly GroupRow[]; format: DeckFormat | undefined; onPlay: boolean }) {
   // `otag:` resolves its slug at parse time, so re-run once the vocabulary lands.
   const tagsVersion = useOracleTags();
   const [query, setQuery] = useState(PRESETS[0]!.query);
   const [min, setMin] = useState(PRESETS[0]!.min);
-  const [onPlay, setOnPlay] = useState(true);
 
   const library = useMemo(() => librarySize(rows), [rows]);
   const group = useMemo(() => resolveGroup(rows, query), [rows, query, tagsVersion]);
@@ -99,20 +98,6 @@ export function DrawOddsPanel({ rows, format }: { rows: readonly GroupRow[]; for
             aria-label="One more copy"
           >
             +
-          </button>
-        </div>
-        <div className="seg-row odds-seg" role="radiogroup" aria-label="Play or draw">
-          <button type="button" className={`seg${onPlay ? ' seg-active' : ''}`} role="radio" aria-checked={onPlay} onClick={() => setOnPlay(true)}>
-            On the play
-          </button>
-          <button
-            type="button"
-            className={`seg${onPlay ? '' : ' seg-active'}`}
-            role="radio"
-            aria-checked={!onPlay}
-            onClick={() => setOnPlay(false)}
-          >
-            On the draw
           </button>
         </div>
       </div>

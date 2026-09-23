@@ -32,6 +32,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.162.0',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'Deck stats is now Deck analysis, a page of its own with three tabs: Mana, Flow and Model. A bar at the top stays on screen and holds the one play/draw switch (there used to be three), the play style and how much of the deck is modelled. Tap either chip to go to the Model tab, where card behavior now lives.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'The simulator now mulligans on your Opening hand keep rule. It always kept two to five lands whatever you set, so changing the rule moved one panel and nothing else. The rule is remembered per deck.',
+      },
+    ],
+  },
+  {
     version: '0.161.0',
     changes: [
       {
@@ -247,21 +262,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Moving a card back into the library used to drop it in most decks. It goes back in now.',
-      },
-    ],
-  },
-  {
-    version: '0.158.2',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Card behavior criteria can read X. Write `[X]` anywhere a number goes, like `t:creature mv<=[X]`, and pick what it is worth from the dropdown that appears: the mana you spent on X, the cards in your hand, the lands you control. `[X-1]` and `[X+2]` work too. The editor shows the range it matches as you type.',
-      },
-      {
-        kind: 'changed',
-        text:
-          'The simulator now pays for X. It used to treat a Fireball as a one-mana spell and leave the rest of the turn unspent. X spells are cast last, take whatever mana is left over, and are held rather than cast for nothing. Expect the "mana spent" line to sit closer to the "mana available" line in any deck that plays one.',
       },
     ],
   },

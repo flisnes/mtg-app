@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BEHAVIOR_AMOUNTS,
   BEHAVIOR_AMOUNT_OPS,
@@ -41,7 +41,6 @@ import {
   type CardBehavior,
   type EffectProfile,
 } from '@mtg/shared';
-import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
 import { ManaCost } from './ManaCost.js';
 import { setCardBehavior } from '../db/dataAccess.js';
@@ -209,23 +208,19 @@ export interface DeckMatcher {
   count: (q: string) => { min: number; max: number; varies: boolean };
 }
 
-export function CardBehaviorSheet({
+export function CardBehaviorPanel({
   deckId,
-  deckName,
   rows,
   behaviors,
   policy,
   onPolicy,
-  onClose,
 }: {
   deckId: string;
-  deckName: string;
   rows: readonly GroupRow[];
   behaviors: ReadonlyMap<string, CardBehavior>;
   /** How the sequencer plays the deck. The other half of "what does this card do". */
   policy: SimPolicy;
   onPolicy: (policy: SimPolicy) => void;
-  onClose: () => void;
 }) {
   const cards = useMemo(() => behaviorCards(rows, behaviors), [rows, behaviors]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -276,12 +271,21 @@ export function CardBehaviorSheet({
     };
   }, [rows]);
 
+  // The panel is a tab on a page now, not a sheet with its own scroll, so a
+  // card opened from far down the list would open its editor off screen.
+  const top = useRef<HTMLDivElement | null>(null);
+  const opened = useRef(false);
+  useEffect(() => {
+    // Not on mount: switching to the tab already lands at its top.
+    if (!opened.current) {
+      opened.current = true;
+      return;
+    }
+    top.current?.scrollIntoView({ block: 'start' });
+  }, [openId]);
+
   return (
-    <Sheet
-      onClose={onClose}
-      title={open ? open.name : `Card behavior: ${deckName}`}
-      className="behavior-sheet"
-    >
+    <div ref={top} className="behavior-panel">
       {open ? (
         <BehaviorEditor
           key={open.oracleId}
@@ -293,7 +297,7 @@ export function CardBehaviorSheet({
       ) : (
         <BehaviorList cards={cards} policy={policy} onPolicy={onPolicy} onOpen={setOpenId} />
       )}
-    </Sheet>
+    </div>
   );
 }
 

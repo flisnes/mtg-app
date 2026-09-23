@@ -4519,19 +4519,66 @@ button.primary {
 .deck-stats-tone.tone-warn {
   color: #e6a23c;
 }
-/* The sheet shell is a flex column with its own gap, so everything inside
-   relies on that rather than stacking margins on top of it. */
-.deck-stats-sheet p {
+/* ---- Deck analysis page (#/decks/:id/analysis, rebuild plan A4) ---- */
+/* The panels were written for .sheet, a flex column with a 0.75rem gap, and
+   they lean on that gap rather than margins. The page gives them the same. */
+.deck-analysis,
+.deck-analysis-body,
+.behavior-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.deck-analysis p,
+.behavior-panel p {
   margin: 0;
 }
-/* .sheet is a max-height column flexbox, so once the content passes 90dvh every
-   child shrinks to make it fit — and a chart with a fixed height and no say in
-   the matter collapses to its axis labels. This sheet fits on a desktop window
-   and does not on a phone, which is exactly how it shipped flat in v0.150.0.
-   Nothing in here should ever shrink; the sheet scrolls instead. Same trap as
-   .sheet-tabs, one section further down the page. */
-.deck-stats-sheet > * {
-  flex-shrink: 0;
+/* Every number on the page obeys this bar, so it stays on screen, tabs and
+   all. `top` is minus .app-main's 1rem padding-top: sticky pins to the
+   scroller's content edge, which left a strip of scrolled content showing
+   above the bar. */
+.analysis-context {
+  position: sticky;
+  top: -1rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+/* A row of its own, so both chips share the next one instead of one of them
+   wrapping alone onto a third. */
+.analysis-play {
+  flex: 1 1 100%;
+}
+.analysis-chip {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
+  white-space: nowrap;
+}
+.analysis-chip-warn {
+  color: #e6a23c;
+  border-color: #e6a23c66;
+}
+.analysis-tabs {
+  flex: 1 1 100%;
+  margin: 0.2rem 0 0;
+}
+.deck-stats-verdict.tone-warn {
+  color: #e6a23c;
+}
+/* The card editor scrolls itself into view when a card opens; clear the bar,
+   whose height DeckAnalysis measures into the variable. */
+.behavior-panel {
+  scroll-margin-top: calc(var(--analysis-bar-h, 10rem) + 0.5rem);
 }
 .deck-stats-head {
   font-size: 0.8rem;
@@ -7899,12 +7946,7 @@ a.seg {
   margin: 0.25rem 0 0.75rem;
 }
 
-/* ---- Card behavior: what the user says a card does (CardBehaviorSheet) ---- */
-/* Same flex trap as .deck-stats-sheet and .trace-sheet: a tall sheet whose
-   children would otherwise be squashed to fit 90dvh. It scrolls instead. */
-.behavior-sheet > * {
-  flex-shrink: 0;
-}
+/* ---- Card behavior: what the user says a card does (CardBehaviorPanel, the Model tab) ---- */
 /* The play-style pickers. One per row rather than three abreast: the label
    under each is a sentence, and a sentence in a third of a phone is four
    lines of two words. */
@@ -7977,7 +8019,9 @@ a.seg {
   border-radius: 999px;
   padding: 0.05rem 0.4rem;
 }
+/* Also the analysis page's link back to its deck, which is an <a>. */
 .behavior-back {
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;

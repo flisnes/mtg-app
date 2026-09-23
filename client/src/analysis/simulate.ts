@@ -166,7 +166,7 @@ export interface SimOptions {
   onPlay: boolean;
   maxTurn: number;
   format: DeckFormat | undefined;
-  /** Keep a seven holding this many lands. */
+  /** Keep a seven holding this many of the keep rule's cards (`SimCard.keeps`, lands by default). */
   keepMin: number;
   keepMax: number;
   /** Off for the acceptance test, which needs the simulator to be the hypergeometric. */
@@ -214,25 +214,27 @@ export const DEFAULT_POLICY: SimPolicy = { spend: 'ramp', combat: 'triggers', in
 export interface PolicyOption<T> {
   id: T;
   label: string;
+  /** Two words for the chip in the analysis context bar. */
+  short: string;
   hint: string;
 }
 
 export const SPEND_POLICIES: readonly PolicyOption<SpendPolicy>[] = [
-  { id: 'ramp', label: 'Ramp first, then greedily', hint: 'Rocks, dorks and land ramp before anything else, then the priciest spell the turn can pay for.' },
-  { id: 'draw', label: 'Card draw first', hint: 'Anything that puts cards in your hand jumps the queue, then ramp, then the rest.' },
-  { id: 'creatures', label: 'Creatures first', hint: 'Bodies before the engine. The aggro ordering: a two-drop on turn two beats a Signet.' },
-  { id: 'curve', label: 'Cheapest first', hint: 'Fit as many spells into the turn as the mana holds, rather than the one biggest.' },
+  { id: 'ramp', label: 'Ramp first, then greedily', short: 'Ramp first', hint: 'Rocks, dorks and land ramp before anything else, then the priciest spell the turn can pay for.' },
+  { id: 'draw', label: 'Card draw first', short: 'Draw first', hint: 'Anything that puts cards in your hand jumps the queue, then ramp, then the rest.' },
+  { id: 'creatures', label: 'Creatures first', short: 'Creatures first', hint: 'Bodies before the engine. The aggro ordering: a two-drop on turn two beats a Signet.' },
+  { id: 'curve', label: 'Cheapest first', short: 'Cheapest first', hint: 'Fit as many spells into the turn as the mana holds, rather than the one biggest.' },
 ];
 
 export const COMBAT_POLICIES: readonly PolicyOption<CombatPolicy>[] = [
-  { id: 'triggers', label: 'Only when it triggers something', hint: 'A creature swings if attacking is what wakes its rule. Nobody else bothers.' },
-  { id: 'all', label: 'Everything attacks', hint: 'Every creature that can, does, every turn. Nothing blocks, so all of it connects.' },
-  { id: 'none', label: 'Nobody attacks', hint: 'The creatures are here for something other than combat.' },
+  { id: 'triggers', label: 'Only when it triggers something', short: 'Attacks for triggers', hint: 'A creature swings if attacking is what wakes its rule. Nobody else bothers.' },
+  { id: 'all', label: 'Everything attacks', short: 'All attack', hint: 'Every creature that can, does, every turn. Nothing blocks, so all of it connects.' },
+  { id: 'none', label: 'Nobody attacks', short: 'No attacks', hint: 'The creatures are here for something other than combat.' },
 ];
 
 export const INTERACTION_POLICIES: readonly PolicyOption<InteractionPolicy>[] = [
-  { id: 'cast', label: 'Cast instants on sight', hint: 'An instant is a spell like any other and goes in the spend order with them.' },
-  { id: 'hold', label: 'Hold instants up', hint: 'Instants stay in hand and their mana stays untapped. Nobody is across the table to cast them at, so the cost shows as unspent mana.' },
+  { id: 'cast', label: 'Cast instants on sight', short: 'Instants cast', hint: 'An instant is a spell like any other and goes in the spend order with them.' },
+  { id: 'hold', label: 'Hold instants up', short: 'Instants held', hint: 'Instants stay in hand and their mana stays untapped. Nobody is across the table to cast them at, so the cost shows as unspent mana.' },
 ];
 
 export const defaultSimOptions = (format: DeckFormat | undefined, onPlay: boolean): SimOptions => ({
@@ -441,8 +443,9 @@ export function halfWidth(p: number, games: number): number {
  * about nothing:
  *
  *   1. London mulligan. Deal seven; keep it if it holds `keepMin`..`keepMax`
- *      lands, else ship it. Bottom an excess land when the hand is more than
- *      half lands, otherwise the most expensive spell. Keep any five.
+ *      of the keep rule's cards (lands unless told otherwise), else ship it.
+ *      Bottom an excess land when the hand is more than half lands, otherwise
+ *      the most expensive spell. Keep any five.
  *   2. Draw for turn, except turn one on the play.
  *   3. Play a land, always, if there is one, and one more for every extra land
  *      drop you have in play. Which land: if something in hand costs exactly
@@ -2726,9 +2729,9 @@ export function simulate(
 
       const keep = opts.mulligan ? Math.min(handSize(opts.format, m), handLen) : handLen;
       if (opts.mulligan && keep > KEEP_ANYTHING_AT) {
-        let lands = 0;
-        for (let i = 0; i < handLen; i++) if (cards[hand[i]!]!.land) lands++;
-        if (lands < opts.keepMin || lands > opts.keepMax) continue;
+        let counted = 0;
+        for (let i = 0; i < handLen; i++) if (cards[hand[i]!]!.keeps) counted++;
+        if (counted < opts.keepMin || counted > opts.keepMax) continue;
       }
       // London bottoms the difference. Which card goes back is a judgement
       // about the cards; the rule below is as close as a mana model gets to one.

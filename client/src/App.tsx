@@ -17,6 +17,7 @@ import { Tradelist } from './routes/Tradelist.js';
 import { SealedProducts } from './routes/SealedProducts.js';
 import { Containers } from './routes/Containers.js';
 import { ContainerDetail } from './routes/ContainerDetail.js';
+import { DeckAnalysisPage } from './routes/DeckAnalysisPage.js';
 import { Trade } from './routes/Trade.js';
 import { History } from './routes/History.js';
 import { PriceMovers } from './routes/PriceMovers.js';
@@ -210,6 +211,7 @@ function AppShell() {
                 rows of the decks table — see deck/containers.ts). */}
             <Route path="/decks" element={<Containers kind="deck" />} />
             <Route path="/decks/:id" element={<ContainerDetail kind="deck" />} />
+            <Route path="/decks/:id/analysis" element={<DeckAnalysisPage />} />
             <Route path="/binders" element={<Containers kind="binder" />} />
             <Route path="/binders/:id" element={<ContainerDetail kind="binder" />} />
             <Route path="/boxes" element={<Containers kind="box" />} />

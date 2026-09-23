@@ -40,15 +40,40 @@ const RARE = 0.005;
 
 const pct = (p: number) => `${Math.round(p * 100)}%`;
 
-export function MulliganPanel({ rows, format }: { rows: readonly GroupRow[]; format: DeckFormat | undefined }) {
+/** The keep rule: which cards a seven is judged on, and how many of them it wants. */
+export interface KeepRule {
+  query: string;
+  min: number;
+  max: number;
+}
+
+/** What every deck keeps on until its owner says otherwise, and what the simulator used to hard-code. */
+export const DEFAULT_KEEP_RULE: KeepRule = { query: PRESETS[0]!.query, min: PRESETS[0]!.min, max: PRESETS[0]!.max };
+
+/**
+ * The keep rule is lifted to the sheet because the simulator mulligans with it
+ * too. Before that it kept on two to five lands whatever this panel said, so a
+ * rule changed here moved this panel and nothing else.
+ */
+export function MulliganPanel({
+  rows,
+  format,
+  onPlay,
+  rule,
+  onRule,
+}: {
+  rows: readonly GroupRow[];
+  format: DeckFormat | undefined;
+  onPlay: boolean;
+  rule: KeepRule;
+  onRule: (rule: KeepRule) => void;
+}) {
   // `otag:` and `is:` resolve their slugs at parse time, so re-run once the
   // tag vocabulary lands.
   const tagsVersion = useOracleTags();
-  const [query, setQuery] = useState(PRESETS[0]!.query);
-  const [min, setMin] = useState(PRESETS[0]!.min);
-  const [max, setMax] = useState(PRESETS[0]!.max);
-  const [need, setNeed] = useState(PRESETS[0]!.need);
-  const [onPlay, setOnPlay] = useState(true);
+  const { query, min, max } = rule;
+  const setQuery = (q: string) => onRule({ ...rule, query: q });
+  const [need, setNeed] = useState(() => PRESETS.find((p) => p.query === rule.query)?.need ?? PRESETS[0]!.need);
 
   const { noun, many } = PRESETS.find((p) => p.query === query) ?? ANY;
 
@@ -66,9 +91,7 @@ export function MulliganPanel({ rows, format }: { rows: readonly GroupRow[]; for
   const count = (n: number) => `${n} ${n === 1 ? noun : many}`;
 
   const apply = (p: Preset) => {
-    setQuery(p.query);
-    setMin(p.min);
-    setMax(p.max);
+    onRule({ query: p.query, min: p.min, max: p.max });
     setNeed(p.need);
   };
 
@@ -100,10 +123,7 @@ export function MulliganPanel({ rows, format }: { rows: readonly GroupRow[]; for
             lo={0}
             hi={MAX_IN_HAND}
             label="keep minimum"
-            onChange={(n) => {
-              setMin(n);
-              if (n > max) setMax(n);
-            }}
+            onChange={(n) => onRule({ ...rule, min: n, max: Math.max(n, max) })}
           />
           <span>to</span>
           <Step
@@ -111,32 +131,9 @@ export function MulliganPanel({ rows, format }: { rows: readonly GroupRow[]; for
             lo={0}
             hi={MAX_IN_HAND}
             label="keep maximum"
-            onChange={(n) => {
-              setMax(n);
-              if (n < min) setMin(n);
-            }}
+            onChange={(n) => onRule({ ...rule, max: n, min: Math.min(n, min) })}
           />
           <span>{many}</span>
-        </div>
-        <div className="seg-row odds-seg" role="radiogroup" aria-label="Play or draw">
-          <button
-            type="button"
-            className={`seg${onPlay ? ' seg-active' : ''}`}
-            role="radio"
-            aria-checked={onPlay}
-            onClick={() => setOnPlay(true)}
-          >
-            On the play
-          </button>
-          <button
-            type="button"
-            className={`seg${onPlay ? '' : ' seg-active'}`}
-            role="radio"
-            aria-checked={!onPlay}
-            onClick={() => setOnPlay(false)}
-          >
-            On the draw
-          </button>
         </div>
       </div>
 
@@ -161,7 +158,7 @@ export function MulliganPanel({ rows, format }: { rows: readonly GroupRow[]; for
           <p className="fine-print">
             Average opening hand {out.expectedHandSize.toFixed(1)} cards.
             {out.freeMulligan && ' Your first mulligan in Commander is free, so a seven is still a seven.'} The rule stops applying at{' '}
-            {KEEP_ANYTHING_AT}: nobody ships a five over a {noun} count.
+            {KEEP_ANYTHING_AT}: nobody ships a five over a {noun} count. The simulator mulligans on this same rule, so changing it moves the simulated numbers too.
           </p>
 
           <div className="odds-controls">

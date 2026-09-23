@@ -153,12 +153,11 @@ function Report({
         tapped. A four-drop can have plenty of white and still not have four mana.
       </p>
       <p className="fine-print">
-        A goldfish: nobody is across the table and the play pattern is fixed. It keeps a seven holding two to five lands, bottoms the
-        spare land or the priciest spell, plays a land every turn (an untapped one when a card in hand costs exactly one more than it
-        has, otherwise the tapland while it is free), cracks a fetch for the land that widens its colors, then spends the turn down:
-        ramp first and priciest first, then the rest of the hand, with a coin flip between equals. A spell that draws, loots, mills,
-        digs or makes Treasure now does it; a ritual, a cost reducer and every effect behind a trigger still resolve as nothing, so a
-        deck built on those reads worse here than it plays. How much of your deck that is, is on the line under the charts above.
+        A goldfish: nobody is across the table. It mulligans on your Opening hand rule, plays a land every turn, cracks a fetch for
+        the land that widens its colors, then spends the turn in the order set under Card behavior, with a coin flip between equals.
+        Spells that draw, loot, mill, dig, make Treasure or add mana do it, and so does anything you have written a rule for. Cost
+        reducers, and effects behind a trigger or a condition the card database cannot read, resolve as nothing until you write them
+        under Card behavior, so a deck built on those reads worse here than it plays.
       </p>
     </>
   );

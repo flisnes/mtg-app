@@ -139,6 +139,13 @@ export interface SimCard {
    */
   instant: boolean;
   /**
+   * Counted by the keep rule: the opener keeps a seven holding `keepMin` to
+   * `keepMax` of these. Lands unless the Opening hand panel says otherwise,
+   * because that panel's rule is the one the user set and the simulator
+   * mulliganing on a different one made the two quietly disagree.
+   */
+  keeps: boolean;
+  /**
    * The card's face, for the goldfish trace's battlefield. Small rather than
    * normal: a board row is a dozen tiles a hundred pixels wide, and the normal
    * scan is six times the bytes for pixels nobody sees.
@@ -293,7 +300,12 @@ interface LandInfo {
  * every caller that only wants the card database's reading — the goldfish trace
  * and the stats sheet both pass one, the acceptance rig does not.
  */
-export function buildSimDeck(rows: readonly DeckRow[], behaviors?: ReadonlyMap<string, CardBehavior>): SimDeck {
+export function buildSimDeck(
+  rows: readonly DeckRow[],
+  behaviors?: ReadonlyMap<string, CardBehavior>,
+  /** The Opening hand panel's keep query. Blank or absent keeps on lands. */
+  keepQuery?: string,
+): SimDeck {
   const cards: SimCard[] = [];
   /** The card behind each entry of `cards`, kept only long enough to run the filters. */
   const oracles: OracleCard[] = [];
@@ -362,6 +374,7 @@ export function buildSimDeck(rows: readonly DeckRow[], behaviors?: ReadonlyMap<s
       creature: isCreatureFace(parts[0] ?? ''),
       power: powerOf(o.power),
       instant: isInstantFace(parts[0] ?? ''),
+      keeps: landAnywhere || role === 'fetch',
       image: o.imageSmall ?? o.imageNormal ?? null,
       effect: decodeEffectProfile(o.effect),
       behavior: compileBehavior(behaviors?.get(o.oracleId)),
@@ -417,7 +430,17 @@ export function buildSimDeck(rows: readonly DeckRow[], behaviors?: ReadonlyMap<s
     if (card.effect?.unknown && !card.behavior) coverage.floored += card.copies;
   }
 
+  applyKeepQuery(cards, oracles, keepQuery);
+
   return { cards, library, commanders, hasManaData: profiled > 0, coverage, filters: buildFilters(cards, oracles) };
+}
+
+/** Re-point `keeps` at the user's keep query, when there is one that parses to something. */
+function applyKeepQuery(cards: SimCard[], oracles: readonly OracleCard[], q: string | undefined): void {
+  if (!q?.trim()) return;
+  const compiled = compileCardQuery(q);
+  if (compiled.isEmpty) return;
+  for (let i = 0; i < cards.length; i++) cards[i]!.keeps = compiled.matches(toSearchableEntry(oracles[i]!));
 }
 
 /**

@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.162.0
+
+- **Changed: Deck stats is now Deck analysis, a page of its own.** It was one long sheet over the deck page; it now has three tabs. *Mana* holds the curve, land count, taplands, colored sources, fixes from your collection and On curve. *Flow* holds how the game unfolds, what each card is worth, the goldfish trace, the opening hand and draw odds. *Model* holds card behavior and the play style, which used to be a sheet inside the sheet. The tab you are on is kept in the address, so back and reload return you to it. Open it from the stats line under the legality panel, or from the deck's menu.
+- **Changed: one bar above the tabs that every number follows.** It stays on screen while you scroll and holds the one play/draw switch (there used to be three, and the colored-source report was always on the play whatever they said), a chip naming the play style, and a chip saying how many of your cards the simulator plays out and how many are worth checking. Either chip takes you to the Model tab.
+- **Fixed: the simulator mulligans on your keep rule.** The Opening hand panel lets you say what a keepable seven is ("keep 2 to 5 lands", or any search you like), but the simulator always kept two to five lands regardless, so changing the rule moved that panel and nothing else. Now every simulated number uses the same rule. It is remembered per deck on this device.
+- **Fixed: the small print under On curve** said rituals and triggered effects resolve as nothing. Rituals have worked since 0.159.3 and triggers can be written under Card behavior. It now says what actually happens.
+
 ## 0.161.0
 
 - **Added: the colored-source panel now shows what was actually on the battlefield.** The counts at the top of it assume every copy in your deck is in play at once, which is why five paragraphs of small print under them explain the ways that is not true. A new block under the chips counts the sources the simulation really had, per color, on the turn you pick. A deck with 19 Forests, 20 utility lands and a Yavimaya is told it has 40 green sources, and told two rows later that 2.3 of its 4.0 sources make green on turn four. Both numbers are true and the second is the one you play with.

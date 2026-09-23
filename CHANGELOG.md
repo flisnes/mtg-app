@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.170.0
+
+- **Added: does the spend order matter?** The Model tab now plays your deck under all four spend orders (ramp first, draw first, creatures first, cheapest first) over the same 2,000 shuffles and puts them in one table: commander on time, mana on turn 6, mana spent on turn 6 and cards seen by then. The best in each column is green when the gap is more than luck, and one line says which number the order moves most, or that it barely moves anything. Tap an order to play the deck that way.
+
 ## 0.169.0
 
 - **Added: rules travel between your decks.** A card you already wrote a rule for in another deck now offers that rule when you open it on the Model tab, with the deck it came from. *Use this* copies it into the editor; save to keep it. The other deck's rule stays as it is. In the list, such a card says which deck has a rule and what it does, and one that would otherwise fold away under *Right as nothing* gets its own section, *Written in your other decks*, so it doesn't hide. Several decks with the same rule show as one offer.

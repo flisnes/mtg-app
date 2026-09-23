@@ -49,12 +49,14 @@ import { otherDeckBehaviors, setCardBehavior, type BorrowableBehavior } from '..
 import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '../cardDb/querySyntax.js';
 import type { GroupRow } from '../analysis/groups.js';
 import { HowWorked } from './HowWorked.js';
+import { PolicySpread } from './PolicySpread.js';
 import type { QueueCard, QueueReason } from '../analysis/coverage.js';
 import {
   COMBAT_POLICIES,
   INTERACTION_POLICIES,
   SPEND_POLICIES,
   type PolicyOption,
+  type SpendRun,
   type SimPolicy,
   type SimRuleFires,
 } from '../analysis/simulate.js';
@@ -233,6 +235,8 @@ export function CardBehaviorPanel({
   onSaved,
   fires,
   onWatch,
+  spread,
+  spreadStale,
 }: {
   deckId: string;
   rows: readonly GroupRow[];
@@ -251,6 +255,10 @@ export function CardBehaviorPanel({
   fires: readonly SimRuleFires[] | undefined;
   /** Open one game with this card's lines picked out. */
   onWatch: (oracleId: string) => void;
+  /** Every spend order's short run (rebuild plan C6), or undefined before one. */
+  spread: readonly SpendRun[] | undefined;
+  /** `spread` is from before the latest change. */
+  spreadStale: boolean;
 }) {
   const cards = useMemo(() => behaviorCards(rows, behaviors), [rows, behaviors]);
   // Rules for these cards in the user's other decks (rebuild plan C4). Live,
@@ -339,6 +347,8 @@ export function CardBehaviorPanel({
           onPolicy={onPolicy}
           onOpen={setOpenId}
           borrowable={borrowable}
+          spread={spread}
+          spreadStale={spreadStale}
         />
       )}
     </div>
@@ -371,6 +381,8 @@ function BehaviorList({
   onPolicy,
   onOpen,
   borrowable,
+  spread,
+  spreadStale,
 }: {
   cards: BehaviorCard[];
   queue: readonly QueueCard[] | null;
@@ -379,6 +391,8 @@ function BehaviorList({
   onOpen: (oracleId: string) => void;
   /** Rules for the same card in the user's other decks. */
   borrowable: ReadonlyMap<string, BorrowableBehavior[]>;
+  spread: readonly SpendRun[] | undefined;
+  spreadStale: boolean;
 }) {
   // Every derived reading, not some of them. A fetchland and an Exploration
   // were both missing from this test, so both sat under "Nothing read yet"
@@ -411,6 +425,7 @@ function BehaviorList({
   return (
     <>
       <PolicyPicker policy={policy} onPolicy={onPolicy} />
+      <PolicySpread runs={spread} current={policy.spend} stale={spreadStale} onSpend={(spend) => onPolicy({ ...policy, spend })} />
       <h4 className="deck-stats-head">What each card does</h4>
       <p className="fine-print">
         The card database only reads what a card always does for you as it resolves. Anything behind a trigger or an "if" does

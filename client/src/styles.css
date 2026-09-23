@@ -8027,6 +8027,42 @@ a.seg {
   line-height: 1.4;
   color: var(--text-dim);
 }
+/* The spend orders side by side (C6). */
+.policy-spread {
+  margin-bottom: 0.75rem;
+  transition: opacity 0.2s;
+}
+.policy-spread.is-stale {
+  opacity: 0.55;
+}
+.policy-spread .cast-table th[scope='row'] {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--text);
+  border-bottom: 1px solid var(--surface-2);
+  padding: 0.4rem 0.3rem;
+}
+.policy-spread tr.is-current th[scope='row'] {
+  font-weight: 700;
+}
+.policy-spread-use {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-align: left;
+  cursor: pointer;
+}
+.policy-spread-yours {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  margin-left: 0.2rem;
+}
 .behavior-list {
   list-style: none;
   margin: 0 0 0.5rem;

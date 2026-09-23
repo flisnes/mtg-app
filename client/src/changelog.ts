@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.170.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The Model tab now plays your deck under all four spend orders and shows them side by side, so you can see whether the order matters and tap the one that does best.',
+      },
+    ],
+  },
+  {
     version: '0.169.0',
     changes: [
       {
@@ -207,16 +216,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'What each card is worth now scores one copy rather than the whole stack. Twenty basics added together buried every other card in the list and only told you that you run twenty basics. A Forest is now judged against a Sol Ring, and rows with several copies still show what all of them come to.',
-      },
-    ],
-  },
-  {
-    version: '0.159.1',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'What each card in your deck is worth. A new line under the trajectory charts splits both curves up by the card that made them, so you can see which of your cards puts your mana online and which of them finds you your cards. A land another card fetched counts for the card that fetched it, and a card drawn off a trigger counts for the permanent that triggered.',
       },
     ],
   },

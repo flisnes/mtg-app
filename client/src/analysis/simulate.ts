@@ -4129,4 +4129,16 @@ export type SimResponse =
   /** The quick pass: the first `QUICK_GAMES` of the same seed, in a fraction of the time. */
   | { type: 'quick'; result: SimResult }
   | { type: 'done'; result: SimResult }
+  /**
+   * Every spend order at `QUICK_GAMES`, same seed, after the full run (rebuild
+   * plan C6). The chosen one is the quick pass itself, so the rows are the
+   * same shuffles and the spread is the policy rather than the deal.
+   */
+  | { type: 'spread'; runs: SpendRun[] }
   | { type: 'error'; message: string };
+
+/** One spend order's short run, for the Model tab's "what the spend order is worth". */
+export interface SpendRun {
+  spend: SpendPolicy;
+  result: SimResult;
+}

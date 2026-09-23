@@ -29,6 +29,7 @@ import {
   type SimContribution,
   type SimPolicy,
   type SimResult,
+  type SpendRun,
 } from '../analysis/simulate.js';
 import { useSimulation } from '../analysis/useSimulation.js';
 import { DEFAULT_KEEP_RULE, MulliganPanel, type KeepRule } from './MulliganPanel.js';
@@ -334,6 +335,11 @@ export function DeckAnalysis({
   );
   const sim = useSimulation(simDeck, simOpts);
   const simResult = sim.kind === 'done' ? sim.result : sim.kind === 'running' ? sim.previous : undefined;
+  // The spend orders side by side (C6). The last set stays up while the next
+  // deals, so tapping an order does not blank the table it was tapped in.
+  const freshSpread = sim.kind === 'done' ? sim.spread : undefined;
+  const lastSpread = useRef<SpendRun[] | undefined>(undefined);
+  if (freshSpread) lastSpread.current = freshSpread;
 
   // Before/after on save. The baseline is whatever the current deck has dealt
   // so far; the after is the first run on any other deck.
@@ -621,6 +627,8 @@ export function DeckAnalysis({
               onSaved={onModelSaved}
               fires={simResult?.fires}
               onWatch={(oracleId) => setTracing({ focus: oracleId })}
+              spread={freshSpread ?? lastSpread.current}
+              spreadStale={!freshSpread}
             />
           </>
         )}

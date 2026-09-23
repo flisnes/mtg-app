@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SimDeck } from './simDeck.js';
-import type { SimOptions, SimRequest, SimResponse, SimResult } from './simulate.js';
+import type { SimOptions, SimRequest, SimResponse, SimResult, SpendRun } from './simulate.js';
 
 // The simulator's lifecycle: one worker, restarted whenever the deck or the
 // settings change, terminated when the sheet closes.
@@ -15,11 +15,12 @@ const DEBOUNCE_MS = 120;
  * list it just changed from one about the list before. `quick` is the run's
  * first two thousand games once they are in (rebuild plan C2); while the rest
  * deal, `previous` is that quick result rather than the old deck's.
+ * `spread` is every spend order's short run (C6), a moment after `done`.
  */
 export type SimStatus =
   | { kind: 'idle' }
   | { kind: 'running'; fraction: number; previous?: SimResult; quick?: SimResult; deck: SimDeck }
-  | { kind: 'done'; result: SimResult; quick?: SimResult; deck: SimDeck }
+  | { kind: 'done'; result: SimResult; quick?: SimResult; deck: SimDeck; spread?: SpendRun[] }
   | { kind: 'error'; message: string };
 
 export function useSimulation(deck: SimDeck | null, opts: SimOptions): SimStatus {
@@ -53,6 +54,8 @@ export function useSimulation(deck: SimDeck | null, opts: SimOptions): SimStatus
         } else if (msg.type === 'done') {
           lastRef.current = msg.result;
           setStatus({ kind: 'done', result: msg.result, quick, deck });
+        } else if (msg.type === 'spread') {
+          setStatus((s) => (s.kind === 'done' ? { ...s, spread: msg.runs } : s));
           worker.terminate();
         } else {
           setStatus({ kind: 'error', message: msg.message });

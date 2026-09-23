@@ -9,6 +9,16 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.159.1',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'What each card in your deck is worth. A new line under the trajectory charts splits both curves up by the card that made them, so you can see which of your cards puts your mana online and which of them finds you your cards. A land another card fetched counts for the card that fetched it, and a card drawn off a trigger counts for the permanent that triggered.',
+      },
+    ],
+  },
+  {
     version: '0.159.0',
     changes: [
       {

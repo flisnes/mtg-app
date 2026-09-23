@@ -9,6 +9,26 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.158.6',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'The twenty-card ceiling on what one behavior step can do is gone. "Draw half your library" in a 99-card deck really is 49 cards now, so the curve for a Peer Into the Abyss deck is the curve for a deck that contains one.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Division comes in two flavours: rounded down and rounded up, because the cards print both. The operator now sits next to the amount as a symbol, blank until you pick one.',
+      },
+      {
+        kind: 'added',
+        text:
+          'The card behavior editor shows the card. Writing a rule means reading the card, and reading it off a name alone was a memory test.',
+      },
+    ],
+  },
+  {
     version: '0.158.5',
     changes: [
       {

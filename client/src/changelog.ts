@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.166.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Who does the work now lists the draw and ramp cards the simulator plays as nothing, at 0 and in amber. Tap one to write what it does.',
+      },
+    ],
+  },
+  {
     version: '0.165.0',
     changes: [
       {
@@ -228,26 +238,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'fixed',
         text:
           'A fetchland put onto the battlefield some other way cracks for a land instead of sitting there as a land that taps for every colour it could have found.',
-      },
-    ],
-  },
-  {
-    version: '0.158.6',
-    changes: [
-      {
-        kind: 'changed',
-        text:
-          'The twenty-card ceiling on what one behavior step can do is gone. "Draw half your library" in a 99-card deck really is 49 cards now, so the curve for a Peer Into the Abyss deck is the curve for a deck that contains one.',
-      },
-      {
-        kind: 'added',
-        text:
-          'Division comes in two flavours: rounded down and rounded up, because the cards print both. The operator now sits next to the amount as a symbol, blank until you pick one.',
-      },
-      {
-        kind: 'added',
-        text:
-          'The card behavior editor shows the card. Writing a rule means reading the card, and reading it off a name alone was a memory test.',
       },
     ],
   },

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Sheet } from './Sheet.js';
 import { HowWorked } from './HowWorked.js';
+import { Icon } from './icons.js';
 import type { SimContribution, SimResult } from '../analysis/simulate.js';
+import type { IdleEngine, IdleEngines } from '../analysis/coverage.js';
 
 // Who made the trajectory lines — phase 13, and the first panel in this sheet
 // that answers "is this card pulling its weight" with a number.
@@ -35,8 +37,22 @@ type Lens = 'mana' | 'cards';
 const one = (n: number) => n.toFixed(1);
 const two = (n: number) => n.toFixed(2);
 
-export function ContributionsSheet({ result, onClose }: { result: SimResult; onClose: () => void }) {
-  const [lens, setLens] = useState<Lens>('mana');
+export function ContributionsSheet({
+  result,
+  idle,
+  onClose,
+  onModel,
+}: {
+  result: SimResult;
+  /** Cards the tags say should be in this list and the simulator plays as nothing. */
+  idle: IdleEngines | null;
+  onClose: () => void;
+  /** Open a card in the Model tab's editor. */
+  onModel: (oracleId: string) => void;
+}) {
+  // Cards first when the deck's draw engines are the ones stuck at zero and
+  // its mana is not: that is the list worth landing on.
+  const [lens, setLens] = useState<Lens>(() => (idle && idle.cards.length > 0 && idle.mana.length === 0 ? 'cards' : 'mana'));
   const turns = result.maxTurn;
 
   // Everything on show is **one copy**. A deck's twenty Forests are one row
@@ -51,6 +67,10 @@ export function ContributionsSheet({ result, onClose }: { result: SimResult; onC
   const peak = Math.max(0.01, ...rows.map((c) => perCopy(c, lens)));
   /** Every copy of everything, which is the quantity the chart's line is. */
   const deckTotal = rows.reduce((sum, c) => sum + value(c, lens), 0);
+  // Rebuild plan B3: an engine the simulator can't read is listed at zero
+  // rather than left off, which turns a silent floor into a gap with a way to
+  // close it. Only this lens's: a draw card is not missing from the mana list.
+  const zeros: IdleEngine[] = (lens === 'mana' ? idle?.mana : idle?.cards) ?? [];
 
   return (
     <Sheet onClose={onClose} title="Who does the work" className="contrib-sheet">
@@ -79,7 +99,7 @@ export function ContributionsSheet({ result, onClose }: { result: SimResult; onC
 
       <p className="deck-stats-verdict">{headline(result, lens, rows, deckTotal, turns)}</p>
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && zeros.length === 0 ? (
         <p className="fine-print">
           Nothing in this deck {lens === 'mana' ? 'makes mana' : 'draws you cards'} in a way the simulator can read, so there is
           nothing to split up.
@@ -111,6 +131,19 @@ export function ContributionsSheet({ result, onClose }: { result: SimResult; onC
               </li>
             );
           })}
+          {zeros.map((c) => (
+            <li key={c.oracleId} className="contrib-row contrib-idle">
+              <button type="button" onClick={() => onModel(c.oracleId)}>
+                <span className="contrib-name">
+                  {c.name}
+                  {c.copies > 1 && <span className="contrib-copies"> ×{c.copies}</span>}
+                </span>
+                <span className="contrib-idle-note">doing nothing yet</span>
+                <span className="contrib-v">0</span>
+                <Icon name="chevronRight" />
+              </button>
+            </li>
+          ))}
         </ul>
       )}
 
@@ -123,8 +156,11 @@ export function ContributionsSheet({ result, onClose }: { result: SimResult; onC
       )}
 
       <p className="fine-print">
-        One copy each, so a basic is judged against a Sol Ring rather than outnumbering it. A zero can mean the card does nothing
-        or that the simulator can't read it yet: the Model tab says which.
+        One copy each, so a basic is judged against a Sol Ring rather than outnumbering it.
+        {zeros.length > 0 &&
+          ` ${zeros.length === 1 ? 'The card at 0' : `The ${zeros.length} cards at 0`} ${lens === 'mana' ? 'ramp' : 'draw'}${
+            zeros.length === 1 ? 's' : ''
+          } at the table but not in the simulator yet, so the ${lens} line is a floor. Tap one to write what it does.`}
       </p>
       <HowWorked>
         <p className="fine-print">

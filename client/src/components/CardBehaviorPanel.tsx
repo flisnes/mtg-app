@@ -215,6 +215,8 @@ export function CardBehaviorPanel({
   behaviors,
   policy,
   onPolicy,
+  openId,
+  onOpenId,
 }: {
   deckId: string;
   rows: readonly GroupRow[];
@@ -222,9 +224,12 @@ export function CardBehaviorPanel({
   /** How the sequencer plays the deck. The other half of "what does this card do". */
   policy: SimPolicy;
   onPolicy: (policy: SimPolicy) => void;
+  /** The card in the editor. Held by the page so another tab can open one. */
+  openId: string | null;
+  onOpenId: (oracleId: string | null) => void;
 }) {
   const cards = useMemo(() => behaviorCards(rows, behaviors), [rows, behaviors]);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const setOpenId = onOpenId;
   const open = openId ? (cards.find((c) => c.oracleId === openId) ?? null) : null;
 
   // The same query engine the search bar uses, pointed at this deck. It runs on

@@ -15,7 +15,7 @@ import { CardBehaviorPanel } from './CardBehaviorPanel.js';
 import { AnalysisOverview } from './AnalysisOverview.js';
 import { HowWorked } from './HowWorked.js';
 import { buildSimDeck } from '../analysis/simDeck.js';
-import { missedDrawCopies } from '../analysis/coverage.js';
+import { idleEngines, missedDrawCopies, type IdleEngines } from '../analysis/coverage.js';
 import { deckBehaviorMap } from '../db/dataAccess.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import {
@@ -126,7 +126,7 @@ function behaviorNote(coverage: { blanks: number; authored: number }, missedDraw
  * a deck built around a draw engine, naming the best Forest would be the app
  * looking straight past the thing the deck is about.
  */
-function contribNote(result: SimResult): string {
+function contribNote(result: SimResult, idle: IdleEngines | null): string {
   let best: SimContribution | undefined;
   let bestShare = 0;
   const manaAll = result.manaByTurn.slice(1).reduce((a, b) => a + b, 0);
@@ -141,7 +141,19 @@ function contribNote(result: SimResult): string {
       best = c;
     }
   }
-  return best ? `${best.name} leads` : `${result.contributions.length} cards pull their weight`;
+  const lead = best ? `${best.name} leads` : `${result.contributions.length} cards pull their weight`;
+  // The gap is the reason to open the sheet when there is one, so it goes on
+  // the chip rather than waiting at the bottom of the list.
+  const n = idleCount(idle);
+  if (n === 0) return lead;
+  const gap = `${n} doing nothing yet`;
+  return result.contributions.length > 0 ? `${lead}, ${gap}` : gap;
+}
+
+/** Distinct cards stuck at zero in either lens. */
+function idleCount(idle: IdleEngines | null): number {
+  if (!idle) return 0;
+  return new Set([...idle.mana, ...idle.cards].map((c) => c.oracleId)).size;
 }
 
 /** One tappable line under the legality panel: the headline, and the way in. */
@@ -268,6 +280,9 @@ export function DeckAnalysis({
 
   const [tracing, setTracing] = useState(false);
   const [contribOpen, setContribOpen] = useState(false);
+  // The card open in the Model tab's editor, lifted here so a row in "Who does
+  // the work" can open one from the Flow tab.
+  const [modelCard, setModelCard] = useState<string | null>(null);
   // How the sequencer plays this deck. Set on the Model tab, where the rest of
   // "what happens in a simulated game" is decided, and named in the bar above
   // every tab because it moves every simulated number.
@@ -297,7 +312,10 @@ export function DeckAnalysis({
   // How many of the deck's blanks the tags say should have drawn you something.
   // Depends on `tagsReady` because the vocabulary loads off IndexedDB after the
   // first render, and a memo that doesn't watch for it reports null forever.
-  const missedDraw = useMemo(() => missedDrawCopies(rows), [rows, tagsReady]);
+  // The same question per card, for "Who does the work" to list at zero. Off
+  // the built deck, so a card with a behavior on it drops out of both.
+  const idle = useMemo(() => idleEngines(rows, simDeck), [rows, simDeck, tagsReady]);
+  const missedDraw = useMemo(() => missedDrawCopies(idle), [idle]);
   // Lands, mana sources and cards with an effect the sequencer resolves. The
   // same arithmetic `coverageNote` does, because the chip and the paragraph
   // explaining it disagreeing would be worse than either of them being absent.
@@ -320,6 +338,11 @@ export function DeckAnalysis({
   // A new tab starts at its top. Only when the bar is pinned: at rest the page
   // header is still on screen and jumping past it would be the app scrolling
   // for no reason.
+  // Leaving the Model tab closes its editor, the way unmounting it used to.
+  useEffect(() => {
+    if (tab !== 'model') setModelCard(null);
+  }, [tab]);
+
   const shownTab = useRef(tab);
   useEffect(() => {
     if (shownTab.current === tab) return;
@@ -486,11 +509,11 @@ export function DeckAnalysis({
             {/* The other question about an average: which of the ninety-nine
                 produced it. Only offered when somebody in there did something,
                 which for a deck of nothing but basics and removal is nobody. */}
-            {simResult && simResult.contributions.length > 0 && (
+            {simResult && (simResult.contributions.length > 0 || idleCount(idle) > 0) && (
               <button type="button" className="deck-stats-line" onClick={() => setContribOpen(true)}>
                 <span className="deck-stats-bits">
                   <span>Who does the work</span>
-                  <span className="deck-stats-tone tone-ok">{contribNote(simResult)}</span>
+                  <span className={`deck-stats-tone ${idleCount(idle) > 0 ? 'tone-warn' : 'tone-ok'}`}>{contribNote(simResult, idle)}</span>
                 </span>
                 <Icon name="chevronRight" />
               </button>
@@ -515,7 +538,15 @@ export function DeckAnalysis({
         {tab === 'model' && (
           <>
             <p className={`deck-stats-verdict${toCheck > 0 ? ' tone-warn' : ''}`}>{behaviorNote(simDeck.coverage, missedDraw)}.</p>
-            <CardBehaviorPanel deckId={deckId} rows={rows} behaviors={behaviors ?? EMPTY_BEHAVIORS} policy={policy} onPolicy={savePolicy} />
+            <CardBehaviorPanel
+              deckId={deckId}
+              rows={rows}
+              behaviors={behaviors ?? EMPTY_BEHAVIORS}
+              policy={policy}
+              onPolicy={savePolicy}
+              openId={modelCard}
+              onOpenId={setModelCard}
+            />
           </>
         )}
 
@@ -527,7 +558,18 @@ export function DeckAnalysis({
         </p>
       </div>
 
-      {contribOpen && simResult && <ContributionsSheet result={simResult} onClose={() => setContribOpen(false)} />}
+      {contribOpen && simResult && (
+        <ContributionsSheet
+          result={simResult}
+          idle={idle}
+          onClose={() => setContribOpen(false)}
+          onModel={(oracleId) => {
+            setContribOpen(false);
+            setModelCard(oracleId);
+            onTab('model');
+          }}
+        />
+      )}
       {tracing && <GameTraceSheet deck={simDeck} opts={simOpts} onClose={() => setTracing(false)} />}
     </div>
   );

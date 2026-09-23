@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.166.0
+
+- **Added: the cards doing nothing are in Who does the work.** The list used to show only cards the simulator could measure, so a draw engine it can't read yet (a Korvold, a card that draws off a trigger) was simply missing, and the chart above quietly came out low. Now every card the database calls draw or ramp that plays out as nothing in the simulator is listed at 0, in amber, under the cards that did the work: draw cards under *Cards*, ramp under *Mana*. Your commander counts too. Tap one to go straight to its editor on the Model tab. The row on the Flow tab says how many there are.
+- **Fixed: writing what a draw card does now takes it off the "to check" count.** The Model chip kept counting a draw card as doing nothing even after you had written a rule for it.
+
 ## 0.165.0
 
 - **Added: Screw and flood, at the top of the Flow tab.** The mana chart is an average, and an average of 4.7 mana on turn six hides the game stuck on three lands and the one drowning on eight. Now every simulated turn is sorted: *screwed* (two or more mana behind the turn number, holding a spell you can't afford), *flooded* (two or more mana left over and nothing in hand to spend it on) or neither. The headline says how often you are screwed or flooded at least once by turn six, how many turns you cast nothing, and how much mana goes unspent. A table gives each turn, with how often you are on curve for mana.

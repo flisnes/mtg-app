@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.164.0',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'The Mana tab answers "can I cast it on time" once: Cast on time lists your commander and every late cost with the reason it was late, total mana, a color, or a tapland. Colored sources no longer gives a second, different verdict.',
+      },
+    ],
+  },
+  {
     version: '0.163.0',
     changes: [
       {
@@ -243,21 +253,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'Any amount can be adjusted: plus, minus, times or divided by a number. Dark Deal is the previous X minus 1, Peer Into the Abyss is your library divided by 2. "Cards in your library" is a new amount too.',
-      },
-    ],
-  },
-  {
-    version: '0.158.4',
-    changes: [
-      {
-        kind: 'fixed',
-        text:
-          'Ramp spells were ramping twice once you wrote a rule for them. Harrow, Into the North, Three Visits and the rest are read as land ramp off the mana data, not the oracle text, so the card behavior screen filed them under "nothing read yet" and the simulator fetched a land anyway. They now say what the database reads, and your own rule replaces it instead of stacking on top.',
-      },
-      {
-        kind: 'fixed',
-        text:
-          'A move step with criteria took the topmost match in your library rather than a random one, so the copy that left was always the copy you would have drawn soonest. Worth about 6% of a ramp deck\'s mana by turn six.',
       },
     ],
   },

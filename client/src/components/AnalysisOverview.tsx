@@ -1,7 +1,8 @@
 import { Icon } from './icons.js';
 import type { DeckManaStats } from '../deck/manaStats.js';
 import { shortfallHeadline, type ManaReport } from '../analysis/manaSources.js';
-import type { SimResult } from '../analysis/simulate.js';
+import type { SimLimits, SimResult } from '../analysis/simulate.js';
+import { heldBackBy } from './OnCurvePanel.js';
 import type { SimCoverage } from '../analysis/simDeck.js';
 
 // The Overview tab (rebuild plan A5): one row per question, each a status, a
@@ -111,34 +112,59 @@ function manaAnswer(
 
   const late = result.costs.filter((c) => c.onCurvePay < THRESHOLD);
   const commander = result.commanders[0];
+  const commanderLate = commander !== undefined && commander.onCurvePay < THRESHOLD;
   const bits: string[] = [];
-  if (commander) bits.push(`You cast ${commander.name} on turn ${commander.curveTurn} ${pctShort(commander.onCurvePay)} of the time.`);
+  if (commander) {
+    bits.push(
+      `You cast ${commander.name} on turn ${commander.curveTurn} ${pctShort(commander.onCurvePay)} of the time${commanderLate ? becauseOf(commander.limits) : ''}.`,
+    );
+  }
   if (late.length === 0) {
-    bits.push(commander ? 'Every other cost is on time.' : 'Every cost clears 90% on its own curve.');
+    bits.push(commander ? 'Every other cost is on time.' : 'Every cost clears 90% on its own turn.');
   } else {
     const worst = late[0]!;
     bits.push(
-      `${late.length} cost${plural(late.length)} miss${late.length === 1 ? 'es' : ''} 90% on curve, worst ${worst.names[0]} at ${pctShort(worst.onCurvePay)} on turn ${worst.curveTurn}.`,
+      `${late.length} cost${plural(late.length)} miss${late.length === 1 ? 'es' : ''} 90% on ${late.length === 1 ? 'its' : 'their'} own turn, worst ${worst.names[0]} at ${pctShort(worst.onCurvePay)} on turn ${worst.curveTurn}${becauseOf(worst.limits)}.`,
     );
   }
   if (stats.land.tone !== 'ok') bits.push(`${stats.lands} lands, ${stats.land.short}.`);
 
-  const commanderLate = commander !== undefined && commander.onCurvePay < THRESHOLD;
   const ok = !commanderLate && late.length === 0 && stats.land.tone === 'ok';
+  // The fix follows the reason: the commander's when it is late, since it is
+  // in every game, otherwise the worst cost's. The land count only speaks when
+  // the reason is mana (or there is no late cost): more lands do not fix color.
+  const lead = commanderLate ? commander : late[0];
+  const leadWhy = lead ? heldBackBy(lead.limits) : null;
+  const landsSpeak = !leadWhy || leadWhy.kind === 'mana';
   const next =
-    stats.land.tone === 'light'
+    landsSpeak && stats.land.tone === 'light'
       ? `Add ${-stats.land.diff} land${plural(-stats.land.diff)}, or cheap ramp.`
-      : stats.land.tone === 'heavy'
+      : landsSpeak && stats.land.tone === 'heavy'
         ? `Cut ${stats.land.diff} land${plural(stats.land.diff)} for spells.`
-        : ok
+        : ok || !lead
           ? undefined
-          : 'See which costs run late, and the fixes you own.';
+          : fixFor(lead.limits);
   return {
     tone: ok ? 'ok' : 'warn',
     status: ok ? 'on time' : commanderLate ? 'commander late' : late.length > 0 ? `${late.length} late` : 'land count',
     text: bits.join(' '),
     next,
   };
+}
+
+/** ", held back by total mana", or nothing when the limiter has no answer. */
+function becauseOf(limits: SimLimits): string {
+  const why = heldBackBy(limits);
+  return why ? `, held back by ${why.label}` : '';
+}
+
+/** The next step for what held a cost back. A dual does not fix a card short on mana. */
+function fixFor(limits: SimLimits): string {
+  const why = heldBackBy(limits);
+  if (!why) return 'See which costs run late.';
+  if (why.kind === 'tapped') return 'Fewer lands that enter tapped.';
+  if (why.kind === 'mana') return 'More lands or cheap ramp. More duals will not help.';
+  return `More ${why.label}. See the fixes you own.`;
 }
 
 /**

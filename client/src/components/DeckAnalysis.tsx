@@ -6,7 +6,7 @@ import { CURVE_MAX, TAX_TURNS, type DeckManaStats } from '../deck/manaStats.js';
 import { DrawOddsPanel } from './DrawOddsPanel.js';
 import { ColorSourcesPanel } from './ColorSourcesPanel.js';
 import { ManaFixPanel } from './ManaFixPanel.js';
-import { OnCurvePanel } from './OnCurvePanel.js';
+import { heldBackBy, OnCurvePanel } from './OnCurvePanel.js';
 import { ContributionsSheet } from './ContributionsSheet.js';
 import { DeckTrajectory } from './DeckTrajectory.js';
 import { GameTraceSheet } from './GameTraceSheet.js';
@@ -157,6 +157,11 @@ export function DeckStatsLine({ stats, onOpen }: { stats: DeckManaStats; onOpen:
       <Icon name="chevronRight" />
     </button>
   );
+}
+
+/** Is any late cost, the commander's included, held back by color rather than by mana. */
+function colorLate(result: SimResult): boolean {
+  return [...result.commanders, ...result.costs].some((c) => c.onCurvePay < 0.9 && heldBackBy(c.limits)?.kind === 'color');
 }
 
 function Curve({ stats }: { stats: DeckManaStats }) {
@@ -452,11 +457,15 @@ export function DeckAnalysis({
               </p>
             )}
 
-            <ColorSourcesPanel report={report} sim={simResult ?? null} onPlay={onPlay} />
-
-            <ManaFixPanel report={report} rows={rows} deckId={deckId} format={format} placements={placements} onAdd={onAddFix} />
-
             <OnCurvePanel status={sim} opts={simOpts} hasManaData={simDeck.hasManaData} />
+
+            <ColorSourcesPanel report={report} sim={simResult ?? null} />
+
+            {/* Only when color is what the simulation says is holding a cost
+                back. A dual does not fix a commander that is short on mana. */}
+            {(!simResult || colorLate(simResult)) && (
+              <ManaFixPanel report={report} rows={rows} deckId={deckId} format={format} placements={placements} onAdd={onAddFix} />
+            )}
           </>
         )}
 

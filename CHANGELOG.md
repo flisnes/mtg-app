@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.164.0
+
+- **Changed: one answer to "can I cast it on time".** The Mana tab used to give a card three numbers from two different calculations: an exact colored-source check ("2 red sources short"), the share of sources in play, and the simulated On curve odds. They disagreed whenever a card was short on mana rather than on color. Now *Cast on time* leads the tab with one table: your commander, then every cost that misses 90% on its own turn, and a *Held back by* column saying why. *Total mana* means more lands or ramp, and a dual will not help. *A color* (say, *red sources*) means more of that color. *Taplands* means the land you played that turn came down tapped. Pick any card under the table for its odds turn by turn and the full breakdown.
+- **Changed: Colored sources is now just the sources.** Printed per color, and what was actually on the battlefield, with no verdict of its own. *Fixes from your collection* only shows up when color is what the simulation says is holding a cost back.
+- **Changed: the Overview's Mana row says why.** "Worst Behemoth Sledge at 21% on turn 3, held back by white sources", and the next step follows the reason instead of always suggesting lands.
+
 ## 0.163.0
 
 - **Added: an Overview tab, and Deck analysis opens on it.** One row each for Mana, Flow and Model: how it looks, in a sentence, and what to do about it. *Mana* says whether your commander and the rest of your costs come down on time and whether the land count fits the curve. *Flow* says whether the deck stumbles on land drops, leaves mana unspent or runs out of cards by turn six. *Model* says how many of your cards the simulator actually plays out, and how many draw cards it is reading as blanks. Tap a row for the tab with the charts behind it.

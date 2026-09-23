@@ -1,18 +1,18 @@
 import { useState } from 'react';
 import { ManaCost } from './ManaCost.js';
-import { shortfallHeadline, colorName, type CastCheck, type ManaReport } from '../analysis/manaSources.js';
+import { colorName, type ManaReport } from '../analysis/manaSources.js';
 import type { PipColor } from '../analysis/manaCost.js';
 import { MASK_BITS } from '../analysis/simDeck.js';
 import type { SimResult } from '../analysis/simulate.js';
 import { HowWorked } from './HowWorked.js';
 
-// "Can I actually cast this?" — the colored-source half of the deck's mana,
-// where the land-count verdict is the colorless half.
-//
-// It leads with the worst offender rather than a table, because a table of
-// thirty cards at 94% buries the one at 61% that is losing you games. The
-// table is still there underneath it, worst first, and stops before it becomes
-// a decklist.
+// The colored sources, printed and in play. Evidence, not a verdict: since
+// rebuild plan B1 "can I cast it on time" is answered once, by Cast on time
+// above this, and its "held back by" column is what says whether color was the
+// problem. The exact shortfall rows that used to lead here were a second
+// castability number, and they disagreed with the first whenever a card was
+// short on mana rather than on color. `manaReport` still computes them, for
+// the collection fixes below.
 //
 // §14 added the second half of the panel, and it is the more honest half. The
 // chips at the top count every copy in the decklist as though all of it were on
@@ -21,9 +21,6 @@ import { HowWorked } from './HowWorked.js';
 // simulator actually had in play. Both stay: the printed count is a fact about
 // the pile of cards and the reader needs it, and the measured one is a fact
 // about the games.
-
-/** Enough rows to see a pattern, few enough that the sheet stays a sheet. */
-const MAX_ROWS = 6;
 
 /**
  * The turn the measured block opens on.
@@ -38,7 +35,7 @@ const DEFAULT_TURN = 4;
 const pct = (p: number) => `${Math.round(p * 100)}%`;
 const one = (n: number) => n.toFixed(1);
 
-export function ColorSourcesPanel({ report, sim, onPlay }: { report: ManaReport; sim: SimResult | null; onPlay: boolean }) {
+export function ColorSourcesPanel({ report, sim }: { report: ManaReport; sim: SimResult | null }) {
   return (
     <>
       <h3 className="deck-stats-head">Colored sources</h3>
@@ -67,34 +64,7 @@ export function ColorSourcesPanel({ report, sim, onPlay }: { report: ManaReport;
             <p className="fine-print">Dealing the games that answer this…</p>
           )}
 
-          <p className="deck-stats-verdict">{verdict(report.checks, report.shortfalls)}</p>
-          {report.shortfalls.length > 0 && (
-            <ul className="source-rows">
-              {report.shortfalls.slice(0, MAX_ROWS).map((c) => (
-                <li key={c.oracleId} className={c.uncastable ? 'source-row source-row-bad' : 'source-row'}>
-                  <span className="source-row-name">{c.name}</span>
-                  <ManaCost cost={c.manaCost} className="source-row-cost" />
-                  <span className="source-row-p">{c.uncastable ? 'never' : pct(c.p)}</span>
-                  <span className="source-row-note">{rowNote(c)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {report.shortfalls.length > MAX_ROWS && (
-            <p className="fine-print">And {report.shortfalls.length - MAX_ROWS} more below 90%.</p>
-          )}
-          <p className="fine-print">
-            Exact odds, {onPlay ? 'on the play' : 'on the draw'} with no mulligans: each card by the turn of its mana value, at a 90%
-            bar.
-          </p>
           <HowWorked>
-            <p className="fine-print">
-              Worked out for a library of {report.library}. Karsten's published tables ask two to four fewer sources, because his
-              simulations get to mulligan for one. Lands that always enter tapped count from turn two, rocks and dorks a turn after
-              you could cast them. Colors are checked one at a time, so a two-color card can pass both halves and still stumble on
-              the draw that gives you one of each.
-              {report.unmodelled > 0 && ` ${report.unmodelled} cost${report.unmodelled === 1 ? '' : 's'} here use {X} or snow, taken at face value.`}
-            </p>
             {report.fetches > 0 && (
               <p className="fine-print">
                 {report.fetches} fetchland{report.fetches === 1 ? '' : 's'} counted as {report.fetches === 1 ? 'a source' : 'sources'}{' '}
@@ -121,8 +91,8 @@ export function ColorSourcesPanel({ report, sim, onPlay }: { report: ManaReport;
               <>
                 <p className="fine-print">
                   In play is simulated over {sim.games.toLocaleString()} games, counted after your land drop and before the turn's
-                  mana is spent. The chips count every copy in the deck as though it were on the battlefield; these count the ones
-                  that were. A fetchland is whatever it went and got, and a filter land makes nothing on its own.
+                  mana is spent. The chips count every copy in the deck as though it were on the battlefield; the rows count the
+                  ones that were. A fetchland is whatever it went and got, and a filter land makes nothing on its own.
                 </p>
                 <p className="fine-print">
                   Expect the early turns to read high and settle. The simulation plays the land that most widens your colors first,
@@ -205,7 +175,7 @@ function MeasuredSources({ report, sim }: { report: ManaReport; sim: SimResult }
           })}
         </ul>
       )}
-      <p className="fine-print">Simulated: the sources actually on the battlefield on that turn.</p>
+      <p className="fine-print">The chips count every copy in the deck. These rows are simulated: what was on the battlefield that turn.</p>
     </>
   );
 }
@@ -219,34 +189,4 @@ function grantedName(colors: readonly PipColor[]): string {
   const wubrg = colors.filter((c) => c !== 'C');
   if (wubrg.length === 5) return colors.includes('C') ? 'every kind of mana' : 'every color';
   return colorName(colors);
-}
-
-function verdict(checks: readonly CastCheck[], shortfalls: readonly CastCheck[]) {
-  if (checks.length === 0) return 'Nothing in this deck asks for colored mana.';
-  if (shortfalls.length === 0) {
-    return (
-      <>
-        <strong className="tone-ok">The mana is there.</strong> All {checks.length} colored card
-        {checks.length === 1 ? '' : 's'} clear 90% on curve.
-      </>
-    );
-  }
-  const worst = shortfalls[0]!;
-  const rest = shortfalls.length - 1;
-  return (
-    <>
-      <strong>{shortfallHeadline(worst)}</strong>
-      {rest > 0 && ` ${rest} other card${rest === 1 ? '' : 's'} ${rest === 1 ? 'is' : 'are'} short too.`}
-    </>
-  );
-}
-
-/** The right-hand clause: what is missing, how far off the count is, or when it lands. */
-function rowNote(c: CastCheck): string {
-  if (c.uncastable) return `no ${c.missing.map((m) => colorName([m])).join(' or ')} mana`;
-  if (c.needed === null) {
-    return `turn ${c.turn} · ${c.sources} ${colorName(c.colors)} · ${c.clearsAtTurn ? `clears turn ${c.clearsAtTurn}` : 'never clears'}`;
-  }
-  const short = Math.max(1, c.needed - c.sources);
-  return `turn ${c.turn} · ${c.sources} of ${c.needed} ${colorName(c.colors)} (${short} short)`;
 }

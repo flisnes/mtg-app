@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { ManaCost } from './ManaCost.js';
-import { halfWidth, type SimCardResult, type SimCostGroup, type SimOptions, type SimResult } from '../analysis/simulate.js';
+import { halfWidth, type SimCardResult, type SimCostGroup, type SimLimits, type SimOptions, type SimResult } from '../analysis/simulate.js';
+import { colorName } from '../analysis/manaSources.js';
+import type { PipColor } from '../analysis/manaCost.js';
+import { MASK_BITS } from '../analysis/simDeck.js';
 import type { SimStatus } from '../analysis/useSimulation.js';
 import { HowWorked } from './HowWorked.js';
 
@@ -18,6 +21,12 @@ import { HowWorked } from './HowWorked.js';
 // So it says "simulated" on its face, prints its confidence interval, and
 // states the play pattern it assumes. Users who play Magic know a goldfish
 // number when they see one; users who do not deserve to be told.
+//
+// Rebuild plan B1 made it the castability answer for the whole Mana tab: one
+// table, one number per late cost, and a "held back by" column from the
+// simulator's limiter. It replaced Colored sources' exact shortfall rows, which
+// were a second castability number that disagreed with this one whenever a
+// card was short on mana rather than on color.
 
 /** The bar every card is read against, and the same one the colored-source report uses. */
 const THRESHOLD = 0.9;
@@ -55,7 +64,7 @@ export function OnCurvePanel({
   if (!hasManaData) {
     return (
       <>
-        <h3 className="deck-stats-head">On curve</h3>
+        <h3 className="deck-stats-head">Cast on time</h3>
         <p className="fine-print">
           Your card database predates this data. Refresh it from About to see what this deck actually casts on time.
         </p>
@@ -65,7 +74,7 @@ export function OnCurvePanel({
 
   return (
     <>
-      <h3 className="deck-stats-head">On curve</h3>
+      <h3 className="deck-stats-head">Cast on time</h3>
       {status.kind === 'error' ? (
         <p className="fine-print">The simulator stopped: {status.message}</p>
       ) : !result ? (
@@ -89,114 +98,204 @@ function Report({
   onPick: (id: string) => void;
 }) {
   const shortfalls = result.costs.filter((c) => c.onCurvePay < THRESHOLD);
-  const card = result.cards.find((c) => c.oracleId === picked) ?? result.cards[0];
+  const commander = result.commanders[0];
+  // The commander is the default chart: it is in every game and usually the
+  // card the deck is built to cast. Otherwise the worst card in the library.
+  const everyCard = [...result.commanders, ...result.cards];
+  const card = everyCard.find((c) => c.oracleId === picked) ?? everyCard[0];
 
-  if (!card && result.commanders.length === 0) {
+  if (!card) {
     return <p className="deck-stats-verdict">Nothing in this deck has a cost to pay.</p>;
   }
 
+  const commanderLate = commander !== undefined && commander.onCurvePay < THRESHOLD;
   return (
     <>
-      {/* The command zone first. It is the one card you are guaranteed to have
-          in every game, it is usually the card the deck was built around, and
-          it is the only one here whose odds are purely about your mana. */}
-      {result.commanders.map((c) => (
-        <Commander key={c.oracleId} card={c} />
-      ))}
+      <p className={`deck-stats-verdict${shortfalls.length === 0 && !commanderLate ? ' tone-ok' : ''}`}>
+        {verdict(result, shortfalls, commanderLate)}
+      </p>
+      <p className="fine-print">The bar: payable on its own turn in 9 of 10 games where you hold it.</p>
 
-      {card && (
-        <>
-          {result.commanders.length > 0 && <h4 className="deck-stats-head">The rest of the deck</h4>}
-          <p className={`deck-stats-verdict${shortfalls.length === 0 ? ' tone-ok' : ''}`}>{verdict(result, shortfalls)}</p>
-
-          <select className="sim-pick" value={card.oracleId} onChange={(e) => onPick(e.target.value)} aria-label="Card to chart">
-            {result.cards.map((c) => (
-              <option key={c.oracleId} value={c.oracleId}>
-                {c.name} · {pctShort(c.onCurvePay)} on turn {c.curveTurn}
-              </option>
+      {(result.commanders.length > 0 || shortfalls.length > 0) && (
+        <table className="cast-table">
+          <thead>
+            <tr>
+              <th scope="col">Card</th>
+              <th scope="col">Turn</th>
+              <th scope="col" className="cast-p">
+                On time
+              </th>
+              <th scope="col">Held back by</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* The command zone first, on time or not. It is the one card you
+                have in every game, so its row is the one a reader looks for. */}
+            {result.commanders.map((c) => (
+              <CastRow
+                key={c.oracleId}
+                name={c.name}
+                note="commander"
+                manaCost={c.manaCost}
+                turn={c.curveTurn}
+                p={c.onCurvePay}
+                limits={c.limits}
+              />
             ))}
-          </select>
-          <PayChart card={card} />
-          <p className="fine-print">
-            How often your mana pays for {card.name} by each turn, counting only the games you are holding it. Turn {card.curveTurn} is
-            its curve: you have drawn it by then {pct(card.heldByTurn[card.curveTurn] ?? 0)} of the time, so you actually cast it on
-            curve {pct(card.onCurveCast)} of games. ±{(halfWidth(card.onCurvePay, card.paySample) * 100).toFixed(1)} points.
-          </p>
-
-          {shortfalls.length > 0 && (
-            <ul className="source-rows">
-              {shortfalls.slice(0, MAX_ROWS).map((c) => (
-                <li key={c.manaCost} className="source-row">
-                  <ManaCost cost={c.manaCost} className="source-row-cost" />
-                  <span className="source-row-name">{nameList(c.names)}</span>
-                  <span className="source-row-p">{pctShort(c.onCurvePay)}</span>
-                  <span className="source-row-note">
-                    turn {c.curveTurn} · {c.copies} card{c.copies === 1 ? '' : 's'} at this cost
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {shortfalls.length > MAX_ROWS && (
-            <p className="fine-print">And {shortfalls.length - MAX_ROWS} more costs below 90% on curve.</p>
-          )}
-        </>
+            {shortfalls.slice(0, MAX_ROWS).map((c) => (
+              <CastRow
+                key={c.manaCost}
+                name={nameList(c.names)}
+                manaCost={c.manaCost}
+                turn={c.curveTurn}
+                p={c.onCurvePay}
+                limits={c.limits}
+              />
+            ))}
+          </tbody>
+        </table>
+      )}
+      {shortfalls.length > MAX_ROWS && (
+        <p className="fine-print">And {shortfalls.length - MAX_ROWS} more costs below 90% on their own turn.</p>
       )}
 
+      <h4 className="source-live-head">By turn</h4>
+      <select className="sim-pick" value={card.oracleId} onChange={(e) => onPick(e.target.value)} aria-label="Card to chart">
+        {everyCard.map((c) => (
+          <option key={c.oracleId} value={c.oracleId}>
+            {c.name} · {pctShort(c.onCurvePay)} on turn {c.curveTurn}
+          </option>
+        ))}
+      </select>
+      <PayChart card={card} />
+      <p className="fine-print">{cardCaption(card)}</p>
+
       <p className="fine-print">
-        Simulated, {result.games.toLocaleString()} games.{running && ' Re-dealing…'} You average {manaLine(result)}. Effects the
-        simulator can't read yet do nothing, so a deck built on them reads worse here than it plays.
+        Simulated, {result.games.toLocaleString()} games.{running && ' Re-dealing…'} Effects the simulator can't read yet do
+        nothing, so a deck built on them reads worse here than it plays.
       </p>
       <HowWorked>
         <p className="fine-print">
-          {pct(result.pMulligan)} of games started below seven cards, at {one(result.meanHandSize)} cards on average. Cards sharing a
-          printed cost share a number: they have the same answer, and pooling them is what makes it precise in a singleton deck.
+          You average {manaLine(result)}. {pct(result.pMulligan)} of games started below seven cards, at{' '}
+          {one(result.meanHandSize)} cards on average. Cards sharing a printed cost share a number: they have the same answer, and
+          pooling them is what makes it precise in a singleton deck. The deck averages {pct(result.deckOnCurve)} on time across
+          every copy.
         </p>
         <p className="fine-print">
-          Where this disagrees with Colored sources, it is usually not about color. That check counts the sources you have seen and
-          stops there; this one plays the turns out, so it also charges you for the lands you never drew and the ones that came
-          down tapped. A four-drop can have plenty of white and still not have four mana.
+          Held back by is asked on the card's own turn, in the games you hold it and can't pay for it, in this order. Taplands: the
+          land that came down tapped this turn would have paid it. Total mana: too little mana in play whatever its colors, which
+          lands and ramp fix and a dual does not. A color: enough mana, not the right kind.
         </p>
         <p className="fine-print">
           Nobody is across the table. It mulligans on your Opening hand rule, plays a land every turn, cracks a fetch for the land
           that widens its colors, then spends the turn in the play style set on the Model tab, with a coin flip between equals.
           Spells that draw, loot, mill, dig, make Treasure or add mana do it, and so does anything you have written a rule for.
-          Cost reducers, and effects behind a trigger or a condition, do nothing until you write them on the Model tab.
+          Cost reducers, and effects behind a trigger or a condition, do nothing until you write them on the Model tab. Commander
+          tax is not counted, so a commander's number is the first cast.
         </p>
       </HowWorked>
     </>
   );
 }
 
-/**
- * The commander's own block, ahead of everything else.
- *
- * It earns the place: it waits in the command zone, so unlike every other card
- * in the deck there is no question of drawing it, and the whole deck is usually
- * built on the assumption that it resolves. That also makes it the one card
- * here whose number is *only* about the mana, which is why it needs no "you
- * have drawn it by then" clause and gets the full run behind its interval.
- */
-function Commander({ card }: { card: SimCardResult }) {
-  const ci = halfWidth(card.onCurvePay, card.paySample);
-  const late = card.payByTurn[Math.min(card.curveTurn + 2, card.payByTurn.length - 1)] ?? 0;
+function CastRow({
+  name,
+  note,
+  manaCost,
+  turn,
+  p,
+  limits,
+}: {
+  name: string;
+  note?: string;
+  manaCost: string;
+  turn: number;
+  p: number;
+  limits: SimLimits;
+}) {
+  const late = p < THRESHOLD;
+  const why = late ? heldBackBy(limits) : null;
   return (
-    <>
-      <p className={`deck-stats-verdict${card.onCurvePay >= THRESHOLD ? ' tone-ok' : ''}`}>
-        <strong>
-          You cast {card.name} on turn {card.curveTurn} {pctShort(card.onCurvePay)} of the time.
-        </strong>{' '}
-        It is waiting in the command zone every game, so this is your mana and nothing else.
-      </p>
-      <PayChart card={card} />
-      <p className="fine-print">
-        <ManaCost cost={card.manaCost} /> on turn {card.curveTurn}, and {pct(late)} by turn{' '}
-        {Math.min(card.curveTurn + 2, card.payByTurn.length - 1)}. ±{(ci * 100).toFixed(1)} points. Commander tax is not counted, so
-        this is the first cast, not the one after they killed it.
-      </p>
-    </>
+    <tr>
+      <td>
+        <span className="cast-name">{name}</span>
+        {note && <span className="cast-note"> ({note})</span>} <ManaCost cost={manaCost} className="source-row-cost" />
+      </td>
+      <td className="cast-turn">{turn}</td>
+      <td className={`cast-p${late ? ' cast-late' : ' tone-ok'}`}>{pctShort(p)}</td>
+      <td>
+        {why ? (
+          <span className={`cast-limit cast-limit-${why.kind}`} title={limitBreakdown(limits)}>
+            {why.label}
+          </span>
+        ) : (
+          <span className="cast-note">{late ? '' : 'on time'}</span>
+        )}
+      </td>
+    </tr>
   );
 }
+
+export type LimitKind = 'mana' | 'color' | 'tapped';
+
+/**
+ * The one reason to print in the column: whichever held the cost back in the
+ * most games. Null when nothing measurable did, which on a late row means the
+ * card left your hand before its turn (a loot, a discard).
+ */
+export function heldBackBy(limits: SimLimits): { kind: LimitKind; label: string; colors: PipColor[] } | null {
+  const ranked: [LimitKind, number][] = [
+    ['tapped', limits.tapped],
+    ['mana', limits.mana],
+    ['color', limits.color],
+  ];
+  ranked.sort((a, b) => b[1] - a[1]);
+  const [kind, share] = ranked[0]!;
+  if (share < 0.005) return null;
+  if (kind === 'tapped') return { kind, label: 'taplands', colors: [] };
+  if (kind === 'mana') return { kind, label: 'total mana', colors: [] };
+  const colors = shortColors(limits);
+  return { kind, label: colors.length > 0 ? `${colors.map((c) => colorName([c])).join(' and ')} sources` : 'colors', colors };
+}
+
+/**
+ * The colors worth naming: the one short most often, and any other short at
+ * least half as often, so a {B}{R} card starved of both says both.
+ */
+function shortColors(limits: SimLimits): PipColor[] {
+  const top = Math.max(...limits.colors);
+  if (top <= 0) return [];
+  return [...MASK_BITS].filter((_c, i) => (limits.colors[i] ?? 0) >= top / 2) as PipColor[];
+}
+
+/** "71% total mana, 29% red sources", as shares of the misses. */
+function limitBreakdown(limits: SimLimits): string {
+  const misses = limits.tapped + limits.mana + limits.color;
+  if (misses <= 0) return '';
+  const colors = shortColors(limits);
+  const parts: [string, number][] = [
+    ['total mana', limits.mana],
+    [colors.length > 0 ? `${colors.map((c) => colorName([c])).join(' and ')} sources` : 'colors', limits.color],
+    ['taplands', limits.tapped],
+  ];
+  const shown = parts.filter(([, x]) => x / misses >= 0.05).sort((a, b) => b[1] - a[1]);
+  // One reason needs no share: "97% green sources" beside nothing reads as a typo.
+  if (shown.length === 1) return shown[0]![0];
+  return shown.map(([label, x]) => `${pct(x / misses)} ${label}`).join(', ');
+}
+
+/** Under the chart: when it is payable, how often you have it, and what stops it. */
+function cardCaption(card: SimCardResult): string {
+  const ci = `±${(halfWidth(card.onCurvePay, card.paySample) * 100).toFixed(1)} points`;
+  const why = limitBreakdown(card.limits);
+  const late = card.onCurvePay < THRESHOLD && why ? ` When it isn't: ${why}.` : '';
+  if (card.commander) {
+    const t = Math.min(card.curveTurn + 2, card.payByTurn.length - 1);
+    return `Waiting in the command zone every game, so this is your mana and nothing else: ${pctShort(card.onCurvePay)} on turn ${card.curveTurn}, ${pct(card.payByTurn[t] ?? 0)} by turn ${t}, ${ci}.${late}`;
+  }
+  return `How often your mana pays for ${card.name} by each turn, in the games you hold it: ${pctShort(card.onCurvePay)} on turn ${card.curveTurn}, ${ci}. You have drawn it by then ${pct(card.heldByTurn[card.curveTurn] ?? 0)} of the time.${late}`;
+}
+
 
 /** The per-turn bars, with the turn the card is trying to be cast on marked. */
 function PayChart({ card }: { card: SimCardResult }) {
@@ -219,25 +318,22 @@ function PayChart({ card }: { card: SimCardResult }) {
   );
 }
 
-function verdict(result: SimResult, shortfalls: readonly SimCostGroup[]): ReactNode {
-  const total = result.costs.length;
-  if (shortfalls.length === 0) {
+function verdict(result: SimResult, shortfalls: readonly SimCostGroup[], commanderLate: boolean): ReactNode {
+  const total = result.costs.length + result.commanders.length;
+  const late = shortfalls.length + (commanderLate ? 1 : 0);
+  if (late === 0) {
     return (
       <>
-        <strong>The mana is there on time.</strong> All {total} cost{total === 1 ? '' : 's'} in the library clear 90% on their own
-        curve, and the deck averages {pct(result.deckOnCurve)}.
+        <strong>The mana is there on time.</strong> All {total} cost{total === 1 ? '' : 's'} clear 90% on their own turn.
       </>
     );
   }
-  const worst = shortfalls[0]!;
-  const rest = shortfalls.length - 1;
   return (
     <>
       <strong>
-        {worst.names[0]} has the mana for it on turn {worst.curveTurn} {pctShort(worst.onCurvePay)} of the time.
-      </strong>{' '}
-      {rest > 0 && `${rest} other cost${rest === 1 ? '' : 's'} ${rest === 1 ? 'is' : 'are'} late too. `}
-      The deck averages {pct(result.deckOnCurve)} across every copy.
+        {late} of {total} cost{total === 1 ? '' : 's'} miss the bar.
+      </strong>
+      {commanderLate && ' Your commander is one of them.'}
     </>
   );
 }

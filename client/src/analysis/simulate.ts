@@ -9,7 +9,7 @@ import {
   type DeckFormat,
   type EffectProfile,
 } from '@mtg/shared';
-import { canPay, explainPayment, maxMatching, PAY_GENERIC, PAY_UNUSED, type ManaUnit, type UnitGroup } from './canPay.js';
+import { canPay, explainPayment, maxMatching, missingColors, PAY_GENERIC, PAY_UNUSED, type ManaUnit, type UnitGroup } from './canPay.js';
 import {
   newTraceSink,
   pipText,
@@ -296,7 +296,56 @@ export interface SimCardResult {
   onCurveCast: number;
   /** Games behind `payByTurn` at `curveTurn` — the sample its interval is built on. */
   paySample: number;
+  /** Why it was not payable on `curveTurn`, in the games it was held. Pooled like `payByTurn`. */
+  limits: SimLimits;
 }
+
+/**
+ * What held a cost back on its own turn (rebuild plan B1), as shares of the
+ * same games `onCurvePay` is out of, so `onCurvePay + tapped + mana + color`
+ * comes to one, give or take a card that left your hand before its turn.
+ *
+ * One reason per game, asked in this order:
+ *
+ * - `tapped`: the land that came down tapped this turn would have paid it.
+ * - `mana`: too little mana in play, whatever its colors. Lands and ramp fix
+ *   this, and a dual does not.
+ * - `color`: enough mana, not the right colors. `colors` says which, over
+ *   `WUBRGC`; a cost short two colors at once counts against both.
+ *
+ * This is the column the old colored-source count and the simulated one were
+ * both trying to be: they disagreed whenever a card was short on mana and not
+ * on color, and now the row says which.
+ */
+export interface SimLimits {
+  tapped: number;
+  mana: number;
+  color: number;
+  colors: number[];
+}
+
+/** Indices into the limiter tally, in the order `diagnose` asks them. */
+const LIMIT_TAPPED = 0;
+const LIMIT_MANA = 1;
+const LIMIT_COLOR = 2;
+const LIMITS = 3;
+
+/**
+ * The turn a cost wants paying on. From the parsed cost rather than Scryfall's
+ * `cmc`, which sums both halves of a split card and so holds a two-mana Fire to
+ * turn four.
+ */
+const curveTurnFor = (cost: ParsedCost, maxTurn: number): number => Math.min(maxTurn, Math.max(1, Math.ceil(cost.mana)));
+
+/**
+ * The least mana that pays a cost at all: a two-brid pip paid in its color, a
+ * Phyrexian one in life. Below this no arrangement of colors helps.
+ */
+const leastMana = (cost: ParsedCost): number => {
+  let n = cost.generic;
+  for (const pip of cost.pips) n += pip.genericOut === null ? 1 : Math.min(1, pip.genericOut);
+  return n;
+};
 
 /** One printed cost in the deck, and how often the mana covered it. */
 export interface SimCostGroup {
@@ -311,6 +360,7 @@ export interface SimCostGroup {
   onCurvePay: number;
   /** Games behind the conditional at `curveTurn`. */
   sample: number;
+  limits: SimLimits;
 }
 
 /**
@@ -739,6 +789,37 @@ export function simulate(
       }
     }
     return total;
+  };
+
+  /**
+   * Why a cost the pool just refused was refused (B1). Only asked on a card's
+   * own turn and only when it failed, so it is a small fraction of the solves.
+   *
+   * Tapped first: this turn's pool plus every source that arrived this turn
+   * and comes online next turn, which at the pay check is the land drop (or
+   * the fetch) that came down tapped. Then total mana, then color.
+   */
+  const diagnose = (cost: ParsedCost, turn: number, available: number): { reason: number; short: number } => {
+    lateUnits.length = 0;
+    lateGroups.length = 0;
+    for (const u of units) lateUnits.push(u);
+    for (const g of unitGroups) lateGroups.push(g);
+    let late = 0;
+    for (let s = 0; s < srcLen; s++) {
+      if (srcOnline[s] !== turn + 1) continue;
+      const expires = srcExpires[s]!;
+      if (expires > 0 && turn + 1 > expires) continue;
+      const k = srcUnits[s]!;
+      late += k;
+      const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
+      if (srcOneColor[s] && k > 1) lateGroups.push({ colors: UNIT_BY_MASK[mask]!.colors, count: k });
+      else for (let u = 0; u < k; u++) lateUnits.push(UNIT_BY_MASK[mask]!);
+    }
+    if (late > 0 && canPay(cost, lateUnits, lateGroups)) return { reason: LIMIT_TAPPED, short: 0 };
+    if (available < leastMana(cost)) return { reason: LIMIT_MANA, short: 0 };
+    let short = 0;
+    for (const c of missingColors(cost, units, unitGroups)) short |= 1 << MASK_BITS.indexOf(c);
+    return { reason: LIMIT_COLOR, short };
   };
 
   /**
@@ -2425,6 +2506,28 @@ export function simulate(
   const castAt = new Uint32Array(n * stride);
   /** heldAt[card * stride + turn]: games where it first reached your hand then. */
   const heldAt = new Uint32Array(n * stride);
+  /**
+   * limitAt[card * LIMITS + reason]: games where the card was in hand on its
+   * own turn and the mana did not cover it, by reason. shortAt is the same
+   * games by the color that was short, over `WUBRGC`.
+   */
+  const limitAt = new Uint32Array(n * LIMITS);
+  const shortAt = new Uint32Array(n * COLORS);
+  /** The turn each card wants casting on, as `summarise` reads it. 0 for no cost. */
+  const curveOf = new Int32Array(n);
+  for (let i = 0; i < n; i++) {
+    const cost = cards[i]!.cost;
+    if (groupOf[i]! >= 0 && cost) curveOf[i] = curveTurnFor(cost, maxTurn);
+  }
+  /** One diagnosis per cost per turn, shared by every card in hand written at it. */
+  const limitStamp = new Int32Array(groups).fill(-1);
+  const limitReason = new Int32Array(groups);
+  const limitShort = new Int32Array(groups);
+  /** The last game each card was diagnosed in, so a second copy in hand is not a second game. */
+  const limitSeen = new Int32Array(n).fill(-1);
+  /** Scratch for the "had the tapped land been untapped" pool. */
+  const lateUnits: ManaUnit[] = [];
+  const lateGroups: UnitGroup[] = [];
   const manaSum = new Float64Array(stride);
   /** Mana actually committed to spells, against the mana that was there to commit. */
   const spentSum = new Float64Array(stride);
@@ -2982,7 +3085,22 @@ export function simulate(
           if (canPay(cost, units, unitGroups)) firstPay[g] = turn;
           else if (withRituals && !castsAsRitual(cards[index]!) && payableWithRituals(cost)) firstPay[g] = turn;
         }
-        if (firstPay[g] !== 0) firstCast[index] = turn;
+        if (firstPay[g] !== 0) {
+          firstCast[index] = turn;
+        } else if (turn === curveOf[index] && limitSeen[index] !== game) {
+          // In hand on its own turn and not payable: the limiter's one question.
+          // Once per card, not per copy in hand, because `heldAt` counts games.
+          limitSeen[index] = game;
+          if (limitStamp[g] !== stamp) {
+            limitStamp[g] = stamp;
+            const why = diagnose(cards[index]!.cost!, turn, available);
+            limitReason[g] = why.reason;
+            limitShort[g] = why.short;
+          }
+          limitAt[index * LIMITS + limitReason[g]!]!++;
+          const short = limitShort[g]!;
+          if (short) for (let c = 0; c < COLORS; c++) if (short & (1 << c)) shortAt[index * COLORS + c]!++;
+        }
       }
 
       // --- Spend the turn ---------------------------------------------------
@@ -3379,6 +3497,8 @@ export function simulate(
   return summarise(deck, opts, games, {
     castAt,
     heldAt,
+    limitAt,
+    shortAt,
     groupOf,
     stride,
     manaSum,
@@ -3573,6 +3693,8 @@ function pickDiscard(cards: SimCard[], hand: Int32Array, handLen: number): numbe
 interface Tallies {
   castAt: Uint32Array;
   heldAt: Uint32Array;
+  limitAt: Uint32Array;
+  shortAt: Uint32Array;
   groupOf: Int32Array;
   stride: number;
   manaSum: Float64Array;
@@ -3619,6 +3741,8 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
   const pending: Pending[] = [];
   const pooledHeld = new Map<number, Float64Array>();
   const pooledCast = new Map<number, Float64Array>();
+  /** Limiter counts per pool: `LIMITS` reasons, then `COLORS` short colors. */
+  const pooledLimit = new Map<number, Float64Array>();
 
   for (let i = 0; i < deck.cards.length; i++) {
     const card = deck.cards[i]!;
@@ -3637,9 +3761,7 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
       group: pool,
       held,
       cast,
-      // From the parsed cost rather than Scryfall's `cmc`, which sums both
-      // halves of a split card and so holds a two-mana Fire to turn four.
-      curveTurn: Math.min(opts.maxTurn, Math.max(1, Math.ceil(card.cost!.mana))),
+      curveTurn: curveTurnFor(card.cost!, opts.maxTurn),
       copies: card.copies + (card.commander ? 1 : 0),
     });
     const ph = pooledHeld.get(pool) ?? new Float64Array(stride);
@@ -3650,7 +3772,24 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     }
     pooledHeld.set(pool, ph);
     pooledCast.set(pool, pc);
+    const pl = pooledLimit.get(pool) ?? new Float64Array(LIMITS + COLORS);
+    for (let r = 0; r < LIMITS; r++) pl[r] = pl[r]! + t.limitAt[i * LIMITS + r]!;
+    for (let c = 0; c < COLORS; c++) pl[LIMITS + c] = pl[LIMITS + c]! + t.shortAt[i * COLORS + c]!;
+    pooledLimit.set(pool, pl);
   }
+
+  /** The limiter as shares of the games `onCurvePay` is out of. */
+  const pooledLimits = (g: number, curveTurn: number): SimLimits => {
+    const counts = pooledLimit.get(g)!;
+    const held = pooledHeld.get(g)![curveTurn]!;
+    const share = (x: number) => (held > 0 ? x / held : 0);
+    return {
+      tapped: share(counts[LIMIT_TAPPED]!),
+      mana: share(counts[LIMIT_MANA]!),
+      color: share(counts[LIMIT_COLOR]!),
+      colors: Array.from({ length: COLORS }, (_c, c) => share(counts[LIMITS + c]!)),
+    };
+  };
 
   /** Pooled P(payable | held), which is 0 where nothing was ever held to ask. */
   const pooledPay = (g: number): number[] => {
@@ -3671,6 +3810,7 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
   for (const p of pending) {
     const payByTurn = pooledPay(p.group);
     const onCurvePay = payByTurn[p.curveTurn]!;
+    const limits = pooledLimits(p.group, p.curveTurn);
     const heldByTurn = [0, ...[...p.held].slice(1).map((count) => count * per)];
     const castByTurn = [0, ...[...p.cast].slice(1).map((count) => count * per)];
     (p.card.commander ? commanders : results).push({
@@ -3687,6 +3827,7 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
       onCurvePay,
       onCurveCast: castByTurn[p.curveTurn]!,
       paySample: pooledHeld.get(p.group)![p.curveTurn]!,
+      limits,
     });
     weight += p.copies;
     weighted += p.copies * onCurvePay;
@@ -3709,6 +3850,7 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
       payByTurn,
       onCurvePay,
       sample: pooledHeld.get(p.group)![p.curveTurn]!,
+      limits,
     };
     byGroup.set(p.group, row);
     costs.push(row);

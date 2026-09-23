@@ -4877,6 +4877,67 @@ button.primary {
   color: var(--text-dim);
 }
 
+/* Cast on time (rebuild plan B1): one row per late cost, and the reason it
+   was late. A table rather than the row cards, because the four columns are
+   the point: the eye runs down "held back by" to see which fix to reach for. */
+.cast-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin: 0.4rem 0;
+}
+.cast-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding: 0.25rem 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+.cast-table td {
+  padding: 0.4rem 0.3rem;
+  border-bottom: 1px solid var(--surface-2);
+  vertical-align: baseline;
+}
+.cast-table .cast-p {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cast-table td.cast-p {
+  font-weight: 700;
+}
+.cast-table td.tone-ok {
+  color: var(--ok);
+}
+.cast-table td.cast-late {
+  color: #e6a23c;
+}
+.cast-turn {
+  font-variant-numeric: tabular-nums;
+}
+.cast-name {
+  font-weight: 600;
+}
+.cast-note {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+.cast-limit {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+/* Color is the one reason the collection fixes below answer, so it is the one
+   that gets the amber: it points at the panel that can do something about it. */
+.cast-limit-color {
+  background: rgba(230, 162, 60, 0.16);
+  color: #e6a23c;
+}
+
 /* Mana fixes: the same row shape as the shortfalls above them, except every
    row is a button — the whole point is that the fix is one tap away — and the
    copy count leads instead of trailing, because "+2" is what you're deciding. */

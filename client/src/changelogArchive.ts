@@ -9,6 +9,21 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.158.4',
+    changes: [
+      {
+        kind: 'fixed',
+        text:
+          'Ramp spells were ramping twice once you wrote a rule for them. Harrow, Into the North, Three Visits and the rest are read as land ramp off the mana data, not the oracle text, so the card behavior screen filed them under "nothing read yet" and the simulator fetched a land anyway. They now say what the database reads, and your own rule replaces it instead of stacking on top.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'A move step with criteria took the topmost match in your library rather than a random one, so the copy that left was always the copy you would have drawn soonest. Worth about 6% of a ramp deck\'s mana by turn six.',
+      },
+    ],
+  },
+  {
     version: '0.158.3',
     changes: [
       {

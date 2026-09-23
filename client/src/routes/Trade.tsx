@@ -534,10 +534,26 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const iConfirmed = snap.confirmed[seat];
   const peerConfirmed = snap.confirmed[peer];
 
+  if (snap.state === 'completed' && trade.applyState === 'failed') {
+    return (
+      <Page title="Trade not saved">
+        <p className="gate-msg">
+          The trade went through, but this device couldn't write it to your collection. Nothing changed here yet.
+        </p>
+        <div className="trade-actions">
+          <button className="primary" onClick={trade.retryApply}>
+            Retry
+          </button>
+        </div>
+      </Page>
+    );
+  }
   if (snap.state === 'completed') {
     return (
       <Page title="Trade complete 🎉">
-        <p className="gate-msg">Your collection has been updated.</p>
+        <p className="gate-msg">
+          {trade.applyState === 'applied' ? 'Your collection has been updated.' : 'Updating your collection…'}
+        </p>
         {tradeConflicts.length > 0 && (
           <p className="gate-msg">
             <Link to="/conflicts" state={{ tradedKeys: tradeConflicts.map((c) => collectionKey(c)) }}>

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.172.1
+
+- **Fixed: trades that didn't stick.** Since 0.158.0, a trade where you gave away a card filed in a deck or binder showed "Trade complete" but changed nothing: the cards stayed in your collection and the trade never reached your history. Those trades now save. If writing a trade ever fails again, the app says so and offers Retry instead of celebrating. A trade lost to this bug wasn't recorded anywhere on your device, so it has to be entered again by hand.
+
 ## 0.172.0
 
 - **Added: rules you don't have to write.** About 50 well-known cards the card database can't read now come with a rule already written for them: Craterhoof Behemoth, Ashaya, Everflowing Chalice, Rampaging Baloths, Beast Whisperer, Guardian Project, Primeval Titan, Grave Titan, the enchantresses, Reliquary Tower and more. Open one on the Model tab and *Written for this card* offers it; *Use this*, then save. In the list, such a card shows the rule under its name, and one that would fold away under *Right as nothing* is listed under *Ready to use* instead (which also holds rules from your other decks). They are written to err low: Welcoming Vampire's "once each turn" and similar clauses were left out rather than guessed.

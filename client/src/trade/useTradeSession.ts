@@ -42,6 +42,10 @@ export interface TradeSession {
   /** No partner, no relay: we sit in seat 'a' and record both sides ourselves. */
   solo: boolean;
   error: string | null;
+  /** Whether a completed trade made it into this device's collection. */
+  applyState: ApplyState;
+  /** Try writing a completed trade to the collection again after a failure. */
+  retryApply: () => void;
   /** Partner's tradelist, if they've answered a request. null = never asked/answered. */
   peerTradelist: TradeLine[] | null;
   /** True while a tradelist request is in flight. */
@@ -65,6 +69,8 @@ export interface TradeSession {
   cancel: () => void;
   reset: () => void;
 }
+
+export type ApplyState = 'pending' | 'applied' | 'failed';
 
 /** The relay caps shared lists at 500 lines (server maxOfferLines). */
 const SHARE_LINE_CAP = 500;
@@ -111,6 +117,7 @@ export function useTradeSession(): TradeSession {
   const [peerTradelistLoading, setPeerTradelistLoading] = useState(false);
   const [peerWishlist, setPeerWishlist] = useState<WishLine[] | null>(null);
   const [solo, setSolo] = useState(false);
+  const [applyState, setApplyState] = useState<ApplyState>('pending');
 
   const ws = useRef<WebSocket | null>(null);
   // The handshake message a fresh create/join/resume was started with, kept so
@@ -122,6 +129,8 @@ export function useTradeSession(): TradeSession {
   const soloSnap = useRef<SessionSnapshot | null>(null);
   const active = useRef<Partial<ActiveTrade>>({});
   const appliedRef = useRef(false);
+  // Re-runs a failed apply (the Retry button); null when nothing has failed.
+  const retryRef = useRef<(() => void) | null>(null);
   const intentionalClose = useRef(false);
   // Pending auto-resume timer (stored so reset/unmount/reconnect can cancel it —
   // a fire-and-forget timer would revive a torn-down session) + attempt counter.
@@ -163,6 +172,34 @@ export function useTradeSession(): TradeSession {
     });
   }, []);
 
+  /**
+   * Write a completed trade to the collection. A failure is shown, not dropped:
+   * the trade stays persisted (so resuming it re-delivers `completed` and tries
+   * again) and Retry is offered. onApplied runs only once it's actually written.
+   */
+  const runApply = useCallback(
+    (sessionId: string, given: TradeLine[], received: TradeLine[], partner: string | null, onApplied: () => void) => {
+      const attempt = () => {
+        setApplyState('pending');
+        applyCompletedTrade(sessionId, given, received, partner).then(
+          () => {
+            retryRef.current = null;
+            setApplyState('applied');
+            onApplied();
+          },
+          (err: unknown) => {
+            console.error('Applying the completed trade failed', err);
+            retryRef.current = attempt;
+            setApplyState('failed');
+          },
+        );
+      };
+      attempt();
+    },
+    [],
+  );
+  const retryApply = useCallback(() => retryRef.current?.(), []);
+
   const handleSnapshot = useCallback(
     (raw: SessionSnapshot, mySeat: Seat) => {
       // The peer is untrusted — sanitize both offers before anything uses them.
@@ -179,13 +216,11 @@ export function useTradeSession(): TradeSession {
         appliedRef.current = true;
         const given = snap.offers[mySeat];
         const received = snap.offers[otherSeat(mySeat)];
-        void applyCompletedTrade(snap.sessionId, given, received, peerUsername.current).finally(
-          () => void clearPersisted(),
-        );
+        runApply(snap.sessionId, given, received, peerUsername.current, () => void clearPersisted());
       }
       if (snap.state === 'cancelled') void clearPersisted();
     },
-    [clearPersisted, sendIdentity],
+    [clearPersisted, sendIdentity, runApply],
   );
 
   const onMessage = useCallback(
@@ -362,16 +397,14 @@ export function useTradeSession(): TradeSession {
     setSnapshot(next);
     if (next.state === 'completed' && !appliedRef.current) {
       appliedRef.current = true;
-      void applyCompletedTrade(next.sessionId, next.offers.a, next.offers.b, null).finally(
-        () => void clearPersistedSoloTrade(),
-      );
+      runApply(next.sessionId, next.offers.a, next.offers.b, null, () => void clearPersistedSoloTrade());
       return;
     }
     // A solo trade lives entirely on this device, so the snapshot *is* the
     // session: mirror every edit, and only let go once it's done or called off.
     if (next.state === 'completed' || next.state === 'cancelled') void clearPersistedSoloTrade();
     else void setSetting(SOLO_KEY, next);
-  }, []);
+  }, [runApply]);
 
   /** Drop any live socket and hand the board to a solo snapshot (fresh or restored). */
   const enterSolo = useCallback(
@@ -490,6 +523,8 @@ export function useTradeSession(): TradeSession {
     ws.current = null;
     active.current = {};
     appliedRef.current = false;
+    retryRef.current = null;
+    setApplyState('pending');
     stateRef.current = null;
     peerUsername.current = null;
     sentIdentity.current = false;
@@ -541,5 +576,5 @@ export function useTradeSession(): TradeSession {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [connect]);
 
-  return { status, seat, snapshot, peerPresent, solo, error, peerTradelist, peerTradelistLoading, peerWishlist, create, startSolo, resumeSolo, join, resume, sendOffer, requestTradelist, requestWishlist, accept, unaccept, confirmComplete, cancel, reset };
+  return { status, seat, snapshot, peerPresent, solo, error, applyState, retryApply, peerTradelist, peerTradelistLoading, peerWishlist, create, startSolo, resumeSolo, join, resume, sendOffer, requestTradelist, requestWishlist, accept, unaccept, confirmComplete, cancel, reset };
 }

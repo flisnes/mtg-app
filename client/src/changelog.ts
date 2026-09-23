@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.172.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text:
+          'Trades that gave away a card filed in a deck or binder said "Trade complete" but changed nothing. They save now, and a failed save shows a Retry button.',
+      },
+    ],
+  },
+  {
     version: '0.172.0',
     changes: [
       {

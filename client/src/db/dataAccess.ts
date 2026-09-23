@@ -2436,7 +2436,11 @@ export async function applyCompletedTrade(
   const prices = await getPricesByIds([...given, ...received].map((l) => l.scryfallId));
   const centsOf = (scryfallId: string, finish: Finish) => acquisitionCents(prices.get(scryfallId), finish);
 
-  return db.transaction('rw', [db.collection, db.wishlist, db.trades, db.events, db.outbox, db.decks, db.deckCards], async () => {
+  // DECK_TABLES in full, not a hand-picked subset: reconcileFilingAfterTrade
+  // opens a nested DECK_TABLES transaction, and Dexie aborts the whole trade if
+  // that names a table this one doesn't (v0.158.0 added deckBehaviors and every
+  // trade giving away a filed card silently rolled back).
+  return db.transaction('rw', [...DECK_TABLES, db.wishlist, db.trades], async () => {
     if (await db.trades.get(sessionId)) return { applied: false }; // already applied
 
     const entries = await db.collection.toArray();
@@ -2624,7 +2628,7 @@ export type UndoResult =
   | { undone: true; events: UserEvent[]; trade?: Trade }
   | { undone: false; reason: 'gone' | 'conflict' };
 
-const UNDO_TABLES = [db.collection, db.wishlist, db.decks, db.deckCards, db.trades, db.events, db.outbox];
+const UNDO_TABLES = [...DECK_TABLES, db.wishlist, db.trades];
 
 /** The copy an event was about, as a row lookup. Events written before special
  *  conditions existed name no specials, which is exactly the ordinary copy. */

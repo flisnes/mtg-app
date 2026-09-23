@@ -32,6 +32,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.165.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Flow opens on Screw and flood: how often you are screwed or flooded by turn six, a turn-by-turn table, and how much mana you really have on any turn ("at least 6 on turn 6 in 33% of games").',
+      },
+    ],
+  },
+  {
     version: '0.164.0',
     changes: [
       {
@@ -238,21 +248,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'The card behavior editor shows the card. Writing a rule means reading the card, and reading it off a name alone was a memory test.',
-      },
-    ],
-  },
-  {
-    version: '0.158.5',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Card behavior can now say "the previous X": the number the step before it actually reached. That is what a Windfall needs, since the hand it draws for is already in the graveyard by the time it draws.',
-      },
-      {
-        kind: 'added',
-        text:
-          'Any amount can be adjusted: plus, minus, times or divided by a number. Dark Deal is the previous X minus 1, Peer Into the Abyss is your library divided by 2. "Cards in your library" is a new amount too.',
       },
     ],
   },

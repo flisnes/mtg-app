@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.165.0
+
+- **Added: Screw and flood, at the top of the Flow tab.** The mana chart is an average, and an average of 4.7 mana on turn six hides the game stuck on three lands and the one drowning on eight. Now every simulated turn is sorted: *screwed* (two or more mana behind the turn number, holding a spell you can't afford), *flooded* (two or more mana left over and nothing in hand to spend it on) or neither. The headline says how often you are screwed or flooded at least once by turn six, how many turns you cast nothing, and how much mana goes unspent. A table gives each turn, with how often you are on curve for mana.
+- **Added: how much mana, not just how much on average.** Pick a turn and see the odds of having at least 1, 2, 3... mana on it: "at least 6 mana on turn 6 in 33% of games, 4 or less in 39%".
+- **Changed: the Overview's Flow row reads the same numbers.** It warns when you are screwed or flooded by turn six in more than three games of ten, instead of only looking at the third land drop.
+
 ## 0.164.0
 
 - **Changed: one answer to "can I cast it on time".** The Mana tab used to give a card three numbers from two different calculations: an exact colored-source check ("2 red sources short"), the share of sources in play, and the simulated On curve odds. They disagreed whenever a card was short on mana rather than on color. Now *Cast on time* leads the tab with one table: your commander, then every cost that misses 90% on its own turn, and a *Held back by* column saying why. *Total mana* means more lands or ramp, and a dual will not help. *A color* (say, *red sources*) means more of that color. *Taplands* means the land you played that turn came down tapped. Pick any card under the table for its odds turn by turn and the full breakdown.

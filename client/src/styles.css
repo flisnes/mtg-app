@@ -4916,6 +4916,11 @@ button.primary {
 .cast-turn {
   font-variant-numeric: tabular-nums;
 }
+/* Screw and flood (B2): the turn the verdict is read on, marked. */
+.flow-table .flow-row-mark td {
+  background: var(--surface-2);
+  font-weight: 600;
+}
 .cast-name {
   font-weight: 600;
 }

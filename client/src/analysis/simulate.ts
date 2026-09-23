@@ -329,6 +329,10 @@ const LIMIT_TAPPED = 0;
 const LIMIT_MANA = 1;
 const LIMIT_COLOR = 2;
 const LIMITS = 3;
+/** Mana histogram width: 0..14 and "15 or more". Nothing in eight turns reads past it. */
+export const MANA_BINS = 16;
+/** Unspent mana that makes a turn with an empty hand a flooded one. One is rounding. */
+const FLOOD_UNSPENT = 2;
 
 /**
  * The turn a cost wants paying on. From the parsed cost rather than Scryfall's
@@ -425,6 +429,30 @@ export interface SimResult {
   handSizeByTurn: number[];
   /** P(you had a land to play), indexed by turn. */
   landDropByTurn: number[];
+  /**
+   * The turn itself, sorted (rebuild plan B2). Each is P(this turn was one),
+   * indexed by turn, and the `*Ever` pair is P(at least one by then).
+   *
+   * Screwed: two or more mana behind the turn number, holding a spell that
+   * costs more than you have. One behind is most Commander turn sixes and not
+   * worth a name; behind with nothing to cast costs you nothing.
+   *
+   * Flooded: two or more mana unspent and nothing left in hand to spend it on.
+   * An empty hand counts, since the fix is the same: more cards.
+   *
+   * Idle: nothing cast at all. The land drop alone does not count.
+   */
+  screwByTurn: number[];
+  floodByTurn: number[];
+  idleByTurn: number[];
+  screwEverByTurn: number[];
+  floodEverByTurn: number[];
+  /**
+   * P(at least k mana available on turn t), `[turn][k]`, k from 0 to
+   * `MANA_BINS - 1` (the last bin is "that many or more"). The distribution
+   * behind `manaByTurn`'s mean: "7 mana by turn 6 in 38% of games".
+   */
+  manaAtLeast: number[][];
   /**
    * Mean sources on the battlefield making each color, `[color][turn]` over
    * `WUBRGC`, sampled after the land drop and before the turn's mana is spent
@@ -2536,6 +2564,14 @@ export function simulate(
   /** Cards still in hand at end of turn, once the turn's spells have left it. */
   const handSum = new Float64Array(stride);
   const landDrops = new Uint32Array(stride);
+  /** Turns sorted into screwed / flooded / idle, and the first of each per game. See SimResult. */
+  const screwAt = new Uint32Array(stride);
+  const floodAt = new Uint32Array(stride);
+  const idleAt = new Uint32Array(stride);
+  const screwFirst = new Uint32Array(stride);
+  const floodFirst = new Uint32Array(stride);
+  /** manaHist[turn * MANA_BINS + mana]: games with exactly that much available (last bin: or more). */
+  const manaHist = new Uint32Array(stride * MANA_BINS);
   /**
    * sourceSum[color * stride + turn]: sources on the battlefield that turn able
    * to make that color, over `WUBRGC`. Written in the pool walk, so what is
@@ -2805,6 +2841,8 @@ export function simulate(
     extraLands = 0;
     colorsHeld = 0;
     handLen = 0;
+    let gameScrewed = false;
+    let gameFlooded = false;
     libLen = deckSize;
     top = 0;
     seen = 0;
@@ -3124,6 +3162,7 @@ export function simulate(
       // just finished asking about. Null in every deck that holds none.
       const ritualGoal = withRituals ? ritualTarget(available) : null;
       let spent = 0;
+      let castCount = 0;
       /** How many instants the turn refused to cast, for the trace's last word. */
       let held = 0;
       for (let cast = 0; cast < MAX_CASTS_PER_TURN; cast++) {
@@ -3240,6 +3279,7 @@ export function simulate(
         }
         paid.mana += card.cost!.mana;
         spent += card.cost!.mana;
+        castCount++;
         hand[pick] = hand[--handLen]!;
 
         // --- X ----------------------------------------------------------
@@ -3469,6 +3509,32 @@ export function simulate(
       combatSum[turn] = combatSum[turn]! + gameCombat;
       manaSum[turn] = manaSum[turn]! + available;
       spentSum[turn] = spentSum[turn]! + spent;
+      manaHist[turn * MANA_BINS + Math.min(Math.floor(available), MANA_BINS - 1)]!++;
+      // The turn, sorted. Read off the hand as the turn leaves it: a spell
+      // still there is one the mana did not reach (or the policy is holding,
+      // which is a choice and never a flood).
+      let spellsLeft = 0;
+      let tooDear = 0;
+      for (let i = 0; i < handLen; i++) {
+        const card = cards[hand[i]!]!;
+        if (!card.spell || !card.cost) continue;
+        spellsLeft++;
+        if (card.cost.mana > available) tooDear++;
+      }
+      if (castCount === 0) idleAt[turn]!++;
+      if (available <= turn - 2 && tooDear > 0) {
+        screwAt[turn]!++;
+        if (!gameScrewed) {
+          gameScrewed = true;
+          screwFirst[turn]!++;
+        }
+      } else if (spellsLeft === 0 && available - spent >= FLOOD_UNSPENT) {
+        floodAt[turn]!++;
+        if (!gameFlooded) {
+          gameFlooded = true;
+          floodFirst[turn]!++;
+        }
+      }
       seenSum[turn] = seenSum[turn]! + seen;
       handSum[turn] = handSum[turn]! + handLen;
       // `seen` is cumulative within a game, so its decomposition has to be too:
@@ -3506,6 +3572,12 @@ export function simulate(
     seenSum,
     handSum,
     landDrops,
+    screwAt,
+    floodAt,
+    idleAt,
+    screwFirst,
+    floodFirst,
+    manaHist,
     sourceSum,
     sourcesInPlay,
     damageSum,
@@ -3702,6 +3774,12 @@ interface Tallies {
   seenSum: Float64Array;
   handSum: Float64Array;
   landDrops: Uint32Array;
+  screwAt: Uint32Array;
+  floodAt: Uint32Array;
+  idleAt: Uint32Array;
+  screwFirst: Uint32Array;
+  floodFirst: Uint32Array;
+  manaHist: Uint32Array;
   sourceSum: Float64Array;
   sourcesInPlay: Float64Array;
   damageSum: Float64Array;
@@ -3918,6 +3996,20 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     cardsSeenByTurn: [...seenSum].map((sum) => sum * per),
     handSizeByTurn: [...handSum].map((sum) => sum * per),
     landDropByTurn: [...landDrops].map((count) => count * per),
+    screwByTurn: [...t.screwAt].map((count) => count * per),
+    floodByTurn: [...t.floodAt].map((count) => count * per),
+    idleByTurn: [...t.idleAt].map((count) => count * per),
+    screwEverByTurn: [...cumulative(t.screwFirst, 0)].map((count) => count * per),
+    floodEverByTurn: [...cumulative(t.floodFirst, 0)].map((count) => count * per),
+    manaAtLeast: Array.from({ length: stride }, (_t, turn) => {
+      const out = new Array<number>(MANA_BINS).fill(0);
+      let cum = 0;
+      for (let k = MANA_BINS - 1; k >= 0; k--) {
+        cum += t.manaHist[turn * MANA_BINS + k]!;
+        out[k] = cum * per;
+      }
+      return out;
+    }),
     sourcesByTurn: Array.from({ length: COLORS }, (_c, color) =>
       Array.from({ length: stride }, (_t, turn) => sourceSum[color * stride + turn]! * per),
     ),

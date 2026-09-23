@@ -1,4 +1,4 @@
-// The older half of the changelog (0.158.3 down to 0.98.0), split out of
+// The older half of the changelog (0.158.5 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,21 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.158.5',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Card behavior can now say "the previous X": the number the step before it actually reached. That is what a Windfall needs, since the hand it draws for is already in the graveyard by the time it draws.',
+      },
+      {
+        kind: 'added',
+        text:
+          'Any amount can be adjusted: plus, minus, times or divided by a number. Dark Deal is the previous X minus 1, Peer Into the Abyss is your library divided by 2. "Cards in your library" is a new amount too.',
+      },
+    ],
+  },
   {
     version: '0.158.4',
     changes: [

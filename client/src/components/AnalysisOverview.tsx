@@ -4,6 +4,7 @@ import { shortfallHeadline, type ManaReport } from '../analysis/manaSources.js';
 import type { SimLimits, SimResult } from '../analysis/simulate.js';
 import { heldBackBy } from './OnCurvePanel.js';
 import type { SimCoverage } from '../analysis/simDeck.js';
+import { FLOW_TURN } from './FlowTurnsPanel.js';
 
 // The Overview tab (rebuild plan A5): one row per question, each a status, a
 // sentence and the next thing to do, and each a way into the tab with the
@@ -14,10 +15,9 @@ import type { SimCoverage } from '../analysis/simDeck.js';
 
 /** The bar every cost is read against, the same one On curve uses. */
 const THRESHOLD = 0.9;
-/** The turn Flow is judged on: late enough for the curve to be out, early enough to matter. */
-const FLOW_TURN = 6;
-/** Missing the third land drop more often than this is a deck that stumbles. */
-const MISS_THIRD = 0.3;
+/** Screwed (or flooded) at least once by turn six in more games than this is worth a warning. */
+const SCREW = 0.3;
+const FLOOD = 0.3;
 /** Mana left on the table on turn six worth saying out loud. */
 const UNSPENT = 2;
 
@@ -168,9 +168,10 @@ function fixFor(limits: SimLimits): string {
 }
 
 /**
- * Does the deck keep doing things. Three ways it stops: it misses land drops
+ * Does the deck keep doing things. Three ways it stops: it falls behind on mana
  * (screw), it has mana and nothing to spend it on (flood, or cards the model
- * cannot read), or it runs out of cards. The first one found leads.
+ * cannot read), or it runs out of cards. The first one found leads. Screw and
+ * flood are the Flow tab's own numbers, read on the same turn.
  */
 function flowAnswer(result: SimResult | undefined, hasManaData: boolean, games: number): Answer {
   if (!hasManaData) return noData;
@@ -179,16 +180,19 @@ function flowAnswer(result: SimResult | undefined, hasManaData: boolean, games: 
   const mana = result.manaByTurn[t] ?? 0;
   const spent = result.manaSpentByTurn[t] ?? 0;
   const hand = result.handSizeByTurn[t] ?? 0;
-  const seen = result.cardsSeenByTurn[t] ?? 0;
-  const missThird = 1 - (result.landDropByTurn[3] ?? 1);
-  const facts = `By turn ${t} you have seen ${one(seen)} cards, hold ${one(hand)} and spend ${one(spent)} of ${one(mana)} mana.`;
+  const screw = result.screwEverByTurn[t] ?? 0;
+  const flood = result.floodEverByTurn[t] ?? 0;
+  const facts = `By turn ${t} you are screwed at least once in ${pct(screw)} of games and flooded in ${pct(flood)}; on turn ${t} you hold ${one(hand)} cards and spend ${one(spent)} of ${one(mana)} mana.`;
 
-  if (missThird > MISS_THIRD) {
+  if (screw > SCREW) {
+    return { tone: 'warn', status: 'screws', text: facts, next: 'More lands or cheap ramp.' };
+  }
+  if (flood > FLOOD) {
     return {
       tone: 'warn',
-      status: 'stumbles',
-      text: `You miss your third land drop in ${pct(missThird)} of games. ${facts}`,
-      next: 'More lands or cheap ramp.',
+      status: 'floods',
+      text: facts,
+      next: 'More card draw or mana sinks, or model the cards that should be finding you some.',
     };
   }
   if (mana - spent >= UNSPENT) {

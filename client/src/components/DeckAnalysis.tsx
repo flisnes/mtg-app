@@ -8,6 +8,7 @@ import { ColorSourcesPanel } from './ColorSourcesPanel.js';
 import { ManaFixPanel } from './ManaFixPanel.js';
 import { heldBackBy, OnCurvePanel } from './OnCurvePanel.js';
 import { ContributionsSheet } from './ContributionsSheet.js';
+import { FlowTurnsPanel } from './FlowTurnsPanel.js';
 import { DeckTrajectory } from './DeckTrajectory.js';
 import { GameTraceSheet } from './GameTraceSheet.js';
 import { CardBehaviorPanel } from './CardBehaviorPanel.js';
@@ -471,6 +472,7 @@ export function DeckAnalysis({
 
         {tab === 'flow' && (
           <>
+            {simDeck.hasManaData && simResult && <FlowTurnsPanel result={simResult} />}
             <h3 className="deck-stats-head">How the game unfolds</h3>
             {!simDeck.hasManaData ? (
               <p className="fine-print">Your card database predates this data. Refresh it from About to see how this deck plays out.</p>

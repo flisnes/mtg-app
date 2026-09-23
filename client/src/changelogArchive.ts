@@ -1,4 +1,4 @@
-// The older half of the changelog (0.158.2 down to 0.98.0), split out of
+// The older half of the changelog (0.158.3 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,25 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.158.3',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Card behavior can put cards on the top or the bottom of your library, and a card can talk about itself. A tutor that puts the card on top, a spell that exiles itself instead of hitting the graveyard, a Green Sun\'s Zenith that shuffles back in: all one step now.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'A card put into the library on its own lands in a random spot, which is what shuffling it back in means. Top and bottom go where they say, and several cards sent to either arrive in a random order.',
+      },
+      {
+        kind: 'fixed',
+        text: 'Moving a card back into the library used to drop it in most decks. It goes back in now.',
+      },
+    ],
+  },
   {
     version: '0.158.2',
     changes: [

@@ -46,6 +46,7 @@ import { ManaCost } from './ManaCost.js';
 import { setCardBehavior } from '../db/dataAccess.js';
 import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '../cardDb/querySyntax.js';
 import type { GroupRow } from '../analysis/groups.js';
+import { HowWorked } from './HowWorked.js';
 import {
   COMBAT_POLICIES,
   INTERACTION_POLICIES,
@@ -198,7 +199,7 @@ function playsOutAs(card: BehaviorCard, preview: readonly BehaviorRule[]): strin
   if (derived) return `${PLAY_LEAD}: ${derived}, read from the card`;
   // A Forest is not a blank, it is a Forest. The line under this one says so.
   if (card.source) return 'Nothing beyond what it is.';
-  return 'Nothing. This card resolves as a blank.';
+  return 'Nothing. In the simulator this card does nothing.';
 }
 
 /** How many of the deck's distinct cards a move step's criteria would find. */
@@ -340,19 +341,22 @@ function BehaviorList({
       <PolicyPicker policy={policy} onPolicy={onPolicy} />
       <h4 className="deck-stats-head">What each card does</h4>
       <p className="fine-print">
-        The card database reads oracle text conservatively: only what a card does unconditionally, on resolution, to you. Anything
-        behind a trigger or an "if" reaches the simulator as a blank. Tell it what a card really does and it plays it out. A
-        behavior covers your hand, library, graveyard and exile, and can move cards between them with the same search syntax the
-        card search uses. Your rules replace what the database read the card as <em>doing</em>; what the card <em>is</em> stays, so
-        lands still make their mana whatever it says here.
+        The card database only reads what a card always does for you as it resolves. Anything behind a trigger or an "if" does
+        nothing in the simulator until you write it here.
       </p>
-      <Section title={`Your own (${authored.length})`} cards={authored} onOpen={onOpen} />
-      <Section title={`Nothing read yet (${blank.length})`} cards={blank} onOpen={onOpen} />
-      <Section title={`Read from the card (${read.length})`} cards={read} onOpen={onOpen} />
-      <p className="fine-print">
-        Authored cards play out exactly as written, which means the trajectory curves stop being a pure floor for this deck. The
-        coverage line under the charts says how many, so the number stays honest either way.
-      </p>
+      <HowWorked>
+        <p className="fine-print">
+          A rule can touch your hand, library, graveyard, exile and battlefield, and moves cards between them with the card search
+          syntax. It replaces what the card <em>does</em>; what the card <em>is</em> stays, so a land still makes its mana.
+        </p>
+        <p className="fine-print">
+          Cards you write play out exactly as written, so for this deck the curves stop being a pure floor. The chip at the top
+          says how many of your cards the simulator plays out.
+        </p>
+      </HowWorked>
+      <Section title={`Yours (${authored.length})`} cards={authored} onOpen={onOpen} />
+      <Section title={`Does nothing yet (${blank.length})`} cards={blank} onOpen={onOpen} />
+      <Section title={`From the card's text (${read.length})`} cards={read} onOpen={onOpen} />
     </>
   );
 }
@@ -396,8 +400,8 @@ function PolicyPicker({ policy, onPolicy }: { policy: SimPolicy; onPolicy: (poli
         />
       </div>
       <p className="fine-print">
-        The goldfish has no opponent, so these are about your own sequencing and nothing else. Change one and every number in the
-        stats sheet moves with it, which is the point: a percentage is only worth reading under a policy you would have played.
+        Nobody is across the table, so these are about your own sequencing. Every simulated number follows them: pick the way you
+        would actually play.
       </p>
     </>
   );
@@ -556,46 +560,39 @@ function BehaviorEditor({
           not editable here, but what replaces it has to be said out loud. */}
       {card.ramp && (
         <p className="fine-print">
-          The card database already reads this one as land ramp: <em>{card.ramp}</em>. It does not say <em>which</em> land, so the
-          simulator takes whichever one best fixes your colours. Write your own rule and it replaces that reading, so put the ramp
-          in as a step if you want it. What the card <em>is</em> stays either way: a land still makes its mana and a rock still
-          taps for it.
+          The card database reads this as land ramp: <em>{card.ramp}</em>. The simulator picks whichever land best fixes your
+          colors. A rule of yours replaces that, so add the ramp as a step if you still want it.
         </p>
       )}
       {card.fetch && (
         <p className="fine-print">
-          The card database already reads this one as a fetchland: <em>{card.fetch}</em>. It does not say <em>which</em> land, so
-          the simulator takes whichever one best fixes your colours. Write your own rule and it replaces that search, so put it in
-          as a step if you want it. Until this release a rule written here never fired at all.
+          The card database reads this as a fetchland: <em>{card.fetch}</em>. The simulator fetches whichever land best fixes your
+          colors. A rule of yours replaces that search, so add it as a step if you still want it.
         </p>
       )}
       {card.ritual && (
         <p className="fine-print">
-          The card database already reads this one as a ritual: <em>{card.ritual}</em>. The mana lands in your mana pool for the
-          turn you cast it and is gone at the end of it, so the simulator only casts it when something else in hand is waiting on
-          exactly that much mana. Write your own rule and it replaces that reading, so put an "Add X mana" step in if you want it
-          back; a step adds mana of any color, where the card database keeps the colors the card prints.
+          The card database reads this as a ritual: <em>{card.ritual}</em>. The mana is gone at end of turn, so the simulator only
+          casts it when something in hand needs that mana now. A rule of yours replaces that; an "Add X mana" step makes mana of
+          any color.
         </p>
       )}
       {card.extraLand && (
         <p className="fine-print">
-          The card database already reads this one as extra land drops: <em>{card.extraLand}</em>. It is worth a drop only while
-          you have a spare land in hand, which is a fact about the game and not about the card, so the coverage line counts it
-          apart from the ramp it sums. Write your own rule and it replaces that reading entirely, which is how you say a card does
-          not do this.
+          The card database reads this as extra land drops: <em>{card.extraLand}</em>. They only count when you have a spare land
+          in hand. A rule of yours replaces that entirely, which is also how you say the card does not do this.
         </p>
       )}
       {card.source && (
         <p className="fine-print">
-          What this card <em>is</em>: <em>{card.source}</em>. That comes off the type line and the printed ability rather than
-          off a reading of the text, so a rule written here does not replace it — a Llanowar Elves taps for green whatever else
-          you tell it to do. It is listed so that everything the simulator gives this card is in one place.
+          What this card <em>is</em>: <em>{card.source}</em>. That comes from the type line and the printed mana ability, so no
+          rule here replaces it: a Llanowar Elves taps for green whatever else you tell it to do.
         </p>
       )}
       {!card.derived && !card.ramp && !card.fetch && !card.ritual && !card.extraLand && !card.source && !card.authored && (
         <p className="fine-print">
-          The card database reads nothing unconditional off this one, so it currently resolves as a blank. Add a rule and it stops
-          being one.
+          The card database finds nothing on this card it can play out, so in the simulator it does nothing. Add a rule and it
+          will.
         </p>
       )}
 
@@ -955,7 +952,7 @@ function RuleEditor({
               left is what that hint does not say: where the syntax comes from,
               what blank means, and where the chain stops. */}
           <p className="fine-print">
-            Card search syntax, matched against this deck, same as a move step's. Blank means anything wakes it. Triggers chain
+            Card search syntax, matched against this deck, same as a move step's. Leave it empty and anything wakes it. Triggers chain
             two deep, so an engine that feeds itself stops rather than spinning.
           </p>
         </div>
@@ -1087,7 +1084,7 @@ function RuleEditor({
                   {colors.length === 1
                     ? 'Every mana this adds is that color, the way a Dark Ritual adds three black.'
                     : step.oneColor
-                      ? 'One color, picked as it resolves, and all of the mana is that one — a Lotus Field, not a Burnt Offering.'
+                      ? 'One color, picked as it resolves, and all of the mana is that one: a Lotus Field, not a Burnt Offering.'
                       : 'Each mana can be any of these, picked as it is spent. All five is any color, which is the default.'}
                 </span>
               </div>
@@ -1132,62 +1129,68 @@ function RuleEditor({
         );
       })}
 
-      {rule.steps.some((s) => s.op === 'move' || s.op === 'flicker') && (
-        <p className="fine-print">
-          Criteria use the card search syntax, matched against this deck: <code>t:basic</code>, <code>t:creature mv&lt;=3</code>,{' '}
-          <code>o:"draw a card"</code>. Leave it blank for any card. <code>set:</code> and <code>is:foil</code> are about a
-          printing, so they never match here. The battlefield holds every permanent you control now, creatures included, so a
-          sacrifice can go and find one; how a card lands there is the picker beside the zones.
-        </p>
-      )}
-      {rule.steps.some((s) => s.op === 'mana') && (
-        <p className="fine-print">
-          "Add X mana" is your mana pool, not a permanent: the mana is there for the rest of the turn you make it and gone at the
-          end of it, spent or not. A Treasure is the same mana with a keep attached, so use this for the mana that evaporates —
-          a landfall trigger, a ritual — and the Treasure step for the mana that waits.
-        </p>
-      )}
-      {rule.steps.some((s) => s.op === 'flicker') && (
-        <p className="fine-print">
-          A flicker takes permanents off the battlefield and puts them straight back, which fires everything they do on the way
-          in. What it costs is what they were already doing: the mana arrives tapped again, and a creature is summoning sick
-          again, so it cannot attack this turn.
-        </p>
-      )}
-      {rule.steps.some((s) => (s.op === 'move' || s.op === 'self') && (s.to ?? '').startsWith('library')) && (
-        <p className="fine-print">
-          Into the library on its own means a random spot, which is what shuffling a card back in comes to. Top and bottom go
-          where they say. Send more than one card to either and they arrive in a random order, because nothing decided which went
-          first. Only the library is ever searched from the top down, so it is also the only zone you can take cards out of.
-        </p>
-      )}
-      {rule.steps.some((s) => s.op === 'self') && (
-        <p className="fine-print">
-          "Put this card into a zone" is the card talking about itself, and it happens instead of where the card would otherwise
-          go: a spell that exiles itself rather than hitting the graveyard, or one that shuffles back into the library. On a
-          permanent it also takes the card off the battlefield, so anything it was doing there stops.
-        </p>
-      )}
-      {rule.steps.some((s) => s.x.kind === 'prev' || s.qx?.kind === 'prev') && (
-        <p className="fine-print">
-          "The previous X" is what the step before it actually reached, not what it asked for. That is what makes a Windfall
-          writable: discard X where X is your hand, then draw the previous X. A step that found less than it wanted hands on the
-          smaller number, and the first step of a rule has nothing before it, so it reads zero.
-        </p>
-      )}
-      {rule.steps.some((s) => !!s.x.op || !!s.qx?.op) && (
-        <p className="fine-print">
-          <code>÷</code> rounds down and <code>÷↑</code> rounds up, because the cards print both. Nothing is capped: half a
-          99-card library really is 49 cards, and a step stops only when the zone it is working on runs out.
-        </p>
-      )}
-      {rule.steps.some((s) => s.op === 'move' && queryHasX(s.q)) && (
-        <p className="fine-print">
-          <code>[X]</code> is the one thing here the card search does not know. Write it anywhere a number goes, say what it is
-          worth below, and <code>mv&lt;=[X]</code> becomes <code>mv&lt;=5</code> as the rule resolves. <code>[X-1]</code> and{' '}
-          <code>[X+2]</code> work too; nothing fancier does, and nothing goes below zero. This one <em>is</em> capped, at{' '}
-          {MAX_QUERY_X}: the query is compiled once per value of X before the game starts, so the range has to be a short one.
-        </p>
+      {rule.steps.some(
+        (s) => s.op === 'move' || s.op === 'flicker' || s.op === 'mana' || s.op === 'self' || s.x.kind === 'prev' || s.qx?.kind === 'prev' || !!s.x.op || !!s.qx?.op,
+      ) && (
+      <HowWorked label="How these steps work">
+        {rule.steps.some((s) => s.op === 'move' || s.op === 'flicker') && (
+          <p className="fine-print">
+            Criteria use the card search syntax, matched against this deck: <code>t:basic</code>, <code>t:creature mv&lt;=3</code>,{' '}
+            <code>o:"draw a card"</code>. Leave it empty for any card. <code>set:</code> and <code>is:foil</code> are about a
+            printing, so they never match here. The battlefield holds every permanent you control now, creatures included, so a
+            sacrifice can go and find one; how a card lands there is the picker beside the zones.
+          </p>
+        )}
+        {rule.steps.some((s) => s.op === 'mana') && (
+          <p className="fine-print">
+            "Add X mana" is your mana pool, not a permanent: the mana is there for the rest of the turn you make it and gone at the
+            end of it, spent or not. A Treasure is the same mana with a keep attached, so use this for the mana that vanishes,
+            like a landfall trigger or a ritual, and the Treasure step for the mana that waits.
+          </p>
+        )}
+        {rule.steps.some((s) => s.op === 'flicker') && (
+          <p className="fine-print">
+            A flicker takes permanents off the battlefield and puts them straight back, which fires everything they do on the way
+            in. What it costs is what they were already doing: the mana arrives tapped again, and a creature is summoning sick
+            again, so it cannot attack this turn.
+          </p>
+        )}
+        {rule.steps.some((s) => (s.op === 'move' || s.op === 'self') && (s.to ?? '').startsWith('library')) && (
+          <p className="fine-print">
+            Into the library on its own means a random spot, which is what shuffling a card back in comes to. Top and bottom go
+            where they say. Send more than one card to either and they arrive in a random order, because nothing decided which went
+            first. Only the library is ever searched from the top down, so it is also the only zone you can take cards out of.
+          </p>
+        )}
+        {rule.steps.some((s) => s.op === 'self') && (
+          <p className="fine-print">
+            "Put this card into a zone" is the card talking about itself, and it happens instead of where the card would otherwise
+            go: a spell that exiles itself rather than hitting the graveyard, or one that shuffles back into the library. On a
+            permanent it also takes the card off the battlefield, so anything it was doing there stops.
+          </p>
+        )}
+        {rule.steps.some((s) => s.x.kind === 'prev' || s.qx?.kind === 'prev') && (
+          <p className="fine-print">
+            "The previous X" is what the step before it actually reached, not what it asked for. That is what makes a Windfall
+            writable: discard X where X is your hand, then draw the previous X. A step that found less than it wanted hands on the
+            smaller number, and the first step of a rule has nothing before it, so it reads zero.
+          </p>
+        )}
+        {rule.steps.some((s) => !!s.x.op || !!s.qx?.op) && (
+          <p className="fine-print">
+            <code>÷</code> rounds down and <code>÷↑</code> rounds up, because the cards print both. Nothing is capped: half a
+            99-card library really is 49 cards, and a step stops only when the zone it is working on runs out.
+          </p>
+        )}
+        {rule.steps.some((s) => s.op === 'move' && queryHasX(s.q)) && (
+          <p className="fine-print">
+            <code>[X]</code> is the one thing here the card search does not know. Write it anywhere a number goes, say what it is
+            worth below, and <code>mv&lt;=[X]</code> becomes <code>mv&lt;=5</code> as the rule resolves. <code>[X-1]</code> and{' '}
+            <code>[X+2]</code> work too; nothing fancier does, and nothing goes below zero. This one <em>is</em> capped, at{' '}
+            {MAX_QUERY_X}: the query is compiled once per value of X before the game starts, so the range has to be a short one.
+          </p>
+        )}
+      </HowWorked>
       )}
 
       {rule.steps.length < MAX_BEHAVIOR_STEPS && (

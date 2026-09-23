@@ -125,7 +125,7 @@ export function GameTraceSheet({
   return (
     <Sheet onClose={onClose} title="One game, played out" className="trace-sheet">
       <p className="fine-print">
-        The same sequencer behind every number in this sheet, dealt once and written down. {opts.onPlay ? 'On the play' : 'On the draw'},
+        The same simulator behind every number on the analysis page, dealt once and written down. {opts.onPlay ? 'On the play' : 'On the draw'},
         seed {trace.seed}. Scroll the turns and the board plays forward with you.
       </p>
 

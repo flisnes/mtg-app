@@ -11,6 +11,8 @@ import { ContributionsSheet } from './ContributionsSheet.js';
 import { DeckTrajectory } from './DeckTrajectory.js';
 import { GameTraceSheet } from './GameTraceSheet.js';
 import { CardBehaviorPanel } from './CardBehaviorPanel.js';
+import { AnalysisOverview } from './AnalysisOverview.js';
+import { HowWorked } from './HowWorked.js';
 import { buildSimDeck } from '../analysis/simDeck.js';
 import { missedDrawCopies } from '../analysis/coverage.js';
 import { deckBehaviorMap } from '../db/dataAccess.js';
@@ -111,10 +113,10 @@ function loadKeepRule(deckId: string): KeepRule {
  * actually costing the curves anything, and the only one worth a tap.
  */
 function behaviorNote(coverage: { blanks: number; authored: number }, missedDraw: number | null): string {
-  if (missedDraw && missedDraw > 0) return `${missedDraw} draw card${plural(missedDraw)} unread`;
-  if (coverage.authored > 0) return `${coverage.authored} card${plural(coverage.authored)} play out your way`;
-  if (coverage.blanks > 0) return `${coverage.blanks} resolve as nothing`;
-  return 'every card is modelled';
+  if (missedDraw && missedDraw > 0) return `${missedDraw} draw card${plural(missedDraw)} doing nothing yet: write what they do below`;
+  if (coverage.authored > 0) return `${coverage.authored} card${plural(coverage.authored)} play out the way you wrote them`;
+  if (coverage.blanks > 0) return `${coverage.blanks} cards do nothing in the simulator, which is right for removal`;
+  return 'The simulator plays out every card';
 }
 
 /**
@@ -192,8 +194,12 @@ function taplandText(stats: DeckManaStats): string {
   )} mana over your first ${TAX_TURNS} turns.`;
 }
 
-/** The tabs, in the order a deck gets looked at: can it cast its cards, how does a game go, and what the model knows. */
+/**
+ * The tabs, in the order a deck gets looked at: the answers, then can it cast
+ * its cards, how does a game go, and what the model knows.
+ */
 export const ANALYSIS_TABS = [
+  { id: 'overview', label: 'Overview' },
   { id: 'mana', label: 'Mana' },
   { id: 'flow', label: 'Flow' },
   { id: 'model', label: 'Model' },
@@ -366,6 +372,19 @@ export function DeckAnalysis({
       </div>
 
       <div className="deck-analysis-body" role="tabpanel">
+        {tab === 'overview' && (
+          <AnalysisOverview
+            stats={stats}
+            report={report}
+            result={simResult}
+            hasManaData={simDeck.hasManaData}
+            games={simOpts.games}
+            coverage={simDeck.coverage}
+            toCheck={toCheck}
+            onTab={onTab}
+          />
+        )}
+
         {tab === 'mana' && (
           <>
             <div className="deck-stats-tiles">
@@ -393,24 +412,28 @@ export function DeckAnalysis({
               </strong>{' '}
               {stats.land.text}
             </p>
-            {stats.modalLands > 0 && (
-              <p className="fine-print">
-                {stats.modalLands} of them {stats.modalLands === 1 ? 'is a modal card' : 'are modal cards'} with a land on the back,
-                counted here as {stats.modalLands === 1 ? 'a land' : 'lands'} and in the curve as{' '}
-                {stats.modalLands === 1 ? 'a spell' : 'spells'}, which is what {stats.modalLands === 1 ? 'it is' : 'they are'}.
-              </p>
-            )}
-            {stats.sacrificedLands > 0 && (
-              <p className="fine-print">
-                Something here eats {stats.sacrificedLands} land{plural(stats.sacrificedLands)} as it enters, so the verdict is judged
-                against {stats.effectiveLands}. A Lotus Field is three permanents becoming one.
-              </p>
-            )}
-            {stats.bounceLands > 0 && (
-              <p className="fine-print">
-                {stats.bounceLands} of them {stats.bounceLands === 1 ? 'returns a land' : 'return a land'} to your hand on entry. That
-                is land-count neutral (you get the card back as a spare land drop) and costs you a mana on the turn it lands.
-              </p>
+            {(stats.modalLands > 0 || stats.sacrificedLands > 0 || stats.bounceLands > 0) && (
+              <HowWorked label="What counts as a land here">
+              {stats.modalLands > 0 && (
+                <p className="fine-print">
+                  {stats.modalLands} of them {stats.modalLands === 1 ? 'is a modal card' : 'are modal cards'} with a land on the back,
+                  counted here as {stats.modalLands === 1 ? 'a land' : 'lands'} and in the curve as{' '}
+                  {stats.modalLands === 1 ? 'a spell' : 'spells'}, which is what {stats.modalLands === 1 ? 'it is' : 'they are'}.
+                </p>
+              )}
+              {stats.sacrificedLands > 0 && (
+                <p className="fine-print">
+                  Something here eats {stats.sacrificedLands} land{plural(stats.sacrificedLands)} as it enters, so the verdict is judged
+                  against {stats.effectiveLands}. A Lotus Field is three permanents becoming one.
+                </p>
+              )}
+              {stats.bounceLands > 0 && (
+                <p className="fine-print">
+                  {stats.bounceLands} of them {stats.bounceLands === 1 ? 'returns a land' : 'return a land'} to your hand on entry. That
+                  is land-count neutral (you get the card back as a spare land drop) and costs you a mana on the turn it lands.
+                </p>
+              )}
+              </HowWorked>
             )}
 
             <h3 className="deck-stats-head">Taplands</h3>
@@ -419,8 +442,7 @@ export function DeckAnalysis({
                 <p className="deck-stats-verdict">{taplandText(stats)}</p>
                 {stats.tappedMaybe > 0 && (
                   <p className="fine-print">
-                    The sometimes-tapped ones (shocks, checks, fastlands) stay out of that number. You decide when they cost you, so an
-                    average would be a guess wearing a decimal point.
+                    Shocks, checklands and fastlands stay out of that number: you decide when they cost you.
                   </p>
                 )}
               </>
@@ -456,7 +478,7 @@ export function DeckAnalysis({
             {simResult && simResult.contributions.length > 0 && (
               <button type="button" className="deck-stats-line" onClick={() => setContribOpen(true)}>
                 <span className="deck-stats-bits">
-                  <span>What each card is worth</span>
+                  <span>Who does the work</span>
                   <span className="deck-stats-tone tone-ok">{contribNote(simResult)}</span>
                 </span>
                 <Icon name="chevronRight" />

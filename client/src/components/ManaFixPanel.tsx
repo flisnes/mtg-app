@@ -71,7 +71,7 @@ export function ManaFixPanel({
           {plan.fixes.length > 0 && (
             <p className="fine-print">
               Tapping a row files those copies into the mainboard, out of the pile they're in now. It takes nothing out, so the odds above
-              only move all the way once you cut {plan.added} card{plural(plan.added)} to make room — a bigger deck draws its lands later,
+              only move all the way once you cut {plan.added} card{plural(plan.added)} to make room: a bigger deck draws its lands later,
               which is the whole reason the count matters. Which {plan.added === 1 ? 'spell' : 'spells'} to cut isn't a question
               arithmetic answers.
             </p>
@@ -84,7 +84,7 @@ export function ManaFixPanel({
             </p>
           )}
           <p className="fine-print">
-            Only what your collection holds, checked against this deck's format and colour identity. A fetchland is counted for the lands
+            Only what your collection holds, checked against this deck's format and color identity. A fetchland is counted for the lands
             this decklist actually runs, the same way the report above counts one.
           </p>
         </>

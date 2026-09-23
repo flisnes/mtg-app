@@ -25,7 +25,7 @@ export function DeckAnalysisPage() {
   // you were, which matters once the Model tab is where you spend your time.
   const [params, setParams] = useSearchParams();
   const raw = params.get('tab');
-  const tab: AnalysisTab = isTab(raw) ? raw : 'mana';
+  const tab: AnalysisTab = isTab(raw) ? raw : 'overview';
   const setTab = (next: AnalysisTab) => setParams({ tab: next }, { replace: true });
 
   const placements = usePlacementIndex();

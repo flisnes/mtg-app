@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.163.0
+
+- **Added: an Overview tab, and Deck analysis opens on it.** One row each for Mana, Flow and Model: how it looks, in a sentence, and what to do about it. *Mana* says whether your commander and the rest of your costs come down on time and whether the land count fits the curve. *Flow* says whether the deck stumbles on land drops, leaves mana unspent or runs out of cards by turn six. *Model* says how many of your cards the simulator actually plays out, and how many draw cards it is reading as blanks. Tap a row for the tab with the charts behind it.
+- **Changed: less small print.** Each section now keeps the one caveat that changes how you read its number, and the rest sits behind "How this is worked out". The Mana tab has about a third of the words it had. "What each card is worth" is now *Who does the work* (it was never about price), and cards the simulator can't play out are now said to "do nothing" instead of "resolving as a blank". In Card behavior the lists are *Yours*, *Does nothing yet* and *From the card's text*.
+
 ## 0.162.0
 
 - **Changed: Deck stats is now Deck analysis, a page of its own.** It was one long sheet over the deck page; it now has three tabs. *Mana* holds the curve, land count, taplands, colored sources, fixes from your collection and On curve. *Flow* holds how the game unfolds, what each card is worth, the goldfish trace, the opening hand and draw odds. *Model* holds card behavior and the play style, which used to be a sheet inside the sheet. The tab you are on is kept in the address, so back and reload return you to it. Open it from the stats line under the legality panel, or from the deck's menu.

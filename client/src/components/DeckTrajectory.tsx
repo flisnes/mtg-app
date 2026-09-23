@@ -1,3 +1,4 @@
+import { HowWorked } from './HowWorked.js';
 import { useEffect, useRef, useState } from 'react';
 import type { SimCoverage } from '../analysis/simDeck.js';
 import type { SimResult } from '../analysis/simulate.js';
@@ -85,11 +86,15 @@ export function DeckTrajectory({
       )}
 
       <p className="fine-print">
-        An average game, over {result.games.toLocaleString()} of them. Each turn it plays its land drops, then spends what it has
-        in whatever order the play style under Card behavior asks for, with a coin flip between cards it has no reason to prefer.
-        The policy is part of the answer, so changing it moves every line here.
+        An average game, over {result.games.toLocaleString()} of them, played in the style named at the top.
       </p>
-      <p className="fine-print">{coverageNote(coverage, missedDraw)}</p>
+      <HowWorked>
+        <p className="fine-print">
+          Each turn it plays its land drops, then spends what it has in the order the play style asks for, with a coin flip
+          between cards it has no reason to prefer. Change the style on the Model tab and every line here moves.
+        </p>
+        <p className="fine-print">{coverageNote(coverage, missedDraw)}</p>
+      </HowWorked>
     </>
   );
 }
@@ -118,11 +123,11 @@ function coverageNote(c: SimCoverage, missedDraw: number | null): string {
 
   const rest: string[] = [];
   if (c.blanks > 0) {
-    rest.push(`The other ${c.blanks} are cast and resolve as nothing, which is the right answer for a removal spell.`);
+    rest.push(`The other ${c.blanks} are cast and do nothing, which is the right answer for a removal spell.`);
   }
   if (missedDraw && missedDraw > 0) {
     rest.push(
-      `${missedDraw} of them ${missedDraw === 1 ? 'is a card' : 'are cards'} the database calls a draw spell whose draw hangs off a trigger or a condition we don't read, so every line above is a floor rather than an estimate.`,
+      `${missedDraw} of them ${missedDraw === 1 ? 'is a card' : 'are cards'} the database calls a draw spell whose draw hangs off a trigger or a condition the simulator can't read yet, so every line above is a floor rather than an estimate.`,
     );
   } else if (c.blanks > 0) {
     rest.push('Anything they would have drawn you is missing from the lines above, so read them as a floor.');
@@ -184,7 +189,7 @@ function manaNote(result: SimResult, turns: number): string {
     result.manaSpentByTurn[worstTurn] ?? 0,
   )} of it`;
   if (worstGap < 0.75) return `${at}, which is about as tight as a curve gets.`;
-  return `${at}. That gap is the widest in the game, and some of it is real: the rest is the cards this model can't read, which cost you the mana and find you nothing.`;
+  return `${at}. That gap is the widest in the game, and some of it is real: the rest is cards the simulator can't read yet, which cost you the mana and find you nothing.`;
 }
 
 function cardsNote(result: SimResult, turns: number): string {

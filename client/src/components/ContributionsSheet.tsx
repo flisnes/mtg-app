@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Sheet } from './Sheet.js';
+import { HowWorked } from './HowWorked.js';
 import type { SimContribution, SimResult } from '../analysis/simulate.js';
 
 // Who made the trajectory lines — phase 13, and the first panel in this sheet
@@ -52,7 +53,7 @@ export function ContributionsSheet({ result, onClose }: { result: SimResult; onC
   const deckTotal = rows.reduce((sum, c) => sum + value(c, lens), 0);
 
   return (
-    <Sheet onClose={onClose} title="What each card is worth" className="contrib-sheet">
+    <Sheet onClose={onClose} title="Who does the work" className="contrib-sheet">
       <div className="odds-controls">
         <div className="seg-row odds-seg" role="radiogroup" aria-label="Mana or cards">
           <button
@@ -80,7 +81,7 @@ export function ContributionsSheet({ result, onClose }: { result: SimResult; onC
 
       {rows.length === 0 ? (
         <p className="fine-print">
-          Nothing in this deck {lens === 'mana' ? 'makes mana' : 'draws you cards'} in a way this model can read, so there is
+          Nothing in this deck {lens === 'mana' ? 'makes mana' : 'draws you cards'} in a way the simulator can read, so there is
           nothing to split up.
         </p>
       ) : (
@@ -122,26 +123,27 @@ export function ContributionsSheet({ result, onClose }: { result: SimResult; onC
       )}
 
       <p className="fine-print">
-        Every number here is one copy, so a basic is judged against a Sol Ring rather than outnumbering it. Multiply a row by the
-        copies you run and they add back up to the {lens === 'mana' ? 'mana' : 'cards seen'} line on the trajectory chart.
+        One copy each, so a basic is judged against a Sol Ring rather than outnumbering it. A zero can mean the card does nothing
+        or that the simulator can't read it yet: the Model tab says which.
       </p>
-      <p className="fine-print">
-        This is what happened, not what you would lose by cutting the card. Those are different numbers whenever two cards work
-        together: cast an Opt with an Archmage Emeritus out and each of them drew you one card, which is what this counts, but cut
-        the Opt and the trigger goes with it and you are down two. Cut-one-card numbers never add up. These do, which is why they
-        are the ones on show.
-      </p>
-      {lens === 'mana' && (
+      <HowWorked>
         <p className="fine-print">
-          A land another card went and got belongs to the card that got it, for as long as it is on the battlefield, which is the
-          only way a Cultivate is ever worth anything. It is the generous reading: some of those lands would have turned up off
-          the top anyway.
+          Multiply a row by the copies you run and they add back up to the {lens === 'mana' ? 'mana' : 'cards seen'} line on the
+          Flow tab.
         </p>
-      )}
-      <p className="fine-print">
-        A card this model cannot read resolves as a blank and earns nothing, so a zero here can mean the card does nothing or can
-        mean we could not tell. Card behavior, back on the stats sheet, says which and lets you write the rule out yourself.
-      </p>
+        <p className="fine-print">
+          This is what happened, not what you would lose by cutting the card. Those differ whenever two cards work together: cast
+          an Opt with an Archmage Emeritus out and each drew you one card, which is what this counts, but cut the Opt and the
+          trigger goes with it and you are down two. Cut-one-card numbers never add up. These do.
+        </p>
+        {lens === 'mana' && (
+          <p className="fine-print">
+            A land another card went and got belongs to the card that got it, for as long as it is on the battlefield, which is
+            the only way a Cultivate is ever worth anything. It is the generous reading: some of those lands would have turned up
+            off the top anyway.
+          </p>
+        )}
+      </HowWorked>
     </Sheet>
   );
 }

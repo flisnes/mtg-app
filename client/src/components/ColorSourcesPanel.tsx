@@ -4,6 +4,7 @@ import { shortfallHeadline, colorName, type CastCheck, type ManaReport } from '.
 import type { PipColor } from '../analysis/manaCost.js';
 import { MASK_BITS } from '../analysis/simDeck.js';
 import type { SimResult } from '../analysis/simulate.js';
+import { HowWorked } from './HowWorked.js';
 
 // "Can I actually cast this?" — the colored-source half of the deck's mana,
 // where the land-count verdict is the colorless half.
@@ -82,39 +83,55 @@ export function ColorSourcesPanel({ report, sim, onPlay }: { report: ManaReport;
           {report.shortfalls.length > MAX_ROWS && (
             <p className="fine-print">And {report.shortfalls.length - MAX_ROWS} more below 90%.</p>
           )}
-          {report.fetches > 0 && (
-            <p className="fine-print">
-              {report.fetches} fetchland{report.fetches === 1 ? '' : 's'} counted as {report.fetches === 1 ? 'a source' : 'sources'} of
-              everything {report.fetches === 1 ? 'it' : 'they'} could find in this deck. Each land can only be found once, so a pile of
-              fetches over a single Island is friendlier here than at the table.
-            </p>
-          )}
-          {report.granted.length > 0 && (
-            <p className="fine-print">
-              Something in this deck gives every land you control {grantedName(report.granted)} — an Urborg, a Chromatic Lantern or the
-              like — so every land is counted as a source of {report.granted.length === 1 ? 'it' : 'them'} here. That assumes you have
-              drawn it, the same way a fetchland is counted as everything it could find. The on-curve simulation does not assume it: there
-              a granter only widens your lands once it is on the battlefield.
-            </p>
-          )}
-          {(report.genericOnly > 0 || report.restricted > 0 || report.expiring > 0) && (
-            <p className="fine-print">
-              {report.genericOnly > 0 &&
-                `${report.genericOnly} source${report.genericOnly === 1 ? '' : 's'} here read an opponent's lands for their colors, so they count toward generic mana and no colored pip. `}
-              {report.restricted > 0 &&
-                `${report.restricted} can only be spent on part of your deck, and are counted in full anyway. `}
-              {report.expiring > 0 &&
-                `${report.expiring} run out after a turn or two and are counted as if they didn't.`}
-            </p>
-          )}
           <p className="fine-print">
-            Each card is held to its mana value as the turn to cast it, at a 90% bar, worked out exactly for a library of{' '}
-            {report.library} {onPlay ? 'on the play' : 'on the draw'} with no mulligans. Karsten's published tables ask two to four fewer, because his simulations get
-            to mulligan for a source. Lands that always enter tapped count from turn two, rocks and dorks a turn after you could cast them.
-            Colors are checked one at a time, so a two-color card can pass both halves and still stumble on the draw that gives you one of
-            each.
-            {report.unmodelled > 0 && ` ${report.unmodelled} cost${report.unmodelled === 1 ? '' : 's'} here use {X} or snow, taken at face value.`}
+            Exact odds, {onPlay ? 'on the play' : 'on the draw'} with no mulligans: each card by the turn of its mana value, at a 90%
+            bar.
           </p>
+          <HowWorked>
+            <p className="fine-print">
+              Worked out for a library of {report.library}. Karsten's published tables ask two to four fewer sources, because his
+              simulations get to mulligan for one. Lands that always enter tapped count from turn two, rocks and dorks a turn after
+              you could cast them. Colors are checked one at a time, so a two-color card can pass both halves and still stumble on
+              the draw that gives you one of each.
+              {report.unmodelled > 0 && ` ${report.unmodelled} cost${report.unmodelled === 1 ? '' : 's'} here use {X} or snow, taken at face value.`}
+            </p>
+            {report.fetches > 0 && (
+              <p className="fine-print">
+                {report.fetches} fetchland{report.fetches === 1 ? '' : 's'} counted as {report.fetches === 1 ? 'a source' : 'sources'}{' '}
+                of everything {report.fetches === 1 ? 'it' : 'they'} could find in this deck. Each land can only be found once, so a
+                pile of fetches over a single Island is friendlier here than at the table.
+              </p>
+            )}
+            {report.granted.length > 0 && (
+              <p className="fine-print">
+                Something in this deck gives every land you control {grantedName(report.granted)} (an Urborg, a Chromatic Lantern or
+                the like), so every land counts as a source of {report.granted.length === 1 ? 'it' : 'them'} here, as though you had
+                drawn it. The simulation does not assume that: there it only widens your lands once it is on the battlefield.
+              </p>
+            )}
+            {(report.genericOnly > 0 || report.restricted > 0 || report.expiring > 0) && (
+              <p className="fine-print">
+                {report.genericOnly > 0 &&
+                  `${report.genericOnly} source${report.genericOnly === 1 ? '' : 's'} here read an opponent's lands for their colors, so they count toward generic mana and no colored pip. `}
+                {report.restricted > 0 && `${report.restricted} can only be spent on part of your deck, and are counted in full anyway. `}
+                {report.expiring > 0 && `${report.expiring} run out after a turn or two and are counted as if they didn't.`}
+              </p>
+            )}
+            {sim && (
+              <>
+                <p className="fine-print">
+                  In play is simulated over {sim.games.toLocaleString()} games, counted after your land drop and before the turn's
+                  mana is spent. The chips count every copy in the deck as though it were on the battlefield; these count the ones
+                  that were. A fetchland is whatever it went and got, and a filter land makes nothing on its own.
+                </p>
+                <p className="fine-print">
+                  Expect the early turns to read high and settle. The simulation plays the land that most widens your colors first,
+                  so turn one is your best land far more often than the decklist suggests. A share that falls is the deck drifting
+                  back to what it holds, not your mana getting worse.
+                </p>
+              </>
+            )}
+          </HowWorked>
         </>
       )}
     </>
@@ -188,17 +205,7 @@ function MeasuredSources({ report, sim }: { report: ManaReport; sim: SimResult }
           })}
         </ul>
       )}
-      <p className="fine-print">
-        Simulated · {sim.games.toLocaleString()} games, counted after your land drop and before the turn's mana is spent. The chips above
-        count every copy in the deck as though it were already on the battlefield; these count the ones that were. A fetchland is whatever
-        it went and got, a granter only widens your lands once it is in play, and a filter land makes nothing on its own: the assumptions
-        the small print above has to make, this block does not.
-      </p>
-      <p className="fine-print">
-        Expect the early turns to read high and settle. The simulation plays the land that most widens your colors first, so turn one is
-        your best land far more often than the decklist would suggest, and every turn after that drifts back toward what the deck actually
-        holds. A share that falls is the deck regressing to its own mean, not your mana getting worse.
-      </p>
+      <p className="fine-print">Simulated: the sources actually on the battlefield on that turn.</p>
     </>
   );
 }

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { ManaCost } from './ManaCost.js';
 import { halfWidth, type SimCardResult, type SimCostGroup, type SimOptions, type SimResult } from '../analysis/simulate.js';
 import type { SimStatus } from '../analysis/useSimulation.js';
+import { HowWorked } from './HowWorked.js';
 
 // "Do I actually cast this on turn four?" — phase 5, and the first panel in
 // this sheet whose number is simulated rather than exact.
@@ -143,22 +144,26 @@ function Report({
       )}
 
       <p className="fine-print">
-        Simulated, {result.games.toLocaleString()} games.{running && ' Re-dealing…'} You average {manaLine(result)}.{' '}
-        {pct(result.pMulligan)} of those games started below seven cards, at {one(result.meanHandSize)} cards on average. Cards sharing a
-        printed cost share a number, because they have the same answer and pooling them is what makes it precise in a singleton deck.
+        Simulated, {result.games.toLocaleString()} games.{running && ' Re-dealing…'} You average {manaLine(result)}. Effects the
+        simulator can't read yet do nothing, so a deck built on them reads worse here than it plays.
       </p>
-      <p className="fine-print">
-        Where this disagrees with the colored sources above, it is usually not about color. That check counts the sources you have seen
-        and stops there; this one plays the turns out, so it also charges you for the lands you never drew and the ones that came down
-        tapped. A four-drop can have plenty of white and still not have four mana.
-      </p>
-      <p className="fine-print">
-        A goldfish: nobody is across the table. It mulligans on your Opening hand rule, plays a land every turn, cracks a fetch for
-        the land that widens its colors, then spends the turn in the order set under Card behavior, with a coin flip between equals.
-        Spells that draw, loot, mill, dig, make Treasure or add mana do it, and so does anything you have written a rule for. Cost
-        reducers, and effects behind a trigger or a condition the card database cannot read, resolve as nothing until you write them
-        under Card behavior, so a deck built on those reads worse here than it plays.
-      </p>
+      <HowWorked>
+        <p className="fine-print">
+          {pct(result.pMulligan)} of games started below seven cards, at {one(result.meanHandSize)} cards on average. Cards sharing a
+          printed cost share a number: they have the same answer, and pooling them is what makes it precise in a singleton deck.
+        </p>
+        <p className="fine-print">
+          Where this disagrees with Colored sources, it is usually not about color. That check counts the sources you have seen and
+          stops there; this one plays the turns out, so it also charges you for the lands you never drew and the ones that came
+          down tapped. A four-drop can have plenty of white and still not have four mana.
+        </p>
+        <p className="fine-print">
+          Nobody is across the table. It mulligans on your Opening hand rule, plays a land every turn, cracks a fetch for the land
+          that widens its colors, then spends the turn in the play style set on the Model tab, with a coin flip between equals.
+          Spells that draw, loot, mill, dig, make Treasure or add mana do it, and so does anything you have written a rule for.
+          Cost reducers, and effects behind a trigger or a condition, do nothing until you write them on the Model tab.
+        </p>
+      </HowWorked>
     </>
   );
 }

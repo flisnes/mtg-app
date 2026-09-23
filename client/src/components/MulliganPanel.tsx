@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import type { DeckFormat } from '@mtg/shared';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { librarySize, resolveGroup, type GroupRow } from '../analysis/groups.js';
+import { HowWorked } from './HowWorked.js';
 import { KEEP_ANYTHING_AT, mulliganOutlook, type HandRow, type MulliganOutlook } from '../analysis/mulligan.js';
 
 // "How often does this deck give me a hand worth keeping?" — phase 4.
@@ -199,13 +200,19 @@ export function MulliganPanel({
         </>
       )}
 
-      <p className="fine-print">
-        {group.inCommandZone > 0 && 'Your commander matches too, and it is never in your opening hand. '}
-        {group.unknown > 0 && `${group.unknown} cards here aren't in your card database, so they can't be counted. `}
-        London: every mulligan deals a fresh seven from the whole deck, so your odds of seeing a keepable hand never change. What a
-        mulligan costs is a card. That is also why nothing here tells you to take one: shipping a hand trades a card for a better {noun}{' '}
-        count, this panel counts {many} and not cards, and only you know what the card was.
-      </p>
+      {(group.inCommandZone > 0 || group.unknown > 0) && (
+        <p className="fine-print">
+          {group.inCommandZone > 0 && 'Your commander matches too, and it is never in your opening hand. '}
+          {group.unknown > 0 && `${group.unknown} cards here aren't in your card database, so they can't be counted.`}
+        </p>
+      )}
+      <HowWorked>
+        <p className="fine-print">
+          London: every mulligan deals a fresh seven from the whole deck, so your odds of seeing a keepable hand never change. What a
+          mulligan costs is a card. That is also why nothing here tells you to take one: shipping a hand trades a card for a better{' '}
+          {noun} count, this panel counts {many} and not cards, and only you know what the card was.
+        </p>
+      </HowWorked>
     </>
   );
 }

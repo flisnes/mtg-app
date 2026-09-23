@@ -493,8 +493,16 @@ const KEY_REPAIRS = 'syncRepairs';
  * ever do need a fifth, note that a repair only heals rows the server still
  * holds: a stale device that edits such a row first pushes its stripped copy
  * with a newer stamp, and then the field is gone from the account for good.
+ *
+ * - `behaviorGrammarF` (v0.171.0): the fifth, and the one place the fix above
+ *   cannot reach. A card behavior is sanitized strictly, all the way down (see
+ *   sanitizeCardBehavior), so preserveUnknown keeps the row's keys but not what
+ *   is inside `behavior`. A build from before the object layer drops the new
+ *   step kinds, the `static` and `tap` rules and the `cast` options, and stores
+ *   what is left. That build plays the card out as less, which is the safe
+ *   direction; this re-pull puts the rest back once it updates.
  */
-const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems2', 'deckCardUnfiled'] as const;
+const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems2', 'deckCardUnfiled', 'behaviorGrammarF'] as const;
 
 async function runOneTimeRepairs(): Promise<void> {
   const done = (await getSetting<string[]>(KEY_REPAIRS)) ?? [];

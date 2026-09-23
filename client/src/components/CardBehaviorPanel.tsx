@@ -1,14 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
+  BASIC_BY_COLOR,
   BEHAVIOR_AMOUNTS,
   BEHAVIOR_AMOUNT_OPS,
   BEHAVIOR_FROM_ZONES,
   BEHAVIOR_MANA_COLORS,
   BEHAVIOR_STEPS,
+  BEHAVIOR_TOKENS,
   BEHAVIOR_TRIGGERS,
+  BEHAVIOR_TYPES,
   BEHAVIOR_ZONES,
   CARD_BEHAVIOR_VERSION,
+  CAST_OPTIONS,
+  MAX_CAST_N,
+  MAX_CAST_OPTIONS,
+  MAX_TOKEN_PT,
+  normalizeCost,
+  ruleKind,
+  stepFits,
+  type CastOption,
+  type CastOptionKind,
+  type RuleKind,
   MAX_BEHAVIOR_AMOUNT,
   MAX_BEHAVIOR_QUERY,
   MAX_BEHAVIOR_RULES,
@@ -25,7 +38,6 @@ import {
   describeLandRamp,
   describeManaSource,
   describeRitual,
-  describeRule,
   manaStepColors,
   normalizeManaColors,
   queryHasX,
@@ -199,8 +211,8 @@ function summaryOf(card: BehaviorCard): string {
  * "blank" under an Exploration is exactly what sends someone off to write a
  * rule the card already had — which was the whole complaint, one screen up.
  */
-function playsOutAs(card: BehaviorCard, preview: readonly BehaviorRule[]): string {
-  if (preview.length > 0) return preview.map(describeRule).join('. ');
+function playsOutAs(card: BehaviorCard, preview: readonly BehaviorRule[], cast: readonly CastOption[]): string {
+  if (preview.length > 0 || cast.length > 0) return describeBehavior({ v: CARD_BEHAVIOR_VERSION, rules: [...preview], cast: [...cast] }).join('. ');
   const derived = card.ramp ?? card.fetch ?? card.ritual ?? card.extraLand;
   if (derived) return `${PLAY_LEAD}: ${derived}, read from the card`;
   // A Forest is not a blank, it is a Forest. The line under this one says so.
@@ -209,6 +221,10 @@ function playsOutAs(card: BehaviorCard, preview: readonly BehaviorRule[]): strin
 }
 
 const NO_OFFERS: ReadonlyMap<string, BorrowableBehavior[]> = new Map();
+
+/** A behavior's content for comparing two of them: its rules and its other ways to cast. */
+const shapeOf = (b: { rules: readonly BehaviorRule[]; cast?: readonly CastOption[] }): string =>
+  JSON.stringify({ rules: b.rules, cast: b.cast ?? [] });
 
 /** "Elves", "Elves and Gruul", "Elves and 2 more". */
 function deckNames(decks: readonly string[]): string {
@@ -434,7 +450,9 @@ function BehaviorList({
       <HowWorked>
         <p className="fine-print">
           A rule can touch your hand, library, graveyard, exile and battlefield, and moves cards between them with the card search
-          syntax. It replaces what the card <em>does</em>; what the card <em>is</em> stays, so a land still makes its mana.
+          syntax. It replaces what the card <em>does</em>; what the card <em>is</em> stays, so a land still makes its mana
+          unless you write its mana ability yourself. A rule can also make tokens, put counters on the card, grant +X/+X or a
+          type while the card is out, and add other ways to cast it (kicker, flashback, suspend).
         </p>
         <p className="fine-print">
           Cards you write play out exactly as written, so for this deck the curves stop being a pure floor. The chip at the top
@@ -671,6 +689,8 @@ function BehaviorEditor({
   // why saving *replaces* the derived reading rather than adding to it.
   const start = card.authored ?? behaviorFromEffect(card.derived);
   const [rules, setRules] = useState<BehaviorRule[]>(() => (start ? start.rules.map((r) => ({ ...r, steps: [...r.steps] })) : []));
+  // Other ways to cast it (rebuild plan F5): kicker, flashback, suspend.
+  const [cast, setCast] = useState<CastOption[]>(() => (card.authored?.cast ?? []).map((o) => ({ ...o })));
   const [saving, setSaving] = useState(false);
 
   const edit = (i: number, next: BehaviorRule) => setRules(rules.map((r, k) => (k === i ? next : r)));
@@ -682,7 +702,7 @@ function BehaviorEditor({
     // stored bytes are normalized the one way: colors in WUBRGC order, flags
     // dropped where they say nothing, all five colors written as none at all.
     // Saving the same rule twice has to be the same row.
-    const clean = kept.length > 0 ? sanitizeCardBehavior({ v: CARD_BEHAVIOR_VERSION, rules: kept }) : null;
+    const clean = kept.length > 0 || cast.length > 0 ? sanitizeCardBehavior({ v: CARD_BEHAVIOR_VERSION, rules: kept, cast }) : null;
     await setCardBehavior(deckId, card.oracleId, clean);
     // Saving what was already there changes nothing, and a toast saying so is noise.
     if (JSON.stringify(clean) !== JSON.stringify(card.authored)) onSaved(card.oracleId, card.name, card.authored, clean === null);
@@ -698,9 +718,11 @@ function BehaviorEditor({
 
   const preview = rules.filter((r) => r.steps.length > 0);
   // What this deck already saved is not an offer, however many decks share it.
-  const saved = card.authored ? JSON.stringify(card.authored.rules) : null;
-  const shown = offers.filter((o) => JSON.stringify(o.behavior.rules) !== saved);
-  const drafted = JSON.stringify(preview);
+  const saved = card.authored ? shapeOf(card.authored) : null;
+  const shown = offers.filter((o) => shapeOf(o.behavior) !== saved);
+  const drafted = shapeOf({ rules: preview, cast });
+  /** A kicker in the draft, so "the times it was kicked" is a number worth offering. */
+  const kicker = cast.some((o) => o.kind === 'kicker' || o.kind === 'multikicker');
 
   return (
     <>
@@ -751,8 +773,8 @@ function BehaviorEditor({
       )}
       {card.source && (
         <p className="fine-print">
-          What this card <em>is</em>: <em>{card.source}</em>. That comes from the type line and the printed mana ability, so no
-          rule here replaces it: a Llanowar Elves taps for green whatever else you tell it to do.
+          What this card <em>is</em>: <em>{card.source}</em>. That comes from the type line and the printed mana ability, so only
+          an "It taps for mana" rule replaces it: a Llanowar Elves taps for green whatever else you tell it to do.
         </p>
       )}
       {!card.derived && !card.ramp && !card.fetch && !card.ritual && !card.extraLand && !card.source && !card.authored && (
@@ -767,7 +789,7 @@ function BehaviorEditor({
           <h4 className="deck-stats-head">From your other decks</h4>
           <ul className="behavior-offers">
             {shown.map((o, i) => {
-              const inDraft = JSON.stringify(o.behavior.rules) === drafted;
+              const inDraft = shapeOf(o.behavior) === drafted;
               return (
                 <li key={i}>
                   <span className="behavior-offer-text">
@@ -777,7 +799,10 @@ function BehaviorEditor({
                   <button
                     type="button"
                     disabled={inDraft}
-                    onClick={() => setRules(o.behavior.rules.map((r) => ({ ...r, steps: [...r.steps] })))}
+                    onClick={() => {
+                      setRules(o.behavior.rules.map((r) => ({ ...r, steps: [...r.steps] })));
+                      setCast((o.behavior.cast ?? []).map((c) => ({ ...c })));
+                    }}
                   >
                     {inDraft ? 'In the draft' : 'Use this'}
                   </button>
@@ -799,6 +824,7 @@ function BehaviorEditor({
           hasX={card.hasX}
           permanent={card.permanent}
           creature={card.creature}
+          kicker={kicker}
           onChange={(next) => edit(i, next)}
           onRemove={() => setRules(rules.filter((_r, k) => k !== i))}
         />
@@ -815,19 +841,21 @@ function BehaviorEditor({
         </button>
       )}
 
+      <CastOptionsEditor options={cast} onChange={setCast} permanent={card.permanent} />
+
       <h4 className="deck-stats-head">Plays out as</h4>
       {/* With no rules of your own, what plays out is whatever the database
           read — which for a ramp spell is not nothing, and saying "blank" here
           is what sends someone off to write a rule the card already had. */}
-      <p className="deck-stats-verdict">{playsOutAs(card, preview)}</p>
+      <p className="deck-stats-verdict">{playsOutAs(card, preview, cast)}</p>
       {/* What the card *is* is not replaced by anything written above, so it is
           said on its own line rather than folded into the sentence. */}
-      {card.source && <p className="fine-print">{card.source}, whatever the rules above say.</p>}
+      {card.source && !preview.some((r) => r.on === 'tap') && <p className="fine-print">{card.source}, whatever the rules above say.</p>}
       {card.authored && fires && fires.length > 0 && (
         <FiringCounts
           authored={card.authored}
           fires={fires}
-          edited={JSON.stringify(preview) !== JSON.stringify(card.authored.rules)}
+          edited={drafted !== shapeOf(card.authored)}
         />
       )}
       <button type="button" className="behavior-watch" onClick={onWatch}>
@@ -912,15 +940,18 @@ function AmountPicker({
   label,
   offer,
   onChange,
+  matcher,
 }: {
   value: BehaviorAmount;
   label: string;
   /** Which of the catalog's amounts make sense here. */
   offer: (o: (typeof BEHAVIOR_AMOUNTS)[number]) => boolean;
   onChange: (next: BehaviorAmount) => void;
+  /** For the criteria of a `matching` amount. */
+  matcher?: DeckMatcher;
 }) {
   const adjustable = !BEHAVIOR_AMOUNTS.find((o) => o.id === value.kind)?.noAdjust;
-  return (
+  const picker = (
     <div className="behavior-x">
       <label className="field">
         <select
@@ -975,7 +1006,8 @@ function AmountPicker({
             aria-label={`${label}, adjusted`}
             onChange={(e) => {
               const op = e.target.value as BehaviorAmountOp | '';
-              onChange(op ? { kind: value.kind, op, by: value.by ?? 1 } : { kind: value.kind });
+              const q = value.q ? { q: value.q } : {};
+              onChange(op ? { kind: value.kind, op, by: value.by ?? 1, ...q } : { kind: value.kind, ...q });
             }}
           >
             <option value=""></option>
@@ -1003,6 +1035,27 @@ function AmountPicker({
           />
         </label>
       )}
+    </div>
+  );
+  if (value.kind !== 'matching') return picker;
+  // "Permanents you control matching": the criteria belongs to the amount, so
+  // it sits right under it rather than with the step's own.
+  return (
+    <div className="behavior-amount">
+      {picker}
+      <div className="behavior-q behavior-rule-q">
+        <label className="field">
+          <input
+            type="text"
+            value={value.q ?? ''}
+            maxLength={MAX_BEHAVIOR_QUERY}
+            aria-label="Which of your permanents count"
+            placeholder="Every permanent, or t:elf, t:artifact, …"
+            onChange={(e) => onChange({ ...value, q: e.target.value })}
+          />
+        </label>
+        {matcher && <MatchNote q={value.q ?? ''} matcher={matcher} />}
+      </div>
     </div>
   );
 }
@@ -1045,12 +1098,24 @@ function MatchNote({ q, matcher }: { q: string; matcher: DeckMatcher }) {
   );
 }
 
+/** The steps a fresh rule of each kind opens on. */
+const firstStep = (kind: RuleKind): BehaviorStep =>
+  kind === 'static'
+    ? { op: 'pump', x: { kind: 'fixed', n: 1 } }
+    : kind === 'tap'
+      ? { op: 'tapsfor', x: { kind: 'fixed', n: 1 }, colors: 'C' }
+      : emptyStep();
+
+/** The fields only one verb reads, dropped when the verb changes so none of them hides in the row. */
+const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub'];
+
 function RuleEditor({
   rule,
   matcher,
   hasX,
   permanent,
   creature,
+  kicker,
   onChange,
   onRemove,
 }: {
@@ -1062,12 +1127,15 @@ function RuleEditor({
   permanent: boolean;
   /** And it can attack, which is a shorter list than that. */
   creature: boolean;
+  /** The draft has a kicker, so "the times it was kicked" means something. */
+  kicker: boolean;
   onChange: (next: BehaviorRule) => void;
   onRemove: () => void;
 }) {
   const setStep = (i: number, next: BehaviorRule['steps'][number]) =>
     onChange({ ...rule, steps: rule.steps.map((s, k) => (k === i ? next : s)) });
   const trigger = BEHAVIOR_TRIGGERS.find((t) => t.id === rule.on);
+  const kind = ruleKind(rule.on);
   // A trigger the card cannot have is hidden, unless the rule is already on it:
   // a type line read one way today and another way tomorrow must not silently
   // orphan a rule somebody wrote.
@@ -1076,16 +1144,28 @@ function RuleEditor({
   );
   /** "The mana you spent on X" is a number only while the cast is resolving. */
   const xAvailable = hasX && rule.on === 'play';
+  /** And the kick count, while it is being cast or arriving from that cast. */
+  const kickAvailable = kicker && (rule.on === 'play' || rule.on === 'etb');
+  /** The amounts that read a moment make no sense in a standing effect. */
+  const momentary = kind === 'trigger';
 
   /**
    * Moving a rule off `play` takes its X with it, so any amount reading one
    * becomes a fixed zero rather than a select with nothing selected in it.
+   * Moving it to a different kind of rule (a trigger to a static) starts the
+   * steps over, because none of them would fit.
    */
   const changeTrigger = (on: BehaviorTrigger) => {
+    const next = BEHAVIOR_TRIGGERS.find((t) => t.id === on);
+    const nextKind = ruleKind(on);
     // The criteria belongs to the moment, not to the rule: move off a watched
     // trigger and there is nothing for it to narrow, so it goes rather than
     // sitting in the row invisibly and coming back on the way past.
-    const q = BEHAVIOR_TRIGGERS.find((t) => t.id === on)?.watches ? rule.q : undefined;
+    const q = next?.watches || nextKind === 'static' ? rule.q : undefined;
+    if (nextKind !== kind) {
+      onChange({ on, q, steps: [firstStep(nextKind)] });
+      return;
+    }
     if (on === 'play' || !hasX) {
       onChange({ ...rule, on, q });
       return;
@@ -1110,31 +1190,62 @@ function RuleEditor({
    * match" is bounded by a source zone that a draw step does not have.
    */
   const changeOp = (i: number, step: BehaviorStep, op: BehaviorStepKind) => {
-    // The colors belong to the one verb that makes mana, and nothing else can
-    // read them. Dropped on the way out rather than kept invisibly and revived
-    // on the way past.
-    const base = without(step, 'colors', 'oneColor');
-    if (op === 'flicker') {
-      // The criteria and any `[X]` in it carry over from a move; the zones do
-      // not, because a flicker does not have any, and neither does how it lands.
-      setStep(i, { ...without(base, 'from', 'to', 'untapped'), op });
-      return;
+    // The fields one verb reads belong to that verb, and nothing else can read
+    // them. Dropped on the way out rather than kept invisibly and revived on
+    // the way past.
+    const base = without(step, ...VERB_FIELDS);
+    const counted = base.x.kind === 'all' ? { kind: 'fixed' as const, n: 1 } : base.x;
+    const one = { kind: 'fixed' as const, n: 1 };
+    switch (op) {
+      case 'flicker':
+        // The criteria and any `[X]` in it carry over from a move; the zones do
+        // not, because a flicker does not have any, and neither does how it lands.
+        setStep(i, { ...without(base, 'from', 'to', 'untapped'), op });
+        return;
+      case 'move': {
+        const from = base.from && BEHAVIOR_FROM_ZONES.some((z) => z.id === base.from) ? base.from : 'library';
+        const to = base.to === from ? 'hand' : (base.to ?? 'hand');
+        setStep(i, { ...base, op, from, to, ...(to === 'battlefield' && base.untapped ? { untapped: true } : {}) });
+        return;
+      }
+      case 'self': {
+        // One card, no criteria, and the amount is not a choice — see the step's
+        // own note below. Exile is the default because self-exile is the case
+        // this exists for.
+        const to = base.to ?? 'exile';
+        setStep(i, { op, x: one, to, ...(to === 'battlefield' && base.untapped ? { untapped: true } : {}) });
+        return;
+      }
+      case 'token':
+        setStep(i, { op, x: counted, tk: 'beast' });
+        return;
+      case 'counter':
+        setStep(i, { op, x: counted, ck: 'p1p1' });
+        return;
+      case 'pump':
+        setStep(i, { op, x: counted, ...(kind === 'trigger' && base.q ? { q: base.q } : {}) });
+        return;
+      case 'keyword':
+        setStep(i, { op, x: one, kw: 'H', ...(kind === 'trigger' && base.q ? { q: base.q } : {}) });
+        return;
+      case 'addtype':
+        setStep(i, { op, x: one, ty: 'L', sub: 'G' });
+        return;
+      case 'landfrom':
+        setStep(i, { op, x: one, from: 'graveyard' });
+        return;
+      case 'nomaxhand':
+        setStep(i, { op, x: one });
+        return;
+      case 'extramana':
+        setStep(i, { op, x: counted, colors: 'G' });
+        return;
+      case 'tapsfor':
+        setStep(i, { op, x: counted, colors: 'C' });
+        return;
+      default:
+        setStep(i, { op, x: counted });
     }
-    if (op === 'move') {
-      const from = base.from && BEHAVIOR_FROM_ZONES.some((z) => z.id === base.from) ? base.from : 'library';
-      const to = base.to === from ? 'hand' : (base.to ?? 'hand');
-      setStep(i, { ...base, op, from, to, ...(to === 'battlefield' && base.untapped ? { untapped: true } : {}) });
-      return;
-    }
-    if (op === 'self') {
-      // One card, no criteria, and the amount is not a choice — see the step's
-      // own note below. Exile is the default because self-exile is the case
-      // this exists for.
-      const to = base.to ?? 'exile';
-      setStep(i, { op, x: { kind: 'fixed', n: 1 }, to, ...(to === 'battlefield' && base.untapped ? { untapped: true } : {}) });
-      return;
-    }
-    setStep(i, { op, x: base.x.kind === 'all' ? { kind: 'fixed', n: 1 } : base.x });
   };
 
   /**
@@ -1154,6 +1265,9 @@ function RuleEditor({
     const base = zone === 'battlefield' ? step : without(step, 'untapped');
     setStep(i, { ...base, to: zone, from });
   };
+
+  const verbs = BEHAVIOR_STEPS.filter((o) => stepFits(o.id, kind) || o.id === rule.steps[0]?.op);
+  const maxSteps = kind === 'tap' ? 1 : MAX_BEHAVIOR_STEPS;
 
   return (
     <div className="behavior-rule">
@@ -1183,16 +1297,24 @@ function RuleEditor({
 
       {/* A watched trigger's criteria: which cards wake the rule. Above the
           steps rather than beside them, because it says *when* this happens and
-          the steps say what. Landfall is one word in a box. */}
-      {trigger?.watches && (
-        <div className="behavior-q behavior-watch">
+          the steps say what. Landfall is one word in a box. A static rule's
+          criteria says which of your permanents it applies to, and sits in the
+          same place for the same reason. */}
+      {(trigger?.watches || kind === 'static') && (
+        <div className="behavior-q behavior-rule-q">
           <label className="field">
             <input
               type="text"
               value={rule.q ?? ''}
               maxLength={MAX_BEHAVIOR_QUERY}
-              aria-label="Which cards wake this"
-              placeholder={rule.on === 'cast' ? 'Any spell, or t:instant or t:sorcery, …' : 'Any permanent, or t:land, t:creature, …'}
+              aria-label={kind === 'static' ? 'Which of your permanents it applies to' : 'Which cards wake this'}
+              placeholder={
+                kind === 'static'
+                  ? 'All of them, or t:creature, t:elf, …'
+                  : rule.on === 'cast'
+                    ? 'Any spell, or t:instant or t:sorcery, …'
+                    : 'Any permanent, or t:land, t:creature, …'
+              }
               onChange={(e) => onChange({ ...rule, q: e.target.value })}
             />
           </label>
@@ -1201,8 +1323,9 @@ function RuleEditor({
               left is what that hint does not say: where the syntax comes from,
               what blank means, and where the chain stops. */}
           <p className="fine-print">
-            Card search syntax, matched against this deck, same as a move step's. Leave it empty and anything wakes it. Triggers chain
-            two deep, so an engine that feeds itself stops rather than spinning.
+            {kind === 'static'
+              ? 'Card search syntax, matched against this deck. Types a rule adds count here too: with Ashaya out, t:land finds your creatures.'
+              : 'Card search syntax, matched against this deck, same as a move step\'s. Leave it empty and anything wakes it. Triggers chain two deep, so an engine that feeds itself stops rather than spinning.'}
           </p>
         </div>
       )}
@@ -1211,25 +1334,37 @@ function RuleEditor({
         const move = step.op === 'move';
         const flicker = step.op === 'flicker';
         const self = step.op === 'self';
-        const mana = step.op === 'mana';
+        const colorsStep = step.op === 'mana' || step.op === 'extramana' || step.op === 'tapsfor';
+        const info = BEHAVIOR_STEPS.find((o) => o.id === step.op);
         // Both of them narrow what they reach with a criteria box; only a move
-        // has two zones to pick.
-        const narrows = move || flicker;
+        // has two zones to pick. A pump or a haste grant on a trigger narrows
+        // which creatures get it; on a static the rule's own criteria does.
+        const creatureQuery = (step.op === 'pump' || step.op === 'keyword') && kind === 'trigger';
+        const narrows = move || flicker || creatureQuery;
+        const objectControls = step.op === 'token' || step.op === 'counter' || step.op === 'addtype' || step.op === 'landfrom';
         // The one destination with two ways to arrive, and the only place the
         // question is worth asking.
         const lands = (move || self) && step.to === 'battlefield';
         const colors = manaStepColors(step);
+        // The grid rows this step has, top to bottom.
+        const areas = [
+          "'op drop'",
+          !info?.noAmount && "'x drop'",
+          (self || move) && "'zones drop'",
+          objectControls && "'obj drop'",
+          colorsStep && "'colors drop'",
+          narrows && "'q drop'",
+        ]
+          .filter(Boolean)
+          .join(' ');
         return (
-          <div
-            className={`behavior-step${narrows ? ' behavior-step-move' : ''}${self ? ' behavior-step-self' : ''}${mana ? ' behavior-step-mana' : ''}`}
-            key={i}
-          >
+          <div className="behavior-step" style={{ gridTemplateAreas: areas }} key={i}>
             {/* The verb on its own line and the number under it: three controls
                 abreast on a 393px phone truncates every one of them, and "X = cards
                 in your h" is not a choice anybody can make. */}
             <label className="field behavior-op">
               <select value={step.op} aria-label="What happens" onChange={(e) => changeOp(i, step, e.target.value as BehaviorStepKind)}>
-                {BEHAVIOR_STEPS.map((o) => (
+                {verbs.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.label}
                   </option>
@@ -1238,11 +1373,18 @@ function RuleEditor({
             </label>
             {/* A `self` step moves one card and that card is this one, so an
                 amount picker on it would be a control with a single setting. */}
-            {!self && (
+            {!info?.noAmount && (
               <AmountPicker
                 value={step.x}
                 label="Where X comes from"
-                offer={(o) => (narrows || !o.moveOnly) && (!o.needsX || xAvailable) && (!o.needsPrev || i > 0)}
+                matcher={matcher}
+                offer={(o) =>
+                  (move || flicker || !o.moveOnly) &&
+                  (!o.needsX || (xAvailable && momentary)) &&
+                  (!o.needsPrev || (i > 0 && momentary)) &&
+                  (!o.needsKicker || kickAvailable) &&
+                  (!o.needsPermanent || permanent)
+                }
                 onChange={(x) => setStep(i, { ...step, x })}
               />
             )}
@@ -1297,7 +1439,8 @@ function RuleEditor({
                 {lands && <TapPicker step={step} onChange={(next) => setStep(i, next)} />}
               </div>
             )}
-            {mana && (
+            {objectControls && <ObjectControls step={step} onChange={(next) => setStep(i, next)} />}
+            {colorsStep && (
               <div className="behavior-colors">
                 <div className="behavior-swatches" role="group" aria-label="Which colors this mana can be">
                   {BEHAVIOR_MANA_COLORS.map((c) => {
@@ -1319,7 +1462,7 @@ function RuleEditor({
                 {/* Only with something to choose between. One color on offer is
                     already all of one color, and a checkbox that cannot change
                     the answer is §12.2's lie wearing a tick box. */}
-                {colors.length > 1 && (
+                {colors.length > 1 && step.op !== 'extramana' && (
                   <label className="behavior-check">
                     <input
                       type="checkbox"
@@ -1329,13 +1472,15 @@ function RuleEditor({
                     <span>All of it the same color</span>
                   </label>
                 )}
-                <span className="fine-print">
-                  {colors.length === 1
-                    ? 'Every mana this adds is that color, the way a Dark Ritual adds three black.'
-                    : step.oneColor
-                      ? 'One color, picked as it resolves, and all of the mana is that one: a Lotus Field, not a Burnt Offering.'
-                      : 'Each mana can be any of these, picked as it is spent. All five is any color, which is the default.'}
-                </span>
+                {step.op === 'mana' && (
+                  <span className="fine-print">
+                    {colors.length === 1
+                      ? 'Every mana this adds is that color, the way a Dark Ritual adds three black.'
+                      : step.oneColor
+                        ? 'One color, picked as it resolves, and all of the mana is that one: a Lotus Field, not a Burnt Offering.'
+                        : 'Each mana can be any of these, picked as it is spent. All five is any color, which is the default.'}
+                  </span>
+                )}
               </div>
             )}
             {narrows && (
@@ -1345,21 +1490,27 @@ function RuleEditor({
                     type="text"
                     value={step.q ?? ''}
                     maxLength={MAX_BEHAVIOR_QUERY}
-                    aria-label="Which cards"
-                    placeholder={flicker ? 'Any permanent, or t:creature, …' : 'Any card, or t:basic, t:creature mv<=3, …'}
+                    aria-label={creatureQuery ? 'Which creatures' : 'Which cards'}
+                    placeholder={
+                      creatureQuery
+                        ? 'All your creatures, or t:elf, …'
+                        : flicker
+                          ? 'Any permanent, or t:creature, …'
+                          : 'Any card, or t:basic, t:creature mv<=3, …'
+                    }
                     onChange={(e) => setStep(i, { ...step, q: e.target.value })}
                   />
                 </label>
                 <MatchNote q={step.q ?? ''} matcher={matcher} />
                 {/* The control appears because the query asked for it. No
                     placeholder, no dropdown, and nothing to explain away. */}
-                {queryHasX(step.q) && (
+                {!creatureQuery && queryHasX(step.q) && (
                   <>
                     <span className="fine-print behavior-plug-lead">[X] in that query is:</span>
                     <AmountPicker
                       value={step.qx ?? { kind: 'fixed', n: 0 }}
                       label="What [X] in the criteria is worth"
-                      offer={(o) => !o.moveOnly && (!o.needsX || xAvailable) && (!o.needsPrev || i > 0)}
+                      offer={(o) => !o.moveOnly && !o.hasQuery && (!o.needsX || xAvailable) && (!o.needsPrev || i > 0) && (!o.needsKicker || kickAvailable)}
                       onChange={(qx) => setStep(i, { ...step, qx })}
                     />
                   </>
@@ -1378,80 +1529,420 @@ function RuleEditor({
         );
       })}
 
-      {rule.steps.some(
-        (s) => s.op === 'move' || s.op === 'flicker' || s.op === 'mana' || s.op === 'self' || s.x.kind === 'prev' || s.qx?.kind === 'prev' || !!s.x.op || !!s.qx?.op,
-      ) && (
-      <HowWorked label="How these steps work">
-        {rule.steps.some((s) => s.op === 'move' || s.op === 'flicker') && (
-          <p className="fine-print">
-            Criteria use the card search syntax, matched against this deck: <code>t:basic</code>, <code>t:creature mv&lt;=3</code>,{' '}
-            <code>o:"draw a card"</code>. Leave it empty for any card. <code>set:</code> and <code>is:foil</code> are about a
-            printing, so they never match here. The battlefield holds every permanent you control now, creatures included, so a
-            sacrifice can go and find one; how a card lands there is the picker beside the zones.
-          </p>
-        )}
-        {rule.steps.some((s) => s.op === 'mana') && (
-          <p className="fine-print">
-            "Add X mana" is your mana pool, not a permanent: the mana is there for the rest of the turn you make it and gone at the
-            end of it, spent or not. A Treasure is the same mana with a keep attached, so use this for the mana that vanishes,
-            like a landfall trigger or a ritual, and the Treasure step for the mana that waits.
-          </p>
-        )}
-        {rule.steps.some((s) => s.op === 'flicker') && (
-          <p className="fine-print">
-            A flicker takes permanents off the battlefield and puts them straight back, which fires everything they do on the way
-            in. What it costs is what they were already doing: the mana arrives tapped again, and a creature is summoning sick
-            again, so it cannot attack this turn.
-          </p>
-        )}
-        {rule.steps.some((s) => (s.op === 'move' || s.op === 'self') && (s.to ?? '').startsWith('library')) && (
-          <p className="fine-print">
-            Into the library on its own means a random spot, which is what shuffling a card back in comes to. Top and bottom go
-            where they say. Send more than one card to either and they arrive in a random order, because nothing decided which went
-            first. Only the library is ever searched from the top down, so it is also the only zone you can take cards out of.
-          </p>
-        )}
-        {rule.steps.some((s) => s.op === 'self') && (
-          <p className="fine-print">
-            "Put this card into a zone" is the card talking about itself, and it happens instead of where the card would otherwise
-            go: a spell that exiles itself rather than hitting the graveyard, or one that shuffles back into the library. On a
-            permanent it also takes the card off the battlefield, so anything it was doing there stops.
-          </p>
-        )}
-        {rule.steps.some((s) => s.x.kind === 'prev' || s.qx?.kind === 'prev') && (
-          <p className="fine-print">
-            "The previous X" is what the step before it actually reached, not what it asked for. That is what makes a Windfall
-            writable: discard X where X is your hand, then draw the previous X. A step that found less than it wanted hands on the
-            smaller number, and the first step of a rule has nothing before it, so it reads zero.
-          </p>
-        )}
-        {rule.steps.some((s) => !!s.x.op || !!s.qx?.op) && (
-          <p className="fine-print">
-            <code>÷</code> rounds down and <code>÷↑</code> rounds up, because the cards print both. Nothing is capped: half a
-            99-card library really is 49 cards, and a step stops only when the zone it is working on runs out.
-          </p>
-        )}
-        {rule.steps.some((s) => s.op === 'move' && queryHasX(s.q)) && (
-          <p className="fine-print">
-            <code>[X]</code> is the one thing here the card search does not know. Write it anywhere a number goes, say what it is
-            worth below, and <code>mv&lt;=[X]</code> becomes <code>mv&lt;=5</code> as the rule resolves. <code>[X-1]</code> and{' '}
-            <code>[X+2]</code> work too; nothing fancier does, and nothing goes below zero. This one <em>is</em> capped, at{' '}
-            {MAX_QUERY_X}: the query is compiled once per value of X before the game starts, so the range has to be a short one.
-          </p>
-        )}
-      </HowWorked>
-      )}
+      <StepNotes rule={rule} kind={kind} />
 
-      {rule.steps.length < MAX_BEHAVIOR_STEPS && (
+      {rule.steps.length < maxSteps && (
         <button
           type="button"
           className="behavior-add"
-          onClick={() => onChange({ ...rule, steps: [...rule.steps, emptyStep()] })}
+          onClick={() => onChange({ ...rule, steps: [...rule.steps, firstStep(kind)] })}
         >
           <Icon name="plus" />
           <span>Then…</span>
         </button>
       )}
     </div>
+  );
+}
+
+/** The extra controls of the object-layer steps (rebuild plan F): which token, which counter, which type, which zone. */
+function ObjectControls({ step, onChange }: { step: BehaviorStep; onChange: (next: BehaviorStep) => void }) {
+  if (step.op === 'token') {
+    const custom = step.tk === 'custom';
+    const types = step.ty || 'C';
+    const creature = types.includes('C');
+    const toggleType = (letter: string) => {
+      const next = types.includes(letter) ? types.replace(letter, '') : types + letter;
+      // A token is something. Unticking the last type is refused, the way the
+      // mana colors refuse their last one.
+      if (!next) return;
+      const ordered = [...'CAE'].filter((t) => next.includes(t)).join('');
+      const base = { ...step, ty: ordered };
+      onChange(ordered.includes('C') ? { ...base, tp: step.tp ?? 1, tt: step.tt ?? 1 } : without(base, 'tp', 'tt', 'kw'));
+    };
+    return (
+      <div className="behavior-obj">
+        <label className="field">
+          <select
+            value={step.tk ?? 'beast'}
+            aria-label="Which token"
+            onChange={(e) =>
+              onChange(
+                e.target.value === 'custom'
+                  ? { ...step, tk: 'custom', ty: 'C', tp: 1, tt: 1 }
+                  : without({ ...step, tk: e.target.value }, 'ty', 'tp', 'tt', 'kw'),
+              )
+            }
+          >
+            {BEHAVIOR_TOKENS.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {custom && (
+          <>
+            <div className="behavior-obj-row" role="group" aria-label="Its card types">
+              {BEHAVIOR_TYPES.filter((t) => t.id !== 'L').map((t) => (
+                <label key={t.id} className="behavior-check">
+                  <input type="checkbox" checked={types.includes(t.id)} onChange={() => toggleType(t.id)} />
+                  <span>{t.label}</span>
+                </label>
+              ))}
+            </div>
+            {creature && (
+              <div className="behavior-obj-row">
+                <label className="field behavior-n">
+                  <input
+                    type="number"
+                    min={0}
+                    max={MAX_TOKEN_PT}
+                    inputMode="numeric"
+                    aria-label="Power"
+                    value={step.tp ?? 1}
+                    onChange={(e) => onChange({ ...step, tp: Math.max(0, Math.min(MAX_TOKEN_PT, Math.round(Number(e.target.value) || 0))) })}
+                  />
+                </label>
+                <span className="behavior-pt-slash">/</span>
+                <label className="field behavior-n">
+                  <input
+                    type="number"
+                    min={1}
+                    max={MAX_TOKEN_PT}
+                    inputMode="numeric"
+                    aria-label="Toughness"
+                    value={step.tt ?? 1}
+                    onChange={(e) => onChange({ ...step, tt: Math.max(1, Math.min(MAX_TOKEN_PT, Math.round(Number(e.target.value) || 1))) })}
+                  />
+                </label>
+                <label className="behavior-check">
+                  <input
+                    type="checkbox"
+                    checked={!!step.kw?.includes('H')}
+                    onChange={(e) => onChange(e.target.checked ? { ...step, kw: 'H' } : without(step, 'kw'))}
+                  />
+                  <span>Haste</span>
+                </label>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+  if (step.op === 'counter') {
+    return (
+      <div className="behavior-obj">
+        <label className="field">
+          <select
+            value={step.ck ?? 'p1p1'}
+            aria-label="Which counters"
+            onChange={(e) => onChange({ ...step, ck: e.target.value === 'charge' ? 'charge' : 'p1p1' })}
+          >
+            <option value="p1p1">+1/+1 counters</option>
+            <option value="charge">Charge counters (or any other kind)</option>
+          </select>
+        </label>
+      </div>
+    );
+  }
+  if (step.op === 'addtype') {
+    return (
+      <div className="behavior-obj behavior-zones">
+        <label className="field">
+          <select
+            value={step.ty ?? 'L'}
+            aria-label="Which type"
+            onChange={(e) => {
+              const ty = e.target.value;
+              onChange(ty === 'L' ? { ...step, ty } : without({ ...step, ty }, 'sub'));
+            }}
+          >
+            {BEHAVIOR_TYPES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {step.ty === 'L' && (
+          <label className="field">
+            <select
+              value={step.sub ?? ''}
+              aria-label="Which basic land type"
+              onChange={(e) => onChange(e.target.value ? { ...step, sub: e.target.value } : without(step, 'sub'))}
+            >
+              <option value="">No basic land type</option>
+              {Object.entries(BASIC_BY_COLOR).map(([color, name]) => (
+                <option key={color} value={color}>
+                  {name} (taps for {`{${color}}`})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+    );
+  }
+  if (step.op === 'landfrom') {
+    return (
+      <div className="behavior-obj">
+        <label className="field">
+          <select
+            value={step.from ?? 'graveyard'}
+            aria-label="From where"
+            onChange={(e) => onChange({ ...step, from: e.target.value as BehaviorZone })}
+          >
+            <option value="graveyard">From your graveyard</option>
+            <option value="librarytop">From the top of your library</option>
+          </select>
+        </label>
+      </div>
+    );
+  }
+  return null;
+}
+
+/** What a rule's steps need explaining, behind one disclosure. */
+function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
+  const has = (...ops: BehaviorStepKind[]) => rule.steps.some((s) => ops.includes(s.op));
+  const amounts = rule.steps.flatMap((s) => [s.x, ...(s.qx ? [s.qx] : [])]);
+  const notes: { key: string; text: React.ReactNode }[] = [];
+  if (has('move', 'flicker')) {
+    notes.push({
+      key: 'q',
+      text: (
+        <>
+          Criteria use the card search syntax, matched against this deck: <code>t:basic</code>, <code>t:creature mv&lt;=3</code>,{' '}
+          <code>o:"draw a card"</code>. Leave it empty for any card. <code>set:</code> and <code>is:foil</code> are about a
+          printing, so they never match here. The battlefield holds every permanent you control now, creatures included, so a
+          sacrifice can go and find one; how a card lands there is the picker beside the zones.
+        </>
+      ),
+    });
+  }
+  if (has('mana')) {
+    notes.push({
+      key: 'mana',
+      text: '"Add X mana" is your mana pool, not a permanent: the mana is there for the rest of the turn you make it and gone at the end of it, spent or not. A Treasure is the same mana with a keep attached, so use this for the mana that vanishes, like a landfall trigger or a ritual, and the Treasure step for the mana that waits.',
+    });
+  }
+  if (has('flicker')) {
+    notes.push({
+      key: 'flicker',
+      text: 'A flicker takes permanents off the battlefield and puts them straight back, which fires everything they do on the way in. What it costs is what they were already doing: the mana arrives tapped again, and a creature is summoning sick again, so it cannot attack this turn. A token that leaves does not come back.',
+    });
+  }
+  if (rule.steps.some((s) => (s.op === 'move' || s.op === 'self') && (s.to ?? '').startsWith('library'))) {
+    notes.push({
+      key: 'library',
+      text: 'Into the library on its own means a random spot, which is what shuffling a card back in comes to. Top and bottom go where they say. Send more than one card to either and they arrive in a random order, because nothing decided which went first. Only the library is ever searched from the top down, so it is also the only zone you can take cards out of.',
+    });
+  }
+  if (has('self')) {
+    notes.push({
+      key: 'self',
+      text: '"Put this card into a zone" is the card talking about itself, and it happens instead of where the card would otherwise go: a spell that exiles itself rather than hitting the graveyard, or one that shuffles back into the library. On a permanent it also takes the card off the battlefield, so anything it was doing there stops. A commander goes back to the command zone instead, and costs two more each time.',
+    });
+  }
+  if (has('token')) {
+    notes.push({
+      key: 'token',
+      text: 'Tokens are permanents like any other: they count as creatures, wake "enters" rules, and attack when combat says so, from the turn after they arrive unless they have haste. A Treasure pays for something and is sacrificed; a Food or a Clue sits there, since eating or cracking one is not modelled yet. A token that leaves the battlefield is gone.',
+    });
+  }
+  if (has('counter')) {
+    notes.push({
+      key: 'counter',
+      text: 'The counters go on this card, the copy that just arrived if there are two. +1/+1 counters add to its power; any other kind is only counted, which is what "the counters on it" reads, so an Everflowing Chalice is an entry rule putting "the times it was kicked" charge counters on it and a mana rule tapping for that many.',
+    });
+  }
+  if (has('pump', 'keyword')) {
+    notes.push({
+      key: 'pump',
+      text:
+        kind === 'static'
+          ? 'For as long as this card is out, every creature the criteria above finds gets it, the ones that arrive later included. The amount is read again whenever the battlefield changes.'
+          : 'Until end of turn, for the creatures on the battlefield now: a Craterhoof\'s +X/+X, read once as it resolves. Combat comes after the turn\'s spells, so a pump in a play or entry rule is in time for the attack.',
+    });
+  }
+  if (has('addtype')) {
+    notes.push({
+      key: 'addtype',
+      text: 'The permanents the criteria finds are that type as well, for everything that asks: t:land in another rule, "lands you control", landfall. The criteria reads what cards are printed as, so a rule cannot feed on the type it adds. A basic land type is a mana ability: a creature made a Forest taps for {G} from the next turn.',
+    });
+  }
+  if (has('extramana')) {
+    notes.push({
+      key: 'extramana',
+      text: 'Each permanent the criteria finds adds this much more, in these colors, whenever it taps for mana. Badgermole Cub is t:creature, 1, green.',
+    });
+  }
+  if (has('landfrom')) {
+    notes.push({
+      key: 'landfrom',
+      text: 'Your land drop can come from there as well as from your hand, and does when it is as good: a land you play from the graveyard or the library is one your hand keeps. A fetch played from the graveyard goes back there when it cracks, so Ramunap Excavator plays it again next turn.',
+    });
+  }
+  if (has('tapsfor')) {
+    notes.push({
+      key: 'tapsfor',
+      text: 'This replaces the mana ability the card database read, and makes the card a mana source if it was not one. The amount is read every turn the pool is built, so it can count the charge counters on it or your creatures (Gaea\'s Cradle). A creature is summoning sick the turn it arrives, and one that taps for mana does not attack that turn.',
+    });
+  }
+  if (amounts.some((x) => x.kind === 'prev')) {
+    notes.push({
+      key: 'prev',
+      text: '"The previous X" is what the step before it actually reached, not what it asked for. That is what makes a Windfall writable: discard X where X is your hand, then draw the previous X. A step that found less than it wanted hands on the smaller number, and the first step of a rule has nothing before it, so it reads zero.',
+    });
+  }
+  if (amounts.some((x) => x.kind === 'matching')) {
+    notes.push({
+      key: 'matching',
+      text: '"Your permanents matching" counts what you control right now against the criteria under it: t:elf is Distant Melody. Empty counts every permanent, tokens and lands included.',
+    });
+  }
+  if (amounts.some((x) => !!x.op)) {
+    notes.push({
+      key: 'op',
+      text: (
+        <>
+          <code>÷</code> rounds down and <code>÷↑</code> rounds up, because the cards print both. Nothing is capped: half a
+          99-card library really is 49 cards, and a step stops only when the zone it is working on runs out.
+        </>
+      ),
+    });
+  }
+  if (rule.steps.some((s) => s.op === 'move' && queryHasX(s.q))) {
+    notes.push({
+      key: 'x',
+      text: (
+        <>
+          <code>[X]</code> is the one thing here the card search does not know. Write it anywhere a number goes, say what it is
+          worth below, and <code>mv&lt;=[X]</code> becomes <code>mv&lt;=5</code> as the rule resolves. <code>[X-1]</code> and{' '}
+          <code>[X+2]</code> work too; nothing fancier does, and nothing goes below zero. This one <em>is</em> capped, at{' '}
+          {MAX_QUERY_X}: the query is compiled once per value of X before the game starts, so the range has to be a short one.
+        </>
+      ),
+    });
+  }
+  if (notes.length === 0) return null;
+  return (
+    <HowWorked label="How these steps work">
+      {notes.map((n) => (
+        <p key={n.key} className="fine-print">
+          {n.text}
+        </p>
+      ))}
+    </HowWorked>
+  );
+}
+
+/**
+ * Other ways to cast the card (rebuild plan F5): a price and a zone rather than
+ * something the card does, so they sit under the rules instead of among them.
+ * The rules still run whichever way it was cast.
+ */
+function CastOptionsEditor({
+  options,
+  onChange,
+  permanent,
+}: {
+  options: CastOption[];
+  onChange: (next: CastOption[]) => void;
+  permanent: boolean;
+}) {
+  const used = new Set(options.map((o) => o.kind));
+  // Flashback, retrace and mayhem cast a spell again; a permanent cast from the
+  // graveyard stays out, which only escape prints.
+  const offered = CAST_OPTIONS.filter((o) => !permanent || !o.graveyard || o.id === 'escape');
+  const set = (i: number, next: CastOption) => onChange(options.map((o, k) => (k === i ? next : o)));
+  const add = () => {
+    const kind = offered.find((o) => !used.has(o.id));
+    if (kind) onChange([...options, { kind: kind.id, ...(kind.hasCost ? { cost: '' } : {}), ...(kind.n ? { n: kind.id === 'suspend' ? 4 : 3 } : {}) }]);
+  };
+  return (
+    <>
+      {options.length > 0 && <h4 className="deck-stats-head">Other ways to cast it</h4>}
+      {options.map((o, i) => {
+        const info = CAST_OPTIONS.find((c) => c.id === o.kind)!;
+        const bad = info.hasCost && !normalizeCost(o.cost);
+        return (
+          <div className="behavior-rule behavior-cast" key={i}>
+            <div className="behavior-rule-head">
+              <label className="field behavior-trigger">
+                <select
+                  value={o.kind}
+                  aria-label="How it is cast"
+                  onChange={(e) => {
+                    const next = CAST_OPTIONS.find((c) => c.id === e.target.value)!;
+                    set(i, {
+                      kind: next.id as CastOptionKind,
+                      ...(next.hasCost ? { cost: o.cost ?? '' } : {}),
+                      ...(next.n ? { n: o.n ?? (next.id === 'suspend' ? 4 : 3) } : {}),
+                    });
+                  }}
+                >
+                  {offered
+                    .filter((c) => c.id === o.kind || !used.has(c.id))
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="behavior-drop"
+                onClick={() => onChange(options.filter((_o, k) => k !== i))}
+                aria-label="Remove this way to cast it"
+              >
+                <Icon name="trash" />
+              </button>
+            </div>
+            <p className="fine-print">{info.hint}</p>
+            {(info.hasCost || info.n) && (
+              <div className="behavior-zones">
+                {info.hasCost && (
+                  <label className="field">
+                    <input
+                      type="text"
+                      value={o.cost ?? ''}
+                      maxLength={40}
+                      aria-label="Its cost"
+                      placeholder="Cost, like {2}{U}"
+                      onChange={(e) => set(i, { ...o, cost: e.target.value })}
+                    />
+                  </label>
+                )}
+                {info.n && (
+                  <label className="field behavior-n behavior-cast-n">
+                    <input
+                      type="number"
+                      min={info.id === 'suspend' ? 1 : 0}
+                      max={MAX_CAST_N}
+                      inputMode="numeric"
+                      aria-label={info.n}
+                      value={o.n ?? 1}
+                      onChange={(e) => set(i, { ...o, n: Math.max(0, Math.min(MAX_CAST_N, Math.round(Number(e.target.value) || 0))) })}
+                    />
+                  </label>
+                )}
+                {info.n && <span className="fine-print">{info.n}</span>}
+              </div>
+            )}
+            {bad && <p className="fine-print behavior-nomatch">Write the cost in mana symbols, like {'{2}{U}'} or {'{0}'}. It is not saved until it reads as one.</p>}
+          </div>
+        );
+      })}
+      {options.length < MAX_CAST_OPTIONS && offered.some((o) => !used.has(o.id)) && (
+        <button type="button" className="behavior-add" onClick={add}>
+          <Icon name="plus" />
+          <span>Cast it another way</span>
+        </button>
+      )}
+    </>
   );
 }

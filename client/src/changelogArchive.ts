@@ -9,6 +9,16 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.159.2',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'What each card is worth now scores one copy rather than the whole stack. Twenty basics added together buried every other card in the list and only told you that you run twenty basics. A Forest is now judged against a Sol Ring, and rows with several copies still show what all of them come to.',
+      },
+    ],
+  },
+  {
     version: '0.159.1',
     changes: [
       {

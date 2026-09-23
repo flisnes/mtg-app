@@ -2,6 +2,19 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.171.0
+
+- **Added: card rules can describe what a card becomes, not only what it does.** The Model tab's card editor has new kinds of rule and step:
+  - *Create X tokens*: Treasure, Food, Clue, Beast 4/4, Soldier 1/1, Zombie 2/2, or one you describe (power, toughness, types, haste). Tokens count as creatures, wake "enters" rules and attack. Rampaging Baloths is one line now.
+  - *Put X counters on it*, +1/+1 or charge, and a new amount, *the counters on it*.
+  - *Creatures get +X/+X* and *gain haste*, until end of turn on a trigger (Craterhoof Behemoth), or for as long as the card is out.
+  - *While it is on the battlefield*: an anthem, an added card type (Ashaya makes your creatures Forest lands, so they count as lands, trigger landfall and tap for {G}), extra mana when a creature taps for mana (Badgermole Cub), land drops from your graveyard or the top of your library (Ramunap Excavator, Courser of Kruphix), and no maximum hand size (Reliquary Tower).
+  - *It taps for mana*: a mana ability you write yourself, with an amount that can count its own charge counters or your creatures. Everflowing Chalice cast for four taps for two.
+  - A new amount, *your permanents matching*, with its own search (Distant Melody).
+  - *Cast it another way*: kicker and multikicker (paid whenever the mana is there, with *the times it was kicked* as an amount), flashback, retrace, escape, mayhem and suspend.
+- **Changed: the simulator plays more of the rules.** It discards down to seven cards at end of turn, casts your commander again after it leaves the battlefield with two more mana of tax each time, lets creatures with haste attack the turn they arrive, and a creature that tapped for mana to pay for your turn no longer also attacks. Draw-heavy decks read a little lower on hand size as a result.
+- **Fixed:** the search box of a "when you cast" or "when another permanent enters" rule was drawn as a huge oval.
+
 ## 0.170.0
 
 - **Added: does the spend order matter?** The Model tab now plays your deck under all four spend orders (ramp first, draw first, creatures first, cheapest first) over the same 2,000 shuffles and puts them in one table: commander on time, mana on turn 6, mana spent on turn 6 and cards seen by then. The best in each column is green when the gap is more than luck, and one line says which number the order moves most, or that it barely moves anything. Tap an order to play the deck that way.

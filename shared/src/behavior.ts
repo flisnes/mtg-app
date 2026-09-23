@@ -59,7 +59,23 @@ import { BASIC_LAND_TYPES, MANA_LETTERS, sourceColors, type EffectProfile, type 
  * `enters` with `t:land` and Archmage Emeritus is `cast` with
  * `t:instant or t:sorcery`.
  */
-export type BehaviorTrigger = 'play' | 'etb' | 'attack' | 'death' | 'upkeep' | 'cast' | 'enters';
+export type BehaviorTrigger = 'play' | 'etb' | 'attack' | 'death' | 'upkeep' | 'cast' | 'enters' | 'static' | 'tap';
+
+/**
+ * What kind of rule it is, which decides the steps it may hold (rebuild plan F).
+ *
+ * The first seven entries of BehaviorTrigger are moments: something happens and
+ * the steps run once. `static` and `tap` are not moments, they are standing
+ * facts about the card while it is on the battlefield, and they hold a
+ * different vocabulary. `static` grants (an anthem's +1/+1, Ashaya's added land
+ * type, Reliquary Tower's hand size). `tap` is a mana ability: one step saying
+ * what it taps for, read every turn it is untapped rather than run once.
+ *
+ * They share the rule list and the dropdown with the triggers because to the
+ * person writing them they are the same question, "what does this card do", and
+ * a second editor would be a second place to look.
+ */
+export type RuleKind = 'trigger' | 'static' | 'tap';
 
 /** The triggers that watch other cards, and so carry a criteria of their own. */
 export const WATCHED_TRIGGERS = ['cast', 'enters'] as const;
@@ -115,7 +131,20 @@ export type BehaviorStepKind =
   | 'damage'
   | 'move'
   | 'flicker'
-  | 'self';
+  | 'self'
+  // Rebuild plan F: the object layer. `token`, `counter`, `pump` and `keyword`
+  // run on a trigger (pump and keyword last until end of turn there); the next
+  // four only mean anything in a `static` rule; `tapsfor` is the one step of a
+  // `tap` rule.
+  | 'token'
+  | 'counter'
+  | 'pump'
+  | 'keyword'
+  | 'addtype'
+  | 'extramana'
+  | 'landfrom'
+  | 'nomaxhand'
+  | 'tapsfor';
 
 /**
  * Where a step's number comes from.
@@ -137,7 +166,15 @@ export type BehaviorAmountKind =
   | 'power'
   | 'graveyard'
   | 'turn'
-  | 'xpaid';
+  | 'xpaid'
+  // Rebuild plan F. `counters` is the counters on the card holding the rule
+  // (Everflowing Chalice's charge counters), `kicked` how many times its kicker
+  // was paid, and `matching` the permanents you control matching the amount's
+  // own criteria (Distant Melody), which `lands` and `creatures` are two fixed
+  // cases of.
+  | 'counters'
+  | 'kicked'
+  | 'matching';
 
 /**
  * Arithmetic on an amount, so "half your library" and "that many minus one" are
@@ -166,6 +203,12 @@ export interface BehaviorAmount {
   op?: BehaviorAmountOp;
   /** The right-hand side of `op`, at least 1. Absent exactly when `op` is. */
   by?: number;
+  /**
+   * `matching` only: which of your permanents count, as a Scryfall query.
+   * Empty is every permanent you control. No `[X]`: an amount cannot be the
+   * number that fills its own criteria.
+   */
+  q?: string;
 }
 
 export interface BehaviorStep {
@@ -229,6 +272,235 @@ export interface BehaviorStep {
    * Only meaningful with more than one color on offer and more than one mana.
    */
   oneColor?: true;
+  /**
+   * `token` only: which token, an id from BEHAVIOR_TOKENS. `custom` reads the
+   * three fields after it.
+   */
+  tk?: string;
+  /** `token` with `tk: 'custom'`: its power and toughness. */
+  tp?: number;
+  tt?: number;
+  /**
+   * Card types as letters: C creature, A artifact, E enchantment, L land.
+   * A custom token's types, or the one type an `addtype` grant adds.
+   */
+  ty?: string;
+  /** `token` (custom) and `keyword`: keywords as letters. H is haste, the only one this model can act on. */
+  kw?: string;
+  /** `counter` only: `p1p1` for +1/+1 counters, `charge` for everything that only gets counted. */
+  ck?: 'p1p1' | 'charge';
+  /**
+   * `addtype` with `ty: 'L'` only: a basic land type, as the color letter it
+   * taps for (G is Forest). Ashaya makes creatures Forest lands, and a Forest
+   * taps for {G}; that is the whole reason the subtype is worth writing.
+   */
+  sub?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Tokens (rebuild plan F3)
+// ---------------------------------------------------------------------------
+
+export interface TokenOption {
+  id: string;
+  label: string;
+  /** How it reads on the battlefield and in a trace line. */
+  name: string;
+  /** Type letters, as BehaviorStep.ty. */
+  types: string;
+  power?: number;
+  toughness?: number;
+  /** Its colors as WUBRG letters, so `c:g` finds a Beast. */
+  colors?: string;
+  /** The subtype on its type line, so `t:beast` finds one. */
+  sub?: string;
+}
+
+/**
+ * The tokens worth a name. Treasure is here so the picker has one list, and it
+ * still runs down the old Treasure path: a source that pays for something and
+ * is sacrificed when it does. Food and Clue are artifacts that sit there and
+ * count; eating one or cracking one needs activated abilities, which this model
+ * does not have yet.
+ */
+export const BEHAVIOR_TOKENS: readonly TokenOption[] = [
+  { id: 'treasure', label: 'Treasure', name: 'Treasure', types: 'A', sub: 'Treasure' },
+  { id: 'food', label: 'Food', name: 'Food', types: 'A', sub: 'Food' },
+  { id: 'clue', label: 'Clue', name: 'Clue', types: 'A', sub: 'Clue' },
+  { id: 'beast', label: 'Beast 4/4', name: 'Beast', types: 'C', power: 4, toughness: 4, colors: 'G', sub: 'Beast' },
+  { id: 'soldier', label: 'Soldier 1/1', name: 'Soldier', types: 'C', power: 1, toughness: 1, colors: 'W', sub: 'Soldier' },
+  { id: 'zombie', label: 'Zombie 2/2', name: 'Zombie', types: 'C', power: 2, toughness: 2, colors: 'B', sub: 'Zombie' },
+  { id: 'custom', label: 'Something else', name: 'Token', types: 'C' },
+];
+
+const TOKEN_BY_ID = new Map(BEHAVIOR_TOKENS.map((t) => [t.id, t]));
+
+/** Power and toughness a custom token may be given. */
+export const MAX_TOKEN_PT = 20;
+
+/**
+ * What a `token` step makes, resolved: the catalog entry, or the custom one
+ * with its own numbers. Null for an id this build does not know.
+ */
+export function tokenSpec(step: BehaviorStep): TokenOption | null {
+  const base = TOKEN_BY_ID.get(step.tk ?? '');
+  if (!base) return null;
+  if (base.id !== 'custom') return base;
+  const types = step.ty || 'C';
+  const creature = types.includes('C');
+  const kw = step.kw?.includes('H') ? ', haste' : '';
+  const pt = creature ? `${step.tp ?? 1}/${step.tt ?? 1}` : '';
+  const kinds = [...types].map((t) => TYPE_WORD[t] ?? '').filter(Boolean).join(' ');
+  return {
+    id: 'custom',
+    label: 'Something else',
+    name: `${pt ? `${pt} ` : ''}${kinds || 'Creature'} token${kw}`,
+    types,
+    ...(creature ? { power: step.tp ?? 1, toughness: step.tt ?? 1 } : {}),
+  };
+}
+
+/** One key per distinct token, so two rules making Beasts share one card. */
+export function tokenKey(step: BehaviorStep): string {
+  if (step.tk !== 'custom') return step.tk ?? '';
+  return `custom:${step.tp ?? 1}/${step.tt ?? 1}:${step.ty || 'C'}:${step.kw?.includes('H') ? 'H' : ''}`;
+}
+
+const TYPE_WORD: Record<string, string> = { C: 'Creature', A: 'Artifact', E: 'Enchantment', L: 'Land' };
+
+/** Card types a `addtype` grant can add, and a custom token can be. */
+export const BEHAVIOR_TYPES: readonly { id: string; label: string }[] = [
+  { id: 'C', label: 'Creature' },
+  { id: 'A', label: 'Artifact' },
+  { id: 'E', label: 'Enchantment' },
+  { id: 'L', label: 'Land' },
+];
+
+/** The basic land types, by the color they tap for. */
+export const BASIC_BY_COLOR: Readonly<Record<string, string>> = {
+  W: 'Plains',
+  U: 'Island',
+  B: 'Swamp',
+  R: 'Mountain',
+  G: 'Forest',
+};
+
+// ---------------------------------------------------------------------------
+// Cast options (rebuild plan F5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Other ways to cast the card. Kept apart from the rules because they are not
+ * something the card does, they are a different price and a different zone for
+ * the same spell: the rules still run, whichever way it was cast.
+ */
+export type CastOptionKind = 'kicker' | 'multikicker' | 'flashback' | 'retrace' | 'escape' | 'mayhem' | 'suspend';
+
+export interface CastOption {
+  kind: CastOptionKind;
+  /** The price, as printed: `{2}{U}`. Retrace has none of its own: it is the card's mana cost. */
+  cost?: string;
+  /** Suspend: time counters. Escape: other cards exiled from your graveyard. */
+  n?: number;
+}
+
+export interface CastOptionInfo {
+  id: CastOptionKind;
+  label: string;
+  hint: string;
+  /** It has a price of its own. */
+  hasCost: boolean;
+  /** And a number, named like this. */
+  n?: string;
+  /** Cast out of the graveyard rather than the hand. */
+  graveyard?: boolean;
+}
+
+export const CAST_OPTIONS: readonly CastOptionInfo[] = [
+  {
+    id: 'kicker',
+    label: 'Kicker',
+    hint: 'Paid as well whenever the mana left after the spell covers it. "The times it was kicked" reads 1 or 0.',
+    hasCost: true,
+  },
+  {
+    id: 'multikicker',
+    label: 'Multikicker',
+    hint: 'Paid as many times as the mana left allows. With a cost of {0} it is not cast at all until it can be kicked once.',
+    hasCost: true,
+  },
+  {
+    id: 'flashback',
+    label: 'Flashback',
+    hint: 'Cast from your graveyard for this cost, then exiled.',
+    hasCost: true,
+    graveyard: true,
+  },
+  {
+    id: 'retrace',
+    label: 'Retrace',
+    hint: 'Cast from your graveyard for its mana cost, discarding a land from your hand as well. It goes back to the graveyard.',
+    hasCost: false,
+    graveyard: true,
+  },
+  {
+    id: 'escape',
+    label: 'Escape',
+    hint: 'Cast from your graveyard for this cost, exiling that many other cards from your graveyard.',
+    hasCost: true,
+    n: 'cards to exile',
+    graveyard: true,
+  },
+  {
+    id: 'mayhem',
+    label: 'Mayhem',
+    hint: 'Cast from your graveyard for this cost, on a turn you discarded it.',
+    hasCost: true,
+    graveyard: true,
+  },
+  {
+    id: 'suspend',
+    label: 'Suspend',
+    hint: 'Exiled from your hand for this cost with that many time counters. One comes off each upkeep; at zero it is cast for free, and a creature has haste.',
+    hasCost: true,
+    n: 'time counters',
+  },
+];
+
+const CAST_OPTION_BY_ID = new Map(CAST_OPTIONS.map((o) => [o.id as string, o]));
+
+/** Cast options on one card. Kicker, a graveyard cast and suspend is already a lot of card. */
+export const MAX_CAST_OPTIONS = 3;
+/** Time counters, or cards exiled for escape. */
+export const MAX_CAST_N = 20;
+
+/** A printed cost, symbols only: `{2}{U}`, `{0}`, `{G/W}`. Anything else is not one. */
+const COST_RE = /^(\{(?:\d{1,2}|[WUBRGCSX]|[WUBRG2]\/[WUBRGP])\})+$/;
+
+export function normalizeCost(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.replace(/\s+/g, '').toUpperCase();
+  return s.length <= 40 && COST_RE.test(s) ? s : null;
+}
+
+export function describeCastOption(o: CastOption): string {
+  const cost = normalizeCost(o.cost) ?? o.cost ?? '';
+  switch (o.kind) {
+    case 'kicker':
+      return `Kicker ${cost}: paid whenever the mana is there`;
+    case 'multikicker':
+      return `Multikicker ${cost}: paid as often as the mana allows`;
+    case 'flashback':
+      return `Flashback ${cost}: cast again from the graveyard, then exiled`;
+    case 'retrace':
+      return 'Retrace: cast from the graveyard for its mana cost and a land from hand';
+    case 'escape':
+      return `Escape ${cost}, exiling ${o.n ?? 0} other card${o.n === 1 ? '' : 's'}: cast from the graveyard`;
+    case 'mayhem':
+      return `Mayhem ${cost}: cast from the graveyard the turn it was discarded`;
+    case 'suspend':
+      return `Suspend ${o.n ?? 0} for ${cost}: cast for free ${o.n ?? 0} upkeep${o.n === 1 ? '' : 's'} later`;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +561,16 @@ export interface BehaviorRule {
 export interface CardBehavior {
   v: 1;
   rules: BehaviorRule[];
+  /**
+   * Other ways to cast it (rebuild plan F5). Absent on nearly every card.
+   *
+   * Still `v: 1`. A build from before this field drops it, and drops the new
+   * step kinds, and plays the card out as less than it says, which is the
+   * direction §11.4 allows; `v: 2` would have made the same build refuse the
+   * whole row. The sync repair `behaviorGrammarF` re-pulls the rows such a
+   * build stored once it updates.
+   */
+  cast?: CastOption[];
 }
 
 export const CARD_BEHAVIOR_VERSION = 1;
@@ -374,7 +656,12 @@ export interface TriggerOption {
    * matches it against the card that caused the event.
    */
   watches?: boolean;
+  /** Not a moment but a standing fact. See RuleKind. Absent is `trigger`. */
+  kind?: RuleKind;
 }
+
+/** The kind of a rule, off its `on`. */
+export const ruleKind = (on: BehaviorTrigger | string): RuleKind => TRIGGER_BY_ID.get(on)?.kind ?? 'trigger';
 
 export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
   {
@@ -426,6 +713,22 @@ export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
     needs: 'permanent',
     watches: true,
   },
+  {
+    id: 'static',
+    label: 'While it is on the battlefield',
+    lead: 'While it is on the battlefield',
+    hint: 'A standing effect: an anthem, an added type, extra land drops from another zone, no maximum hand size. Narrow below which of your permanents it applies to. It stops the moment the card leaves.',
+    needs: 'permanent',
+    kind: 'static',
+  },
+  {
+    id: 'tap',
+    label: 'It taps for mana',
+    lead: 'It taps for mana',
+    hint: 'Its mana ability, in place of whatever the card database read. The amount is read every turn it is untapped, so it can count its own charge counters or your creatures.',
+    needs: 'permanent',
+    kind: 'tap',
+  },
 ];
 
 export interface StepOption {
@@ -433,7 +736,13 @@ export interface StepOption {
   label: string;
   /** Third person, for writing the rule out: "draws 2". */
   verb: string;
+  /** Which kinds of rule may hold it. Absent is triggers only. */
+  kinds?: readonly RuleKind[];
+  /** It takes no amount: a switch, not a number. */
+  noAmount?: boolean;
 }
+
+const TRIGGER_AND_STATIC: readonly RuleKind[] = ['trigger', 'static'];
 
 export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'draw', label: 'Draw X', verb: 'draw' },
@@ -442,12 +751,28 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'scry', label: 'Scry X', verb: 'scry' },
   { id: 'surveil', label: 'Surveil X', verb: 'surveil' },
   { id: 'treasure', label: 'Create X Treasures', verb: 'create' },
+  { id: 'token', label: 'Create X tokens', verb: 'create' },
   { id: 'mana', label: 'Add X mana', verb: 'add' },
   { id: 'damage', label: 'Deal X damage', verb: 'deal' },
   { id: 'move', label: 'Move X between zones', verb: 'move' },
   { id: 'flicker', label: 'Flicker X permanents', verb: 'flicker' },
-  { id: 'self', label: 'Put this card into a zone', verb: 'put' },
+  { id: 'self', label: 'Put this card into a zone', verb: 'put', noAmount: true },
+  { id: 'counter', label: 'Put X counters on it', verb: 'put' },
+  { id: 'pump', label: 'Creatures get +X/+X', verb: 'give', kinds: TRIGGER_AND_STATIC },
+  { id: 'keyword', label: 'Creatures gain haste', verb: 'give', kinds: TRIGGER_AND_STATIC, noAmount: true },
+  { id: 'addtype', label: 'Add a card type', verb: 'add', kinds: ['static'], noAmount: true },
+  { id: 'extramana', label: 'Tapping one for mana adds X more', verb: 'add', kinds: ['static'] },
+  { id: 'landfrom', label: 'Play lands from another zone', verb: 'play', kinds: ['static'], noAmount: true },
+  { id: 'nomaxhand', label: 'No maximum hand size', verb: 'have', kinds: ['static'], noAmount: true },
+  { id: 'tapsfor', label: 'Taps for X mana', verb: 'tap', kinds: ['tap'] },
 ];
+
+/** Whether a rule of this kind may hold this step. */
+export const stepFits = (op: BehaviorStepKind | string, kind: RuleKind): boolean =>
+  (STEP_BY_ID.get(op)?.kinds ?? ['trigger']).includes(kind);
+
+/** The zones lands can be played from, besides your hand (Ramunap, Courser). */
+export const LAND_FROM_ZONES: readonly BehaviorZone[] = ['graveyard', 'librarytop'];
 
 export interface ManaColorOption {
   /** A letter of MANA_LETTERS. */
@@ -547,6 +872,12 @@ export interface AmountOption {
   needsPrev?: boolean;
   /** Arithmetic on it would say nothing: see BehaviorAmount.op. */
   noAdjust?: boolean;
+  /** Only means anything on a card that can be on the battlefield. */
+  needsPermanent?: boolean;
+  /** Only means anything on a play or entry rule of a card with a kicker. */
+  needsKicker?: boolean;
+  /** Carries a criteria of its own. */
+  hasQuery?: boolean;
 }
 
 /**
@@ -567,6 +898,9 @@ export const BEHAVIOR_AMOUNTS: readonly AmountOption[] = [
   { id: 'power', label: 'the greatest power', phrase: 'the greatest power among creatures you control' },
   { id: 'graveyard', label: 'your graveyard', phrase: 'cards in your graveyard' },
   { id: 'turn', label: 'the turn number', phrase: 'the turn number' },
+  { id: 'matching', label: 'your permanents matching', phrase: 'permanents you control', hasQuery: true },
+  { id: 'counters', label: 'counters on it', phrase: 'the counters on it', needsPermanent: true },
+  { id: 'kicked', label: 'the times kicked', phrase: 'the times it was kicked', needsKicker: true },
 ];
 
 export interface AmountOpOption {
@@ -625,7 +959,8 @@ export function applyAmountOp(value: number, x: BehaviorAmount): number {
 }
 
 export function describeAmount(x: BehaviorAmount): string {
-  const base = x.kind === 'fixed' ? String(x.n ?? 0) : (AMOUNT_BY_ID.get(x.kind)?.phrase ?? '?');
+  const phrase = x.kind === 'fixed' ? String(x.n ?? 0) : (AMOUNT_BY_ID.get(x.kind)?.phrase ?? '?');
+  const base = x.kind === 'matching' && x.q ? `${phrase} matching ${x.q}` : phrase;
   if (!x.op || !x.by) return base;
   const op = OP_BY_ID.get(x.op);
   return `${base} ${op?.sign ?? x.op} ${x.by}${op?.tail ?? ''}`;
@@ -657,7 +992,7 @@ const intoPrep = (zone: BehaviorZone | undefined): string => (zone === 'battlefi
 const tappedPhrase = (step: BehaviorStep): string =>
   step.to === 'battlefield' ? (step.untapped ? ', untapped' : ', tapped') : '';
 
-export function describeStep(step: BehaviorStep): string {
+export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): string {
   const verb = STEP_BY_ID.get(step.op)?.verb ?? step.op;
   const computed = step.x.kind !== 'fixed';
   const count = computed ? 'X' : String(step.x.n ?? 0);
@@ -692,6 +1027,47 @@ export function describeStep(step: BehaviorStep): string {
     const many = computed || (step.x.n ?? 0) !== 1;
     return `${verb} ${count} Treasure${many ? 's' : ''}${tail}`;
   }
+  const many = computed || (step.x.n ?? 0) !== 1;
+  const whose = step.q ? ` matching ${step.q}` : '';
+  switch (step.op) {
+    case 'token': {
+      const spec = tokenSpec(step);
+      const name = spec?.name ?? 'token';
+      // "2 Beast tokens", "a 3/3 Creature token, haste": the custom name
+      // already ends in "token".
+      const plural = many && !name.includes(' token') ? `${name} tokens` : name.includes(' token') ? name : `${name} token`;
+      return `${verb} ${count} ${plural}${tail}`;
+    }
+    case 'counter': {
+      const kind = step.ck === 'charge' ? 'charge' : '+1/+1';
+      return `put ${count} ${kind} counter${many ? 's' : ''} on this card${tail}`;
+    }
+    // On a static rule the rule's criteria already said which permanents.
+    case 'pump':
+      return kind === 'static' ? `they get +${count}/+${count}${tail}` : `creatures you control${whose} get +${count}/+${count} until end of turn${tail}`;
+    case 'keyword':
+      return kind === 'static' ? 'they have haste' : `creatures you control${whose} gain haste until end of turn`;
+    case 'addtype': {
+      const type = TYPE_WORD[step.ty ?? ''] ?? 'a type';
+      const basic = step.ty === 'L' && step.sub ? ` ${BASIC_BY_COLOR[step.sub] ?? ''}` : '';
+      return `they are${basic} ${type.toLowerCase()}s in addition to their other types`;
+    }
+    case 'extramana': {
+      const symbols = [...manaStepColors(step)].map((c) => `{${c}}`).join('');
+      return `each one tapped for mana adds ${count} more ${manaStepColors(step) === ANY_COLOR ? 'mana of any color' : symbols}${tail}`;
+    }
+    case 'landfrom':
+      return step.from === 'librarytop' ? 'you may play lands from the top of your library' : 'you may play lands from your graveyard';
+    case 'nomaxhand':
+      return 'you have no maximum hand size';
+    case 'tapsfor': {
+      const colors = manaStepColors(step);
+      const symbols = [...colors].map((c) => `{${c}}`).join('');
+      if (colors.length === 1) return `add ${count} ${symbols}${tail}`;
+      const what = colors === ANY_COLOR ? 'any color' : symbols;
+      return step.oneColor ? `add ${count} mana of any one of ${what}${tail}` : `add ${count} mana of ${what}${tail}`;
+    }
+  }
   if (step.op === 'damage') {
     // No target: a goldfish has one opponent and nothing to aim at. The step
     // says how much damage leaves your side of the table, which is the only
@@ -724,6 +1100,7 @@ export function describeStep(step: BehaviorStep): string {
 export function describeTrigger(rule: BehaviorRule): string {
   const t = TRIGGER_BY_ID.get(rule.on);
   const lead = t?.lead ?? rule.on;
+  if (t?.kind === 'static') return rule.q ? `${lead}, for your permanents matching ${rule.q}` : lead;
   return t?.watches && rule.q ? `${lead} matching ${rule.q}` : lead;
 }
 
@@ -731,7 +1108,8 @@ export function describeTrigger(rule: BehaviorRule): string {
 export function describeRule(rule: BehaviorRule): string {
   const lead = describeTrigger(rule);
   if (rule.steps.length === 0) return `${lead}: nothing`;
-  const bits = rule.steps.map(describeStep);
+  const kind = ruleKind(rule.on);
+  const bits = rule.steps.map((step) => describeStep(step, kind));
   const last = bits.pop()!;
   return bits.length > 0 ? `${lead}: ${bits.join(', ')}, then ${last}` : `${lead}: ${last}`;
 }
@@ -739,7 +1117,7 @@ export function describeRule(rule: BehaviorRule): string {
 /** Every rule, one sentence each. Empty for a behavior that does nothing. */
 export function describeBehavior(b: CardBehavior | null | undefined): string[] {
   if (!b) return [];
-  return b.rules.filter((r) => r.steps.length > 0).map(describeRule);
+  return [...b.rules.filter((r) => r.steps.length > 0).map(describeRule), ...(b.cast ?? []).map(describeCastOption)];
 }
 
 // ---------------------------------------------------------------------------
@@ -956,6 +1334,16 @@ export interface CompiledBehavior {
    */
   cast: WatchRule[];
   enters: WatchRule[];
+  /**
+   * `static` rules, each with the criteria saying which of your permanents it
+   * applies to. A list of rules for the reason the watched ones are: two
+   * anthems on one card for two different tribes are two different grants.
+   */
+  statics: WatchRule[];
+  /** The `tap` rule's one step: what it taps for. Null for a card that says nothing. */
+  tap: BehaviorStep | null;
+  /** Other ways to cast it, sanitized. */
+  options: CastOption[];
 }
 
 /**
@@ -969,16 +1357,31 @@ const knownAmount = (x: BehaviorAmount | undefined | null): boolean =>
 
 export function compileBehavior(b: CardBehavior | null | undefined): CompiledBehavior | null {
   if (!b || b.v !== CARD_BEHAVIOR_VERSION || !Array.isArray(b.rules)) return null;
-  const out: CompiledBehavior = { play: [], etb: [], attack: [], death: [], upkeep: [], cast: [], enters: [] };
+  const out: CompiledBehavior = {
+    play: [],
+    etb: [],
+    attack: [],
+    death: [],
+    upkeep: [],
+    cast: [],
+    enters: [],
+    statics: [],
+    tap: null,
+    options: [],
+  };
   for (const rule of b.rules) {
     const trigger = rule ? TRIGGER_BY_ID.get(rule.on) : undefined;
     if (!trigger || !Array.isArray(rule.steps)) continue;
+    const kind = trigger.kind ?? 'trigger';
     // A watched trigger's steps are collected on their own and filed with the
     // criteria that wakes them; every other trigger appends to its one bucket,
-    // which is what it has always done.
-    const bucket: BehaviorStep[] = trigger.watches ? [] : out[rule.on as Exclude<BehaviorTrigger, WatchedTrigger>];
+    // which is what it has always done. A static rule is filed like a watched
+    // one, and a tap rule keeps only its first step.
+    const own = trigger.watches || kind !== 'trigger';
+    const bucket: BehaviorStep[] = own ? [] : out[rule.on as Exclude<BehaviorTrigger, WatchedTrigger | 'static' | 'tap'>];
     for (const step of rule.steps) {
       if (!step || !STEP_BY_ID.has(step.op) || !knownAmount(step.x)) continue;
+      if (!stepFits(step.op, kind) || !objectStepOk(step)) continue;
       if (step.op === 'self') {
         if (!step.to || !ZONE_BY_ID.has(step.to)) continue;
       } else if (step.op === 'move') {
@@ -997,9 +1400,18 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
       }
       bucket.push(step);
     }
-    if (trigger.watches && bucket.length > 0) {
-      const q = typeof rule.q === 'string' ? rule.q.trim() : '';
-      out[rule.on as WatchedTrigger].push(q ? { q, steps: bucket } : { steps: bucket });
+    if (bucket.length === 0) continue;
+    const q = typeof rule.q === 'string' ? rule.q.trim() : '';
+    if (trigger.watches) out[rule.on as WatchedTrigger].push(q ? { q, steps: bucket } : { steps: bucket });
+    else if (kind === 'static') out.statics.push(q ? { q, steps: bucket } : { steps: bucket });
+    else if (kind === 'tap' && !out.tap) out.tap = bucket[0]!;
+  }
+  if (Array.isArray(b.cast)) {
+    for (const o of b.cast) {
+      const info = o ? CAST_OPTION_BY_ID.get(o.kind) : undefined;
+      if (!info) continue;
+      if (info.hasCost && !normalizeCost(o.cost)) continue;
+      out.options.push(o);
     }
   }
   const fires =
@@ -1009,8 +1421,32 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     out.death.length > 0 ||
     out.upkeep.length > 0 ||
     out.cast.length > 0 ||
-    out.enters.length > 0;
+    out.enters.length > 0 ||
+    out.statics.length > 0 ||
+    out.tap !== null ||
+    out.options.length > 0;
   return fires ? out : null;
+}
+
+/** The object-layer steps' own fields, checked. The shared shape is checked above. */
+function objectStepOk(step: BehaviorStep): boolean {
+  switch (step.op) {
+    case 'token':
+      return tokenSpec(step) !== null;
+    case 'keyword':
+      return !!step.kw?.includes('H');
+    case 'addtype':
+      return !!step.ty && step.ty in TYPE_WORD && (!step.sub || step.sub in BASIC_BY_COLOR);
+    case 'landfrom':
+      return !!step.from && LAND_FROM_ZONES.includes(step.from);
+    case 'counter':
+    case 'pump':
+    case 'extramana':
+    case 'tapsfor':
+      return step.x.kind !== 'all';
+    default:
+      return true;
+  }
 }
 
 /**
@@ -1020,16 +1456,38 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
  */
 export function collectBehaviorQueries(b: CompiledBehavior | null | undefined, into: Set<string>): void {
   if (!b) return;
+  // A step can carry up to three: its own, and one on each amount when the
+  // amount counts `matching` permanents.
+  const add = (step: BehaviorStep) => {
+    if (step.q) into.add(step.q);
+    if (step.x.q) into.add(step.x.q);
+    if (step.qx?.q) into.add(step.qx.q);
+  };
   for (const steps of [b.play, b.etb, b.attack, b.death, b.upkeep]) {
-    for (const step of steps) if (step.q) into.add(step.q);
+    for (const step of steps) add(step);
   }
   // A watched rule has two kinds of criteria on it: the one that says which
   // cards wake it, and whatever its own steps narrow with. Both compile the
-  // same way and both come out as a byte per card.
-  for (const rules of [b.cast, b.enters]) {
+  // same way and both come out as a byte per card. A static rule's criteria
+  // says which permanents it applies to, and compiles the same way again.
+  for (const rules of [b.cast, b.enters, b.statics]) {
     for (const rule of rules) {
       if (rule.q) into.add(rule.q);
-      for (const step of rule.steps) if (step.q) into.add(step.q);
+      for (const step of rule.steps) add(step);
+    }
+  }
+  if (b.tap) add(b.tap);
+}
+
+/** Every token a compiled behavior can make, by key, for the deck to append as cards. */
+export function collectBehaviorTokens(b: CompiledBehavior | null | undefined, into: Map<string, TokenOption>): void {
+  if (!b) return;
+  const all = [b.play, b.etb, b.attack, b.death, b.upkeep, ...b.cast.map((r) => r.steps), ...b.enters.map((r) => r.steps)];
+  for (const steps of all) {
+    for (const step of steps) {
+      if (step.op !== 'token' || step.tk === 'treasure') continue;
+      const spec = tokenSpec(step);
+      if (spec) into.set(tokenKey(step), spec);
     }
   }
 }
@@ -1051,6 +1509,13 @@ function cleanAmount(raw: unknown): BehaviorAmount | null {
     return { kind: 'fixed', n: Math.max(0, Math.min(MAX_BEHAVIOR_AMOUNT, n)) };
   }
   const out: BehaviorAmount = { kind: kind as BehaviorAmountKind };
+  if (kind === 'matching' && typeof raw.q === 'string') {
+    // `[X]` resolved away, as on a watched rule's criteria: an amount has no
+    // number to put there.
+    const q = raw.q.trim().slice(0, MAX_BEHAVIOR_QUERY);
+    const resolved = queryHasX(q) ? substituteQueryX(q, 0) : q;
+    if (resolved) out.q = resolved;
+  }
   // An adjustment of zero is not an adjustment, and an amount the catalog says
   // takes none never keeps one. Both are dropped rather than stored, so saving
   // the same rule twice is the same bytes — §12.3's promise, one level down.
@@ -1079,10 +1544,17 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
   const rules: BehaviorRule[] = [];
   for (const r of raw.rules.slice(0, MAX_BEHAVIOR_RULES)) {
     if (!isRecord(r) || typeof r.on !== 'string' || !TRIGGER_BY_ID.has(r.on) || !Array.isArray(r.steps)) continue;
+    const kind = ruleKind(r.on);
     const steps: BehaviorStep[] = [];
-    for (const s of r.steps.slice(0, MAX_BEHAVIOR_STEPS)) {
+    for (const s of r.steps.slice(0, kind === 'tap' ? 1 : MAX_BEHAVIOR_STEPS)) {
       if (!isRecord(s) || typeof s.op !== 'string' || !STEP_BY_ID.has(s.op)) continue;
       const op = s.op as BehaviorStepKind;
+      if (!stepFits(op, kind)) continue;
+      const object = cleanObjectStep(op, s, kind);
+      if (object !== undefined) {
+        if (object) steps.push(object);
+        continue;
+      }
       const from = typeof s.from === 'string' && ZONE_BY_ID.has(s.from) ? (s.from as BehaviorZone) : null;
       const to = typeof s.to === 'string' && ZONE_BY_ID.has(s.to) ? (s.to as BehaviorZone) : null;
       // How it lands, on the one destination that has two ways to. Kept only
@@ -1134,10 +1606,112 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
     // A watched trigger's own criteria. `[X]` is resolved to zero rather than
     // kept: a watched rule is woken by an event rather than resolved with a
     // number, so a placeholder here has nothing to read and would otherwise
-    // cost twenty-one compiled rows nobody ever indexes into.
-    const watch = TRIGGER_BY_ID.get(on)!.watches && typeof r.q === 'string' ? r.q.trim().slice(0, MAX_BEHAVIOR_QUERY) : '';
+    // cost twenty-one compiled rows nobody ever indexes into. A static rule's
+    // criteria is kept the same way.
+    const narrows = TRIGGER_BY_ID.get(on)!.watches || kind === 'static';
+    const watch = narrows && typeof r.q === 'string' ? r.q.trim().slice(0, MAX_BEHAVIOR_QUERY) : '';
     const q = watch && queryHasX(watch) ? substituteQueryX(watch, 0) : watch;
     rules.push(q ? { on, q, steps } : { on, steps });
   }
-  return rules.length > 0 ? { v: CARD_BEHAVIOR_VERSION, rules } : null;
+  const cast = cleanCastOptions(raw.cast);
+  if (rules.length === 0 && cast.length === 0) return null;
+  return cast.length > 0 ? { v: CARD_BEHAVIOR_VERSION, rules, cast } : { v: CARD_BEHAVIOR_VERSION, rules };
+}
+
+/** Type letters in one order, only the ones named, so the same ticks save the same bytes. */
+function cleanTypes(raw: unknown, allowed: string): string {
+  if (typeof raw !== 'string') return '';
+  let out = '';
+  for (const letter of allowed) if (raw.toUpperCase().includes(letter)) out += letter;
+  return out;
+}
+
+const clampInt = (raw: unknown, lo: number, hi: number, fallback: number): number =>
+  typeof raw === 'number' && Number.isFinite(raw) ? Math.max(lo, Math.min(hi, Math.round(raw))) : fallback;
+
+/** A `[X]`-free criteria, trimmed, or nothing. For the object steps that narrow. */
+function cleanQuery(raw: unknown): { q?: string } {
+  if (typeof raw !== 'string') return {};
+  const q = raw.trim().slice(0, MAX_BEHAVIOR_QUERY);
+  const resolved = queryHasX(q) ? substituteQueryX(q, 0) : q;
+  return resolved ? { q: resolved } : {};
+}
+
+/**
+ * The object-layer steps (rebuild plan F). Undefined for every step that is not
+ * one, null for one that does not survive, the clean step otherwise. Each keeps
+ * only the fields it reads, and a step that takes no amount is stored with a
+ * fixed 1 so two saves of the same rule are the same bytes.
+ */
+function cleanObjectStep(op: BehaviorStepKind, s: Record<string, unknown>, kind: RuleKind): BehaviorStep | null | undefined {
+  const one: BehaviorAmount = { kind: 'fixed', n: 1 };
+  const amount = (): BehaviorAmount | null => {
+    const x = cleanAmount(s.x);
+    return x && x.kind !== 'all' ? x : null;
+  };
+  // Only a trigger's pump or keyword narrows on the step: a static rule says
+  // which permanents on the rule itself.
+  const narrowed = kind === 'trigger' ? cleanQuery(s.q) : {};
+  switch (op) {
+    case 'token': {
+      const x = amount();
+      const tk = typeof s.tk === 'string' && TOKEN_BY_ID.has(s.tk) ? s.tk : null;
+      if (!x || !tk) return null;
+      if (tk !== 'custom') return { op, x, tk };
+      const ty = cleanTypes(s.ty, 'CAE') || 'C';
+      const creature = ty.includes('C') ? { tp: clampInt(s.tp, 0, MAX_TOKEN_PT, 1), tt: clampInt(s.tt, 1, MAX_TOKEN_PT, 1) } : {};
+      const kw = typeof s.kw === 'string' && s.kw.toUpperCase().includes('H') && ty.includes('C') ? { kw: 'H' } : {};
+      return { op, x, tk, ty, ...creature, ...kw };
+    }
+    case 'counter': {
+      const x = amount();
+      return x ? { op, x, ck: s.ck === 'charge' ? 'charge' : 'p1p1' } : null;
+    }
+    case 'pump': {
+      const x = amount();
+      return x ? { op, x, ...narrowed } : null;
+    }
+    case 'keyword':
+      return { op, x: one, kw: 'H', ...narrowed };
+    case 'addtype': {
+      const ty = cleanTypes(s.ty, 'CAEL').slice(0, 1);
+      if (!ty) return null;
+      const sub = ty === 'L' && typeof s.sub === 'string' && s.sub.toUpperCase() in BASIC_BY_COLOR ? { sub: s.sub.toUpperCase() } : {};
+      return { op, x: one, ty, ...sub };
+    }
+    case 'extramana':
+    case 'tapsfor': {
+      const x = amount();
+      if (!x) return null;
+      const colors = normalizeManaColors(typeof s.colors === 'string' ? s.colors : '');
+      const oneColor = s.oneColor === true && (colors === '' || colors.length > 1) ? { oneColor: true as const } : {};
+      return { op, x, ...(colors ? { colors } : {}), ...oneColor };
+    }
+    case 'landfrom': {
+      const from = typeof s.from === 'string' && (LAND_FROM_ZONES as readonly string[]).includes(s.from) ? (s.from as BehaviorZone) : null;
+      return from ? { op, x: one, from } : null;
+    }
+    case 'nomaxhand':
+      return { op, x: one };
+    default:
+      return undefined;
+  }
+}
+
+function cleanCastOptions(raw: unknown): CastOption[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CastOption[] = [];
+  const seen = new Set<string>();
+  for (const o of raw.slice(0, MAX_CAST_OPTIONS)) {
+    if (!isRecord(o) || typeof o.kind !== 'string') continue;
+    const info = CAST_OPTION_BY_ID.get(o.kind);
+    // One of each: two flashback costs on one card is one of them being wrong.
+    if (!info || seen.has(info.id)) continue;
+    const cost = info.hasCost ? normalizeCost(o.cost) : null;
+    if (info.hasCost && !cost) continue;
+    seen.add(info.id);
+    const n = info.n ? { n: clampInt(o.n, info.id === 'suspend' ? 1 : 0, MAX_CAST_N, 1) } : {};
+    out.push({ kind: info.id, ...(cost ? { cost } : {}), ...n });
+  }
+  return out;
 }

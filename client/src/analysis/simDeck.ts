@@ -1,19 +1,25 @@
 import {
+  BASIC_BY_COLOR,
   BASIC_LAND_TYPES,
   collectBehaviorQueries,
+  collectBehaviorTokens,
   compileBehavior,
   decodeEffectProfile,
   decodeFetchProfile,
   decodeManaProfile,
+  manaStepColors,
+  normalizeCost,
   queryHasX,
   sourceColors,
   substituteQueryX,
   X_VARIANTS,
+  type BehaviorAmount,
   type CardBehavior,
   type CompiledBehavior,
   type DeckBoard,
   type EffectProfile,
   type OracleCard,
+  type TokenOption,
 } from '@mtg/shared';
 import { parseManaCost, type ParsedCost, type PipColor } from './manaCost.js';
 import type { ManaUnit } from './canPay.js';
@@ -74,6 +80,46 @@ export function popcount(mask: number): number {
  * not one with a flag.
  */
 export type SimRole = 'land' | 'fetch' | 'rock' | 'dork' | 'landramp' | 'extraland' | 'ritual' | 'spell';
+
+/**
+ * Card types as bits, the permanent layer's vocabulary (rebuild plan F2). What
+ * a card is printed as lives on SimCard.types; what a permanent is *now*, after
+ * an Ashaya has made it a land too, lives on the battlefield.
+ */
+export const T_CREATURE = 1;
+export const T_LAND = 2;
+export const T_ARTIFACT = 4;
+export const T_ENCHANTMENT = 8;
+export const T_TOKEN = 16;
+/** Type letters (BehaviorStep.ty) to bits. */
+export const TYPE_BIT: Readonly<Record<string, number>> = { C: T_CREATURE, L: T_LAND, A: T_ARTIFACT, E: T_ENCHANTMENT };
+
+/**
+ * Keywords as bits. Haste is the only one this model can act on: it lets a
+ * creature attack the turn it arrives. Vigilance would need a main phase after
+ * combat to matter, and there is none.
+ */
+export const KW_HASTE = 1;
+
+/** A cast option, parsed once so the spend loop never meets a string. */
+export interface SimKicker {
+  cost: ParsedCost;
+  /** Multikicker: paid as many times as the mana allows. */
+  multi: boolean;
+}
+
+export interface SimGraveyardCast {
+  kind: 'flashback' | 'retrace' | 'escape' | 'mayhem';
+  cost: ParsedCost;
+  /** Escape: other cards exiled from the graveyard. */
+  n: number;
+}
+
+export interface SimSuspend {
+  cost: ParsedCost;
+  /** Time counters. */
+  n: number;
+}
 
 export interface SimCard {
   oracleId: string;
@@ -167,6 +213,26 @@ export interface SimCard {
    * wanted to keep. Merging would double every step they left alone.
    */
   behavior: CompiledBehavior | null;
+  /** Front-face card types as T_ bits, plus T_TOKEN on a token. */
+  types: number;
+  /** Printed keywords as KW_ bits. */
+  keywords: number;
+  /** Printed toughness, or zero, read the way `power` is. */
+  toughness: number;
+  /**
+   * A token, appended after the deck's own cards (rebuild plan F3). It has no
+   * copies and no library slot; it exists only on the battlefield and ceases to
+   * exist the moment it leaves.
+   */
+  token: boolean;
+  /**
+   * An authored mana ability whose amount reads the game (charge counters, your
+   * creatures). Read every time the pool is built; null for the fixed `adds`.
+   */
+  manaAmount: BehaviorAmount | null;
+  kicker: SimKicker | null;
+  gyCast: SimGraveyardCast | null;
+  suspend: SimSuspend | null;
 }
 
 /**
@@ -225,6 +291,12 @@ export interface SimFilter {
    * 1 where `cards[i]` matches. One row of `cards.length` normally; when
    * `varies`, `X_VARIANTS` rows stacked, so the value of `[X]` indexes a row
    * and the lookup is still a single byte.
+   *
+   * Each of those is itself `SimDeck.variants` rows, one per combination of
+   * the types a static rule can add (rebuild plan F6): with an Ashaya out a
+   * creature is a Forest land, and `t:land` has to find it. The row for a card
+   * is `(x * variants + v) * cards.length`, with `v` the permanent's added-type
+   * bits, and zero everywhere off the battlefield.
    */
   match: Uint8Array;
   /** The query holds an `[X]`, so `match` is a stack rather than a row. */
@@ -243,7 +315,19 @@ export interface SimDeck {
   coverage: SimCoverage;
   /** Every criteria string the deck's behaviors use, precompiled. Usually empty. */
   filters: SimFilter[];
+  /** Token kinds, by `tokenKey`, to their index in `cards`. */
+  tokens: Record<string, number>;
+  /**
+   * The distinct types static rules add, as `ty` plus `sub` ("LG" is a Forest
+   * land). Bit g of a permanent's added-type set is `typeGrants[g]`.
+   */
+  typeGrants: string[];
+  /** `2 ** typeGrants.length`: the filter rows per `[X]` value. */
+  variants: number;
 }
+
+/** More added types than this and the grants past it are dropped: the filter stack doubles with each. */
+export const MAX_TYPE_GRANTS = 3;
 
 export interface DeckRow {
   quantity: number;
@@ -343,7 +427,8 @@ export function buildSimDeck(
 
     const index = cards.length;
     byOracle.set(o.oracleId, index);
-    cards.push({
+    const behavior = compileBehavior(behaviors?.get(o.oracleId));
+    const card: SimCard = {
       oracleId: o.oracleId,
       name: o.name,
       manaCost: o.manaCost ?? '',
@@ -377,8 +462,18 @@ export function buildSimDeck(
       keeps: landAnywhere || role === 'fetch',
       image: o.imageSmall ?? o.imageNormal ?? null,
       effect: decodeEffectProfile(o.effect),
-      behavior: compileBehavior(behaviors?.get(o.oracleId)),
-    });
+      behavior,
+      types: typeBits(parts[0] ?? ''),
+      keywords: printedKeywords(o.oracleText),
+      toughness: powerOf(o.toughness),
+      token: false,
+      manaAmount: null,
+      kicker: null,
+      gyCast: null,
+      suspend: null,
+    };
+    if (behavior) applyAuthoredObject(card, behavior);
+    cards.push(card);
     oracles.push(o);
 
     if (r.board === 'main') {
@@ -411,6 +506,20 @@ export function buildSimDeck(
     card.mask = targets.reduce((mask, i) => mask | cards[i]!.mask, 0);
   }
 
+  // Tokens, after every real card, so no library slot and no fetch target ever
+  // points at one. What makes them cards at all is that everything reading a
+  // permanent — filters, entry watchers, the creature count, combat — then
+  // works on a Beast token without knowing it is one.
+  const tokenSpecs = new Map<string, TokenOption>();
+  for (const card of cards) collectBehaviorTokens(card.behavior, tokenSpecs);
+  const tokens: Record<string, number> = {};
+  for (const [key, spec] of tokenSpecs) {
+    tokens[key] = cards.length;
+    const { card, oracle } = tokenCard(key, spec);
+    cards.push(card);
+    oracles.push(oracle);
+  }
+
   const library = new Int32Array(libraryCopies);
   let at = 0;
   for (let i = 0; i < cards.length; i++) {
@@ -432,7 +541,178 @@ export function buildSimDeck(
 
   applyKeepQuery(cards, oracles, keepQuery);
 
-  return { cards, library, commanders, hasManaData: profiled > 0, coverage, filters: buildFilters(cards, oracles) };
+  const typeGrants = collectTypeGrants(cards);
+  const variants = 1 << typeGrants.length;
+  return {
+    cards,
+    library,
+    commanders,
+    hasManaData: profiled > 0,
+    coverage,
+    filters: buildFilters(cards, oracles, typeGrants),
+    tokens,
+    typeGrants,
+    variants,
+  };
+}
+
+/** The front face's card types, as T_ bits. */
+function typeBits(face: string): number {
+  let bits = 0;
+  if (/\bCreature\b/i.test(face)) bits |= T_CREATURE;
+  if (/\bLand\b/i.test(face)) bits |= T_LAND;
+  if (/\bArtifact\b/i.test(face)) bits |= T_ARTIFACT;
+  if (/\bEnchantment\b/i.test(face)) bits |= T_ENCHANTMENT;
+  return bits;
+}
+
+/**
+ * Keywords printed on the card as keywords, not ones it hands out. A keyword
+ * line is a comma list of short words ("Flying, haste"); "creatures you control
+ * gain haste" is a sentence and does not count.
+ */
+function printedKeywords(text: string | null | undefined): number {
+  if (!text) return 0;
+  let bits = 0;
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\([^)]*\)/g, '').trim().toLowerCase();
+    if (!line) continue;
+    const parts = line.split(/,\s*/);
+    if (!parts.every((p) => p.split(/\s+/).length <= 3)) continue;
+    if (parts.includes('haste')) bits |= KW_HASTE;
+  }
+  return bits;
+}
+
+/**
+ * The parts of an authored behavior that change what the card *is* rather than
+ * what it does (rebuild plan F4, F5): a mana ability written by hand, and the
+ * other ways it can be cast. Read once here so the sequencer only meets fields.
+ */
+function applyAuthoredObject(card: SimCard, b: CompiledBehavior): void {
+  const tap = b.tap;
+  if (tap && card.permanent) {
+    // An authored mana ability replaces the one the database read, the same
+    // way every other rule replaces its reading. A land stays a land drop.
+    card.role = card.land ? 'land' : card.creature ? 'dork' : 'rock';
+    card.mask = colorMask(manaStepColors(tap));
+    card.generic = false;
+    card.life = 0;
+    card.entry = 0;
+    card.bounce = false;
+    const fixed = tap.x.kind === 'fixed' && !tap.x.op;
+    card.adds = fixed ? (tap.x.n ?? 0) : 0;
+    card.manaAmount = fixed ? null : tap.x;
+    card.oneColor = !!tap.oneColor;
+    if (card.role !== 'land') card.tapped = 'never';
+  }
+  for (const o of b.options) {
+    const cost = o.cost ? parseManaCost(normalizeCost(o.cost)) : null;
+    switch (o.kind) {
+      case 'kicker':
+      case 'multikicker':
+        if (cost) card.kicker = { cost, multi: o.kind === 'multikicker' };
+        break;
+      case 'retrace':
+        if (card.cost) card.gyCast = { kind: 'retrace', cost: card.cost, n: 0 };
+        break;
+      case 'flashback':
+      case 'escape':
+      case 'mayhem':
+        if (cost) card.gyCast = { kind: o.kind, cost, n: o.n ?? 0 };
+        break;
+      case 'suspend':
+        if (cost) card.suspend = { cost, n: Math.max(1, o.n ?? 1) };
+        break;
+    }
+  }
+}
+
+/** A token kind as a card, and the oracle row its filters are matched against. */
+function tokenCard(key: string, spec: TokenOption): { card: SimCard; oracle: OracleCard } {
+  const words = [...spec.types].map((t) => ({ C: 'Creature', A: 'Artifact', E: 'Enchantment', L: 'Land' })[t] ?? '');
+  const typeLine = `Token ${words.filter(Boolean).join(' ')}${spec.sub ? ` — ${spec.sub}` : ''}`;
+  let types = T_TOKEN;
+  for (const t of spec.types) types |= TYPE_BIT[t] ?? 0;
+  const creature = (types & T_CREATURE) !== 0;
+  const oracle = {
+    oracleId: `token:${key}`,
+    name: spec.name,
+    manaCost: null,
+    cmc: 0,
+    typeLine,
+    oracleText: null,
+    colors: [...(spec.colors ?? '')],
+    colorIdentity: [...(spec.colors ?? '')],
+    rarity: 'common',
+    imageSmall: null,
+    imageNormal: null,
+    defaultScryfallId: '',
+    power: creature ? String(spec.power ?? 0) : null,
+    toughness: creature ? String(spec.toughness ?? 0) : null,
+  } as unknown as OracleCard;
+  const card: SimCard = {
+    oracleId: oracle.oracleId,
+    name: spec.name,
+    manaCost: '',
+    cmc: 0,
+    role: 'spell',
+    land: false,
+    spell: false,
+    cost: null,
+    mask: 0,
+    adds: 0,
+    tapped: 'never',
+    fetchTargets: [],
+    modal: false,
+    oneColor: false,
+    generic: false,
+    life: 0,
+    entry: 0,
+    bounce: false,
+    grantMask: 0,
+    copies: 0,
+    commander: false,
+    permanent: true,
+    creature,
+    power: creature ? (spec.power ?? 0) : 0,
+    instant: false,
+    keeps: false,
+    image: null,
+    effect: null,
+    behavior: null,
+    types,
+    keywords: key.endsWith(':H') ? KW_HASTE : 0,
+    toughness: creature ? (spec.toughness ?? 0) : 0,
+    token: true,
+    manaAmount: null,
+    kicker: null,
+    gyCast: null,
+    suspend: null,
+  };
+  return { card, oracle };
+}
+
+/** Every distinct type a static `addtype` step grants, capped at MAX_TYPE_GRANTS. */
+function collectTypeGrants(cards: readonly SimCard[]): string[] {
+  const out: string[] = [];
+  for (const card of cards) {
+    for (const rule of card.behavior?.statics ?? []) {
+      for (const step of rule.steps) {
+        if (step.op !== 'addtype' || !step.ty) continue;
+        const g = `${step.ty}${step.sub ?? ''}`;
+        if (!out.includes(g) && out.length < MAX_TYPE_GRANTS) out.push(g);
+      }
+    }
+  }
+  return out;
+}
+
+/** The type line a grant adds: "Land Forest". */
+export function grantTypeWords(grant: string): string {
+  const word = ({ C: 'Creature', A: 'Artifact', E: 'Enchantment', L: 'Land' } as Record<string, string>)[grant[0] ?? ''] ?? '';
+  const sub = grant[1] ? (BASIC_BY_COLOR[grant[1]] ?? '') : '';
+  return `${word}${sub ? ` ${sub}` : ''}`;
 }
 
 /** Re-point `keeps` at the user's keep query, when there is one that parses to something. */
@@ -454,27 +734,41 @@ function applyKeepQuery(cards: SimCard[], oracles: readonly OracleCard[], q: str
  * copies. A card that matches nothing is not an error — it is a deck where that
  * step finds nothing, which is what the trace will show.
  */
-function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[]): SimFilter[] {
+function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[], typeGrants: readonly string[]): SimFilter[] {
   const queries = new Set<string>();
   for (const card of cards) collectBehaviorQueries(card.behavior, queries);
   if (queries.size === 0) return [];
-  const entries = oracles.map((o) => toSearchableEntry(o));
   const n = cards.length;
+  const variants = 1 << typeGrants.length;
+  // One searchable entry per card per combination of added types. Variant 0
+  // is the card as printed, which is every card off the battlefield and every
+  // card in a deck with no `addtype` rule, so that deck pays for one row.
+  const entries = Array.from({ length: variants }, (_v, v) =>
+    oracles.map((o) => {
+      if (v === 0) return toSearchableEntry(o);
+      const added = typeGrants.filter((_g, g) => v & (1 << g)).map(grantTypeWords);
+      return toSearchableEntry({ ...o, typeLine: `${o.typeLine} ${added.join(' ')}` });
+    }),
+  );
   const filters: SimFilter[] = [];
 
-  /** One row of the bitmask, for one fully-resolved query string. */
-  const fill = (match: Uint8Array, base: number, resolved: string) => {
+  /** One row of the bitmask per variant, for one fully-resolved query string. */
+  const fill = (match: Uint8Array, x: number, resolved: string) => {
     const compiled = compileCardQuery(resolved);
-    // An empty query is every card, which is also what an absent one means, so
-    // the two agree rather than one of them quietly matching nothing.
-    for (let i = 0; i < entries.length; i++) {
-      if (compiled.isEmpty || compiled.matches(entries[i]!)) match[base + i] = 1;
+    for (let v = 0; v < variants; v++) {
+      const base = (x * variants + v) * n;
+      const rows = entries[v]!;
+      // An empty query is every card, which is also what an absent one means, so
+      // the two agree rather than one of them quietly matching nothing.
+      for (let i = 0; i < rows.length; i++) {
+        if (compiled.isEmpty || compiled.matches(rows[i]!)) match[base + i] = 1;
+      }
     }
   };
 
   for (const q of queries) {
     if (!queryHasX(q)) {
-      const match = new Uint8Array(n);
+      const match = new Uint8Array(variants * n);
       fill(match, 0, q);
       filters.push({ q, match, varies: false });
       continue;
@@ -483,8 +777,8 @@ function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[])
     // placeholder is filled by an amount and amounts are clamped to
     // MAX_BEHAVIOR_AMOUNT, so the range is closed and small enough to just
     // enumerate — which is what keeps the parser out of the game loop.
-    const match = new Uint8Array(X_VARIANTS * n);
-    for (let x = 0; x < X_VARIANTS; x++) fill(match, x * n, substituteQueryX(q, x));
+    const match = new Uint8Array(X_VARIANTS * variants * n);
+    for (let x = 0; x < X_VARIANTS; x++) fill(match, x, substituteQueryX(q, x));
     filters.push({ q, match, varies: true });
   }
   return filters;

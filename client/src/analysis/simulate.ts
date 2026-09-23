@@ -3,6 +3,7 @@ import {
   BEHAVIOR_ZONES,
   manaStepColors,
   MAX_QUERY_X,
+  tokenKey,
   type BehaviorAmount,
   type BehaviorStep,
   type BehaviorTrigger,
@@ -25,7 +26,21 @@ import { handSize } from './gameModel.js';
 import { KEEP_ANYTHING_AT } from './mulligan.js';
 import { makeRng, shuffle, type Rng } from './rng.js';
 import { bindingPips, type ParsedCost, type Pip } from './manaCost.js';
-import { colorMask, MASK_BITS, popcount, UNIT_BY_MASK, type SimCard, type SimDeck, type SimFilter } from './simDeck.js';
+import { Permanents } from './battlefield.js';
+import {
+  colorMask,
+  KW_HASTE,
+  MASK_BITS,
+  popcount,
+  T_CREATURE,
+  T_LAND,
+  TYPE_BIT,
+  UNIT_BY_MASK,
+  type SimCard,
+  type SimDeck,
+  type SimFilter,
+  type SimGraveyardCast,
+} from './simDeck.js';
 
 // The simulator: phase 5, and the only engine here that can answer a question
 // about the *order* you drew things in.
@@ -62,7 +77,7 @@ export const QUICK_GAMES = 2000;
 const PROGRESS_EVERY = 2000;
 
 /** Room for the battlefield. A goldfish that gets past this has other problems. */
-const MAX_SOURCES = 64;
+const MAX_SOURCES = 128;
 
 /**
  * Spells cast in one turn before the sequencer stops asking. A turn that wants
@@ -92,7 +107,12 @@ const MAX_TRIGGER_DEPTH = 2;
  * sources: every creature, every enchantment and every artifact is on it, and
  * only some of those tap for anything.
  */
-const MAX_PERMANENTS = 128;
+const MAX_PERMANENTS = 256;
+
+/** The hand size cleanup discards down to (rebuild plan F1). */
+const HAND_SIZE = 7;
+/** Times one spell is kicked at most. A multikicker with a {0} cost is otherwise a loop. */
+const MAX_KICKS = 20;
 
 /** Cards one effect may put into your hand. Guards a misread "draw X". */
 const MAX_DRAW_PER_EFFECT = 12;
@@ -694,7 +714,17 @@ export function simulate(
   let gyLen = 0;
   const exiled = new Int32Array(deckSize + MAX_HAND);
   let exLen = 0;
-  const landChoices = new Int32Array(MAX_HAND);
+  /** Land-drop candidates: a position, in the zone `landZone` says (hand, graveyard, top of library). */
+  const landChoices = new Int32Array(MAX_HAND * 2);
+  const landZone = new Uint8Array(MAX_HAND * 2);
+  const LAND_HAND = 0;
+  const LAND_GRAVEYARD = 1;
+  const LAND_TOP = 2;
+  /** The card a land-drop candidate is. */
+  const landAt = (c: number): number => {
+    const at = landChoices[c]!;
+    return landZone[c] === LAND_HAND ? hand[at]! : landZone[c] === LAND_GRAVEYARD ? graveyard[at]! : library[at]!;
+  };
   const srcMask = new Int32Array(MAX_SOURCES);
   const srcUnits = new Int32Array(MAX_SOURCES);
   const srcOnline = new Int32Array(MAX_SOURCES);
@@ -728,6 +758,22 @@ export function simulate(
    * whole difference between a ritual and a Treasure.
    */
   const srcFloating = new Uint8Array(MAX_SOURCES);
+  /**
+   * The permanent this source is a view of, by object id (`Permanents.oid`),
+   * or 0 for a Treasure and for floating mana. Slots move on both sides, so
+   * the id is the only link that survives a swap-remove.
+   */
+  const srcOid = new Int32Array(MAX_SOURCES);
+  /** Its amount is read off the card's authored mana ability each time the pool is built. */
+  const srcDyn = new Uint8Array(MAX_SOURCES);
+  /** Made by a static rule's added land type rather than by the card itself (Ashaya). */
+  const srcGranted = new Uint8Array(MAX_SOURCES);
+  /** Colors an added basic land type gives it, OR'd into what it taps for. */
+  const srcSub = new Uint8Array(MAX_SOURCES);
+  /** Extra mana a static rule adds when it is tapped for mana (Badgermole Cub), its colors, and whose it is. */
+  const srcXtra = new Int32Array(MAX_SOURCES);
+  const srcXmask = new Uint8Array(MAX_SOURCES);
+  const srcXby = new Int32Array(MAX_SOURCES);
   const unitGroups: UnitGroup[] = [];
   /**
    * The battlefield, as permanents rather than as mana.
@@ -744,12 +790,7 @@ export function simulate(
    * same number in them — the same convention `srcCard` has always used, and
    * the reason `leavePlay` removes the first match rather than all of them.
    */
-  const permCard = new Int32Array(MAX_PERMANENTS);
-  /** The turn it arrived, so summoning sickness is `permSince === turn`. */
-  const permSince = new Int32Array(MAX_PERMANENTS);
-  /** Last turn it is still around, or 0 for "it does not go away". */
-  const permUntil = new Int32Array(MAX_PERMANENTS);
-  let permLen = 0;
+  const perms = new Permanents(MAX_PERMANENTS);
   /** Permanents with a recurring effect, as card indices. Phyrexian Arena. */
   const recurring = new Int32Array(MAX_SOURCES);
   let recurLen = 0;
@@ -819,7 +860,33 @@ export function simulate(
    * its colors into every land, which is the one place this model was too mean
    * rather than too kind.
    */
+  /** What a source taps for right now: its own colors, a granter's if it is a land, and any added basic land type's. */
+  const srcColors = (s: number): number => (srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!) | srcSub[s]!;
+
+  /** An authored mana ability's amount, read against the permanent it belongs to (its counters). */
+  const tapUnits = (s: number, turn: number): number => {
+    const card = cards[srcCard[s]!]!;
+    if (!card.manaAmount) return card.adds;
+    const was = amountSlot;
+    amountSlot = perms.slotOf(srcOid[s]!);
+    const n = behaviorAmount(card.manaAmount, turn);
+    amountSlot = was;
+    return n;
+  };
+
+  /** A source's static extra mana, pushed into a pool being rebuilt by hand. */
+  const pushExtra = (s: number, into: ManaUnit[], owners: number[] | null): void => {
+    const extra = srcXtra[s]!;
+    if (extra <= 0) return;
+    const unit = UNIT_BY_MASK[srcXmask[s]!]!;
+    for (let u = 0; u < extra; u++) {
+      into.push(unit);
+      if (owners) owners.push(srcXby[s]!);
+    }
+  };
+
   const buildPool = (turn: number, credit = false): number => {
+    ensureFresh(turn);
     units.length = 0;
     unitGroups.length = 0;
     if (sink) {
@@ -831,9 +898,25 @@ export function simulate(
       if (srcOnline[s]! > turn) continue;
       const expires = srcExpires[s]!;
       if (expires > 0 && turn > expires) continue;
+      // An authored mana ability whose amount reads the game is read here, once
+      // per pool, and kept in `srcUnits` so every other walk of the sources this
+      // turn agrees with the pool.
+      if (srcDyn[s]) srcUnits[s] = tapUnits(s, turn);
       const n = srcUnits[s]!;
       total += n;
-      const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
+      const mask = srcColors(s);
+      // A static rule's extra mana for tapping this one (Badgermole Cub), as
+      // plain units of its own colors, credited to the card whose rule it is.
+      const extra = srcXtra[s]!;
+      if (extra > 0) {
+        total += extra;
+        if (credit) creditMana(srcXby[s]!, turn, extra);
+        const xunit = UNIT_BY_MASK[srcXmask[s]!]!;
+        for (let u = 0; u < extra; u++) {
+          units.push(xunit);
+          if (sink) unitOwner.push(srcXby[s]!);
+        }
+      }
       // In the same walk that produces the number, so the two can never
       // disagree about which sources were online. This runs on the land-drop
       // rehearsal too, which is why it is a flag and not a second loop.
@@ -892,7 +975,7 @@ export function simulate(
       if (expires > 0 && turn + 1 > expires) continue;
       const k = srcUnits[s]!;
       late += k;
-      const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
+      const mask = srcColors(s);
       if (srcOneColor[s] && k > 1) lateGroups.push({ colors: UNIT_BY_MASK[mask]!.colors, count: k });
       else for (let u = 0; u < k; u++) lateUnits.push(UNIT_BY_MASK[mask]!);
     }
@@ -1093,26 +1176,42 @@ export function simulate(
     srcBy[srcLen] = by;
     srcTreasure[srcLen] = 0;
     srcFloating[srcLen] = 0;
-    srcLen++;
+    clearSourceExtras(srcLen);
+    const s = srcLen++;
     grantMask |= card.grantMask;
     // Every mana source that is a real card is also a permanent, and this is
     // the one place that has to remember it. A Treasure comes through here with
     // index -1 and is deliberately not one: it is a token, and a rule that
     // could sacrifice it would be sacrificing the same mana twice.
-    if (index >= 0) addPermanent(index, card, turn);
+    if (index >= 0) {
+      const slot = addPermanent(index, card, turn);
+      if (slot >= 0) srcOid[s] = perms.oid[slot]!;
+    }
+    if (card.manaAmount) {
+      srcDyn[s] = 1;
+      srcUnits[s] = tapUnits(s, turn);
+    }
     return true;
+  };
+
+  /** The object-layer fields of a fresh source slot, all off. */
+  const clearSourceExtras = (s: number): void => {
+    srcOid[s] = 0;
+    srcDyn[s] = 0;
+    srcGranted[s] = 0;
+    srcSub[s] = 0;
+    srcXtra[s] = 0;
+    srcXmask[s] = 0;
+    srcXby[s] = -1;
   };
 
   /**
    * File a card on the battlefield. Idempotent is exactly what this must *not*
    * be: two Islands are two entries carrying the same card index.
    */
-  const addPermanent = (index: number, card: SimCard, turn: number): void => {
-    if (permLen >= MAX_PERMANENTS) return;
-    permCard[permLen] = index;
-    permSince[permLen] = turn;
-    permUntil[permLen] = card.life > 0 ? turn + card.life - 1 : 0;
-    permLen++;
+  const addPermanent = (index: number, card: SimCard, turn: number): number => {
+    dirty = true;
+    return perms.add(index, card, turn);
   };
 
   /**
@@ -1123,8 +1222,8 @@ export function simulate(
   const leavePlay = (index: number): boolean => {
     unsource(index);
     unrecur(index);
-    for (let p = 0; p < permLen; p++) {
-      if (permCard[p] !== index) continue;
+    for (let p = 0; p < perms.len; p++) {
+      if (perms.card[p] !== index) continue;
       dropPermanent(p);
       return true;
     }
@@ -1133,10 +1232,8 @@ export function simulate(
 
   /** The same, for a caller that already knows which slot it picked. */
   const dropPermanent = (at: number): void => {
-    permLen--;
-    permCard[at] = permCard[permLen]!;
-    permSince[at] = permSince[permLen]!;
-    permUntil[at] = permUntil[permLen]!;
+    dirty = true;
+    perms.drop(at);
   };
 
   /**
@@ -1159,10 +1256,7 @@ export function simulate(
   };
 
   /** Still around this turn: a Lotus Petal's slot outlives the Petal. */
-  const stillOut = (p: number, turn: number): boolean => {
-    const until = permUntil[p]!;
-    return until === 0 || turn <= until;
-  };
+  const stillOut = (p: number, turn: number): boolean => perms.stillOut(p, turn);
 
   /** Swap-remove a source. The parallel arrays all move together or not at all. */
   const dropSource = (at: number): void => {
@@ -1177,6 +1271,13 @@ export function simulate(
     srcBy[at] = srcBy[srcLen]!;
     srcTreasure[at] = srcTreasure[srcLen]!;
     srcFloating[at] = srcFloating[srcLen]!;
+    srcOid[at] = srcOid[srcLen]!;
+    srcDyn[at] = srcDyn[srcLen]!;
+    srcGranted[at] = srcGranted[srcLen]!;
+    srcSub[at] = srcSub[srcLen]!;
+    srcXtra[at] = srcXtra[srcLen]!;
+    srcXmask[at] = srcXmask[srcLen]!;
+    srcXby[at] = srcXby[srcLen]!;
   };
 
   /**
@@ -1210,6 +1311,11 @@ export function simulate(
       const lost = srcCard[pick]!;
       if (card.bounce) back = lost;
       else bury(lost);
+      // Off the battlefield as a permanent too, not only as mana. It used to
+      // stay on the permanent list, so a Karoo's returned land was still there
+      // to be sacrificed, counted and drawn on the board.
+      const slot = perms.slotOf(srcOid[pick]!);
+      if (slot >= 0) dropPermanent(slot);
       dropSource(pick);
     }
     return back;
@@ -1229,7 +1335,27 @@ export function simulate(
 
   /** A card lands in the yard. Treasure tokens (-1) have no card to put there. */
   const bury = (index: number): void => {
-    if (index >= 0 && gyLen < graveyard.length) graveyard[gyLen++] = index;
+    if (index < 0 || leavesNoCard(index)) return;
+    if (gyLen < graveyard.length) graveyard[gyLen++] = index;
+  };
+
+  /**
+   * A card that cannot go where it is headed, off the battlefield: a token
+   * ceases to exist, and a commander goes back to the command zone (rebuild
+   * plan F1). True when it has been dealt with and the caller should stop.
+   *
+   * The command zone is always chosen, though the rules let a commander bound
+   * for the hand or the library stay there: the tax is the point of modelling
+   * the recast, and a commander tucked into the library is a card this model
+   * would never see again.
+   */
+  const leavesNoCard = (index: number): boolean => {
+    const card = cards[index]!;
+    if (card.token) return true;
+    if (!card.commander) return false;
+    if (handLen < hand.length) hand[handLen++] = index;
+    if (sink) pendingEntry.push(`${card.name} goes back to the command zone`);
+    return true;
   };
 
   /**
@@ -1267,6 +1393,7 @@ export function simulate(
       if (sink) discardedNames.push(cards[index]!.name);
       hand[pick] = hand[--handLen]!;
       bury(index);
+      discardedAt[index] = turnStamp;
       discarded++;
     }
     return discarded;
@@ -1332,6 +1459,7 @@ export function simulate(
       srcBy[srcLen] = creditTo;
       srcTreasure[srcLen] = 1;
       srcFloating[srcLen] = 0;
+      clearSourceExtras(srcLen);
       srcLen++;
       units.push(UNIT_BY_MASK[TREASURE_MASK]!);
       if (sink) unitOwner.push(-1);
@@ -1377,8 +1505,9 @@ export function simulate(
         const expires = srcExpires[s]!;
         if (expires > 0 && turn > expires) continue;
         const n = srcUnits[s]!;
+        pushExtra(s, thrifty, sink ? thriftyOwner : null);
         if (srcOneColor[s] && n > 1) continue; // already in unitGroups
-        const mask = srcIsLand[s] ? srcMask[s]! | grantMask : srcMask[s]!;
+        const mask = srcColors(s);
         const owner = srcFloating[s] ? floatOwner(srcCard[s]!) : srcCard[s]!;
         for (let u = 0; u < n; u++) {
           thrifty.push(UNIT_BY_MASK[mask]!);
@@ -1432,6 +1561,7 @@ export function simulate(
     srcBy[srcLen] = by;
     srcTreasure[srcLen] = 0;
     srcFloating[srcLen] = 1;
+    clearSourceExtras(srcLen);
     srcLen++;
     const unit = UNIT_BY_MASK[mask]!;
     if (grouped) {
@@ -1624,26 +1754,38 @@ export function simulate(
   // draws, a draw whose number is the size of your hand — over a grammar the
   // editor can offer without lying about what gets executed.
 
-  /** Lands on the battlefield right now, for the `lands` amount. */
+  /**
+   * Lands on the battlefield right now, for the `lands` amount. Off the
+   * permanents rather than the mana sources since F2, so a creature an Ashaya
+   * has made a Forest is one, and a land that taps for nothing still is.
+   */
   const landsInPlay = (turn: number): number => {
+    ensureFresh(turn);
     let n = 0;
-    for (let s = 0; s < srcLen; s++) {
-      if (!srcIsLand[s]) continue;
-      const expires = srcExpires[s]!;
-      if (expires > 0 && turn > expires) continue;
-      n++;
-    }
+    for (let p = 0; p < perms.len; p++) if (perms.types[p]! & T_LAND && stillOut(p, turn)) n++;
     return n;
   };
 
-  /** Creatures on the battlefield right now, for the `creatures` amount. */
+  /** Creatures on the battlefield right now, for the `creatures` amount. Tokens are creatures too. */
   const creaturesInPlay = (turn: number): number => {
+    ensureFresh(turn);
     let n = 0;
-    for (let p = 0; p < permLen; p++) {
-      if (!cards[permCard[p]!]!.creature || !stillOut(p, turn)) continue;
-      n++;
-    }
+    for (let p = 0; p < perms.len; p++) if (perms.types[p]! & T_CREATURE && stillOut(p, turn)) n++;
     return n;
+  };
+
+  /** Permanents you control matching a criteria, for the `matching` amount (Distant Melody). */
+  const matchingInPlay = (q: string | undefined, turn: number): number => {
+    ensureFresh(turn);
+    const filter = q ? filterFor.get(q) : undefined;
+    if (q && !filter) return 0;
+    let count = 0;
+    for (let p = 0; p < perms.len; p++) {
+      if (!stillOut(p, turn)) continue;
+      if (filter && filter.match[perms.added[p]! * n + perms.card[p]!] !== 1) continue;
+      count++;
+    }
+    return count;
   };
 
   /**
@@ -1655,11 +1797,11 @@ export function simulate(
    * deck of Llanowar Elves and one Craterhoof reads the Craterhoof's 5.
    */
   const greatestPower = (turn: number): number => {
+    ensureFresh(turn);
     let best = 0;
-    for (let p = 0; p < permLen; p++) {
-      const card = cards[permCard[p]!]!;
-      if (!card.creature || !stillOut(p, turn) || card.power <= best) continue;
-      best = card.power;
+    for (let p = 0; p < perms.len; p++) {
+      if (!(perms.types[p]! & T_CREATURE) || !stillOut(p, turn) || perms.power[p]! <= best) continue;
+      best = perms.power[p]!;
     }
     return best;
   };
@@ -1719,6 +1861,20 @@ export function simulate(
         // Set by the cast that is resolving right now, and zero everywhere
         // else. An upkeep three turns later is not the moment the mana went in.
         n = xSpent;
+        break;
+      case 'kicked':
+        // The same, for how many times its kicker was paid.
+        n = kickedNow;
+        break;
+      case 'counters': {
+        // The permanent a mana ability is being read for, or else the newest
+        // copy of the card the rule is on: the one that just arrived.
+        const slot = amountSlot >= 0 ? amountSlot : stepSelf >= 0 ? perms.newest(stepSelf) : -1;
+        n = slot >= 0 ? perms.p1p1[slot]! + perms.charge[slot]! : 0;
+        break;
+      }
+      case 'matching':
+        n = matchingInPlay(x.q, turn);
         break;
       case 'all':
         // Bounded by the zone rather than by a number. This is only the ceiling
@@ -1790,6 +1946,12 @@ export function simulate(
    * is not that: land drops, upkeeps, and every spell without an X.
    */
   let xSpent = 0;
+  /** How many times the spell resolving right now was kicked, for the `kicked` amount. Zero everywhere else. */
+  let kickedNow = 0;
+  /** The card whose rule is running, for a `counters` amount to find. */
+  let stepSelf = -1;
+  /** The permanent a mana ability's amount is being read for, or -1. */
+  let amountSlot = -1;
 
   /** An absent `qx`: the placeholder is worth nothing until someone says otherwise. */
   const ZERO_AMOUNT: BehaviorAmount = { kind: 'fixed', n: 0 };
@@ -1872,16 +2034,19 @@ export function simulate(
         // Reservoir sampling rather than the first match, for the same reason
         // the library does it: which of four creatures you sacrifice is not
         // decided by the order they happened to be played in.
+        ensureFresh(turn);
         let pick = -1;
         let matches = 0;
-        for (let p = 0; p < permLen; p++) {
-          const index = permCard[p]!;
-          if (!stillOut(p, turn) || !accepts(mask, base, index)) continue;
+        for (let p = 0; p < perms.len; p++) {
+          const index = perms.card[p]!;
+          // The row for what it is *now*: with an Ashaya out, `t:land` finds
+          // a creature.
+          if (!stillOut(p, turn) || !accepts(mask, base + perms.added[p]! * n, index)) continue;
           matches++;
           if (rng.int(matches) === 0) pick = p;
         }
         if (pick < 0) return -1;
-        const index = permCard[pick]!;
+        const index = perms.card[pick]!;
         // The slot it picked, not the first slot carrying that card index:
         // two copies are two slots and only one of them is leaving.
         dropPermanent(pick);
@@ -2057,16 +2222,19 @@ export function simulate(
     const wasAmount = lastAmount;
     const wasText = lastEffectText;
     const wasX = xSpent;
+    const wasKicked = kickedNow;
     const wasMoved = sink ? movedNames.slice() : null;
     // Nothing was cast to get *here*, whatever was cast to get to the rule this
     // is standing inside. A landfall trigger is not the moment somebody's {X}
     // was paid, and a magecraft rule reading `xpaid` off the spell it saw would
     // be reading a number that belongs to a different card.
     xSpent = 0;
+    kickedNow = 0;
     triggerDepth++;
     runSteps(steps, turn, index);
     triggerDepth--;
     xSpent = wasX;
+    kickedNow = wasKicked;
     // Queued rather than said, because we are standing in the middle of the
     // rule that caused this and its own line has not been written yet. Saying
     // it here puts the reanimated creature's draw above the reanimation.
@@ -2112,16 +2280,29 @@ export function simulate(
     if (!everyone && (!opts.effects || !anyAttackers)) return;
     // A list of its own rather than the shared `stack`, which a rule fired
     // below will borrow and empty.
+    ensureFresh(turn);
     const attackers: number[] = [];
     let power = 0;
-    for (let p = 0; p < permLen; p++) {
-      const index = permCard[p]!;
+    let tappedOut = 0;
+    for (let p = 0; p < perms.len; p++) {
+      const index = perms.card[p]!;
       const card = cards[index]!;
-      if (!card.creature || !stillOut(p, turn) || permSince[p]! >= turn) continue;
+      // What it is now and how big it is now (rebuild plan F2): a Beast token
+      // attacks, an anthem counts, a hasty creature swings the turn it lands.
+      if (!(perms.types[p]! & T_CREATURE) || !stillOut(p, turn) || !perms.ready(p, turn)) continue;
       const triggers = opts.effects && !!card.behavior && card.behavior.attack.length > 0;
       if (!everyone && !triggers) continue;
+      // Tapped for mana this turn, so it is not attacking. Until F2 a Llanowar
+      // Elves paid for the turn's spells and then swung anyway.
+      if (perms.tapped[p]) {
+        tappedOut++;
+        continue;
+      }
       attackers.push(index);
-      power += card.power;
+      power += perms.power[p]!;
+    }
+    if (sink && tappedOut > 0) {
+      say(sink, 'note', `${tappedOut} creature${tappedOut === 1 ? ' was' : 's were'} tapped for mana, so ${tappedOut === 1 ? 'it does' : 'they do'} not attack`);
     }
     if (attackers.length === 0) return;
     // Declared before any of them resolves anything, which is both the rule and
@@ -2134,6 +2315,7 @@ export function simulate(
       const card = cards[index]!;
       if (!opts.effects || !card.behavior || card.behavior.attack.length === 0) continue;
       xSpent = 0;
+      kickedNow = 0;
       selfPlaced = false;
       lastAmount = 0;
       runSteps(card.behavior.attack, turn, index);
@@ -2156,13 +2338,13 @@ export function simulate(
   };
 
   /** Does the card that caused an event match what a watched rule is looking for? */
-  const watched = (q: string | undefined, subject: number): boolean => {
+  const watched = (q: string | undefined, subject: number, v: number): boolean => {
     if (!q) return true;
     const filter = filterFor.get(q);
     // A criteria no filter was built for matches nothing, same as a move step's
     // does. Rule criteria never carry an `[X]` (sanitizeCardBehavior resolves
-    // one away), so there is only ever the one row to read.
-    return !!filter && filter.match[subject] === 1;
+    // one away), so there is only one row per added-type variant to read.
+    return !!filter && filter.match[v * n + subject] === 1;
   };
 
   /**
@@ -2185,15 +2367,24 @@ export function simulate(
   const fireWatchers = (which: 'cast' | 'enters', subject: number, turn: number): void => {
     if (!opts.effects || triggerDepth >= MAX_TRIGGER_DEPTH) return;
     const outermost = triggerDepth === 0;
+    // What the arrival is *now*, which with an Ashaya out is a Forest land as
+    // well as a creature: landfall. A spell being cast is not on the
+    // battlefield and is only ever what it was printed as.
+    let v = 0;
+    if (which === 'enters' && V > 1) {
+      ensureFresh(turn);
+      const slot = perms.newest(subject);
+      if (slot >= 0) v = perms.added[slot]!;
+    }
     // A list of its own rather than the shared `stack`, which a rule fired
     // below will borrow and empty.
     const woken: { index: number; steps: readonly BehaviorStep[] }[] = [];
-    for (let p = 0; p < permLen; p++) {
-      const index = permCard[p]!;
+    for (let p = 0; p < perms.len; p++) {
+      const index = perms.card[p]!;
       if (which === 'enters' && index === subject) continue;
       const rules = cards[index]!.behavior?.[which];
       if (!rules || rules.length === 0 || !stillOut(p, turn)) continue;
-      for (const rule of rules) if (watched(rule.q, subject)) woken.push({ index, steps: rule.steps });
+      for (const rule of rules) if (watched(rule.q, subject, v)) woken.push({ index, steps: rule.steps });
     }
     for (const w of woken) fireNested(w.index, cards[w.index]!, turn, w.steps);
     // Drained here rather than left for whatever says the next effect line: the
@@ -2261,6 +2452,7 @@ export function simulate(
   };
 
   const putTo = (index: number, zone: BehaviorZone, turn: number, untapped = false): void => {
+    if (zone !== 'battlefield' && leavesNoCard(index)) return;
     switch (zone) {
       case 'hand':
         hand[handLen++] = index;
@@ -2337,7 +2529,7 @@ export function simulate(
     if (step.q) {
       const filter = filterFor.get(step.q);
       mask = filter ? filter.match : NO_MATCH;
-      if (filter?.varies) base = Math.min(MAX_QUERY_X, behaviorAmount(step.qx ?? ZERO_AMOUNT, turn)) * n;
+      if (filter?.varies) base = Math.min(MAX_QUERY_X, behaviorAmount(step.qx ?? ZERO_AMOUNT, turn)) * V * n;
     }
     // A local list, not the shared `stack`: putting one of these back can fire
     // an entry rule whose own move step borrows `stack` and empties it, and
@@ -2346,16 +2538,17 @@ export function simulate(
     // hot loop.
     const taken: number[] = [];
     for (let k = 0; k < count; k++) {
+      ensureFresh(turn);
       let pick = -1;
       let matches = 0;
-      for (let p = 0; p < permLen; p++) {
-        const index = permCard[p]!;
-        if (!stillOut(p, turn) || !accepts(mask, base, index)) continue;
+      for (let p = 0; p < perms.len; p++) {
+        const index = perms.card[p]!;
+        if (!stillOut(p, turn) || !accepts(mask, base + perms.added[p]! * n, index)) continue;
         matches++;
         if (rng.int(matches) === 0) pick = p;
       }
       if (pick < 0) break;
-      const index = permCard[pick]!;
+      const index = perms.card[pick]!;
       dropPermanent(pick);
       unsource(index);
       unrecur(index);
@@ -2363,6 +2556,9 @@ export function simulate(
     }
     for (const index of taken) {
       if (sink) movedNames.push(cards[index]!.name);
+      // A token that leaves the battlefield ceases to exist, so a flickered
+      // one does not come back.
+      if (cards[index]!.token) continue;
       // A flicker is the one arrival that credits the card itself. It was
       // already yours and already making this mana; blinking it is not the
       // flicker spell going and getting you a Sol Ring.
@@ -2384,7 +2580,7 @@ export function simulate(
       // resolving it. Nothing in here parses anything. Clamped to MAX_QUERY_X
       // rather than left to the amount's own range: this is a row index into a
       // table with X_VARIANTS rows, and an amount is no longer bounded by it.
-      if (filter?.varies) base = Math.min(MAX_QUERY_X, behaviorAmount(step.qx ?? ZERO_AMOUNT, turn)) * n;
+      if (filter?.varies) base = Math.min(MAX_QUERY_X, behaviorAmount(step.qx ?? ZERO_AMOUNT, turn)) * V * n;
     }
     // A stack of cards going to one end of the library goes in a random order,
     // so they are collected first and placed once the step knows how many
@@ -2452,6 +2648,44 @@ export function simulate(
    *
    * @param self The card these rules belong to, for a `self` step to move.
    */
+  /**
+   * Tokens onto the battlefield (rebuild plan F3), as the token kind's card:
+   * everything that reads a permanent then sees them, including the watchers.
+   * Summoning sick like anything else that arrives, unless the token has haste.
+   */
+  const makeTokens = (step: BehaviorStep, count: number, turn: number): number => {
+    const index = deck.tokens[tokenKey(step)];
+    if (index === undefined) return 0;
+    const card = cards[index]!;
+    let made = 0;
+    for (let k = 0; k < count; k++) {
+      if (addPermanent(index, card, turn) < 0) break;
+      made++;
+      fireArrival(index, card, turn);
+    }
+    return made;
+  };
+
+  /**
+   * +X/+X or haste until end of turn, for the creatures on the battlefield now
+   * that match: a Craterhoof, an Overrun. Returns how many it reached.
+   */
+  const pumpUntilEot = (step: BehaviorStep, amount: number, turn: number): number => {
+    ensureFresh(turn);
+    const filter = step.q ? filterFor.get(step.q) : undefined;
+    if (step.q && !filter) return 0;
+    let reached = 0;
+    for (let p = 0; p < perms.len; p++) {
+      if (!(perms.types[p]! & T_CREATURE) || !stillOut(p, turn)) continue;
+      if (filter && filter.match[perms.added[p]! * n + perms.card[p]!] !== 1) continue;
+      if (step.op === 'pump') perms.eotPump[p] = perms.eotPump[p]! + amount;
+      else perms.kwEot[p] = perms.kwEot[p]! | KW_HASTE;
+      perms.refresh(p, cards[perms.card[p]!]!);
+      reached++;
+    }
+    return reached;
+  };
+
   const runSteps = (steps: readonly BehaviorStep[], turn: number, self: number): number => {
     const slot = fireSlot.get(steps);
     if (slot !== undefined) {
@@ -2475,6 +2709,8 @@ export function simulate(
     // outer card's once it returns.
     const outerCredit = creditTo;
     creditTo = self;
+    const outerSelf = stepSelf;
+    stepSelf = self;
     // A rule's first step has no step before it, so "the previous X" is zero
     // and the step does nothing. Reset per rule rather than per game: an
     // upkeep trigger three turns later is not reading the cast that made it.
@@ -2574,11 +2810,45 @@ export function simulate(
           if (sink && movedNames.length) bits.push(`flickers ${movedNames.join(', ')}`);
           break;
         }
+        case 'token': {
+          if (step.tk === 'treasure') {
+            const t = makeTreasures(n, turn);
+            made += t;
+            did = t;
+            if (sink && t > 0) bits.push(`makes ${t} Treasure${t === 1 ? '' : 's'}`);
+            break;
+          }
+          did = makeTokens(step, n, turn);
+          if (sink && did > 0) bits.push(`creates ${did} ${cards[deck.tokens[tokenKey(step)] ?? 0]?.name ?? 'token'}${did === 1 ? '' : 's'}`);
+          break;
+        }
+        case 'counter': {
+          const slot = self >= 0 ? perms.newest(self) : -1;
+          if (slot < 0) {
+            did = 0;
+            break;
+          }
+          if (step.ck === 'charge') perms.charge[slot] = perms.charge[slot]! + n;
+          else perms.p1p1[slot] = perms.p1p1[slot]! + n;
+          perms.refresh(slot, cards[self]!);
+          dirty = true;
+          if (sink) bits.push(`gets ${n} ${step.ck === 'charge' ? 'charge' : '+1/+1'} counter${n === 1 ? '' : 's'}`);
+          break;
+        }
+        case 'pump':
+        case 'keyword': {
+          did = pumpUntilEot(step, n, turn);
+          if (sink && did > 0) {
+            bits.push(step.op === 'pump' ? `gives ${did} creature${did === 1 ? '' : 's'} +${n}/+${n}` : `gives ${did} creature${did === 1 ? '' : 's'} haste`);
+          }
+          break;
+        }
       }
       lastAmount = did;
     }
     if (sink) lastEffectText = bits.join(', ');
     creditTo = outerCredit;
+    stepSelf = outerSelf;
     return made + (entryMana - entryBefore);
   };
 
@@ -2735,9 +3005,9 @@ export function simulate(
     };
     const lands: BoardPile[] = [];
     const permanents: BoardPile[] = [];
-    for (let p = 0; p < permLen; p++) {
+    for (let p = 0; p < perms.len; p++) {
       if (!stillOut(p, turn)) continue;
-      const index = permCard[p]!;
+      const index = perms.card[p]!;
       pileUp(cards[index]!.land ? lands : permanents, index);
     }
     return {
@@ -2746,7 +3016,8 @@ export function simulate(
       treasures: countTreasures(),
       hand: zone(hand, handLen),
       graveyard: zone(graveyard, gyLen),
-      exile: zone(exiled, exLen),
+      // Suspended cards are in exile too, waiting.
+      exile: suspLen > 0 ? [...zone(exiled, exLen), ...zone(suspCard, suspLen)].sort(byName) : zone(exiled, exLen),
     };
   };
 
@@ -2887,6 +3158,571 @@ export function simulate(
     return !canPay(goalProbe, units, unitGroups);
   };
 
+  /**
+   * A spell has been paid for: it resolves. Shared by the spend loop, a
+   * suspended card coming off its last time counter, and a graveyard cast, so
+   * the three can never disagree about what casting a card does. Returns the
+   * mana it added to this turn. `exileAfter` is flashback's "then exile it".
+   */
+  const resolveCast = (index: number, card: SimCard, turn: number, goal: readonly Pip[] | null, exileAfter: boolean): number => {
+    let added = 0;
+    // Cast triggers, and they go off *before* the spell does — which is
+    // both the rule and the reason they are worth writing. An Archmage
+    // Emeritus draws off the Windfall before the Windfall empties your
+    // hand, and a Storm-Kiln Artist's Treasure is mana this turn.
+    if (anyCastWatchers) fireWatchers('cast', index, turn);
+
+    // An authored play rule *is* what the card does, and a behavior
+    // replaces the derived reading rather than adding to it — see
+    // SimCard.behavior. Land ramp is a derived reading like any other, it
+    // just comes off the mana profile instead of the effect profile, and
+    // nothing was enforcing that until an Into the North written out by
+    // hand fetched an Urza's Saga first and then did what it was told.
+    const authored = replacesDerived(card);
+    if (card.role === 'landramp' && !authored) {
+      // What it fetches is a land out of the library, arriving tapped. That
+      // is Rampant Growth exactly and Nature's Lore a turn late, which is
+      // the conservative half of the two. What it is *allowed* to fetch is
+      // not modelled at all — the profile records how many lands, never
+      // which — so this takes the land that best fixes your colours and a
+      // deck with a Snow-Covered Forest package gets whatever is in there.
+      // Writing the criteria out is exactly what a behavior is for.
+      for (let k = 0; k < card.adds; k++) {
+        const at = findLand(cards, library, top, libLen, colorsHeld, null, goal, units, rng);
+        if (at < 0) break;
+        const found = library[at]!;
+        const land = cards[found]!;
+        if (!addSource(found, land, turn + 1, turn, index)) break;
+        colorsHeld |= land.mask;
+        library[at] = library[--libLen]!;
+        if (sink) say(sink, 'mana', `Finds ${land.name}, which arrives tapped`);
+        const back = payEntryCost(land);
+        if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
+        // It entered the battlefield, so anything it does on the way in
+        // does it here too. A land found this way was never played, so its
+        // played rule and its derived reading both stay out.
+        fireEntry(found, land, turn);
+        sayEffect('');
+        fireArrival(found, land, turn);
+      }
+      // The mana that cast it has been spent, and a dork is summoning sick
+      // on top of that, so either way it pays for something from next turn.
+    } else if (card.role === 'rock' || card.role === 'dork') {
+      if (addSource(index, card, turn + 1, turn, index)) {
+        colorsHeld |= card.mask;
+        // A filter like Prophetic Prism profiles at zero net mana: it fixes
+        // colours and adds none. "Will add 0" is true and reads like a bug,
+        // so it says what the card is for instead.
+        if (sink) {
+          const colors = pipText(UNIT_BY_MASK[card.mask]!.colors);
+          say(
+            sink,
+            'mana',
+            card.manaAmount
+              ? `${card.name} will tap for mana from next turn, as its rule says`
+              : card.adds > 0
+              ? `${card.name} will add ${card.adds} ${colors} from next turn`
+              : `${card.name} will filter mana into ${colors} from next turn, adding none`,
+          );
+        }
+      }
+    } else if (card.role === 'ritual' && !authored) {
+      // This turn's mana, in this turn's pool, so the passes below this one
+      // can spend it. The colors are the profile's, not any-color: a Dark
+      // Ritual makes black and a deck that cannot use black mana does not
+      // get to pretend otherwise.
+      const burst = addPoolMana(card.adds, card.mask, card.oneColor, turn, index);
+      added += burst;
+      if (sink && burst > 0) {
+        const colors = pipText(UNIT_BY_MASK[card.mask]!.colors);
+        say(sink, 'mana', `${card.name} adds ${burst} ${colors} to the pool, this turn only`);
+      }
+    } else if (card.role === 'extraland' && !authored) {
+      // From next turn, not this one: this turn's land drop already
+      // happened, above, and an Exploration cast after it does not rewind
+      // the turn. Conservative by exactly one land drop, once.
+      const was = extraLands;
+      extraLands = Math.min(MAX_EXTRA_LANDS, extraLands + Math.max(1, card.adds));
+      const got = extraLands - was;
+      if (sink && got > 0) {
+        say(sink, 'mana', `${got} extra land drop${got === 1 ? '' : 's'} every turn, from next turn`);
+      }
+    }
+    // And what the card *does*, which until this phase was nothing at all.
+    // A Treasure made here is mana this turn, so the budget grows under the
+    // loop's feet — which is the point of a Treasure and the reason `left`
+    // is recomputed from `available` at the top of every pass.
+    // On the battlefield before it resolves, which is the order the real
+    // thing happens in and the order its own entry rule needs: a creature
+    // whose arrival sacrifices a creature can sacrifice itself, and a
+    // Panharmonicon-shaped rule counting creatures counts this one.
+    //
+    // Only the roles that did not already go through addSource above: a
+    // rock and a dork are filed there, with their mana.
+    if (card.permanent && card.role !== 'rock' && card.role !== 'dork') addPermanent(index, card, turn);
+    if (opts.effects) {
+      added += enters(index, card, turn, true);
+      if (sink && resolves(card)) {
+        // A behavior with an upkeep rule and no play rule is the same shape
+        // as a repeatable profile: nothing happened now, something will.
+        const b = card.behavior;
+        const later = b ? b.play.length === 0 && b.etb.length === 0 : card.effect!.repeatable;
+        // *What* will, though, is now two different promises. A watcher does
+        // not fire on a clock, it fires on the next thing you do, and
+        // telling someone their Tatyova triggers at upkeep is the trace
+        // contradicting the rule they just wrote.
+        const when =
+          b && b.upkeep.length === 0 && (b.cast.length > 0 || b.enters.length > 0)
+            ? 'is watching, and fires when it sees what it is waiting for'
+            : b && b.upkeep.length === 0
+              ? 'resolves'
+              : 'will fire every upkeep from next turn';
+        sayEffect(later ? `${card.name} ${when}` : `${card.name} ${lastEffectText || 'resolves'}`);
+      }
+    }
+    // And everyone watching it arrive. After its own rules, which is the
+    // order a card you cast does them in, and not at all if one of them
+    // sent it somewhere other than the battlefield.
+    if (!selfPlaced) fireArrival(index, card, turn);
+    // And where the card itself ends up. A permanent stays out, as a source
+    // if it makes mana and as an untracked body if it does not; everything
+    // else is in the graveyard once it has resolved, which is where a
+    // behavior can go and find it. After the effect, not before, because a
+    // sorcery is on the stack while it resolves and a Regrowth that finds
+    // itself is a rules error rather than a rounding one.
+    //
+    // Unless it said otherwise: a `self` step is the card naming its own
+    // destination, which is the whole of "exile this card instead" and of
+    // a Green Sun's Zenith shuffling back in.
+    if (!card.permanent && !(opts.effects && selfPlaced)) {
+      if (exileAfter) exileCard(index);
+      else bury(index);
+    }
+    return added;
+  };
+
+  // --- The object layer (rebuild plan F) --------------------------------------
+
+  /** Filter rows per `[X]` value: one per combination of the types a static rule adds. */
+  const V = deck.variants;
+  /** Any card with a static rule. Without one, nothing below ever recomputes. */
+  const anyStatics = cards.some((c) => c.permanent && !!c.behavior && c.behavior.statics.length > 0);
+  /** Any card with a way to be cast from the graveyard, so the spend loop looks there. */
+  const anyGraveyardCasts = cards.some((c) => !!c.gyCast);
+  /**
+   * Something on the battlefield changed since the statics were last applied.
+   * Set by every arrival and departure, cleared by `recompute`: statics are
+   * applied when something changes, never per read.
+   */
+  let dirty = false;
+  /** Reliquary Tower is out: no cleanup discard. */
+  let noMaxHand = false;
+  /** A static lets you play lands from the graveyard (Ramunap) or off the top of the library (Courser). */
+  let landFromGraveyard = false;
+  let landFromTop = false;
+  /** Scratch for the recompute: which permanents already have a mana source of their own, and who granted each a land type. */
+  const hasSource = new Uint8Array(MAX_PERMANENTS);
+  const subBy = new Int32Array(MAX_PERMANENTS);
+
+  /** Where a spend-loop pick is. */
+  const ZONE_HAND = 0;
+  const ZONE_GRAVEYARD = 1;
+
+  /** Times each commander has been cast this game, for the tax. */
+  const cmdCasts = new Int32Array(n);
+  /** A commander's cost with its tax on, one per commander per cast count, built on first use. */
+  const taxed = new Map<number, ParsedCost>();
+  const taxedCost = (index: number): ParsedCost => {
+    const casts = cmdCasts[index]!;
+    const key = index * (MAX_KICKS + 1) + Math.min(casts, MAX_KICKS);
+    let cost = taxed.get(key);
+    if (!cost) {
+      const base = cards[index]!.cost!;
+      cost = { ...base, generic: base.generic + 2 * casts, mana: base.mana + 2 * casts };
+      taxed.set(key, cost);
+    }
+    return cost;
+  };
+
+  /** The turn each card was last discarded, as `game * stride + turn`, for mayhem. */
+  const discardedAt = new Int32Array(n).fill(-1);
+  let turnStamp = -1;
+
+  /** Suspended cards and their time counters. They sit in exile; nothing else there can reach them. */
+  const suspCard = new Int32Array(MAX_HAND);
+  const suspTime = new Int32Array(MAX_HAND);
+  let suspLen = 0;
+
+  /** A card goes into exile, unless it cannot go anywhere (a token) or goes home (a commander). */
+  const exileCard = (index: number): void => {
+    if (leavesNoCard(index)) return;
+    if (exLen < exiled.length) exiled[exLen++] = index;
+  };
+
+  /** The rest of what casting it from the graveyard asks, beyond the mana: can it be paid? */
+  const graveyardCastable = (index: number, g: SimGraveyardCast, stamp: number): boolean => {
+    switch (g.kind) {
+      case 'flashback':
+        return true;
+      case 'retrace':
+        // A land card to discard. The commander is not a card in your hand.
+        for (let i = 0; i < handLen; i++) {
+          const c = cards[hand[i]!]!;
+          if (c.land && !c.commander) return true;
+        }
+        return false;
+      case 'escape':
+        return gyLen - 1 >= g.n;
+      case 'mayhem':
+        return discardedAt[index] === stamp;
+    }
+  };
+
+  /** Pay it, and say what it cost for the trace. */
+  const payGraveyardExtras = (index: number, g: SimGraveyardCast, stamp: number): string => {
+    if (g.kind === 'retrace') {
+      // The land you would least miss: the same judgement a discard makes,
+      // among the lands only.
+      let pick = -1;
+      for (let i = 0; i < handLen; i++) {
+        const c = cards[hand[i]!]!;
+        if (!c.land || c.commander) continue;
+        if (pick < 0 || (c.tapped === 'always' && cards[hand[pick]!]!.tapped !== 'always')) pick = i;
+      }
+      if (pick < 0) return '';
+      const land = hand[pick]!;
+      hand[pick] = hand[--handLen]!;
+      bury(land);
+      discardedAt[land] = stamp;
+      return `, discarding ${cards[land]!.name}`;
+    }
+    if (g.kind === 'escape') {
+      // Exile from the far end of the graveyard: the cards put there first,
+      // which a later rule is least likely to want back.
+      const gone: string[] = [];
+      for (let k = 0; k < g.n && gyLen > 0; k++) {
+        const c = graveyard[0]!;
+        graveyard[0] = graveyard[--gyLen]!;
+        if (exLen < exiled.length) exiled[exLen++] = c;
+        gone.push(cards[c]!.name);
+      }
+      return gone.length > 0 ? `, exiling ${gone.length} other card${gone.length === 1 ? '' : 's'}` : '';
+    }
+    void index;
+    return '';
+  };
+
+  /**
+   * Apply every static rule on the battlefield (rebuild plan F6): the added
+   * types first, matched against what cards are printed as so an Ashaya cannot
+   * feed on itself, then the grants that read what cards are now. Then the mana
+   * sources follow: an added basic land type is a mana ability, and a static's
+   * extra mana rides on the source it is for.
+   */
+  const recompute = (turn: number): void => {
+    dirty = false;
+    noMaxHand = false;
+    landFromGraveyard = false;
+    landFromTop = false;
+    const len = perms.len;
+    for (let p = 0; p < len; p++) {
+      perms.types[p] = cards[perms.card[p]!]!.types;
+      perms.added[p] = 0;
+      perms.sub[p] = 0;
+      perms.kwStatic[p] = 0;
+      perms.staticPump[p] = 0;
+      perms.extra[p] = 0;
+      perms.extraMask[p] = 0;
+      perms.extraBy[p] = -1;
+      subBy[p] = -1;
+    }
+    /** Does permanent `t` match a static rule's criteria, in variant `v`? */
+    const covers = (filter: SimFilter | undefined, q: string | undefined, t: number, v: number): boolean =>
+      !q || (!!filter && filter.match[v * n + perms.card[t]!] === 1);
+    // Pass one: types.
+    for (let p = 0; p < len; p++) {
+      const statics = cards[perms.card[p]!]!.behavior?.statics;
+      if (!statics || statics.length === 0 || !stillOut(p, turn)) continue;
+      for (const rule of statics) {
+        const filter = rule.q ? filterFor.get(rule.q) : undefined;
+        for (const step of rule.steps) {
+          if (step.op !== 'addtype' || !step.ty) continue;
+          const g = deck.typeGrants.indexOf(`${step.ty}${step.sub ?? ''}`);
+          if (g < 0) continue;
+          for (let t = 0; t < len; t++) {
+            if (!stillOut(t, turn) || !covers(filter, rule.q, t, 0)) continue;
+            perms.added[t] = perms.added[t]! | (1 << g);
+            perms.types[t] = perms.types[t]! | (TYPE_BIT[step.ty] ?? 0);
+            if (step.sub) {
+              perms.sub[t] = perms.sub[t]! | colorMask(step.sub);
+              if (subBy[t]! < 0) subBy[t] = perms.card[p]!;
+            }
+          }
+        }
+      }
+    }
+    // Pass two: everything else, against what things are now.
+    for (let p = 0; p < len; p++) {
+      const self = perms.card[p]!;
+      const statics = cards[self]!.behavior?.statics;
+      if (!statics || statics.length === 0 || !stillOut(p, turn)) continue;
+      for (const rule of statics) {
+        const filter = rule.q ? filterFor.get(rule.q) : undefined;
+        for (const step of rule.steps) {
+          switch (step.op) {
+            case 'nomaxhand':
+              noMaxHand = true;
+              break;
+            case 'landfrom':
+              if (step.from === 'graveyard') landFromGraveyard = true;
+              else if (step.from === 'librarytop') landFromTop = true;
+              break;
+            case 'pump':
+            case 'keyword':
+            case 'extramana': {
+              const wasSelf = stepSelf;
+              stepSelf = self;
+              const amount = step.op === 'keyword' ? 1 : behaviorAmount(step.x, turn);
+              stepSelf = wasSelf;
+              const mask = step.op === 'extramana' ? colorMask(manaStepColors(step)) : 0;
+              for (let t = 0; t < len; t++) {
+                if (!stillOut(t, turn) || !covers(filter, rule.q, t, perms.added[t]!)) continue;
+                if (step.op === 'extramana') {
+                  perms.extra[t] = perms.extra[t]! + amount;
+                  perms.extraMask[t] = perms.extraMask[t]! | mask;
+                  perms.extraBy[t] = self;
+                  continue;
+                }
+                if (!(perms.types[t]! & T_CREATURE)) continue;
+                if (step.op === 'pump') perms.staticPump[t] = perms.staticPump[t]! + amount;
+                else perms.kwStatic[t] = perms.kwStatic[t]! | KW_HASTE;
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+    for (let p = 0; p < len; p++) perms.refresh(p, cards[perms.card[p]!]!);
+    // The mana view follows. Granted sources that lost their grant (or their
+    // permanent) go; the rest of the sources pick up their permanent's added
+    // colors, land-ness and extra mana.
+    hasSource.fill(0, 0, len);
+    for (let s = 0; s < srcLen; ) {
+      const oid = srcOid[s]!;
+      const p = oid > 0 ? perms.slotOf(oid) : -1;
+      if (srcGranted[s] && (p < 0 || perms.sub[p] === 0)) {
+        dropSource(s);
+        continue;
+      }
+      if (p >= 0) {
+        hasSource[p] = 1;
+        srcSub[s] = srcGranted[s] ? 0 : perms.sub[p]!;
+        if (srcGranted[s]) srcMask[s] = perms.sub[p]!;
+        srcIsLand[s] = perms.types[p]! & T_LAND ? 1 : 0;
+        srcXtra[s] = perms.extra[p]!;
+        srcXmask[s] = perms.extraMask[p]!;
+        srcXby[s] = perms.extraBy[p]!;
+      }
+      s++;
+    }
+    // A permanent with a basic land type and no mana ability of its own gets
+    // one: a creature under Ashaya taps for {G}. From next turn, whatever the
+    // creature's age, so a grant arriving mid-turn cannot pay for this turn.
+    for (let p = 0; p < len; p++) {
+      if (hasSource[p] || perms.sub[p] === 0 || !stillOut(p, turn) || srcLen >= MAX_SOURCES) continue;
+      const s = srcLen++;
+      srcMask[s] = perms.sub[p]!;
+      srcUnits[s] = 1;
+      srcOnline[s] = turn + 1;
+      srcExpires[s] = 0;
+      srcOneColor[s] = 0;
+      srcIsLand[s] = 1;
+      srcCard[s] = perms.card[p]!;
+      srcBy[s] = subBy[p]! >= 0 ? subBy[p]! : perms.card[p]!;
+      srcTreasure[s] = 0;
+      srcFloating[s] = 0;
+      clearSourceExtras(s);
+      srcOid[s] = perms.oid[p]!;
+      srcGranted[s] = 1;
+      srcXtra[s] = perms.extra[p]!;
+      srcXmask[s] = perms.extraMask[p]!;
+      srcXby[s] = perms.extraBy[p]!;
+    }
+  };
+
+  /** Statics up to date before anything reads the board. Free in a deck without one. */
+  const ensureFresh = (turn: number): void => {
+    if (anyStatics && dirty) recompute(turn);
+  };
+
+  /**
+   * Which creatures had to tap for mana this turn (rebuild plan F2), so they do
+   * not attack. The fewest that pay for everything committed, weakest first,
+   * and the Treasures `treasuresSpent` already settled on count as spent: a
+   * Treasure is gone for good and an Elf only for the turn, but the Treasure
+   * count is what it always was, so the only question left is the creatures.
+   */
+  const creatureSources: number[] = [];
+  const tapCreatures = (turn: number, treasures: number): void => {
+    creatureSources.length = 0;
+    for (let s = 0; s < srcLen; s++) {
+      if (srcTreasure[s] || srcFloating[s] || srcOnline[s]! > turn) continue;
+      const expires = srcExpires[s]!;
+      if (expires > 0 && turn > expires) continue;
+      const p = srcOid[s]! > 0 ? perms.slotOf(srcOid[s]!) : -1;
+      if (p >= 0 && perms.types[p]! & T_CREATURE) creatureSources.push(s);
+    }
+    if (creatureSources.length === 0) return;
+    creatureSources.sort((a, b) => perms.power[perms.slotOf(srcOid[a]!)]! - perms.power[perms.slotOf(srcOid[b]!)]!);
+    for (let k = 0; k <= creatureSources.length; k++) {
+      thrifty.length = 0;
+      for (let s = 0; s < srcLen; s++) {
+        if (srcTreasure[s] || srcOnline[s]! > turn) continue;
+        const expires = srcExpires[s]!;
+        if (expires > 0 && turn > expires) continue;
+        const rank = creatureSources.indexOf(s);
+        if (rank >= k) continue;
+        pushExtra(s, thrifty, null);
+        const units = srcUnits[s]!;
+        if (srcOneColor[s] && units > 1) continue; // already in unitGroups
+        const unit = UNIT_BY_MASK[srcColors(s)]!;
+        for (let u = 0; u < units; u++) thrifty.push(unit);
+      }
+      for (let i = 0; i < treasures; i++) thrifty.push(UNIT_BY_MASK[TREASURE_MASK]!);
+      if (!canPay(paid, thrifty, unitGroups)) continue;
+      for (let c = 0; c < k; c++) {
+        const p = perms.slotOf(srcOid[creatureSources[c]!]!);
+        if (p >= 0) perms.tapped[p] = 1;
+      }
+      return;
+    }
+    // Nothing pays it short of all of them, which the spend loop already
+    // checked it could: every one of them tapped.
+    for (const s of creatureSources) {
+      const p = perms.slotOf(srcOid[s]!);
+      if (p >= 0) perms.tapped[p] = 1;
+    }
+  };
+
+  /**
+   * Upkeep: a time counter comes off every suspended card, and the ones at
+   * zero are cast for free. A creature cast that way has haste.
+   */
+  const tickSuspended = (turn: number): void => {
+    for (let k = 0; k < suspLen; ) {
+      suspTime[k] = suspTime[k]! - 1;
+      if (suspTime[k]! > 0) {
+        k++;
+        continue;
+      }
+      const index = suspCard[k]!;
+      suspCard[k] = suspCard[--suspLen]!;
+      suspTime[k] = suspTime[suspLen]!;
+      const card = cards[index]!;
+      if (sink) say(sink, 'cast', `${card.name} comes off suspend and is cast for free`);
+      xSpent = 0;
+      kickedNow = 0;
+      resolveCast(index, card, turn, turnGoal, false);
+      if (card.creature) {
+        const p = perms.newest(index);
+        if (p >= 0) {
+          perms.kwOwn[p] = perms.kwOwn[p]! | KW_HASTE;
+          perms.refresh(p, card);
+        }
+      }
+    }
+  };
+
+  /** End of turn: discard to hand size, unless something says there is none. The commander is not in your hand. */
+  const cleanup = (turn: number): void => {
+    ensureFresh(turn);
+    if (noMaxHand) return;
+    let count = 0;
+    for (let i = 0; i < handLen; i++) if (!cards[hand[i]!]!.commander) count++;
+    if (count <= HAND_SIZE) return;
+    const names: string[] = [];
+    while (count > HAND_SIZE) {
+      const pick = pickDiscard(cards, hand, handLen);
+      if (pick < 0) break;
+      const index = hand[pick]!;
+      hand[pick] = hand[--handLen]!;
+      bury(index);
+      discardedAt[index] = turnStamp;
+      if (sink) names.push(cards[index]!.name);
+      count--;
+    }
+    if (sink && names.length > 0) say(sink, 'note', `Discards ${names.join(', ')} down to ${HAND_SIZE} cards`);
+  };
+
+  // The spend loop's pick, out here so `consider` is one closure for the whole
+  // run rather than one per cast.
+  let pick = -1;
+  let pickRank = -1;
+  let ties = 0;
+  /** Where the pick is: the hand, or the graveyard (rebuild plan F5). */
+  let pickZone = 0;
+  /** What it costs this time: taxed, a graveyard price, a suspend price. */
+  let pickCost: ParsedCost | null = null;
+  /** It is being suspended, not cast. */
+  let pickSuspend = false;
+  /** This turn's ritual target, for `consider`. */
+  let spendRitualGoal: ParsedCost | null = null;
+    /**
+     * One candidate against the best so far. `size` is what the priciest-first
+     * order reads, which is the card's worth rather than this price for a
+     * suspended one.
+     */
+    const consider = (at: number, zone: number, card: SimCard, cost: ParsedCost, size: number, suspending: boolean): void => {
+      // A ritual is ramp for one turn, so it is ramp for the ordering that
+      // matters: cast before the spell it is paying for, or the burst is
+      // gone by the time anything wants it.
+      //
+      // Only while it is actually up on the deal. A Jeska's Will reads as a
+      // ritual and its amount is a floor of one against a cost of three, so
+      // it is filed as one and sequenced as an ordinary spell — the mana
+      // still lands in the pool when it resolves, it just does not get to
+      // jump the queue or answer to `ritualGoal`, which is somebody else's
+      // burst.
+      const burst = !suspending && castsAsRitual(card);
+      const ramp = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp' || burst;
+      if (burst && !ritualNeeded(spendRitualGoal)) return;
+      // Held up, which in a goldfish means never cast. See InteractionPolicy.
+      if (holding && card.instant) return;
+      // What the policy came for, ahead of ramp, because a deck that wants
+      // its two-drop on turn two wants it more than it wants a Signet.
+      const index = zone === ZONE_HAND ? hand[at]! : graveyard[at]!;
+      const favored = spendDraw ? drawsCards[index]! : spendCreatures ? card.creature : false;
+      // An X spell goes last, under every fixed cost, because X is going to
+      // take whatever the turn has left and a Fireball cast first would end
+      // the turn on its own. Cast last it costs nothing: the mana it eats
+      // had nowhere else to go. The +100 keeps every rank non-negative,
+      // which `pickRank` starting at -1 depends on.
+      //
+      // Size is normally priciest-first: the four-drop you can only cast
+      // this turn goes before the one-drop you can cast any turn. Under
+      // `curve` it is inverted, so the turn fits as many spells into the
+      // mana as it holds, which is the whole of what a low-curve deck is
+      // trying to do. Clamped to CURVE_SPAN either way so a twelve-drop can
+      // never climb into the tier above it.
+      const clamped = Math.min(size, CURVE_SPAN);
+      const rank = (ramp ? 1000 : 0) + (favored ? 2000 : 0) + (cost.hasX ? 0 : 100) + (spendCurve ? CURVE_SPAN - clamped : clamped);
+      if (rank < pickRank) return;
+      // Reservoir sampling over the ties, so the choice is uniform among
+      // equals without building a list to shuffle.
+      if (rank === pickRank) {
+        ties++;
+        if (rng.int(ties) !== 0) return;
+      } else {
+        ties = 1;
+        pickRank = rank;
+      }
+      pick = at;
+      pickZone = zone;
+      pickCost = cost;
+      pickSuspend = suspending;
+    };
+
   let handSizeSum = 0;
   let mulliganed = 0;
   const games = deckSize > 0 ? opts.games : 0;
@@ -2897,7 +3733,7 @@ export function simulate(
     firstHeld.fill(0);
     firstPay.fill(0);
     srcLen = 0;
-    permLen = 0;
+    perms.reset();
     grantMask = 0;
     recurLen = 0;
     extraLands = 0;
@@ -2919,6 +3755,12 @@ export function simulate(
     exLen = 0;
     gameDamage = 0;
     gameCombat = 0;
+    suspLen = 0;
+    cmdCasts.fill(0);
+    dirty = false;
+    noMaxHand = false;
+    landFromGraveyard = false;
+    landFromTop = false;
 
     // --- The opener, and however many mulligans it takes ---------------------
     for (let m = 0; ; m++) {
@@ -2974,6 +3816,10 @@ export function simulate(
       // run, not after.
       poolCredited = false;
       const damageBefore = gameDamage;
+      turnStamp = game * stride + turn;
+      // Untap. The only tapped state this model keeps is a creature that paid
+      // for last turn's spells, so it is also the only thing to untap.
+      if (perms.len > 0) perms.untapAll();
       if (sink) {
         sink.turn = { turn, lines: [], available: 0, spent: 0, damage: 0, board: EMPTY_BOARD };
         sink.game.turns.push(sink.turn);
@@ -2985,12 +3831,14 @@ export function simulate(
       // rebuild below picks it up off the battlefield rather than off the
       // return value — which is why that return value is dropped here and
       // added by hand only inside the spend loop, after the pool is fixed.
+      if (suspLen > 0) tickSuspended(turn);
       for (let r = 0; r < recurLen; r++) {
         const index = recurring[r]!;
         const card = cards[index]!;
         // Nothing was cast to get here, so there is no X to read. An upkeep
         // three turns after the spell is not the moment the mana went in.
         xSpent = 0;
+        kickedNow = 0;
         selfPlaced = false;
         if (card.behavior) {
           if (card.behavior.upkeep.length === 0) continue;
@@ -3052,15 +3900,36 @@ export function simulate(
         let best = -1;
         for (let i = 0; i < handLen; i++) {
           if (!cards[hand[i]!]!.land) continue;
+          landZone[candidates] = LAND_HAND;
           landChoices[candidates++] = i;
-          best = i;
+          best = candidates - 1;
+        }
+        // Lands from somewhere other than your hand, when a static says so
+        // (rebuild plan F6): Ramunap Excavator's graveyard, Courser of
+        // Kruphix's top of the library. Only lands, and only the ones the
+        // land drop could play from hand anyway.
+        if (landFromGraveyard || landFromTop) {
+          ensureFresh(turn);
+          if (landFromGraveyard) {
+            for (let j = 0; j < gyLen && candidates < landChoices.length; j++) {
+              if (!cards[graveyard[j]!]!.land) continue;
+              landZone[candidates] = LAND_GRAVEYARD;
+              landChoices[candidates++] = j;
+            }
+          }
+          if (landFromTop && top < libLen && cards[library[top]!]!.land && candidates < landChoices.length) {
+            landZone[candidates] = LAND_TOP;
+            landChoices[candidates++] = top;
+          }
+          if (candidates === 1) best = 0;
         }
         if (candidates > 1) {
           let bestScore = -1;
           let ties = 0;
           for (let c = 0; c < candidates; c++) {
-            const i = landChoices[c]!;
-            const score = landScore(cards[hand[i]!]!, colorsHeld, needUntapped, goal, units);
+            // A land off the graveyard or the library is a card your hand
+            // keeps, which is the whole reason to play one from there.
+            const score = landScore(cards[landAt(c)]!, colorsHeld, needUntapped, goal, units) + (landZone[c] === LAND_HAND ? 0 : 5);
             if (score < bestScore) continue;
             // §11.3: random where the policy is genuinely indifferent, and
             // nowhere else. Two Islands score the same and it does not matter
@@ -3073,7 +3942,7 @@ export function simulate(
               ties = 1;
               bestScore = score;
             }
-            best = i;
+            best = c;
           }
         }
         if (best < 0) {
@@ -3083,25 +3952,29 @@ export function simulate(
         // The land-drop percentage is about the drop everybody gets, so an
         // Azusa turn still counts once rather than three times.
         if (drop === 0) landDrops[turn] = landDrops[turn]! + 1;
+        const cardIndex = landAt(best);
+        const card = cards[cardIndex]!;
         if (sink) {
-          const chosen = cards[hand[best]!]!;
+          const chosen = card;
           // The lands it turned down, by name and distinct. A hand with three
           // Mountains in it did not offer a choice worth reporting, and
           // "plays Mountain over Mountain" reads as a bug rather than as a
           // decision.
           const others = new Set<string>();
           for (let c = 0; c < candidates; c++) {
-            const name = cards[hand[landChoices[c]!]!]!.name;
+            const name = cards[landAt(c)]!.name;
             if (name !== chosen.name) others.add(name);
           }
           const how = chosen.tapped === 'always' ? ' (enters tapped)' : '';
           const over = others.size > 0 ? ` over ${[...others].join(', ')}` : '';
           const extra = drop > 0 ? ' (extra land drop)' : '';
-          say(sink, 'land', `Plays ${chosen.name}${how}${over}${extra}`);
+          const from = landZone[best] === LAND_GRAVEYARD ? ' from the graveyard' : landZone[best] === LAND_TOP ? ' off the top of the library' : '';
+          say(sink, 'land', `Plays ${chosen.name}${from}${how}${over}${extra}`);
         }
-        const cardIndex = hand[best]!;
-        const card = cards[cardIndex]!;
-        hand[best] = hand[--handLen]!;
+        const at = landChoices[best]!;
+        if (landZone[best] === LAND_HAND) hand[at] = hand[--handLen]!;
+        else if (landZone[best] === LAND_GRAVEYARD) graveyard[at] = graveyard[--gyLen]!;
+        else top++;
         if (card.role === 'fetch') {
           // The fetch was *played*, so the fetch's own rule fires — and until
           // this release it never did. This path resolved the land it found and
@@ -3111,6 +3984,7 @@ export function simulate(
           let placed = false;
           if (opts.effects && resolves(card)) {
             xSpent = 0;
+            kickedNow = 0;
             enters(cardIndex, card, turn, true);
             placed = selfPlaced;
             sayEffect(lastEffectText ? `${card.name} ${lastEffectText}` : '');
@@ -3130,6 +4004,7 @@ export function simulate(
           // resolver to call.
           if (opts.effects && resolves(card)) {
             xSpent = 0;
+            kickedNow = 0;
             enters(cardIndex, card, turn, true);
             sayEffect(lastEffectText ? `${card.name} ${lastEffectText}` : '');
           }
@@ -3230,66 +4105,49 @@ export function simulate(
       for (let cast = 0; cast < MAX_CASTS_PER_TURN; cast++) {
         const left = available - spent;
         if (left <= 0) break;
-        let pick = -1;
-        let pickRank = -1;
-        let ties = 0;
+        pick = -1;
+        pickRank = -1;
+        ties = 0;
+        pickZone = ZONE_HAND;
+        pickCost = null;
+        pickSuspend = false;
+        spendRitualGoal = ritualGoal;
         for (let i = 0; i < handLen; i++) {
-          const card = cards[hand[i]!]!;
+          const index = hand[i]!;
+          const card = cards[index]!;
+          // Suspend, when casting it is not on: no mana cost at all (Ancestral
+          // Visions), or more than the turn has. The price is the suspend cost.
+          if (card.suspend && (!card.spell || !card.cost || card.cost.mana > left)) {
+            if (card.suspend.cost.mana <= left) consider(i, ZONE_HAND, card, card.suspend.cost, card.cost?.mana ?? card.cmc, true);
+            continue;
+          }
           if (!card.spell || !card.cost) continue;
+          // The commander pays two more for every time it has been cast.
+          const cost = card.commander && cmdCasts[index]! > 0 ? taxedCost(index) : card.cost;
           // The cheap test first: a cost that wants more mana than is left
           // cannot be paid whatever colors it wants, and skipping it here is
           // what keeps the solver off nine tenths of the hand.
-          if (card.cost.mana > left) continue;
+          if (cost.mana > left) continue;
           // An X spell with nothing left over for X is a card you hold, not a
           // card you cast. Spending a Fireball for zero uses the card up and
           // buys nothing, which is not the conservative direction — it is just
           // worse play. Holding it is what happens at a table, and it is what
           // makes "the mana you spent on X" a number worth reading.
-          if (card.cost.hasX && card.cost.mana >= left) continue;
-          // A ritual is ramp for one turn, so it is ramp for the ordering that
-          // matters: cast before the spell it is paying for, or the burst is
-          // gone by the time anything wants it.
-          //
-          // Only while it is actually up on the deal. A Jeska's Will reads as a
-          // ritual and its amount is a floor of one against a cost of three, so
-          // it is filed as one and sequenced as an ordinary spell — the mana
-          // still lands in the pool when it resolves, it just does not get to
-          // jump the queue or answer to `ritualGoal`, which is somebody else's
-          // burst.
-          const burst = castsAsRitual(card);
-          const ramp = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp' || burst;
-          if (burst && !ritualNeeded(ritualGoal)) continue;
-          // Held up, which in a goldfish means never cast. See InteractionPolicy.
-          if (holding && card.instant) continue;
-          // What the policy came for, ahead of ramp, because a deck that wants
-          // its two-drop on turn two wants it more than it wants a Signet.
-          const favored = spendDraw ? drawsCards[hand[i]!]! : spendCreatures ? card.creature : false;
-          // An X spell goes last, under every fixed cost, because X is going to
-          // take whatever the turn has left and a Fireball cast first would end
-          // the turn on its own. Cast last it costs nothing: the mana it eats
-          // had nowhere else to go. The +100 keeps every rank non-negative,
-          // which `pickRank` starting at -1 depends on.
-          //
-          // Size is normally priciest-first: the four-drop you can only cast
-          // this turn goes before the one-drop you can cast any turn. Under
-          // `curve` it is inverted, so the turn fits as many spells into the
-          // mana as it holds, which is the whole of what a low-curve deck is
-          // trying to do. Clamped to CURVE_SPAN either way so a twelve-drop can
-          // never climb into the tier above it.
-          const size = Math.min(card.cost.mana, CURVE_SPAN);
-          const rank =
-            (ramp ? 1000 : 0) + (favored ? 2000 : 0) + (card.cost.hasX ? 0 : 100) + (spendCurve ? CURVE_SPAN - size : size);
-          if (rank < pickRank) continue;
-          // Reservoir sampling over the ties, so the choice is uniform among
-          // equals without building a list to shuffle.
-          if (rank === pickRank) {
-            ties++;
-            if (rng.int(ties) !== 0) continue;
-          } else {
-            ties = 1;
-            pickRank = rank;
+          if (cost.hasX && cost.mana >= left) continue;
+          // The same for a free spell whose whole point is its multikicker: an
+          // Everflowing Chalice cast unkicked is a card thrown away.
+          if (card.kicker?.multi && cost.mana === 0 && card.kicker.cost.mana > left) continue;
+          consider(i, ZONE_HAND, card, cost, cost.mana, false);
+        }
+        // The graveyard, for the cards with a way to be cast from there.
+        if (anyGraveyardCasts) {
+          for (let j = 0; j < gyLen; j++) {
+            const index = graveyard[j]!;
+            const card = cards[index]!;
+            const g = card.gyCast;
+            if (!g || g.cost.mana > left || !graveyardCastable(index, g, stamp)) continue;
+            consider(j, ZONE_GRAVEYARD, card, g.cost, g.cost.mana, false);
           }
-          pick = i;
         }
         if (pick < 0) {
           if (holding) {
@@ -3317,16 +4175,17 @@ export function simulate(
         }
         // Only now does the matching solver run, and only on the one card the
         // policy actually wants to cast.
-        const index = hand[pick]!;
+        const cost: ParsedCost = pickCost!;
+        const index = pickZone === ZONE_HAND ? hand[pick]! : graveyard[pick]!;
         const card = cards[index]!;
         const before = paid.pips.length;
-        paid.generic += card.cost!.generic;
-        for (const pip of card.cost!.pips) paid.pips.push(pip);
+        paid.generic += cost.generic;
+        for (const pip of cost.pips) paid.pips.push(pip);
         if (!canPay(paid, units, unitGroups)) {
           // Unaffordable in *these* colors alongside what is already committed.
           // Roll it back and stop: the next-best card is usually the same
           // colors and re-scanning the hand for it costs more than it wins.
-          paid.generic -= card.cost!.generic;
+          paid.generic -= cost.generic;
           paid.pips.length = before;
           if (sink) {
             say(
@@ -3339,10 +4198,52 @@ export function simulate(
           }
           break;
         }
-        paid.mana += card.cost!.mana;
-        spent += card.cost!.mana;
+        paid.mana += cost.mana;
+        spent += cost.mana;
         castCount++;
-        hand[pick] = hand[--handLen]!;
+        if (pickZone === ZONE_HAND) hand[pick] = hand[--handLen]!;
+        else graveyard[pick] = graveyard[--gyLen]!;
+
+        // --- Suspend ----------------------------------------------------
+        // Exiled with its time counters; it resolves at an upkeep, not now.
+        if (pickSuspend) {
+          if (suspLen < suspCard.length) {
+            suspCard[suspLen] = index;
+            suspTime[suspLen] = card.suspend!.n;
+            suspLen++;
+          }
+          if (sink && sink.turn) {
+            say(sink, 'cast', `Suspends ${card.name} for ${card.suspend!.n} turn${card.suspend!.n === 1 ? '' : 's'}`);
+            castLines.push({ line: sink.turn.lines[sink.turn.lines.length - 1]!, card: index, generic: cost.generic, pips: cost.pips.length });
+          }
+          continue;
+        }
+
+        // --- The rest of a graveyard cast's price ------------------------
+        const extraCost = pickZone === ZONE_GRAVEYARD ? payGraveyardExtras(index, card.gyCast!, stamp) : '';
+
+        // --- Kicker -----------------------------------------------------
+        // Paid whenever the mana left covers it, as many times as it allows for
+        // a multikicker, and before X, which takes whatever is left after that.
+        xSpent = 0;
+        kickedNow = 0;
+        if (card.kicker && pickZone === ZONE_HAND) {
+          const k = card.kicker.cost;
+          while (kickedNow < MAX_KICKS && (kickedNow === 0 || card.kicker.multi)) {
+            if (k.mana > available - spent) break;
+            const mark = paid.pips.length;
+            paid.generic += k.generic;
+            for (const pip of k.pips) paid.pips.push(pip);
+            if (!canPay(paid, units, unitGroups)) {
+              paid.generic -= k.generic;
+              paid.pips.length = mark;
+              break;
+            }
+            paid.mana += k.mana;
+            spent += k.mana;
+            kickedNow++;
+          }
+        }
 
         // --- X ----------------------------------------------------------
         // Until this point {X} was worth nothing: manaCost.ts records `hasX`
@@ -3350,8 +4251,7 @@ export function simulate(
         // there unspent. X now takes whatever the turn has left, which is what
         // a player does with it and what the `manaSpentByTurn` line has been
         // overstating the gap on for every deck that plays one.
-        xSpent = 0;
-        if (card.cost!.hasX) {
+        if (cost.hasX && pickZone === ZONE_HAND) {
           const rest = available - spent;
           if (rest > 0) {
             paid.generic += rest;
@@ -3367,6 +4267,7 @@ export function simulate(
             }
           }
         }
+        if (card.commander) cmdCasts[index] = cmdCasts[index]! + 1;
 
         if (sink && sink.turn) {
           const rampFirst =
@@ -3375,146 +4276,28 @@ export function simulate(
             card.role === 'landramp' ||
             castsAsRitual(card);
           const why = rampFirst ? ' (ramp first)' : '';
-          const forX = card.cost!.hasX ? ` with X = ${xSpent}` : '';
-          say(sink, 'cast', `Casts ${card.name} ${card.manaCost}${forX}${why}`);
+          const forX = cost.hasX ? ` with X = ${xSpent}` : '';
+          const kicked = kickedNow > 0 ? `, kicked${kickedNow > 1 ? ` ${kickedNow} times` : ''}` : '';
+          const tax = cost !== card.cost && card.commander ? ` with ${cost.mana - card.cost!.mana} commander tax` : '';
+          const from = pickZone === ZONE_GRAVEYARD ? ` from the graveyard (${card.gyCast!.kind}${extraCost})` : '';
+          const price = pickZone === ZONE_GRAVEYARD ? '' : ` ${card.manaCost}`;
+          say(sink, 'cast', `Casts ${card.name}${price}${from}${forX}${kicked}${tax}${why}`);
           // The taps arrive on this line later. The turn has to finish
           // committing first, because there is only one cost to solve and it is
           // the whole turn's.
+          const kick = card.kicker && kickedNow > 0 ? card.kicker.cost : null;
           castLines.push({
             line: sink.turn.lines[sink.turn.lines.length - 1]!,
             card: index,
             // X is generic mana like any other, so the tap breakdown has to
-            // account for it or the line shows five lands paying for two.
-            generic: card.cost!.generic + xSpent,
-            pips: card.cost!.pips.length,
+            // account for it or the line shows five lands paying for two. The
+            // kicker is folded in the same way.
+            generic: cost.generic + xSpent + (kick ? kick.generic * kickedNow : 0),
+            pips: cost.pips.length + (kick ? kick.pips.length * kickedNow : 0),
           });
         }
 
-        // Cast triggers, and they go off *before* the spell does — which is
-        // both the rule and the reason they are worth writing. An Archmage
-        // Emeritus draws off the Windfall before the Windfall empties your
-        // hand, and a Storm-Kiln Artist's Treasure is mana this turn.
-        if (anyCastWatchers) fireWatchers('cast', index, turn);
-
-        // An authored play rule *is* what the card does, and a behavior
-        // replaces the derived reading rather than adding to it — see
-        // SimCard.behavior. Land ramp is a derived reading like any other, it
-        // just comes off the mana profile instead of the effect profile, and
-        // nothing was enforcing that until an Into the North written out by
-        // hand fetched an Urza's Saga first and then did what it was told.
-        const authored = replacesDerived(card);
-        if (card.role === 'landramp' && !authored) {
-          // What it fetches is a land out of the library, arriving tapped. That
-          // is Rampant Growth exactly and Nature's Lore a turn late, which is
-          // the conservative half of the two. What it is *allowed* to fetch is
-          // not modelled at all — the profile records how many lands, never
-          // which — so this takes the land that best fixes your colours and a
-          // deck with a Snow-Covered Forest package gets whatever is in there.
-          // Writing the criteria out is exactly what a behavior is for.
-          for (let k = 0; k < card.adds; k++) {
-            const at = findLand(cards, library, top, libLen, colorsHeld, null, goal, units, rng);
-            if (at < 0) break;
-            const found = library[at]!;
-            const land = cards[found]!;
-            if (!addSource(found, land, turn + 1, turn, index)) break;
-            colorsHeld |= land.mask;
-            library[at] = library[--libLen]!;
-            if (sink) say(sink, 'mana', `Finds ${land.name}, which arrives tapped`);
-            const back = payEntryCost(land);
-            if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
-            // It entered the battlefield, so anything it does on the way in
-            // does it here too. A land found this way was never played, so its
-            // played rule and its derived reading both stay out.
-            fireEntry(found, land, turn);
-            sayEffect('');
-            fireArrival(found, land, turn);
-          }
-          // The mana that cast it has been spent, and a dork is summoning sick
-          // on top of that, so either way it pays for something from next turn.
-        } else if (card.role === 'rock' || card.role === 'dork') {
-          if (addSource(index, card, turn + 1, turn, index)) {
-            colorsHeld |= card.mask;
-            // A filter like Prophetic Prism profiles at zero net mana: it fixes
-            // colours and adds none. "Will add 0" is true and reads like a bug,
-            // so it says what the card is for instead.
-            if (sink) {
-              const colors = pipText(UNIT_BY_MASK[card.mask]!.colors);
-              say(
-                sink,
-                'mana',
-                card.adds > 0
-                  ? `${card.name} will add ${card.adds} ${colors} from next turn`
-                  : `${card.name} will filter mana into ${colors} from next turn, adding none`,
-              );
-            }
-          }
-        } else if (card.role === 'ritual' && !authored) {
-          // This turn's mana, in this turn's pool, so the passes below this one
-          // can spend it. The colors are the profile's, not any-color: a Dark
-          // Ritual makes black and a deck that cannot use black mana does not
-          // get to pretend otherwise.
-          const burst = addPoolMana(card.adds, card.mask, card.oneColor, turn, index);
-          available += burst;
-          if (sink && burst > 0) {
-            const colors = pipText(UNIT_BY_MASK[card.mask]!.colors);
-            say(sink, 'mana', `${card.name} adds ${burst} ${colors} to the pool, this turn only`);
-          }
-        } else if (card.role === 'extraland' && !authored) {
-          // From next turn, not this one: this turn's land drop already
-          // happened, above, and an Exploration cast after it does not rewind
-          // the turn. Conservative by exactly one land drop, once.
-          const was = extraLands;
-          extraLands = Math.min(MAX_EXTRA_LANDS, extraLands + Math.max(1, card.adds));
-          const got = extraLands - was;
-          if (sink && got > 0) {
-            say(sink, 'mana', `${got} extra land drop${got === 1 ? '' : 's'} every turn, from next turn`);
-          }
-        }
-        // And what the card *does*, which until this phase was nothing at all.
-        // A Treasure made here is mana this turn, so the budget grows under the
-        // loop's feet — which is the point of a Treasure and the reason `left`
-        // is recomputed from `available` at the top of every pass.
-        // On the battlefield before it resolves, which is the order the real
-        // thing happens in and the order its own entry rule needs: a creature
-        // whose arrival sacrifices a creature can sacrifice itself, and a
-        // Panharmonicon-shaped rule counting creatures counts this one.
-        //
-        // Only the roles that did not already go through addSource above: a
-        // rock and a dork are filed there, with their mana.
-        if (card.permanent && card.role !== 'rock' && card.role !== 'dork') addPermanent(index, card, turn);
-        if (opts.effects) {
-          available += enters(index, card, turn, true);
-          if (sink && resolves(card)) {
-            // A behavior with an upkeep rule and no play rule is the same shape
-            // as a repeatable profile: nothing happened now, something will.
-            const b = card.behavior;
-            const later = b ? b.play.length === 0 && b.etb.length === 0 : card.effect!.repeatable;
-            // *What* will, though, is now two different promises. A watcher does
-            // not fire on a clock, it fires on the next thing you do, and
-            // telling someone their Tatyova triggers at upkeep is the trace
-            // contradicting the rule they just wrote.
-            const when =
-              b && b.upkeep.length === 0 && (b.cast.length > 0 || b.enters.length > 0)
-                ? 'is watching, and fires when it sees what it is waiting for'
-                : 'will fire every upkeep from next turn';
-            sayEffect(later ? `${card.name} ${when}` : `${card.name} ${lastEffectText || 'resolves'}`);
-          }
-        }
-        // And everyone watching it arrive. After its own rules, which is the
-        // order a card you cast does them in, and not at all if one of them
-        // sent it somewhere other than the battlefield.
-        if (!selfPlaced) fireArrival(index, card, turn);
-        // And where the card itself ends up. A permanent stays out, as a source
-        // if it makes mana and as an untracked body if it does not; everything
-        // else is in the graveyard once it has resolved, which is where a
-        // behavior can go and find it. After the effect, not before, because a
-        // sorcery is on the stack while it resolves and a Regrowth that finds
-        // itself is a rules error rather than a rounding one.
-        //
-        // Unless it said otherwise: a `self` step is the card naming its own
-        // destination, which is the whole of "exile this card instead" and of
-        // a Green Sun's Zenith shuffling back in.
-        if (!card.permanent && !(opts.effects && selfPlaced)) bury(index);
+        available += resolveCast(index, card, turn, goal, pickZone === ZONE_GRAVEYARD && card.gyCast!.kind === 'flashback');
         // A card with no effect profile still resolves as a blank. For a
         // Lightning Bolt that is correct; for a draw spell whose draw hangs off
         // a trigger the pipeline would not read, it is the floor §11.4 warned
@@ -3528,6 +4311,22 @@ export function simulate(
       // turn. A card an attack trigger draws is a card you cannot cast until
       // next turn, which is the post-combat main phase this model does not
       // have, and the omission §11.4 asks for rather than the other kind.
+      // Treasures first, then who was tapped for mana, then the attack: a
+      // creature that paid for the turn is not swinging with it (F2). The
+      // Treasures are only counted here; they are cracked after combat, which
+      // is where they always were.
+      const treasures = countTreasures();
+      let cracked = 0;
+      let attributed = false;
+      if (treasures > 0 && spent > 0) {
+        cracked = treasuresSpent(turn, treasures);
+        if (sink) {
+          attributeTaps(castLines, thrifty, thriftyOwner);
+          attributed = true;
+        }
+      }
+      if (sink && !attributed) attributeTaps(castLines, units, unitOwner);
+      if (spent > 0 && (opts.combat === 'all' || (opts.effects && anyAttackers))) tapCreatures(turn, cracked);
       attackWith(turn);
 
       // --- Treasures, reconciled -------------------------------------------
@@ -3537,27 +4336,21 @@ export function simulate(
       // Treasure is worth more than a ritual.
       //
       // The trace's tap breakdown comes out of the same solve, which is why it
-      // waits until here: attributed against the full pool it would happily
-      // show four Treasures paying for a turn the model charges two for.
-      const treasures = countTreasures();
-      let attributed = false;
-      if (treasures > 0 && spent > 0) {
-        const cracked = treasuresSpent(turn, treasures);
-        if (sink) {
-          attributeTaps(castLines, thrifty, thriftyOwner);
-          attributed = true;
-        }
-        if (cracked > 0) {
-          crackTreasures(cracked);
-          if (sink) say(sink, 'mana', `Sacrifices ${cracked} Treasure${cracked === 1 ? '' : 's'} to cover the turn`);
-        }
+      // waits for it: attributed against the full pool it would happily show
+      // four Treasures paying for a turn the model charges two for.
+      if (cracked > 0) {
+        crackTreasures(cracked);
+        if (sink) say(sink, 'mana', `Sacrifices ${cracked} Treasure${cracked === 1 ? '' : 's'} to cover the turn`);
       }
-      if (sink && !attributed) attributeTaps(castLines, units, unitOwner);
 
       // And the mana pool empties. After the Treasure reconciliation, because
       // that solve wants the floating mana in the pool it is comparing against
       // — a turn paid for by a ritual must not crack a Treasure for it.
       emptyPool();
+      // Cleanup: discard to hand size (F1), and every until-end-of-turn pump
+      // and keyword wears off.
+      cleanup(turn);
+      perms.clearEot(cards);
 
       if (sink && sink.turn) {
         sink.turn.available = available;

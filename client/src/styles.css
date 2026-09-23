@@ -8238,31 +8238,9 @@ a.seg {
   padding-right: 0.2rem;
   text-align: center;
 }
-/* A move needs two more rows: the zones it goes between, and the criteria that
-   says which cards. Same single column, same remove button spanning the lot. */
-.behavior-step-move {
-  grid-template-areas:
-    'op drop'
-    'x drop'
-    'zones drop'
-    'q drop';
-}
-/* "Put this card into a zone" has no amount to pick, so the destination takes
-   the row the number would have used. A `self` step can still land on the
-   battlefield, which adds the tapped picker to the zones row. */
-.behavior-step-self {
-  grid-template-areas:
-    'op drop'
-    'zones drop';
-}
-/* "Add X mana" needs one more row: which colors, and whether all of it has to
-   be the same one. */
-.behavior-step-mana {
-  grid-template-areas:
-    'op drop'
-    'x drop'
-    'colors drop';
-}
+/* Which rows a step has (zones, the object-layer controls, colors, criteria)
+   depends on its verb, so the editor sets grid-template-areas on each step:
+   one column, the remove button spanning all of it. */
 .behavior-colors {
   grid-area: colors;
   display: flex;
@@ -8346,12 +8324,57 @@ a.seg {
 /* The criteria that wakes a watched trigger. Same box as a step's, but it sits
    in the rule's own column rather than in the step grid, so the grid-area it
    inherits has to go. */
-.behavior-watch {
+.behavior-rule-q {
   grid-area: auto;
   padding: 0 0.1rem 0.2rem;
 }
 .behavior-nomatch {
   color: var(--danger);
+}
+/* A `matching` amount carries its own criteria, under the picker and in the
+   same grid row, so the step keeps one column. */
+.behavior-amount {
+  grid-area: x;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.behavior-amount .behavior-x,
+.behavior-amount .behavior-rule-q {
+  grid-area: auto;
+  padding: 0;
+}
+/* The object-layer steps' own controls (rebuild plan F): which token, which
+   counter, which type, which zone. One row of the step grid. */
+.behavior-obj {
+  grid-area: obj;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.behavior-obj.behavior-zones {
+  flex-direction: row;
+}
+.behavior-obj-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.8rem;
+}
+.behavior-obj-row .behavior-n {
+  flex: 0 0 4.2rem;
+}
+.behavior-pt-slash {
+  margin: 0 -0.5rem;
+  color: var(--text-dim);
+}
+.behavior-cast .behavior-zones {
+  align-items: center;
+}
+.behavior-cast .behavior-cast-n {
+  flex: 0 0 4.2rem;
 }
 .behavior-n input {
   width: 100%;

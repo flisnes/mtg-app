@@ -144,6 +144,11 @@ function coverageNote(c: SimCoverage, missedDraw: number | null): string {
       `${c.authored} card${c.authored === 1 ? '' : 's'} play out the way you told them to rather than the way we read them, so the lines above are only as good as your own reading of those.`,
     );
   }
+  if (c.defaults > 0) {
+    rest.push(
+      `${c.defaults} card${c.defaults === 1 ? '' : 's'} play out from rules written for ${c.defaults === 1 ? 'it' : 'them'} by hand. Those err low, but they are still more than the card database reads.`,
+    );
+  }
   return [head, ...rest].join(' ');
 }
 

@@ -17,6 +17,7 @@ import { HowWorked } from './HowWorked.js';
 import { changeLines, ModelChangeToast } from './ModelChangeToast.js';
 import { setCardBehavior } from '../db/dataAccess.js';
 import { buildSimDeck, type SimDeck } from '../analysis/simDeck.js';
+import { effectiveBehaviors, useDefaults } from '../analysis/defaultBehaviors.js';
 import { idleEngines, missedDrawCopies, modelQueue, type IdleEngines } from '../analysis/coverage.js';
 import { deckBehaviorMap } from '../db/dataAccess.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
@@ -137,9 +138,10 @@ function loadKeepRule(deckId: string): KeepRule {
  * be drawing, ramping, tutoring or building something, which is the part
  * actually costing the numbers anything, and the only part worth a tap.
  */
-function behaviorNote(coverage: { blanks: number; authored: number }, queued: number): string {
+function behaviorNote(coverage: { blanks: number; authored: number; defaults: number }, queued: number): string {
   if (queued > 0) return `${queued} card${plural(queued)} worth writing first: the tags say they do something, the simulator plays them as nothing`;
   if (coverage.authored > 0) return `${coverage.authored} card${plural(coverage.authored)} play out the way you wrote them`;
+  if (coverage.defaults > 0) return `${coverage.defaults} card${plural(coverage.defaults)} play out from rules written for them`;
   if (coverage.blanks > 0) return `${coverage.blanks} cards do nothing in the simulator, which is right for removal`;
   return 'The simulator plays out every card';
 }
@@ -328,7 +330,17 @@ export function DeckAnalysis({
   // `otag:` in a keep query resolves its slug at parse time, so the deck is
   // rebuilt once the tag vocabulary lands, the same way the panels re-run.
   const tagsReady = useOracleTags();
-  const simDeck = useMemo(() => buildSimDeck(rows, behaviors, keepRule.query), [rows, behaviors, keepRule.query, tagsReady]);
+  // Plus the rules that ship for popular cards, for every card nobody in this
+  // deck has written one for. Yours always win.
+  const defaults = useDefaults();
+  const effective = useMemo(
+    () => effectiveBehaviors(rows.flatMap((r) => (r.oracle ? [r.oracle] : [])), behaviors, defaults),
+    [rows, behaviors, defaults],
+  );
+  const simDeck = useMemo(
+    () => buildSimDeck(rows, effective.behaviors, keepRule.query, effective.defaulted),
+    [rows, effective, keepRule.query, tagsReady],
+  );
   const simOpts = useMemo(
     () => ({ ...defaultSimOptions(format, onPlay), ...policy, keepMin: keepRule.min, keepMax: keepRule.max }),
     [format, onPlay, policy, keepRule.min, keepRule.max],
@@ -392,7 +404,10 @@ export function DeckAnalysis({
   const idle = useMemo(() => idleEngines(rows, simDeck), [rows, simDeck, tagsReady]);
   const missedDraw = useMemo(() => missedDrawCopies(idle), [idle]);
   // The Model tab's queue, which is also what the coverage chip counts.
-  const queue = useMemo(() => modelQueue(rows, simDeck), [rows, simDeck, tagsReady]);
+  // Minus the cards somebody already read by hand and found nothing to write
+  // for yet: a Rhystic Study is not a rule you are missing, it is a table this
+  // simulator does not have.
+  const queue = useMemo(() => modelQueue(rows, simDeck)?.filter((q) => !defaults.idle.has(q.name)) ?? null, [rows, simDeck, tagsReady, defaults]);
   // Lands, mana sources and cards with an effect the sequencer resolves. The
   // same arithmetic `coverageNote` does, because the chip and the paragraph
   // explaining it disagreeing would be worse than either of them being absent.
@@ -619,6 +634,7 @@ export function DeckAnalysis({
               deckId={deckId}
               rows={rows}
               behaviors={behaviors ?? EMPTY_BEHAVIORS}
+              defaults={defaults}
               policy={policy}
               onPolicy={savePolicy}
               openId={modelCard}

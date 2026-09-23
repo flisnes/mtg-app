@@ -56,6 +56,7 @@ export type QueryTerm = { negate: boolean } & (
   | { kind: 'rarity'; op: NumOp; rank: number }
   | { kind: 'cmc'; op: NumOp; value: number }
   | { kind: 'cmcParity'; even: boolean }
+  | { kind: 'stat'; field: 'power' | 'toughness'; op: NumOp; value: number }
   | { kind: 'mana'; op: NumOp; generic: number; symbols: Map<string, number> }
   | { kind: 'produces'; op: NumOp; letters: string[] | null; count: number | null }
   | { kind: 'set'; value: string }
@@ -237,6 +238,7 @@ const COLOR_FIELDS: Record<string, 'colors' | 'colorIdentity'> = {
   ci: 'colorIdentity',
 };
 const CMC_FIELDS = new Set(['cmc', 'mv', 'manavalue']);
+const STAT_FIELDS: Record<string, 'power' | 'toughness'> = { pow: 'power', power: 'power', tou: 'toughness', toughness: 'toughness' };
 const FORMAT_FIELDS = new Set(['f', 'format', 'legal']);
 const RARITY_FIELDS = new Set(['r', 'rarity']);
 const MANA_FIELDS = new Set(['m', 'mana']);
@@ -249,6 +251,7 @@ const KNOWN_FIELDS = new Set([
   ...Object.keys(STRING_FIELDS),
   ...Object.keys(COLOR_FIELDS),
   ...CMC_FIELDS,
+  ...Object.keys(STAT_FIELDS),
   ...FORMAT_FIELDS,
   ...RARITY_FIELDS,
   ...MANA_FIELDS,
@@ -476,6 +479,15 @@ function fieldTerm(field: string, op: string, value: string, negate: boolean): Q
     const n = Number(value);
     if (!Number.isFinite(n)) return null;
     return { kind: 'cmc', op: op === ':' ? '=' : (op as NumOp), value: n, negate };
+  }
+
+  // Printed power and toughness, the way Scryfall compares them: a `*` or an
+  // `X` is no number, so it matches no comparison at all.
+  const stat = STAT_FIELDS[field];
+  if (stat) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return { kind: 'stat', field: stat, op: op === ':' ? '=' : (op as NumOp), value: n, negate };
   }
 
   if (MANA_FIELDS.has(field)) {
@@ -857,6 +869,11 @@ function termMatches(entry: SearchableEntry, t: QueryTerm): boolean {
       return compareNum(entry.card.cmc, t.op, t.value);
     case 'cmcParity':
       return entry.card.cmc % 2 === 0 === t.even;
+    case 'stat': {
+      const raw = entry.card[t.field];
+      const v = raw == null || raw === '' ? NaN : Number(raw);
+      return Number.isFinite(v) && compareNum(v, t.op, t.value);
+    }
     case 'mana':
       return compareMana(entry.card.manaCost, t.op, t);
     case 'produces': {

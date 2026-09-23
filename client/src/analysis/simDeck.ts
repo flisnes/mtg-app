@@ -275,6 +275,13 @@ export interface SimCoverage {
    * that in.
    */
   authored: number;
+  /**
+   * Copies playing a default behavior that ships with the app (the reviewed
+   * EDH staples, `defaultBehaviors.ts`). Apart from `authored` because nobody
+   * in this deck chose them; they are written to err low, but they are still a
+   * reading above the database's, and the coverage line says how many.
+   */
+  defaults: number;
 }
 
 /**
@@ -389,6 +396,8 @@ export function buildSimDeck(
   behaviors?: ReadonlyMap<string, CardBehavior>,
   /** The Opening hand panel's keep query. Blank or absent keeps on lands. */
   keepQuery?: string,
+  /** Which of `behaviors` are shipped defaults rather than the user's, by oracleId. */
+  defaulted?: ReadonlySet<string>,
 ): SimDeck {
   const cards: SimCard[] = [];
   /** The card behind each entry of `cards`, kept only long enough to run the filters. */
@@ -526,14 +535,15 @@ export function buildSimDeck(
     for (let c = 0; c < cards[i]!.copies; c++) library[at++] = i;
   }
 
-  const coverage: SimCoverage = { library: libraryCopies, lands: 0, mana: 0, effects: 0, floored: 0, blanks: 0, authored: 0 };
+  const coverage: SimCoverage = { library: libraryCopies, lands: 0, mana: 0, effects: 0, floored: 0, blanks: 0, authored: 0, defaults: 0 };
   for (const card of cards) {
     if (card.copies <= 0) continue;
     if (card.role === 'land' || card.role === 'fetch') coverage.lands += card.copies;
     else if (card.role !== 'spell') coverage.mana += card.copies;
     else if (card.effect || card.behavior) coverage.effects += card.copies;
     else coverage.blanks += card.copies;
-    if (card.behavior) coverage.authored += card.copies;
+    if (card.behavior && defaulted?.has(card.oracleId)) coverage.defaults += card.copies;
+    else if (card.behavior) coverage.authored += card.copies;
     // Counted apart from the buckets above, not instead of them: a Read the
     // Bones is modelled *and* flagged, and both facts belong on the line.
     if (card.effect?.unknown && !card.behavior) coverage.floored += card.copies;

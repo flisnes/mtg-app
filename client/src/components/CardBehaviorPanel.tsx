@@ -63,7 +63,8 @@ import type { GroupRow } from '../analysis/groups.js';
 import { HowWorked } from './HowWorked.js';
 import { PolicySpread } from './PolicySpread.js';
 import type { QueueCard, QueueReason } from '../analysis/coverage.js';
-import { prewritten, templatesFor, type Template } from '../analysis/behaviorTemplates.js';
+import { templatesFor, type Template } from '../analysis/behaviorTemplates.js';
+import { gapWords, type ShippedDefaults } from '../analysis/defaultBehaviors.js';
 import { oracleTagClosure } from '../cardDb/oracleTags.js';
 import {
   COMBAT_POLICIES,
@@ -136,8 +137,16 @@ interface BehaviorCard {
   creature: boolean;
   /** Scryfall tag indices, for the starting points (rebuild plan C5). */
   tags: readonly number[];
-  /** A rule somebody already wrote for this card, shipped with the app (C5). */
-  prewritten: CardBehavior | null;
+  /**
+   * The rule that ships with the app for this card, played whenever this deck
+   * has not written its own (notes/edh-top, and C5's pre-written set).
+   */
+  shipped: CardBehavior | null;
+  /**
+   * Read by hand and found nothing to write yet: what it waits on, or an empty
+   * list for a card that is right as nothing. Null when nobody has looked.
+   */
+  idle: readonly string[] | null;
 }
 
 /** "When you play it", straight out of the catalog so it is said in one place. */
@@ -159,7 +168,7 @@ const isNotACard = (typeLine: string) => {
  * against a card, not against a slot, so two slots of the same card are one
  * row here and one row in the database.
  */
-function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string, CardBehavior>): BehaviorCard[] {
+function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string, CardBehavior>, defaults: ShippedDefaults): BehaviorCard[] {
   const byOracle = new Map<string, BehaviorCard>();
   for (const r of rows) {
     const o = r.oracle;
@@ -189,7 +198,8 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       permanent: isPermanent(o.typeLine),
       creature: isCreature(o.typeLine),
       tags: o.tags ?? [],
-      prewritten: prewritten(o.name),
+      shipped: defaults.behaviors.get(o.name) ?? null,
+      idle: defaults.idle.get(o.name) ?? null,
     });
   }
   return [...byOracle.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -197,7 +207,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
 
 /** The line under a card's name in the list. */
 function summaryOf(card: BehaviorCard): string {
-  const lines = describeBehavior(card.authored ?? behaviorFromEffect(card.derived));
+  const lines = describeBehavior(card.authored ?? card.shipped ?? behaviorFromEffect(card.derived));
   if (lines.length > 0) return lines.join('. ');
   // A Harrow used to read "Do nothing" here while the simulator was ramping off
   // it, which is exactly the card somebody then writes out by hand.
@@ -251,6 +261,7 @@ export function CardBehaviorPanel({
   deckId,
   rows,
   behaviors,
+  defaults,
   policy,
   onPolicy,
   openId,
@@ -265,6 +276,8 @@ export function CardBehaviorPanel({
   deckId: string;
   rows: readonly GroupRow[];
   behaviors: ReadonlyMap<string, CardBehavior>;
+  /** Rules that ship with the app, played for any card this deck has not written. */
+  defaults: ShippedDefaults;
   /** How the sequencer plays the deck. The other half of "what does this card do". */
   policy: SimPolicy;
   onPolicy: (policy: SimPolicy) => void;
@@ -284,7 +297,7 @@ export function CardBehaviorPanel({
   /** `spread` is from before the latest change. */
   spreadStale: boolean;
 }) {
-  const cards = useMemo(() => behaviorCards(rows, behaviors), [rows, behaviors]);
+  const cards = useMemo(() => behaviorCards(rows, behaviors, defaults), [rows, behaviors, defaults]);
   // Rules for these cards in the user's other decks (rebuild plan C4). Live,
   // so a rule written in one tab is on offer in the other.
   const borrowable = useLiveQuery(() => otherDeckBehaviors(deckId), [deckId]) ?? NO_OFFERS;
@@ -423,8 +436,9 @@ function BehaviorList({
   // with a line underneath saying what had in fact been read off them.
   const isRead = (c: BehaviorCard) => !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source);
   const authored = cards.filter((c) => c.authored);
-  const blank = cards.filter((c) => !c.authored && !isRead(c));
-  const read = cards.filter((c) => !c.authored && isRead(c));
+  const shipped = cards.filter((c) => !c.authored && c.shipped);
+  const blank = cards.filter((c) => !c.authored && !c.shipped && !isRead(c));
+  const read = cards.filter((c) => !c.authored && !c.shipped && isRead(c));
   // In the queue's order, not the list's. Only blanks: the queue is built off
   // the simulator's deck and this list off the rows, and a card the two
   // disagree about is better left where the list put it than shown twice.
@@ -437,12 +451,13 @@ function BehaviorList({
     reasons.set(q.oracleId, q.reason);
     queued.push(c);
   }
-  // A blank you already wrote in another deck, or one that ships with a rule
-  // written for it, is one tap from done, so it does not fold away with the
-  // blanks that need nothing.
-  const ready = (c: BehaviorCard) => borrowable.has(c.oracleId) || !!c.prewritten;
+  // A blank you already wrote in another deck is one tap from done, so it does
+  // not fold away with the blanks that need nothing.
+  const ready = (c: BehaviorCard) => borrowable.has(c.oracleId);
   const elsewhere = blank.filter((c) => !reasons.has(c.oracleId) && ready(c));
-  const quiet = blank.filter((c) => !reasons.has(c.oracleId) && !ready(c));
+  // Read by hand and waiting on something the simulator does not model yet.
+  const waiting = blank.filter((c) => !reasons.has(c.oracleId) && !ready(c) && !!c.idle?.length);
+  const quiet = blank.filter((c) => !reasons.has(c.oracleId) && !ready(c) && !c.idle?.length);
 
   if (cards.length === 0) {
     return <p className="fine-print">Nothing in the mainboard yet.</p>;
@@ -477,8 +492,9 @@ function BehaviorList({
           </p>
         )}
         <p className="fine-print">
-          Some cards come with a rule already written for them, and a card you wrote in another deck brings that rule along.
-          Either is one tap in the card's editor. Nothing is used until you save it.
+          The most-played Commander cards come with a rule written for them by hand, and the simulator plays it until you write
+          your own. Those rules err low: where a card does more than a rule can say, the rest is left out. A card you wrote in
+          another deck brings that rule along too, one tap in the card's editor.
         </p>
       </HowWorked>
       {queue ? (
@@ -492,11 +508,14 @@ function BehaviorList({
             suggest
           />
           <Section title={`Yours (${authored.length})`} cards={authored} onOpen={onOpen} />
+          <Section title={`Written for you (${shipped.length})`} cards={shipped} onOpen={onOpen} folded />
+          <Section title={`Waits on the simulator (${waiting.length})`} cards={waiting} onOpen={onOpen} folded />
           <Section title={`Right as nothing (${quiet.length})`} cards={quiet} onOpen={onOpen} borrowable={borrowable} folded />
         </>
       ) : (
         <>
           <Section title={`Yours (${authored.length})`} cards={authored} onOpen={onOpen} />
+          <Section title={`Written for you (${shipped.length})`} cards={shipped} onOpen={onOpen} folded />
           <Section title={`Does nothing yet (${blank.length})`} cards={blank} onOpen={onOpen} borrowable={borrowable} suggest />
         </>
       )}
@@ -596,7 +615,7 @@ function Section({
   onOpen: (oracleId: string) => void;
   /** Only passed for cards without a rule here: the line under the name says what another deck wrote. */
   borrowable?: ReadonlyMap<string, BorrowableBehavior[]>;
-  /** Blanks: a card's pre-written rule, when it has one, replaces "Do nothing" under its name. */
+  /** Blanks: an offer from another deck, when there is one, replaces "Do nothing" under its name. */
   suggest?: boolean;
 }) {
   if (cards.length === 0) return null;
@@ -604,8 +623,8 @@ function Section({
     <ul className="behavior-list">
       {cards.map((card) => {
         const reason = reasons?.get(card.oracleId);
-        const offer = card.authored ? undefined : borrowable?.get(card.oracleId)?.[0];
-        const ready = suggest && !card.authored && !offer ? card.prewritten : null;
+        const offer = card.authored || !suggest ? undefined : borrowable?.get(card.oracleId)?.[0];
+        const waits = !card.authored && !card.shipped && card.idle?.length ? card.idle : null;
         return (
           <li key={card.oracleId}>
             <button type="button" className="behavior-row" onClick={() => onOpen(card.oracleId)}>
@@ -618,13 +637,14 @@ function Section({
                   <span className="behavior-row-what behavior-row-offer">
                     In {deckNames(offer.decks)}: {describeBehavior(offer.behavior).join('. ')}
                   </span>
-                ) : ready ? (
-                  <span className="behavior-row-what behavior-row-offer">Written for it: {describeBehavior(ready).join('. ')}</span>
+                ) : waits ? (
+                  <span className="behavior-row-what">Needs {gapWords(waits)}, which the simulator does not model yet</span>
                 ) : (
                   <span className="behavior-row-what">{summaryOf(card)}</span>
                 )}
               </span>
               {card.authored && <span className="behavior-tag">yours</span>}
+              {!card.authored && card.shipped && <span className="behavior-tag">default</span>}
               {reason && <span className="behavior-tag behavior-tag-why">{REASON_LABEL[reason]}</span>}
               <Icon name="chevronRight" />
             </button>
@@ -708,10 +728,12 @@ function BehaviorEditor({
   // otherwise the card database's reading in the same grammar. Editing what we
   // read and writing your own are deliberately the same gesture — which is also
   // why saving *replaces* the derived reading rather than adding to it.
-  const start = card.authored ?? behaviorFromEffect(card.derived);
+  // What plays now: your rule, else the one that ships for this card.
+  const active = card.authored ?? card.shipped;
+  const start = active ?? behaviorFromEffect(card.derived);
   const [rules, setRules] = useState<BehaviorRule[]>(() => (start ? start.rules.map((r) => ({ ...r, steps: [...r.steps] })) : []));
   // Other ways to cast it (rebuild plan F5): kicker, flashback, suspend.
-  const [cast, setCast] = useState<CastOption[]>(() => (card.authored?.cast ?? []).map((o) => ({ ...o })));
+  const [cast, setCast] = useState<CastOption[]>(() => (active?.cast ?? []).map((o) => ({ ...o })));
   const [saving, setSaving] = useState(false);
 
   const edit = (i: number, next: BehaviorRule) => setRules(rules.map((r, k) => (k === i ? next : r)));
@@ -723,7 +745,10 @@ function BehaviorEditor({
     // stored bytes are normalized the one way: colors in WUBRGC order, flags
     // dropped where they say nothing, all five colors written as none at all.
     // Saving the same rule twice has to be the same row.
-    const clean = kept.length > 0 || cast.length > 0 ? sanitizeCardBehavior({ v: CARD_BEHAVIOR_VERSION, rules: kept, cast }) : null;
+    let clean = kept.length > 0 || cast.length > 0 ? sanitizeCardBehavior({ v: CARD_BEHAVIOR_VERSION, rules: kept, cast }) : null;
+    // The default saved unchanged is the default, not a rule of yours: storing
+    // it would freeze this deck on today's version when the shipped one improves.
+    if (clean && card.shipped && shapeOf(clean) === shapeOf(card.shipped)) clean = null;
     await setCardBehavior(deckId, card.oracleId, clean);
     // Saving what was already there changes nothing, and a toast saying so is noise.
     if (JSON.stringify(clean) !== JSON.stringify(card.authored)) onSaved(card.oracleId, card.name, card.authored, clean === null);
@@ -744,11 +769,12 @@ function BehaviorEditor({
   const drafted = shapeOf({ rules: preview, cast });
   /** A kicker in the draft, so "the times it was kicked" is a number worth offering. */
   const kicker = cast.some((o) => o.kind === 'kicker' || o.kind === 'multikicker');
-  // Rebuild plan C5. The pre-written rule, unless it is what this deck saved.
-  const pre = card.prewritten && shapeOf(card.prewritten) !== saved ? card.prewritten : null;
+  // The shipped rule, on offer once this deck has written over it.
+  const pre = card.authored && card.shipped && shapeOf(card.shipped) !== saved ? card.shipped : null;
   // Starting points only for a card nobody has written: with a rule of yours or
-  // a pre-written one, a guess from the tags is a step backwards.
-  const starts: Template[] = card.authored || card.prewritten ? [] : templatesFor(card, oracleTagClosure);
+  // a shipped one, a guess from the tags is a step backwards. And not for one
+  // read by hand and found to have nothing worth writing yet.
+  const starts: Template[] = active || card.idle ? [] : templatesFor(card, oracleTagClosure);
   const use = (b: CardBehavior) => {
     setRules(b.rules.map((r) => ({ ...r, steps: [...r.steps] })));
     setCast((b.cast ?? []).map((c) => ({ ...c })));
@@ -766,7 +792,20 @@ function BehaviorEditor({
           first dropdown two screens down. */}
       {card.image && <img className="behavior-art" src={card.image} alt={card.name} loading="lazy" />}
 
-      {card.derived && !card.authored && (
+      {card.shipped && !card.authored && (
+        <p className="fine-print">
+          Written for this card by hand and played by default. It errs low: where the card does more than a rule can say, the rest
+          is left out. Change anything below and save, and it becomes yours instead.
+        </p>
+      )}
+      {!active && card.idle && (
+        <p className="fine-print">
+          {card.idle.length > 0
+            ? `Read by hand: what this card does needs ${gapWords(card.idle)}, which the simulator does not model yet, so it plays as nothing.`
+            : 'Read by hand: nothing on this card changes a game with nobody across the table, so it is right as nothing.'}
+        </p>
+      )}
+      {card.derived && !active && (
         <p className="fine-print">
           Read off this card's oracle text. Change anything below and it becomes yours instead.
           {card.derived.unknown && ' One of these amounts is a floor we could not read exactly.'}
@@ -807,7 +846,7 @@ function BehaviorEditor({
           an "It taps for mana" rule replaces it: a Llanowar Elves taps for green whatever else you tell it to do.
         </p>
       )}
-      {!card.derived && !card.ramp && !card.fetch && !card.ritual && !card.extraLand && !card.source && !card.authored && (
+      {!card.derived && !card.ramp && !card.fetch && !card.ritual && !card.extraLand && !card.source && !active && !card.idle && (
         <p className="fine-print">
           The card database finds nothing on this card it can play out, so in the simulator it does nothing. Add a rule and it
           will.
@@ -819,8 +858,8 @@ function BehaviorEditor({
           <h4 className="deck-stats-head">Written for this card</h4>
           <OfferList offers={[{ head: 'Ships with the app', behavior: pre }]} drafted={drafted} onUse={use} />
           <p className="fine-print">
-            Read off the card by hand, erring low where the card does more than a rule can say. Copies it into the draft below;
-            save to keep it.
+            Read off the card by hand, erring low where the card does more than a rule can say. "Back to the default" below uses
+            it again.
           </p>
         </>
       )}
@@ -881,11 +920,11 @@ function BehaviorEditor({
       {/* What the card *is* is not replaced by anything written above, so it is
           said on its own line rather than folded into the sentence. */}
       {card.source && !preview.some((r) => r.on === 'tap') && <p className="fine-print">{card.source}, whatever the rules above say.</p>}
-      {card.authored && fires && fires.length > 0 && (
+      {active && fires && fires.length > 0 && (
         <FiringCounts
-          authored={card.authored}
+          authored={active}
           fires={fires}
-          edited={drafted !== shapeOf(card.authored)}
+          edited={drafted !== shapeOf(active)}
         />
       )}
       <button type="button" className="behavior-watch" onClick={onWatch}>
@@ -896,7 +935,7 @@ function BehaviorEditor({
       <div className="sheet-actions">
         {card.authored && (
           <button type="button" onClick={() => void reset()} disabled={saving}>
-            Back to the database
+            {card.shipped ? 'Back to the default' : 'Back to the database'}
           </button>
         )}
         <button type="button" onClick={onBack} disabled={saving}>

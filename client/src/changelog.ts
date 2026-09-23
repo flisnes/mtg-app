@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.173.0',
+    changes: [
+      {
+        kind: 'added',
+        text: "About 220 of the most-played Commander cards now come with a simulator rule written for them, used until you write your own. Find them on the Model tab under Written for you.",
+      },
+      {
+        kind: 'fixed',
+        text: 'Search understands pow and tou, so pow>=3 finds power 3 or more instead of searching card names.',
+      },
+    ],
+  },
+  {
     version: '0.172.1',
     changes: [
       {
@@ -186,46 +199,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'The Card behavior line leads with unread draw spells now, instead of counting every removal spell as a card that does nothing.',
-      },
-    ],
-  },
-  {
-    version: '0.160.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          '"Watch one game play out" now shows the board in card images: permanents on the top row, lands on the bottom, copies stacked with a count. It follows you as you scroll the turns, and buttons open your hand, graveyard and exile. Every line of the turn-by-turn text is still there under it.',
-      },
-      {
-        kind: 'added',
-        text:
-          'Play style, under Card behavior. Pick how the simulator spends a turn (ramp first, card draw first, creatures first, or cheapest first), who attacks (only when it triggers something, everything, or nobody), and whether instants get cast or held up. Every number in the stats sheet moves with it.',
-      },
-      {
-        kind: 'added',
-        text:
-          'A damage chart, for the decks that deal any. It counts what an opponent would have taken, combat and spells apart, and there is a new "Deal X damage" step so you can write a burn spell out by hand.',
-      },
-    ],
-  },
-  {
-    version: '0.159.4',
-    changes: [
-      {
-        kind: 'fixed',
-        text:
-          'Cards like Arboreal Grazer no longer hand you an extra land drop every turn. The card database was reading anything that puts a land onto the battlefield as an Exploration; it now wants the card to actually say "on each of your turns". Azusa correctly grants two.',
-      },
-      {
-        kind: 'changed',
-        text:
-          'Every effect the simulator gives a card is now listed in the card behavior editor, including extra land drops and what a land, rock or mana creature taps for. Writing your own rule replaces the derived reading outright, so you can say a card does not do the thing we read off it.',
-      },
-      {
-        kind: 'added',
-        text:
-          'A move onto the battlefield can now arrive untapped, so a land put into play by a rule pays for something that turn. An "Add X mana" step can now name its colors: one color, a few, or any.',
       },
     ],
   },

@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.173.0
+
+- **Added: the most-played Commander cards model themselves.** EDHREC's top 1000 cards were read one by one, and 219 of them now come with a rule the simulator plays on its own: Cultivate fetches its two basics, Mana Vault gives its three mana once instead of every turn, Beast Whisperer draws, Gaea's Cradle counts your creatures. Your own rule always wins. On the Model tab these sit under *Written for you* with a *default* chip, the editor opens on the default, and *Back to the default* undoes your changes. The defaults err low: where a card does more than a rule can say, the rest is left out.
+- **Changed: fewer cards to check.** Cards that were read and found to need something the simulator can't do yet (Rhystic Study needs opponents casting spells) leave *Write these first* and show under *Waits on the simulator* with what they need.
+- **Fixed:** search had no `pow` or `tou`, so `pow>=3` searched card names. Both work now, and three pre-written rules that used them (Elemental Bond, Garruk's Packleader, Garruk's Uprising) fire for the first time.
+
 ## 0.172.1
 
 - **Fixed: trades that didn't stick.** Since 0.158.0, a trade where you gave away a card filed in a deck or binder showed "Trade complete" but changed nothing: the cards stayed in your collection and the trade never reached your history. Those trades now save. If writing a trade ever fails again, the app says so and offers Retry instead of celebrating. A trade lost to this bug wasn't recorded anywhere on your device, so it has to be entered again by hand.

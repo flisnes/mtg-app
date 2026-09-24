@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.174.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Rules you write now sync to your other devices, and going back to a built-in rule no longer brings back an old version of yours.',
+      },
+    ],
+  },
+  {
     version: '0.174.1',
     changes: [
       {

@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.174.2
+
+- **Fixed: rules now sync between your devices.** Since rules arrived in 0.158.0, a rule written on one device never reached your others: the server cut each rule's id short, and the other device filed what it pulled as a second, stale copy. Your rules now travel between devices like the rest of your decks. Where both devices edited the same card, the most recent edit wins.
+- **Fixed: "Use this" on a built-in rule brought back an old rule of yours.** Choosing the rule that ships with the app (or writing one identical to it) deleted your version, and one of those stale copies took its place. Aftermath Analyst snapped back to a days-old reading while the popup said it was back to the default. The stale copies are cleared when the app starts.
+
 ## 0.174.1
 
 - **Fixed: edited rules snapping back.** With sync on and the app open on two devices, a rule you had written on one device could return to its old version a couple of seconds after you saved an edit on the other, even though the popup had shown the new numbers. It happened when the other device's clock ran ahead, since sync keeps whichever copy has the later time on it. An edit now always counts as newer than the rule it replaces.

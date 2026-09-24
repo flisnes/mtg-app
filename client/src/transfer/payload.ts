@@ -17,6 +17,7 @@ import {
   type Condition,
   type ContainerKind,
   type Deck,
+  SYNC_MAX_ROW_ID,
   type DeckBehavior,
   type DeckBoard,
   type DeckCard,
@@ -120,7 +121,7 @@ const FORMATS = new Set<string>(DECK_FORMATS);
 const BOARDS = new Set<string>(['main', 'side', 'commander', 'token']);
 const CONTAINERS = new Set<string>(CONTAINER_KINDS);
 
-const MAX_ID = 64;
+const MAX_ID = SYNC_MAX_ROW_ID;
 const MAX_QTY = 9999;
 
 // Belt-and-braces row caps per table; the chunk limit already bounds the

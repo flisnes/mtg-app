@@ -138,6 +138,7 @@ export class AccountStore {
       );
     `);
     this.dropLegacySnapshots();
+    this.restoreBehaviorRowIds();
     // Housekeeping at boot, then hourly: idle tokens (the table is otherwise
     // append-only apart from logout) and tombstones every device has seen.
     this.runMaintenance();
@@ -621,6 +622,89 @@ export class AccountStore {
    * is what actually returns the pages to the filesystem, so it runs once and
    * `user_version` records that it has.
    */
+  /**
+   * Give card behavior rows their full ids back (user_version 2).
+   *
+   * Row ids were cut to 64 characters until v0.174.2, and a behavior's id is 73
+   * (deck id, colon, oracle id). Every one was stored under a cut id, and every
+   * device that pulled one kept it as a second, stale copy of the rule. A live
+   * row still carries its full id in its JSON; a tombstone does not, so its
+   * oracle id is found among the deck's cards, and one that stays ambiguous is
+   * left alone. Each restored row gets a fresh seq so every device pulls it.
+   */
+  private restoreBehaviorRowIds(): void {
+    const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined;
+    if ((version?.user_version ?? 0) >= 2) return;
+    type Cut = { user_id: number; row_id: string; row: string | null };
+    const cut = this.db
+      .prepare("SELECT user_id, row_id, row FROM sync_rows WHERE tbl = 'deckBehaviors' AND length(row_id) = 64")
+      .all() as unknown as Cut[];
+    const deckOracles = new Map<number, Map<string, Set<string>>>();
+    const oraclesIn = (userId: number, deckId: string): Set<string> => {
+      let byDeck = deckOracles.get(userId);
+      if (!byDeck) {
+        byDeck = new Map();
+        const rows = this.db
+          .prepare("SELECT row FROM sync_rows WHERE user_id = ? AND tbl = 'deckCards' AND row IS NOT NULL")
+          .all(userId) as unknown as { row: string }[];
+        for (const { row } of rows) {
+          try {
+            const c = JSON.parse(row) as { deckId?: unknown; oracleId?: unknown };
+            if (typeof c.deckId !== 'string' || typeof c.oracleId !== 'string') continue;
+            let set = byDeck.get(c.deckId);
+            if (!set) byDeck.set(c.deckId, (set = new Set()));
+            set.add(c.oracleId);
+          } catch {
+            // A row that doesn't parse names no card.
+          }
+        }
+        deckOracles.set(userId, byDeck);
+      }
+      return byDeck.get(deckId) ?? new Set();
+    };
+    const fullIdOf = (r: Cut): string | null => {
+      if (r.row) {
+        try {
+          const id = (JSON.parse(r.row) as { id?: unknown }).id;
+          return typeof id === 'string' && id.length > r.row_id.length && id.startsWith(r.row_id) ? id : null;
+        } catch {
+          return null;
+        }
+      }
+      const colon = r.row_id.indexOf(':');
+      if (colon < 0) return null;
+      const deckId = r.row_id.slice(0, colon);
+      const prefix = r.row_id.slice(colon + 1);
+      const matches = [...oraclesIn(r.user_id, deckId)].filter((o) => o.startsWith(prefix));
+      return matches.length === 1 ? `${deckId}:${matches[0]}` : null;
+    };
+
+    const exists = this.db.prepare("SELECT 1 FROM sync_rows WHERE user_id = ? AND tbl = 'deckBehaviors' AND row_id = ?");
+    const rename = this.db.prepare("UPDATE sync_rows SET row_id = ?, seq = ? WHERE user_id = ? AND tbl = 'deckBehaviors' AND row_id = ?");
+    const seqOf = this.db.prepare('SELECT max_seq FROM sync_seq WHERE user_id = ?');
+    const setSeq = this.db.prepare(
+      `INSERT INTO sync_seq (user_id, max_seq) VALUES (?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET max_seq = excluded.max_seq`,
+    );
+    const seqs = new Map<number, number>();
+    this.db.exec('BEGIN');
+    try {
+      for (const r of cut) {
+        const full = fullIdOf(r);
+        if (!full || exists.get(r.user_id, full)) continue;
+        const seq = (seqs.get(r.user_id) ?? ((seqOf.get(r.user_id) as { max_seq: number } | undefined)?.max_seq ?? 0)) + 1;
+        seqs.set(r.user_id, seq);
+        rename.run(full, seq, r.user_id, r.row_id);
+      }
+      for (const [userId, seq] of seqs) setSeq.run(userId, seq);
+      this.db.exec('PRAGMA user_version = 2');
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
   private dropLegacySnapshots(): void {
     const row = this.db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined;
     if ((row?.user_version ?? 0) >= 1) return;

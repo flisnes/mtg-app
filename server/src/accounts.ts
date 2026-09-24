@@ -8,6 +8,7 @@ import {
   MIN_PASSWORD_CHARS,
   SYNC_MAX_PUSH,
   SYNC_MAX_ROW_BYTES,
+  SYNC_MAX_ROW_ID,
   SYNC_TABLES,
   USERNAME_RE,
   sanitizeDeckLines,
@@ -207,7 +208,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     for (const raw of rawChanges) {
       const r = (raw ?? {}) as Record<string, unknown>;
       const tbl = SYNC_TABLE_SET.has(r.tbl as string) ? (r.tbl as SyncTable) : null;
-      const rowId = str(r.rowId, 64);
+      const rowId = str(r.rowId, SYNC_MAX_ROW_ID);
       const updatedAt = Number(r.updatedAt);
       if (!tbl || !rowId || !Number.isFinite(updatedAt)) {
         return fail(reply, 400, { error: 'bad_request', message: 'Malformed sync change.' });

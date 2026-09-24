@@ -3,6 +3,7 @@ import {
   MAX_PUBLIC_LINES,
   PROTOCOL_VERSION,
   SYNC_MAX_PUSH,
+  deckBehaviorId,
   type ServerMessage,
   type SyncChange,
   type SyncRequest,
@@ -523,6 +524,20 @@ async function runOneTimeRepairs(): Promise<void> {
 // Wiring
 // ---------------------------------------------------------------------------
 
+/**
+ * Drop the stale twins of card rules (v0.174.2). Row ids were cut to 64
+ * characters on both ends until then, and a behavior's id is 73, so every rule
+ * pulled from the server landed under a cut id beside the real row. The real
+ * row sorts after its twin and hid it, until clearing a rule deleted the real
+ * one and a days-old copy took its place. Dropped straight from the table, not
+ * staged: the server keeps the rule, now under its full id, and sends it again.
+ */
+async function dropCutBehaviorRows(): Promise<void> {
+  const rows = await db.deckBehaviors.toArray();
+  const cut = rows.filter((r) => r.id !== deckBehaviorId(r.deckId, r.oracleId)).map((r) => r.id);
+  if (cut.length > 0) await db.deckBehaviors.bulkDelete(cut);
+}
+
 let initialized = false;
 
 /** Call once at app startup (replaces the old auto-backup-on-open). */
@@ -546,6 +561,10 @@ export function initSyncEngine(): void {
     },
     error: () => {},
   });
+
+  // Every start, since it costs one read of a small table. Nothing lands under a
+  // cut id any more, so it only ever finds the rows older builds left behind.
+  void dropCutBehaviorRows().catch(() => {});
 
   // Repairs first: a rewound cursor must be durable before anything can pull,
   // including a sync_notify off the socket (which would save the old cursor back

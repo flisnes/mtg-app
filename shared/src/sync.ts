@@ -87,6 +87,14 @@ export interface SyncResponse {
   resync?: true;
 }
 
+/**
+ * Longest row id either side keeps. A card behavior's id is a deck id and an
+ * oracle id joined by a colon, 73 characters. The old cap of 64 cut every one
+ * of them short, and a client storing a pulled row under the cut id kept a
+ * stale twin of each rule beside the real one (fixed in v0.174.2).
+ */
+export const SYNC_MAX_ROW_ID = 128;
+
 /** Max changes per push; clients batch the outbox. */
 export const SYNC_MAX_PUSH = 1000;
 /** Max changes returned per pull before hasMore kicks in. */

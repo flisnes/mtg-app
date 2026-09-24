@@ -386,11 +386,15 @@ export function DeckAnalysis({
         ? [change.baseQuick, after.quick]
         : null;
   const finalPair = !!(change && afterFull && change.baseFull);
+  // Saved before the last change had dealt its first games, so there is no
+  // before to hold the after against. Waiting for one would wait forever: the
+  // run that would have produced it was replaced by the one for the new rule.
+  const noBase = !!(change && !change.baseQuick && !change.baseFull);
   useEffect(() => {
-    if (!finalPair) return;
+    if (!finalPair && !noBase) return;
     const t = setTimeout(() => setChange(null), CHANGE_TOAST_MS);
     return () => clearTimeout(t);
-  }, [finalPair, change]);
+  }, [finalPair, noBase, change]);
   const undoChange = () => {
     if (!change) return;
     setChange(null);
@@ -676,6 +680,7 @@ export function DeckAnalysis({
           lines={pair ? changeLines(change.oracleId, pair[0], pair[1]) : null}
           games={pair ? pair[1].games : null}
           final={finalPair}
+          noBase={noBase}
           onUndo={undoChange}
           onClose={() => setChange(null)}
         />

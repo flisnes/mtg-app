@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.174.1
+
+- **Fixed: edited rules snapping back.** With sync on and the app open on two devices, a rule you had written on one device could return to its old version a couple of seconds after you saved an edit on the other, even though the popup had shown the new numbers. It happened when the other device's clock ran ahead, since sync keeps whichever copy has the later time on it. An edit now always counts as newer than the rule it replaces.
+- **Fixed: the "saved" popup stuck on "Dealing the games again".** Saving a rule while the previous change was still dealing its first games left the popup with nothing to compare against, and it waited forever. It now says so and closes on its own.
+
 ## 0.174.0
 
 - **Added: three new moments for a rule.** *At each of your end steps* (the turn it lands too), *When another creature of yours dies* and *When you sacrifice another permanent*. Nothing across the table kills anything, so a creature dies when you sacrifice it; the sacrifice rule also sees Treasures you crack for mana, Clues, fetchlands and the lands Lotus Field eats. Blood Artist drains, Pitiless Plunderer makes Treasures, Mayhem Devil pings.

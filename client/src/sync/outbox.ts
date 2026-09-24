@@ -34,7 +34,7 @@ export async function stagePutMany(tbl: SyncTable, rows: StampedRow[]): Promise<
   await db.outbox.bulkPut(rows.map((row) => ({ tbl, rowId: row.id, updatedAt: stampOf(row), row })));
 }
 
-/** Stage a delete (tombstone). */
-export async function stageDelete(tbl: SyncTable, rowId: string): Promise<void> {
-  await db.outbox.put({ tbl, rowId, updatedAt: Date.now(), deleted: true });
+/** Stage a delete (tombstone), stamped now unless the caller needs it later than that. */
+export async function stageDelete(tbl: SyncTable, rowId: string, updatedAt = Date.now()): Promise<void> {
+  await db.outbox.put({ tbl, rowId, updatedAt, deleted: true });
 }

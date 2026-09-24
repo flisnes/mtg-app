@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.174.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'A rule you edit on one device no longer snaps back to the old version from another device a few seconds after saving.',
+      },
+      {
+        kind: 'fixed',
+        text: 'The "saved" popup no longer waits forever when you save while the games are still being dealt.',
+      },
+    ],
+  },
+  {
     version: '0.174.0',
     changes: [
       {
@@ -179,21 +192,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'The Mana tab answers "can I cast it on time" once: Cast on time lists your commander and every late cost with the reason it was late, total mana, a color, or a tapland. Colored sources no longer gives a second, different verdict.',
-      },
-    ],
-  },
-  {
-    version: '0.163.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Deck analysis opens on a new Overview tab: one row each for Mana, Flow and Model, saying how it looks and what to do next. Tap a row for the details.',
-      },
-      {
-        kind: 'changed',
-        text:
-          'Much less small print in Deck analysis: one caveat per section, the rest behind "How this is worked out". "What each card is worth" is now "Who does the work".',
       },
     ],
   },

@@ -72,6 +72,7 @@ export function ModelChangeToast({
   lines,
   games,
   final,
+  noBase,
   onUndo,
   onClose,
 }: {
@@ -82,6 +83,8 @@ export function ModelChangeToast({
   lines: ToastLine[] | null;
   games: number | null;
   final: boolean;
+  /** Saved while the previous games were still dealing, so there is no before. */
+  noBase: boolean;
   onUndo: () => void;
   onClose: () => void;
 }) {
@@ -98,7 +101,11 @@ export function ModelChangeToast({
           ×
         </button>
       </div>
-      {lines === null ? (
+      {noBase ? (
+        <p className="model-toast-note">
+          Saved while the last change was still dealing, so there is no before to compare it with.
+        </p>
+      ) : lines === null ? (
         <p className="model-toast-note">Dealing the games again…</p>
       ) : lines.length === 0 ? (
         <p className="model-toast-note">

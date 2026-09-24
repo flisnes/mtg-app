@@ -1207,18 +1207,25 @@ export async function otherDeckBehaviors(deckId: string): Promise<Map<string, Bo
  * nothing" and "we never asked" are the same instruction to the sequencer, and
  * only one of them should count towards the authored number on the coverage
  * line.
+ *
+ * Stamped after the row it replaces, not just at Date.now(). The rule on
+ * screen may have come from another device whose clock runs ahead, and sync
+ * is last-writer-wins on those stamps: an edit stamped earlier than what it
+ * edits loses on the server, which hands the old rule back a couple of
+ * seconds after the toast said it saved.
  */
 export async function setCardBehavior(deckId: string, oracleId: string, behavior: CardBehavior | null): Promise<void> {
   const rowId = deckBehaviorId(deckId, oracleId);
   await db.transaction('rw', [db.deckBehaviors, db.outbox], async () => {
+    const existing = await db.deckBehaviors.get(rowId);
+    const updatedAt = Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1);
     if (!behavior || (behavior.rules.length === 0 && !behavior.cast?.length)) {
-      const existing = await db.deckBehaviors.get(rowId);
       if (!existing) return;
       await db.deckBehaviors.delete(rowId);
-      await stageDelete('deckBehaviors', rowId);
+      await stageDelete('deckBehaviors', rowId, updatedAt);
       return;
     }
-    const row: DeckBehavior = { id: rowId, deckId, oracleId, behavior, updatedAt: Date.now() };
+    const row: DeckBehavior = { id: rowId, deckId, oracleId, behavior, updatedAt };
     await db.deckBehaviors.put(row);
     await stagePut('deckBehaviors', row);
   });

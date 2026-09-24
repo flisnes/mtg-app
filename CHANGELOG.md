@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.173.1
+
+- **Fixed: summoning sickness is one rule now.** Any creature without haste taps for mana from the turn after it arrives, however it got there. Dryad Arbor used to tap the turn you played it; it waits like Llanowar Elves now. And the reverse: a Sol Ring or any rock that enters untapped taps the turn it lands, so turn-one Sol Ring pays for a two-drop.
+- **Added: give a card keywords.** The keyword step offers haste, vigilance and double strike, for your creatures or for *this card* only. A vigilant dork still attacks on a turn it tapped for mana, double strike counts its power twice, and a hasty dork taps the turn it lands. The others don't matter in a goldfish, where nothing blocks.
+- **Added: mana that only pays for some spells.** An *It taps for mana* rule takes a search, e.g. `t:creature` for Beastcaller Savant or `t:instant or t:sorcery`, and its mana only pays for spells that match.
+- **Fixed: fewer cards pretend to be land ramp.** Only a search of your own library for a land, on a spell or on a permanent's own arrival, reads as ramp now. Desert Warfare, Path to Exile, Burgeoning, Sakura-Tribe Elder and about 300 others no longer fetch a land when cast, and Lotus Cobra and Nissa, Resurgent Animist no longer tap for mana like dorks. The card data updates with this release.
+
 ## 0.173.0
 
 - **Added: the most-played Commander cards model themselves.** EDHREC's top 1000 cards were read one by one, and 219 of them now come with a rule the simulator plays on its own: Cultivate fetches its two basics, Mana Vault gives its three mana once instead of every turn, Beast Whisperer draws, Gaea's Cradle counts your creatures. Your own rule always wins. On the Model tab these sit under *Written for you* with a *default* chip, the editor opens on the default, and *Back to the default* undoes your changes. The defaults err low: where a card does more than a rule can say, the rest is left out.

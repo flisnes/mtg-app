@@ -233,6 +233,9 @@ export interface BehaviorStep {
    * May contain `[X]` (see `queryHasX`), which is the one thing here that is
    * not Scryfall syntax. Square brackets mean nothing to the real parser, so
    * the borrowed language stays borrowed.
+   *
+   * On `tapsfor` it is the other way round: which spells the mana may be
+   * spent on ("t:creature" for a Beastcaller Savant), absent for any.
    */
   q?: string;
   /**
@@ -285,8 +288,13 @@ export interface BehaviorStep {
    * A custom token's types, or the one type an `addtype` grant adds.
    */
   ty?: string;
-  /** `token` (custom) and `keyword`: keywords as letters. H is haste, the only one this model can act on. */
+  /** `token` (custom) and `keyword`: keywords as letters from BEHAVIOR_KEYWORDS, in that order. */
   kw?: string;
+  /**
+   * `keyword` only: the card holding the rule gets it, not the creatures the
+   * rule's criteria find. "This creature has vigilance", or a hasty dork.
+   */
+  own?: true;
   /** `counter` only: `p1p1` for +1/+1 counters, `charge` for everything that only gets counted. */
   ck?: 'p1p1' | 'charge';
   /**
@@ -348,7 +356,7 @@ export function tokenSpec(step: BehaviorStep): TokenOption | null {
   if (base.id !== 'custom') return base;
   const types = step.ty || 'C';
   const creature = types.includes('C');
-  const kw = step.kw?.includes('H') ? ', haste' : '';
+  const kw = cleanKeywords(step.kw) ? `, ${keywordWords(step.kw)}` : '';
   const pt = creature ? `${step.tp ?? 1}/${step.tt ?? 1}` : '';
   const kinds = [...types].map((t) => TYPE_WORD[t] ?? '').filter(Boolean).join(' ');
   return {
@@ -363,10 +371,36 @@ export function tokenSpec(step: BehaviorStep): TokenOption | null {
 /** One key per distinct token, so two rules making Beasts share one card. */
 export function tokenKey(step: BehaviorStep): string {
   if (step.tk !== 'custom') return step.tk ?? '';
-  return `custom:${step.tp ?? 1}/${step.tt ?? 1}:${step.ty || 'C'}:${step.kw?.includes('H') ? 'H' : ''}`;
+  return `custom:${step.tp ?? 1}/${step.tt ?? 1}:${step.ty || 'C'}:${cleanKeywords(step.kw)}`;
 }
 
 const TYPE_WORD: Record<string, string> = { C: 'Creature', A: 'Artifact', E: 'Enchantment', L: 'Land' };
+
+/**
+ * The keywords a rule can hand out, as the letters `kw` stores. Only the three
+ * a goldfish can act on: nothing blocks, so flying, trample and menace change
+ * nothing, and nothing attacks you, so neither do reach or deathtouch.
+ */
+export const BEHAVIOR_KEYWORDS: readonly { letter: string; word: string; hint: string }[] = [
+  { letter: 'H', word: 'haste', hint: 'Attacks, and taps for mana, the turn it arrives.' },
+  { letter: 'V', word: 'vigilance', hint: 'Still attacks on a turn it tapped for mana, because that mana could have been spent after combat.' },
+  { letter: 'D', word: 'double strike', hint: 'Its power counts twice in the attack.' },
+];
+const KEYWORD_LETTERS = BEHAVIOR_KEYWORDS.map((k) => k.letter).join('');
+
+/** Keyword letters, known ones only, in catalog order. '' for none. */
+export function cleanKeywords(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const up = raw.toUpperCase();
+  return [...KEYWORD_LETTERS].filter((c) => up.includes(c)).join('');
+}
+
+/** "haste", "haste and vigilance", "haste, vigilance and double strike". */
+export function keywordWords(kw: string | undefined): string {
+  const words = BEHAVIOR_KEYWORDS.filter((k) => kw?.includes(k.letter)).map((k) => k.word);
+  if (words.length <= 1) return words[0] ?? 'nothing';
+  return `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+}
 
 /** Card types a `addtype` grant can add, and a custom token can be. */
 export const BEHAVIOR_TYPES: readonly { id: string; label: string }[] = [
@@ -759,7 +793,7 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'self', label: 'Put this card into a zone', verb: 'put', noAmount: true },
   { id: 'counter', label: 'Put X counters on it', verb: 'put' },
   { id: 'pump', label: 'Creatures get +X/+X', verb: 'give', kinds: TRIGGER_AND_STATIC },
-  { id: 'keyword', label: 'Creatures gain haste', verb: 'give', kinds: TRIGGER_AND_STATIC, noAmount: true },
+  { id: 'keyword', label: 'Give keywords (haste, vigilance...)', verb: 'give', kinds: TRIGGER_AND_STATIC, noAmount: true },
   { id: 'addtype', label: 'Add a card type', verb: 'add', kinds: ['static'], noAmount: true },
   { id: 'extramana', label: 'Tapping one for mana adds X more', verb: 'add', kinds: ['static'] },
   { id: 'landfrom', label: 'Play lands from another zone', verb: 'play', kinds: ['static'], noAmount: true },
@@ -1046,7 +1080,8 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
     case 'pump':
       return kind === 'static' ? `they get +${count}/+${count}${tail}` : `creatures you control${whose} get +${count}/+${count} until end of turn${tail}`;
     case 'keyword':
-      return kind === 'static' ? 'they have haste' : `creatures you control${whose} gain haste until end of turn`;
+      if (step.own) return kind === 'static' ? `this card has ${keywordWords(step.kw)}` : `this card gains ${keywordWords(step.kw)} until end of turn`;
+      return kind === 'static' ? `they have ${keywordWords(step.kw)}` : `creatures you control${whose} gain ${keywordWords(step.kw)} until end of turn`;
     case 'addtype': {
       const type = TYPE_WORD[step.ty ?? ''] ?? 'a type';
       const basic = step.ty === 'L' && step.sub ? ` ${BASIC_BY_COLOR[step.sub] ?? ''}` : '';
@@ -1063,9 +1098,10 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
     case 'tapsfor': {
       const colors = manaStepColors(step);
       const symbols = [...colors].map((c) => `{${c}}`).join('');
-      if (colors.length === 1) return `add ${count} ${symbols}${tail}`;
+      const only = step.q ? `, spent only on spells matching ${step.q}` : '';
+      if (colors.length === 1) return `add ${count} ${symbols}${tail}${only}`;
       const what = colors === ANY_COLOR ? 'any color' : symbols;
-      return step.oneColor ? `add ${count} mana of any one of ${what}${tail}` : `add ${count} mana of ${what}${tail}`;
+      return step.oneColor ? `add ${count} mana of any one of ${what}${tail}${only}` : `add ${count} mana of ${what}${tail}${only}`;
     }
   }
   if (step.op === 'damage') {
@@ -1197,7 +1233,12 @@ export function describeLandRamp(mana: ManaProfile | null | undefined): string |
  * nothing" while the sequencer tapped it for a mana of any colour every turn
  * from the one after it landed, which is a model somebody is entitled to see.
  */
-export function describeManaSource(mana: ManaProfile | null | undefined, produces: string | undefined): string | null {
+export function describeManaSource(
+  mana: ManaProfile | null | undefined,
+  produces: string | undefined,
+  /** A creature without haste, which a Dryad Arbor is as much as a Llanowar Elves. */
+  sick = mana?.kind === 'dork',
+): string | null {
   if (!mana) return null;
   if (mana.kind !== 'land' && mana.kind !== 'rock' && mana.kind !== 'dork') return null;
   const colors = sourceColors(mana, produces);
@@ -1218,9 +1259,9 @@ export function describeManaSource(mana: ManaProfile | null | undefined, produce
   // Only 'always'. A conditional tapland is untapped as far as the sequencer is
   // concerned, the same call describeFetch makes.
   const lead = mana.tapped === 'always' ? 'Arrives tapped. ' : '';
-  // Summoning sickness, which is the whole difference between a dork and a rock
-  // and the reason they are two kinds rather than one with a type line.
-  const tail = mana.kind === 'dork' ? ', from the turn after it arrives' : '';
+  // Summoning sickness comes off the type line, not the kind: any creature
+  // without haste waits a turn, a Dryad Arbor as much as a Llanowar Elves.
+  const tail = sick ? '. A creature without haste, so not the turn it arrives' : '';
   return `${lead}${what}${tail}`;
 }
 
@@ -1434,7 +1475,7 @@ function objectStepOk(step: BehaviorStep): boolean {
     case 'token':
       return tokenSpec(step) !== null;
     case 'keyword':
-      return !!step.kw?.includes('H');
+      return cleanKeywords(step.kw) !== '';
     case 'addtype':
       return !!step.ty && step.ty in TYPE_WORD && (!step.sub || step.sub in BASIC_BY_COLOR);
     case 'landfrom':
@@ -1660,7 +1701,7 @@ function cleanObjectStep(op: BehaviorStepKind, s: Record<string, unknown>, kind:
       if (tk !== 'custom') return { op, x, tk };
       const ty = cleanTypes(s.ty, 'CAE') || 'C';
       const creature = ty.includes('C') ? { tp: clampInt(s.tp, 0, MAX_TOKEN_PT, 1), tt: clampInt(s.tt, 1, MAX_TOKEN_PT, 1) } : {};
-      const kw = typeof s.kw === 'string' && s.kw.toUpperCase().includes('H') && ty.includes('C') ? { kw: 'H' } : {};
+      const kw = cleanKeywords(s.kw) && ty.includes('C') ? { kw: cleanKeywords(s.kw) } : {};
       return { op, x, tk, ty, ...creature, ...kw };
     }
     case 'counter': {
@@ -1671,8 +1712,12 @@ function cleanObjectStep(op: BehaviorStepKind, s: Record<string, unknown>, kind:
       const x = amount();
       return x ? { op, x, ...narrowed } : null;
     }
-    case 'keyword':
-      return { op, x: one, kw: 'H', ...narrowed };
+    case 'keyword': {
+      const kw = cleanKeywords(s.kw);
+      if (!kw) return null;
+      // Its own keyword has no criteria to narrow on: it is the one card.
+      return s.own === true ? { op, x: one, kw, own: true } : { op, x: one, kw, ...narrowed };
+    }
     case 'addtype': {
       const ty = cleanTypes(s.ty, 'CAEL').slice(0, 1);
       if (!ty) return null;
@@ -1685,7 +1730,10 @@ function cleanObjectStep(op: BehaviorStepKind, s: Record<string, unknown>, kind:
       if (!x) return null;
       const colors = normalizeManaColors(typeof s.colors === 'string' ? s.colors : '');
       const oneColor = s.oneColor === true && (colors === '' || colors.length > 1) ? { oneColor: true as const } : {};
-      return { op, x, ...(colors ? { colors } : {}), ...oneColor };
+      // "Spend this mana only to cast creature spells": the spells it may pay
+      // for, as criteria. Only a mana ability has a restriction to state.
+      const spend = op === 'tapsfor' ? cleanQuery(s.q) : {};
+      return { op, x, ...(colors ? { colors } : {}), ...oneColor, ...spend };
     }
     case 'landfrom': {
       const from = typeof s.from === 'string' && (LAND_FROM_ZONES as readonly string[]).includes(s.from) ? (s.from as BehaviorZone) : null;

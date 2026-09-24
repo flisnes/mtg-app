@@ -1,6 +1,7 @@
 import {
   applyAmountOp,
   BEHAVIOR_ZONES,
+  keywordWords,
   manaStepColors,
   MAX_QUERY_X,
   tokenKey,
@@ -29,7 +30,10 @@ import { bindingPips, type ParsedCost, type Pip } from './manaCost.js';
 import { Permanents } from './battlefield.js';
 import {
   colorMask,
+  KW_DOUBLE,
   KW_HASTE,
+  KW_VIGILANCE,
+  keywordBits,
   MASK_BITS,
   popcount,
   T_CREATURE,
@@ -774,6 +778,17 @@ export function simulate(
   const srcXtra = new Int32Array(MAX_SOURCES);
   const srcXmask = new Uint8Array(MAX_SOURCES);
   const srcXby = new Int32Array(MAX_SOURCES);
+  /**
+   * Its mana may only be spent on some spells: an authored mana ability with a
+   * "spend only on" query (SimCard.spendQ). Kept out of `units` altogether,
+   * because `paid` is one cost for the whole turn and the solver cannot tell
+   * which spell a pip came from. It pays for a matching spell before that
+   * spell's cost joins `paid`, see payRestricted.
+   */
+  const srcSpend = new Uint8Array(MAX_SOURCES);
+  /** This turn's restricted mana: which source, and how much of it is left. Rebuilt with the pool. */
+  const spendSrc: number[] = [];
+  const spendLeft: number[] = [];
   const unitGroups: UnitGroup[] = [];
   /**
    * The battlefield, as permanents rather than as mana.
@@ -889,6 +904,8 @@ export function simulate(
     ensureFresh(turn);
     units.length = 0;
     unitGroups.length = 0;
+    spendSrc.length = 0;
+    spendLeft.length = 0;
     if (sink) {
       unitOwner.length = 0;
       groupOwner.length = 0;
@@ -903,6 +920,15 @@ export function simulate(
       // turn agrees with the pool.
       if (srcDyn[s]) srcUnits[s] = tapUnits(s, turn);
       const n = srcUnits[s]!;
+      // Restricted mana is not in the total either: it only becomes mana this
+      // turn once a spell it may pay for has spent it.
+      if (srcSpend[s]) {
+        if (n > 0) {
+          spendSrc.push(s);
+          spendLeft.push(n);
+        }
+        continue;
+      }
       total += n;
       const mask = srcColors(s);
       // A static rule's extra mana for tapping this one (Badgermole Cub), as
@@ -970,7 +996,7 @@ export function simulate(
     for (const g of unitGroups) lateGroups.push(g);
     let late = 0;
     for (let s = 0; s < srcLen; s++) {
-      if (srcOnline[s] !== turn + 1) continue;
+      if (srcOnline[s] !== turn + 1 || srcSpend[s]) continue;
       const expires = srcExpires[s]!;
       if (expires > 0 && turn + 1 > expires) continue;
       const k = srcUnits[s]!;
@@ -1163,6 +1189,11 @@ export function simulate(
    */
   const addSource = (index: number, card: SimCard, online: number, turn: number, by: number): boolean => {
     if (srcLen >= MAX_SOURCES) return false;
+    // Summoning sickness, and the one place it is applied to mana: every
+    // creature without haste taps from the turn after it arrives, however it
+    // got here. A Llanowar Elves and a Dryad Arbor played as the land drop are
+    // the same rule, and until this was here the Arbor tapped straight away.
+    if (index >= 0 && summoningSick(card)) online = Math.max(online, turn + 1);
     srcMask[srcLen] = card.mask;
     srcUnits[srcLen] = card.adds;
     srcOnline[srcLen] = online;
@@ -1177,6 +1208,7 @@ export function simulate(
     srcTreasure[srcLen] = 0;
     srcFloating[srcLen] = 0;
     clearSourceExtras(srcLen);
+    srcSpend[srcLen] = index >= 0 && card.spendQ ? 1 : 0;
     const s = srcLen++;
     grantMask |= card.grantMask;
     // Every mana source that is a real card is also a permanent, and this is
@@ -1194,9 +1226,19 @@ export function simulate(
     return true;
   };
 
+  /**
+   * A creature without haste of its own, printed or given by its own rule.
+   * Haste another card hands out (Fires of Yavimaya) lets it attack the turn it
+   * arrives but not tap for mana: the statics are recomputed after the source
+   * is filed, and reading them here would mean recomputing the board on every
+   * arrival. The floor side.
+   */
+  const summoningSick = (card: SimCard): boolean => (card.types & T_CREATURE) !== 0 && (card.keywords & KW_HASTE) === 0;
+
   /** The object-layer fields of a fresh source slot, all off. */
   const clearSourceExtras = (s: number): void => {
     srcOid[s] = 0;
+    srcSpend[s] = 0;
     srcDyn[s] = 0;
     srcGranted[s] = 0;
     srcSub[s] = 0;
@@ -1278,6 +1320,7 @@ export function simulate(
     srcXtra[at] = srcXtra[srcLen]!;
     srcXmask[at] = srcXmask[srcLen]!;
     srcXby[at] = srcXby[srcLen]!;
+    srcSpend[at] = srcSpend[srcLen]!;
   };
 
   /**
@@ -1500,7 +1543,7 @@ export function simulate(
       thrifty.length = 0;
       thriftyOwner.length = 0;
       for (let s = 0; s < srcLen; s++) {
-        if (srcTreasure[s]) continue;
+        if (srcTreasure[s] || srcSpend[s]) continue;
         if (srcOnline[s]! > turn) continue;
         const expires = srcExpires[s]!;
         if (expires > 0 && turn > expires) continue;
@@ -2071,6 +2114,13 @@ export function simulate(
   const openUnits = (index: number, card: SimCard, turn: number, by: number): number => {
     const count = card.adds;
     if (count <= 0) return 0;
+    // Restricted mana joins the turn's restricted pool, not the units. Always
+    // called straight after addSource, so the newest source is this one.
+    if (card.spendQ) {
+      spendSrc.push(srcLen - 1);
+      spendLeft.push(count);
+      return 0;
+    }
     const mask = card.role === 'land' || card.role === 'fetch' ? card.mask | grantMask : card.mask;
     const unit = UNIT_BY_MASK[mask]!;
     if (card.oneColor && count > 1) {
@@ -2161,7 +2211,7 @@ export function simulate(
     if (back >= 0 && handLen < hand.length) hand[handLen++] = back;
     // Online this turn means online *now*, and the turn's pool was built before
     // this rule started running.
-    if (untapped) entryMana += openUnits(index, card, turn, by);
+    if (untapped && !summoningSick(card)) entryMana += openUnits(index, card, turn, by);
     fireEntry(index, card, turn);
     fireArrival(index, card, turn);
   };
@@ -2293,13 +2343,14 @@ export function simulate(
       const triggers = opts.effects && !!card.behavior && card.behavior.attack.length > 0;
       if (!everyone && !triggers) continue;
       // Tapped for mana this turn, so it is not attacking. Until F2 a Llanowar
-      // Elves paid for the turn's spells and then swung anyway.
-      if (perms.tapped[p]) {
+      // Elves paid for the turn's spells and then swung anyway. Vigilance is the
+      // way round it: attack first, tap for mana in the main phase after.
+      if (perms.tapped[p] && !(perms.kw[p]! & KW_VIGILANCE)) {
         tappedOut++;
         continue;
       }
       attackers.push(index);
-      power += perms.power[p]!;
+      power += perms.kw[p]! & KW_DOUBLE ? 2 * perms.power[p]! : perms.power[p]!;
     }
     if (sink && tappedOut > 0) {
       say(sink, 'note', `${tappedOut} creature${tappedOut === 1 ? ' was' : 's were'} tapped for mana, so ${tappedOut === 1 ? 'it does' : 'they do'} not attack`);
@@ -2667,19 +2718,24 @@ export function simulate(
   };
 
   /**
-   * +X/+X or haste until end of turn, for the creatures on the battlefield now
-   * that match: a Craterhoof, an Overrun. Returns how many it reached.
+   * +X/+X or keywords until end of turn, for the creatures on the battlefield
+   * now that match: a Craterhoof, an Overrun. Returns how many it reached. A
+   * keyword the card gives itself reaches only its newest copy.
    */
-  const pumpUntilEot = (step: BehaviorStep, amount: number, turn: number): number => {
+  const pumpUntilEot = (step: BehaviorStep, amount: number, turn: number, self: number): number => {
     ensureFresh(turn);
     const filter = step.q ? filterFor.get(step.q) : undefined;
     if (step.q && !filter) return 0;
+    const only = step.own ? (self >= 0 ? perms.newest(self) : -1) : -2;
+    if (only === -1) return 0;
+    const kw = step.op === 'keyword' ? keywordBits(step.kw) : 0;
     let reached = 0;
     for (let p = 0; p < perms.len; p++) {
+      if (only >= 0 && p !== only) continue;
       if (!(perms.types[p]! & T_CREATURE) || !stillOut(p, turn)) continue;
       if (filter && filter.match[perms.added[p]! * n + perms.card[p]!] !== 1) continue;
       if (step.op === 'pump') perms.eotPump[p] = perms.eotPump[p]! + amount;
-      else perms.kwEot[p] = perms.kwEot[p]! | KW_HASTE;
+      else perms.kwEot[p] = perms.kwEot[p]! | kw;
       perms.refresh(p, cards[perms.card[p]!]!);
       reached++;
     }
@@ -2837,9 +2893,15 @@ export function simulate(
         }
         case 'pump':
         case 'keyword': {
-          did = pumpUntilEot(step, n, turn);
+          did = pumpUntilEot(step, n, turn, self);
           if (sink && did > 0) {
-            bits.push(step.op === 'pump' ? `gives ${did} creature${did === 1 ? '' : 's'} +${n}/+${n}` : `gives ${did} creature${did === 1 ? '' : 's'} haste`);
+            bits.push(
+              step.op === 'pump'
+                ? `gives ${did} creature${did === 1 ? '' : 's'} +${n}/+${n}`
+                : step.own
+                  ? `gains ${keywordWords(step.kw)}`
+                  : `gives ${did} creature${did === 1 ? '' : 's'} ${keywordWords(step.kw)}`,
+            );
           }
           break;
         }
@@ -3036,6 +3098,85 @@ export function simulate(
     }
   };
 
+  /** Each card's "spend only on" criteria, resolved: the spells its mana may pay for. */
+  const spendFilter: (SimFilter | undefined)[] = cards.map((c) => (c.spendQ ? filterFor.get(c.spendQ) : undefined));
+  /** Restricted pool entry `k` may pay for card `index`. */
+  const spendOk = (k: number, index: number): boolean => spendFilter[srcCard[spendSrc[k]!]!]?.match[index] === 1;
+  /** How much restricted mana this turn could still go to card `index`. Zero, fast, in every deck without any. */
+  const spendFor = (index: number): number => {
+    let n = 0;
+    for (let k = 0; k < spendSrc.length; k++) if (spendOk(k, index)) n += spendLeft[k]!;
+    return n;
+  };
+  /** Restricted mana left this turn, for anything. */
+  const spendAny = (): number => {
+    let n = 0;
+    for (let k = 0; k < spendLeft.length; k++) n += spendLeft[k]!;
+    return n;
+  };
+  const spendTook: number[] = [];
+  let spendUsed = 0;
+  const restCost: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [], faces: 1 };
+  /**
+   * The part of `cost` the turn's restricted mana pays for card `index`, and
+   * what that leaves for the pool, which is what joins `paid`. Colored pips
+   * first, since those are what the rest of the pool is short of, then the
+   * generic. Greedy, so a better split can exist and be missed; every split it
+   * takes is a real payment, which is the direction §11.4 allows.
+   *
+   * Nothing is spent until `commitRestricted`: the remainder may still turn
+   * out unpayable, and then the loop rolls back as it always has.
+   */
+  const payRestricted = (index: number, cost: ParsedCost): ParsedCost => {
+    spendUsed = 0;
+    spendTook.length = spendSrc.length;
+    spendTook.fill(0);
+    if (spendSrc.length === 0 || spendFor(index) === 0) return cost;
+    restCost.generic = cost.generic;
+    restCost.pips.length = 0;
+    restCost.hasX = cost.hasX;
+    for (const pip of cost.pips) {
+      let by = -1;
+      for (let k = 0; k < spendSrc.length && by < 0; k++) {
+        if (spendLeft[k]! - spendTook[k]! <= 0 || !spendOk(k, index)) continue;
+        const colors = UNIT_BY_MASK[srcOneColor[spendSrc[k]!] ? 0 : srcColors(spendSrc[k]!)]!.colors;
+        if (pip.options.some((c) => colors.includes(c))) by = k;
+      }
+      if (by < 0) restCost.pips.push(pip);
+      else {
+        spendTook[by] = spendTook[by]! + 1;
+        spendUsed++;
+      }
+    }
+    for (let k = 0; k < spendSrc.length && restCost.generic > 0; k++) {
+      if (!spendOk(k, index)) continue;
+      const take = Math.min(spendLeft[k]! - spendTook[k]!, restCost.generic);
+      spendTook[k] = spendTook[k]! + take;
+      spendUsed += take;
+      restCost.generic -= take;
+    }
+    restCost.mana = cost.mana - spendUsed;
+    return spendUsed > 0 ? restCost : cost;
+  };
+  /**
+   * The spell was cast: spend what payRestricted set aside, tap its creatures,
+   * credit its cards. Returns the trace's aside, empty without a trace.
+   */
+  const commitRestricted = (turn: number): string => {
+    const bits: string[] = [];
+    for (let k = 0; k < spendTook.length; k++) {
+      const took = spendTook[k]!;
+      if (took <= 0) continue;
+      const s = spendSrc[k]!;
+      spendLeft[k] = spendLeft[k]! - took;
+      creditMana(srcBy[s]!, turn, took);
+      const p = srcOid[s]! > 0 ? perms.slotOf(srcOid[s]!) : -1;
+      if (p >= 0 && perms.types[p]! & T_CREATURE) perms.tapped[p] = 1;
+      if (sink) bits.push(`${took} of it from ${cards[srcCard[s]!]!.name} (restricted mana)`);
+    }
+    return bits.length > 0 ? `, ${bits.join(', ')}` : '';
+  };
+
   /** Every cost committed this turn, folded into one, so partial spends add up. */
   const paid: ParsedCost = { generic: 0, pips: [], mana: 0, hasX: false, unmodelled: [], faces: 1 };
 
@@ -3205,11 +3346,15 @@ export function simulate(
         sayEffect('');
         fireArrival(found, land, turn);
       }
-      // The mana that cast it has been spent, and a dork is summoning sick
-      // on top of that, so either way it pays for something from next turn.
     } else if (card.role === 'rock' || card.role === 'dork') {
-      if (addSource(index, card, turn + 1, turn, index)) {
+      // A Sol Ring taps the turn it lands, like any artifact that enters
+      // untapped. A creature is summoning sick (addSource says so) unless it
+      // has haste, and a Coldsteel Heart arrives tapped.
+      const now = card.tapped !== 'always' && !summoningSick(card);
+      if (addSource(index, card, now ? turn : turn + 1, turn, index)) {
         colorsHeld |= card.mask;
+        if (now) added += openUnits(index, card, turn, index);
+        const when = now ? 'this turn' : 'from next turn';
         // A filter like Prophetic Prism profiles at zero net mana: it fixes
         // colours and adds none. "Will add 0" is true and reads like a bug,
         // so it says what the card is for instead.
@@ -3219,10 +3364,10 @@ export function simulate(
             sink,
             'mana',
             card.manaAmount
-              ? `${card.name} will tap for mana from next turn, as its rule says`
+              ? `${card.name} will tap for mana ${now ? 'from this turn' : 'from next turn'}, as its rule says`
               : card.adds > 0
-              ? `${card.name} will add ${card.adds} ${colors} from next turn`
-              : `${card.name} will filter mana into ${colors} from next turn, adding none`,
+              ? `${card.name} will add ${card.adds} ${colors} ${when}`
+              : `${card.name} will filter mana into ${colors} ${when}, adding none`,
           );
         }
       }
@@ -3485,8 +3630,10 @@ export function simulate(
               const amount = step.op === 'keyword' ? 1 : behaviorAmount(step.x, turn);
               stepSelf = wasSelf;
               const mask = step.op === 'extramana' ? colorMask(manaStepColors(step)) : 0;
+              const kw = step.op === 'keyword' ? keywordBits(step.kw) : 0;
               for (let t = 0; t < len; t++) {
-                if (!stillOut(t, turn) || !covers(filter, rule.q, t, perms.added[t]!)) continue;
+                // "This card has vigilance": the permanent holding the rule, whatever the criteria say.
+                if (step.own ? t !== p : !stillOut(t, turn) || !covers(filter, rule.q, t, perms.added[t]!)) continue;
                 if (step.op === 'extramana') {
                   perms.extra[t] = perms.extra[t]! + amount;
                   perms.extraMask[t] = perms.extraMask[t]! | mask;
@@ -3495,7 +3642,7 @@ export function simulate(
                 }
                 if (!(perms.types[t]! & T_CREATURE)) continue;
                 if (step.op === 'pump') perms.staticPump[t] = perms.staticPump[t]! + amount;
-                else perms.kwStatic[t] = perms.kwStatic[t]! | KW_HASTE;
+                else perms.kwStatic[t] = perms.kwStatic[t]! | kw;
               }
               break;
             }
@@ -3567,7 +3714,7 @@ export function simulate(
   const tapCreatures = (turn: number, treasures: number): void => {
     creatureSources.length = 0;
     for (let s = 0; s < srcLen; s++) {
-      if (srcTreasure[s] || srcFloating[s] || srcOnline[s]! > turn) continue;
+      if (srcTreasure[s] || srcFloating[s] || srcSpend[s] || srcOnline[s]! > turn) continue;
       const expires = srcExpires[s]!;
       if (expires > 0 && turn > expires) continue;
       const p = srcOid[s]! > 0 ? perms.slotOf(srcOid[s]!) : -1;
@@ -3578,7 +3725,7 @@ export function simulate(
     for (let k = 0; k <= creatureSources.length; k++) {
       thrifty.length = 0;
       for (let s = 0; s < srcLen; s++) {
-        if (srcTreasure[s] || srcOnline[s]! > turn) continue;
+        if (srcTreasure[s] || srcSpend[s] || srcOnline[s]! > turn) continue;
         const expires = srcExpires[s]!;
         if (expires > 0 && turn > expires) continue;
         const rank = creatureSources.indexOf(s);
@@ -4104,7 +4251,7 @@ export function simulate(
       let held = 0;
       for (let cast = 0; cast < MAX_CASTS_PER_TURN; cast++) {
         const left = available - spent;
-        if (left <= 0) break;
+        if (left <= 0 && (spendSrc.length === 0 || spendAny() === 0)) break;
         pick = -1;
         pickRank = -1;
         ties = 0;
@@ -4127,7 +4274,8 @@ export function simulate(
           // The cheap test first: a cost that wants more mana than is left
           // cannot be paid whatever colors it wants, and skipping it here is
           // what keeps the solver off nine tenths of the hand.
-          if (cost.mana > left) continue;
+          // Restricted mana counts only toward the spells it may pay for.
+          if (cost.mana > left + (spendSrc.length > 0 ? spendFor(index) : 0)) continue;
           // An X spell with nothing left over for X is a card you hold, not a
           // card you cast. Spending a Fireball for zero uses the card up and
           // buys nothing, which is not the conservative direction — it is just
@@ -4179,13 +4327,17 @@ export function simulate(
         const index = pickZone === ZONE_HAND ? hand[pick]! : graveyard[pick]!;
         const card = cards[index]!;
         const before = paid.pips.length;
-        paid.generic += cost.generic;
-        for (const pip of cost.pips) paid.pips.push(pip);
+        // What restricted mana does not pay for is what the pool has to.
+        const pay = payRestricted(index, cost);
+        const payGeneric = pay.generic;
+        const payPips = pay.pips.length;
+        paid.generic += pay.generic;
+        for (const pip of pay.pips) paid.pips.push(pip);
         if (!canPay(paid, units, unitGroups)) {
           // Unaffordable in *these* colors alongside what is already committed.
           // Roll it back and stop: the next-best card is usually the same
           // colors and re-scanning the hand for it costs more than it wins.
-          paid.generic -= cost.generic;
+          paid.generic -= pay.generic;
           paid.pips.length = before;
           if (sink) {
             say(
@@ -4198,8 +4350,14 @@ export function simulate(
           }
           break;
         }
-        paid.mana += cost.mana;
+        paid.mana += cost.mana - spendUsed;
         spent += cost.mana;
+        // Restricted mana becomes this turn's mana the moment it is spent.
+        let spendNote = '';
+        if (spendUsed > 0) {
+          spendNote = commitRestricted(turn);
+          available += spendUsed;
+        }
         castCount++;
         if (pickZone === ZONE_HAND) hand[pick] = hand[--handLen]!;
         else graveyard[pick] = graveyard[--gyLen]!;
@@ -4214,7 +4372,7 @@ export function simulate(
           }
           if (sink && sink.turn) {
             say(sink, 'cast', `Suspends ${card.name} for ${card.suspend!.n} turn${card.suspend!.n === 1 ? '' : 's'}`);
-            castLines.push({ line: sink.turn.lines[sink.turn.lines.length - 1]!, card: index, generic: cost.generic, pips: cost.pips.length });
+            castLines.push({ line: sink.turn.lines[sink.turn.lines.length - 1]!, card: index, generic: payGeneric, pips: payPips });
           }
           continue;
         }
@@ -4281,7 +4439,7 @@ export function simulate(
           const tax = cost !== card.cost && card.commander ? ` with ${cost.mana - card.cost!.mana} commander tax` : '';
           const from = pickZone === ZONE_GRAVEYARD ? ` from the graveyard (${card.gyCast!.kind}${extraCost})` : '';
           const price = pickZone === ZONE_GRAVEYARD ? '' : ` ${card.manaCost}`;
-          say(sink, 'cast', `Casts ${card.name}${price}${from}${forX}${kicked}${tax}${why}`);
+          say(sink, 'cast', `Casts ${card.name}${price}${from}${forX}${kicked}${tax}${why}${spendNote}`);
           // The taps arrive on this line later. The turn has to finish
           // committing first, because there is only one cost to solve and it is
           // the whole turn's.
@@ -4292,8 +4450,8 @@ export function simulate(
             // X is generic mana like any other, so the tap breakdown has to
             // account for it or the line shows five lands paying for two. The
             // kicker is folded in the same way.
-            generic: cost.generic + xSpent + (kick ? kick.generic * kickedNow : 0),
-            pips: cost.pips.length + (kick ? kick.pips.length * kickedNow : 0),
+            generic: payGeneric + xSpent + (kick ? kick.generic * kickedNow : 0),
+            pips: payPips + (kick ? kick.pips.length * kickedNow : 0),
           });
         }
 

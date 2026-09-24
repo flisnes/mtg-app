@@ -198,9 +198,11 @@ const GAINS_ITSELF = /\bthis [\w' ]+ gains\b/i;
  * A triggered ability, which is every mana doubler ever printed: "Whenever you
  * tap a land for mana, add one mana of any type that land produced." Caged Sun,
  * Vorinclex, Mirari's Wake and Zendikar Resurgent all hang their mana off
- * somebody else's ability and have no way to make mana on their own.
+ * somebody else's ability and have no way to make mana on their own. An
+ * ability word can come first: Nissa, Resurgent Animist's "Landfall — Whenever
+ * a land you control enters, add one mana" was read as a dork.
  */
-const TRIGGERED = /^\s*(?:whenever|when|at the beginning)\b/i;
+const TRIGGERED = /^\s*(?:[^—\n]{1,40} — )?(?:whenever|when|at the beginning)\b/i;
 
 /**
  * The cost spends the card itself, so the ability is not what the card does
@@ -383,12 +385,37 @@ function bestClause(clauses: readonly AddClause[]): Chosen | undefined {
 }
 
 /**
- * Ramp that actually puts a land into play. The `land-ramp` tag is broader than
- * that — it also carries cards that only fetch to hand, and a scattering that
- * look like mis-tags (Volition Reins) — and this is the sentence the real ones
- * all print.
+ * Ramp that actually puts a land into play, the way the sequencer plays it: once,
+ * as the card resolves, out of your own library. The `land-ramp` tag is far
+ * broader than that. It carries cards that only fetch to hand, a Path to Exile
+ * that ramps the *opponent*, a Burgeoning playing lands off your hand, a Desert
+ * Warfare returning sacrificed Deserts, and every planeswalker, landfall
+ * creature and sacrifice outlet that finds a land some other way. "Onto the
+ * battlefield" anywhere in the text read all of those as a Rampant Growth.
+ *
+ * So the sentence has to be a search of *your* library for a land (by name of
+ * type or basic type), put onto the battlefield. On a permanent it also has to
+ * hang off its own entry: a Wood Elves resolves exactly like a Rampant Growth,
+ * a Sakura-Tribe Elder or a Nissa does not. Everything that fails is the §11.4
+ * floor, and a behavior can write it back in.
  */
-const PUTS_LAND_IN_PLAY = /onto the battlefield/i;
+const LAND_SEARCH =
+  /\bsearch your library for [^.]*?\b(?:lands?|basics?|Forests?|Plains|Islands?|Swamps?|Mountains?|Deserts?|Gates?|Caves?|Wastes)\b[^.]*?\bcards?\b[^]*?\bonto the battlefield\b/i;
+/** The permanent's own arrival: "When this creature enters", "When Golos enters". Not another creature's. */
+const OWN_ENTRY = /^(?:[^—]{1,40} — )?When(?:ever)?(?!an? |another |one or more |a nontoken )[^,.]*?\benters\b/i;
+const PERMANENT_FACE = /\b(?:Creature|Artifact|Enchantment|Planeswalker|Battle)\b/;
+
+export function putsLandInPlay(typeLine: string, oracleText: string | null): boolean {
+  const permanent = PERMANENT_FACE.test(typeLine.split('//')[0] ?? '');
+  for (const raw of (oracleText ?? '').split('\n')) {
+    const line = raw.replace(/\([^)]*\)/g, '').trim();
+    // One sentence can run past a period ("Search ... for a basic land card.
+    // Put it onto the battlefield"), so the match spans the line, not the sentence.
+    if (!LAND_SEARCH.test(line)) continue;
+    if (!permanent || OWN_ENTRY.test(line)) return true;
+  }
+  return false;
+}
 
 /** Fetched lands overwhelmingly arrive tapped, and here the text says so plainly. */
 const FETCHES_TAPPED = /onto the battlefield tapped/i;
@@ -623,7 +650,7 @@ export function manaProfileOf(card: ManaProfileInput, index: ManaTagIndex): Mana
   }
   // Ramp that fetches cardboard rather than tapping for mana, so it has no
   // `produces` of its own: what it makes is whatever land it finds.
-  if (tagged(index.landRamp) && PUTS_LAND_IN_PLAY.test(card.oracleText ?? '')) {
+  if (tagged(index.landRamp) && putsLandInPlay(card.typeLine, card.oracleText)) {
     const flags = FETCHES_TAPPED.test(card.oracleText ?? '') ? MANA_TAPPED : 0;
     return [kindOf('landramp'), tagged(index.multiLandRamp) ? 2 : 1, flags];
   }

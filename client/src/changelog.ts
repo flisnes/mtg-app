@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.173.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Any creature without haste waits a turn to tap for mana, Dryad Arbor included, and rocks tap the turn they land. Desert Warfare, Path to Exile and about 300 others no longer read as land ramp.',
+      },
+      {
+        kind: 'added',
+        text: 'Rules can give haste, vigilance or double strike to a card itself, and a mana ability can be limited to spells matching a search.',
+      },
+    ],
+  },
+  {
     version: '0.173.0',
     changes: [
       {

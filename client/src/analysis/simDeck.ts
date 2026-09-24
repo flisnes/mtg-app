@@ -1,6 +1,7 @@
 import {
   BASIC_BY_COLOR,
   BASIC_LAND_TYPES,
+  cleanKeywords,
   collectBehaviorQueries,
   collectBehaviorTokens,
   compileBehavior,
@@ -95,11 +96,23 @@ export const T_TOKEN = 16;
 export const TYPE_BIT: Readonly<Record<string, number>> = { C: T_CREATURE, L: T_LAND, A: T_ARTIFACT, E: T_ENCHANTMENT };
 
 /**
- * Keywords as bits. Haste is the only one this model can act on: it lets a
- * creature attack the turn it arrives. Vigilance would need a main phase after
- * combat to matter, and there is none.
+ * Keywords as bits, the three this model can act on (BEHAVIOR_KEYWORDS). Haste
+ * lets a creature attack and tap for mana the turn it arrives. Vigilance lets
+ * one that tapped for mana attack anyway: there is no main phase after combat,
+ * so the mana it made is read as spent there. Double strike counts its power
+ * twice.
  */
 export const KW_HASTE = 1;
+export const KW_VIGILANCE = 2;
+export const KW_DOUBLE = 4;
+const KW_BY_LETTER: Readonly<Record<string, number>> = { H: KW_HASTE, V: KW_VIGILANCE, D: KW_DOUBLE };
+
+/** A step's keyword letters as KW_ bits. */
+export function keywordBits(kw: string | undefined): number {
+  let bits = 0;
+  for (const c of cleanKeywords(kw)) bits |= KW_BY_LETTER[c] ?? 0;
+  return bits;
+}
 
 /** A cast option, parsed once so the spend loop never meets a string. */
 export interface SimKicker {
@@ -230,6 +243,12 @@ export interface SimCard {
    * creatures). Read every time the pool is built; null for the fixed `adds`.
    */
   manaAmount: BehaviorAmount | null;
+  /**
+   * An authored mana ability whose mana may only be spent on spells matching
+   * this query ("t:instant or t:sorcery"), or null for mana that pays for
+   * anything. Resolved through SimDeck.filters like every other criteria.
+   */
+  spendQ: string | null;
   kicker: SimKicker | null;
   gyCast: SimGraveyardCast | null;
   suspend: SimSuspend | null;
@@ -477,6 +496,7 @@ export function buildSimDeck(
       toughness: powerOf(o.toughness),
       token: false,
       manaAmount: null,
+      spendQ: null,
       kicker: null,
       gyCast: null,
       suspend: null,
@@ -581,7 +601,7 @@ function typeBits(face: string): number {
  * line is a comma list of short words ("Flying, haste"); "creatures you control
  * gain haste" is a sentence and does not count.
  */
-function printedKeywords(text: string | null | undefined): number {
+export function printedKeywords(text: string | null | undefined): number {
   if (!text) return 0;
   let bits = 0;
   for (const raw of text.split('\n')) {
@@ -590,6 +610,8 @@ function printedKeywords(text: string | null | undefined): number {
     const parts = line.split(/,\s*/);
     if (!parts.every((p) => p.split(/\s+/).length <= 3)) continue;
     if (parts.includes('haste')) bits |= KW_HASTE;
+    if (parts.includes('vigilance')) bits |= KW_VIGILANCE;
+    if (parts.includes('double strike')) bits |= KW_DOUBLE;
   }
   return bits;
 }
@@ -600,6 +622,9 @@ function printedKeywords(text: string | null | undefined): number {
  * other ways it can be cast. Read once here so the sequencer only meets fields.
  */
 function applyAuthoredObject(card: SimCard, b: CompiledBehavior): void {
+  // "This card has haste" is what the card is, the same as a printed keyword,
+  // so summoning sickness reads it on arrival like one.
+  for (const rule of b.statics) for (const step of rule.steps) if (step.op === 'keyword' && step.own) card.keywords |= keywordBits(step.kw);
   const tap = b.tap;
   if (tap && card.permanent) {
     // An authored mana ability replaces the one the database read, the same
@@ -614,6 +639,7 @@ function applyAuthoredObject(card: SimCard, b: CompiledBehavior): void {
     card.adds = fixed ? (tap.x.n ?? 0) : 0;
     card.manaAmount = fixed ? null : tap.x;
     card.oneColor = !!tap.oneColor;
+    card.spendQ = tap.q || null;
     if (card.role !== 'land') card.tapped = 'never';
   }
   for (const o of b.options) {
@@ -692,10 +718,12 @@ function tokenCard(key: string, spec: TokenOption): { card: SimCard; oracle: Ora
     effect: null,
     behavior: null,
     types,
-    keywords: key.endsWith(':H') ? KW_HASTE : 0,
+    // Only a custom token carries keywords, as the key's last field.
+    keywords: key.startsWith('custom:') ? keywordBits(key.slice(key.lastIndexOf(':') + 1)) : 0,
     toughness: creature ? (spec.toughness ?? 0) : 0,
     token: true,
     manaAmount: null,
+    spendQ: null,
     kicker: null,
     gyCast: null,
     suspend: null,

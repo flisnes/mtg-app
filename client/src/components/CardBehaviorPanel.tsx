@@ -5,6 +5,7 @@ import {
   BEHAVIOR_AMOUNTS,
   BEHAVIOR_AMOUNT_OPS,
   BEHAVIOR_FROM_ZONES,
+  BEHAVIOR_KEYWORDS,
   BEHAVIOR_MANA_COLORS,
   BEHAVIOR_STEPS,
   BEHAVIOR_TOKENS,
@@ -13,6 +14,7 @@ import {
   BEHAVIOR_ZONES,
   CARD_BEHAVIOR_VERSION,
   CAST_OPTIONS,
+  cleanKeywords,
   MAX_CAST_N,
   MAX_CAST_OPTIONS,
   MAX_TOKEN_PT,
@@ -65,6 +67,7 @@ import { PolicySpread } from './PolicySpread.js';
 import type { QueueCard, QueueReason } from '../analysis/coverage.js';
 import { templatesFor, type Template } from '../analysis/behaviorTemplates.js';
 import { gapWords, type ShippedDefaults } from '../analysis/defaultBehaviors.js';
+import { KW_HASTE, printedKeywords } from '../analysis/simDeck.js';
 import { oracleTagClosure } from '../cardDb/oracleTags.js';
 import {
   COMBAT_POLICIES,
@@ -192,7 +195,8 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       fetch: o.produces ? null : describeFetch(decodeFetchProfile(o.fetch)),
       ritual: describeRitual(decodeManaProfile(o.mana), o.produces),
       extraLand: describeExtraLand(decodeManaProfile(o.mana)),
-      source: describeManaSource(decodeManaProfile(o.mana), o.produces),
+      // Sick is a creature without haste, off the type line: a Dryad Arbor too.
+      source: describeManaSource(decodeManaProfile(o.mana), o.produces, isCreature(o.typeLine) && !(printedKeywords(o.oracleText) & KW_HASTE)),
       authored: behaviors.get(o.oracleId) ?? null,
       image: o.imageNormal ?? o.imageSmall ?? null,
       permanent: isPermanent(o.typeLine),
@@ -1442,9 +1446,12 @@ function RuleEditor({
         // Both of them narrow what they reach with a criteria box; only a move
         // has two zones to pick. A pump or a haste grant on a trigger narrows
         // which creatures get it; on a static the rule's own criteria does.
-        const creatureQuery = (step.op === 'pump' || step.op === 'keyword') && kind === 'trigger';
-        const narrows = move || flicker || creatureQuery;
-        const objectControls = step.op === 'token' || step.op === 'counter' || step.op === 'addtype' || step.op === 'landfrom';
+        const creatureQuery = (step.op === 'pump' || (step.op === 'keyword' && !step.own)) && kind === 'trigger';
+        // A mana ability's "spend this mana only on", as criteria.
+        const spendQuery = step.op === 'tapsfor';
+        const narrows = move || flicker || creatureQuery || spendQuery;
+        const objectControls =
+          step.op === 'token' || step.op === 'counter' || step.op === 'addtype' || step.op === 'landfrom' || step.op === 'keyword';
         // The one destination with two ways to arrive, and the only place the
         // question is worth asking.
         const lands = (move || self) && step.to === 'battlefield';
@@ -1542,7 +1549,7 @@ function RuleEditor({
                 {lands && <TapPicker step={step} onChange={(next) => setStep(i, next)} />}
               </div>
             )}
-            {objectControls && <ObjectControls step={step} onChange={(next) => setStep(i, next)} />}
+            {objectControls && <ObjectControls step={step} kind={kind} onChange={(next) => setStep(i, next)} />}
             {colorsStep && (
               <div className="behavior-colors">
                 <div className="behavior-swatches" role="group" aria-label="Which colors this mana can be">
@@ -1588,16 +1595,19 @@ function RuleEditor({
             )}
             {narrows && (
               <div className="behavior-q">
+                {spendQuery && <span className="fine-print behavior-plug-lead">Spend its mana only on:</span>}
                 <label className="field">
                   <input
                     type="text"
                     value={step.q ?? ''}
                     maxLength={MAX_BEHAVIOR_QUERY}
-                    aria-label={creatureQuery ? 'Which creatures' : 'Which cards'}
+                    aria-label={creatureQuery ? 'Which creatures' : spendQuery ? 'Spend it only on' : 'Which cards'}
                     placeholder={
                       creatureQuery
                         ? 'All your creatures, or t:elf, …'
-                        : flicker
+                        : spendQuery
+                          ? 'Spend it on anything, or only on t:creature, …'
+                          : flicker
                           ? 'Any permanent, or t:creature, …'
                           : 'Any card, or t:basic, t:creature mv<=3, …'
                     }
@@ -1605,9 +1615,15 @@ function RuleEditor({
                   />
                 </label>
                 <MatchNote q={step.q ?? ''} matcher={matcher} />
+                {spendQuery && (
+                  <span className="fine-print">
+                    Which spells its mana may pay for, in card search syntax. "t:instant or t:sorcery" is either; without the
+                    "or" it would have to be both.
+                  </span>
+                )}
                 {/* The control appears because the query asked for it. No
                     placeholder, no dropdown, and nothing to explain away. */}
-                {!creatureQuery && queryHasX(step.q) && (
+                {!creatureQuery && !spendQuery && queryHasX(step.q) && (
                   <>
                     <span className="fine-print behavior-plug-lead">[X] in that query is:</span>
                     <AmountPicker
@@ -1649,7 +1665,47 @@ function RuleEditor({
 }
 
 /** The extra controls of the object-layer steps (rebuild plan F): which token, which counter, which type, which zone. */
-function ObjectControls({ step, onChange }: { step: BehaviorStep; onChange: (next: BehaviorStep) => void }) {
+/**
+ * The keywords a goldfish can act on, as checkboxes. A keyword step needs at
+ * least one, so the last tick is refused there; a token can have none.
+ */
+function KeywordChecks({ step, onChange, required = false }: { step: BehaviorStep; onChange: (next: BehaviorStep) => void; required?: boolean }) {
+  const kw = cleanKeywords(step.kw);
+  const toggle = (letter: string) => {
+    const next = cleanKeywords(kw.includes(letter) ? kw.replace(letter, '') : kw + letter);
+    if (!next && required) return;
+    onChange(next ? { ...step, kw: next } : without(step, 'kw'));
+  };
+  return (
+    <div className="behavior-obj-row" role="group" aria-label="Keywords">
+      {BEHAVIOR_KEYWORDS.map((k) => (
+        <label key={k.letter} className="behavior-check" title={k.hint}>
+          <input type="checkbox" checked={kw.includes(k.letter)} onChange={() => toggle(k.letter)} />
+          <span>{k.word[0]!.toUpperCase() + k.word.slice(1)}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function ObjectControls({ step, onChange, kind }: { step: BehaviorStep; onChange: (next: BehaviorStep) => void; kind: RuleKind }) {
+  if (step.op === 'keyword') {
+    return (
+      <div className="behavior-obj">
+        <KeywordChecks step={step} onChange={onChange} required />
+        <label className="field">
+          <select
+            value={step.own ? 'own' : 'them'}
+            aria-label="Who gets it"
+            onChange={(e) => onChange(e.target.value === 'own' ? { ...without(step, 'q'), own: true } : without(step, 'own'))}
+          >
+            <option value="them">{kind === 'static' ? 'The creatures the criteria above find' : 'Your creatures'}</option>
+            <option value="own">This card</option>
+          </select>
+        </label>
+      </div>
+    );
+  }
   if (step.op === 'token') {
     const custom = step.tk === 'custom';
     const types = step.ty || 'C';
@@ -1719,16 +1775,9 @@ function ObjectControls({ step, onChange }: { step: BehaviorStep; onChange: (nex
                     onChange={(e) => onChange({ ...step, tt: Math.max(1, Math.min(MAX_TOKEN_PT, Math.round(Number(e.target.value) || 1))) })}
                   />
                 </label>
-                <label className="behavior-check">
-                  <input
-                    type="checkbox"
-                    checked={!!step.kw?.includes('H')}
-                    onChange={(e) => onChange(e.target.checked ? { ...step, kw: 'H' } : without(step, 'kw'))}
-                  />
-                  <span>Haste</span>
-                </label>
               </div>
             )}
+            {creature && <KeywordChecks step={step} onChange={onChange} />}
           </>
         )}
       </div>
@@ -1870,6 +1919,12 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
           : 'Until end of turn, for the creatures on the battlefield now: a Craterhoof\'s +X/+X, read once as it resolves. Combat comes after the turn\'s spells, so a pump in a play or entry rule is in time for the attack.',
     });
   }
+  if (has('keyword')) {
+    notes.push({
+      key: 'keyword',
+      text: 'Only the keywords a goldfish can act on. Haste lets a creature attack and tap for mana the turn it arrives. Vigilance lets one that tapped for mana attack anyway, as if that mana went on spells after combat. Double strike counts its power twice. Nothing blocks here, so flying, trample and the rest would change nothing. "This card" gives them to the card holding the rule and nothing else.',
+    });
+  }
   if (has('addtype')) {
     notes.push({
       key: 'addtype',
@@ -1891,7 +1946,7 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
   if (has('tapsfor')) {
     notes.push({
       key: 'tapsfor',
-      text: 'This replaces the mana ability the card database read, and makes the card a mana source if it was not one. The amount is read every turn the pool is built, so it can count the charge counters on it or your creatures (Gaea\'s Cradle). A creature is summoning sick the turn it arrives, and one that taps for mana does not attack that turn.',
+      text: 'This replaces the mana ability the card database read, and makes the card a mana source if it was not one. The amount is read every turn the pool is built, so it can count the charge counters on it or your creatures (Gaea\'s Cradle). A creature without haste is summoning sick the turn it arrives, and one that taps for mana does not attack that turn unless it has vigilance. A rock taps the turn it lands. With "spend it only on" filled in, the mana pays only for spells matching it (Beastcaller Savant, Cavern of Souls), and nothing else can use it.',
     });
   }
   if (amounts.some((x) => x.kind === 'prev')) {

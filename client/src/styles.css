@@ -8373,6 +8373,32 @@ a.seg {
 .behavior-cast .behavior-zones {
   align-items: center;
 }
+/* An ability's price and a rule's guard (rebuild plan E3): a short column in
+   the rule's box, above the steps, sized like the step controls. */
+.behavior-cost,
+.behavior-guard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.behavior-cost .field input,
+.behavior-guard .field select {
+  width: 100%;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.45rem;
+}
+.behavior-guard .behavior-obj-row .field {
+  flex: 1 1 8rem;
+}
+.behavior-guard .fine-print,
+.behavior-cost .fine-print {
+  margin: 0;
+}
+.behavior-cost-word {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
 .behavior-cast .behavior-cast-n {
   flex: 0 0 4.2rem;
 }

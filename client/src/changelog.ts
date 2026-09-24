@@ -32,6 +32,23 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.174.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Rules can fire at your end step, when another creature of yours dies, or when you sacrifice something (Treasures and Clues count). Blood Artist drains, Pitiless Plunderer makes Treasures.',
+      },
+      {
+        kind: 'added',
+        text: 'Abilities you pay for: mana, {T}, a sacrifice, a discard or life. The simulator uses them with spare mana, so Mind Stone, Clues and War Room draw cards now.',
+      },
+      {
+        kind: 'added',
+        text: 'Rules can say "only if" (threshold, metalcraft) and "once each turn", and a move can take the biggest card instead of a random one. 31 more popular cards model themselves, and 18 do more.',
+      },
+    ],
+  },
+  {
     version: '0.173.1',
     changes: [
       {
@@ -177,41 +194,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'Much less small print in Deck analysis: one caveat per section, the rest behind "How this is worked out". "What each card is worth" is now "Who does the work".',
-      },
-    ],
-  },
-  {
-    version: '0.162.0',
-    changes: [
-      {
-        kind: 'changed',
-        text:
-          'Deck stats is now Deck analysis, a page of its own with three tabs: Mana, Flow and Model. A bar at the top stays on screen and holds the one play/draw switch (there used to be three), the play style and how much of the deck is modelled. Tap either chip to go to the Model tab, where card behavior now lives.',
-      },
-      {
-        kind: 'fixed',
-        text:
-          'The simulator now mulligans on your Opening hand keep rule. It always kept two to five lands whatever you set, so changing the rule moved one panel and nothing else. The rule is remembered per deck.',
-      },
-    ],
-  },
-  {
-    version: '0.161.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'The colored-source panel now shows what was actually on the battlefield. The counts at the top assume every copy in your deck is in play at once; the new block under them counts the sources the simulation really had, per color, on the turn you pick. A deck with a Yavimaya is told it has 40 green sources, and told two rows later that 2.3 of its 4.0 sources make green on turn four.',
-      },
-      {
-        kind: 'added',
-        text:
-          'A fourth tile on the deck stats sheet, saying how many of your cards the model plays out rather than resolving as nothing.',
-      },
-      {
-        kind: 'changed',
-        text:
-          'The Card behavior line leads with unread draw spells now, instead of counting every removal spell as a card that does nothing.',
       },
     ],
   },

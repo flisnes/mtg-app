@@ -7,6 +7,7 @@ import {
   BEHAVIOR_FROM_ZONES,
   BEHAVIOR_KEYWORDS,
   BEHAVIOR_MANA_COLORS,
+  BEHAVIOR_PICKS,
   BEHAVIOR_STEPS,
   BEHAVIOR_TOKENS,
   BEHAVIOR_TRIGGERS,
@@ -14,7 +15,10 @@ import {
   BEHAVIOR_ZONES,
   CARD_BEHAVIOR_VERSION,
   CAST_OPTIONS,
+  cleanCost,
   cleanKeywords,
+  describeCost,
+  MAX_COST_N,
   MAX_CAST_N,
   MAX_CAST_OPTIONS,
   MAX_TOKEN_PT,
@@ -46,9 +50,11 @@ import {
   compileBehavior,
   sanitizeCardBehavior,
   substituteQueryX,
+  type ActivationCost,
   type BehaviorAmount,
   type BehaviorAmountKind,
   type BehaviorAmountOp,
+  type BehaviorPick,
   type BehaviorRule,
   type BehaviorStep,
   type BehaviorStepKind,
@@ -1007,8 +1013,13 @@ function FiringCounts({
 }) {
   const compiled = compileBehavior(authored);
   const lines = fires.map((f) => {
-    const lead = BEHAVIOR_TRIGGERS.find((t) => t.id === f.on)?.lead ?? f.on;
-    const q = f.watch !== undefined && (f.on === 'cast' || f.on === 'enters') ? compiled?.[f.on][f.watch]?.q : undefined;
+    // An ability is named by its price, the way it is printed.
+    const lead =
+      f.on === 'activate' && f.watch !== undefined
+        ? describeCost(compiled?.activate[f.watch]?.cost)
+        : (BEHAVIOR_TRIGGERS.find((t) => t.id === f.on)?.lead ?? f.on);
+    const watchedOn = f.on === 'cast' || f.on === 'enters' || f.on === 'dies' || f.on === 'sacrifice' ? f.on : null;
+    const q = f.watch !== undefined && watchedOn ? compiled?.[watchedOn][f.watch]?.q : undefined;
     const label = q ? `${lead} (${q})` : lead;
     // Once a game is the usual answer for a play rule and says nothing twice.
     const times = f.perGame >= 1.05 ? `, ${f.perGame.toFixed(1)} times a game` : '';
@@ -1214,7 +1225,172 @@ const firstStep = (kind: RuleKind): BehaviorStep =>
       : emptyStep();
 
 /** The fields only one verb reads, dropped when the verb changes so none of them hides in the row. */
-const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub'];
+const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub', 'pick'];
+
+/** A number box for the cost editor: whole numbers from 0 to `max`. */
+function CountBox({ value, max, label, onChange }: { value: number; max: number; label: string; onChange: (n: number) => void }) {
+  return (
+    <label className="field behavior-n">
+      <input
+        type="number"
+        min={0}
+        max={max}
+        inputMode="numeric"
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(Math.max(0, Math.min(max, Math.round(Number(e.target.value) || 0))))}
+      />
+    </label>
+  );
+}
+
+/**
+ * An ability's price (rebuild plan E3), each part optional. Stored as typed
+ * and cleaned on save, so a half-typed mana cost is not thrown away mid-word.
+ */
+function CostEditor({ cost, matcher, onChange }: { cost: ActivationCost; matcher: DeckMatcher; onChange: (next: ActivationCost) => void }) {
+  /** Set one part, and drop the ones that say nothing so none hides in the draft. */
+  const set = (patch: Partial<ActivationCost>) => {
+    const next: ActivationCost = { ...cost, ...patch };
+    if (!next.mana) delete next.mana;
+    if (!next.tap) delete next.tap;
+    if (!next.self) delete next.self;
+    if (!next.sac) {
+      delete next.sac;
+      delete next.sacq;
+    }
+    if (!next.discard) delete next.discard;
+    if (!next.life) delete next.life;
+    onChange(next);
+  };
+  const badMana = !!cost.mana && !normalizeCost(cost.mana);
+  const unpriced = !badMana && !cleanCost(cost);
+  return (
+    <div className="behavior-cost">
+      <span className="fine-print behavior-plug-lead">The price:</span>
+      <label className="field">
+        <input
+          type="text"
+          value={cost.mana ?? ''}
+          maxLength={40}
+          aria-label="Mana it costs"
+          placeholder="Mana, like {2}, or none"
+          onChange={(e) => set({ mana: e.target.value })}
+        />
+      </label>
+      <div className="behavior-obj-row">
+        <label className="behavior-check">
+          <input type="checkbox" checked={!!cost.tap} onChange={(e) => set({ tap: e.target.checked || undefined })} />
+          <span>Tap it ({'{T}'})</span>
+        </label>
+        <label className="behavior-check">
+          <input type="checkbox" checked={!!cost.self} onChange={(e) => set({ self: e.target.checked || undefined })} />
+          <span>Sacrifice it</span>
+        </label>
+      </div>
+      <div className="behavior-obj-row">
+        <span className="behavior-cost-word">Sacrifice</span>
+        <CountBox value={cost.sac ?? 0} max={MAX_COST_N} label="Other permanents to sacrifice" onChange={(sac) => set({ sac })} />
+        <span className="behavior-cost-word">other permanents</span>
+      </div>
+      {!!cost.sac && (
+        <div className="behavior-q behavior-rule-q">
+          <label className="field">
+            <input
+              type="text"
+              value={cost.sacq ?? ''}
+              maxLength={MAX_BEHAVIOR_QUERY}
+              aria-label="Which permanents it may sacrifice"
+              placeholder="Any permanent, or t:creature, t:artifact, …"
+              onChange={(e) => set({ sacq: e.target.value || undefined })}
+            />
+          </label>
+          <MatchNote q={cost.sacq ?? ''} matcher={matcher} />
+        </div>
+      )}
+      <div className="behavior-obj-row">
+        <span className="behavior-cost-word">Discard</span>
+        <CountBox value={cost.discard ?? 0} max={MAX_COST_N} label="Cards to discard" onChange={(discard) => set({ discard })} />
+        <span className="behavior-cost-word">Pay</span>
+        <CountBox value={cost.life ?? 0} max={MAX_BEHAVIOR_AMOUNT} label="Life to pay" onChange={(life) => set({ life })} />
+        <span className="behavior-cost-word">life</span>
+      </div>
+      {badMana && <p className="fine-print behavior-nomatch">Write the mana in symbols, like {'{2}'} or {'{1}{G}'}. It is not saved until it reads as one.</p>}
+      {unpriced && (
+        <p className="fine-print behavior-nomatch">An ability needs a price: mana, tapping it, a sacrifice, a discard or life. It is not saved without one.</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Only if" and "once each turn" (rebuild plan E3), under the trigger they
+ * guard. Folded to two checkboxes until one is ticked, since most rules have
+ * neither.
+ */
+function GuardEditor({
+  rule,
+  kind,
+  matcher,
+  offer,
+  onChange,
+}: {
+  rule: BehaviorRule;
+  kind: RuleKind;
+  matcher: DeckMatcher;
+  offer: (o: (typeof BEHAVIOR_AMOUNTS)[number]) => boolean;
+  onChange: (next: BehaviorRule) => void;
+}) {
+  const cond = rule.cond;
+  const drop = (key: 'cond' | 'once') => {
+    const next = { ...rule };
+    delete next[key];
+    onChange(next);
+  };
+  return (
+    <div className="behavior-guard">
+      <div className="behavior-obj-row">
+        <label className="behavior-check">
+          <input
+            type="checkbox"
+            checked={!!cond}
+            onChange={(e) => (e.target.checked ? onChange({ ...rule, cond: { x: { kind: 'graveyard' }, op: '>=', n: 7 } }) : drop('cond'))}
+          />
+          <span>Only if…</span>
+        </label>
+        {/* A mana ability is read every turn, so a limit on it says nothing. */}
+        {kind !== 'tap' && (
+          <label className="behavior-check">
+            <input type="checkbox" checked={!!rule.once} onChange={(e) => (e.target.checked ? onChange({ ...rule, once: true }) : drop('once'))} />
+            <span>Once each turn</span>
+          </label>
+        )}
+      </div>
+      {cond && (
+        <>
+          <AmountPicker value={cond.x} label="What the condition counts" offer={offer} matcher={matcher} onChange={(x) => onChange({ ...rule, cond: { ...cond, x } })} />
+          <div className="behavior-obj-row">
+            <label className="field">
+              <select
+                value={cond.op}
+                aria-label="At least or at most"
+                onChange={(e) => onChange({ ...rule, cond: { ...cond, op: e.target.value === '<=' ? '<=' : '>=' } })}
+              >
+                <option value=">=">is at least</option>
+                <option value="<=">is at most</option>
+              </select>
+            </label>
+            <CountBox value={cond.n} max={MAX_BEHAVIOR_AMOUNT} label="The number" onChange={(n) => onChange({ ...rule, cond: { ...cond, n } })} />
+          </div>
+          <p className="fine-print">
+            Read each time, before anything happens: threshold is "your graveyard, at least 7", metalcraft is "your permanents
+            matching t:artifact, at least 3".
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
 
 function RuleEditor({
   rule,
@@ -1253,8 +1429,8 @@ function RuleEditor({
   const xAvailable = hasX && rule.on === 'play';
   /** And the kick count, while it is being cast or arriving from that cast. */
   const kickAvailable = kicker && (rule.on === 'play' || rule.on === 'etb');
-  /** The amounts that read a moment make no sense in a standing effect. */
-  const momentary = kind === 'trigger';
+  /** The amounts that read a moment make no sense in a standing effect. An ability is a moment. */
+  const momentary = kind === 'trigger' || kind === 'activate';
 
   /**
    * Moving a rule off `play` takes its X with it, so any amount reading one
@@ -1270,7 +1446,9 @@ function RuleEditor({
     // sitting in the row invisibly and coming back on the way past.
     const q = next?.watches || nextKind === 'static' ? rule.q : undefined;
     if (nextKind !== kind) {
-      onChange({ on, q, steps: [firstStep(nextKind)] });
+      // A new kind starts over: its steps, and its price, which only an
+      // ability has. The condition and the limit start over with them.
+      onChange({ on, ...(q ? { q } : {}), ...(nextKind === 'activate' ? { cost: { tap: true as const } } : {}), steps: [firstStep(nextKind)] });
       return;
     }
     if (on === 'play' || !hasX) {
@@ -1420,7 +1598,11 @@ function RuleEditor({
                   ? 'All of them, or t:creature, t:elf, …'
                   : rule.on === 'cast'
                     ? 'Any spell, or t:instant or t:sorcery, …'
-                    : 'Any permanent, or t:land, t:creature, …'
+                    : rule.on === 'dies'
+                      ? 'Any creature, or -t:token, t:zombie, …'
+                      : rule.on === 'sacrifice'
+                        ? 'Any permanent, or t:artifact, t:creature, …'
+                        : 'Any permanent, or t:land, t:creature, …'
               }
               onChange={(e) => onChange({ ...rule, q: e.target.value })}
             />
@@ -1435,6 +1617,24 @@ function RuleEditor({
               : 'Card search syntax, matched against this deck, same as a move step\'s. Leave it empty and anything wakes it. Triggers chain two deep, so an engine that feeds itself stops rather than spinning.'}
           </p>
         </div>
+      )}
+
+      {kind === 'activate' && <CostEditor cost={rule.cost ?? {}} matcher={matcher} onChange={(cost) => onChange({ ...rule, cost })} />}
+      {kind !== 'static' && (
+        <GuardEditor
+          rule={rule}
+          kind={kind}
+          matcher={matcher}
+          offer={(o) =>
+            o.id !== 'fixed' &&
+            !o.moveOnly &&
+            !o.needsPrev &&
+            (!o.needsX || xAvailable) &&
+            (!o.needsKicker || kickAvailable) &&
+            (!o.needsPermanent || permanent)
+          }
+          onChange={onChange}
+        />
       )}
 
       {rule.steps.map((step, i) => {
@@ -1547,6 +1747,23 @@ function RuleEditor({
                   </select>
                 </label>
                 {lands && <TapPicker step={step} onChange={(next) => setStep(i, next)} />}
+                {/* Which of the matches, when it is not all of them. */}
+                {step.x.kind !== 'all' && (
+                  <label className="field">
+                    <select
+                      value={step.pick ?? ''}
+                      aria-label="Which of them"
+                      onChange={(e) => setStep(i, e.target.value ? { ...step, pick: e.target.value as BehaviorPick } : without(step, 'pick'))}
+                    >
+                      <option value="">Any of them, at random</option>
+                      {BEHAVIOR_PICKS.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </div>
             )}
             {objectControls && <ObjectControls step={step} kind={kind} onChange={(next) => setStep(i, next)} />}
@@ -1947,6 +2164,24 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
     notes.push({
       key: 'tapsfor',
       text: 'This replaces the mana ability the card database read, and makes the card a mana source if it was not one. The amount is read every turn the pool is built, so it can count the charge counters on it or your creatures (Gaea\'s Cradle). A creature without haste is summoning sick the turn it arrives, and one that taps for mana does not attack that turn unless it has vigilance. A rock taps the turn it lands. With "spend it only on" filled in, the mana pays only for spells matching it (Beastcaller Savant, Cavern of Souls), and nothing else can use it.',
+    });
+  }
+  if (has('gainlife', 'loselife') || amounts.some((x) => x.kind === 'life')) {
+    notes.push({
+      key: 'life',
+      text: 'Your life starts at 40 in Commander and 20 elsewhere. Nobody across the table deals damage, so only your own rules move it. What it is for is paying: an ability pays life only while that leaves you at a quarter of your starting life or more.',
+    });
+  }
+  if (rule.steps.some((s) => s.op === 'move' && s.pick)) {
+    notes.push({
+      key: 'pick',
+      text: '"Greatest mana value first" takes the biggest card that matches, power breaking a tie: the creature a Reanimate wants. "Least useful first" takes a token first, then anything that makes no mana, then the cheapest: the creature a sacrifice wants. Otherwise it is a random match, the way a search shuffles.',
+    });
+  }
+  if (kind === 'activate') {
+    notes.push({
+      key: 'activate',
+      text: 'The simulator uses abilities after the turn\'s spells, with mana nothing in hand could use, then tries casting again. It will not sacrifice a mana source (this one or another) while a spell is in hand, sacrifices a creature only when something pays for it, and makes mana only when that mana reaches a spell in hand. {T} means the card is tapped for the turn: no mana from it and no attack.',
     });
   }
   if (amounts.some((x) => x.kind === 'prev')) {

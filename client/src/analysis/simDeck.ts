@@ -13,8 +13,11 @@ import {
   queryHasX,
   sourceColors,
   substituteQueryX,
+  BEHAVIOR_TOKENS,
+  TOKEN_ABILITIES,
   X_VARIANTS,
   type BehaviorAmount,
+  type BehaviorCondition,
   type CardBehavior,
   type CompiledBehavior,
   type DeckBoard,
@@ -249,6 +252,8 @@ export interface SimCard {
    * anything. Resolved through SimDeck.filters like every other criteria.
    */
   spendQ: string | null;
+  /** An authored mana ability that taps only while this holds (Mox Opal), or null. */
+  manaCond: BehaviorCondition | null;
   kicker: SimKicker | null;
   gyCast: SimGraveyardCast | null;
   suspend: SimSuspend | null;
@@ -497,6 +502,7 @@ export function buildSimDeck(
       token: false,
       manaAmount: null,
       spendQ: null,
+      manaCond: null,
       kicker: null,
       gyCast: null,
       suspend: null,
@@ -541,6 +547,10 @@ export function buildSimDeck(
   // works on a Beast token without knowing it is one.
   const tokenSpecs = new Map<string, TokenOption>();
   for (const card of cards) collectBehaviorTokens(card.behavior, tokenSpecs);
+  // A Treasure is a source, not a card, everywhere but one: a rule watching
+  // for sacrifices (rebuild plan E3) has to be able to ask whether the thing
+  // sacrificed was an artifact. So it gets a card, only in a deck that asks.
+  if (cards.some((c) => (c.behavior?.sacrifice.length ?? 0) > 0)) tokenSpecs.set('treasure', BEHAVIOR_TOKENS[0]!);
   const tokens: Record<string, number> = {};
   for (const [key, spec] of tokenSpecs) {
     tokens[key] = cards.length;
@@ -635,9 +645,11 @@ function applyAuthoredObject(card: SimCard, b: CompiledBehavior): void {
     card.life = 0;
     card.entry = 0;
     card.bounce = false;
-    const fixed = tap.x.kind === 'fixed' && !tap.x.op;
+    // A condition makes even a fixed amount one that is read every turn.
+    const fixed = tap.x.kind === 'fixed' && !tap.x.op && !b.tapCond;
     card.adds = fixed ? (tap.x.n ?? 0) : 0;
     card.manaAmount = fixed ? null : tap.x;
+    card.manaCond = b.tapCond;
     card.oneColor = !!tap.oneColor;
     card.spendQ = tap.q || null;
     if (card.role !== 'land') card.tapped = 'never';
@@ -716,7 +728,8 @@ function tokenCard(key: string, spec: TokenOption): { card: SimCard; oracle: Ora
     keeps: false,
     image: null,
     effect: null,
-    behavior: null,
+    // A Clue cracks for a card and a Food is eaten (rebuild plan E3).
+    behavior: compileBehavior(TOKEN_ABILITIES[key]),
     types,
     // Only a custom token carries keywords, as the key's last field.
     keywords: key.startsWith('custom:') ? keywordBits(key.slice(key.lastIndexOf(':') + 1)) : 0,
@@ -724,6 +737,7 @@ function tokenCard(key: string, spec: TokenOption): { card: SimCard; oracle: Ora
     token: true,
     manaAmount: null,
     spendQ: null,
+    manaCond: null,
     kicker: null,
     gyCast: null,
     suspend: null,

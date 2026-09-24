@@ -501,8 +501,12 @@ const KEY_REPAIRS = 'syncRepairs';
  *   step kinds, the `static` and `tap` rules and the `cast` options, and stores
  *   what is left. That build plays the card out as less, which is the safe
  *   direction; this re-pull puts the rest back once it updates.
+ * - `behaviorGrammarE3` (v0.174.0): the same again for rebuild plan E3's end
+ *   step, dies, sacrifice and ability rules, conditions, once-a-turn, a move's
+ *   pick and the life steps. A build from before them drops a rule it cannot
+ *   read, so the row it stores is missing it until this re-pull.
  */
-const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems2', 'deckCardUnfiled', 'behaviorGrammarF'] as const;
+const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems2', 'deckCardUnfiled', 'behaviorGrammarF', 'behaviorGrammarE3'] as const;
 
 async function runOneTimeRepairs(): Promise<void> {
   const done = (await getSetting<string[]>(KEY_REPAIRS)) ?? [];

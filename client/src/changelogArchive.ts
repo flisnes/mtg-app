@@ -9,6 +9,41 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.162.0',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'Deck stats is now Deck analysis, a page of its own with three tabs: Mana, Flow and Model. A bar at the top stays on screen and holds the one play/draw switch (there used to be three), the play style and how much of the deck is modelled. Tap either chip to go to the Model tab, where card behavior now lives.',
+      },
+      {
+        kind: 'fixed',
+        text:
+          'The simulator now mulligans on your Opening hand keep rule. It always kept two to five lands whatever you set, so changing the rule moved one panel and nothing else. The rule is remembered per deck.',
+      },
+    ],
+  },
+  {
+    version: '0.161.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'The colored-source panel now shows what was actually on the battlefield. The counts at the top assume every copy in your deck is in play at once; the new block under them counts the sources the simulation really had, per color, on the turn you pick. A deck with a Yavimaya is told it has 40 green sources, and told two rows later that 2.3 of its 4.0 sources make green on turn four.',
+      },
+      {
+        kind: 'added',
+        text:
+          'A fourth tile on the deck stats sheet, saying how many of your cards the model plays out rather than resolving as nothing.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'The Card behavior line leads with unread draw spells now, instead of counting every removal spell as a card that does nothing.',
+      },
+    ],
+  },
+  {
     version: '0.160.0',
     changes: [
       {

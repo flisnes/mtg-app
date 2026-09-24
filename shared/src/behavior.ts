@@ -58,8 +58,28 @@ import { BASIC_LAND_TYPES, MANA_LETTERS, sourceColors, type EffectProfile, type 
  * count is a criteria string on the rule (`BehaviorRule.q`), so landfall is
  * `enters` with `t:land` and Archmage Emeritus is `cast` with
  * `t:instant or t:sorcery`.
+ *
+ * Rebuild plan E3 added three moments and one kind. `endstep` is upkeep's
+ * other end of the turn. `dies` and `sacrifice` are watched like `cast` and
+ * `enters`: another creature of yours dying (Blood Artist), and you
+ * sacrificing another permanent, Treasures and fetchlands included (Mayhem
+ * Devil). `activate` is not a moment at all but an ability with a price, which
+ * the spend loop pays when the turn has mana left over.
  */
-export type BehaviorTrigger = 'play' | 'etb' | 'attack' | 'death' | 'upkeep' | 'cast' | 'enters' | 'static' | 'tap';
+export type BehaviorTrigger =
+  | 'play'
+  | 'etb'
+  | 'attack'
+  | 'death'
+  | 'upkeep'
+  | 'cast'
+  | 'enters'
+  | 'static'
+  | 'tap'
+  | 'endstep'
+  | 'dies'
+  | 'sacrifice'
+  | 'activate';
 
 /**
  * What kind of rule it is, which decides the steps it may hold (rebuild plan F).
@@ -74,11 +94,15 @@ export type BehaviorTrigger = 'play' | 'etb' | 'attack' | 'death' | 'upkeep' | '
  * They share the rule list and the dropdown with the triggers because to the
  * person writing them they are the same question, "what does this card do", and
  * a second editor would be a second place to look.
+ *
+ * `activate` (rebuild plan E3) holds the same steps a trigger does. What sets
+ * it apart is the price on the rule (`BehaviorRule.cost`) and who decides it
+ * happens: the spend loop, not the game.
  */
-export type RuleKind = 'trigger' | 'static' | 'tap';
+export type RuleKind = 'trigger' | 'static' | 'tap' | 'activate';
 
 /** The triggers that watch other cards, and so carry a criteria of their own. */
-export const WATCHED_TRIGGERS = ['cast', 'enters'] as const;
+export const WATCHED_TRIGGERS = ['cast', 'enters', 'dies', 'sacrifice'] as const;
 export type WatchedTrigger = (typeof WATCHED_TRIGGERS)[number];
 
 /**
@@ -144,7 +168,13 @@ export type BehaviorStepKind =
   | 'extramana'
   | 'landfrom'
   | 'nomaxhand'
-  | 'tapsfor';
+  | 'tapsfor'
+  // Rebuild plan E3: a life total, so life can be a price.
+  | 'gainlife'
+  | 'loselife'
+  // Internal: a rule's condition, compiled in front of its steps. Never stored,
+  // never offered; see GateStep.
+  | 'gate';
 
 /**
  * Where a step's number comes from.
@@ -174,7 +204,9 @@ export type BehaviorAmountKind =
   // cases of.
   | 'counters'
   | 'kicked'
-  | 'matching';
+  | 'matching'
+  // Rebuild plan E3: your life total, for a condition or a Toxic Deluge.
+  | 'life';
 
 /**
  * Arithmetic on an amount, so "half your library" and "that many minus one" are
@@ -303,6 +335,64 @@ export interface BehaviorStep {
    * taps for {G}; that is the whole reason the subtype is worth writing.
    */
   sub?: string;
+  /**
+   * `move` only: which of the matching cards it takes (rebuild plan E3).
+   * Absent is a random one, which is what a search or a sacrifice did before
+   * there was a choice. See BEHAVIOR_PICKS.
+   */
+  pick?: BehaviorPick;
+}
+
+/** Which card a move takes when more than one matches. */
+export type BehaviorPick = 'most' | 'least';
+
+export const BEHAVIOR_PICKS: readonly { id: BehaviorPick; label: string; phrase: string }[] = [
+  { id: 'most', label: 'Greatest mana value first', phrase: 'greatest mana value first' },
+  { id: 'least', label: 'Least useful first', phrase: 'least useful first' },
+];
+
+/**
+ * A rule's condition (rebuild plan E3): the rule runs only while an amount is
+ * at least, or at most, a number. Threshold is "your graveyard, at least 7";
+ * metalcraft is "your permanents matching t:artifact, at least 3".
+ */
+export interface BehaviorCondition {
+  x: BehaviorAmount;
+  op: '>=' | '<=';
+  n: number;
+}
+
+/**
+ * What an activated ability costs (rebuild plan E3). Every part is optional
+ * and a rule needs at least one, or the ability would be free and endless.
+ */
+export interface ActivationCost {
+  /** Mana, as printed: `{2}{U}`. */
+  mana?: string;
+  /** `{T}`: the card taps, so it cannot tap for mana or attack that turn. */
+  tap?: true;
+  /** Sacrifice this card. */
+  self?: true;
+  /** Sacrifice this many other permanents matching `sacq` (any permanent when absent). */
+  sac?: number;
+  sacq?: string;
+  /** Discard this many cards. */
+  discard?: number;
+  /** Pay this much life. */
+  life?: number;
+}
+
+/**
+ * The internal step a condition or a "once each turn" compiles to. It sits in
+ * front of the rule's steps inside a flattened trigger list, and when it does
+ * not hold the next `span` steps are skipped. That keeps every list a plain
+ * `BehaviorStep[]`, which is what the sequencer and its firing counts key on.
+ */
+export interface GateStep extends BehaviorStep {
+  op: 'gate';
+  span: number;
+  cond?: BehaviorCondition;
+  once?: true;
 }
 
 // ---------------------------------------------------------------------------
@@ -327,9 +417,9 @@ export interface TokenOption {
 /**
  * The tokens worth a name. Treasure is here so the picker has one list, and it
  * still runs down the old Treasure path: a source that pays for something and
- * is sacrificed when it does. Food and Clue are artifacts that sit there and
- * count; eating one or cracking one needs activated abilities, which this model
- * does not have yet.
+ * is sacrificed when it does. A Clue is cracked for a card ({2}, sacrifice it)
+ * and a Food eaten for 3 life ({2}, {T}, sacrifice it) whenever the turn has
+ * that mana spare: see TOKEN_ABILITIES.
  */
 export const BEHAVIOR_TOKENS: readonly TokenOption[] = [
   { id: 'treasure', label: 'Treasure', name: 'Treasure', types: 'A', sub: 'Treasure' },
@@ -342,6 +432,12 @@ export const BEHAVIOR_TOKENS: readonly TokenOption[] = [
 ];
 
 const TOKEN_BY_ID = new Map(BEHAVIOR_TOKENS.map((t) => [t.id, t]));
+
+/** What the catalog's artifact tokens do when you pay for them (rebuild plan E3). */
+export const TOKEN_ABILITIES: Readonly<Record<string, CardBehavior>> = {
+  clue: { v: 1, rules: [{ on: 'activate', cost: { mana: '{2}', self: true }, steps: [{ op: 'draw', x: { kind: 'fixed', n: 1 } }] }] },
+  food: { v: 1, rules: [{ on: 'activate', cost: { mana: '{2}', tap: true, self: true }, steps: [{ op: 'gainlife', x: { kind: 'fixed', n: 3 } }] }] },
+};
 
 /** Power and toughness a custom token may be given. */
 export const MAX_TOKEN_PT = 20;
@@ -584,6 +680,12 @@ export interface BehaviorRule {
    * resolved with a number, so there is nothing for a placeholder to read.
    */
   q?: string;
+  /** `activate` only: the price. */
+  cost?: ActivationCost;
+  /** Runs only while this holds. Triggers, activations and mana abilities. */
+  cond?: BehaviorCondition;
+  /** At most once each turn. Triggers and activations. */
+  once?: true;
 }
 
 /**
@@ -722,7 +824,7 @@ export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
     id: 'death',
     label: 'When it dies',
     lead: 'When it dies',
-    hint: 'Leaving the battlefield for the graveyard, which in this model means a rule sacrificed it. Nothing on the other side of the table is killing anything.',
+    hint: 'Leaving the battlefield for the graveyard, which in this model means it was sacrificed, by a rule or as the cost of an ability. Nothing on the other side of the table is killing anything.',
     needs: 'permanent',
   },
   {
@@ -730,6 +832,13 @@ export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
     label: 'At each of your upkeeps',
     lead: 'At each of your upkeeps',
     hint: 'Fires every turn from the one after it lands. For permanents that stay on the battlefield.',
+  },
+  {
+    id: 'endstep',
+    label: 'At each of your end steps',
+    lead: 'At the beginning of your end step',
+    hint: 'After combat, before you discard down to seven. It fires the turn it lands too. A card drawn here is in hand for next turn, and mana made here is gone before anything can spend it.',
+    needs: 'permanent',
   },
   {
     id: 'cast',
@@ -746,6 +855,30 @@ export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
     hint: 'However it got there: played, cast, fetched, flickered or reanimated. Narrow it below: t:land is landfall, t:creature is Guardian Project. This card never wakes itself, and neither does a second copy of it.',
     needs: 'permanent',
     watches: true,
+  },
+  {
+    id: 'dies',
+    label: 'When another creature of yours dies',
+    lead: 'Whenever another creature you control dies',
+    hint: 'Nothing across the table kills anything, so a creature dies when you sacrifice it: to a rule, or to an ability\'s cost. Tokens count. Narrow it below: -t:token is nontoken. Blood Artist is this plus its own "When it dies".',
+    needs: 'permanent',
+    watches: true,
+  },
+  {
+    id: 'sacrifice',
+    label: 'When you sacrifice another permanent',
+    lead: 'Whenever you sacrifice another permanent',
+    hint: 'Any permanent: a creature, a Treasure you cracked for mana, a Clue, a fetchland cracking, a land Lotus Field eats. Narrow it below: t:artifact, t:creature.',
+    needs: 'permanent',
+    watches: true,
+  },
+  {
+    id: 'activate',
+    label: 'An ability you pay for',
+    lead: 'Pay the cost',
+    hint: 'An activated ability. The simulator uses it after the turn\'s spells, with mana nothing in hand wanted, and then tries casting again. Card draw goes first. It will not sacrifice a mana source while you hold a spell, sacrifices only tokens or cards that do something when they die, and pays life only above a quarter of your starting life.',
+    needs: 'permanent',
+    kind: 'activate',
   },
   {
     id: 'static',
@@ -799,11 +932,13 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'landfrom', label: 'Play lands from another zone', verb: 'play', kinds: ['static'], noAmount: true },
   { id: 'nomaxhand', label: 'No maximum hand size', verb: 'have', kinds: ['static'], noAmount: true },
   { id: 'tapsfor', label: 'Taps for X mana', verb: 'tap', kinds: ['tap'] },
+  { id: 'gainlife', label: 'Gain X life', verb: 'gain' },
+  { id: 'loselife', label: 'Lose X life', verb: 'lose' },
 ];
 
-/** Whether a rule of this kind may hold this step. */
+/** Whether a rule of this kind may hold this step. An ability holds what a trigger does. */
 export const stepFits = (op: BehaviorStepKind | string, kind: RuleKind): boolean =>
-  (STEP_BY_ID.get(op)?.kinds ?? ['trigger']).includes(kind);
+  (STEP_BY_ID.get(op)?.kinds ?? ['trigger']).includes(kind === 'activate' ? 'trigger' : kind);
 
 /** The zones lands can be played from, besides your hand (Ramunap, Courser). */
 export const LAND_FROM_ZONES: readonly BehaviorZone[] = ['graveyard', 'librarytop'];
@@ -935,6 +1070,7 @@ export const BEHAVIOR_AMOUNTS: readonly AmountOption[] = [
   { id: 'matching', label: 'your permanents matching', phrase: 'permanents you control', hasQuery: true },
   { id: 'counters', label: 'counters on it', phrase: 'the counters on it', needsPermanent: true },
   { id: 'kicked', label: 'the times kicked', phrase: 'the times it was kicked', needsKicker: true },
+  { id: 'life', label: 'your life', phrase: 'your life total' },
 ];
 
 export interface AmountOpOption {
@@ -1047,7 +1183,8 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
     if (step.x.kind === 'all') return `move everything${filter}${where}${plug}`;
     const n = step.x.n ?? 0;
     const cards = computed ? 'X cards' : `${n} card${n === 1 ? '' : 's'}`;
-    return `move ${cards}${filter}${where}${tail}${plug}`;
+    const pick = step.pick ? `, ${BEHAVIOR_PICKS.find((p) => p.id === step.pick)?.phrase ?? ''}` : '';
+    return `move ${cards}${filter}${pick}${where}${tail}${plug}`;
   }
   if (step.op === 'flicker') {
     const filter = step.q ? ` matching ${step.q}` : '';
@@ -1103,6 +1240,9 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
       const what = colors === ANY_COLOR ? 'any color' : symbols;
       return step.oneColor ? `add ${count} mana of any one of ${what}${tail}${only}` : `add ${count} mana of ${what}${tail}${only}`;
     }
+    case 'gainlife':
+    case 'loselife':
+      return `${verb} ${count} life${tail}`;
   }
   if (step.op === 'damage') {
     // No target: a goldfish has one opponent and nothing to aim at. The step
@@ -1135,10 +1275,41 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
  */
 export function describeTrigger(rule: BehaviorRule): string {
   const t = TRIGGER_BY_ID.get(rule.on);
-  const lead = t?.lead ?? rule.on;
+  const lead = t?.kind === 'activate' ? describeCost(rule.cost) : (t?.lead ?? rule.on);
   if (t?.kind === 'static') return rule.q ? `${lead}, for your permanents matching ${rule.q}` : lead;
-  return t?.watches && rule.q ? `${lead} matching ${rule.q}` : lead;
+  const base = t?.watches && rule.q ? `${lead} matching ${rule.q}` : lead;
+  return `${base}${guardPhrase(rule)}`;
 }
+
+/** An ability's price, as printed: "{2}, {T}, sacrifice it". */
+export function describeCost(cost: ActivationCost | undefined): string {
+  if (!cost) return 'Free';
+  const bits: string[] = [];
+  const mana = normalizeCost(cost.mana);
+  if (mana) bits.push(mana);
+  if (cost.tap) bits.push('{T}');
+  if (cost.self) bits.push('sacrifice it');
+  if (cost.sac) {
+    const what = cost.sacq ? ` matching ${cost.sacq}` : '';
+    bits.push(`sacrifice ${cost.sac} other permanent${cost.sac === 1 ? '' : 's'}${what}`);
+  }
+  if (cost.discard) bits.push(`discard ${cost.discard} card${cost.discard === 1 ? '' : 's'}`);
+  if (cost.life) bits.push(`pay ${cost.life} life`);
+  if (bits.length === 0) return 'Free';
+  const out = bits.join(', ');
+  return out[0]!.toUpperCase() + out.slice(1);
+}
+
+/** "only if X is at least 7 (X = cards in your graveyard)". */
+export function describeCondition(c: BehaviorCondition): string {
+  const at = c.op === '<=' ? 'at most' : 'at least';
+  if (c.x.kind === 'fixed') return `only if ${c.x.n ?? 0} is ${at} ${c.n}`;
+  return `only if ${describeAmount(c.x)} is ${at} ${c.n}`;
+}
+
+/** The condition and the once-a-turn limit, as a tail on the lead. */
+const guardPhrase = (rule: BehaviorRule): string =>
+  `${rule.cond ? `, ${describeCondition(rule.cond)}` : ''}${rule.once ? ', once each turn' : ''}`;
 
 /** One rule as a sentence: "When you play it: draw 2, then discard 1". */
 export function describeRule(rule: BehaviorRule): string {
@@ -1383,9 +1554,29 @@ export interface CompiledBehavior {
   statics: WatchRule[];
   /** The `tap` rule's one step: what it taps for. Null for a card that says nothing. */
   tap: BehaviorStep | null;
+  /** The tap rule taps only while this holds (Mox Opal's metalcraft). */
+  tapCond: BehaviorCondition | null;
   /** Other ways to cast it, sanitized. */
   options: CastOption[];
+  /** Rebuild plan E3. */
+  endstep: BehaviorStep[];
+  dies: WatchRule[];
+  sacrifice: WatchRule[];
+  /** Activated abilities, one per rule: each has its own price. */
+  activate: ActivateRule[];
 }
+
+export interface ActivateRule {
+  cost: ActivationCost;
+  /** Gate-free: the condition and the limit are checked before the price is paid. */
+  steps: BehaviorStep[];
+  cond?: BehaviorCondition;
+  once?: true;
+}
+
+/** The plain triggers, whose rules flatten into one list of steps each. */
+export const PLAIN_TRIGGERS = ['play', 'etb', 'attack', 'death', 'upkeep', 'endstep'] as const;
+export type PlainTrigger = (typeof PLAIN_TRIGGERS)[number];
 
 /**
  * An amount this build can execute end to end. An unknown *op* is dropped with
@@ -1408,18 +1599,31 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     enters: [],
     statics: [],
     tap: null,
+    tapCond: null,
     options: [],
+    endstep: [],
+    dies: [],
+    sacrifice: [],
+    activate: [],
   };
   for (const rule of b.rules) {
     const trigger = rule ? TRIGGER_BY_ID.get(rule.on) : undefined;
-    if (!trigger || !Array.isArray(rule.steps)) continue;
+    if (!trigger || !Array.isArray(rule.steps) || unreadableCondition(rule)) continue;
     const kind = trigger.kind ?? 'trigger';
     // A watched trigger's steps are collected on their own and filed with the
     // criteria that wakes them; every other trigger appends to its one bucket,
     // which is what it has always done. A static rule is filed like a watched
     // one, and a tap rule keeps only its first step.
     const own = trigger.watches || kind !== 'trigger';
-    const bucket: BehaviorStep[] = own ? [] : out[rule.on as Exclude<BehaviorTrigger, WatchedTrigger | 'static' | 'tap'>];
+    const bucket: BehaviorStep[] = own ? [] : out[rule.on as PlainTrigger];
+    // A condition or a limit goes in front of the rule's steps as a gate, so a
+    // plain trigger's list can still be one list (see GateStep). Its span is
+    // filled in once the steps that survive are known.
+    const cond = kind === 'trigger' || kind === 'tap' || kind === 'activate' ? compiledCondition(rule.cond) : null;
+    const once = (kind === 'trigger' || kind === 'activate') && rule.once === true;
+    const gate: GateStep | null = kind === 'trigger' && (cond || once) ? { op: 'gate', x: cond?.x ?? ZERO, span: 0, ...(cond ? { cond } : {}), ...(once ? { once: true as const } : {}) } : null;
+    const start = bucket.length;
+    if (gate) bucket.push(gate);
     for (const step of rule.steps) {
       if (!step || !STEP_BY_ID.has(step.op) || !knownAmount(step.x)) continue;
       if (!stepFits(step.op, kind) || !objectStepOk(step)) continue;
@@ -1441,11 +1645,22 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
       }
       bucket.push(step);
     }
-    if (bucket.length === 0) continue;
+    if (gate) {
+      gate.span = bucket.length - start - 1;
+      // A gate guarding nothing is not a rule.
+      if (gate.span === 0) bucket.length = start;
+    }
+    if (bucket.length === start) continue;
     const q = typeof rule.q === 'string' ? rule.q.trim() : '';
     if (trigger.watches) out[rule.on as WatchedTrigger].push(q ? { q, steps: bucket } : { steps: bucket });
     else if (kind === 'static') out.statics.push(q ? { q, steps: bucket } : { steps: bucket });
-    else if (kind === 'tap' && !out.tap) out.tap = bucket[0]!;
+    else if (kind === 'tap' && !out.tap) {
+      out.tap = bucket[0]!;
+      out.tapCond = cond;
+    } else if (kind === 'activate') {
+      const cost = cleanCost(rule.cost);
+      if (cost) out.activate.push({ cost, steps: bucket, ...(cond ? { cond } : {}), ...(once ? { once: true as const } : {}) });
+    }
   }
   if (Array.isArray(b.cast)) {
     for (const o of b.cast) {
@@ -1465,8 +1680,41 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     out.enters.length > 0 ||
     out.statics.length > 0 ||
     out.tap !== null ||
-    out.options.length > 0;
+    out.options.length > 0 ||
+    out.endstep.length > 0 ||
+    out.dies.length > 0 ||
+    out.sacrifice.length > 0 ||
+    out.activate.length > 0;
   return fires ? out : null;
+}
+
+const ZERO: BehaviorAmount = { kind: 'fixed', n: 0 };
+
+/**
+ * A condition this build can check, or null. A rule whose condition it cannot
+ * read is skipped rather than run unguarded (`unreadableCondition`): the guard
+ * is what kept it low.
+ */
+function compiledCondition(raw: BehaviorCondition | undefined): BehaviorCondition | null {
+  if (!raw) return null;
+  if (!knownAmount(raw.x) || raw.x.kind === 'all' || raw.x.kind === 'prev') return null;
+  if (raw.op !== '>=' && raw.op !== '<=') return null;
+  return raw;
+}
+
+/** A rule carries a condition this build cannot read. Such a rule is skipped, not run unguarded. */
+export const unreadableCondition = (rule: BehaviorRule): boolean => !!rule.cond && compiledCondition(rule.cond) === null;
+
+/** The steps of each plain trigger, activated ability and watched rule, for the callers that walk them all. */
+export function allStepLists(b: CompiledBehavior): readonly (readonly BehaviorStep[])[] {
+  return [
+    ...PLAIN_TRIGGERS.map((on) => b[on]),
+    ...b.cast.map((r) => r.steps),
+    ...b.enters.map((r) => r.steps),
+    ...b.dies.map((r) => r.steps),
+    ...b.sacrifice.map((r) => r.steps),
+    ...b.activate.map((r) => r.steps),
+  ];
 }
 
 /** The object-layer steps' own fields, checked. The shared shape is checked above. */
@@ -1504,27 +1752,34 @@ export function collectBehaviorQueries(b: CompiledBehavior | null | undefined, i
     if (step.x.q) into.add(step.x.q);
     if (step.qx?.q) into.add(step.qx.q);
   };
-  for (const steps of [b.play, b.etb, b.attack, b.death, b.upkeep]) {
-    for (const step of steps) add(step);
+  for (const on of PLAIN_TRIGGERS) {
+    for (const step of b[on]) add(step);
   }
   // A watched rule has two kinds of criteria on it: the one that says which
   // cards wake it, and whatever its own steps narrow with. Both compile the
   // same way and both come out as a byte per card. A static rule's criteria
   // says which permanents it applies to, and compiles the same way again.
-  for (const rules of [b.cast, b.enters, b.statics]) {
+  for (const rules of [b.cast, b.enters, b.dies, b.sacrifice, b.statics]) {
     for (const rule of rules) {
       if (rule.q) into.add(rule.q);
       for (const step of rule.steps) add(step);
     }
   }
+  // An ability's criteria: which permanents its cost may sacrifice, and what
+  // its condition counts.
+  for (const a of b.activate) {
+    if (a.cost.sacq) into.add(a.cost.sacq);
+    if (a.cond?.x.q) into.add(a.cond.x.q);
+    for (const step of a.steps) add(step);
+  }
   if (b.tap) add(b.tap);
+  if (b.tapCond?.x.q) into.add(b.tapCond.x.q);
 }
 
 /** Every token a compiled behavior can make, by key, for the deck to append as cards. */
 export function collectBehaviorTokens(b: CompiledBehavior | null | undefined, into: Map<string, TokenOption>): void {
   if (!b) return;
-  const all = [b.play, b.etb, b.attack, b.death, b.upkeep, ...b.cast.map((r) => r.steps), ...b.enters.map((r) => r.steps)];
-  for (const steps of all) {
+  for (const steps of allStepLists(b)) {
     for (const step of steps) {
       if (step.op !== 'token' || step.tk === 'treasure') continue;
       const spec = tokenSpec(step);
@@ -1640,7 +1895,9 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
         continue;
       }
       if (!from || !to || from === to || ZONE_BY_ID.get(from)!.toOnly) continue;
-      steps.push({ op, x, from, to, ...narrowed, ...landing });
+      // "All that match" takes every one, so which comes first says nothing.
+      const pick = x.kind !== 'all' && (s.pick === 'most' || s.pick === 'least') ? { pick: s.pick as BehaviorPick } : {};
+      steps.push({ op, x, from, to, ...narrowed, ...landing, ...pick });
     }
     if (steps.length === 0) continue;
     const on = r.on as BehaviorTrigger;
@@ -1652,11 +1909,61 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
     const narrows = TRIGGER_BY_ID.get(on)!.watches || kind === 'static';
     const watch = narrows && typeof r.q === 'string' ? r.q.trim().slice(0, MAX_BEHAVIOR_QUERY) : '';
     const q = watch && queryHasX(watch) ? substituteQueryX(watch, 0) : watch;
-    rules.push(q ? { on, q, steps } : { on, steps });
+    // An ability without a price is not one: it would be free and endless.
+    const cost = kind === 'activate' ? cleanCost(r.cost) : null;
+    if (kind === 'activate' && !cost) continue;
+    // A condition this build cannot read drops the rule rather than the
+    // condition, since running it unguarded is the generous direction.
+    const guarded = kind === 'trigger' || kind === 'tap' || kind === 'activate';
+    const cond = guarded && r.cond !== undefined ? cleanCondition(r.cond) : null;
+    if (guarded && r.cond !== undefined && !cond) continue;
+    const once = (kind === 'trigger' || kind === 'activate') && r.once === true;
+    rules.push({
+      on,
+      ...(q ? { q } : {}),
+      ...(cost ? { cost } : {}),
+      ...(cond ? { cond } : {}),
+      ...(once ? { once: true as const } : {}),
+      steps,
+    });
   }
   const cast = cleanCastOptions(raw.cast);
   if (rules.length === 0 && cast.length === 0) return null;
   return cast.length > 0 ? { v: CARD_BEHAVIOR_VERSION, rules, cast } : { v: CARD_BEHAVIOR_VERSION, rules };
+}
+
+/** Permanents or cards one ability's cost may sacrifice or discard. */
+export const MAX_COST_N = 5;
+
+/** An ability's price, or null when nothing of it survives or nothing is left to pay. */
+export function cleanCost(raw: unknown): ActivationCost | null {
+  if (!isRecord(raw)) return null;
+  const out: ActivationCost = {};
+  const mana = normalizeCost(raw.mana);
+  if (mana) out.mana = mana;
+  if (raw.tap === true) out.tap = true;
+  if (raw.self === true) out.self = true;
+  const sac = clampInt(raw.sac, 0, MAX_COST_N, 0);
+  if (sac > 0) {
+    out.sac = sac;
+    const q = cleanQuery(raw.sacq).q;
+    if (q) out.sacq = q;
+  }
+  const discard = clampInt(raw.discard, 0, MAX_COST_N, 0);
+  if (discard > 0) out.discard = discard;
+  const life = clampInt(raw.life, 0, MAX_BEHAVIOR_AMOUNT, 0);
+  if (life > 0) out.life = life;
+  const priced = out.tap || out.self || out.sac || out.discard || out.life || (out.mana && out.mana !== '{0}');
+  return priced ? out : null;
+}
+
+/** A condition as stored: an amount the build reads, an operator, a number. */
+function cleanCondition(raw: unknown): BehaviorCondition | null {
+  if (!isRecord(raw)) return null;
+  const x = cleanAmount(raw.x);
+  if (!x || x.kind === 'all' || x.kind === 'prev') return null;
+  if (raw.op !== '>=' && raw.op !== '<=') return null;
+  return { x, op: raw.op, n: clampInt(raw.n, 0, MAX_BEHAVIOR_AMOUNT, 0) };
 }
 
 /** Type letters in one order, only the ones named, so the same ticks save the same bytes. */

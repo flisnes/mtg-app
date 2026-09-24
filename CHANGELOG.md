@@ -2,6 +2,16 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.174.0
+
+- **Added: three new moments for a rule.** *At each of your end steps* (the turn it lands too), *When another creature of yours dies* and *When you sacrifice another permanent*. Nothing across the table kills anything, so a creature dies when you sacrifice it; the sacrifice rule also sees Treasures you crack for mana, Clues, fetchlands and the lands Lotus Field eats. Blood Artist drains, Pitiless Plunderer makes Treasures, Mayhem Devil pings.
+- **Added: abilities you pay for.** *An ability you pay for* takes a price: mana, tapping the card, sacrificing it, sacrificing other permanents, discarding or paying life. The simulator uses abilities after the turn's spells, with mana nothing in hand wanted, then tries casting again. Card draw goes first. It won't cash in a mana source while you hold a spell, sacrifices only tokens or cards that do something when they die (and only when something pays for it), and pays life down to a quarter of your starting life. Clue tokens now crack for a card and Food is eaten.
+- **Added: "Only if" and "Once each turn".** A rule can wait for a condition, like threshold (7 cards in your graveyard) or metalcraft (3 artifacts), and draw engines like Welcoming Vampire can fire just once a turn. Mana abilities take a condition too: Mox Opal taps only with metalcraft, Temple of the False God only with five lands.
+- **Added: choose what a move takes.** A move step can take the card with the greatest mana value (the creature a Reanimate wants) or the least useful one (a token before your best creature) instead of a random match.
+- **Added: a life total.** *Gain X life* and *Lose X life* steps and a *your life* amount. Only your own rules move it; it matters for abilities that cost life.
+- **Changed: 31 more popular cards model themselves, and 18 more do more.** Mind Stone, Commander's Sphere and Hedron Archive draw once your hand runs dry, the aristocrats (Blood Artist, Zulaport Cutthroat, Viscera Seer, Phyrexian Altar) work together, Tireless Tracker cracks its Clues, and lands like Castle Locthwain, Geier Reach Sanitarium and War Room use their abilities.
+- **Fixed:** a modal double-faced card played as its land no longer runs the spell side's rule. A Bala Ged Recovery written to draw would draw every time you played it as a land.
+
 ## 0.173.1
 
 - **Fixed: summoning sickness is one rule now.** Any creature without haste taps for mana from the turn after it arrives, however it got there. Dryad Arbor used to tap the turn you played it; it waits like Llanowar Elves now. And the reverse: a Sol Ring or any rock that enters untapped taps the turn it lands, so turn-one Sol Ring pays for a two-drop.

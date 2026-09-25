@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.177.0
+
+- **Added: X = your devotion.** A rule's number can be your devotion to one or more colors: the mana symbols of those colors in the costs of your permanents, the card itself included once it is out. A hybrid symbol counts once even toward two colors, and {G/P} counts toward green. Gray Merchant of Asphodel now drains for your devotion to black, and Karametra's Acolyte taps for your devotion to green. For Nykthos, write its {2},{T} ability with devotion to the color your deck leans on.
+- **Added: count different names.** *Your permanents matching* has a *Count different names* box, so seven Forests count as one. Field of the Dead now makes its Zombies once seven lands with different names are out, and The Necrobloom makes a Zombie instead of a Plant from then on.
+
 ## 0.176.0
 
 - **Added: dredge.** Whenever you would draw a card, the simulator may dredge instead: mill that many and return the card from your graveyard to your hand. A printed Dredge (Golgari Grave-Troll, Stinkweed Imp, Life from the Loam) is read off the card with nothing to write. It dredges a spell back whenever it can, and a land only when your hand has none. The game trace says what came back and what it milled, and the card's rule page counts how often it dredges.

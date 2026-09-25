@@ -1,5 +1,6 @@
 import {
   applyAmountOp,
+  devotionColors,
   BEHAVIOR_ZONES,
   describeCost,
   keywordWords,
@@ -1959,17 +1960,69 @@ export function simulate(
     return n;
   };
 
-  /** Permanents you control matching a criteria, for the `matching` amount (Distant Melody). */
-  const matchingInPlay = (q: string | undefined, turn: number): number => {
+  /**
+   * Each card's name as a small number, so "different names" is a stamp per
+   * name rather than a set of strings. By name and not by index: two sources
+   * making a Zombie are two token cards with one name between them.
+   */
+  const nameId = new Int32Array(n);
+  {
+    const ids = new Map<string, number>();
+    for (let i = 0; i < n; i++) {
+      const name = cards[i]!.name;
+      let id = ids.get(name);
+      if (id === undefined) ids.set(name, (id = ids.size));
+      nameId[i] = id;
+    }
+  }
+  const nameSeen = new Int32Array(n);
+  let nameStamp = 0;
+
+  /**
+   * Permanents you control matching a criteria, for the `matching` amount
+   * (Distant Melody), or the different names among them (Field of the Dead).
+   */
+  const matchingInPlay = (q: string | undefined, uniq: boolean, turn: number): number => {
     ensureFresh(turn);
     const filter = q ? filterFor.get(q) : undefined;
     if (q && !filter) return 0;
+    if (uniq) nameStamp++;
     let count = 0;
     for (let p = 0; p < perms.len; p++) {
       if (!stillOut(p, turn)) continue;
       if (filter && filter.match[perms.added[p]! * n + perms.card[p]!] !== 1) continue;
+      if (uniq) {
+        const id = nameId[perms.card[p]!]!;
+        if (nameSeen[id] === nameStamp) continue;
+        nameSeen[id] = nameStamp;
+      }
       count++;
     }
+    return count;
+  };
+
+  /**
+   * Each card's devotion for every set of colors, WUBRG as bits 1 to 16: the
+   * symbols in its front-face cost that one of the colors can pay. A {W/B} is
+   * one symbol, so it counts once toward "white and black", and a {G/P} or a
+   * {2/G} counts toward green like the rules say. Lands and tokens have no cost.
+   */
+  const devotionOf = new Int32Array(n * 32);
+  for (let i = 0; i < n; i++) {
+    for (const pip of cards[i]!.cost?.pips ?? []) {
+      let bits = 0;
+      for (const c of pip.options) if (c !== 'C') bits |= 1 << 'WUBRG'.indexOf(c);
+      for (let want = 1; want < 32; want++) if (bits & want) devotionOf[i * 32 + want]!++;
+    }
+  }
+
+  /** Your devotion to a set of colors (Gray Merchant): every permanent's share, the card holding the rule included. */
+  const devotionInPlay = (x: BehaviorAmount, turn: number): number => {
+    ensureFresh(turn);
+    let want = 0;
+    for (const c of devotionColors(x)) want |= 1 << 'WUBRG'.indexOf(c);
+    let count = 0;
+    for (let p = 0; p < perms.len; p++) if (stillOut(p, turn)) count += devotionOf[perms.card[p]! * 32 + want]!;
     return count;
   };
 
@@ -2059,7 +2112,10 @@ export function simulate(
         break;
       }
       case 'matching':
-        n = matchingInPlay(x.q, turn);
+        n = matchingInPlay(x.q, !!x.uniq, turn);
+        break;
+      case 'devotion':
+        n = devotionInPlay(x, turn);
         break;
       case 'life':
         n = life;

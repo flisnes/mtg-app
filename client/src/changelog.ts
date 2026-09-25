@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.177.0',
+    changes: [
+      {
+        kind: 'added',
+        text: "Rules can count your devotion to a color, so Gray Merchant drains for the right amount and Karametra's Acolyte taps for it. Your permanents matching can count different names, which is how Field of the Dead ships now.",
+      },
+    ],
+  },
+  {
     version: '0.176.0',
     changes: [
       {
@@ -187,16 +196,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'The card editor says how often each saved trigger fired, and Watch it in a game deals a game with that card in it and shows only its lines.',
-      },
-    ],
-  },
-  {
-    version: '0.167.0',
-    changes: [
-      {
-        kind: 'changed',
-        text:
-          'The Model tab opens on Write these first: the cards that should draw, ramp, tutor or build something and do nothing yet, best first. Removal and plain creatures fold away under Right as nothing.',
       },
     ],
   },

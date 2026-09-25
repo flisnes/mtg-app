@@ -45,6 +45,7 @@ import {
   describeLandRamp,
   describeManaSource,
   describeRitual,
+  devotionColors,
   manaStepColors,
   normalizeManaColors,
   queryHasX,
@@ -1106,7 +1107,8 @@ function AmountPicker({
               onChange(kind === 'fixed' ? { kind, n: value.n ?? 1 } : { kind });
               return;
             }
-            onChange(value.op && value.by ? { kind, op: value.op, by: value.by } : { kind });
+            const own = kind === 'devotion' ? { c: value.c ?? 'B' } : {};
+            onChange(value.op && value.by ? { kind, op: value.op, by: value.by, ...own } : { kind, ...own });
           }}
         >
           {/* Whatever is already selected stays listed even when it no longer
@@ -1146,8 +1148,8 @@ function AmountPicker({
             aria-label={`${label}, adjusted`}
             onChange={(e) => {
               const op = e.target.value as BehaviorAmountOp | '';
-              const q = value.q ? { q: value.q } : {};
-              onChange(op ? { kind: value.kind, op, by: value.by ?? 1, ...q } : { kind: value.kind, ...q });
+              const own = { ...(value.q ? { q: value.q } : {}), ...(value.uniq ? { uniq: true } : {}), ...(value.c ? { c: value.c } : {}) };
+              onChange(op ? { kind: value.kind, op, by: value.by ?? 1, ...own } : { kind: value.kind, ...own });
             }}
           >
             <option value=""></option>
@@ -1177,6 +1179,36 @@ function AmountPicker({
       )}
     </div>
   );
+  if (value.kind === 'devotion') {
+    const colors = devotionColors(value);
+    // Unticking the last color is refused: devotion to nothing is no amount.
+    const toggle = (letter: string) => {
+      const next = colors.includes(letter) ? [...colors].filter((c) => c !== letter).join('') : colors + letter;
+      if (next) onChange({ ...value, c: devotionColors({ kind: 'devotion', c: next }) });
+    };
+    return (
+      <div className="behavior-amount">
+        {picker}
+        <div className="behavior-swatches" role="group" aria-label="Devotion to which colors">
+          {BEHAVIOR_MANA_COLORS.filter((c) => c.id !== 'C').map((c) => {
+            const on = colors.includes(c.id);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className={`behavior-swatch${on ? ' is-on' : ''}`}
+                aria-pressed={on}
+                aria-label={c.label}
+                onClick={() => toggle(c.id)}
+              >
+                <ManaCost cost={c.symbol} />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
   if (value.kind !== 'matching') return picker;
   // "Permanents you control matching": the criteria belongs to the amount, so
   // it sits right under it rather than with the step's own.
@@ -1196,6 +1228,18 @@ function AmountPicker({
         </label>
         {matcher && <MatchNote q={value.q ?? ''} matcher={matcher} />}
       </div>
+      <label className="behavior-check">
+        <input
+          type="checkbox"
+          checked={!!value.uniq}
+          onChange={(e) => {
+            const rest = { ...value };
+            delete rest.uniq;
+            onChange(e.target.checked ? { ...rest, uniq: true } : rest);
+          }}
+        />
+        <span>Count different names</span>
+      </label>
     </div>
   );
 }
@@ -2264,7 +2308,7 @@ function ObjectControls({
 /** What a rule's steps need explaining, behind one disclosure. */
 function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
   const has = (...ops: BehaviorStepKind[]) => rule.steps.some((s) => ops.includes(s.op));
-  const amounts = rule.steps.flatMap((s) => [s.x, ...(s.qx ? [s.qx] : [])]);
+  const amounts = [...rule.steps.flatMap((s) => [s.x, ...(s.qx ? [s.qx] : [])]), ...(rule.cond ? [rule.cond.x] : [])];
   const notes: { key: string; text: React.ReactNode }[] = [];
   if (has('move', 'flicker')) {
     notes.push({
@@ -2393,7 +2437,13 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
   if (amounts.some((x) => x.kind === 'matching')) {
     notes.push({
       key: 'matching',
-      text: '"Your permanents matching" counts what you control right now against the criteria under it: t:elf is Distant Melody. Empty counts every permanent, tokens and lands included.',
+      text: '"Your permanents matching" counts what you control right now against the criteria under it: t:elf is Distant Melody. Empty counts every permanent, tokens and lands included. "Count different names" counts seven Forests as one, the way Field of the Dead wants its lands.',
+    });
+  }
+  if (amounts.some((x) => x.kind === 'devotion')) {
+    notes.push({
+      key: 'devotion',
+      text: 'Devotion counts the mana symbols of those colors in the costs of your permanents, this one included once it is out. A hybrid symbol counts once even toward two colors, and {G/P} counts toward green. Lands and tokens have no cost, so they add nothing. Pick one color for Nykthos: the one your deck leans on.',
     });
   }
   if (amounts.some((x) => !!x.op)) {

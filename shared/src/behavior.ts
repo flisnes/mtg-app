@@ -223,7 +223,10 @@ export type BehaviorAmountKind =
   | 'kicked'
   | 'matching'
   // Rebuild plan E3: your life total, for a condition or a Toxic Deluge.
-  | 'life';
+  | 'life'
+  // The mana symbols among your permanents' costs that are one of the
+  // amount's colors (`c`): Gray Merchant, Nykthos, Karametra's Acolyte.
+  | 'devotion';
 
 /**
  * Arithmetic on an amount, so "half your library" and "that many minus one" are
@@ -258,6 +261,17 @@ export interface BehaviorAmount {
    * number that fills its own criteria.
    */
   q?: string;
+  /**
+   * `matching` only: count different names rather than permanents, so seven
+   * Forests are one. Field of the Dead's "seven or more lands with different
+   * names".
+   */
+  uniq?: boolean;
+  /**
+   * `devotion` only: the colors, as WUBRG letters, at least one. Two is the
+   * hybrid gods' "devotion to white and black", where a {W/B} counts once.
+   */
+  c?: string;
 }
 
 export interface BehaviorStep {
@@ -1204,6 +1218,7 @@ export const BEHAVIOR_AMOUNTS: readonly AmountOption[] = [
   { id: 'graveyard', label: 'your graveyard', phrase: 'cards in your graveyard' },
   { id: 'turn', label: 'the turn number', phrase: 'the turn number' },
   { id: 'matching', label: 'your permanents matching', phrase: 'permanents you control', hasQuery: true },
+  { id: 'devotion', label: 'your devotion', phrase: 'your devotion to' },
   { id: 'counters', label: 'counters on it', phrase: 'the counters on it', needsPermanent: true },
   { id: 'kicked', label: 'the times kicked', phrase: 'the times it was kicked', needsKicker: true },
   { id: 'life', label: 'your life', phrase: 'your life total' },
@@ -1264,9 +1279,29 @@ export function applyAmountOp(value: number, x: BehaviorAmount): number {
   }
 }
 
-export function describeAmount(x: BehaviorAmount): string {
+/** The colors of a `devotion` amount as stored, WUBRG order, and black when there are none. */
+export const devotionColors = (x: BehaviorAmount): string => {
+  let out = '';
+  for (const letter of 'WUBRG') if (x.c?.toUpperCase().includes(letter)) out += letter;
+  return out || 'B';
+};
+
+const COLOR_WORDS: Record<string, string> = { W: 'white', U: 'blue', B: 'black', R: 'red', G: 'green' };
+
+function amountBase(x: BehaviorAmount): string {
   const phrase = x.kind === 'fixed' ? String(x.n ?? 0) : (AMOUNT_BY_ID.get(x.kind)?.phrase ?? '?');
-  const base = x.kind === 'matching' && x.q ? `${phrase} matching ${x.q}` : phrase;
+  if (x.kind === 'devotion') {
+    const words = [...devotionColors(x)].map((c) => COLOR_WORDS[c]!);
+    const list = words.length <= 2 ? words.join(' and ') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+    return `${phrase} ${list}`;
+  }
+  if (x.kind !== 'matching') return phrase;
+  const what = x.q ? `${phrase} matching ${x.q}` : phrase;
+  return x.uniq ? `different names among ${what}` : what;
+}
+
+export function describeAmount(x: BehaviorAmount): string {
+  const base = amountBase(x);
   if (!x.op || !x.by) return base;
   const op = OP_BY_ID.get(x.op);
   return `${base} ${op?.sign ?? x.op} ${x.by}${op?.tail ?? ''}`;
@@ -1973,6 +2008,8 @@ function cleanAmount(raw: unknown): BehaviorAmount | null {
     const resolved = queryHasX(q) ? substituteQueryX(q, 0) : q;
     if (resolved) out.q = resolved;
   }
+  if (kind === 'matching' && raw.uniq === true) out.uniq = true;
+  if (kind === 'devotion') out.c = devotionColors({ kind, c: typeof raw.c === 'string' ? raw.c : undefined });
   // An adjustment of zero is not an adjustment, and an amount the catalog says
   // takes none never keeps one. Both are dropped rather than stored, so saving
   // the same rule twice is the same bytes — §12.3's promise, one level down.

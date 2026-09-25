@@ -512,6 +512,9 @@ const KEY_REPAIRS = 'syncRepairs';
  * - `behaviorGrammarDredge` (v0.176.0): the "While it is in your graveyard"
  *   rule with its dredge step, and the static granting dredge (The
  *   Necrobloom). Same story: an older build drops them.
+ * - `behaviorGrammarDevotion` (v0.177.0): the devotion amount, and "count
+ *   different names" on a matching one. An older build drops the first and
+ *   counts every permanent for the second.
  */
 const REPAIRS = [
   'containerKinds',
@@ -522,6 +525,7 @@ const REPAIRS = [
   'behaviorGrammarE3',
   'behaviorGrammarGrants',
   'behaviorGrammarDredge',
+  'behaviorGrammarDevotion',
 ] as const;
 
 async function runOneTimeRepairs(): Promise<void> {

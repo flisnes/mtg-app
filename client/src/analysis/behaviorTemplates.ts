@@ -1,4 +1,4 @@
-import type { BehaviorRule, BehaviorStep, CardBehavior } from '@mtg/shared';
+import type { BehaviorCondition, BehaviorRule, BehaviorStep, CardBehavior } from '@mtg/shared';
 
 // Rebuild plan C5: rules nobody has to write from a blank page.
 //
@@ -21,6 +21,8 @@ import type { BehaviorRule, BehaviorStep, CardBehavior } from '@mtg/shared';
 // the grammar cannot say ("once each turn", "you may pay {1}").
 
 const rule = (on: BehaviorRule['on'], steps: BehaviorStep[], q?: string): BehaviorRule => (q ? { on, q, steps } : { on, steps });
+/** A rule that runs only while its condition holds, keys in the order the editor saves them. */
+const when = (on: BehaviorRule['on'], q: string, cond: BehaviorCondition, steps: BehaviorStep[]): BehaviorRule => ({ on, q, cond, steps });
 const n = (k: number) => ({ kind: 'fixed' as const, n: k });
 const draw = (k = 1): BehaviorStep => ({ op: 'draw', x: n(k) });
 const token = (tp: number, tt: number, k: BehaviorStep['x'] = n(1)): BehaviorStep => ({ op: 'token', x: k, tk: 'custom', ty: 'C', tp, tt });
@@ -29,6 +31,8 @@ const cardToken = (tid: string, tn: string, k: BehaviorStep['x'] = n(1)): Behavi
 const behavior = (...rules: BehaviorRule[]): CardBehavior => ({ v: 1, rules });
 
 const LAND = 't:land';
+/** Lands you control with different names: Field of the Dead's seven. */
+const LAND_NAMES = { kind: 'matching' as const, q: LAND, uniq: true };
 const NONTOKEN_CREATURE = 't:creature -t:token';
 const INSTANT_SORCERY = 't:instant or t:sorcery';
 
@@ -55,8 +59,11 @@ export const PREWRITTEN: Readonly<Record<string, CardBehavior>> = {
     rule('static', [{ op: 'grantcast', x: n(1), from: 'graveyard', gk: 'retrace', q: 'is:permanent -t:land' }]),
     rule('attack', [{ op: 'mill', x: n(3) }]),
   ),
-  // The seven-lands Zombie is left out: a Plant every time is the floor.
-  'The Necrobloom': behavior(rule('static', [{ op: 'grantdredge', x: n(2), q: LAND }]), rule('enters', [token(0, 1)], LAND)),
+  'The Necrobloom': behavior(
+    rule('static', [{ op: 'grantdredge', x: n(2), q: LAND }]),
+    when('enters', LAND, { x: LAND_NAMES, op: '<=', n: 6 }, [token(0, 1)]),
+    when('enters', LAND, { x: LAND_NAMES, op: '>=', n: 7 }, [{ op: 'token', x: n(1), tk: 'zombie' }]),
+  ),
   'Mole Man, Moloid Master': behavior(
     rule('static', [{ op: 'landfrom', x: n(1), from: 'graveyard' }]),
     rule('enters', [cardToken('26457778-9e7e-4de8-b5a9-78990b1fca13', 'Moloid')], LAND),
@@ -91,6 +98,7 @@ export const PREWRITTEN: Readonly<Record<string, CardBehavior>> = {
   'Impact Tremors': behavior(rule('enters', [{ op: 'damage', x: n(1) }], 't:creature')),
   'Purphoros, God of the Forge': behavior(rule('enters', [{ op: 'damage', x: n(2) }], 't:creature')),
   // Mana (F4, F5).
+  "Karametra's Acolyte": behavior(rule('tap', [{ op: 'tapsfor', x: { kind: 'devotion', c: 'G' }, colors: 'G' }])),
   'Everflowing Chalice': {
     v: 1,
     rules: [rule('etb', [{ op: 'counter', x: { kind: 'kicked' }, ck: 'charge' }]), rule('tap', [{ op: 'tapsfor', x: { kind: 'counters' }, colors: 'C' }])],

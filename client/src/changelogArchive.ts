@@ -9,6 +9,16 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.167.0',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'The Model tab opens on Write these first: the cards that should draw, ramp, tutor or build something and do nothing yet, best first. Removal and plain creatures fold away under Right as nothing.',
+      },
+    ],
+  },
+  {
     version: '0.166.0',
     changes: [
       {

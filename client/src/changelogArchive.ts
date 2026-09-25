@@ -9,6 +9,16 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.164.0',
+    changes: [
+      {
+        kind: 'changed',
+        text:
+          'The Mana tab answers "can I cast it on time" once: Cast on time lists your commander and every late cost with the reason it was late, total mana, a color, or a tapland. Colored sources no longer gives a second, different verdict.',
+      },
+    ],
+  },
+  {
     version: '0.163.0',
     changes: [
       {

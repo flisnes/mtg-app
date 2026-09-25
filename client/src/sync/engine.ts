@@ -506,8 +506,11 @@ const KEY_REPAIRS = 'syncRepairs';
  *   step, dies, sacrifice and ability rules, conditions, once-a-turn, a move's
  *   pick and the life steps. A build from before them drops a rule it cannot
  *   read, so the row it stores is missing it until this re-pull.
+ * - `behaviorGrammarGrants` (v0.175.0): tokens picked by name from the card
+ *   database and the grant that lets cards in a zone be cast (Six's retrace).
+ *   An older build drops both steps; this re-pull puts them back.
  */
-const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems2', 'deckCardUnfiled', 'behaviorGrammarF', 'behaviorGrammarE3'] as const;
+const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems2', 'deckCardUnfiled', 'behaviorGrammarF', 'behaviorGrammarE3', 'behaviorGrammarGrants'] as const;
 
 async function runOneTimeRepairs(): Promise<void> {
   const done = (await getSetting<string[]>(KEY_REPAIRS)) ?? [];

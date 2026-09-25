@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { CardBehavior, DeckFormat } from '@mtg/shared';
+import { namedTokenIds, type CardBehavior, type DeckFormat } from '@mtg/shared';
 import { Icon } from './icons.js';
 import { CURVE_MAX, TAX_TURNS, type DeckManaStats } from '../deck/manaStats.js';
 import { DrawOddsPanel } from './DrawOddsPanel.js';
@@ -20,6 +20,7 @@ import { buildSimDeck, type SimDeck } from '../analysis/simDeck.js';
 import { effectiveBehaviors, useDefaults } from '../analysis/defaultBehaviors.js';
 import { idleEngines, missedDrawCopies, modelQueue, type IdleEngines } from '../analysis/coverage.js';
 import { deckBehaviorMap } from '../db/dataAccess.js';
+import { getOracleCardsRaw } from '../db/queries.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import {
   COMBAT_POLICIES,
@@ -337,9 +338,13 @@ export function DeckAnalysis({
     () => effectiveBehaviors(rows.flatMap((r) => (r.oracle ? [r.oracle] : [])), behaviors, defaults),
     [rows, behaviors, defaults],
   );
+  // The token cards rules name out of the card database (a Moloid, an
+  // Everywhere). Until they load those rules make nothing, the floor side.
+  const tokenIds = useMemo(() => namedTokenIds(effective.behaviors.values()), [effective]);
+  const tokenOracles = useLiveQuery(() => (tokenIds.length > 0 ? getOracleCardsRaw(tokenIds) : new Map()), [tokenIds.join()]);
   const simDeck = useMemo(
-    () => buildSimDeck(rows, effective.behaviors, keepRule.query, effective.defaulted),
-    [rows, effective, keepRule.query, tagsReady],
+    () => buildSimDeck(rows, effective.behaviors, keepRule.query, effective.defaulted, tokenOracles),
+    [rows, effective, keepRule.query, tagsReady, tokenOracles],
   );
   const simOpts = useMemo(
     () => ({ ...defaultSimOptions(format, onPlay), ...policy, keepMin: keepRule.min, keepMax: keepRule.max }),

@@ -4,6 +4,7 @@ import {
   describeCost,
   keywordWords,
   manaStepColors,
+  MAX_CAST_N,
   MAX_QUERY_X,
   tokenKey,
   type ActivateRule,
@@ -123,6 +124,8 @@ const MAX_PERMANENTS = 256;
 const HAND_SIZE = 7;
 /** Times one spell is kicked at most. A multikicker with a {0} cost is otherwise a loop. */
 const MAX_KICKS = 20;
+/** Graveyard cast kinds in a fixed order, for the key of a granted cast. */
+const GRANT_KIND_ORDER: readonly SimGraveyardCast['kind'][] = ['flashback', 'retrace', 'escape', 'mayhem', 'cast'];
 
 /**
  * Activated abilities used in one turn (rebuild plan E3). A sacrifice outlet
@@ -2887,13 +2890,20 @@ export function simulate(
    * everything that reads a permanent then sees them, including the watchers.
    * Summoning sick like anything else that arrives, unless the token has haste.
    */
-  const makeTokens = (step: BehaviorStep, count: number, turn: number): number => {
+  const makeTokens = (step: BehaviorStep, count: number, turn: number, by: number): number => {
     const index = deck.tokens[tokenKey(step)];
     if (index === undefined) return 0;
     const card = cards[index]!;
+    // A token that taps for mana, found by name in the card database (an
+    // Everywhere, an Eldrazi Spawn read as a dork), is a source like the card
+    // it copies. From next turn: most arrive tapped, and the rest are the floor.
+    const source = (card.role === 'land' || card.role === 'rock' || card.role === 'dork') && (card.adds > 0 || !!card.manaAmount);
     let made = 0;
     for (let k = 0; k < count; k++) {
-      if (addPermanent(index, card, turn) < 0) break;
+      if (source) {
+        if (!addSource(index, card, turn + 1, turn, by)) break;
+        colorsHeld |= card.mask;
+      } else if (addPermanent(index, card, turn) < 0) break;
       made++;
       fireArrival(index, card, turn);
     }
@@ -3083,7 +3093,7 @@ export function simulate(
             if (sink && t > 0) bits.push(`makes ${t} Treasure${t === 1 ? '' : 's'}`);
             break;
           }
-          did = makeTokens(step, n, turn);
+          did = makeTokens(step, n, turn, self);
           if (sink && did > 0) bits.push(`creates ${did} ${cards[deck.tokens[tokenKey(step)] ?? 0]?.name ?? 'token'}${did === 1 ? '' : 's'}`);
           break;
         }
@@ -3674,8 +3684,34 @@ export function simulate(
   const V = deck.variants;
   /** Any card with a static rule. Without one, nothing below ever recomputes. */
   const anyStatics = cards.some((c) => c.permanent && !!c.behavior && c.behavior.statics.length > 0);
+  /** Any static on a card of this deck that lets cards in a zone be cast (Six's retrace, Future Sight). */
+  const grantsFrom = (zone: string): boolean =>
+    cards.some((c) => c.permanent && !!c.behavior?.statics.some((r) => r.steps.some((s) => s.op === 'grantcast' && s.from === zone)));
+  const anyGraveyardGrants = grantsFrom('graveyard');
+  const anyTopGrants = grantsFrom('librarytop');
   /** Any card with a way to be cast from the graveyard, so the spend loop looks there. */
-  const anyGraveyardCasts = cards.some((c) => !!c.gyCast);
+  const anyGraveyardCasts = anyGraveyardGrants || cards.some((c) => !!c.gyCast);
+  /**
+   * The grants on the battlefield right now, filled by `recompute`: which cards
+   * in the graveyard may be cast and how, and which top card of the library.
+   * A null filter is every card. A handful at most, so a plain list.
+   */
+  const gyGrants: { filter: SimFilter | null; kind: SimGraveyardCast['kind']; n: number }[] = [];
+  const topGrants: (SimFilter | null)[] = [];
+  /**
+   * The cast a grant hands one card, built once per card and kind so the spend
+   * loop never allocates. The printed cost: a graveyard holds no commander.
+   */
+  const grantedCasts = new Map<number, SimGraveyardCast>();
+  const grantedCast = (index: number, kind: SimGraveyardCast['kind'], n: number): SimGraveyardCast => {
+    const key = (index * 8 + GRANT_KIND_ORDER.indexOf(kind)) * (MAX_CAST_N + 1) + n;
+    let g = grantedCasts.get(key);
+    if (!g) {
+      g = { kind, cost: cards[index]!.cost!, n };
+      grantedCasts.set(key, g);
+    }
+    return g;
+  };
   /**
    * Something on the battlefield changed since the statics were last applied.
    * Set by every arrival and departure, cleared by `recompute`: statics are
@@ -3694,6 +3730,8 @@ export function simulate(
   /** Where a spend-loop pick is. */
   const ZONE_HAND = 0;
   const ZONE_GRAVEYARD = 1;
+  /** The top card of the library, which a grant lets you cast (Future Sight). */
+  const ZONE_TOP = 2;
 
   /** Times each commander has been cast this game, for the tax. */
   const cmdCasts = new Int32Array(n);
@@ -3742,6 +3780,8 @@ export function simulate(
         return gyLen - 1 >= g.n;
       case 'mayhem':
         return discardedAt[index] === stamp;
+      case 'cast':
+        return true;
     }
   };
 
@@ -3791,6 +3831,8 @@ export function simulate(
     noMaxHand = false;
     landFromGraveyard = false;
     landFromTop = false;
+    gyGrants.length = 0;
+    topGrants.length = 0;
     const len = perms.len;
     for (let p = 0; p < len; p++) {
       perms.types[p] = cards[perms.card[p]!]!.types;
@@ -3844,6 +3886,15 @@ export function simulate(
               if (step.from === 'graveyard') landFromGraveyard = true;
               else if (step.from === 'librarytop') landFromTop = true;
               break;
+            case 'grantcast': {
+              // Matched against the cards as printed: nothing in a graveyard
+              // or a library has had a type added to it.
+              const grantFilter = step.q ? filterFor.get(step.q) : undefined;
+              if (step.q && !grantFilter) break;
+              if (step.from === 'librarytop') topGrants.push(grantFilter ?? null);
+              else if (step.gk) gyGrants.push({ filter: grantFilter ?? null, kind: step.gk, n: step.x.n ?? 0 });
+              break;
+            }
             case 'pump':
             case 'keyword':
             case 'extramana': {
@@ -4384,6 +4435,8 @@ export function simulate(
   let pickCost: ParsedCost | null = null;
   /** It is being suspended, not cast. */
   let pickSuspend = false;
+  /** A graveyard pick: which of its ways to be cast from there, its own or a grant. */
+  let pickGy: SimGraveyardCast | null = null;
   /** This turn's ritual target, for `consider`. */
   let spendRitualGoal: ParsedCost | null = null;
     /**
@@ -4391,7 +4444,7 @@ export function simulate(
      * order reads, which is the card's worth rather than this price for a
      * suspended one.
      */
-    const consider = (at: number, zone: number, card: SimCard, cost: ParsedCost, size: number, suspending: boolean): void => {
+    const consider = (at: number, zone: number, card: SimCard, cost: ParsedCost, size: number, suspending: boolean, gy: SimGraveyardCast | null = null): void => {
       // A ritual is ramp for one turn, so it is ramp for the ordering that
       // matters: cast before the spell it is paying for, or the burst is
       // gone by the time anything wants it.
@@ -4409,7 +4462,7 @@ export function simulate(
       if (holding && card.instant) return;
       // What the policy came for, ahead of ramp, because a deck that wants
       // its two-drop on turn two wants it more than it wants a Signet.
-      const index = zone === ZONE_HAND ? hand[at]! : graveyard[at]!;
+      const index = zone === ZONE_HAND ? hand[at]! : zone === ZONE_GRAVEYARD ? graveyard[at]! : library[at]!;
       const favored = spendDraw ? drawsCards[index]! : spendCreatures ? card.creature : false;
       // An X spell goes last, under every fixed cost, because X is going to
       // take whatever the turn has left and a Fireball cast first would end
@@ -4439,6 +4492,7 @@ export function simulate(
       pickZone = zone;
       pickCost = cost;
       pickSuspend = suspending;
+      pickGy = gy;
     };
 
   let handSizeSum = 0;
@@ -4480,6 +4534,8 @@ export function simulate(
     noMaxHand = false;
     landFromGraveyard = false;
     landFromTop = false;
+    gyGrants.length = 0;
+    topGrants.length = 0;
 
     // --- The opener, and however many mulligans it takes ---------------------
     for (let m = 0; ; m++) {
@@ -4568,6 +4624,16 @@ export function simulate(
           continue;
         }
         sayEffect(lastEffectText ? `Upkeep: ${card.name} ${lastEffectText}` : '');
+        // Leaving the battlefield already took it off the list (leavePlay's
+        // unrecur), swapping the last entry into this slot. That entry has not
+        // fired yet, so the slot is looked at again. Removing it a second time
+        // here dropped another card's upkeep, or with one entry took the
+        // length to -1, so a commander recast after exiling itself never
+        // fired again.
+        if (r >= recurLen || recurring[r] !== index) {
+          r--;
+          continue;
+        }
         // A permanent that put itself somewhere else has left the battlefield,
         // so it comes off the list rather than triggering from the graveyard.
         if (selfPlaced) {
@@ -4647,8 +4713,11 @@ export function simulate(
           let ties = 0;
           for (let c = 0; c < candidates; c++) {
             // A land off the graveyard or the library is a card your hand
-            // keeps, which is the whole reason to play one from there.
-            const score = landScore(cards[landAt(c)]!, colorsHeld, needUntapped, goal, units) + (landZone[c] === LAND_HAND ? 0 : 5);
+            // keeps, which is the whole reason to play one from there: next
+            // turn's drop, or the land a retrace discards. Worth more than a
+            // new color (10 each), less than untapped on the turn that needs
+            // it (100) or a pip you are stuck on (1000).
+            const score = landScore(cards[landAt(c)]!, colorsHeld, needUntapped, goal, units) + (landZone[c] === LAND_HAND ? 0 : 50);
             if (score < bestScore) continue;
             // §11.3: random where the policy is genuinely indifferent, and
             // nowhere else. Two Islands score the same and it does not matter
@@ -4837,6 +4906,7 @@ export function simulate(
         pickZone = ZONE_HAND;
         pickCost = null;
         pickSuspend = false;
+        pickGy = null;
         spendRitualGoal = ritualGoal;
         for (let i = 0; i < (dry ? 0 : handLen); i++) {
           const index = hand[i]!;
@@ -4868,12 +4938,36 @@ export function simulate(
         }
         // The graveyard, for the cards with a way to be cast from there.
         if (anyGraveyardCasts && !dry) {
+          // A grant (Six) is only on while its card is, so the statics have
+          // to be current before the graveyard is read.
+          if (anyGraveyardGrants || anyTopGrants) ensureFresh(turn);
           for (let j = 0; j < gyLen; j++) {
             const index = graveyard[j]!;
             const card = cards[index]!;
             const g = card.gyCast;
-            if (!g || g.cost.mana > left || !graveyardCastable(index, g, stamp)) continue;
-            consider(j, ZONE_GRAVEYARD, card, g.cost, g.cost.mana, false);
+            // Its own way first, then whatever the battlefield grants it. The
+            // same card offered twice is fine: `consider` keeps the one pick.
+            if (g && g.cost.mana <= left && graveyardCastable(index, g, stamp)) consider(j, ZONE_GRAVEYARD, card, g.cost, g.cost.mana, false, g);
+            if (gyGrants.length === 0 || !card.spell || !card.cost || card.cost.mana > left) continue;
+            // An X spell cast from here gets no X (only a hand cast reads
+            // it), so it is held for the same reason a hand one is.
+            if (card.cost.hasX && card.cost.mana >= left) continue;
+            for (const grant of gyGrants) {
+              if (grant.filter && grant.filter.match[index] !== 1) continue;
+              const granted = grantedCast(index, grant.kind, grant.n);
+              if (!graveyardCastable(index, granted, stamp)) continue;
+              consider(j, ZONE_GRAVEYARD, card, granted.cost, granted.cost.mana, false, granted);
+              break;
+            }
+          }
+        }
+        // The top card of the library, while a grant says it may be cast.
+        if (anyTopGrants && !dry && top < libLen) {
+          ensureFresh(turn);
+          const index = library[top]!;
+          const card = cards[index]!;
+          if (topGrants.length > 0 && card.spell && card.cost && card.cost.mana <= left && !(card.cost.hasX && card.cost.mana >= left)) {
+            if (topGrants.some((filter) => !filter || filter.match[index] === 1)) consider(top, ZONE_TOP, card, card.cost, card.cost.mana, false);
           }
         }
         if (pick < 0) {
@@ -4912,7 +5006,9 @@ export function simulate(
         // Only now does the matching solver run, and only on the one card the
         // policy actually wants to cast.
         const cost: ParsedCost = pickCost!;
-        const index = pickZone === ZONE_HAND ? hand[pick]! : graveyard[pick]!;
+        const index = pickZone === ZONE_HAND ? hand[pick]! : pickZone === ZONE_GRAVEYARD ? graveyard[pick]! : library[pick]!;
+        /** Cast the ordinary way, if from somewhere unusual: kicker and X are paid as from the hand. */
+        const plain = pickZone !== ZONE_GRAVEYARD || pickGy!.kind === 'cast';
         const card = cards[index]!;
         const before = paid.pips.length;
         // What restricted mana does not pay for is what the pool has to.
@@ -4956,7 +5052,9 @@ export function simulate(
         }
         castCount++;
         if (pickZone === ZONE_HAND) hand[pick] = hand[--handLen]!;
-        else graveyard[pick] = graveyard[--gyLen]!;
+        else if (pickZone === ZONE_GRAVEYARD) graveyard[pick] = graveyard[--gyLen]!;
+        // Off the top: the next card down is the top now, and the next draw.
+        else top++;
 
         // --- Suspend ----------------------------------------------------
         // Exiled with its time counters; it resolves at an upkeep, not now.
@@ -4974,14 +5072,14 @@ export function simulate(
         }
 
         // --- The rest of a graveyard cast's price ------------------------
-        const extraCost = pickZone === ZONE_GRAVEYARD ? payGraveyardExtras(index, card.gyCast!, stamp) : '';
+        const extraCost = pickZone === ZONE_GRAVEYARD ? payGraveyardExtras(index, pickGy!, stamp) : '';
 
         // --- Kicker -----------------------------------------------------
         // Paid whenever the mana left covers it, as many times as it allows for
         // a multikicker, and before X, which takes whatever is left after that.
         xSpent = 0;
         kickedNow = 0;
-        if (card.kicker && pickZone === ZONE_HAND) {
+        if (card.kicker && plain) {
           const k = card.kicker.cost;
           while (kickedNow < MAX_KICKS && (kickedNow === 0 || card.kicker.multi)) {
             if (k.mana > available - spent) break;
@@ -5005,7 +5103,7 @@ export function simulate(
         // there unspent. X now takes whatever the turn has left, which is what
         // a player does with it and what the `manaSpentByTurn` line has been
         // overstating the gap on for every deck that plays one.
-        if (cost.hasX && pickZone === ZONE_HAND) {
+        if (cost.hasX && plain) {
           const rest = available - spent;
           if (rest > 0) {
             paid.generic += rest;
@@ -5033,8 +5131,15 @@ export function simulate(
           const forX = cost.hasX ? ` with X = ${xSpent}` : '';
           const kicked = kickedNow > 0 ? `, kicked${kickedNow > 1 ? ` ${kickedNow} times` : ''}` : '';
           const tax = cost !== card.cost && card.commander ? ` with ${cost.mana - card.cost!.mana} commander tax` : '';
-          const from = pickZone === ZONE_GRAVEYARD ? ` from the graveyard (${card.gyCast!.kind}${extraCost})` : '';
-          const price = pickZone === ZONE_GRAVEYARD ? '' : ` ${card.manaCost}`;
+          const from =
+            pickZone === ZONE_TOP
+              ? ' from the top of the library'
+              : pickZone !== ZONE_GRAVEYARD
+                ? ''
+                : pickGy!.kind === 'cast'
+                  ? ' from the graveyard'
+                  : ` from the graveyard (${pickGy!.kind}${extraCost})`;
+          const price = pickZone === ZONE_GRAVEYARD && pickGy!.kind !== 'cast' ? '' : ` ${card.manaCost}`;
           say(sink, 'cast', `Casts ${card.name}${price}${from}${forX}${kicked}${tax}${why}${spendNote}`);
           // The taps arrive on this line later. The turn has to finish
           // committing first, because there is only one cost to solve and it is
@@ -5051,7 +5156,7 @@ export function simulate(
           });
         }
 
-        available += resolveCast(index, card, turn, goal, pickZone === ZONE_GRAVEYARD && card.gyCast!.kind === 'flashback');
+        available += resolveCast(index, card, turn, goal, pickZone === ZONE_GRAVEYARD && pickGy!.kind === 'flashback');
         // A card with no effect profile still resolves as a blank. For a
         // Lightning Bolt that is correct; for a draw spell whose draw hangs off
         // a trigger the pipeline would not read, it is the floor §11.4 warned

@@ -62,10 +62,14 @@ import {
   type BehaviorZone,
   type CardBehavior,
   type EffectProfile,
+  GRANT_CASTS,
+  grantCastInfo,
+  type OracleCard,
 } from '@mtg/shared';
 import { Icon } from './icons.js';
 import { ManaCost } from './ManaCost.js';
 import { otherDeckBehaviors, setCardBehavior, type BorrowableBehavior } from '../db/dataAccess.js';
+import { getOracleCardsRaw, searchTokenCards } from '../db/queries.js';
 import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '../cardDb/querySyntax.js';
 import type { GroupRow } from '../analysis/groups.js';
 import { HowWorked } from './HowWorked.js';
@@ -146,6 +150,8 @@ interface BehaviorCard {
   creature: boolean;
   /** Scryfall tag indices, for the starting points (rebuild plan C5). */
   tags: readonly number[];
+  /** The tokens the card database says it makes, as oracle ids: the token picker offers these first. */
+  tokens: readonly string[];
   /**
    * The rule that ships with the app for this card, played whenever this deck
    * has not written its own (notes/edh-top, and C5's pre-written set).
@@ -208,6 +214,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       permanent: isPermanent(o.typeLine),
       creature: isCreature(o.typeLine),
       tags: o.tags ?? [],
+      tokens: o.tokenOracleIds ?? [],
       shipped: defaults.behaviors.get(o.name) ?? null,
       idle: defaults.idle.get(o.name) ?? null,
     });
@@ -904,6 +911,7 @@ function BehaviorEditor({
           permanent={card.permanent}
           creature={card.creature}
           kicker={kicker}
+          ownTokens={card.tokens}
           onChange={(next) => edit(i, next)}
           onRemove={() => setRules(rules.filter((_r, k) => k !== i))}
         />
@@ -1225,7 +1233,14 @@ const firstStep = (kind: RuleKind): BehaviorStep =>
       : emptyStep();
 
 /** The fields only one verb reads, dropped when the verb changes so none of them hides in the row. */
-const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub', 'pick'];
+/**
+ * Static steps the rule's criteria says nothing to: they are about zones or the
+ * game, not your permanents. A rule of only these hides the box, unless it
+ * already holds something, which stays visible so it can be cleared.
+ */
+const UNNARROWED: ReadonlySet<string> = new Set(['grantcast', 'landfrom', 'nomaxhand']);
+
+const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub', 'pick', 'tid', 'tn', 'gk'];
 
 /** A number box for the cost editor: whole numbers from 0 to `max`. */
 function CountBox({ value, max, label, onChange }: { value: number; max: number; label: string; onChange: (n: number) => void }) {
@@ -1399,6 +1414,7 @@ function RuleEditor({
   permanent,
   creature,
   kicker,
+  ownTokens,
   onChange,
   onRemove,
 }: {
@@ -1412,6 +1428,8 @@ function RuleEditor({
   creature: boolean;
   /** The draft has a kicker, so "the times it was kicked" means something. */
   kicker: boolean;
+  /** The tokens the card database says this card makes. */
+  ownTokens: readonly string[];
   onChange: (next: BehaviorRule) => void;
   onRemove: () => void;
 }) {
@@ -1519,6 +1537,9 @@ function RuleEditor({
       case 'landfrom':
         setStep(i, { op, x: one, from: 'graveyard' });
         return;
+      case 'grantcast':
+        setStep(i, { op, x: one, from: 'graveyard', gk: 'retrace', q: 'is:permanent -t:land' });
+        return;
       case 'nomaxhand':
         setStep(i, { op, x: one });
         return;
@@ -1585,7 +1606,7 @@ function RuleEditor({
           the steps say what. Landfall is one word in a box. A static rule's
           criteria says which of your permanents it applies to, and sits in the
           same place for the same reason. */}
-      {(trigger?.watches || kind === 'static') && (
+      {(trigger?.watches || (kind === 'static' && (!!rule.q || !rule.steps.every((st) => UNNARROWED.has(st.op))))) && (
         <div className="behavior-q behavior-rule-q">
           <label className="field">
             <input
@@ -1649,9 +1670,16 @@ function RuleEditor({
         const creatureQuery = (step.op === 'pump' || (step.op === 'keyword' && !step.own)) && kind === 'trigger';
         // A mana ability's "spend this mana only on", as criteria.
         const spendQuery = step.op === 'tapsfor';
-        const narrows = move || flicker || creatureQuery || spendQuery;
+        // Which cards in the zone a grant reaches.
+        const grantQuery = step.op === 'grantcast';
+        const narrows = move || flicker || creatureQuery || spendQuery || grantQuery;
         const objectControls =
-          step.op === 'token' || step.op === 'counter' || step.op === 'addtype' || step.op === 'landfrom' || step.op === 'keyword';
+          step.op === 'token' ||
+          step.op === 'counter' ||
+          step.op === 'addtype' ||
+          step.op === 'landfrom' ||
+          step.op === 'keyword' ||
+          step.op === 'grantcast';
         // The one destination with two ways to arrive, and the only place the
         // question is worth asking.
         const lands = (move || self) && step.to === 'battlefield';
@@ -1766,7 +1794,7 @@ function RuleEditor({
                 )}
               </div>
             )}
-            {objectControls && <ObjectControls step={step} kind={kind} onChange={(next) => setStep(i, next)} />}
+            {objectControls && <ObjectControls step={step} kind={kind} ownTokens={ownTokens} onChange={(next) => setStep(i, next)} />}
             {colorsStep && (
               <div className="behavior-colors">
                 <div className="behavior-swatches" role="group" aria-label="Which colors this mana can be">
@@ -1813,17 +1841,20 @@ function RuleEditor({
             {narrows && (
               <div className="behavior-q">
                 {spendQuery && <span className="fine-print behavior-plug-lead">Spend its mana only on:</span>}
+                {grantQuery && <span className="fine-print behavior-plug-lead">Which cards there:</span>}
                 <label className="field">
                   <input
                     type="text"
                     value={step.q ?? ''}
                     maxLength={MAX_BEHAVIOR_QUERY}
-                    aria-label={creatureQuery ? 'Which creatures' : spendQuery ? 'Spend it only on' : 'Which cards'}
+                    aria-label={creatureQuery ? 'Which creatures' : spendQuery ? 'Spend it only on' : grantQuery ? 'Which cards in that zone' : 'Which cards'}
                     placeholder={
                       creatureQuery
                         ? 'All your creatures, or t:elf, …'
                         : spendQuery
                           ? 'Spend it on anything, or only on t:creature, …'
+                          : grantQuery
+                          ? 'Any card, or is:permanent, t:instant, …'
                           : flicker
                           ? 'Any permanent, or t:creature, …'
                           : 'Any card, or t:basic, t:creature mv<=3, …'
@@ -1840,7 +1871,7 @@ function RuleEditor({
                 )}
                 {/* The control appears because the query asked for it. No
                     placeholder, no dropdown, and nothing to explain away. */}
-                {!creatureQuery && !spendQuery && queryHasX(step.q) && (
+                {!creatureQuery && !spendQuery && !grantQuery && queryHasX(step.q) && (
                   <>
                     <span className="fine-print behavior-plug-lead">[X] in that query is:</span>
                     <AmountPicker
@@ -1881,6 +1912,82 @@ function RuleEditor({
   );
 }
 
+/**
+ * A token out of the card database, by name. The card's own tokens (what
+ * Scryfall says it makes) are offered before anything is typed, so Mole Man's
+ * Moloid is one tap; anything else is a name search over the token cards.
+ * Several tokens share a name, so each result says what it is.
+ */
+function TokenPicker({ step, ownTokens, onChange }: { step: BehaviorStep; ownTokens: readonly string[]; onChange: (next: BehaviorStep) => void }) {
+  const [text, setText] = useState('');
+  const own = useLiveQuery(async () => {
+    if (ownTokens.length === 0) return [];
+    const byId = await getOracleCardsRaw(ownTokens);
+    return ownTokens.map((id) => byId.get(id)).filter((c): c is OracleCard => !!c && /^Token\b/i.test(c.typeLine));
+  }, [ownTokens.join()]);
+  const found = useLiveQuery(() => searchTokenCards(text), [text]);
+  const picked = useLiveQuery(() => (step.tid ? getOracleCardsRaw([step.tid]) : undefined), [step.tid]);
+  const current = step.tid ? picked?.get(step.tid) : undefined;
+  const choose = (c: OracleCard) => {
+    onChange({ ...step, tid: c.oracleId, tn: c.name });
+    setText('');
+  };
+  const list = text.trim() ? (found ?? []) : (own ?? []);
+  return (
+    <div className="behavior-token-pick">
+      <p className="fine-print">
+        {current ? (
+          <>
+            Makes <strong>{current.name}</strong>: {tokenLine(current)}
+          </>
+        ) : step.tid ? (
+          <>Makes {step.tn ?? 'a token'} (not in the card database on this device yet)</>
+        ) : (
+          'Pick a token below, or search for one by name.'
+        )}
+      </p>
+      <label className="field">
+        <input
+          type="search"
+          value={text}
+          aria-label="Search tokens by name"
+          placeholder="Search tokens by name: Moloid, Everywhere, Beast…"
+          onChange={(e) => setText(e.target.value)}
+        />
+      </label>
+      {list.length > 0 && (
+        <div className="behavior-token-list" role="list">
+          {!text.trim() && <span className="fine-print">This card makes:</span>}
+          {list.map((c) => (
+            <button
+              key={c.oracleId}
+              type="button"
+              role="listitem"
+              className={`behavior-token-opt${c.oracleId === step.tid ? ' is-on' : ''}`}
+              aria-pressed={c.oracleId === step.tid}
+              onClick={() => choose(c)}
+            >
+              <span className="behavior-token-name">{c.name}</span>
+              <span className="behavior-token-line">{tokenLine(c)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {text.trim() && found && found.length === 0 && <p className="fine-print">No token starts with "{text.trim()}".</p>}
+    </div>
+  );
+}
+
+/** "1/1 Creature, Minion, green", "Land, taps for WUBRG": enough to tell twelve Beasts apart. */
+function tokenLine(c: OracleCard): string {
+  const type = c.typeLine.replace(/^Token\s*/i, '').replace(/\s+—\s+/, ', ');
+  const pt = c.power != null && c.toughness != null ? `${c.power}/${c.toughness} ` : '';
+  const colors = c.colors.length > 0 ? `, ${c.colors.join('')}` : '';
+  const mana = c.produces ? `, taps for ${c.produces}` : '';
+  const text = c.oracleText ? `. ${c.oracleText.replace(/\s*\([^)]*\)/g, '').split('\n')[0]}` : '';
+  return `${pt}${type}${colors}${mana}${text}`.slice(0, 140);
+}
+
 /** The extra controls of the object-layer steps (rebuild plan F): which token, which counter, which type, which zone. */
 /**
  * The keywords a goldfish can act on, as checkboxes. A keyword step needs at
@@ -1905,7 +2012,62 @@ function KeywordChecks({ step, onChange, required = false }: { step: BehaviorSte
   );
 }
 
-function ObjectControls({ step, onChange, kind }: { step: BehaviorStep; onChange: (next: BehaviorStep) => void; kind: RuleKind }) {
+function ObjectControls({
+  step,
+  onChange,
+  kind,
+  ownTokens,
+}: {
+  step: BehaviorStep;
+  onChange: (next: BehaviorStep) => void;
+  kind: RuleKind;
+  ownTokens: readonly string[];
+}) {
+  if (step.op === 'grantcast') {
+    const how = grantCastInfo(step.gk) ?? GRANT_CASTS[0]!;
+    const zone = step.from ?? 'graveyard';
+    return (
+      <div className="behavior-obj behavior-zones">
+        <label className="field">
+          <select
+            value={zone}
+            aria-label="Cards in which zone"
+            onChange={(e) => {
+              const from = e.target.value as BehaviorZone;
+              // A kind that makes no sense from there falls back to a plain cast.
+              const gk = how.zones.includes(from) ? how.id : 'cast';
+              onChange({ ...step, from, gk, x: { kind: 'fixed', n: 1 } });
+            }}
+          >
+            <option value="graveyard">Cards in your graveyard</option>
+            <option value="librarytop">The top card of your library</option>
+          </select>
+        </label>
+        <label className="field">
+          <select
+            value={how.id}
+            aria-label="How they can be cast"
+            onChange={(e) => {
+              const next = grantCastInfo(e.target.value) ?? GRANT_CASTS[0]!;
+              onChange({ ...step, gk: next.id, x: { kind: 'fixed', n: next.n ? 3 : 1 } });
+            }}
+          >
+            {GRANT_CASTS.filter((g) => g.zones.includes(zone)).map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {how.n && (
+          <div className="behavior-obj-row">
+            <span className="fine-print">{how.n}</span>
+            <CountBox value={step.x.n ?? 0} max={MAX_CAST_N} label={how.n} onChange={(n) => onChange({ ...step, x: { kind: 'fixed', n } })} />
+          </div>
+        )}
+      </div>
+    );
+  }
   if (step.op === 'keyword') {
     return (
       <div className="behavior-obj">
@@ -1945,8 +2107,8 @@ function ObjectControls({ step, onChange, kind }: { step: BehaviorStep; onChange
             onChange={(e) =>
               onChange(
                 e.target.value === 'custom'
-                  ? { ...step, tk: 'custom', ty: 'C', tp: 1, tt: 1 }
-                  : without({ ...step, tk: e.target.value }, 'ty', 'tp', 'tt', 'kw'),
+                  ? without({ ...step, tk: 'custom', ty: 'C', tp: 1, tt: 1 }, 'tid', 'tn')
+                  : without({ ...step, tk: e.target.value }, 'ty', 'tp', 'tt', 'kw', 'tid', 'tn'),
               )
             }
           >
@@ -1957,6 +2119,7 @@ function ObjectControls({ step, onChange, kind }: { step: BehaviorStep; onChange
             ))}
           </select>
         </label>
+        {step.tk === 'card' && <TokenPicker step={step} ownTokens={ownTokens} onChange={onChange} />}
         {custom && (
           <>
             <div className="behavior-obj-row" role="group" aria-label="Its card types">
@@ -2118,7 +2281,7 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
   if (has('token')) {
     notes.push({
       key: 'token',
-      text: 'Tokens are permanents like any other: they count as creatures, wake "enters" rules, and attack when combat says so, from the turn after they arrive unless they have haste. A Treasure pays for something and is sacrificed; a Food or a Clue sits there, since eating or cracking one is not modelled yet. A token that leaves the battlefield is gone.',
+      text: 'Tokens are permanents like any other: they count as creatures, wake "enters" rules, and attack when combat says so, from the turn after they arrive unless they have haste. A Treasure pays for something and is sacrificed; a Clue is cracked and a Food eaten when the turn has mana spare. A token found by name is built from its card: a land token like Everywhere taps for mana from the turn after it arrives, and a creature token has its printed power. A token that leaves the battlefield is gone.',
     });
   }
   if (has('counter')) {
@@ -2152,6 +2315,12 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
     notes.push({
       key: 'extramana',
       text: 'Each permanent the criteria finds adds this much more, in these colors, whenever it taps for mana. Badgermole Cub is t:creature, 1, green.',
+    });
+  }
+  if (has('grantcast')) {
+    notes.push({
+      key: 'grantcast',
+      text: 'While this card is on the battlefield, the simulator looks in that zone for spells as well as in your hand. Retrace pays the mana cost plus a land card from your hand, and the card goes back to the graveyard if it is not a permanent, so it can be cast again. Flashback exiles it after. Escape exiles that many other cards from your graveyard. Lands are played, not cast: for those, use "Play lands from another zone" as well.',
     });
   }
   if (has('landfrom')) {

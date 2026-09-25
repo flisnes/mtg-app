@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.175.0
+
+- **Added: tokens by name.** A rule's *Create X tokens* step has *Find a token by name*: search the card database for any token, or tap one of the tokens the card itself makes. Mole Man, Moloid Master makes Moloids, Overlord of the Hauntwoods makes Everywhere. The token is built from its real card, so Everywhere is a land that taps for any color from the turn after it arrives, and a Moloid is a 1/1 Minion that attacks and wakes "enters" rules.
+- **Added: cards in a zone can be cast.** *While it is on the battlefield* has a new step, *Cards in a zone can be cast*: pick the zone, a search for which cards (`is:permanent -t:land`), and how. Retrace (its cost plus a land card from your hand), flashback, escape, or a plain cast, from your graveyard or off the top of your library. The simulator looks there for spells as well as in your hand, and stops the moment the card leaves. Six gives nonland permanents in your graveyard retrace; Future Sight casts off the top.
+- **Changed: Six, Mole Man and Overlord of the Hauntwoods model themselves.** Six mills three on attack and grants retrace, Mole Man plays lands from your graveyard and makes a Moloid on landfall, and Overlord makes an Everywhere when it enters and attacks.
+- **Changed: a land in your graveyard is played before one in hand** when a card lets you (Mole Man, Ramunap Excavator), unless the one in hand is the untapped land this turn needs or the color you're stuck on. The land you keep is next turn's drop, or the one retrace discards.
+- **Fixed: a card that exiles itself at upkeep kept its rule only once.** A commander recast after exiling itself never fired its upkeep rule again, and with other upkeep rules out, one of those could stop firing instead.
+
 ## 0.174.2
 
 - **Fixed: rules now sync between your devices.** Since rules arrived in 0.158.0, a rule written on one device never reached your others: the server cut each rule's id short, and the other device filed what it pulled as a second, stale copy. Your rules now travel between devices like the rest of your decks. Where both devices edited the same card, the most recent edit wins.

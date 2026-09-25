@@ -24,6 +24,8 @@ const rule = (on: BehaviorRule['on'], steps: BehaviorStep[], q?: string): Behavi
 const n = (k: number) => ({ kind: 'fixed' as const, n: k });
 const draw = (k = 1): BehaviorStep => ({ op: 'draw', x: n(k) });
 const token = (tp: number, tt: number, k: BehaviorStep['x'] = n(1)): BehaviorStep => ({ op: 'token', x: k, tk: 'custom', ty: 'C', tp, tt });
+/** A token card out of the database, by oracle id. template-check.ts checks the id names that token. */
+const cardToken = (tid: string, tn: string, k: BehaviorStep['x'] = n(1)): BehaviorStep => ({ op: 'token', x: k, tk: 'card', tid, tn });
 const behavior = (...rules: BehaviorRule[]): CardBehavior => ({ v: 1, rules });
 
 const LAND = 't:land';
@@ -47,6 +49,21 @@ export const PREWRITTEN: Readonly<Record<string, CardBehavior>> = {
   'Ramunap Excavator': behavior(rule('static', [{ op: 'landfrom', x: n(1), from: 'graveyard' }])),
   'Courser of Kruphix': behavior(rule('static', [{ op: 'landfrom', x: n(1), from: 'librarytop' }])),
   'Reliquary Tower': behavior(rule('static', [{ op: 'nomaxhand', x: n(1) }])),
+  // "During your turn" is every turn a goldfish has. The attack's land pick is
+  // left out: milling three and keeping none is the floor.
+  Six: behavior(
+    rule('static', [{ op: 'grantcast', x: n(1), from: 'graveyard', gk: 'retrace', q: 'is:permanent -t:land' }]),
+    rule('attack', [{ op: 'mill', x: n(3) }]),
+  ),
+  'Mole Man, Moloid Master': behavior(
+    rule('static', [{ op: 'landfrom', x: n(1), from: 'graveyard' }]),
+    rule('enters', [cardToken('26457778-9e7e-4de8-b5a9-78990b1fca13', 'Moloid')], LAND),
+  ),
+  // Impending is left out: cast for five, it is a creature from the start.
+  'Overlord of the Hauntwoods': behavior(
+    rule('etb', [cardToken('77872673-2806-41ee-bc4c-57fbc488a40f', 'Everywhere')]),
+    rule('attack', [cardToken('77872673-2806-41ee-bc4c-57fbc488a40f', 'Everywhere')]),
+  ),
   'Glorious Anthem': behavior(rule('static', [{ op: 'pump', x: n(1) }], 't:creature')),
   "Mirari's Wake": behavior(rule('static', [{ op: 'pump', x: n(1) }], 't:creature'), rule('static', [{ op: 'extramana', x: n(1) }], LAND)),
   'Zendikar Resurgent': behavior(rule('static', [{ op: 'extramana', x: n(1) }], LAND), rule('cast', [draw()], 't:creature')),

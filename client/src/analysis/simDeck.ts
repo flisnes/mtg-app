@@ -125,7 +125,8 @@ export interface SimKicker {
 }
 
 export interface SimGraveyardCast {
-  kind: 'flashback' | 'retrace' | 'escape' | 'mayhem';
+  /** `cast` is a plain cast for its mana cost, which only a grant hands out (Muldrotha). */
+  kind: 'flashback' | 'retrace' | 'escape' | 'mayhem' | 'cast';
   cost: ParsedCost;
   /** Escape: other cards exiled from the graveyard. */
   n: number;
@@ -422,6 +423,12 @@ export function buildSimDeck(
   keepQuery?: string,
   /** Which of `behaviors` are shipped defaults rather than the user's, by oracleId. */
   defaulted?: ReadonlySet<string>,
+  /**
+   * The token cards a rule names out of the card database (`tk: 'card'`), by
+   * oracle id. A rule whose token is missing here makes nothing, which is the
+   * floor side: the caller loads them and the deck is rebuilt when they land.
+   */
+  tokenOracles?: ReadonlyMap<string, OracleCard>,
 ): SimDeck {
   const cards: SimCard[] = [];
   /** The card behind each entry of `cards`, kept only long enough to run the filters. */
@@ -461,52 +468,7 @@ export function buildSimDeck(
     const index = cards.length;
     byOracle.set(o.oracleId, index);
     const behavior = compileBehavior(behaviors?.get(o.oracleId));
-    const card: SimCard = {
-      oracleId: o.oracleId,
-      name: o.name,
-      manaCost: o.manaCost ?? '',
-      cmc: o.cmc,
-      role,
-      land: landAnywhere || role === 'fetch',
-      // A land has nothing to pay, so it has nothing to check.
-      spell: !landFront && !!o.manaCost,
-      cost: landFront ? null : parseManaCost(o.manaCost),
-      // The profile's colors, not `produces` — see sourceColors(). A card whose
-      // mana has no nameable color keeps an empty mask and pays generic only.
-      mask: colorMask(profile ? sourceColors(profile, o.produces) : o.produces),
-      // A utility land that taps for nothing still costs you your land drop and
-      // adds no mana, which is exactly what a zero says.
-      adds: profile?.adds ?? (role === 'land' && !o.produces ? 0 : 1),
-      tapped: fetch?.tapped ?? profile?.tapped ?? 'never',
-      fetchTargets: [],
-      modal: landAnywhere && !landFront,
-      oneColor: !!profile?.oneColor && (profile?.adds ?? 0) > 1,
-      generic: !!profile?.opponent,
-      life: profile?.life ?? 0,
-      entry: profile?.entry ?? 0,
-      bounce: !!profile?.bounce,
-      grantMask: colorMask(o.grants),
-      copies: r.board === 'main' ? r.quantity : 0,
-      commander: r.board === 'commander',
-      permanent: isPermanentFace(parts[0] ?? ''),
-      creature: isCreatureFace(parts[0] ?? ''),
-      power: powerOf(o.power),
-      instant: isInstantFace(parts[0] ?? ''),
-      keeps: landAnywhere || role === 'fetch',
-      image: o.imageSmall ?? o.imageNormal ?? null,
-      effect: decodeEffectProfile(o.effect),
-      behavior,
-      types: typeBits(parts[0] ?? ''),
-      keywords: printedKeywords(o.oracleText),
-      toughness: powerOf(o.toughness),
-      token: false,
-      manaAmount: null,
-      spendQ: null,
-      manaCond: null,
-      kicker: null,
-      gyCast: null,
-      suspend: null,
-    };
+    const card = simCardOf(o, behavior, r.board === 'main' ? r.quantity : 0, r.board === 'commander');
     if (behavior) applyAuthoredObject(card, behavior);
     cards.push(card);
     oracles.push(o);
@@ -553,10 +515,11 @@ export function buildSimDeck(
   if (cards.some((c) => (c.behavior?.sacrifice.length ?? 0) > 0)) tokenSpecs.set('treasure', BEHAVIOR_TOKENS[0]!);
   const tokens: Record<string, number> = {};
   for (const [key, spec] of tokenSpecs) {
+    const made = spec.oracleId ? tokenFromCard(spec.oracleId, tokenOracles, behaviors) : tokenCard(key, spec);
+    if (!made) continue;
     tokens[key] = cards.length;
-    const { card, oracle } = tokenCard(key, spec);
-    cards.push(card);
-    oracles.push(oracle);
+    cards.push(made.card);
+    oracles.push(made.oracle);
   }
 
   const library = new Int32Array(libraryCopies);
@@ -594,6 +557,63 @@ export function buildSimDeck(
     typeGrants,
     variants,
   };
+}
+
+/** A card of the deck as the sequencer sees it, before any authored rule changes what it is. */
+function simCardOf(o: OracleCard, behavior: CompiledBehavior | null, copies: number, commander: boolean): SimCard {
+  const parts = faces(o.typeLine);
+  const landFront = isLandFace(parts[0] ?? '');
+  const landAnywhere = parts.some(isLandFace);
+  const role = roleOf(o, landFront, landAnywhere);
+  const profile = decodeManaProfile(o.mana);
+  const fetch = role === 'fetch' ? decodeFetchProfile(o.fetch) : null;
+  const card: SimCard = {
+    oracleId: o.oracleId,
+    name: o.name,
+    manaCost: o.manaCost ?? '',
+    cmc: o.cmc,
+    role,
+    land: landAnywhere || role === 'fetch',
+    // A land has nothing to pay, so it has nothing to check.
+    spell: !landFront && !!o.manaCost,
+    cost: landFront ? null : parseManaCost(o.manaCost),
+    // The profile's colors, not `produces` — see sourceColors(). A card whose
+    // mana has no nameable color keeps an empty mask and pays generic only.
+    mask: colorMask(profile ? sourceColors(profile, o.produces) : o.produces),
+    // A utility land that taps for nothing still costs you your land drop and
+    // adds no mana, which is exactly what a zero says.
+    adds: profile?.adds ?? (role === 'land' && !o.produces ? 0 : 1),
+    tapped: fetch?.tapped ?? profile?.tapped ?? 'never',
+    fetchTargets: [],
+    modal: landAnywhere && !landFront,
+    oneColor: !!profile?.oneColor && (profile?.adds ?? 0) > 1,
+    generic: !!profile?.opponent,
+    life: profile?.life ?? 0,
+    entry: profile?.entry ?? 0,
+    bounce: !!profile?.bounce,
+    grantMask: colorMask(o.grants),
+    copies,
+    commander,
+    permanent: isPermanentFace(parts[0] ?? ''),
+    creature: isCreatureFace(parts[0] ?? ''),
+    power: powerOf(o.power),
+    instant: isInstantFace(parts[0] ?? ''),
+    keeps: landAnywhere || role === 'fetch',
+    image: o.imageSmall ?? o.imageNormal ?? null,
+    effect: decodeEffectProfile(o.effect),
+    behavior,
+    types: typeBits(parts[0] ?? ''),
+    keywords: printedKeywords(o.oracleText),
+    toughness: powerOf(o.toughness),
+    token: false,
+    manaAmount: null,
+    spendQ: null,
+    manaCond: null,
+    kicker: null,
+    gyCast: null,
+    suspend: null,
+  };
+  return card;
 }
 
 /** The front face's card types, as T_ bits. */
@@ -674,6 +694,31 @@ function applyAuthoredObject(card: SimCard, b: CompiledBehavior): void {
         break;
     }
   }
+}
+
+/**
+ * A token straight out of the card database: an Everywhere is a land that taps
+ * for every color, a Moloid a 1/1 Minion, read the way a real card is. Its own
+ * rules, if anyone wrote some, come along like any card's.
+ */
+function tokenFromCard(
+  oracleId: string,
+  tokenOracles: ReadonlyMap<string, OracleCard> | undefined,
+  behaviors: ReadonlyMap<string, CardBehavior> | undefined,
+): { card: SimCard; oracle: OracleCard } | null {
+  const oracle = tokenOracles?.get(oracleId);
+  if (!oracle) return null;
+  const behavior = compileBehavior(behaviors?.get(oracleId));
+  const card = simCardOf(oracle, behavior, 0, false);
+  if (behavior) applyAuthoredObject(card, behavior);
+  // Never cast and never in a hand: a token only exists on the battlefield.
+  card.spell = false;
+  card.cost = null;
+  card.permanent = true;
+  card.keeps = false;
+  card.token = true;
+  card.types |= T_TOKEN;
+  return { card, oracle };
 }
 
 /** A token kind as a card, and the oracle row its filters are matched against. */

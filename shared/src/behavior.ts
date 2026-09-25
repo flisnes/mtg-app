@@ -169,6 +169,10 @@ export type BehaviorStepKind =
   | 'landfrom'
   | 'nomaxhand'
   | 'tapsfor'
+  // A static grant on cards in another zone: "nonland permanent cards in your
+  // graveyard have retrace" (Six), "you may cast spells from the top of your
+  // library" (Future Sight). See GRANT_CASTS.
+  | 'grantcast'
   // Rebuild plan E3: a life total, so life can be a price.
   | 'gainlife'
   | 'loselife'
@@ -312,6 +316,17 @@ export interface BehaviorStep {
    * three fields after it.
    */
   tk?: string;
+  /**
+   * `token` with `tk: 'card'`: the token card in the card database, by oracle
+   * id, and its name as it was when picked. The id is what the simulator
+   * builds the token from (types, P/T, what it taps for); the name is kept so
+   * the rule reads right without a database lookup, and because several
+   * different tokens share one name (there are a dozen Beasts).
+   */
+  tid?: string;
+  tn?: string;
+  /** `grantcast` only: how the cards in `from` matching `q` may be cast. See GRANT_CASTS. */
+  gk?: GrantCastKind;
   /** `token` with `tk: 'custom'`: its power and toughness. */
   tp?: number;
   tt?: number;
@@ -412,6 +427,8 @@ export interface TokenOption {
   colors?: string;
   /** The subtype on its type line, so `t:beast` finds one. */
   sub?: string;
+  /** `card` only: the token card in the database this one is built from. */
+  oracleId?: string;
 }
 
 /**
@@ -428,8 +445,17 @@ export const BEHAVIOR_TOKENS: readonly TokenOption[] = [
   { id: 'beast', label: 'Beast 4/4', name: 'Beast', types: 'C', power: 4, toughness: 4, colors: 'G', sub: 'Beast' },
   { id: 'soldier', label: 'Soldier 1/1', name: 'Soldier', types: 'C', power: 1, toughness: 1, colors: 'W', sub: 'Soldier' },
   { id: 'zombie', label: 'Zombie 2/2', name: 'Zombie', types: 'C', power: 2, toughness: 2, colors: 'B', sub: 'Zombie' },
+  // Any token in the card database, found by name: a Moloid, an Everywhere.
+  // Built from the real card, so it is a creature, a land or a Clue exactly as
+  // printed and taps for whatever the database read off it.
+  { id: 'card', label: 'Find a token by name', name: 'Token', types: '' },
   { id: 'custom', label: 'Something else', name: 'Token', types: 'C' },
 ];
+
+/** An oracle id, as `tid` stores it. */
+const ORACLE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** A token's name, as `tn` stores it. The longest printed one is well under this. */
+export const MAX_TOKEN_NAME = 60;
 
 const TOKEN_BY_ID = new Map(BEHAVIOR_TOKENS.map((t) => [t.id, t]));
 
@@ -438,6 +464,20 @@ export const TOKEN_ABILITIES: Readonly<Record<string, CardBehavior>> = {
   clue: { v: 1, rules: [{ on: 'activate', cost: { mana: '{2}', self: true }, steps: [{ op: 'draw', x: { kind: 'fixed', n: 1 } }] }] },
   food: { v: 1, rules: [{ on: 'activate', cost: { mana: '{2}', tap: true, self: true }, steps: [{ op: 'gainlife', x: { kind: 'fixed', n: 3 } }] }] },
 };
+
+/**
+ * Every token card these behaviors name out of the card database, sorted and
+ * distinct, so the caller can load them before building the deck.
+ */
+export function namedTokenIds(behaviors: Iterable<CardBehavior | null | undefined>): string[] {
+  const out = new Set<string>();
+  for (const b of behaviors) {
+    for (const rule of b?.rules ?? []) {
+      for (const step of rule.steps ?? []) if (step?.op === 'token' && step.tk === 'card' && step.tid) out.add(step.tid);
+    }
+  }
+  return [...out].sort();
+}
 
 /** Power and toughness a custom token may be given. */
 export const MAX_TOKEN_PT = 20;
@@ -449,6 +489,10 @@ export const MAX_TOKEN_PT = 20;
 export function tokenSpec(step: BehaviorStep): TokenOption | null {
   const base = TOKEN_BY_ID.get(step.tk ?? '');
   if (!base) return null;
+  if (base.id === 'card') {
+    if (!step.tid || !ORACLE_ID_RE.test(step.tid)) return null;
+    return { ...base, name: step.tn || 'Token', oracleId: step.tid };
+  }
   if (base.id !== 'custom') return base;
   const types = step.ty || 'C';
   const creature = types.includes('C');
@@ -466,6 +510,7 @@ export function tokenSpec(step: BehaviorStep): TokenOption | null {
 
 /** One key per distinct token, so two rules making Beasts share one card. */
 export function tokenKey(step: BehaviorStep): string {
+  if (step.tk === 'card') return `card:${step.tid ?? ''}`;
   if (step.tk !== 'custom') return step.tk ?? '';
   return `custom:${step.tp ?? 1}/${step.tt ?? 1}:${step.ty || 'C'}:${cleanKeywords(step.kw)}`;
 }
@@ -630,6 +675,63 @@ export function describeCastOption(o: CastOption): string {
       return `Mayhem ${cost}: cast from the graveyard the turn it was discarded`;
     case 'suspend':
       return `Suspend ${o.n ?? 0} for ${cost}: cast for free ${o.n ?? 0} upkeep${o.n === 1 ? '' : 's'} later`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Grants on cards in another zone
+// ---------------------------------------------------------------------------
+
+/**
+ * A way a `grantcast` step lets cards in a zone be cast, while the card holding
+ * the rule is on the battlefield. The printed cast options' graveyard kinds at
+ * the card's own mana cost, plus a plain cast for the effects that say only
+ * "you may cast": Future Sight, Muldrotha, Conduit of Worlds.
+ *
+ * A list rather than a flag per card so the next one (Underworld Breach was
+ * escape) is a row here and a case in the simulator, not a new step.
+ */
+export type GrantCastKind = 'retrace' | 'flashback' | 'escape' | 'cast';
+
+export interface GrantCastInfo {
+  id: GrantCastKind;
+  label: string;
+  /** The zones this makes sense from. */
+  zones: readonly BehaviorZone[];
+  /** It takes a number, named like this (escape: the other cards it exiles). */
+  n?: string;
+}
+
+export const GRANT_CASTS: readonly GrantCastInfo[] = [
+  { id: 'retrace', label: 'Retrace (its cost and a land from hand)', zones: ['graveyard'] },
+  { id: 'flashback', label: 'Flashback (its cost, then exiled)', zones: ['graveyard'] },
+  { id: 'escape', label: 'Escape (its cost, exiling other cards)', zones: ['graveyard'], n: 'Other cards exiled' },
+  { id: 'cast', label: 'Cast it for its cost', zones: ['graveyard', 'librarytop'] },
+];
+
+const GRANT_CAST_BY_ID = new Map(GRANT_CASTS.map((g) => [g.id as string, g]));
+
+/** The zones a `grantcast` can reach into. */
+export const GRANT_ZONES: readonly BehaviorZone[] = ['graveyard', 'librarytop'];
+
+export const grantCastInfo = (id: string | undefined): GrantCastInfo | undefined => GRANT_CAST_BY_ID.get(id ?? '');
+
+/** "cards in your graveyard matching is:permanent have retrace". */
+function describeGrant(step: BehaviorStep): string {
+  const match = step.q ? ` matching ${step.q}` : '';
+  if (step.from === 'librarytop') return `you may cast the top card of your library${match}`;
+  const cards = `cards in your graveyard${match}`;
+  switch (step.gk) {
+    case 'retrace':
+      return `${cards} have retrace: cast for their mana cost and a land card discarded`;
+    case 'flashback':
+      return `${cards} have flashback equal to their mana cost`;
+    case 'escape': {
+      const n = step.x.n ?? 0;
+      return `${cards} have escape: their mana cost, exiling ${n} other card${n === 1 ? '' : 's'}`;
+    }
+    default:
+      return `you may cast ${cards}`;
   }
 }
 
@@ -884,7 +986,7 @@ export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
     id: 'static',
     label: 'While it is on the battlefield',
     lead: 'While it is on the battlefield',
-    hint: 'A standing effect: an anthem, an added type, extra land drops from another zone, no maximum hand size. Narrow below which of your permanents it applies to. It stops the moment the card leaves.',
+    hint: 'A standing effect: an anthem, an added type, extra land drops from another zone, cards in your graveyard gaining retrace, no maximum hand size. Narrow below which of your permanents it applies to. It stops the moment the card leaves.',
     needs: 'permanent',
     kind: 'static',
   },
@@ -931,6 +1033,7 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'extramana', label: 'Tapping one for mana adds X more', verb: 'add', kinds: ['static'] },
   { id: 'landfrom', label: 'Play lands from another zone', verb: 'play', kinds: ['static'], noAmount: true },
   { id: 'nomaxhand', label: 'No maximum hand size', verb: 'have', kinds: ['static'], noAmount: true },
+  { id: 'grantcast', label: 'Cards in a zone can be cast', verb: 'let', kinds: ['static'], noAmount: true },
   { id: 'tapsfor', label: 'Taps for X mana', verb: 'tap', kinds: ['tap'] },
   { id: 'gainlife', label: 'Gain X life', verb: 'gain' },
   { id: 'loselife', label: 'Lose X life', verb: 'lose' },
@@ -1232,6 +1335,8 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
       return step.from === 'librarytop' ? 'you may play lands from the top of your library' : 'you may play lands from your graveyard';
     case 'nomaxhand':
       return 'you have no maximum hand size';
+    case 'grantcast':
+      return describeGrant(step);
     case 'tapsfor': {
       const colors = manaStepColors(step);
       const symbols = [...colors].map((c) => `{${c}}`).join('');
@@ -1728,6 +1833,10 @@ function objectStepOk(step: BehaviorStep): boolean {
       return !!step.ty && step.ty in TYPE_WORD && (!step.sub || step.sub in BASIC_BY_COLOR);
     case 'landfrom':
       return !!step.from && LAND_FROM_ZONES.includes(step.from);
+    case 'grantcast': {
+      const g = grantCastInfo(step.gk);
+      return !!g && !!step.from && g.zones.includes(step.from);
+    }
     case 'counter':
     case 'pump':
     case 'extramana':
@@ -2005,6 +2114,12 @@ function cleanObjectStep(op: BehaviorStepKind, s: Record<string, unknown>, kind:
       const x = amount();
       const tk = typeof s.tk === 'string' && TOKEN_BY_ID.has(s.tk) ? s.tk : null;
       if (!x || !tk) return null;
+      if (tk === 'card') {
+        const tid = typeof s.tid === 'string' && ORACLE_ID_RE.test(s.tid) ? s.tid : null;
+        if (!tid) return null;
+        const tn = typeof s.tn === 'string' ? s.tn.trim().slice(0, MAX_TOKEN_NAME) : '';
+        return { op, x, tk, tid, ...(tn ? { tn } : {}) };
+      }
       if (tk !== 'custom') return { op, x, tk };
       const ty = cleanTypes(s.ty, 'CAE') || 'C';
       const creature = ty.includes('C') ? { tp: clampInt(s.tp, 0, MAX_TOKEN_PT, 1), tt: clampInt(s.tt, 1, MAX_TOKEN_PT, 1) } : {};
@@ -2048,6 +2163,18 @@ function cleanObjectStep(op: BehaviorStepKind, s: Record<string, unknown>, kind:
     }
     case 'nomaxhand':
       return { op, x: one };
+    case 'grantcast': {
+      const g = grantCastInfo(typeof s.gk === 'string' ? s.gk : undefined);
+      const from = typeof s.from === 'string' && (GRANT_ZONES as readonly string[]).includes(s.from) ? (s.from as BehaviorZone) : null;
+      if (!g || !from || !g.zones.includes(from)) return null;
+      // Its own criteria, on the step: which cards in that zone. The rule's
+      // criteria is about your permanents and says nothing here.
+      const q = cleanQuery(s.q);
+      // Escape's other cards ride on the amount, a fixed number; every other
+      // kind takes none.
+      const n = g.id === 'escape' ? clampInt(isRecord(s.x) ? s.x.n : undefined, 0, MAX_CAST_N, 3) : 1;
+      return { op, x: { kind: 'fixed', n }, from, gk: g.id, ...q };
+    }
     default:
       return undefined;
   }

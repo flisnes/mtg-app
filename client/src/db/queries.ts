@@ -51,6 +51,24 @@ export async function getOracleCardsByIds(ids: Iterable<string>): Promise<Map<st
   return new Map(priced.map((c) => [c.oracleId, c]));
 }
 
+/** The same, without prices: for the simulator, which never shows one. */
+export async function getOracleCardsRaw(ids: Iterable<string>): Promise<Map<string, OracleCard>> {
+  const cards = (await db.oracleCards.bulkGet([...new Set(ids)])).filter((c): c is OracleCard => !!c);
+  return new Map(cards.map((c) => [c.oracleId, c]));
+}
+
+/** Token cards whose name starts with `prefix`, for the behavior editor's token picker. */
+export async function searchTokenCards(prefix: string, limit = 30): Promise<OracleCard[]> {
+  const q = prefix.trim();
+  if (!q) return [];
+  return db.oracleCards
+    .where('name')
+    .startsWithIgnoreCase(q)
+    .filter((c) => /^Token\b/i.test(c.typeLine))
+    .limit(limit)
+    .toArray();
+}
+
 export async function getPrintingsByIds(ids: Iterable<string>): Promise<Map<string, Priced<Printing>>> {
   const unique = [...new Set(ids)];
   const printings = (await db.printings.bulkGet(unique)).filter((p): p is Printing => !!p);

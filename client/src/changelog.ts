@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.175.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Rules can create any token by name, like Moloids or Everywhere, built from the real token card. A new "cards in a zone can be cast" step gives your graveyard retrace, flashback or escape, like Six.',
+      },
+      {
+        kind: 'fixed',
+        text: 'A commander that exiles itself at upkeep keeps its upkeep rule after you recast it.',
+      },
+    ],
+  },
+  {
     version: '0.174.2',
     changes: [
       {
@@ -191,16 +204,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'Flow opens on Screw and flood: how often you are screwed or flooded by turn six, a turn-by-turn table, and how much mana you really have on any turn ("at least 6 on turn 6 in 33% of games").',
-      },
-    ],
-  },
-  {
-    version: '0.164.0',
-    changes: [
-      {
-        kind: 'changed',
-        text:
-          'The Mana tab answers "can I cast it on time" once: Cast on time lists your commander and every late cost with the reason it was late, total mana, a color, or a tapland. Colored sources no longer gives a second, different verdict.',
       },
     ],
   },

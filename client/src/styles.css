@@ -8357,6 +8357,52 @@ a.seg {
 .behavior-obj.behavior-zones {
   flex-direction: row;
 }
+.behavior-zones > .behavior-obj-row {
+  flex: 1 1 100%;
+}
+/* The token picker: the card's own tokens, or name search results. */
+.behavior-token-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.behavior-token-pick .fine-print {
+  margin: 0;
+}
+.behavior-token-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+.behavior-token-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.behavior-token-opt.is-on {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.behavior-token-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.behavior-token-line {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
 .behavior-obj-row {
   display: flex;
   flex-wrap: wrap;

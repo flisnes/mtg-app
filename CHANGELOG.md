@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.176.0
+
+- **Added: dredge.** Whenever you would draw a card, the simulator may dredge instead: mill that many and return the card from your graveyard to your hand. A printed Dredge (Golgari Grave-Troll, Stinkweed Imp, Life from the Loam) is read off the card with nothing to write. It dredges a spell back whenever it can, and a land only when your hand has none. The game trace says what came back and what it milled, and the card's rule page counts how often it dredges.
+- **Added: "While it is in your graveyard" rules.** A new kind of rule for a card sitting in your graveyard. Its one step is *Dredge X*, for a card that has no printed Dredge or to change the number.
+- **Added: cards in your graveyard can gain dredge.** *While it is on the battlefield* has a new step, *Cards in your graveyard have dredge X*, with a search for which cards. The Necrobloom ships with it (lands, dredge 2) and its Plant on landfall.
+- **Changed: milled cards count as seen.** The cards-seen line now includes cards milled or moved from your library to your graveyard, credited to the card that did it. Self-mill and dredge decks read higher than before.
+
 ## 0.175.0
 
 - **Added: tokens by name.** A rule's *Create X tokens* step has *Find a token by name*: search the card database for any token, or tap one of the tokens the card itself makes. Mole Man, Moloid Master makes Moloids, Overlord of the Hauntwoods makes Everywhere. The token is built from its real card, so Everywhere is a land that taps for any color from the turn after it arrives, and a Moloid is a 1/1 Minion that attacks and wakes "enters" rules.

@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.176.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Dredge in the simulator. Printed Dredge is read off the card, a new "While it is in your graveyard" rule sets it by hand, and a new static step gives cards in your graveyard dredge, like the lands under The Necrobloom.',
+      },
+      {
+        kind: 'changed',
+        text: 'Milled cards now count toward cards seen.',
+      },
+    ],
+  },
+  {
     version: '0.175.0',
     changes: [
       {
@@ -184,26 +197,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'The Model tab opens on Write these first: the cards that should draw, ramp, tutor or build something and do nothing yet, best first. Removal and plain creatures fold away under Right as nothing.',
-      },
-    ],
-  },
-  {
-    version: '0.166.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Who does the work now lists the draw and ramp cards the simulator plays as nothing, at 0 and in amber. Tap one to write what it does.',
-      },
-    ],
-  },
-  {
-    version: '0.165.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Flow opens on Screw and flood: how often you are screwed or flooded by turn six, a turn-by-turn table, and how much mana you really have on any turn ("at least 6 on turn 6 in 33% of games").',
       },
     ],
   },

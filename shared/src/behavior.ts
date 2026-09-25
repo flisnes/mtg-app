@@ -65,6 +65,10 @@ import { BASIC_LAND_TYPES, MANA_LETTERS, sourceColors, type EffectProfile, type 
  * sacrificing another permanent, Treasures and fetchlands included (Mayhem
  * Devil). `activate` is not a moment at all but an ability with a price, which
  * the spend loop pays when the turn has mana left over.
+ *
+ * `graveyard` is the one kind that works from somewhere other than the
+ * battlefield: a standing fact about the card while it sits in your graveyard.
+ * Dredge is the first thing it holds.
  */
 export type BehaviorTrigger =
   | 'play'
@@ -79,7 +83,8 @@ export type BehaviorTrigger =
   | 'endstep'
   | 'dies'
   | 'sacrifice'
-  | 'activate';
+  | 'activate'
+  | 'graveyard';
 
 /**
  * What kind of rule it is, which decides the steps it may hold (rebuild plan F).
@@ -98,8 +103,11 @@ export type BehaviorTrigger =
  * `activate` (rebuild plan E3) holds the same steps a trigger does. What sets
  * it apart is the price on the rule (`BehaviorRule.cost`) and who decides it
  * happens: the spend loop, not the game.
+ *
+ * `graveyard` is `static` for a card in the graveyard rather than on the
+ * battlefield, with its own short vocabulary (dredge).
  */
-export type RuleKind = 'trigger' | 'static' | 'tap' | 'activate';
+export type RuleKind = 'trigger' | 'static' | 'tap' | 'activate' | 'graveyard';
 
 /** The triggers that watch other cards, and so carry a criteria of their own. */
 export const WATCHED_TRIGGERS = ['cast', 'enters', 'dies', 'sacrifice'] as const;
@@ -173,6 +181,11 @@ export type BehaviorStepKind =
   // graveyard have retrace" (Six), "you may cast spells from the top of your
   // library" (Future Sight). See GRANT_CASTS.
   | 'grantcast'
+  // Dredge N, on a `graveyard` rule: "if you would draw a card, you may mill N
+  // and return this card to your hand instead". `grantdredge` is the static
+  // that hands it to other cards in your graveyard (The Necrobloom's lands).
+  | 'dredge'
+  | 'grantdredge'
   // Rebuild plan E3: a life total, so life can be a price.
   | 'gainlife'
   | 'loselife'
@@ -735,6 +748,17 @@ function describeGrant(step: BehaviorStep): string {
   }
 }
 
+/**
+ * The ceiling on a dredge number. Six is the most ever printed; the headroom is
+ * for a custom card, not for a typo to mill the whole library.
+ */
+export const MAX_DREDGE = 20;
+
+/** "dredge 3: ...", the reminder text in this grammar's voice. */
+export function describeDredge(n: number): string {
+  return `dredge ${n}: if you would draw a card, you may mill ${n} and return this card to your hand instead`;
+}
+
 // ---------------------------------------------------------------------------
 // The [X] placeholder
 // ---------------------------------------------------------------------------
@@ -986,7 +1010,7 @@ export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
     id: 'static',
     label: 'While it is on the battlefield',
     lead: 'While it is on the battlefield',
-    hint: 'A standing effect: an anthem, an added type, extra land drops from another zone, cards in your graveyard gaining retrace, no maximum hand size. Narrow below which of your permanents it applies to. It stops the moment the card leaves.',
+    hint: 'A standing effect: an anthem, an added type, extra land drops from another zone, cards in your graveyard gaining retrace or dredge, no maximum hand size. Narrow below which of your permanents it applies to. It stops the moment the card leaves.',
     needs: 'permanent',
     kind: 'static',
   },
@@ -997,6 +1021,13 @@ export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
     hint: 'Its mana ability, in place of whatever the card database read. The amount is read every turn it is untapped, so it can count its own charge counters or your creatures.',
     needs: 'permanent',
     kind: 'tap',
+  },
+  {
+    id: 'graveyard',
+    label: 'While it is in your graveyard',
+    lead: 'While it is in your graveyard',
+    hint: 'A standing fact about the card while it sits in your graveyard, whatever put it there: discarded, milled, died or cast. Dredge is the one step it holds. A printed Dredge is already read off the card; a rule here replaces that number.',
+    kind: 'graveyard',
   },
 ];
 
@@ -1034,6 +1065,8 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'landfrom', label: 'Play lands from another zone', verb: 'play', kinds: ['static'], noAmount: true },
   { id: 'nomaxhand', label: 'No maximum hand size', verb: 'have', kinds: ['static'], noAmount: true },
   { id: 'grantcast', label: 'Cards in a zone can be cast', verb: 'let', kinds: ['static'], noAmount: true },
+  { id: 'grantdredge', label: 'Cards in your graveyard have dredge X', verb: 'give', kinds: ['static'] },
+  { id: 'dredge', label: 'Dredge X', verb: 'dredge', kinds: ['graveyard'] },
   { id: 'tapsfor', label: 'Taps for X mana', verb: 'tap', kinds: ['tap'] },
   { id: 'gainlife', label: 'Gain X life', verb: 'gain' },
   { id: 'loselife', label: 'Lose X life', verb: 'lose' },
@@ -1337,6 +1370,10 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
       return 'you have no maximum hand size';
     case 'grantcast':
       return describeGrant(step);
+    case 'dredge':
+      return describeDredge(step.x.n ?? 0);
+    case 'grantdredge':
+      return `cards in your graveyard${step.q ? ` matching ${step.q}` : ''} have dredge ${step.x.n ?? 0}`;
     case 'tapsfor': {
       const colors = manaStepColors(step);
       const symbols = [...colors].map((c) => `{${c}}`).join('');
@@ -1669,6 +1706,12 @@ export interface CompiledBehavior {
   sacrifice: WatchRule[];
   /** Activated abilities, one per rule: each has its own price. */
   activate: ActivateRule[];
+  /**
+   * Its own dredge number, from a `graveyard` rule, or 0 when it says none.
+   * Replaces a printed Dredge; a `grantdredge` from another card rides in
+   * that card's `statics` instead.
+   */
+  dredge: number;
 }
 
 export interface ActivateRule {
@@ -1710,6 +1753,7 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     dies: [],
     sacrifice: [],
     activate: [],
+    dredge: 0,
   };
   for (const rule of b.rules) {
     const trigger = rule ? TRIGGER_BY_ID.get(rule.on) : undefined;
@@ -1765,6 +1809,10 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     } else if (kind === 'activate') {
       const cost = cleanCost(rule.cost);
       if (cost) out.activate.push({ cost, steps: bucket, ...(cond ? { cond } : {}), ...(once ? { once: true as const } : {}) });
+    } else if (kind === 'graveyard') {
+      // Two dredge numbers on one card is one of them being wrong; the bigger
+      // one is what the card would be played for.
+      for (const step of bucket) if (step.op === 'dredge') out.dredge = Math.max(out.dredge, step.x.n ?? 0);
     }
   }
   if (Array.isArray(b.cast)) {
@@ -1789,7 +1837,8 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     out.endstep.length > 0 ||
     out.dies.length > 0 ||
     out.sacrifice.length > 0 ||
-    out.activate.length > 0;
+    out.activate.length > 0 ||
+    out.dredge > 0;
   return fires ? out : null;
 }
 
@@ -1837,6 +1886,9 @@ function objectStepOk(step: BehaviorStep): boolean {
       const g = grantCastInfo(step.gk);
       return !!g && !!step.from && g.zones.includes(step.from);
     }
+    case 'dredge':
+    case 'grantdredge':
+      return step.x.kind === 'fixed' && (step.x.n ?? 0) >= 1;
     case 'counter':
     case 'pump':
     case 'extramana':
@@ -2174,6 +2226,13 @@ function cleanObjectStep(op: BehaviorStepKind, s: Record<string, unknown>, kind:
       // kind takes none.
       const n = g.id === 'escape' ? clampInt(isRecord(s.x) ? s.x.n : undefined, 0, MAX_CAST_N, 3) : 1;
       return { op, x: { kind: 'fixed', n }, from, gk: g.id, ...q };
+    }
+    case 'dredge':
+    case 'grantdredge': {
+      // A printed number, never one read off the game: dredge is a keyword.
+      const n = clampInt(isRecord(s.x) ? s.x.n : undefined, 1, MAX_DREDGE, 1);
+      // Which cards in the graveyard get it, on the step like grantcast's.
+      return op === 'dredge' ? { op, x: { kind: 'fixed', n } } : { op, x: { kind: 'fixed', n }, ...cleanQuery(s.q) };
     }
     default:
       return undefined;

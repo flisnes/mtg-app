@@ -39,6 +39,7 @@ import {
   decodeFetchProfile,
   decodeManaProfile,
   describeBehavior,
+  describeDredge,
   describeExtraLand,
   describeFetch,
   describeLandRamp,
@@ -77,7 +78,7 @@ import { PolicySpread } from './PolicySpread.js';
 import type { QueueCard, QueueReason } from '../analysis/coverage.js';
 import { templatesFor, type Template } from '../analysis/behaviorTemplates.js';
 import { gapWords, type ShippedDefaults } from '../analysis/defaultBehaviors.js';
-import { KW_HASTE, printedKeywords } from '../analysis/simDeck.js';
+import { KW_HASTE, printedDredge, printedKeywords } from '../analysis/simDeck.js';
 import { oracleTagClosure } from '../cardDb/oracleTags.js';
 import {
   COMBAT_POLICIES,
@@ -126,6 +127,8 @@ interface BehaviorCard {
    * simulator handed it a land drop every turn for the rest of the game.
    */
   extraLand: string | null;
+  /** A printed Dredge N, or 0. Like haste, a keyword: it holds whatever else is written, unless a graveyard rule says another number. */
+  dredge: number;
   /**
    * And what the card *is*: a land, a rock, a mana creature. The one reading a
    * rule written here does not replace, listed anyway because every effect the
@@ -207,6 +210,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       fetch: o.produces ? null : describeFetch(decodeFetchProfile(o.fetch)),
       ritual: describeRitual(decodeManaProfile(o.mana), o.produces),
       extraLand: describeExtraLand(decodeManaProfile(o.mana)),
+      dredge: printedDredge(o.oracleText),
       // Sick is a creature without haste, off the type line: a Dryad Arbor too.
       source: describeManaSource(decodeManaProfile(o.mana), o.produces, isCreature(o.typeLine) && !(printedKeywords(o.oracleText) & KW_HASTE)),
       authored: behaviors.get(o.oracleId) ?? null,
@@ -235,6 +239,7 @@ function summaryOf(card: BehaviorCard): string {
   // No lead on this one: a Forest taps for green whenever you like, which is
   // not a thing that happens when you play it.
   if (card.source) return card.source;
+  if (card.dredge) return `Dredge ${card.dredge}`;
   return 'Do nothing';
 }
 
@@ -250,6 +255,7 @@ function playsOutAs(card: BehaviorCard, preview: readonly BehaviorRule[], cast: 
   if (preview.length > 0 || cast.length > 0) return describeBehavior({ v: CARD_BEHAVIOR_VERSION, rules: [...preview], cast: [...cast] }).join('. ');
   const derived = card.ramp ?? card.fetch ?? card.ritual ?? card.extraLand;
   if (derived) return `${PLAY_LEAD}: ${derived}, read from the card`;
+  if (card.dredge) return `Dredge ${card.dredge}, printed on the card.`;
   // A Forest is not a blank, it is a Forest. The line under this one says so.
   if (card.source) return 'Nothing beyond what it is.';
   return 'Nothing. In the simulator this card does nothing.';
@@ -451,7 +457,7 @@ function BehaviorList({
   // Every derived reading, not some of them. A fetchland and an Exploration
   // were both missing from this test, so both sat under "Nothing read yet"
   // with a line underneath saying what had in fact been read off them.
-  const isRead = (c: BehaviorCard) => !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source);
+  const isRead = (c: BehaviorCard) => !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source || c.dredge);
   const authored = cards.filter((c) => c.authored);
   const shipped = cards.filter((c) => !c.authored && c.shipped);
   const blank = cards.filter((c) => !c.authored && !c.shipped && !isRead(c));
@@ -863,7 +869,13 @@ function BehaviorEditor({
           an "It taps for mana" rule replaces it: a Llanowar Elves taps for green whatever else you tell it to do.
         </p>
       )}
-      {!card.derived && !card.ramp && !card.fetch && !card.ritual && !card.extraLand && !card.source && !active && !card.idle && (
+      {card.dredge > 0 && (
+        <p className="fine-print">
+          Printed on the card: <em>{describeDredge(card.dredge)}</em>. The simulator dredges a spell back whenever it can, and a land
+          only when your hand has none. A "While it is in your graveyard" rule replaces the number; nothing else here touches it.
+        </p>
+      )}
+      {!card.derived && !card.ramp && !card.fetch && !card.ritual && !card.extraLand && !card.source && !card.dredge && !active && !card.idle && (
         <p className="fine-print">
           The card database finds nothing on this card it can play out, so in the simulator it does nothing. Add a rule and it
           will.
@@ -1025,7 +1037,9 @@ function FiringCounts({
     const lead =
       f.on === 'activate' && f.watch !== undefined
         ? describeCost(compiled?.activate[f.watch]?.cost)
-        : (BEHAVIOR_TRIGGERS.find((t) => t.id === f.on)?.lead ?? f.on);
+        : f.on === 'graveyard'
+          ? 'Dredges instead of drawing'
+          : (BEHAVIOR_TRIGGERS.find((t) => t.id === f.on)?.lead ?? f.on);
     const watchedOn = f.on === 'cast' || f.on === 'enters' || f.on === 'dies' || f.on === 'sacrifice' ? f.on : null;
     const q = f.watch !== undefined && watchedOn ? compiled?.[watchedOn][f.watch]?.q : undefined;
     const label = q ? `${lead} (${q})` : lead;
@@ -1230,7 +1244,9 @@ const firstStep = (kind: RuleKind): BehaviorStep =>
     ? { op: 'pump', x: { kind: 'fixed', n: 1 } }
     : kind === 'tap'
       ? { op: 'tapsfor', x: { kind: 'fixed', n: 1 }, colors: 'C' }
-      : emptyStep();
+      : kind === 'graveyard'
+        ? { op: 'dredge', x: { kind: 'fixed', n: 3 } }
+        : emptyStep();
 
 /** The fields only one verb reads, dropped when the verb changes so none of them hides in the row. */
 /**
@@ -1238,7 +1254,7 @@ const firstStep = (kind: RuleKind): BehaviorStep =>
  * game, not your permanents. A rule of only these hides the box, unless it
  * already holds something, which stays visible so it can be cleared.
  */
-const UNNARROWED: ReadonlySet<string> = new Set(['grantcast', 'landfrom', 'nomaxhand']);
+const UNNARROWED: ReadonlySet<string> = new Set(['grantcast', 'grantdredge', 'landfrom', 'nomaxhand']);
 
 const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub', 'pick', 'tid', 'tn', 'gk'];
 
@@ -1543,6 +1559,12 @@ function RuleEditor({
       case 'nomaxhand':
         setStep(i, { op, x: one });
         return;
+      case 'dredge':
+        setStep(i, { op, x: { kind: 'fixed', n: 3 } });
+        return;
+      case 'grantdredge':
+        setStep(i, { op, x: { kind: 'fixed', n: 2 }, q: 't:land' });
+        return;
       case 'extramana':
         setStep(i, { op, x: counted, colors: 'G' });
         return;
@@ -1573,7 +1595,7 @@ function RuleEditor({
   };
 
   const verbs = BEHAVIOR_STEPS.filter((o) => stepFits(o.id, kind) || o.id === rule.steps[0]?.op);
-  const maxSteps = kind === 'tap' ? 1 : MAX_BEHAVIOR_STEPS;
+  const maxSteps = kind === 'tap' || kind === 'graveyard' ? 1 : MAX_BEHAVIOR_STEPS;
 
   return (
     <div className="behavior-rule">
@@ -1641,7 +1663,7 @@ function RuleEditor({
       )}
 
       {kind === 'activate' && <CostEditor cost={rule.cost ?? {}} matcher={matcher} onChange={(cost) => onChange({ ...rule, cost })} />}
-      {kind !== 'static' && (
+      {kind !== 'static' && kind !== 'graveyard' && (
         <GuardEditor
           rule={rule}
           kind={kind}
@@ -1671,7 +1693,9 @@ function RuleEditor({
         // A mana ability's "spend this mana only on", as criteria.
         const spendQuery = step.op === 'tapsfor';
         // Which cards in the zone a grant reaches.
-        const grantQuery = step.op === 'grantcast';
+        const grantQuery = step.op === 'grantcast' || step.op === 'grantdredge';
+        // Dredge is a printed number, never one read off the game.
+        const fixedOnly = step.op === 'dredge' || step.op === 'grantdredge';
         const narrows = move || flicker || creatureQuery || spendQuery || grantQuery;
         const objectControls =
           step.op === 'token' ||
@@ -1717,6 +1741,7 @@ function RuleEditor({
                 label="Where X comes from"
                 matcher={matcher}
                 offer={(o) =>
+                  (!fixedOnly || o.id === 'fixed') &&
                   (move || flicker || !o.moveOnly) &&
                   (!o.needsX || (xAvailable && momentary)) &&
                   (!o.needsPrev || (i > 0 && momentary)) &&
@@ -2321,6 +2346,12 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
     notes.push({
       key: 'grantcast',
       text: 'While this card is on the battlefield, the simulator looks in that zone for spells as well as in your hand. Retrace pays the mana cost plus a land card from your hand, and the card goes back to the graveyard if it is not a permanent, so it can be cast again. Flashback exiles it after. Escape exiles that many other cards from your graveyard. Lands are played, not cast: for those, use "Play lands from another zone" as well.',
+    });
+  }
+  if (has('dredge', 'grantdredge')) {
+    notes.push({
+      key: 'dredge',
+      text: 'Whenever you would draw a card, the draw step included, the simulator may dredge instead: mill that many and put the card back in your hand. It always does for a spell, since a known card beats a random one and the mill feeds the graveyard. It does for a land only when your hand holds none, and not while something lets you play lands from the graveyard. It cannot dredge with fewer cards than that left in the library. Milled cards count as seen, for the card that dredged them.',
     });
   }
   if (has('landfrom')) {

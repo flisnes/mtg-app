@@ -55,6 +55,8 @@ export const PREWRITTEN: Readonly<Record<string, CardBehavior>> = {
     rule('static', [{ op: 'grantcast', x: n(1), from: 'graveyard', gk: 'retrace', q: 'is:permanent -t:land' }]),
     rule('attack', [{ op: 'mill', x: n(3) }]),
   ),
+  // The seven-lands Zombie is left out: a Plant every time is the floor.
+  'The Necrobloom': behavior(rule('static', [{ op: 'grantdredge', x: n(2), q: LAND }]), rule('enters', [token(0, 1)], LAND)),
   'Mole Man, Moloid Master': behavior(
     rule('static', [{ op: 'landfrom', x: n(1), from: 'graveyard' }]),
     rule('enters', [cardToken('26457778-9e7e-4de8-b5a9-78990b1fca13', 'Moloid')], LAND),

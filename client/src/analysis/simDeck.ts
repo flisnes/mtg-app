@@ -16,6 +16,7 @@ import {
   BEHAVIOR_TOKENS,
   TOKEN_ABILITIES,
   X_VARIANTS,
+  MAX_DREDGE,
   type BehaviorAmount,
   type BehaviorCondition,
   type CardBehavior,
@@ -258,6 +259,12 @@ export interface SimCard {
   kicker: SimKicker | null;
   gyCast: SimGraveyardCast | null;
   suspend: SimSuspend | null;
+  /**
+   * Dredge N of its own: printed, or from a "While it is in your graveyard"
+   * rule, which replaces the printed number. 0 for none. A grant from another
+   * card (The Necrobloom) is read off the battlefield instead.
+   */
+  dredge: number;
 }
 
 /**
@@ -612,6 +619,7 @@ function simCardOf(o: OracleCard, behavior: CompiledBehavior | null, copies: num
     kicker: null,
     gyCast: null,
     suspend: null,
+    dredge: printedDredge(o.oracleText),
   };
   return card;
 }
@@ -647,6 +655,16 @@ export function printedKeywords(text: string | null | undefined): number {
 }
 
 /**
+ * A printed "Dredge N" keyword line, or 0. Read like the keywords above: the
+ * card database has no field for it, and it is a keyword, not a reading.
+ */
+export function printedDredge(text: string | null | undefined): number {
+  if (!text) return 0;
+  const m = /^dredge (\d+)\b/im.exec(text.replace(/\([^)]*\)/g, ''));
+  return m ? Math.min(MAX_DREDGE, Number(m[1])) : 0;
+}
+
+/**
  * The parts of an authored behavior that change what the card *is* rather than
  * what it does (rebuild plan F4, F5): a mana ability written by hand, and the
  * other ways it can be cast. Read once here so the sequencer only meets fields.
@@ -674,6 +692,7 @@ function applyAuthoredObject(card: SimCard, b: CompiledBehavior): void {
     card.spendQ = tap.q || null;
     if (card.role !== 'land') card.tapped = 'never';
   }
+  if (b.dredge > 0) card.dredge = b.dredge;
   for (const o of b.options) {
     const cost = o.cost ? parseManaCost(normalizeCost(o.cost)) : null;
     switch (o.kind) {
@@ -786,6 +805,7 @@ function tokenCard(key: string, spec: TokenOption): { card: SimCard; oracle: Ora
     kicker: null,
     gyCast: null,
     suspend: null,
+    dredge: 0,
   };
   return { card, oracle };
 }

@@ -1,4 +1,4 @@
-// The older half of the changelog (0.160.0 down to 0.98.0), split out of
+// The older half of the changelog (0.166.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,26 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.166.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Who does the work now lists the draw and ramp cards the simulator plays as nothing, at 0 and in amber. Tap one to write what it does.',
+      },
+    ],
+  },
+  {
+    version: '0.165.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Flow opens on Screw and flood: how often you are screwed or flooded by turn six, a turn-by-turn table, and how much mana you really have on any turn ("at least 6 on turn 6 in 33% of games").',
+      },
+    ],
+  },
   {
     version: '0.164.0',
     changes: [

@@ -151,7 +151,7 @@ export function ContributionsSheet({
         <p className="fine-print">
           Your opening hand is worth {one(result.seenFromOpener[turns] ?? 0)} of the {one(result.cardsSeenByTurn[turns] ?? 0)} cards
           you have seen by turn {turns}, and your draw step another {one(result.seenFromDrawStep[turns] ?? 0)}. Neither is any
-          card's doing, so neither is in the list. Everything above is cards your deck found you on top of them.
+          card's doing, so neither is in the list. Everything above is cards your deck found you on top of them, milled ones included: a card face up in your graveyard is one you have seen.
         </p>
       )}
 

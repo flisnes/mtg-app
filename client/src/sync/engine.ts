@@ -509,8 +509,20 @@ const KEY_REPAIRS = 'syncRepairs';
  * - `behaviorGrammarGrants` (v0.175.0): tokens picked by name from the card
  *   database and the grant that lets cards in a zone be cast (Six's retrace).
  *   An older build drops both steps; this re-pull puts them back.
+ * - `behaviorGrammarDredge` (v0.176.0): the "While it is in your graveyard"
+ *   rule with its dredge step, and the static granting dredge (The
+ *   Necrobloom). Same story: an older build drops them.
  */
-const REPAIRS = ['containerKinds', 'syncTableAdditions', 'containerEmblems2', 'deckCardUnfiled', 'behaviorGrammarF', 'behaviorGrammarE3', 'behaviorGrammarGrants'] as const;
+const REPAIRS = [
+  'containerKinds',
+  'syncTableAdditions',
+  'containerEmblems2',
+  'deckCardUnfiled',
+  'behaviorGrammarF',
+  'behaviorGrammarE3',
+  'behaviorGrammarGrants',
+  'behaviorGrammarDredge',
+] as const;
 
 async function runOneTimeRepairs(): Promise<void> {
   const done = (await getSetting<string[]>(KEY_REPAIRS)) ?? [];

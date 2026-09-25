@@ -653,7 +653,13 @@ export function simulate(
   // identity is the trigger and no call site has to say which one it is.
   const fireSlot = new Map<readonly BehaviorStep[], number>();
   const fireMeta: { card: number; on: BehaviorTrigger; watch?: number }[] = [];
+  /** Each card's dredge line in the firing counts, or -1. Printed or authored. */
+  const dredgeSlot = new Int32Array(n).fill(-1);
   for (let i = 0; i < n; i++) {
+    if (cards[i]!.dredge > 0) {
+      dredgeSlot[i] = fireMeta.length;
+      fireMeta.push({ card: i, on: 'graveyard' });
+    }
     const b = cards[i]!.behavior;
     if (!b) continue;
     for (const on of ['play', 'etb', 'attack', 'death', 'upkeep', 'endstep'] as const) {
@@ -860,10 +866,10 @@ export function simulate(
    * resolvers below move all four of these and closing over them beats
    * threading them through five call signatures.
    *
-   * `top` is the library pointer and `seen` is what reached your hand off it.
-   * They used to be the same number, and they stop being the same number the
-   * moment anything mills: a card binned off the top has left the library
-   * without you ever seeing it, and the cards chart is about what you hold.
+   * `top` is the library pointer and `seen` is what came off it face up: into
+   * your hand, or milled into the graveyard, where you know it is and a dredge
+   * or a reanimation can use it. Kept apart from `top` because not every way
+   * off the library is one of those.
    */
   let handLen = 0;
   let libLen = 0;
@@ -1452,8 +1458,20 @@ export function simulate(
    */
   const drawCards = (count: number): number => {
     let drawn = 0;
+    let dredged = 0;
     for (let k = 0; k < count; k++) {
-      if (top >= libLen || handLen >= hand.length) break;
+      if (handLen >= hand.length) break;
+      // Each draw on its own may be a dredge instead, and one that is still
+      // counts as a card for "the previous X": it put a card in your hand.
+      if (anyDredge && gyLen > 0) {
+        const said = dredgeInstead();
+        if (said !== null) {
+          dredged++;
+          if (sink) drewNames.push(said);
+          continue;
+        }
+      }
+      if (top >= libLen) break;
       const index = library[top++]!;
       hand[handLen++] = index;
       seen++;
@@ -1461,7 +1479,7 @@ export function simulate(
       if (sink) drewNames.push(cards[index]!.name);
     }
     creditSeen(creditTo, drawn);
-    return drawn;
+    return drawn + dredged;
   };
 
   /**
@@ -1484,7 +1502,11 @@ export function simulate(
     return discarded;
   };
 
-  /** Cards off the top into the graveyard. They leave the library; you never see them. */
+  /**
+   * Cards off the top into the graveyard. They count as seen: face up in the
+   * yard is a card you know about, and for a dredge or self-mill deck it is
+   * most of what the deck digs through.
+   */
   const millCards = (count: number): number => {
     let milled = 0;
     for (let k = 0; k < count && top < libLen; k++) {
@@ -1493,7 +1515,82 @@ export function simulate(
       bury(index);
       milled++;
     }
+    seen += milled;
+    creditSeen(creditTo, milled);
     return milled;
+  };
+
+  /** A card's dredge number right now: its own, or a grant's (The Necrobloom's lands), whichever is bigger. */
+  const dredgeOf = (index: number): number => {
+    let d = cards[index]!.dredge;
+    for (const g of dredgeGrants) if (g.n > d && (!g.filter || g.filter.match[index] === 1)) d = g.n;
+    return d;
+  };
+
+  /** A land in hand to play, the commander aside. */
+  const landInHand = (): boolean => {
+    for (let i = 0; i < handLen; i++) {
+      const c = cards[hand[i]!]!;
+      if (c.land && !c.commander) return true;
+    }
+    return false;
+  };
+
+  /**
+   * Dredge instead of drawing, when a card in the graveyard is worth more than
+   * the top of the library. A spell always is: a known card beats a random one,
+   * and the mill feeds the graveyard it came from. A land only when your hand
+   * holds none and nothing lets you play it from the graveyard as it is. The
+   * biggest dredge wins a tie, since the mill is the point.
+   *
+   * Null to draw as usual. Otherwise the card is in hand and the return is what
+   * happened, for the trace ('' when nothing is tracing). The milled cards are
+   * credited to the card that dredged them.
+   */
+  const dredgeInstead = (): string | null => {
+    ensureFresh(turnNow);
+    const left = libLen - top;
+    let pick = -1;
+    let pickN = 0;
+    let pickLand = true;
+    let wantLand: boolean | null = null;
+    for (let i = 0; i < gyLen; i++) {
+      const index = graveyard[i]!;
+      const d = dredgeOf(index);
+      // Fewer cards in the library than the number, and it cannot dredge.
+      if (d <= 0 || d > left) continue;
+      const land = cards[index]!.land;
+      if (land) {
+        if (pick >= 0 && !pickLand) continue;
+        if (wantLand === null) wantLand = !landFromGraveyard && !landInHand();
+        if (!wantLand) continue;
+      }
+      if (pick < 0 || (pickLand && !land) || d > pickN) {
+        pick = i;
+        pickN = d;
+        pickLand = land;
+      }
+    }
+    if (pick < 0) return null;
+    const index = graveyard[pick]!;
+    graveyard[pick] = graveyard[--gyLen]!;
+    const slot = dredgeSlot[index]!;
+    if (slot >= 0) {
+      fireCount[slot]!++;
+      if (fireSeen[slot] !== gameNo) {
+        fireSeen[slot] = gameNo;
+        fireGames[slot]!++;
+      }
+    }
+    const at = milledNames.length;
+    const outer = creditTo;
+    creditTo = index;
+    millCards(pickN);
+    creditTo = outer;
+    hand[handLen++] = index;
+    if (!sink) return '';
+    const names = milledNames.splice(at);
+    return `${cards[index]!.name} (dredge ${pickN}, milling ${names.length > 0 ? names.join(', ') : 'nothing'})`;
   };
 
   /**
@@ -2827,9 +2924,10 @@ export function simulate(
       const index = takeFrom(from, mask, base, turn, step.pick);
       if (index < 0) break;
       moved++;
-      // `seen` is cards that reached your hand off the library, which is what
-      // the cards chart reads. A tutor counts; a regrowth does not.
-      if (from === 'library' && to === 'hand') {
+      // `seen` is cards off the library that you got to look at, which is what
+      // the cards chart reads: a tutor counts, and so does one binned face up
+      // like a mill. A regrowth does not.
+      if (from === 'library' && (to === 'hand' || to === 'graveyard')) {
         seen++;
         creditSeen(creditTo, 1);
       }
@@ -3698,6 +3796,12 @@ export function simulate(
    */
   const gyGrants: { filter: SimFilter | null; kind: SimGraveyardCast['kind']; n: number }[] = [];
   const topGrants: (SimFilter | null)[] = [];
+  /** The dredge grants on the battlefield right now (The Necrobloom): which graveyard cards, and how much. */
+  const dredgeGrants: { filter: SimFilter | null; n: number }[] = [];
+  /** Anything in this deck dredges, so a draw looks in the graveyard first. */
+  const anyDredge =
+    cards.some((c) => c.dredge > 0) ||
+    cards.some((c) => c.permanent && !!c.behavior?.statics.some((r) => r.steps.some((s) => s.op === 'grantdredge')));
   /**
    * The cast a grant hands one card, built once per card and kind so the spend
    * loop never allocates. The printed cost: a graveyard holds no commander.
@@ -3752,6 +3856,8 @@ export function simulate(
   /** The turn each card was last discarded, as `game * stride + turn`, for mayhem. */
   const discardedAt = new Int32Array(n).fill(-1);
   let turnStamp = -1;
+  /** The turn being played, for the zone movers that have no turn passed to them (a dredge's statics). */
+  let turnNow = 0;
 
   /** Suspended cards and their time counters. They sit in exile; nothing else there can reach them. */
   const suspCard = new Int32Array(MAX_HAND);
@@ -3833,6 +3939,7 @@ export function simulate(
     landFromTop = false;
     gyGrants.length = 0;
     topGrants.length = 0;
+    dredgeGrants.length = 0;
     const len = perms.len;
     for (let p = 0; p < len; p++) {
       perms.types[p] = cards[perms.card[p]!]!.types;
@@ -3893,6 +4000,12 @@ export function simulate(
               if (step.q && !grantFilter) break;
               if (step.from === 'librarytop') topGrants.push(grantFilter ?? null);
               else if (step.gk) gyGrants.push({ filter: grantFilter ?? null, kind: step.gk, n: step.x.n ?? 0 });
+              break;
+            }
+            case 'grantdredge': {
+              const grantFilter = step.q ? filterFor.get(step.q) : undefined;
+              if (step.q && !grantFilter) break;
+              dredgeGrants.push({ filter: grantFilter ?? null, n: step.x.n ?? 0 });
               break;
             }
             case 'pump':
@@ -4536,6 +4649,7 @@ export function simulate(
     landFromTop = false;
     gyGrants.length = 0;
     topGrants.length = 0;
+    dredgeGrants.length = 0;
 
     // --- The opener, and however many mulligans it takes ---------------------
     for (let m = 0; ; m++) {
@@ -4592,6 +4706,7 @@ export function simulate(
       poolCredited = false;
       const damageBefore = gameDamage;
       turnStamp = game * stride + turn;
+      turnNow = turn;
       // Untap. The only tapped state this model keeps is a creature that paid
       // for last turn's spells, so it is also the only thing to untap.
       if (perms.len > 0) perms.untapAll();
@@ -4642,7 +4757,13 @@ export function simulate(
         }
       }
 
-      if (!(turn === 1 && opts.onPlay) && top < libLen && handLen < MAX_HAND) {
+      // A dredge replaces the draw step's draw like any other. The cards it
+      // mills are the dredging card's, not the draw step's.
+      const drawing = !(turn === 1 && opts.onPlay) && handLen < MAX_HAND;
+      const dredged = drawing && anyDredge && gyLen > 0 ? dredgeInstead() : null;
+      if (dredged !== null) {
+        if (sink) say(sink, 'draw', `Dredges back ${dredged} instead of drawing`);
+      } else if (drawing && top < libLen) {
         const index = library[top++]!;
         hand[handLen++] = index;
         seen++;

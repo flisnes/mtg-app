@@ -109,6 +109,8 @@ export const TYPE_BIT: Readonly<Record<string, number>> = { C: T_CREATURE, L: T_
 export const KW_HASTE = 1;
 export const KW_VIGILANCE = 2;
 export const KW_DOUBLE = 4;
+/** Printed only — the authored keyword step has no letter for it. */
+export const KW_DEFENDER = 8;
 const KW_BY_LETTER: Readonly<Record<string, number>> = { H: KW_HASTE, V: KW_VIGILANCE, D: KW_DOUBLE };
 
 /** A step's keyword letters as KW_ bits. */
@@ -235,6 +237,12 @@ export interface SimCard {
   types: number;
   /** Printed keywords as KW_ bits. */
   keywords: number;
+  /**
+   * A Theros god's condition: it is not a creature, and does not attack, while
+   * your devotion to `want`'s colors (WUBRG as bits 1 to 16) is below `n`.
+   * Null for every card that is simply what its type line says.
+   */
+  god: { want: number; n: number } | null;
   /** Printed toughness, or zero, read the way `power` is. */
   toughness: number;
   /**
@@ -615,6 +623,7 @@ function simCardOf(o: OracleCard, behavior: CompiledBehavior | null, copies: num
     behavior,
     types: typeBits(parts[0] ?? ''),
     keywords: printedKeywords(o.oracleText),
+    god: godClause(o.oracleText),
     toughness: powerOf(o.toughness),
     token: false,
     manaAmount: null,
@@ -731,8 +740,30 @@ export function printedKeywords(text: string | null | undefined): number {
     if (parts.includes('haste')) bits |= KW_HASTE;
     if (parts.includes('vigilance')) bits |= KW_VIGILANCE;
     if (parts.includes('double strike')) bits |= KW_DOUBLE;
+    if (parts.includes('defender')) bits |= KW_DEFENDER;
   }
   return bits;
+}
+
+/** "As long as your devotion to black is less than five, this isn't a creature." */
+const GOD_CLAUSE =
+  /\bas long as your devotion to ([a-z ]+?) is less than ([a-z]+|\d+)\b[^.\n]*isn't a creature/i;
+const GOD_NUMBERS: Readonly<Record<string, number>> = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+const GOD_COLORS: Readonly<Record<string, number>> = { white: 1, blue: 2, black: 4, red: 8, green: 16 };
+
+/**
+ * The devotion condition of a Theros god, or null. Erebos attacked for five
+ * on an empty board; below the threshold the card is not a creature at all,
+ * and the simulator tracks devotion already (v0.177), so this is a reading,
+ * not a guess.
+ */
+export function godClause(text: string | null | undefined): { want: number; n: number } | null {
+  const m = GOD_CLAUSE.exec(text ?? '');
+  if (!m) return null;
+  let want = 0;
+  for (const [name, bit] of Object.entries(GOD_COLORS)) if (m[1]!.includes(name)) want |= bit;
+  const n = GOD_NUMBERS[m[2]!.toLowerCase()] ?? Number(m[2]);
+  return want && Number.isFinite(n) ? { want, n } : null;
 }
 
 /**
@@ -880,6 +911,7 @@ function tokenCard(key: string, spec: TokenOption): { card: SimCard; oracle: Ora
     types,
     // Only a custom token carries keywords, as the key's last field.
     keywords: key.startsWith('custom:') ? keywordBits(key.slice(key.lastIndexOf(':') + 1)) : 0,
+    god: null,
     toughness: creature ? (spec.toughness ?? 0) : 0,
     token: true,
     manaAmount: null,

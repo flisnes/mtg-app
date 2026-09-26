@@ -38,6 +38,7 @@ import { bindingPips, parseManaCost, type ParsedCost, type Pip } from './manaCos
 import { Permanents } from './battlefield.js';
 import {
   colorMask,
+  KW_DEFENDER,
   KW_DOUBLE,
   KW_HASTE,
   KW_VIGILANCE,
@@ -2016,14 +2017,19 @@ export function simulate(
     }
   }
 
+  /** Your devotion to a WUBRG bitset: every permanent's share summed. */
+  const devotionTo = (want: number, turn: number): number => {
+    let count = 0;
+    for (let p = 0; p < perms.len; p++) if (stillOut(p, turn)) count += devotionOf[perms.card[p]! * 32 + want]!;
+    return count;
+  };
+
   /** Your devotion to a set of colors (Gray Merchant): every permanent's share, the card holding the rule included. */
   const devotionInPlay = (x: BehaviorAmount, turn: number): number => {
     ensureFresh(turn);
     let want = 0;
     for (const c of devotionColors(x)) want |= 1 << 'WUBRG'.indexOf(c);
-    let count = 0;
-    for (let p = 0; p < perms.len; p++) if (stillOut(p, turn)) count += devotionOf[perms.card[p]! * 32 + want]!;
-    return count;
+    return devotionTo(want, turn);
   };
 
   /**
@@ -2661,6 +2667,10 @@ export function simulate(
       // What it is now and how big it is now (rebuild plan F2): a Beast token
       // attacks, an anthem counts, a hasty creature swings the turn it lands.
       if (!(perms.types[p]! & T_CREATURE) || !stillOut(p, turn) || !perms.ready(p, turn)) continue;
+      // A wall does not swing, and a Theros god below its devotion is not even
+      // a creature. Both attacked before, which inflated the deck (§11.4).
+      if (perms.kw[p]! & KW_DEFENDER) continue;
+      if (card.god && devotionTo(card.god.want, turn) < card.god.n) continue;
       const triggers = opts.effects && !!card.behavior && card.behavior.attack.length > 0;
       if (!everyone && !triggers) continue;
       // Tapped for mana this turn, so it is not attacking. Until F2 a Llanowar

@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.181.0',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'A Theros god no longer attacks below its devotion threshold, and creatures with defender no longer attack at all. Damage curves read a little lower and closer to how the deck plays.',
+      },
+    ],
+  },
+  {
     version: '0.180.0',
     changes: [
       {
@@ -194,15 +203,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'changed',
         text:
           'The simulator now discards down to seven at end of turn, recasts your commander with its tax, and a creature that taps for mana no longer also attacks.',
-      },
-    ],
-  },
-  {
-    version: '0.170.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'The Model tab now plays your deck under all four spend orders and shows them side by side, so you can see whether the order matters and tap the one that does best.',
       },
     ],
   },

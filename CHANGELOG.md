@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.181.0
+
+- **Fixed: gods and walls attacked when they should not.** A Theros god swung for its full power even below its devotion threshold, so an Erebos hit for five off an empty board. It now checks your devotion each combat, the same count Gray Merchant drains by, and stays home until you are devout enough. Creatures with defender no longer attack at all. Both inflated damage curves, and the floor promises the opposite direction.
+
 ## 0.180.0
 
 - **Fixed: the card database read some mana too generously.** The simulator's promise is a floor: when it errs, it errs low. The color review found the places it erred high instead, and this build fixes the biggest batch. Mana priced in something other than mana no longer reads as a free repeating source: Ashnod's Altar wants a creature, Springleaf Drum wants an untapped one, Skirge Familiar wants your cards. A sacrifice without a tap cost (Blood Pet, the Spirit Guides, Lion's Eye Diamond) is one mana once, not one mana forever. Spells with a sacrifice attached (Deadly Dispute, Village Rites, Culling the Weak) stop reading as free draws and free rituals. "Activate only if" abilities (Mox Opal, Temple of the False God), loyalty abilities, Saga chapters, back faces and reminder text (Chandra, The Aetherspark, firebending) no longer count as the card's own tap. And the Diamonds, the Borderposts and Coldsteel Heart finally enter tapped, including when you wrote their mana rule yourself. Around 250 cards read lower and closer to how they play; "you control a Swamp" duals and Horizon Canopy-style life costs still count, because in the decks that play them they always could.

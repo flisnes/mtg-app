@@ -11,6 +11,7 @@ import { UpdatePrompt } from './components/UpdatePrompt.js';
 import { useWhatsNew, WhatsNewModal } from './components/WhatsNewModal.js';
 import { AppHotkeys } from './components/AppHotkeys.js';
 import { GlobalSearchBar, GlobalSearchProvider } from './components/GlobalSearch.js';
+import { CollectionSnapshotProvider } from './db/collectionSnapshot.js';
 import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
 import { Tradelist } from './routes/Tradelist.js';
@@ -100,10 +101,15 @@ export function App() {
 
   // AppShell lives inside the providers so it can use toasts for the card-data
   // update feedback (ToastProvider must be an ancestor of useToast).
+  // CollectionSnapshotProvider is the one shared read of the user's own tables —
+  // every ownership badge, placement pill, header value and the bell derive
+  // from it (see db/collectionSnapshot.tsx).
   return (
     <ToastProvider>
       <GlobalSearchProvider>
-        <AppShell />
+        <CollectionSnapshotProvider>
+          <AppShell />
+        </CollectionSnapshotProvider>
       </GlobalSearchProvider>
     </ToastProvider>
   );

@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { DAY_MS, type Finish, type PriceHistory, type UserEvent, type UserEventKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
+import { useCollectionEntries } from '../db/collectionSnapshot.js';
 import { getPricesByIds, priceForFinish, type CardPrice } from '../cardDb/prices.js';
 import { getPrefs } from '../prefs.js';
 import { canConvert, convertToDisplay } from './rates.js';
@@ -267,15 +268,16 @@ export function buildCollectionValueSeries(
 
 /** The live daily value series for the whole collection. Null = not enough data. */
 export function useCollectionValueSeries(): CollectionValueSeries | null | undefined {
+  const entries = useCollectionEntries();
   return useLiveQuery(async () => {
-    const [entries, events, histories] = await Promise.all([
-      db.collection.toArray(),
+    if (!entries) return undefined;
+    const [events, histories] = await Promise.all([
       db.events.where('kind').anyOf('collection.add', 'collection.remove').toArray(),
       db.priceHistories.toArray(),
     ]);
     const prices = await getPricesByIds(histories.map((h) => h.scryfallId));
     return buildCollectionValueSeries(entries, events, histories, prices);
-  }, []);
+  }, [entries]);
 }
 
 /**

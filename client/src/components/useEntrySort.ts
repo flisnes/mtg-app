@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema.js';
+import { useCollectionEntries } from '../db/collectionSnapshot.js';
 import { getPricesByIds, priceForFinish } from '../cardDb/prices.js';
 import type { JoinedEntry, JoinedWish } from '../db/queries.js';
 import { acquisitionGain, costBasisOf } from '../price/costBasis.js';
@@ -40,13 +41,13 @@ export interface EntrySortData {
 
 export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortData {
   const needChanges = sort.key === 'change' || sort.key === 'changePct';
+  const entries = useCollectionEntries();
   const changes = useLiveQuery(async () => {
-    if (!needChanges) return undefined;
-    // Three full reads, all of them big tables, which is why this is lazy: the
-    // rows being sorted, their recorded readings, and the adds that say what
-    // each printing cost.
-    const [entries, histories, events] = await Promise.all([
-      db.collection.toArray(),
+    if (!needChanges || !entries) return undefined;
+    // Two full reads of big tables, which is why this is lazy: the recorded
+    // readings, and the adds that say what each printing cost. The rows being
+    // sorted come off the shared snapshot.
+    const [histories, events] = await Promise.all([
       db.priceHistories.toArray(),
       db.events.where('kind').equals('collection.add').toArray(),
     ]);
@@ -84,7 +85,7 @@ export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortDat
       m.set(key, gain ? { delta: gain.delta, pct: gain.pct } : { delta: trend.delta, pct: trend.pct });
     }
     return m;
-  }, [needChanges]);
+  }, [needChanges, entries]);
 
   // Stable identity: callers memoize their sort on this, and the collection is
   // thousands of rows to re-sort if it changes every render.

@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema.js';
+import { useCollectionEntries } from '../db/collectionSnapshot.js';
 import { moverFlag } from './movers.js';
 import { useMoverTuning } from './moverTuning.js';
 
@@ -11,8 +13,10 @@ import { useMoverTuning } from './moverTuning.js';
  */
 export function useMoverFlags(): Map<string, 'up' | 'down'> | undefined {
   const tuning = useMoverTuning();
-  return useLiveQuery(async () => {
-    const [histories, entries] = await Promise.all([db.priceHistories.toArray(), db.collection.toArray()]);
+  const entries = useCollectionEntries();
+  const histories = useLiveQuery(() => db.priceHistories.toArray(), []);
+  return useMemo(() => {
+    if (!histories || !entries) return undefined;
     // Copies held decide whether a cheap card's move is pocket change or a
     // real position (see the position term in movers.ts).
     const qtyById = new Map<string, number>();
@@ -23,5 +27,5 @@ export function useMoverFlags(): Map<string, 'up' | 'down'> | undefined {
       if (f) m.set(h.scryfallId, f);
     }
     return m;
-  }, [tuning]);
+  }, [histories, entries, tuning]);
 }

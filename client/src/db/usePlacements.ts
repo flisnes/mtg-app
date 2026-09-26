@@ -1,16 +1,17 @@
-import { useMemo } from 'react';
 import {
   prefsCompatible,
+  type CollectionEntry,
   type Condition,
   type ContainerKind,
   type CopyPrefs,
+  type Deck,
   type DeckBoard,
+  type DeckCard,
   type Finish,
 } from '@mtg/shared';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { claimKeyOf } from '../deck/filing.js';
 import { collectionKey } from './dataAccess.js';
-import { db } from './schema.js';
+import { useCollectionSnapshot } from './collectionSnapshot.js';
 
 // One shared answer to "where is this card?" — the deck / binder / box badge on
 // collection cards and the pills in the card sheet. Decks, binders and boxes are
@@ -177,173 +178,143 @@ function mergeByContainer(slots: Slot[], allocated: Map<string, number>): Placem
 
 /**
  * Just how many copies are filed in more places than you own — the notification
- * bell's dot. The bell lives in the header on every screen, so this deliberately
- * skips the full placement index: two table reads plus the container *ids* (an
- * index-only scan) instead of joining every slot to its container.
+ * bell's dot. The bell lives in the header on every screen; the count is the
+ * shared index's conflict list, which the snapshot provider builds once per
+ * data change anyway, so the bell adds no reads of its own.
  */
 export function useFilingConflictCount(): number {
-  return (
-    useLiveQuery(async () => {
-      const [slots, entries, containerIds] = await Promise.all([
-        db.deckCards.toArray(),
-        db.collection.toArray(),
-        db.decks.toCollection().primaryKeys(),
-      ]);
-      const live = new Set(containerIds);
-      const owned = new Map<string, number>();
-      for (const e of entries) {
-        const k = collectionKey(e);
-        owned.set(k, (owned.get(k) ?? 0) + e.quantity);
-      }
-      const claimed = new Map<string, number>();
-      for (const s of slots) {
-        const k = claimKeyOf(s);
-        // Skip slots orphaned by a container delete that hasn't synced yet — the
-        // placement index ignores them too, so a phantom dot would never resolve.
-        if (!k || !live.has(s.deckId)) continue;
-        claimed.set(k, (claimed.get(k) ?? 0) + s.quantity);
-      }
-      let n = 0;
-      claimed.forEach((c, k) => {
-        if (c > (owned.get(k) ?? 0)) n++;
-      });
-      return n;
-    }, []) ?? 0
-  );
+  return useCollectionSnapshot().conflictCount;
 }
 
 export function usePlacementIndex(): PlacementIndex | undefined {
-  const data = useLiveQuery(async () => {
-    const [containers, slots, entries] = await Promise.all([
-      db.decks.toArray(),
-      db.deckCards.toArray(),
-      db.collection.toArray(),
-    ]);
-    return { containers, slots, entries };
-  }, []);
+  return useCollectionSnapshot().placements;
+}
 
-  return useMemo(() => {
-    if (!data) return undefined;
-    const byId = new Map(data.containers.map((c) => [c.id, c]));
-    // Copies owned, per physical-copy identity. Entries are unique on that key,
-    // so this is one row each — summed anyway to be safe.
-    const ownedByCopy = new Map<string, number>();
-    for (const e of data.entries) {
-      const k = collectionKey(e);
-      ownedByCopy.set(k, (ownedByCopy.get(k) ?? 0) + e.quantity);
+/** Build the index. Pure — the snapshot provider calls it once per data change. */
+export function buildPlacementIndex(
+  containers: Deck[],
+  slots: DeckCard[],
+  entries: CollectionEntry[],
+): PlacementIndex {
+  const byId = new Map(containers.map((c) => [c.id, c]));
+  // Copies owned, per physical-copy identity. Entries are unique on that key,
+  // so this is one row each — summed anyway to be safe.
+  const ownedByCopy = new Map<string, number>();
+  for (const e of entries) {
+    const k = collectionKey(e);
+    ownedByCopy.set(k, (ownedByCopy.get(k) ?? 0) + e.quantity);
+  }
+
+  // Raw slots bucketed per oracle card, each keeping the edition and the traits
+  // it asks for; the filtering happens per question at lookup time.
+  const byOracle = new Map<string, Slot[]>();
+  const claiming: Slot[] = [];
+  for (const s of slots) {
+    // An "any printing" basic promises nothing about your shelves: it isn't a
+    // copy you own, so it neither files a card away nor over-promises one.
+    if (s.anyBasic) continue;
+    const container = byId.get(s.deckId);
+    if (!container) continue; // orphan slot (a delete that hasn't synced yet)
+    const slot: Slot = {
+      id: s.id,
+      containerId: container.id,
+      kind: container.kind ?? 'deck',
+      name: container.name,
+      quantity: s.quantity,
+      board: s.board,
+      ...(s.scryfallId ? { scryfallId: s.scryfallId } : {}),
+      prefs: { condition: s.condition, finish: s.finish, lang: s.lang },
+      // Pinned all the way down = this slot is about one real card of yours.
+      ...(claimKeyOf(s) ? { claimKey: claimKeyOf(s) } : {}),
+      updatedAt: s.updatedAt,
+    };
+    if (slot.claimKey) claiming.push(slot);
+    const arr = byOracle.get(s.oracleId);
+    if (arr) arr.push(slot);
+    else byOracle.set(s.oracleId, [slot]);
+  }
+
+  // Hand the copies out, newest claim first: the deck you just filed the card
+  // into gets it, the one you took it out of goes wanting. Ties break on id so
+  // the answer never flickers between renders.
+  const allocated = new Map<string, number>();
+  const unspoken = new Map(ownedByCopy);
+  for (const s of [...claiming].sort((a, b) => b.updatedAt - a.updatedAt || (a.id < b.id ? -1 : 1))) {
+    const left = unspoken.get(s.claimKey!) ?? 0;
+    const take = Math.min(left, s.quantity);
+    if (take > 0) unspoken.set(s.claimKey!, left - take);
+    allocated.set(s.id, take);
+  }
+
+  const infos = new Map<string, OraclePlacements>();
+  const conflicts: FilingConflict[] = [];
+  byOracle.forEach((slots, oracleId) => {
+    const claims = new Map<string, Claim>();
+    for (const s of slots) {
+      if (!s.claimKey) continue;
+      const c = claims.get(s.claimKey);
+      if (c) {
+        c.claimed += s.quantity;
+        c.slots.push(s);
+      } else claims.set(s.claimKey, { owned: ownedByCopy.get(s.claimKey) ?? 0, claimed: s.quantity, slots: [s] });
     }
-
-    // Raw slots bucketed per oracle card, each keeping the edition and the traits
-    // it asks for; the filtering happens per question at lookup time.
-    const byOracle = new Map<string, Slot[]>();
-    const claiming: Slot[] = [];
-    for (const s of data.slots) {
-      // An "any printing" basic promises nothing about your shelves: it isn't a
-      // copy you own, so it neither files a card away nor over-promises one.
-      if (s.anyBasic) continue;
-      const container = byId.get(s.deckId);
-      if (!container) continue; // orphan slot (a delete that hasn't synced yet)
-      const slot: Slot = {
-        id: s.id,
-        containerId: container.id,
-        kind: container.kind ?? 'deck',
-        name: container.name,
-        quantity: s.quantity,
-        board: s.board,
-        ...(s.scryfallId ? { scryfallId: s.scryfallId } : {}),
-        prefs: { condition: s.condition, finish: s.finish, lang: s.lang },
-        // Pinned all the way down = this slot is about one real card of yours.
-        ...(claimKeyOf(s) ? { claimKey: claimKeyOf(s) } : {}),
-        updatedAt: s.updatedAt,
-      };
-      if (slot.claimKey) claiming.push(slot);
-      const arr = byOracle.get(s.oracleId);
-      if (arr) arr.push(slot);
-      else byOracle.set(s.oracleId, [slot]);
-    }
-
-    // Hand the copies out, newest claim first: the deck you just filed the card
-    // into gets it, the one you took it out of goes wanting. Ties break on id so
-    // the answer never flickers between renders.
-    const allocated = new Map<string, number>();
-    const unspoken = new Map(ownedByCopy);
-    for (const s of [...claiming].sort((a, b) => b.updatedAt - a.updatedAt || (a.id < b.id ? -1 : 1))) {
-      const left = unspoken.get(s.claimKey!) ?? 0;
-      const take = Math.min(left, s.quantity);
-      if (take > 0) unspoken.set(s.claimKey!, left - take);
-      allocated.set(s.id, take);
-    }
-
-    const infos = new Map<string, OraclePlacements>();
-    const conflicts: FilingConflict[] = [];
-    byOracle.forEach((slots, oracleId) => {
-      const claims = new Map<string, Claim>();
-      for (const s of slots) {
-        if (!s.claimKey) continue;
-        const c = claims.get(s.claimKey);
-        if (c) {
-          c.claimed += s.quantity;
-          c.slots.push(s);
-        } else claims.set(s.claimKey, { owned: ownedByCopy.get(s.claimKey) ?? 0, claimed: s.quantity, slots: [s] });
-      }
-      infos.set(oracleId, { slots, claims, cache: new Map() });
-      // A pinned slot knows all four traits, so any of its slots can spell the
-      // copy out for the resolver.
-      claims.forEach((c) => {
-        if (c.claimed <= c.owned) return;
-        const s = c.slots[0]!;
-        conflicts.push({
-          oracleId,
-          scryfallId: s.scryfallId!,
-          condition: s.prefs.condition!,
-          finish: s.prefs.finish!,
-          lang: s.prefs.lang!,
-          owned: c.owned,
-          claimed: c.claimed,
-          places: mergeByContainer(c.slots, allocated),
-        });
+    infos.set(oracleId, { slots, claims, cache: new Map() });
+    // A pinned slot knows all four traits, so any of its slots can spell the
+    // copy out for the resolver.
+    claims.forEach((c) => {
+      if (c.claimed <= c.owned) return;
+      const s = c.slots[0]!;
+      conflicts.push({
+        oracleId,
+        scryfallId: s.scryfallId!,
+        condition: s.prefs.condition!,
+        finish: s.prefs.finish!,
+        lang: s.prefs.lang!,
+        owned: c.owned,
+        claimed: c.claimed,
+        places: mergeByContainer(c.slots, allocated),
       });
     });
+  });
 
-    return {
-      lookup(oracleId: string, scryfallId?: string | null, copy?: CopyPrefs) {
-        const g = infos.get(oracleId);
-        if (!g) return NONE;
-        const key = `${scryfallId ?? ''}|${copy?.finish ?? ''}|${copy?.lang ?? ''}|${copy?.condition ?? ''}`;
-        let info = g.cache.get(key);
-        if (!info) {
-          const matched = g.slots.filter(
-            (s) =>
-              (!scryfallId || !s.scryfallId || s.scryfallId === scryfallId) &&
-              (!copy || prefsCompatible(s.prefs, copy)),
-          );
-          // The ⚠ is about one piece of cardboard, so it counts the copies the
-          // matched slots actually name. A question loose enough to touch several
-          // copies at once (a search hit, which knows a printing but no traits)
-          // reports the ones in conflict, so "3 claimed / 2 owned" is always a
-          // true sentence about the same set of cards.
-          const keys = [...new Set(matched.map((s) => s.claimKey).filter((k): k is string => !!k))];
-          const over = keys.filter((k) => {
-            const c = g.claims.get(k)!;
-            return c.claimed > c.owned;
-          });
-          const counted = over.length > 0 ? over : keys;
-          let claimed = 0;
-          let owned = 0;
-          for (const k of counted) {
-            const c = g.claims.get(k)!;
-            claimed += c.claimed;
-            owned += c.owned;
-          }
-          info = { places: mergeByContainer(matched, allocated), claimed, owned, over: over.length > 0 };
-          g.cache.set(key, info);
+  return {
+    lookup(oracleId: string, scryfallId?: string | null, copy?: CopyPrefs) {
+      const g = infos.get(oracleId);
+      if (!g) return NONE;
+      const key = `${scryfallId ?? ''}|${copy?.finish ?? ''}|${copy?.lang ?? ''}|${copy?.condition ?? ''}`;
+      let info = g.cache.get(key);
+      if (!info) {
+        const matched = g.slots.filter(
+          (s) =>
+            (!scryfallId || !s.scryfallId || s.scryfallId === scryfallId) &&
+            (!copy || prefsCompatible(s.prefs, copy)),
+        );
+        // The ⚠ is about one piece of cardboard, so it counts the copies the
+        // matched slots actually name. A question loose enough to touch several
+        // copies at once (a search hit, which knows a printing but no traits)
+        // reports the ones in conflict, so "3 claimed / 2 owned" is always a
+        // true sentence about the same set of cards.
+        const keys = [...new Set(matched.map((s) => s.claimKey).filter((k): k is string => !!k))];
+        const over = keys.filter((k) => {
+          const c = g.claims.get(k)!;
+          return c.claimed > c.owned;
+        });
+        const counted = over.length > 0 ? over : keys;
+        let claimed = 0;
+        let owned = 0;
+        for (const k of counted) {
+          const c = g.claims.get(k)!;
+          claimed += c.claimed;
+          owned += c.owned;
         }
-        return info;
-      },
-      allocated(slotId: string) {
-        return allocated.get(slotId) ?? 0;
-      },
-      conflicts,
-    };
-  }, [data]);
+        info = { places: mergeByContainer(matched, allocated), claimed, owned, over: over.length > 0 };
+        g.cache.set(key, info);
+      }
+      return info;
+    },
+    allocated(slotId: string) {
+      return allocated.get(slotId) ?? 0;
+    },
+    conflicts,
+  };
 }

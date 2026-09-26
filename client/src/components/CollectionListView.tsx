@@ -1,10 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import type { CollectionEntry, ContainerKind } from '@mtg/shared';
-import { db } from '../db/schema.js';
+import type { ContainerKind } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
-import { joinCollectionEntries, type JoinedEntry } from '../db/queries.js';
+import type { JoinedEntry } from '../db/queries.js';
+import { useCollectionEntries, useJoinedCollection } from '../db/collectionSnapshot.js';
 import { removeCollectionEntriesBulk, removeDeckCardsMatching, setQuantityForTradeBulk } from '../db/dataAccess.js';
 import { useFiling } from '../deck/useFiling.js';
 import { CardSheet } from './CardSheet.js';
@@ -29,22 +28,12 @@ import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
 import { usePageMeta } from '../routes/Page.js';
 
-/** Join collection entries with their card + printing display data. */
-function useJoinedCollection(): JoinedEntry[] | undefined {
-  return useLiveQuery(async () => joinCollectionEntries(await db.collection.toArray()), []);
-}
-
-/**
- * The collection rows on their own, with no card-DB join. This is a small table
- * and it lands in a few milliseconds, where joining thousands of entries against
- * 100k printings and the price shards takes the better part of a second. It's
- * what lets the screen say honestly how much is in there while the rest catches
- * up, instead of standing at "0 entries · 0 cards" long enough to look like the
- * collection went to the graveyard.
- */
-function useCollectionEntries(): CollectionEntry[] | undefined {
-  return useLiveQuery(() => db.collection.toArray(), []);
-}
+// Both the joined rows and the raw entries come from the shared collection
+// snapshot (one query, one join, shared with the header value and every badge).
+// The raw entries land in milliseconds where the join takes the better part of
+// a second; they're what lets the screen say honestly how much is in there
+// while the join catches up, instead of standing at "0 entries · 0 cards" long
+// enough to look like the collection went to the graveyard.
 
 /** Narrow the list to copies that are (or aren't) in a deck, binder or box —
  *  or to the ones promised to more places than you own. */

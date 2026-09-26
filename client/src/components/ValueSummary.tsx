@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { ContainerKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { containerKind } from '../deck/containers.js';
 import { getOracleCardsByIds, getOwnedCountsFor, getPrintingsByIds } from '../db/queries.js';
+import { useJoinedCollection } from '../db/collectionSnapshot.js';
 import { addToTotal, formatTotal, pricedForFinish, type PriceTotal } from './CardSorting.js';
 import { loadSealedProducts } from '../sealed/store.js';
 import { sealedPriceOf } from '../sealed/product.js';
@@ -48,22 +50,20 @@ export function HeaderValue({
   );
 }
 
-/** Total value of the collection (or just the copies marked for trade). */
+/** Total value of the collection (or just the copies marked for trade).
+ *  Summed off the shared joined rows, so the header and the list underneath it
+ *  ride the same single card join instead of each running their own. */
 export function useCollectionValue(onlyTrade = false): PriceTotal | undefined {
-  return useLiveQuery(async () => {
-    const entries = await db.collection.toArray();
-    const relevant = onlyTrade ? entries.filter((e) => e.quantityForTrade > 0) : entries;
-    const [oracleMap, printMap] = await Promise.all([
-      getOracleCardsByIds(relevant.map((e) => e.oracleId)),
-      getPrintingsByIds(relevant.map((e) => e.scryfallId)),
-    ]);
+  const rows = useJoinedCollection();
+  return useMemo(() => {
+    if (!rows) return undefined;
     const total: PriceTotal = { eur: 0, usd: 0 };
-    for (const e of relevant) {
-      const qty = onlyTrade ? e.quantityForTrade : e.quantity;
-      addToTotal(total, qty, pricedForFinish(printMap.get(e.scryfallId), e.finish), oracleMap.get(e.oracleId));
+    for (const r of rows) {
+      const qty = onlyTrade ? r.entry.quantityForTrade : r.entry.quantity;
+      if (qty > 0) addToTotal(total, qty, pricedForFinish(r.printing, r.entry.finish), r.oracle);
     }
     return total;
-  }, [onlyTrade]);
+  }, [rows, onlyTrade]);
 }
 
 /**

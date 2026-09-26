@@ -1,4 +1,4 @@
-// The older half of the changelog (0.171.0 down to 0.98.0), split out of
+// The older half of the changelog (0.172.1 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,26 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.172.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text:
+          'Trades that gave away a card filed in a deck or binder said "Trade complete" but changed nothing. They save now, and a failed save shows a Retry button.',
+      },
+    ],
+  },
+  {
+    version: '0.172.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Some cards now come with their rule already written (Craterhoof, Ashaya, Everflowing Chalice, Beast Whisperer and about 45 more), one tap away in the Model tab. Other cards get a starting point from their tags, like "Landfall: draw a card".',
+      },
+    ],
+  },
   {
     version: '0.171.0',
     changes: [

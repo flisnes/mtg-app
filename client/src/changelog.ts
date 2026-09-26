@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.181.3',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Editing a card no longer makes every badge, total and list re-read your whole collection separately — they now share one pass, so edits feel snappier on big collections.',
+      },
+    ],
+  },
+  {
     version: '0.181.2',
     changes: [
       {
@@ -177,26 +186,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Search understands pow and tou, so pow>=3 finds power 3 or more instead of searching card names.',
-      },
-    ],
-  },
-  {
-    version: '0.172.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text:
-          'Trades that gave away a card filed in a deck or binder said "Trade complete" but changed nothing. They save now, and a failed save shows a Retry button.',
-      },
-    ],
-  },
-  {
-    version: '0.172.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Some cards now come with their rule already written (Craterhoof, Ashaya, Everflowing Chalice, Beast Whisperer and about 45 more), one tap away in the Model tab. Other cards get a starting point from their tags, like "Landfall: draw a card".',
       },
     ],
   },

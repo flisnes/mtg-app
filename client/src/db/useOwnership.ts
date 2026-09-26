@@ -1,13 +1,11 @@
-import { useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import type { CollectionEntry, Condition, Finish } from '@mtg/shared';
+import type { CollectionEntry, Condition, Finish, WishlistEntry } from '@mtg/shared';
 import { wishPrefsMet } from '@mtg/shared';
-import { db } from './schema.js';
+import { useCollectionSnapshot } from './collectionSnapshot.js';
 
 // One shared answer to "where does this card stand with me?" for the checkmark
 // shown on cards everywhere (search, scan, wishlist, decks, trade, the card
-// sheet). Two live queries — the whole collection and the whole wishlist —
-// grouped per oracle, so every render site reads the same source instead of
+// sheet). Built once per data change in the collection snapshot provider and
+// read through context, so every render site shares the same index instead of
 // each rolling its own.
 
 export interface OwnedStatus {
@@ -75,84 +73,84 @@ interface OracleWish {
 const NONE: OwnedStatus = { qty: 0, forTrade: 0, ownsExact: false, wished: 0 };
 
 export function useOwnershipIndex(): OwnershipIndex | undefined {
-  const rows = useLiveQuery(() => db.collection.toArray(), []);
-  const wishes = useLiveQuery(() => db.wishlist.toArray(), []);
-  return useMemo(() => {
-    if (!rows || !wishes) return undefined;
-    const byOracle = new Map<string, OracleOwn>();
-    for (const e of rows) {
-      let g = byOracle.get(e.oracleId);
-      if (!g) {
-        g = { qty: 0, forTrade: 0, ids: new Set(), entries: [] };
-        byOracle.set(e.oracleId, g);
-      }
-      g.qty += e.quantity;
-      g.forTrade += e.quantityForTrade;
-      g.ids.add(e.scryfallId);
-      g.entries.push(e);
+  return useCollectionSnapshot().ownership;
+}
+
+/** Build the index. Pure — the snapshot provider calls it once per data change. */
+export function buildOwnershipIndex(rows: CollectionEntry[], wishes: WishlistEntry[]): OwnershipIndex {
+  const byOracle = new Map<string, OracleOwn>();
+  for (const e of rows) {
+    let g = byOracle.get(e.oracleId);
+    if (!g) {
+      g = { qty: 0, forTrade: 0, ids: new Set(), entries: [] };
+      byOracle.set(e.oracleId, g);
     }
-    // Wishes are counted per oracle, not per printing: a wish can sit on "any
-    // printing", so "you're after this card" is the only claim it always makes.
-    // The printings are kept alongside anyway, for the chip that says "this is
-    // the one".
-    const wishedByOracle = new Map<string, OracleWish>();
-    for (const w of wishes) {
-      let g = wishedByOracle.get(w.oracleId);
-      if (!g) {
-        g = { qty: 0, ids: new Set(), anyPrinting: false };
-        wishedByOracle.set(w.oracleId, g);
-      }
-      g.qty += w.quantity;
-      if (w.scryfallId) g.ids.add(w.scryfallId);
-      else g.anyPrinting = true;
+    g.qty += e.quantity;
+    g.forTrade += e.quantityForTrade;
+    g.ids.add(e.scryfallId);
+    g.entries.push(e);
+  }
+  // Wishes are counted per oracle, not per printing: a wish can sit on "any
+  // printing", so "you're after this card" is the only claim it always makes.
+  // The printings are kept alongside anyway, for the chip that says "this is
+  // the one".
+  const wishedByOracle = new Map<string, OracleWish>();
+  for (const w of wishes) {
+    let g = wishedByOracle.get(w.oracleId);
+    if (!g) {
+      g = { qty: 0, ids: new Set(), anyPrinting: false };
+      wishedByOracle.set(w.oracleId, g);
     }
-    /** Does a wish cover this printing? "Any printing" covers all of them. */
-    const wishCovers = (g: OracleWish | undefined, scryfallId?: string | null) =>
-      !!g && g.qty > 0 && (g.anyPrinting || (!!scryfallId && g.ids.has(scryfallId)));
-    return {
-      lookup(oracleId, scryfallId) {
-        const w = wishedByOracle.get(oracleId);
-        const wished = w?.qty ?? 0;
-        const wishesExact = wishCovers(w, scryfallId);
-        const g = byOracle.get(oracleId);
-        if (!g) return wished ? { ...NONE, wished, wishesExact } : NONE;
-        return {
-          qty: g.qty,
-          forTrade: g.forTrade,
-          ownsExact: !!scryfallId && g.ids.has(scryfallId),
-          wished,
-          wishesExact,
-          tradesExact: !!scryfallId && g.entries.some((e) => e.scryfallId === scryfallId && e.quantityForTrade > 0),
-        };
-      },
-      lookupWanted(oracleId, wants) {
-        const w = wishedByOracle.get(oracleId);
-        const wished = w?.qty ?? 0;
-        const wishesExact = wishCovers(w, wants.scryfallId);
-        const g = byOracle.get(oracleId);
-        if (!g) return wished ? { ...NONE, wished, wishesExact } : NONE;
-        // Exact means exact: the slot has to say which printing, finish,
-        // condition and language it means before we can claim you have *that*
-        // card. Leave anything on "any" and it's the single check.
-        const pinned = !!wants.scryfallId && !!wants.finish && !!wants.condition && !!wants.lang;
-        const met =
-          pinned && g.entries.some((e) => wants.scryfallId === e.scryfallId && wishPrefsMet(wants, e));
-        return {
-          qty: g.qty,
-          forTrade: g.forTrade,
-          ownsExact: met,
-          wished,
-          wishesExact,
-          tradesExact: !!wants.scryfallId && g.entries.some((e) => e.scryfallId === wants.scryfallId && e.quantityForTrade > 0),
-        };
-      },
-      ownedPrintings(oracleId) {
-        const g = byOracle.get(oracleId);
-        return g ? [...g.ids] : [];
-      },
-      ownedCopies(oracleId) {
-        return byOracle.get(oracleId)?.entries ?? [];
-      },
-    };
-  }, [rows, wishes]);
+    g.qty += w.quantity;
+    if (w.scryfallId) g.ids.add(w.scryfallId);
+    else g.anyPrinting = true;
+  }
+  /** Does a wish cover this printing? "Any printing" covers all of them. */
+  const wishCovers = (g: OracleWish | undefined, scryfallId?: string | null) =>
+    !!g && g.qty > 0 && (g.anyPrinting || (!!scryfallId && g.ids.has(scryfallId)));
+  return {
+    lookup(oracleId, scryfallId) {
+      const w = wishedByOracle.get(oracleId);
+      const wished = w?.qty ?? 0;
+      const wishesExact = wishCovers(w, scryfallId);
+      const g = byOracle.get(oracleId);
+      if (!g) return wished ? { ...NONE, wished, wishesExact } : NONE;
+      return {
+        qty: g.qty,
+        forTrade: g.forTrade,
+        ownsExact: !!scryfallId && g.ids.has(scryfallId),
+        wished,
+        wishesExact,
+        tradesExact: !!scryfallId && g.entries.some((e) => e.scryfallId === scryfallId && e.quantityForTrade > 0),
+      };
+    },
+    lookupWanted(oracleId, wants) {
+      const w = wishedByOracle.get(oracleId);
+      const wished = w?.qty ?? 0;
+      const wishesExact = wishCovers(w, wants.scryfallId);
+      const g = byOracle.get(oracleId);
+      if (!g) return wished ? { ...NONE, wished, wishesExact } : NONE;
+      // Exact means exact: the slot has to say which printing, finish,
+      // condition and language it means before we can claim you have *that*
+      // card. Leave anything on "any" and it's the single check.
+      const pinned = !!wants.scryfallId && !!wants.finish && !!wants.condition && !!wants.lang;
+      const met =
+        pinned && g.entries.some((e) => wants.scryfallId === e.scryfallId && wishPrefsMet(wants, e));
+      return {
+        qty: g.qty,
+        forTrade: g.forTrade,
+        ownsExact: met,
+        wished,
+        wishesExact,
+        tradesExact: !!wants.scryfallId && g.entries.some((e) => e.scryfallId === wants.scryfallId && e.quantityForTrade > 0),
+      };
+    },
+    ownedPrintings(oracleId) {
+      const g = byOracle.get(oracleId);
+      return g ? [...g.ids] : [];
+    },
+    ownedCopies(oracleId) {
+      return byOracle.get(oracleId)?.entries ?? [];
+    },
+  };
 }

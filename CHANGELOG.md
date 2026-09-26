@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.181.3
+
+- **Changed: editing a card does a fraction of the work it used to.** Changing a quantity, filing a card away or marking one for trade used to make every part of the screen re-read your whole collection for itself — the list, the header total, the price-change badges, the deck badges and the notification bell each ran their own pass, including two full matches of your collection against the card database. They now share one. On a big collection, edits and the moments after them feel noticeably snappier, especially on phones.
+
 ## 0.181.2
 
 - **Changed: the app downloads a little less and the deck simulator got a real test suite.** The simulator engine moved into its own package and out of the main bundle, so first load and every update fetch ~20 KB less; the engine now loads on demand the first time you watch a game play out. Its correctness checks (mana payment, rituals, card credit, flow, behaviors) now run as a proper test suite on every change. Nothing about the numbers changed.

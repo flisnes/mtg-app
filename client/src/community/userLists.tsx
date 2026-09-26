@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   wishMatchesCopy,
+  type CollectionEntry,
   type OracleCard,
   type Priced,
   type Printing,
@@ -11,6 +12,10 @@ import {
 import { ApiError, getUserLists } from '../account/api.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { useCollectionEntries } from '../db/collectionSnapshot.js';
+
+/** Stable while the snapshot loads, so the matcher memo doesn't churn. */
+const EMPTY_ENTRIES: CollectionEntry[] = [];
 import { Icon } from '../components/icons.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { langMark } from '../components/LangFlag.js';
@@ -126,7 +131,7 @@ export function useMyWants(): (line: TradeLine) => boolean {
  * also meet the wish's finish/condition/language preferences.
  */
 export function useMyCollection(): { have: HaveFn; own: HaveFn } {
-  const entries = useLiveQuery(() => db.collection.toArray(), [], []);
+  const entries = useCollectionEntries() ?? EMPTY_ENTRIES;
   return useMemo(() => {
     const matcher = (rows: typeof entries): HaveFn => {
       const byOracle = new Map<string, typeof rows>();

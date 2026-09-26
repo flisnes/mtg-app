@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.182.0
+
+- **Fixed: a finished background data update no longer resets the screen you are on.** When card data or prices updated in the background, the whole view reloaded the moment it finished — and if you were mid-way through adding cards or editing a deck, your place went with it. The update now lands quietly: open screens pick up the new data on their own and a small toast says it arrived. Your edit stays exactly where you left it.
+- **Added: you can see the background data update happening.** A silent card-data or price download used to give no sign it was running at all. There is now a slim progress strip under the header showing what is downloading and how far along it is.
+
 ## 0.181.3
 
 - **Changed: editing a card does a fraction of the work it used to.** Changing a quantity, filing a card away or marking one for trade used to make every part of the screen re-read your whole collection for itself — the list, the header total, the price-change badges, the deck badges and the notification bell each ran their own pass, including two full matches of your collection against the card database. They now share one. On a big collection, edits and the moments after them feel noticeably snappier, especially on phones.

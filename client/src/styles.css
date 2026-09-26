@@ -536,6 +536,32 @@ button.danger-outline {
   color: var(--text-dim);
   justify-content: center;
 }
+/* Quiet strip for a background download running on a standing "always" policy —
+   informational, no buttons, so it stays low-key. The accept-flow's progress
+   rides the purple UpdatePrompt ribbon instead. */
+.banner-syncing {
+  gap: 0.75rem;
+  padding: 0.35rem 1rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: calc(var(--header-h) + var(--safe-top));
+  z-index: var(--z-banner);
+}
+.banner-syncing-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.banner-syncing .progress {
+  flex: 1;
+  max-width: 10rem;
+  flex-shrink: 0;
+  height: 5px;
+}
 
 /* One data feed's row in Settings → Automatic downloads. */
 .download-feed {

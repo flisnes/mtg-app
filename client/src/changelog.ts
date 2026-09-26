@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.182.0',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'A background data update no longer resets the screen when it finishes — if you were adding cards or editing a deck, you stay right where you were.',
+      },
+      {
+        kind: 'added',
+        text: 'Background card-data and price downloads now show a slim progress strip under the header while they run.',
+      },
+    ],
+  },
+  {
     version: '0.181.3',
     changes: [
       {

@@ -228,9 +228,14 @@ export interface CardSetInfo {
   releasedAt: string;
 }
 
-// The card DB is replaced wholesale on a version bump (and the app reloads for
-// it), so within one session this list can't go stale.
+// Within one session this list only goes stale when a card-data update lands —
+// sync.ts drops it then, alongside the other card-DB caches.
 let setListCache: CardSetInfo[] | null = null;
+
+/** Drop the cached set list after a card-data import (new sets may exist). */
+export function invalidateSetList(): void {
+  setListCache = null;
+}
 
 /**
  * Every set the installed card DB knows about, newest first.

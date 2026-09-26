@@ -8,6 +8,7 @@ import { invalidateSearchIndex } from './search.js';
 import { invalidatePriceCache } from './prices.js';
 import { invalidateOracleTags } from './oracleTags.js';
 import { invalidateSetIndex } from './setIndex.js';
+import { invalidateSetList } from '../db/queries.js';
 
 // Orchestrates card-DB freshness (beta plan §3). The manifest describes the
 // card data as 256 hash-named chunks per artifact plus a separate prices file;
@@ -166,6 +167,7 @@ function workerRun(
     invalidatePriceCache();
     invalidateOracleTags();
     invalidateSetIndex();
+    invalidateSetList();
   };
 }
 
@@ -177,6 +179,7 @@ function fallbackRun(): RunSync {
     invalidatePriceCache();
     invalidateOracleTags();
     invalidateSetIndex();
+    invalidateSetList();
   };
 }
 

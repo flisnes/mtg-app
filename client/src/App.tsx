@@ -155,7 +155,10 @@ function AppShell() {
     return () => document.removeEventListener('visibilitychange', check);
   }, []);
 
-  // A completed background card-data update bumps epoch — toast + re-query.
+  // A completed background card-data update bumps epoch. Just say so — the
+  // worker's table writes re-fire mounted live queries on their own (Dexie
+  // propagates changes across contexts), and anything cached refreshes on the
+  // next query. No remount: the user may be mid-edit when the update lands.
   useEffect(() => {
     if (epoch > 0) toast('Card data updated');
   }, [epoch, toast]);
@@ -195,6 +198,17 @@ function AppShell() {
           onDecline={dismissData}
         />
       )}
+      {updatingData && !dataPrompt && !showUpdate && (
+        <div className="banner banner-syncing" role="status">
+          <span className="banner-syncing-label">{dataProgress?.label ?? 'Updating card data…'}</span>
+          <div className="progress">
+            <div
+              className="progress-bar"
+              style={{ width: `${Math.round((dataProgress?.fraction ?? 0) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
       {offlineReady && !showUpdate && !dataPrompt && (
         <div className="banner banner-offline" role="status" onAnimationEnd={() => setOfflineReady(false)}>
           Ready to work offline.
@@ -203,7 +217,7 @@ function AppShell() {
 
       <AppHotkeys />
 
-      <main className="app-main" key={epoch}>
+      <main className="app-main">
         <Suspense fallback={null}>
           <Routes>
             <Route path="/" element={<Collection />} />

@@ -1,4 +1,4 @@
-// The older half of the changelog (0.166.0 down to 0.98.0), split out of
+// The older half of the changelog (0.168.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,21 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.168.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Saving a card rule shows what it changed: its own draws or mana, and any deck number that moved, before and after. Undo puts the old rule back. A quick answer comes first, the full 20,000 games right after.',
+      },
+      {
+        kind: 'added',
+        text:
+          'The card editor says how often each saved trigger fired, and Watch it in a game deals a game with that card in it and shows only its lines.',
+      },
+    ],
+  },
   {
     version: '0.167.0',
     changes: [

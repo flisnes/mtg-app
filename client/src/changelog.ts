@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.178.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The 1000 most-played commanders are now reviewed: 522 of them ship with a rule, like the top 1000 cards before them. Your own rule still wins.',
+      },
+      {
+        kind: 'fixed',
+        text: 'Mana that can only be spent on some spells now only pays for those. Ancient Ziggurat, Cormela and Jeweled Lotus used to pay for anything.',
+      },
+    ],
+  },
+  {
     version: '0.177.0',
     changes: [
       {
@@ -181,21 +194,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'A card you already wrote a rule for in another deck offers that rule in its editor. One tap copies it in; save to keep it.',
-      },
-    ],
-  },
-  {
-    version: '0.168.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Saving a card rule shows what it changed: its own draws or mana, and any deck number that moved, before and after. Undo puts the old rule back. A quick answer comes first, the full 20,000 games right after.',
-      },
-      {
-        kind: 'added',
-        text:
-          'The card editor says how often each saved trigger fired, and Watch it in a game deals a game with that card in it and shows only its lines.',
       },
     ],
   },

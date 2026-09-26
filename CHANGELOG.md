@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.178.0
+
+- **Added: defaults for the 1000 most-played commanders.** EDHREC's top 1000 commanders were read one by one, the way the top 1000 cards were in 0.173.0. 522 of them now play a rule out of the box: Krenko taps for Goblins, Kaalia puts an Angel, Demon or Dragon onto the battlefield when she attacks, Y'shtola drains off big noncreature spells. Most are partial and leave out what the simulator cannot do yet. The rest show under *Waits on the simulator* with what they need, such as abilities from the command zone. Your own rule for a card always wins.
+- **Fixed: restricted mana paid for anything.** Mana the card says can only be spent on some spells (Ancient Ziggurat on creatures, Cormela on instants and sorceries, Giada on Angels, Eldrazi Temple on colorless Eldrazi) paid for every spell unless you wrote the card's mana rule yourself. It now pays only for the spells it names. Mana for abilities only, or for something the simulator cannot tell apart (spells from your graveyard, the chosen type), pays for no spell. Jeweled Lotus pays for your commander. Decks with these cards read a little lower, and closer to how they play.
+
 ## 0.177.0
 
 - **Added: X = your devotion.** A rule's number can be your devotion to one or more colors: the mana symbols of those colors in the costs of your permanents, the card itself included once it is out. A hybrid symbol counts once even toward two colors, and {G/P} counts toward green. Gray Merchant of Asphodel now drains for your devotion to black, and Karametra's Acolyte taps for your devotion to green. For Nykthos, write its {2},{T} ability with devotion to the color your deck leans on.

@@ -249,9 +249,13 @@ export interface SimCard {
    */
   manaAmount: BehaviorAmount | null;
   /**
-   * An authored mana ability whose mana may only be spent on spells matching
-   * this query ("t:instant or t:sorcery"), or null for mana that pays for
-   * anything. Resolved through SimDeck.filters like every other criteria.
+   * Mana this card makes may only be spent on spells matching this query
+   * ("t:instant or t:sorcery"), or null for mana that pays for anything.
+   * Resolved through SimDeck.filters like every other criteria. An authored
+   * mana ability sets it from its `q`; otherwise a database reading flagged
+   * restricted sets it from the card's "spend this mana only" text
+   * (`restrictionQuery`). A query with no filter behind it (SPEND_NOTHING)
+   * pays for no spell at all.
    */
   spendQ: string | null;
   /** An authored mana ability that taps only while this holds (Mox Opal), or null. */
@@ -614,7 +618,7 @@ function simCardOf(o: OracleCard, behavior: CompiledBehavior | null, copies: num
     toughness: powerOf(o.toughness),
     token: false,
     manaAmount: null,
-    spendQ: null,
+    spendQ: profile?.restricted ? restrictionQuery(o.oracleText) : null,
     manaCond: null,
     kicker: null,
     gyCast: null,
@@ -622,6 +626,83 @@ function simCardOf(o: OracleCard, behavior: CompiledBehavior | null, copies: num
     dredge: printedDredge(o.oracleText),
   };
   return card;
+}
+
+/**
+ * Spend-only criteria that match no spell: abilities-only mana (Pit Automaton),
+ * or a restriction this reader cannot say (spells from your graveyard, the
+ * chosen type). Never compiled into a filter, and a spendQ with no filter
+ * pays for nothing, which is the floor side of §11.4.
+ */
+export const SPEND_NOTHING = 'spend:nothing';
+/** "Spend this mana only to cast your commander" (Jeweled Lotus). Filled by buildFilters. */
+export const SPEND_COMMANDER = 'spend:commander';
+
+/** Words before "spell" that name a card type, a supertype or a color; anything else single is a subtype. */
+const SPEND_WORDS: Readonly<Record<string, string>> = {
+  instant: 't:instant',
+  sorcery: 't:sorcery',
+  creature: 't:creature',
+  artifact: 't:artifact',
+  enchantment: 't:enchantment',
+  planeswalker: 't:planeswalker',
+  battle: 't:battle',
+  legendary: 't:legendary',
+  noncreature: '-t:creature',
+  nonartifact: '-t:artifact',
+  colorless: 'c:c',
+  multicolored: 'c:m',
+};
+/** Words that make a restriction something this reader cannot say. */
+const SPEND_UNKNOWN = /\b(chosen|kicked|monocolored|face-down|foretell|flashback|commander|graveyard|exile|own|watermark|colors?|that|with|without|from|of)\b|\{/;
+
+/**
+ * A database mana reading flagged restricted, as the spells it may pay for.
+ * The DB keeps only the flag, so this reads the card's own words: "Spend this
+ * mana only to cast instant or sorcery spells" is `(t:instant or t:sorcery)`,
+ * "... Dragon spells" is `(t:dragon)`, "... creature spells with mana value 4
+ * or greater" adds `mv>=4`. Ability clauses ("or activate abilities of
+ * artifacts") are dropped, since restricted mana never pays for abilities
+ * here, and an alternative it cannot read is dropped with them: each one
+ * dropped is spells the mana would pay for and does not, never the reverse.
+ * Several "spend only" clauses on one card are joined with `or`.
+ */
+export function restrictionQuery(text: string | null | undefined): string {
+  const parts: string[] = [];
+  for (const m of (text ?? '').matchAll(/spend this mana only ([^.]*)/gi)) {
+    const q = spendClause(m[1]!.toLowerCase());
+    if (q === SPEND_COMMANDER) return SPEND_COMMANDER;
+    if (q && !parts.includes(q)) parts.push(q);
+  }
+  if (parts.length === 0) return SPEND_NOTHING;
+  return parts.length === 1 ? parts[0]! : parts.map((p) => `(${p})`).join(' or ');
+}
+
+function spendClause(clause: string): string | null {
+  if (/\bcast your commander\b/.test(clause)) return SPEND_COMMANDER;
+  const m = /\bcast (?:an? )?(.*?)\bspells?\b(.*)$/.exec(clause);
+  if (!m) return null;
+  const list = m[1]!.trim();
+  const rest = m[2]!.trim();
+  // What follows the first "spell": nothing, another alternative (dropped), or
+  // a mana value floor. Anything else qualifies the spell in a way that is
+  // not a search term ("from your graveyard", "of the chosen type").
+  let mv = '';
+  const mvm = /^with mana value (\d+) or greater\b/.exec(rest);
+  if (mvm) mv = `mv>=${mvm[1]}`;
+  else if (rest && !/^(or|and|and\/or)\b/.test(rest)) return null;
+  const items = list ? list.split(/\s*,\s*(?:and\/or |and |or )?|\s+(?:and\/or|or|and)\s+/).filter(Boolean) : [];
+  const terms: string[] = [];
+  for (const item of items) {
+    if (SPEND_UNKNOWN.test(item)) continue;
+    const words = item.replace(/^(an?|the) /, '').split(/\s+/);
+    if (!words.every((w) => /^[a-z]+$/.test(w))) continue;
+    terms.push(words.map((w) => SPEND_WORDS[w] ?? `t:${w}`).join(' '));
+  }
+  if (items.length > 0 && terms.length === 0) return null;
+  const any = terms.length === 0 ? '' : terms.length === 1 ? terms[0]! : `(${terms.join(' or ')})`;
+  const q = [any, mv].filter(Boolean).join(' ');
+  return q || null;
 }
 
 /** The front face's card types, as T_ bits. */
@@ -854,9 +935,21 @@ function applyKeepQuery(cards: SimCard[], oracles: readonly OracleCard[], q: str
 function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[], typeGrants: readonly string[]): SimFilter[] {
   const queries = new Set<string>();
   for (const card of cards) collectBehaviorQueries(card.behavior, queries);
-  if (queries.size === 0) return [];
+  let commanderOnly = false;
+  for (const card of cards) {
+    if (card.spendQ === SPEND_COMMANDER) commanderOnly = true;
+    else if (card.spendQ && card.spendQ !== SPEND_NOTHING) queries.add(card.spendQ);
+  }
   const n = cards.length;
   const variants = 1 << typeGrants.length;
+  const filters: SimFilter[] = [];
+  // Not a search term: "your commander" is a fact about this deck, not a card.
+  if (commanderOnly) {
+    const match = new Uint8Array(variants * n);
+    for (let v = 0; v < variants; v++) for (let i = 0; i < n; i++) if (cards[i]!.commander) match[v * n + i] = 1;
+    filters.push({ q: SPEND_COMMANDER, match, varies: false });
+  }
+  if (queries.size === 0) return filters;
   // One searchable entry per card per combination of added types. Variant 0
   // is the card as printed, which is every card off the battlefield and every
   // card in a deck with no `addtype` rule, so that deck pays for one row.
@@ -867,7 +960,6 @@ function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[],
       return toSearchableEntry({ ...o, typeLine: `${o.typeLine} ${added.join(' ')}` });
     }),
   );
-  const filters: SimFilter[] = [];
 
   /** One row of the bitmask per variant, for one fully-resolved query string. */
   const fill = (match: Uint8Array, x: number, resolved: string) => {

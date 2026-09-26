@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.179.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The top 500 EDH cards per color (3,500 total, by color-wheel and colorless splits) are now reviewed. More rules ship out of the box: Treasures and Clues auto-crack, lands tutor themselves, creatures grant evasion. 1,801 rules now play the top 3,000 cards.',
+      },
+    ],
+  },
+  {
     version: '0.178.0',
     changes: [
       {

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.179.0
+
+- **Expanded: EDH card simulator defaults now cover the top 500 cards per color.** In 0.173.0, the top 1000 cards received rules; in 0.178.0, the top 1000 commanders did. This build reviews the top 500 cards of each color, multicolor and colorless (3,500 cards total, 1,801 rules total). More Treasures and Clues auto-crack, more lands tutor, more creatures grant evasion on their own. The simulator has less goldfish left to do.
+
 ## 0.178.0
 
 - **Added: defaults for the 1000 most-played commanders.** EDHREC's top 1000 commanders were read one by one, the way the top 1000 cards were in 0.173.0. 522 of them now play a rule out of the box: Krenko taps for Goblins, Kaalia puts an Angel, Demon or Dragon onto the battlefield when she attacks, Y'shtola drains off big noncreature spells. Most are partial and leave out what the simulator cannot do yet. The rest show under *Waits on the simulator* with what they need, such as abilities from the command zone. Your own rule for a card always wins.

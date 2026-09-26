@@ -1,4 +1,4 @@
-// The older half of the changelog (0.170.0 down to 0.98.0), split out of
+// The older half of the changelog (0.171.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,21 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.171.0',
+    changes: [
+      {
+        kind: 'added',
+        text:
+          'Card rules can do far more: make tokens, put counters on a card, pump your creatures, add a type while a card is out (Ashaya), write a mana ability (Everflowing Chalice), and cast a card with kicker, flashback, escape or suspend.',
+      },
+      {
+        kind: 'changed',
+        text:
+          'The simulator now discards down to seven at end of turn, recasts your commander with its tax, and a creature that taps for mana no longer also attacks.',
+      },
+    ],
+  },
   {
     version: '0.170.0',
     changes: [

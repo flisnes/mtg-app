@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.181.2',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The deck simulator moved into its own package with a proper test suite, and out of the main download: the app fetches a little less and the engine loads when you first watch a game play out.',
+      },
+    ],
+  },
+  {
     version: '0.181.0',
     changes: [
       {
@@ -188,21 +197,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
         kind: 'added',
         text:
           'Some cards now come with their rule already written (Craterhoof, Ashaya, Everflowing Chalice, Beast Whisperer and about 45 more), one tap away in the Model tab. Other cards get a starting point from their tags, like "Landfall: draw a card".',
-      },
-    ],
-  },
-  {
-    version: '0.171.0',
-    changes: [
-      {
-        kind: 'added',
-        text:
-          'Card rules can do far more: make tokens, put counters on a card, pump your creatures, add a type while a card is out (Ashaya), write a mana ability (Everflowing Chalice), and cast a card with kicker, flashback, escape or suspend.',
-      },
-      {
-        kind: 'changed',
-        text:
-          'The simulator now discards down to seven at end of turn, recasts your commander with its tax, and a creature that taps for mana no longer also attacks.',
       },
     ],
   },

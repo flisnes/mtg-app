@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { SimDeck } from './simDeck.js';
-import type { SimOptions, SimRequest, SimResponse, SimResult, SpendRun } from './simulate.js';
+import type { SimDeck, SimOptions, SimRequest, SimResponse, SimResult, SpendRun } from '@mtg/sim';
 
 // The simulator's lifecycle: one worker, restarted whenever the deck or the
 // settings change, terminated when the sheet closes.

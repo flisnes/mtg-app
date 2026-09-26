@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Finish, OracleCard, Priced } from '@mtg/shared';
-import { compileCardQuery, rowPrintingSummary, toSearchableEntry } from '../cardDb/querySyntax.js';
+import { compileCardQuery, rowPrintingSummary, toSearchableEntry } from '@mtg/shared';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { CardSheet } from './CardSheet.js';
 import type { CardItem } from './CardViews.js';

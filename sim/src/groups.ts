@@ -1,5 +1,5 @@
 import type { DeckBoard, Finish, OracleCard } from '@mtg/shared';
-import { compileCardQuery, rowPrintingSummary, toSearchableEntry, type RowPrinting } from '../cardDb/querySyntax.js';
+import { compileCardQuery, rowPrintingSummary, toSearchableEntry, type RowPrinting } from '@mtg/shared';
 
 // A "card group" is a search query run against one deck. That is the whole
 // design: the app already has a Scryfall-style query language with four

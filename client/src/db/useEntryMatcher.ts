@@ -6,7 +6,7 @@ import {
   toSearchableEntry,
   type RowPrinting,
   type SearchableEntry,
-} from '../cardDb/querySyntax.js';
+} from '@mtg/shared';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 
 /** Any joined list row: an entry with an id, plus the card and printing it resolved to. */

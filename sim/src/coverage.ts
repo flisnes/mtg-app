@@ -1,5 +1,11 @@
-import { oracleTagClosure } from '../cardDb/oracleTags.js';
 import type { DeckRow, SimDeck } from './simDeck.js';
+
+/**
+ * The tag vocabulary, injected: the app passes cardDb/oracleTags.js's
+ * Dexie-backed `oracleTagClosure`, the tests pass a map. Returns the tag ids
+ * in a slug's subtree, or null when the vocabulary is not loaded.
+ */
+export type OracleTagClosure = (slug: string) => ReadonlySet<number> | null;
 
 // The half of §11.4's coverage report that `SimDeck.coverage` cannot produce.
 //
@@ -56,7 +62,7 @@ export interface IdleEngines {
  * land, and its draw is an activated ability nothing here would pay for, so
  * naming it as a gap would be pointing at the wrong thing.
  */
-export function idleEngines(rows: readonly DeckRow[], deck: SimDeck): IdleEngines | null {
+export function idleEngines(rows: readonly DeckRow[], deck: SimDeck, oracleTagClosure: OracleTagClosure): IdleEngines | null {
   const draw = oracleTagClosure(DRAW_SLUG);
   const ramp = oracleTagClosure(RAMP_SLUG);
   if (!draw && !ramp) return null;
@@ -119,7 +125,7 @@ export interface QueueCard extends IdleEngine {
  * first (cast earlier, so it is working for more of the turns we measure),
  * then more copies.
  */
-export function modelQueue(rows: readonly DeckRow[], deck: SimDeck): QueueCard[] | null {
+export function modelQueue(rows: readonly DeckRow[], deck: SimDeck, oracleTagClosure: OracleTagClosure): QueueCard[] | null {
   const lists: [QueueReason, ReadonlySet<number> | null][] = [
     ['draw', oracleTagClosure(DRAW_SLUG)],
     ['ramp', oracleTagClosure(RAMP_SLUG)],
@@ -159,7 +165,7 @@ function union(sets: (ReadonlySet<number> | null)[]): ReadonlySet<number> | null
  * resolves as blanks, or null when the tag vocabulary is not available. A
  * commander is not in the library, so it is not in this count.
  */
-export function missedDrawCopies(idle: IdleEngines | null): number | null {
+export function missedDrawCopies(idle: IdleEngines | null, oracleTagClosure: OracleTagClosure): number | null {
   if (!idle || !oracleTagClosure(DRAW_SLUG)) return null;
   return idle.cards.reduce((sum, c) => sum + c.copies, 0);
 }

@@ -11,7 +11,7 @@ import {
   toSearchableEntry,
   type PrintingSummary,
   type SearchableEntry,
-} from './querySyntax.js';
+} from '@mtg/shared';
 
 // Card search (beta plan §2, §6). The oracle set (~37k) is small enough to hold
 // in memory, which gives fast substring matching (a name-prefix index alone

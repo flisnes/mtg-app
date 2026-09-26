@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Sheet } from './Sheet.js';
 import { HowWorked } from './HowWorked.js';
 import { Icon } from './icons.js';
-import type { SimContribution, SimResult } from '../analysis/simulate.js';
-import type { IdleEngine, IdleEngines } from '../analysis/coverage.js';
+import type { SimContribution, SimResult } from '@mtg/sim';
+import type { IdleEngine, IdleEngines } from '@mtg/sim';
 
 // Who made the trajectory lines — phase 13, and the first panel in this sheet
 // that answers "is this card pulling its weight" with a number.

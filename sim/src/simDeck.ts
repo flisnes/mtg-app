@@ -28,7 +28,7 @@ import {
 } from '@mtg/shared';
 import { parseManaCost, type ParsedCost, type PipColor } from './manaCost.js';
 import type { ManaUnit } from './canPay.js';
-import { compileCardQuery, toSearchableEntry } from '../cardDb/querySyntax.js';
+import { compileCardQuery, toSearchableEntry } from '@mtg/shared';
 
 // The deck, flattened into the shape the simulator wants: one entry per
 // distinct card, a library that is one number per copy, and every fact the turn

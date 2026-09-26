@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MANA_BINS, type SimResult } from '../analysis/simulate.js';
+import { MANA_BINS, type SimResult } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
 
 // Screw and flood (rebuild plan B2): the same games as the trajectory charts,

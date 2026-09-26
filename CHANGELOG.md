@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.181.2
+
+- **Changed: the app downloads a little less and the deck simulator got a real test suite.** The simulator engine moved into its own package and out of the main bundle, so first load and every update fetch ~20 KB less; the engine now loads on demand the first time you watch a game play out. Its correctness checks (mana payment, rituals, card credit, flow, behaviors) now run as a proper test suite on every change. Nothing about the numbers changed.
+
 ## 0.181.1
 
 - Internal housekeeping in the project's planning notes. Nothing in the app changed.

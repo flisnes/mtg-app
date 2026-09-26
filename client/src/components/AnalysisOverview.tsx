@@ -1,9 +1,9 @@
 import { Icon } from './icons.js';
 import type { DeckManaStats } from '../deck/manaStats.js';
-import { shortfallHeadline, type ManaReport } from '../analysis/manaSources.js';
-import type { SimLimits, SimResult } from '../analysis/simulate.js';
+import { shortfallHeadline, type ManaReport } from '@mtg/sim';
+import type { SimLimits, SimResult } from '@mtg/sim';
 import { heldBackBy } from './OnCurvePanel.js';
-import type { SimCoverage } from '../analysis/simDeck.js';
+import type { SimCoverage } from '@mtg/sim';
 import { FLOW_TURN } from './FlowTurnsPanel.js';
 
 // The Overview tab (rebuild plan A5): one row per question, each a status, a

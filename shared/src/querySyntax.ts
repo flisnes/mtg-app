@@ -8,7 +8,7 @@ import {
   type OracleCard,
   type PrintingVariant,
   type Rarity,
-} from '@mtg/shared';
+} from './card.js';
 
 // Scryfall-style search syntax. A query is whitespace-separated terms, ANDed
 // together; `-` prefixes negate a term. Bare words (or quoted phrases) match

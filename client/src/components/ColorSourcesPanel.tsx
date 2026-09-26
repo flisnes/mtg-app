@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { ManaCost } from './ManaCost.js';
-import { colorName, type ManaReport } from '../analysis/manaSources.js';
-import type { PipColor } from '../analysis/manaCost.js';
-import { MASK_BITS } from '../analysis/simDeck.js';
-import type { SimResult } from '../analysis/simulate.js';
+import { colorName, type ManaReport } from '@mtg/sim';
+import type { PipColor } from '@mtg/sim';
+import { MASK_BITS } from '@mtg/sim';
+import type { SimResult } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
 
 // The colored sources, printed and in play. Evidence, not a verdict: since

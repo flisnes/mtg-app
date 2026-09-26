@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
-import { traceGame, type SimOptions } from '../analysis/simulate.js';
-import type { SimCard, SimDeck } from '../analysis/simDeck.js';
-import type { BoardPile, BoardState, GameTrace, TraceKind } from '../analysis/trace.js';
+import type { SimCard, SimDeck, SimOptions } from '@mtg/sim';
+import type { BoardPile, BoardState, GameTrace, TraceKind } from '@mtg/sim';
+
+/**
+ * The engine, loaded when the sheet first opens. Everything else on the
+ * analysis page runs the simulator in its worker, so the main bundle does not
+ * carry simulate.ts; this sheet is the one place the main thread plays a game
+ * itself, and it can wait a beat for the chunk.
+ */
+type TraceGameFn = (deck: SimDeck, opts: SimOptions, seed: number) => GameTrace;
+let loadedTraceGame: TraceGameFn | null = null;
 
 // One game, read start to finish.
 //
@@ -66,7 +74,7 @@ function appearsIn(trace: GameTrace, names: readonly string[]): boolean {
  * somebody else's deck to find out the rule never fired is the wait this skips.
  * Gives up after a few dozen deals and shows the last one, which says so.
  */
-function dealWith(deck: SimDeck, opts: SimOptions, names: readonly string[]): number {
+function dealWith(traceGame: TraceGameFn, deck: SimDeck, opts: SimOptions, names: readonly string[]): number {
   let seed = randomSeed();
   if (names.length === 0) return seed;
   for (let i = 0; i < FOCUS_TRIES; i++) {
@@ -76,25 +84,51 @@ function dealWith(deck: SimDeck, opts: SimOptions, names: readonly string[]): nu
   return seed;
 }
 
-export function GameTraceSheet({
-  deck,
-  opts,
-  focus = null,
-  onClose,
-}: {
+interface TraceSheetProps {
   deck: SimDeck;
   opts: SimOptions;
   /** A card to pick out: its lines marked, the rest foldable, the deal chosen to include it. */
   focus?: string | null;
   onClose: () => void;
-}) {
+}
+
+export function GameTraceSheet(props: TraceSheetProps) {
+  const [traceGame, setTraceGame] = useState<TraceGameFn | null>(() => loadedTraceGame);
+  useEffect(() => {
+    if (traceGame) return;
+    let live = true;
+    void import('@mtg/sim/simulate').then((m) => {
+      loadedTraceGame = m.traceGame;
+      if (live) setTraceGame(() => m.traceGame);
+    });
+    return () => {
+      live = false;
+    };
+  }, [traceGame]);
+  if (!traceGame) {
+    return (
+      <Sheet onClose={props.onClose} title="One game, played out" className="trace-sheet">
+        <p className="fine-print">Shuffling up…</p>
+      </Sheet>
+    );
+  }
+  return <LoadedTraceSheet traceGame={traceGame} {...props} />;
+}
+
+function LoadedTraceSheet({
+  traceGame,
+  deck,
+  opts,
+  focus = null,
+  onClose,
+}: TraceSheetProps & { traceGame: TraceGameFn }) {
   const focusCard = focus ? deck.cards.find((c) => c.oracleId === focus) : undefined;
   const names = useMemo(() => namesOf(focusCard), [focusCard]);
   const [only, setOnly] = useState(true);
   // A fresh seed per deal. Not the simulation's own seed: that one is fixed so
   // the charts do not shuffle themselves every render, and a trace you cannot
   // re-deal is a trace that shows you one hand forever.
-  const [seed, setSeed] = useState(() => dealWith(deck, opts, names));
+  const [seed, setSeed] = useState(() => dealWith(traceGame, deck, opts, names));
   const trace = useMemo(() => traceGame(deck, opts, seed), [deck, opts, seed]);
   const filtering = names.length > 0 && only;
   const found = names.length === 0 || appearsIn(trace, names);
@@ -267,7 +301,7 @@ export function GameTraceSheet({
         ))}
       </div>
 
-      <button type="button" className="trace-again" onClick={() => setSeed(dealWith(deck, opts, names))}>
+      <button type="button" className="trace-again" onClick={() => setSeed(dealWith(traceGame, deck, opts, names))}>
         <Icon name="refresh" />
         Deal another game
       </button>

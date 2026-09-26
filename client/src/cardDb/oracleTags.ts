@@ -2,7 +2,7 @@ import type { CardDbArtifactMeta, CardDbManifest, OracleTagDictionary } from '@m
 import { db } from '../db/schema.js';
 import { sha256Hex } from '../util/sha256.js';
 import { CARD_DB_BASE } from './config.js';
-import { setOracleTagResolver } from './querySyntax.js';
+import { setOracleTagResolver } from '@mtg/shared';
 
 // The Scryfall Tagger oracle-tag vocabulary behind `otag:` search. Each oracle
 // card row carries sorted indices into this list (OracleCard.tags); the list

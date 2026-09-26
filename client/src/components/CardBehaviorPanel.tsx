@@ -72,14 +72,14 @@ import { Icon } from './icons.js';
 import { ManaCost } from './ManaCost.js';
 import { otherDeckBehaviors, setCardBehavior, type BorrowableBehavior } from '../db/dataAccess.js';
 import { getOracleCardsRaw, searchTokenCards } from '../db/queries.js';
-import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '../cardDb/querySyntax.js';
-import type { GroupRow } from '../analysis/groups.js';
+import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '@mtg/shared';
+import type { GroupRow } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
 import { PolicySpread } from './PolicySpread.js';
-import type { QueueCard, QueueReason } from '../analysis/coverage.js';
-import { templatesFor, type Template } from '../analysis/behaviorTemplates.js';
-import { gapWords, type ShippedDefaults } from '../analysis/defaultBehaviors.js';
-import { KW_HASTE, printedDredge, printedKeywords } from '../analysis/simDeck.js';
+import type { QueueCard, QueueReason } from '@mtg/sim';
+import { templatesFor, type Template } from '@mtg/sim';
+import { gapWords, type ShippedDefaults } from '@mtg/sim';
+import { KW_HASTE, printedDredge, printedKeywords } from '@mtg/sim';
 import { oracleTagClosure } from '../cardDb/oracleTags.js';
 import {
   COMBAT_POLICIES,
@@ -89,7 +89,7 @@ import {
   type SpendRun,
   type SimPolicy,
   type SimRuleFires,
-} from '../analysis/simulate.js';
+} from '@mtg/sim';
 
 // "What does this card actually do?", answered by the person holding it.
 //

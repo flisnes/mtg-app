@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { ManaCost } from './ManaCost.js';
-import { halfWidth, type SimCardResult, type SimCostGroup, type SimLimits, type SimOptions, type SimResult } from '../analysis/simulate.js';
-import { colorName } from '../analysis/manaSources.js';
-import type { PipColor } from '../analysis/manaCost.js';
-import { MASK_BITS } from '../analysis/simDeck.js';
+import { halfWidth, type SimCardResult, type SimCostGroup, type SimLimits, type SimOptions, type SimResult } from '@mtg/sim';
+import { colorName } from '@mtg/sim';
+import type { PipColor } from '@mtg/sim';
+import { MASK_BITS } from '@mtg/sim';
 import type { SimStatus } from '../analysis/useSimulation.js';
 import { HowWorked } from './HowWorked.js';
 

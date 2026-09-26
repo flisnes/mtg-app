@@ -1,4 +1,4 @@
-import { SPEND_POLICIES, type SimResult, type SpendPolicy, type SpendRun } from '../analysis/simulate.js';
+import { SPEND_POLICIES, type SimResult, type SpendPolicy, type SpendRun } from '@mtg/sim';
 import { FLOW_TURN } from './FlowTurnsPanel.js';
 import { HowWorked } from './HowWorked.js';
 

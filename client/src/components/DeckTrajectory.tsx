@@ -1,7 +1,7 @@
 import { HowWorked } from './HowWorked.js';
 import { useEffect, useRef, useState } from 'react';
-import type { SimCoverage } from '../analysis/simDeck.js';
-import type { SimResult } from '../analysis/simulate.js';
+import type { SimCoverage } from '@mtg/sim';
+import type { SimResult } from '@mtg/sim';
 
 // How the game unfolds, turn by turn — phase 7, and the first thing in this
 // sheet that is about the *deck* rather than about a card in it.

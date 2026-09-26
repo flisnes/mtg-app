@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { sanitizeCardBehavior, type CardBehavior } from '@mtg/shared';
 import { PREWRITTEN } from './behaviorTemplates.js';
 
@@ -54,18 +53,6 @@ export function loadDefaults(): Promise<ShippedDefaults> {
     })
     .catch(() => PREWRITTEN_ONLY);
   return pending;
-}
-
-export function useDefaults(): ShippedDefaults {
-  const [defaults, setDefaults] = useState<ShippedDefaults>(PREWRITTEN_ONLY);
-  useEffect(() => {
-    let live = true;
-    void loadDefaults().then((d) => live && setDefaults(d));
-    return () => {
-      live = false;
-    };
-  }, []);
-  return defaults;
 }
 
 /**

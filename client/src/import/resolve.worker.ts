@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import type { Finish, OracleCard, Printing } from '@mtg/shared';
-import { normalize as normalizeText, normalizeName as normalizeNameText } from '../cardDb/querySyntax.js';
+import { normalize as normalizeText, normalizeName as normalizeNameText } from '@mtg/shared';
 import { buildNameMultiIndex, cardPriority } from '../cardDb/search.js';
 import { resolveDisplayPrintings } from '../cardDb/preferredPrinting.js';
 import { db } from '../db/schema.js';

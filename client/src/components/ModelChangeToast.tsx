@@ -1,4 +1,4 @@
-import type { SimResult } from '../analysis/simulate.js';
+import type { SimResult } from '@mtg/sim';
 import { FLOW_TURN } from './FlowTurnsPanel.js';
 
 // What a saved rule did to the numbers (rebuild plan C2). Before and after are

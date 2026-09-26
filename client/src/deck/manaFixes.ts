@@ -8,8 +8,8 @@ import {
   readyTurn,
   type ManaReport,
   type SourceRow,
-} from '../analysis/manaSources.js';
-import type { PipColor } from '../analysis/manaCost.js';
+} from '@mtg/sim';
+import type { PipColor } from '@mtg/sim';
 import { copiesWelcome, isBasicLand } from './legality.js';
 
 // Phase 6: the colored-source report says what is wrong; this says what to do

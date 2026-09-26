@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
-import { QUICK_GAMES, SPEND_POLICIES, simulate, type SimRequest, type SimResponse, type SimResult, type SpendRun } from './simulate.js';
+import { QUICK_GAMES, SPEND_POLICIES, type SimRequest, type SimResponse, type SimResult, type SpendRun } from '@mtg/sim';
+import { simulate } from '@mtg/sim/simulate';
 
 // Twenty thousand games with a matching solve in the loop is a second or two of
 // solid arithmetic. On the main thread that is a second or two of a frozen

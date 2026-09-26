@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { DeckFormat } from '@mtg/shared';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
-import { librarySize, resolveGroup, type GroupRow } from '../analysis/groups.js';
-import { handSize, MAX_TURN } from '../analysis/gameModel.js';
-import { oddsCurve, turnReaching } from '../analysis/drawOdds.js';
+import { librarySize, resolveGroup, type GroupRow } from '@mtg/sim';
+import { handSize, MAX_TURN } from '@mtg/sim';
+import { oddsCurve, turnReaching } from '@mtg/sim';
 
 // "What are the odds I've drawn N of these by turn T?" — phase 2 of the deck
 // analysis, and the first piece with a question in it rather than a count.

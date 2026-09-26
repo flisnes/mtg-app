@@ -16,9 +16,11 @@ import { AnalysisOverview } from './AnalysisOverview.js';
 import { HowWorked } from './HowWorked.js';
 import { changeLines, ModelChangeToast } from './ModelChangeToast.js';
 import { setCardBehavior } from '../db/dataAccess.js';
-import { buildSimDeck, type SimDeck } from '../analysis/simDeck.js';
-import { effectiveBehaviors, useDefaults } from '../analysis/defaultBehaviors.js';
-import { idleEngines, missedDrawCopies, modelQueue, type IdleEngines } from '../analysis/coverage.js';
+import { buildSimDeck, type SimDeck } from '@mtg/sim';
+import { effectiveBehaviors } from '@mtg/sim';
+import { useDefaults } from '../analysis/useDefaults.js';
+import { idleEngines, missedDrawCopies, modelQueue, type IdleEngines } from '@mtg/sim';
+import { oracleTagClosure } from '../cardDb/oracleTags.js';
 import { deckBehaviorMap } from '../db/dataAccess.js';
 import { getOracleCardsRaw } from '../db/queries.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
@@ -32,11 +34,11 @@ import {
   type SimPolicy,
   type SimResult,
   type SpendRun,
-} from '../analysis/simulate.js';
+} from '@mtg/sim';
 import { useSimulation } from '../analysis/useSimulation.js';
 import { DEFAULT_KEEP_RULE, MulliganPanel, type KeepRule } from './MulliganPanel.js';
-import { librarySize, type GroupRow } from '../analysis/groups.js';
-import { manaReport } from '../analysis/manaSources.js';
+import { librarySize, type GroupRow } from '@mtg/sim';
+import { manaReport } from '@mtg/sim';
 import type { ManaFix } from '../deck/manaFixes.js';
 import type { PlacementIndex } from '../db/usePlacements.js';
 
@@ -410,13 +412,13 @@ export function DeckAnalysis({
   // first render, and a memo that doesn't watch for it reports null forever.
   // The same question per card, for "Who does the work" to list at zero. Off
   // the built deck, so a card with a behavior on it drops out of both.
-  const idle = useMemo(() => idleEngines(rows, simDeck), [rows, simDeck, tagsReady]);
-  const missedDraw = useMemo(() => missedDrawCopies(idle), [idle]);
+  const idle = useMemo(() => idleEngines(rows, simDeck, oracleTagClosure), [rows, simDeck, tagsReady]);
+  const missedDraw = useMemo(() => missedDrawCopies(idle, oracleTagClosure), [idle]);
   // The Model tab's queue, which is also what the coverage chip counts.
   // Minus the cards somebody already read by hand and found nothing to write
   // for yet: a Rhystic Study is not a rule you are missing, it is a table this
   // simulator does not have.
-  const queue = useMemo(() => modelQueue(rows, simDeck)?.filter((q) => !defaults.idle.has(q.name)) ?? null, [rows, simDeck, tagsReady, defaults]);
+  const queue = useMemo(() => modelQueue(rows, simDeck, oracleTagClosure)?.filter((q) => !defaults.idle.has(q.name)) ?? null, [rows, simDeck, tagsReady, defaults]);
   // Lands, mana sources and cards with an effect the sequencer resolves. The
   // same arithmetic `coverageNote` does, because the chip and the paragraph
   // explaining it disagreeing would be worse than either of them being absent.

@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { DeckFormat } from '@mtg/shared';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
-import { librarySize, resolveGroup, type GroupRow } from '../analysis/groups.js';
+import { librarySize, resolveGroup, type GroupRow } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
-import { KEEP_ANYTHING_AT, mulliganOutlook, type HandRow, type MulliganOutlook } from '../analysis/mulligan.js';
+import { KEEP_ANYTHING_AT, mulliganOutlook, type HandRow, type MulliganOutlook } from '@mtg/sim';
 
 // "How often does this deck give me a hand worth keeping?" — phase 4.
 //

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.181.1
+
+- Internal housekeeping in the project's planning notes. Nothing in the app changed.
+
 ## 0.181.0
 
 - **Fixed: gods and walls attacked when they should not.** A Theros god swung for its full power even below its devotion threshold, so an Erebos hit for five off an empty board. It now checks your devotion each combat, the same count Gray Merchant drains by, and stays home until you are devout enough. Creatures with defender no longer attack at all. Both inflated damage curves, and the floor promises the opposite direction.

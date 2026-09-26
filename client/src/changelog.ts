@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.180.0',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The card database read some mana too generously. Mana priced in a sacrifice or another permanent (Ashnod\'s Altar, Springleaf Drum), one-shots without a tap cost (Blood Pet, the Spirit Guides), spells with a sacrifice attached (Deadly Dispute), "activate only if" abilities (Mox Opal) and loyalty or Saga mana no longer read as free repeating sources, and tapped rocks like Coldsteel Heart now enter tapped. Around 250 cards read lower and closer to how they play.',
+      },
+    ],
+  },
+  {
     version: '0.179.0',
     changes: [
       {
@@ -194,15 +203,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'The Model tab now plays your deck under all four spend orders and shows them side by side, so you can see whether the order matters and tap the one that does best.',
-      },
-    ],
-  },
-  {
-    version: '0.169.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'A card you already wrote a rule for in another deck offers that rule in its editor. One tap copies it in; save to keep it.',
       },
     ],
   },

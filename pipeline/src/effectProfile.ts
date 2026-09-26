@@ -185,6 +185,24 @@ const ADDITIONAL_COST = new RegExp(
   `\\bas an additional cost to cast[^,]*,[^.]*\\bdiscards? (?:${AMOUNT}) cards?\\b`,
   'i',
 );
+/**
+ * An additional cost we cannot price in cards: sacrifice a creature (Deadly
+ * Dispute, Village Rites), exile, return, pay energy. The card read as a free
+ * draw two on an empty board, which is a §11.4 break, and half a card is worse
+ * than none of it in both directions — so the whole profile is dropped. Three
+ * costs stay because the caster can always pay them: a discard (the tally
+ * counts it), an optional "you may …", and a reveal. An "or discard a card"
+ * alternative also stays — the discard is the honest price then.
+ */
+const UNPAYABLE_COST =
+  /\bas an additional cost to cast this spell, (?!discard\b|you may\b|reveal\b)(?![^.\n]*(?:\bor discards? a card\b|\bdiscards? a card,? or\b))/i;
+/**
+ * A sacrifice of your own board demanded alongside the payout: Disciple of
+ * Bolas's "sacrifice another creature. You … draw X cards" was a free draw
+ * one. The price is a fact about the board the tally cannot see, so the line
+ * is poisoned the same way an unreadable condition poisons it.
+ */
+const SACRIFICE_PRICE = /\byou sacrifice\b|\bsacrifices? (?:a|an|another|any number|x|\d+|one|two|three)\b/i;
 
 type Timing = 'resolve' | 'repeat' | 'skip';
 
@@ -254,6 +272,9 @@ export function effectProfileOf(card: EffectProfileInput, index: EffectTagIndex)
   }
 
   for (const line of lines) {
+    // The unpayable additional cost belongs to casting the card at all, so it
+    // takes the whole profile with it whatever else the card says.
+    if (UNPAYABLE_COST.test(line)) return undefined;
     const timing = timingOf(line, isSpell);
     // An additional cost is a property of casting the card at all, so it counts
     // even on a permanent, whose other lines this loop is about to walk past.
@@ -284,12 +305,18 @@ export function effectProfileOf(card: EffectProfileInput, index: EffectTagIndex)
       // card. If you do, draw a card" would keep the price and drop the draw.
       // Half a card is worse than none of it either way. A sentence about
       // somebody else is not a condition and poisons nothing.
-      if (CONDITION.test(sentence) || WHEEL.test(sentence)) {
+      /** Whoever this verb belongs to, it isn't us. */
+      const theirs = (at: number) => OTHER_PLAYER.test(sentence.slice(Math.max(0, at - SUBJECT_WINDOW), at));
+      // An opponent's sacrifice is their problem, not our price: Cruel
+      // Ultimatum's "Target opponent sacrifices a creature" must not poison
+      // the sentence where *we* draw three. An additional-cost line already
+      // passed UNPAYABLE_COST, so its sacrifice is the alternative we are not
+      // paying — poisoning it would erase the discard we count instead.
+      const sac = /\bas an additional cost\b/i.test(sentence) ? null : SACRIFICE_PRICE.exec(sentence);
+      if (CONDITION.test(sentence) || WHEEL.test(sentence) || (sac && !theirs(sac.index))) {
         poisoned = true;
         break;
       }
-      /** Whoever this verb belongs to, it isn't us. */
-      const theirs = (at: number) => OTHER_PLAYER.test(sentence.slice(Math.max(0, at - SUBJECT_WINDOW), at));
 
       const take = (re: RegExp, key: (typeof KEYS)[number], gate: boolean) => {
         const m = re.exec(sentence);

@@ -771,7 +771,9 @@ function applyAuthoredObject(card: SimCard, b: CompiledBehavior): void {
     card.manaCond = b.tapCond;
     card.oneColor = !!tap.oneColor;
     card.spendQ = tap.q || null;
-    if (card.role !== 'land') card.tapped = 'never';
+    // card.tapped stays: an authored mana ability says what the card taps for,
+    // not when it untaps — zeroing it dropped the database's enters-tapped
+    // reading, so a hand-ruled Coldsteel Heart tapped a turn early.
   }
   if (b.dredge > 0) card.dredge = b.dredge;
   for (const o of b.options) {

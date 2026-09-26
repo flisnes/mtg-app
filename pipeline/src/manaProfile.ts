@@ -174,9 +174,6 @@ interface AddClause {
   vague: boolean;
 }
 
-/** "{T}: Add {C}" — a cost you can pay at will, which is what a source is. */
-const TAP_COST = /\{T\}/i;
-
 /**
  * The "add" is inside quotation marks, which in Magic's templating always means
  * the ability belongs to something else: Chromatic Lantern's `Lands you control
@@ -212,7 +209,48 @@ const TRIGGERED = /^\s*(?:[^—\n]{1,40} — )?(?:whenever|when|at the beginning
  * Sacrifice this land: Add {C}{C}" is a one-off cash-in, and reading it as the
  * land's output is how a one-mana land gets credited with two every turn.
  */
-const SELF_LIMITED = /\bsacrifice (?:this|it)\b|\bremove an? [\w-]+ counter from (?:this|it)\b/i;
+const SELF_LIMITED =
+  /\bsacrifice (?:this|it)\b|\bremove an? [\w+/-]+ counter from (?:this|it)\b|\bexile this card from your hand\b/i;
+
+/**
+ * The cost is paid in something that is neither mana nor this card's own tap:
+ * another permanent sacrificed or tapped (Ashnod's Altar, Springleaf Drum),
+ * counters removed (Ramos), a card discarded (Skirge Familiar), life paid, a
+ * Food foraged. Pricing only the symbols read all of these as free repeating
+ * sources, which is the biggest §11.4 break the color review found. The clause
+ * is dropped rather than discounted, because what the price costs is a fact
+ * about the board; a behavior can write the honest version back in.
+ * SELF_LIMITED is checked first, so a card spending *itself* stays a one-shot
+ * instead of vanishing. "Pay N life" stays payable: the goldfish has forty life
+ * and no one attacking it, so on Horizon Canopy and the Amonkhet deserts the
+ * life is not the part that decides anything. Energy and everything else is a
+ * resource the simulator cannot mint.
+ */
+const EXTERNAL_PRICE =
+  /\b(?:sacrifice|exile|discard|return|tap|forage)\b|\bremove (?!any number\b|x )|\bpay\b(?! (?:\d+|x) life)/i;
+
+/**
+ * A line that is not an activated ability of the permanent as it sits on the
+ * battlefield: a loyalty ability (Chandra, Torch of Defiance's "+1: Add
+ * {R}{R}" — loyalty is not modelled), a Saga chapter (mana once, on a clock,
+ * read as the front face's tap forever), cumulative upkeep (Braid of Fire's
+ * mana arrives in upkeep and is spent or gone before any spell is cast).
+ */
+const NOT_AN_ABILITY = /^\s*(?:[+−-]?\d+\s*:|[IVX]+(?:\s*,\s*[IVX]+)*\s*—|Cumulative upkeep)/i;
+
+/** "Activate only if you control three or more artifacts" — Mox Opal, Mox Jasper. */
+const ACTIVATE_ONLY_IF = /\bactivate (?:this ability )?only if\b/i;
+
+/**
+ * …except when the condition is owning a land of a named type: Tainted Isle's
+ * "Activate only if you control a Swamp" and the Verges' "a Mountain or another
+ * land that could produce {R}" are true in nearly every deck that plays the
+ * card, and dropping half a dual's colors over them punishes the wrong decks.
+ * Counted thresholds ("five or more lands", "three lands with the same name")
+ * stay dropped: those are the Temple of the False God kind of promise.
+ */
+const LAND_TYPE_CONDITION =
+  /\bonly if you control (?:a|an|another) [^.]*?\b(?:Plains|Island|Swamp|Mountain|Forest|Wastes|basic land|land that could produce)/i;
 
 /** "Add one mana of any color that a land an opponent controls could produce." */
 const OPPONENT_COLORS = /\ban opponent controls could produce\b/i;
@@ -275,7 +313,15 @@ const ADDS_MANA = /\{[WUBRGCSX0-9/]+\}|\bmana\b/i;
  */
 function ownClauses(oracleText: string | null): AddClause[] {
   const out: AddClause[] = [];
-  for (const line of (oracleText ?? '').split('\n')) {
+  for (const raw of (oracleText ?? '').split('\n')) {
+    // Reminder text explains a keyword or a token, never this card's own tap:
+    // firebending's "(… add {R} …)" happens on attack, and the parens say so.
+    // One exception: a typed land's intrinsic ability is printed exactly this
+    // way — Murmuring Bosk's "({T}: Add {G}.)" is the Forest type talking, and
+    // it is the card's own — so that one shape is unwrapped, not stripped.
+    const line = raw.replace(/\((\{T\}: Add [^)]*)\)/gi, '$1').replace(/\([^)]*\)/g, ' ');
+    if (NOT_AN_ABILITY.test(line)) continue;
+    if (ACTIVATE_ONLY_IF.test(line) && !LAND_TYPE_CONDITION.test(line)) continue;
     const m = ADD_CLAUSE.exec(line);
     if (!m) continue;
     const cost = m[1] ?? '';
@@ -283,6 +329,11 @@ function ownClauses(oracleText: string | null): AddClause[] {
     if (QUOTED_ABILITY.test(cost) && !GAINS_ITSELF.test(cost)) continue;
     if (TRIGGERED.test(cost)) continue;
     if (!ADDS_MANA.test(body)) continue;
+    const selfPrice = SELF_LIMITED.test(cost);
+    // "Spell mastery — If there are two or more instant and/or sorcery cards in
+    // your graveyard, add {B}{B}{B}": an "if" before the add is mana we would
+    // be counting as certain.
+    if (!selfPrice && (EXTERNAL_PRICE.test(cost) || /\bif\b/i.test(cost))) continue;
 
     // The amount is read from the cost and the clause only. The *rest* of the
     // line is a different sentence and routinely mentions {X} for reasons that
@@ -308,7 +359,10 @@ function ownClauses(oracleText: string | null): AddClause[] {
       // Where the mana may be spent *is* in the following sentence, so this one
       // reads the whole line.
       restricted: RESTRICTED_USE.test(line),
-      limited: SELF_LIMITED.test(cost) && TAP_COST.test(cost),
+      // No {T} required: Blood Pet's "Sacrifice this creature: Add {B}" and the
+      // Spirit Guides' exile-from-hand are one-shots too, and requiring the tap
+      // read them as free repeating dorks.
+      limited: selfPrice,
       vague: VAGUE_COLOR.test(body),
     });
   }
@@ -475,6 +529,23 @@ const BOUNCES_LAND_ON_ENTRY =
 /** "Each land is a Swamp in addition to its other land types." */
 const GRANTS_BASIC_TYPE = /\beach land is an? (Plains|Island|Swamp|Mountain|Forest)\b/i;
 
+/**
+ * "As an additional cost to cast this spell, sacrifice a creature": Culling the
+ * Weak and Infernal Plunge are not castable off an empty board, and reading the
+ * add-clause alone made them free rituals. A discard cost is deliberately not
+ * here — the hand can usually pay it, and effectProfile counts it.
+ */
+const SPELL_SAC_COST = /\bas an additional cost to cast this spell, (?:sacrifice|exile|return|tap|pay)\b/i;
+
+/**
+ * "This artifact enters tapped." — its own sentence on its own line, which is
+ * safe to read in a way "enters tapped" on a land is not (rule 1's shocklands
+ * hide theirs behind "unless"): the Diamonds and Coldsteel Heart were tapping a
+ * turn early. Trigger words are excluded so Amulet of Vigor's "Whenever a
+ * permanent you control enters tapped" stays what it is.
+ */
+const SELF_TAPPED_NONLAND = /^(?!.*\b(?:when|whenever|if|unless)\b)[^."“\n]* enters(?: the battlefield)? tapped\b/im;
+
 /** Prismatic Omen, Dryad of the Ilysian Grove. */
 const GRANTS_EVERY_TYPE = /\blands you control are every basic land type\b/i;
 
@@ -562,11 +633,24 @@ export function manaProfileOf(card: ManaProfileInput, index: ManaTagIndex): Mana
 
   const isLand = /\bLand\b/.test(card.typeLine);
   const isCreature = /\bCreature\b/.test(card.typeLine);
-  const clauses = ownClauses(card.oracleText);
+  const isSpellFace = /\b(?:Instant|Sorcery)\b/.test(card.typeLine.split('//')[0] ?? '');
+
+  // The back face is a different card the front has to reach first, so only the
+  // front face's abilities are the card's — The Legend of Roku's back-face
+  // firebending was reading as the Saga's own four-mana tap. The one exception
+  // is a land on both faces (the Pathways): you choose which land to play as it
+  // hits the table, so the union of the two really is the card's palette.
+  const faceTypes = card.typeLine.split('//');
+  const bothLands = faceTypes.length > 1 && faceTypes.every((t) => /\bLand\b/.test(t));
+  const text = bothLands ? (card.oracleText ?? '') : (card.oracleText ?? '').split('\n//\n')[0]!;
+
+  const clauses = isSpellFace && SPELL_SAC_COST.test(text) ? [] : ownClauses(text);
   const clause = bestClause(clauses);
   const parsed = clause?.net ?? null;
   /** It can make mana by itself, rather than causing somebody else's land to. */
   const ownsMana = clauses.length > 0;
+  /** A rock or dork that arrives tapped; lands get theirs from the tapland tag. */
+  const selfTapped = !isLand && SELF_TAPPED_NONLAND.test(text) ? MANA_TAPPED : 0;
 
   /**
    * Everything past `flags` in the tuple, trimmed back to nothing for the great
@@ -624,11 +708,12 @@ export function manaProfileOf(card: ManaProfileInput, index: ManaTagIndex): Mana
   // A mana creature's mana arrives a turn late. Checked before `rock` because
   // Tagger tags a few artifact creatures as both.
   if (card.produces && ownsMana && (tagged(index.dork) || (isCreature && parsed !== null))) {
-    const flags = MANA_SICK | clauseFlags() | (parsed === null ? MANA_UNKNOWN : 0) | (clause?.limited ? MANA_ONE_SHOT : 0);
+    const flags =
+      MANA_SICK | selfTapped | clauseFlags() | (parsed === null ? MANA_UNKNOWN : 0) | (clause?.limited ? MANA_ONE_SHOT : 0);
     return [kindOf('dork'), parsed ?? 1, flags, ...tail(clauseColors())] as ManaProfileTuple;
   }
   if (card.produces && ownsMana && tagged(index.rock)) {
-    const flags = clauseFlags() | (parsed === null ? MANA_UNKNOWN : 0) | (clause?.limited ? MANA_ONE_SHOT : 0);
+    const flags = selfTapped | clauseFlags() | (parsed === null ? MANA_UNKNOWN : 0) | (clause?.limited ? MANA_ONE_SHOT : 0);
     return [kindOf('rock'), parsed ?? 1, flags, ...tail(clauseColors())] as ManaProfileTuple;
   }
   if (card.produces && ownsMana && tagged(index.ritual)) {
@@ -665,7 +750,7 @@ export function manaProfileOf(card: ManaProfileInput, index: ManaTagIndex): Mana
   // — shipped as a one-mana any-color rock, and Mirari's Wake, Zendikar
   // Resurgent, both Gauntlets and Joiner Adept alongside it.
   if (card.produces && ownsMana) {
-    const flags = clauseFlags() | (parsed === null ? MANA_UNKNOWN : 0) | (clause?.limited ? MANA_ONE_SHOT : 0);
+    const flags = selfTapped | clauseFlags() | (parsed === null ? MANA_UNKNOWN : 0) | (clause?.limited ? MANA_ONE_SHOT : 0);
     return [kindOf('rock'), parsed ?? 1, flags, ...tail(clauseColors())] as ManaProfileTuple;
   }
 

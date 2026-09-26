@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.180.0
+
+- **Fixed: the card database read some mana too generously.** The simulator's promise is a floor: when it errs, it errs low. The color review found the places it erred high instead, and this build fixes the biggest batch. Mana priced in something other than mana no longer reads as a free repeating source: Ashnod's Altar wants a creature, Springleaf Drum wants an untapped one, Skirge Familiar wants your cards. A sacrifice without a tap cost (Blood Pet, the Spirit Guides, Lion's Eye Diamond) is one mana once, not one mana forever. Spells with a sacrifice attached (Deadly Dispute, Village Rites, Culling the Weak) stop reading as free draws and free rituals. "Activate only if" abilities (Mox Opal, Temple of the False God), loyalty abilities, Saga chapters, back faces and reminder text (Chandra, The Aetherspark, firebending) no longer count as the card's own tap. And the Diamonds, the Borderposts and Coldsteel Heart finally enter tapped, including when you wrote their mana rule yourself. Around 250 cards read lower and closer to how they play; "you control a Swamp" duals and Horizon Canopy-style life costs still count, because in the decks that play them they always could.
+
 ## 0.179.0
 
 - **Expanded: EDH card simulator defaults now cover the top 500 cards per color.** In 0.173.0, the top 1000 cards received rules; in 0.178.0, the top 1000 commanders did. This build reviews the top 500 cards of each color, multicolor and colorless (3,500 cards total, 1,801 rules total). More Treasures and Clues auto-crack, more lands tutor, more creatures grant evasion on their own. The simulator has less goldfish left to do.

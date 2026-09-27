@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.182.4
+
+- Internal: every edit now pairs its database write with its sync staging through one helper, so a future edit path can't forget to sync. No visible changes.
+
 ## 0.182.3
 
 - **Added: find the rest of a card's cycle from its card sheet.** Open Morphic Pool and a "See the other cards in this cycle" link sits under the rules text; tap it and the search shows the other four bond lands. Works for any card the Scryfall Tagger community has filed in a cycle (shocklands, Signets, Titans, ...), and cards in no cycle simply don't show the link.

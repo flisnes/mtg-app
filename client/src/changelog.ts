@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.182.5',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Every popup sheet in the app now shares one frame, so the guard against a double-tap landing inside a freshly opened sheet, Escape/back handling and screen-reader dialog markup apply everywhere.',
+      },
+    ],
+  },
+  {
     version: '0.182.3',
     changes: [
       {
@@ -165,28 +174,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'A commander that exiles itself at upkeep keeps its upkeep rule after you recast it.',
-      },
-    ],
-  },
-  {
-    version: '0.174.2',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Rules you write now sync to your other devices, and going back to a built-in rule no longer brings back an old version of yours.',
-      },
-    ],
-  },
-  {
-    version: '0.174.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'A rule you edit on one device no longer snaps back to the old version from another device a few seconds after saving.',
-      },
-      {
-        kind: 'fixed',
-        text: 'The "saved" popup no longer waits forever when you save while the games are still being dealt.',
       },
     ],
   },

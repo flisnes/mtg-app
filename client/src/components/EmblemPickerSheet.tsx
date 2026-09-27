@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { EMBLEM_COLORS, type ContainerEmblem, type ContainerKind, type EmblemColor, type OracleCard, type Priced } from '@mtg/shared';
 import { getSetList, type CardSetInfo } from '../db/queries.js';
 import { CardSearch, CropStage } from './AvatarEditorSheet.js';
 import { Emblem } from './Emblem.js';
 import { EMBLEM_COLOR_CSS, EMBLEM_MANA_PIPS, EMBLEM_SYMBOL_GROUPS, emblemColorLabel } from './emblemSymbols.js';
 import { SetSymbol } from './SetSymbol.js';
-import { useDismiss } from './useDismiss.js';
-import { useTapGuard } from './useTapGuard.js';
+import { Sheet } from './Sheet.js';
 
 // Pick what a deck, binder or box wears in the list. Three ways in, one per tab:
 //  - Art: search any card, then frame it — the profile-picture flow, reused
@@ -43,10 +41,6 @@ export function EmblemPickerSheet({
   onSave: (emblem: ContainerEmblem | undefined) => void;
   onClose: () => void;
 }) {
-  useDismiss(onClose);
-  // Opened from a row's options menu, whose items sit where this sheet's own
-  // buttons land — swallow the tail of the tap that opened it.
-  const tapGuard = useTapGuard();
   const [tab, setTab] = useState<Tab>(emblem?.type === 'set' ? 'set' : emblem?.type === 'symbol' ? 'symbol' : 'art');
   const [card, setCard] = useState<Priced<OracleCard> | null>(null);
   // The emblem as it now stands, so the preview and the ticked swatch/symbol
@@ -77,73 +71,70 @@ export function EmblemPickerSheet({
 
   const closeLabel = saved ? 'Done' : 'Cancel';
 
-  return createPortal(
-    <div className="sheet-backdrop" onClick={onClose} {...tapGuard}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`Emblem for ${name}`}>
-        <div className="sheet-name emblem-sheet-name">
-          <Emblem emblem={current} kind={kind} size={28} />
-          <span>{card ? 'Frame the art' : `Emblem for “${name}”`}</span>
-        </div>
-
-        {!card && (
-          <div className="seg-row sheet-tabs" role="tablist" aria-label="Emblem source">
-            {TABS.map((t) => (
-              <button
-                key={t.tab}
-                role="tab"
-                aria-selected={t.tab === tab}
-                className={t.tab === tab ? 'seg seg-active' : 'seg'}
-                onClick={() => setTab(t.tab)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {tab === 'art' &&
-          (card ? (
-            <CropStage
-              card={card}
-              onBack={() => setCard(null)}
-              onSave={(art) => commit({ type: 'art', art })}
-              onCancel={onClose}
-              saveLabel="Use this art"
-            />
-          ) : (
-            <CardSearch
-              onPick={setCard}
-              onCancel={onClose}
-              actions={current ? <button onClick={() => commit(undefined)}>Remove emblem</button> : undefined}
-            />
-          ))}
-
-        {tab === 'symbol' && (
-          <SymbolPicker
-            selected={current?.type === 'symbol' ? current.symbol : undefined}
-            color={color}
-            onPickColor={pickColor}
-            onPick={(symbol) => commit({ type: 'symbol', symbol, ...(color ? { color } : {}) })}
-            onClear={current ? () => commit(undefined) : undefined}
-            onCancel={onClose}
-            closeLabel={closeLabel}
-          />
-        )}
-
-        {tab === 'set' && (
-          <SetPicker
-            selected={current?.type === 'set' ? current.set : undefined}
-            color={color}
-            onPickColor={pickColor}
-            onPick={(set) => commit({ type: 'set', set, ...(color ? { color } : {}) })}
-            onClear={current ? () => commit(undefined) : undefined}
-            onCancel={onClose}
-            closeLabel={closeLabel}
-          />
-        )}
+  return (
+    <Sheet onClose={onClose} label={`Emblem for ${name}`}>
+      <div className="sheet-name emblem-sheet-name">
+        <Emblem emblem={current} kind={kind} size={28} />
+        <span>{card ? 'Frame the art' : `Emblem for “${name}”`}</span>
       </div>
-    </div>,
-    document.body,
+
+      {!card && (
+        <div className="seg-row sheet-tabs" role="tablist" aria-label="Emblem source">
+          {TABS.map((t) => (
+            <button
+              key={t.tab}
+              role="tab"
+              aria-selected={t.tab === tab}
+              className={t.tab === tab ? 'seg seg-active' : 'seg'}
+              onClick={() => setTab(t.tab)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'art' &&
+        (card ? (
+          <CropStage
+            card={card}
+            onBack={() => setCard(null)}
+            onSave={(art) => commit({ type: 'art', art })}
+            onCancel={onClose}
+            saveLabel="Use this art"
+          />
+        ) : (
+          <CardSearch
+            onPick={setCard}
+            onCancel={onClose}
+            actions={current ? <button onClick={() => commit(undefined)}>Remove emblem</button> : undefined}
+          />
+        ))}
+
+      {tab === 'symbol' && (
+        <SymbolPicker
+          selected={current?.type === 'symbol' ? current.symbol : undefined}
+          color={color}
+          onPickColor={pickColor}
+          onPick={(symbol) => commit({ type: 'symbol', symbol, ...(color ? { color } : {}) })}
+          onClear={current ? () => commit(undefined) : undefined}
+          onCancel={onClose}
+          closeLabel={closeLabel}
+        />
+      )}
+
+      {tab === 'set' && (
+        <SetPicker
+          selected={current?.type === 'set' ? current.set : undefined}
+          color={color}
+          onPickColor={pickColor}
+          onPick={(set) => commit({ type: 'set', set, ...(color ? { color } : {}) })}
+          onClear={current ? () => commit(undefined) : undefined}
+          onCancel={onClose}
+          closeLabel={closeLabel}
+        />
+      )}
+    </Sheet>
   );
 }
 

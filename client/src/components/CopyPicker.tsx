@@ -4,7 +4,7 @@ import { CONTAINER_META } from '../deck/containers.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
-import { useDismiss } from './useDismiss.js';
+import { Sheet } from './Sheet.js';
 
 // "Your copies": the cards you actually hold, as tiles. Used three times: the
 // card sheet's "pick one from my collection" shortcut, the deck assembler that
@@ -184,39 +184,25 @@ export function CopyPicker({
   onAddCopy?: () => void;
   onClose: () => void;
 }) {
-  useDismiss(onClose);
   return (
-    <div
-      className="sheet-backdrop"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClose();
-      }}
-    >
-      <div
-        className="sheet edition-picker-sheet"
-        role="dialog"
-        aria-label="Your copies"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="edition-picker-head">
-          <h2>Your copies</h2>
-          <button onClick={onClose} aria-label="Close">
-            <Icon name="close" size={18} />
-          </button>
-        </div>
-        <CopyGrid copies={copies} printings={printings} selected={selected} onSelect={onSelect} />
-        {onAddCopy && (
-          <button
-            type="button"
-            className="linklike copy-picker-add"
-            onClick={onAddCopy}
-            title="Add the copy to your collection, then file that one"
-          >
-            <Icon name="plus" size={14} /> Not here? Add a copy
-          </button>
-        )}
+    <Sheet onClose={onClose} className="edition-picker-sheet" label="Your copies">
+      <div className="edition-picker-head">
+        <h2>Your copies</h2>
+        <button onClick={onClose} aria-label="Close">
+          <Icon name="close" size={18} />
+        </button>
       </div>
-    </div>
+      <CopyGrid copies={copies} printings={printings} selected={selected} onSelect={onSelect} />
+      {onAddCopy && (
+        <button
+          type="button"
+          className="linklike copy-picker-add"
+          onClick={onAddCopy}
+          title="Add the copy to your collection, then file that one"
+        >
+          <Icon name="plus" size={14} /> Not here? Add a copy
+        </button>
+      )}
+    </Sheet>
   );
 }

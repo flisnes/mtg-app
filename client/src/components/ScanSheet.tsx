@@ -46,7 +46,7 @@ import { CONTAINER_META } from '../deck/containers.js';
 import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
 import { useDismiss } from './useDismiss.js';
 import { useConfirm } from './ConfirmSheet.js';
-import { TAP_GUARD_MS, useTapGuard } from './useTapGuard.js';
+import { Sheet } from './Sheet.js';
 import { useFiling } from '../deck/useFiling.js';
 import { unfileClashes, type FilingCopy } from '../deck/filing.js';
 import { useAsyncAction } from './useAsyncAction.js';
@@ -601,11 +601,6 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // later, so a collection scan ends by offering to put the pile somewhere.
   const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
   const { confirm, sheet: confirmSheet } = useConfirm();
-  // The duplicates sheet is rendered inline by this component, so its guard
-  // clock has to start when the step appears, not when the scanner opened.
-  const conflictTapGuard = useTapGuard(TAP_GUARD_MS, conflictStep);
-  // Same for the review's "already own these" step — it arrives mid-flow.
-  const ownedTapGuard = useTapGuard(TAP_GUARD_MS, rescanPhase === 'owned' ? rescanStep : null);
 
   const total = session.reduce((n, e) => n + e.qty, 0);
 
@@ -1541,18 +1536,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     })();
 
   // Back / Escape peels the scanner's own layers before leaving the scan. The
-  // sheets that live in their own components (session list, replace picker,
-  // re-scan review) register themselves and sit above this one; only the
+  // sheets rendered through <Sheet> (session list, replace picker, re-scan
+  // review, duplicates) register themselves and sit above this one; only the
   // inline layers need naming here. A commit in flight claims nothing.
-  useDismiss(
-    committing
-      ? null
-      : conflictStep
-        ? () => setConflictStep(null)
-        : settingsOpen
-          ? () => setSettingsOpen(false)
-          : close,
-  );
+  useDismiss(committing ? null : settingsOpen ? () => setSettingsOpen(false) : close);
 
   /** Session copies of a printing across finishes/boards — the tile's badge. */
   const countOf = (scryfallId: string) => session.reduce((n, e) => (e.scryfallId === scryfallId ? n + e.qty : n), 0);
@@ -1931,8 +1918,14 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           const otherCount = conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0);
           const toTradelist = target.kind === 'tradelist';
           return (
-            <div className="sheet-backdrop" onClick={() => setConflictStep(null)} {...conflictTapGuard}>
-              <div className="sheet" role="dialog" aria-label="Resolve duplicates" onClick={(e) => e.stopPropagation()}>
+            <Sheet
+              onClose={() => setConflictStep(null)}
+              dismiss={committing ? null : () => setConflictStep(null)}
+              label="Resolve duplicates"
+              // Rendered inline by the scanner, so the guard clock has to start
+              // when the step appears, not when the scanner opened.
+              resetKey={conflictStep}
+            >
                 <ImportConflicts
                   conflicts={conflictStep.conflicts}
                   otherCount={otherCount}
@@ -1985,8 +1978,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
                   onConfirm={(choices) => runCommit(() => commitLines(conflictStep.lines, choices, conflictStep.conflicts))}
                   onBack={() => setConflictStep(null)}
                 />
-              </div>
-            </div>
+            </Sheet>
           );
         })()}
 
@@ -2058,8 +2050,11 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           so these start on Skip — but a second physical copy (Add) or a printing
           correction (Update) is one tap away, per card. */}
       {rescanStep && target.kind === 'deck' && rescanPhase === 'owned' && (
-        <div className="sheet-backdrop" onClick={() => setRescanStep(null)} {...ownedTapGuard}>
-          <div className="sheet" role="dialog" aria-label="Cards you already own" onClick={(e) => e.stopPropagation()}>
+        <Sheet
+          onClose={() => setRescanStep(null)}
+          dismiss={committing ? null : () => setRescanStep(null)}
+          label="Cards you already own"
+        >
             <ImportConflicts
               conflicts={rescanStep.conflicts}
               otherCount={rescanStep.unowned.filter((e) => rescanPicked.has(entryKey(e))).length}
@@ -2087,8 +2082,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
                 else setRescanStep(null);
               }}
             />
-          </div>
-        </div>
+        </Sheet>
       )}
 
       {/* Last, so it stacks above any review step that can raise it: every
@@ -2126,58 +2120,54 @@ function RescanChangesSheet({
   const changed = changes.filter((c) => c.kind === 'change');
   const removed = changes.filter((c) => c.kind === 'remove');
   const rows = [...added, ...changed, ...removed];
-  useDismiss(busy ? null : onBack);
-  const tapGuard = useTapGuard();
   return (
-    <div className="sheet-backdrop" onClick={onBack} {...tapGuard}>
-      <div className="sheet scan-list-sheet" role="dialog" aria-label="Re-scan changes" onClick={(e) => e.stopPropagation()}>
-        <div className="scan-sheet-head">
-          <h2>Re-scan changes</h2>
-          <span className="scan-target">→ {deckName}</span>
-          <button className="scan-close" onClick={onBack} aria-label="Back">
-            <Icon name="close" size={18} />
-          </button>
-        </div>
-        <p className="fine-print">
-          Sets “{deckName}” to exactly what you scanned, and files those copies into it. Cards left unchanged aren’t
-          listed.
-        </p>
-        {rows.length === 0 ? (
-          <p className="scan-list-empty">
-            Same cards as before. The copies you scanned get filed here, so “{deckName}” is holding them.
-          </p>
-        ) : (
-          <ul className="scan-list">
-            {rows.map((c) => (
-              <li key={`${c.kind}|${c.oracleId}|${c.board}`} className="scan-list-row">
-                <span className="scan-list-main scan-list-static">
-                  {c.image ? <img className="scan-list-thumb" src={c.image} alt="" /> : <span className="scan-list-thumb" />}
-                  <span className="scan-list-info">
-                    <strong>{c.name}</strong>
-                    {showBoards && <span className="scan-printing">{BOARD_LABELS[c.board]}</span>}
-                  </span>
-                </span>
-                {c.kind === 'add' && <span className="rescan-tag rescan-add">Added ×{c.quantity}</span>}
-                {c.kind === 'remove' && <span className="rescan-tag rescan-remove">Removed ×{c.quantity}</span>}
-                {c.kind === 'change' && (
-                  <span className={`rescan-tag ${c.to > c.from ? 'rescan-add' : 'rescan-remove'}`}>
-                    {c.from} → {c.to}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="scan-confirm-actions">
-          <button className="primary" disabled={busy} onClick={onNext}>
-            {busy ? 'Applying…' : nextLabel}
-          </button>
-          <button onClick={onBack} disabled={busy}>
-            Keep scanning
-          </button>
-        </div>
+    <Sheet onClose={onBack} dismiss={busy ? null : onBack} className="scan-list-sheet" label="Re-scan changes">
+      <div className="scan-sheet-head">
+        <h2>Re-scan changes</h2>
+        <span className="scan-target">→ {deckName}</span>
+        <button className="scan-close" onClick={onBack} aria-label="Back">
+          <Icon name="close" size={18} />
+        </button>
       </div>
-    </div>
+      <p className="fine-print">
+        Sets “{deckName}” to exactly what you scanned, and files those copies into it. Cards left unchanged aren’t
+        listed.
+      </p>
+      {rows.length === 0 ? (
+        <p className="scan-list-empty">
+          Same cards as before. The copies you scanned get filed here, so “{deckName}” is holding them.
+        </p>
+      ) : (
+        <ul className="scan-list">
+          {rows.map((c) => (
+            <li key={`${c.kind}|${c.oracleId}|${c.board}`} className="scan-list-row">
+              <span className="scan-list-main scan-list-static">
+                {c.image ? <img className="scan-list-thumb" src={c.image} alt="" /> : <span className="scan-list-thumb" />}
+                <span className="scan-list-info">
+                  <strong>{c.name}</strong>
+                  {showBoards && <span className="scan-printing">{BOARD_LABELS[c.board]}</span>}
+                </span>
+              </span>
+              {c.kind === 'add' && <span className="rescan-tag rescan-add">Added ×{c.quantity}</span>}
+              {c.kind === 'remove' && <span className="rescan-tag rescan-remove">Removed ×{c.quantity}</span>}
+              {c.kind === 'change' && (
+                <span className={`rescan-tag ${c.to > c.from ? 'rescan-add' : 'rescan-remove'}`}>
+                  {c.from} → {c.to}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="scan-confirm-actions">
+        <button className="primary" disabled={busy} onClick={onNext}>
+          {busy ? 'Applying…' : nextLabel}
+        </button>
+        <button onClick={onBack} disabled={busy}>
+          Keep scanning
+        </button>
+      </div>
+    </Sheet>
   );
 }
 
@@ -2315,12 +2305,8 @@ function SessionSheet({
   };
 
   // The per-line card sheet stacks above this one and dismisses first.
-  useDismiss(busy ? null : onClose);
-  const tapGuard = useTapGuard();
-
   return (
-    <div className="sheet-backdrop" onClick={onClose} {...tapGuard}>
-      <div className="sheet scan-list-sheet" role="dialog" aria-label="Scanned cards" onClick={(e) => e.stopPropagation()}>
+    <Sheet onClose={onClose} dismiss={busy ? null : onClose} className="scan-list-sheet" label="Scanned cards">
         <div className="scan-sheet-head">
           <h2>Scanned cards</h2>
           <span className="scan-target">→ {targetLabel(target)}</span>
@@ -2446,7 +2432,6 @@ function SessionSheet({
             onClose={() => setEditing(null)}
           />
         )}
-      </div>
-    </div>
+    </Sheet>
   );
 }

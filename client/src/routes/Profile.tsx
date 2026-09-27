@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
@@ -28,8 +27,8 @@ import { CardSheet, EditionGrid } from '../components/CardSheet.js';
 import { Icon } from '../components/icons.js';
 import { ManaCost } from '../components/ManaCost.js';
 import { useCardArtist } from '../components/useCardArtist.js';
+import { Sheet } from '../components/Sheet.js';
 import { useToast } from '../components/Toast.js';
-import { useDismiss } from '../components/useDismiss.js';
 import { EmptyState, Page } from './Page.js';
 
 // Public profile page (/profile/:username): profile picture plus up to three
@@ -345,7 +344,6 @@ function FavoriteCardPickerSheet({
   onClear: () => void;
   onClose: () => void;
 }) {
-  useDismiss(onClose);
   // Two steps, like the profile-picture editor: search a card, then pick the
   // printing from the same edition grid the card sheet uses.
   const [pending, setPending] = useState<{ card: Priced<OracleCard>; printings: Priced<Printing>[] } | null>(null);
@@ -359,22 +357,19 @@ function FavoriteCardPickerSheet({
     setPending({ card, printings });
   }
 
-  return createPortal(
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Pick a favorite card">
-        <div className="sheet-name">Pick a favorite card</div>
-        <CardSearch
-          onPick={(c) => void choose(c)}
-          onCancel={onClose}
-          actions={
-            hasCurrent && (
-              <button className="danger-outline" onClick={onClear}>
-                Clear slot
-              </button>
-            )
-          }
-        />
-      </div>
+  return (
+    <Sheet onClose={onClose} title="Pick a favorite card">
+      <CardSearch
+        onPick={(c) => void choose(c)}
+        onCancel={onClose}
+        actions={
+          hasCurrent && (
+            <button className="danger-outline" onClick={onClear}>
+              Clear slot
+            </button>
+          )
+        }
+      />
       {pending && (
         <EditionGrid
           printings={pending.printings}
@@ -385,8 +380,7 @@ function FavoriteCardPickerSheet({
           onClose={() => setPending(null)}
         />
       )}
-    </div>,
-    document.body,
+    </Sheet>
   );
 }
 
@@ -401,8 +395,6 @@ function FavoriteDeckPickerSheet({
   onClear: () => void;
   onClose: () => void;
 }) {
-  useDismiss(onClose);
-
   // Same summary the Decks page computes: mainboard count + color identity.
   // Only actual decks — a profile shows off brews, not where you keep your bulk.
   const decks = useLiveQuery(async () => {
@@ -427,57 +419,53 @@ function FavoriteDeckPickerSheet({
     );
   }, []);
 
-  return createPortal(
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Pick a favorite deck">
-        <div className="sheet-name">Pick a favorite deck</div>
-        {decks === undefined ? (
-          <p className="search-meta">Loading…</p>
-        ) : decks.length === 0 ? (
-          <div className="empty-state">
-            <p>No decks yet.</p>
-            <p className="empty-phase">Brew one on the Decks tab first.</p>
-          </div>
-        ) : (
-          <ul className="menu-list">
-            {decks.map(({ deck, main, colors }) => (
-              <li key={deck.id}>
-                <button
-                  className="menu-item menu-item-btn"
-                  onClick={() =>
-                    onPick({ deckId: deck.id, name: deck.name, format: deck.format ?? 'casual', colors, cards: main })
-                  }
-                >
-                  <span className="menu-icon" aria-hidden>
-                    <Icon name="decks" />
-                  </span>
-                  <span className="deck-line">
-                    <span className="deck-name">{deck.name}</span>
-                    <span className="deck-meta">
-                      <span className="deck-format">{formatLabel(deck.format ?? 'casual')}</span>
-                      <ManaCost
-                        cost={colors.length > 0 ? colors.map((c) => `{${c}}`).join('') : '{C}'}
-                        className="deck-colors"
-                      />
-                      <span className="badge">{main} cards</span>
-                    </span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="fine-print">Favoriting a deck lets other signed-in users browse its decklist.</p>
-        <div className="sheet-actions">
-          {hasCurrent && (
-            <button className="danger-outline" onClick={onClear}>
-              Clear slot
-            </button>
-          )}
-          <button onClick={onClose}>Cancel</button>
+  return (
+    <Sheet onClose={onClose} title="Pick a favorite deck">
+      {decks === undefined ? (
+        <p className="search-meta">Loading…</p>
+      ) : decks.length === 0 ? (
+        <div className="empty-state">
+          <p>No decks yet.</p>
+          <p className="empty-phase">Brew one on the Decks tab first.</p>
         </div>
+      ) : (
+        <ul className="menu-list">
+          {decks.map(({ deck, main, colors }) => (
+            <li key={deck.id}>
+              <button
+                className="menu-item menu-item-btn"
+                onClick={() =>
+                  onPick({ deckId: deck.id, name: deck.name, format: deck.format ?? 'casual', colors, cards: main })
+                }
+              >
+                <span className="menu-icon" aria-hidden>
+                  <Icon name="decks" />
+                </span>
+                <span className="deck-line">
+                  <span className="deck-name">{deck.name}</span>
+                  <span className="deck-meta">
+                    <span className="deck-format">{formatLabel(deck.format ?? 'casual')}</span>
+                    <ManaCost
+                      cost={colors.length > 0 ? colors.map((c) => `{${c}}`).join('') : '{C}'}
+                      className="deck-colors"
+                    />
+                    <span className="badge">{main} cards</span>
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="fine-print">Favoriting a deck lets other signed-in users browse its decklist.</p>
+      <div className="sheet-actions">
+        {hasCurrent && (
+          <button className="danger-outline" onClick={onClear}>
+            Clear slot
+          </button>
+        )}
+        <button onClick={onClose}>Cancel</button>
       </div>
-    </div>,
-    document.body,
+    </Sheet>
   );
 }

@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
 import { AVATAR_MAX_ZOOM, type OracleCard, type Priced, type Printing, type ProfileAvatar } from '@mtg/shared';
 import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { getPrintingsForOracle } from '../db/queries.js';
 import { artCropUrl, clampCropCenter, cropLayout } from './Avatar.js';
-import { useDismiss } from './useDismiss.js';
+import { Sheet } from './Sheet.js';
 
 // Profile-picture editor: search any card, pick a printing, then pan (drag),
 // pinch or slide to zoom the art inside a circular frame — the usual
@@ -19,21 +18,20 @@ export function AvatarEditorSheet({
   onSave: (avatar: ProfileAvatar) => void;
   onClose: () => void;
 }) {
-  useDismiss(onClose);
   const [card, setCard] = useState<Priced<OracleCard> | null>(null);
 
-  return createPortal(
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Choose a profile picture">
-        <div className="sheet-name">{card ? 'Frame the art' : 'Pick a card for your profile picture'}</div>
-        {card ? (
-          <CropStage card={card} onBack={() => setCard(null)} onSave={onSave} onCancel={onClose} />
-        ) : (
-          <CardSearch onPick={setCard} onCancel={onClose} />
-        )}
-      </div>
-    </div>,
-    document.body,
+  return (
+    <Sheet
+      onClose={onClose}
+      label="Choose a profile picture"
+      title={card ? 'Frame the art' : 'Pick a card for your profile picture'}
+    >
+      {card ? (
+        <CropStage card={card} onBack={() => setCard(null)} onSave={onSave} onCancel={onClose} />
+      ) : (
+        <CardSearch onPick={setCard} onCancel={onClose} />
+      )}
+    </Sheet>
   );
 }
 

@@ -1,4 +1,4 @@
-// The older half of the changelog (0.174.0 down to 0.98.0), split out of
+// The older half of the changelog (0.174.2 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,28 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.174.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Rules you write now sync to your other devices, and going back to a built-in rule no longer brings back an old version of yours.',
+      },
+    ],
+  },
+  {
+    version: '0.174.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'A rule you edit on one device no longer snaps back to the old version from another device a few seconds after saving.',
+      },
+      {
+        kind: 'fixed',
+        text: 'The "saved" popup no longer waits forever when you save while the games are still being dealt.',
+      },
+    ],
+  },
   {
     version: '0.174.0',
     changes: [

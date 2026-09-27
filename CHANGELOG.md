@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.182.5
+
+- **Fixed: every popup sheet now behaves the same.** Twenty sheets across the app (favorite pickers, emblem picker, edit history, scan review steps, the trade tools and more) each rolled their own frame, and most had drifted: no protection against the tap that opened them landing on a button inside, missing screen-reader dialog markup, and a few that could be covered by the tab bar. They all go through the one shared sheet now, so the 400ms double-tap guard, Escape/back handling and proper dialog semantics apply everywhere.
+- Internal: the three value charts (card price history, collection value, sealed value) now draw through one shared plot instead of three copies of it, the trade screen reads ownership from the shared index, and the Spoilers page stops re-scanning all 100k printings for what the search index already knows.
+
 ## 0.182.4
 
 - Internal: every edit now pairs its database write with its sync staging through one helper, so a future edit path can't forget to sync. No visible changes.

@@ -4,6 +4,7 @@ import type { OracleCard, Priced, Printing } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds } from '../db/queries.js';
+import { getDebutIndex, getSetIndex, type Debut } from '../cardDb/search.js';
 import { CardItems, useViewMode, ViewToggle, type CardItem } from '../components/CardViews.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { SetSymbol } from '../components/SetSymbol.js';
@@ -14,6 +15,11 @@ import { Icon } from '../components/icons.js';
 // derived from the local card DB (which resyncs daily), so freshness tracks the
 // nightly Scryfall pull — spoiled-but-unreleased sets carry a future releasedAt
 // and sort to the top, tagged "upcoming".
+//
+// The set list and each card's debut come from the search index, which already
+// walks the printings table once and caches the result — this page used to run
+// its own scan of all 100k printings for the same numbers. Only the chosen
+// sets' own printings are read from the table, by index.
 
 // How many recent sets to offer in the picker. The card DB has no set-type
 // field, so token/promo "sets" ride along; newest-first ordering keeps the real
@@ -27,8 +33,6 @@ interface SetSummary {
   name: string;
   releasedAt: string;
   upcoming: boolean;
-  newCount: number;
-  reprintCount: number;
 }
 
 interface SpoilerCard {
@@ -53,74 +57,6 @@ function better(a: Printing, b: Printing): boolean {
   return a.scryfallId <= b.scryfallId;
 }
 
-// One full scan of the printings table. It's the whole card DB (~100k rows), but
-// we need every printing to know each card's earliest release (its debut), and
-// the table only changes on a card-DB update, so useLiveQuery re-runs rarely.
-async function loadSpoilerData(): Promise<{ summaries: SetSummary[]; bySet: Map<string, SpoilerCard[]> }> {
-  const printings = await db.printings.toArray();
-
-  // Each card's debut = its earliest printing across all sets.
-  const debut = new Map<string, Printing>();
-  // Group printings by set, tracking the set's release date (its earliest card).
-  const sets = new Map<string, { code: string; name: string; releasedAt: string; rows: Printing[] }>();
-  for (const p of printings) {
-    const d = debut.get(p.oracleId);
-    if (!d || p.releasedAt < d.releasedAt) debut.set(p.oracleId, p);
-    let s = sets.get(p.set);
-    if (!s) {
-      s = { code: p.set, name: p.setName, releasedAt: p.releasedAt, rows: [] };
-      sets.set(p.set, s);
-    }
-    if (p.releasedAt < s.releasedAt) s.releasedAt = p.releasedAt;
-    s.rows.push(p);
-  }
-
-  const recent = [...sets.values()]
-    .sort((a, b) => b.releasedAt.localeCompare(a.releasedAt) || a.name.localeCompare(b.name))
-    .slice(0, RECENT_SET_LIMIT);
-
-  const today = new Date().toISOString().slice(0, 10);
-  const summaries: SetSummary[] = [];
-  const bySet = new Map<string, SpoilerCard[]>();
-  for (const s of recent) {
-    // Collapse variants (showcase, foil, collector-number siblings) to one entry
-    // per card, keeping the nicest printing to show.
-    const rep = new Map<string, Printing>();
-    for (const p of s.rows) {
-      const cur = rep.get(p.oracleId);
-      if (!cur || better(p, cur)) rep.set(p.oracleId, p);
-    }
-    const cards: SpoilerCard[] = [];
-    let newCount = 0;
-    let reprintCount = 0;
-    for (const p of rep.values()) {
-      const d = debut.get(p.oracleId)!;
-      const isReprint = d.releasedAt < s.releasedAt; // debuted before this set → a reprint
-      if (isReprint) reprintCount++;
-      else newCount++;
-      cards.push({
-        scryfallId: p.scryfallId,
-        oracleId: p.oracleId,
-        image: p.imageNormal ?? p.imageSmall,
-        isReprint,
-        firstSet: d.set,
-        firstSetName: d.setName,
-        firstYear: d.releasedAt.slice(0, 4),
-      });
-    }
-    summaries.push({
-      code: s.code,
-      name: s.name,
-      releasedAt: s.releasedAt,
-      upcoming: s.releasedAt > today,
-      newCount,
-      reprintCount,
-    });
-    bySet.set(s.code, cards);
-  }
-  return { summaries, bySet };
-}
-
 export function Spoilers() {
   const [view, setView] = useViewMode();
   // null = "not yet chosen", so we default to the newest set. Once the user
@@ -131,7 +67,25 @@ export function Spoilers() {
   const [info, setInfo] = useState<{ oracle: Priced<OracleCard>; scryfallId: string } | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
-  const data = useLiveQuery(loadSpoilerData, []);
+  // The recent-set list and the debut of every card, both straight off the
+  // cached search index.
+  const [data, setData] = useState<{ summaries: SetSummary[]; debuts: ReadonlyMap<string, Debut> } | undefined>();
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [sets, debuts] = await Promise.all([getSetIndex(), getDebutIndex()]);
+      const today = new Date().toISOString().slice(0, 10);
+      const summaries = [...sets]
+        .sort((a, b) => b.releasedAt.localeCompare(a.releasedAt) || a.name.localeCompare(b.name))
+        .slice(0, RECENT_SET_LIMIT)
+        .map((s): SetSummary => ({ code: s.code, name: s.name, releasedAt: s.releasedAt, upcoming: s.releasedAt > today }));
+      if (!cancelled) setData({ summaries, debuts });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const defaultCode = data?.summaries[0]?.code;
 
   // Which sets are checked. Membership only — display order follows summaries.
@@ -144,21 +98,48 @@ export function Spoilers() {
     [data, selectedSet],
   );
 
+  // Only the chosen sets' printings are read from the table — by the `set`
+  // index, not a full scan.
+  const selectedRows = useLiveQuery(
+    async () =>
+      selectedSummaries.length ? db.printings.where('set').anyOf(selectedSummaries.map((s) => s.code)).toArray() : [],
+    [selectedSummaries],
+  );
+
   // Merge every checked set into one list, deduped by card (a staple reprinted
   // across two chosen sets shows once). A card new in any chosen set counts as
   // new, so we keep the "new" printing when the same card appears both ways.
   const cards = useMemo<SpoilerCard[] | undefined>(() => {
-    if (!data) return undefined;
+    if (!data || !selectedRows) return undefined;
+    // Collapse variants (showcase, foil, collector-number siblings) to one entry
+    // per card per set, keeping the nicest printing to show.
+    const rep = new Map<string, Printing>();
+    for (const p of selectedRows) {
+      const key = `${p.set}|${p.oracleId}`;
+      const cur = rep.get(key);
+      if (!cur || better(p, cur)) rep.set(key, p);
+    }
     const byOracle = new Map<string, SpoilerCard>();
-    for (const s of data.summaries) {
-      if (!selectedSet.has(s.code)) continue;
-      for (const c of data.bySet.get(s.code) ?? []) {
+    for (const s of selectedSummaries) {
+      for (const p of rep.values()) {
+        if (p.set !== s.code) continue;
+        const d = data.debuts.get(p.oracleId);
+        const isReprint = !!d && d.releasedAt < s.releasedAt; // debuted before this set → a reprint
+        const c: SpoilerCard = {
+          scryfallId: p.scryfallId,
+          oracleId: p.oracleId,
+          image: p.imageNormal ?? p.imageSmall,
+          isReprint,
+          firstSet: d?.set ?? p.set,
+          firstSetName: d?.setName ?? p.setName,
+          firstYear: (d?.releasedAt ?? p.releasedAt).slice(0, 4),
+        };
         const cur = byOracle.get(c.oracleId);
         if (!cur || (!c.isReprint && cur.isReprint)) byOracle.set(c.oracleId, c);
       }
     }
     return [...byOracle.values()];
-  }, [data, selectedSet]);
+  }, [data, selectedRows, selectedSummaries]);
 
   const newCount = cards?.filter((c) => !c.isReprint).length ?? 0;
   const reprintCount = (cards?.length ?? 0) - newCount;

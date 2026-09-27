@@ -1,9 +1,8 @@
-import { createPortal } from 'react-dom';
 import type { OracleCard, Priced } from '@mtg/shared';
 import { CardList, type CardItem } from './CardViews.js';
 import { Icon } from './icons.js';
 import { useCardMaps } from '../db/useCardMaps.js';
-import { useDismiss } from './useDismiss.js';
+import { Sheet } from './Sheet.js';
 import { batchCount, describeBatch, describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { entryEvents, type HistoryEntry } from '../history/useHistoryEntries.js';
 import { fmtCents, fmtDateTime } from '../util/format.js';
@@ -27,7 +26,6 @@ export function EventSheet({
 }) {
   const events = entryEvents(entry);
   const { printMap, oracleMap } = useCardMaps(events.map((e) => ({ scryfallId: e.scryfallId ?? '', oracleId: e.oracleId })));
-  useDismiss(onClose);
 
   const display = entry.kind === 'batch' ? describeBatch(entry.source, entry.label, entry.events) : describeEvent(entry.event);
   const totalCards = batchCount(events);
@@ -53,39 +51,36 @@ export function EventSheet({
     };
   });
 
-  return createPortal(
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-label="Change details" onClick={(e) => e.stopPropagation()}>
-        <div className="event-sheet-head">
-          <span className="event-sheet-icon" aria-hidden>
-            <Icon name={display.icon} />
-          </span>
-          <div className="event-sheet-titles">
-            <div className="sheet-name">
-              {display.verb}
-              {entry.kind === 'batch' && ` · ${totalCards} card${totalCards === 1 ? '' : 's'}`}
-            </div>
-            <div className="result-sub">{fmtDateTime(entry.ts)}</div>
-            {single?.priceEurCents != null && (
-              <div className="result-sub">{fmtCents(single.priceEurCents)}/ea</div>
-            )}
+  return (
+    <Sheet onClose={onClose} label="Change details">
+      <div className="event-sheet-head">
+        <span className="event-sheet-icon" aria-hidden>
+          <Icon name={display.icon} />
+        </span>
+        <div className="event-sheet-titles">
+          <div className="sheet-name">
+            {display.verb}
+            {entry.kind === 'batch' && ` · ${totalCards} card${totalCards === 1 ? '' : 's'}`}
           </div>
-        </div>
-
-        <CardList items={items} />
-
-        <div className="sheet-actions">
-          {canUndo && onUndo && (
-            <button className="danger-outline" onClick={onUndo}>
-              Undo
-            </button>
+          <div className="result-sub">{fmtDateTime(entry.ts)}</div>
+          {single?.priceEurCents != null && (
+            <div className="result-sub">{fmtCents(single.priceEurCents)}/ea</div>
           )}
-          <button className="primary" onClick={onClose}>
-            Close
-          </button>
         </div>
       </div>
-    </div>,
-    document.body,
+
+      <CardList items={items} />
+
+      <div className="sheet-actions">
+        {canUndo && onUndo && (
+          <button className="danger-outline" onClick={onUndo}>
+            Undo
+          </button>
+        )}
+        <button className="primary" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </Sheet>
   );
 }

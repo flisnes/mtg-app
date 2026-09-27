@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { CollectionEntry, Condition, ContainerKind, CopyPrefs, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, SlotShape, SpecialCondition, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
 import {
@@ -57,6 +56,7 @@ import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice, pickPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
+import { Sheet } from './Sheet.js';
 import { TagField } from './TagField.js';
 import { useDismiss } from './useDismiss.js';
 
@@ -450,7 +450,6 @@ export function CardSheet(props: CardSheetProps) {
   // was, then shows itself out. A toast would fire off-screen behind the sheet,
   // and the answer belongs on the thing you just pressed.
   const [added, setAdded] = useState<ListKind | null>(null);
-  useDismiss(busy ? null : onClose);
 
   // onClose is usually a fresh arrow from the caller, so hold it in a ref: the
   // goodbye timer must not restart every time the parent re-renders.
@@ -943,18 +942,16 @@ export function CardSheet(props: CardSheetProps) {
     onClose();
   }
 
-  // Portal to <body>: the sheet must escape any stacking context its opener
-  // lives in (e.g. the search overlay), or the tab bar can cover its buttons.
-  return createPortal(
+  return (
     // Its own backdrop class: at 900px and up this one centers the sheet
     // instead of sitting it on the bottom edge (see styles.css).
-    <div className="sheet-backdrop card-sheet-backdrop" onClick={onClose}>
-      <div
-        className="sheet card-sheet"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label={mode === 'info' ? oracleCard.name : `${mode === 'add' ? 'Add' : 'Edit'} ${oracleCard.name}`}
-      >
+    <Sheet
+      onClose={onClose}
+      dismiss={busy ? null : onClose}
+      className="card-sheet"
+      backdropClassName="card-sheet-backdrop"
+      label={mode === 'info' ? oracleCard.name : `${mode === 'add' ? 'Add' : 'Edit'} ${oracleCard.name}`}
+    >
         {/* Name and the two controls span the sheet, above the art. Beside the
             art they were sharing a 168px column with a ⋯ and an ✕, which a card
             called "_____ _____ Rocketship" wins by pushing them off the edge. */}
@@ -1394,7 +1391,6 @@ export function CardSheet(props: CardSheetProps) {
             )}
           </div>
         )}
-      </div>
 
       {zoomed && cardImage && (
         <CardZoom
@@ -1537,8 +1533,7 @@ export function CardSheet(props: CardSheetProps) {
         />
       )}
       {filingSheet}
-    </div>,
-    document.body,
+    </Sheet>
   );
 }
 
@@ -1718,7 +1713,6 @@ export function EditionGrid({
   onSelect: (scryfallId: string) => void;
   onClose: () => void;
 }) {
-  useDismiss(onClose);
   // A card can have forty printings, and scrolling art to find "the Modern
   // Horizons 2 one" is slower than typing it. Set name, set code and collector
   // number all match, since those are the three things printed on the card.
@@ -1732,17 +1726,8 @@ export function EditionGrid({
           p.collectorNumber.toLowerCase().includes(q),
       )
     : printings;
-  // stopPropagation on the backdrop: this overlay nests inside the card
-  // sheet's backdrop, whose click handler would otherwise also close the sheet.
   return (
-    <div
-      className="sheet-backdrop"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClose();
-      }}
-    >
-      <div className="sheet edition-picker-sheet" role="dialog" aria-label="All printings" onClick={(e) => e.stopPropagation()}>
+    <Sheet onClose={onClose} className="edition-picker-sheet" label="All printings">
         <div className="edition-picker-head">
           <h2>All printings</h2>
           <button onClick={onClose} aria-label="Close">
@@ -1795,8 +1780,7 @@ export function EditionGrid({
             );
           })}
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 

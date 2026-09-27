@@ -4,8 +4,7 @@ import { specialLabel } from '@mtg/shared';
 import { collectionKey } from '../db/dataAccess.js';
 import { getPrintingsByIds } from '../db/queries.js';
 import { Icon } from '../components/icons.js';
-import { useDismiss } from '../components/useDismiss.js';
-import { useTapGuard } from '../components/useTapGuard.js';
+import { Sheet } from '../components/Sheet.js';
 import type { ConflictChoice, ImportConflict } from './conflicts.js';
 
 /**
@@ -175,48 +174,44 @@ function ReplaceCopySheet({
     return parts.join(' · ');
   };
   const incoming = plan.conflict.incoming.map((l) => describe(l)).join(', ');
-  useDismiss(onBack);
-  const tapGuard = useTapGuard();
 
   return (
-    <div className="sheet-backdrop" onClick={onBack} {...tapGuard}>
-      <div className="sheet scan-list-sheet" role="dialog" aria-label="Which copy to replace" onClick={(e) => e.stopPropagation()}>
-        <div className="scan-sheet-head">
-          <h2>Which copy to replace?</h2>
-          {total > 1 && (
-            <span className="scan-target">
-              {index + 1} / {total}
-            </span>
-          )}
-          <button className="scan-close" onClick={onBack} aria-label="Cancel">
-            <Icon name="close" size={18} />
-          </button>
-        </div>
-        <p className="fine-print">
-          You own <strong>{plan.conflict.name}</strong> in more than one version. Pick the copy the incoming{' '}
-          {incoming ? <em>{incoming}</em> : 'printing'} should replace — one copy is swapped out, so your total for this
-          card stays the same.
-        </p>
-        <ul className="scan-list">
-          {plan.candidates.map((e) => (
-            <li key={e.id} className="scan-list-row">
-              <label className="scan-list-main" style={{ cursor: 'pointer' }}>
-                <input type="radio" name="replace-copy" checked={picked === e.id} onChange={() => setPicked(e.id)} />
-                <span className="scan-list-info">
-                  <strong>{describe(e)}</strong>
-                  <span className="scan-printing">You own ×{e.quantity}</span>
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-        <div className="scan-confirm-actions">
-          <button className="primary" disabled={!picked} onClick={() => onPick(picked)}>
-            {index + 1 < total ? 'Next' : 'Replace'}
-          </button>
-          <button onClick={onBack}>Cancel</button>
-        </div>
+    <Sheet onClose={onBack} className="scan-list-sheet" label="Which copy to replace" resetKey={plan}>
+      <div className="scan-sheet-head">
+        <h2>Which copy to replace?</h2>
+        {total > 1 && (
+          <span className="scan-target">
+            {index + 1} / {total}
+          </span>
+        )}
+        <button className="scan-close" onClick={onBack} aria-label="Cancel">
+          <Icon name="close" size={18} />
+        </button>
       </div>
-    </div>
+      <p className="fine-print">
+        You own <strong>{plan.conflict.name}</strong> in more than one version. Pick the copy the incoming{' '}
+        {incoming ? <em>{incoming}</em> : 'printing'} should replace — one copy is swapped out, so your total for this
+        card stays the same.
+      </p>
+      <ul className="scan-list">
+        {plan.candidates.map((e) => (
+          <li key={e.id} className="scan-list-row">
+            <label className="scan-list-main" style={{ cursor: 'pointer' }}>
+              <input type="radio" name="replace-copy" checked={picked === e.id} onChange={() => setPicked(e.id)} />
+              <span className="scan-list-info">
+                <strong>{describe(e)}</strong>
+                <span className="scan-printing">You own ×{e.quantity}</span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="scan-confirm-actions">
+        <button className="primary" disabled={!picked} onClick={() => onPick(picked)}>
+          {index + 1 < total ? 'Next' : 'Replace'}
+        </button>
+        <button onClick={onBack}>Cancel</button>
+      </div>
+    </Sheet>
   );
 }

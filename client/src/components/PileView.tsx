@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { useDismiss } from './useDismiss.js';
+import { Sheet } from './Sheet.js';
 
 // Goblin mode's pile view: every copy of every card scattered face-up-or-down
 // across one big heap, like a shoebox dumped on the table. No sorting, no
@@ -527,33 +526,29 @@ function PileCard({
 
 /** "Card info" for the Magic card back — what you get for long-pressing a face-down card. No peeking. */
 export function CardBackSheet({ onClose }: { onClose: () => void }) {
-  useDismiss(onClose);
-  return createPortal(
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Card back">
-        <div className="sheet-head">
-          <img className="sheet-card" src={CARD_BACK_URL} alt="The Magic: The Gathering card back" />
-          <div className="sheet-info">
-            <div className="sheet-name">Card back</div>
-            <div className="result-sub">Card — Back</div>
-            <div className="result-sub">
-              The most-printed piece of Magic art there is: Jesper Myrfors&rsquo; &ldquo;Deckmaster&rdquo; design, on
-              the reverse of every card since 1993.
-            </div>
-            <div className="result-price">Priceless</div>
+  return (
+    <Sheet onClose={onClose} label="Card back">
+      <div className="sheet-head">
+        <img className="sheet-card" src={CARD_BACK_URL} alt="The Magic: The Gathering card back" />
+        <div className="sheet-info">
+          <div className="sheet-name">Card back</div>
+          <div className="result-sub">Card — Back</div>
+          <div className="result-sub">
+            The most-printed piece of Magic art there is: Jesper Myrfors&rsquo; &ldquo;Deckmaster&rdquo; design, on
+            the reverse of every card since 1993.
           </div>
-        </div>
-        <p className="fine-print">
-          This card is face down, so this is all you get. Double-tap it to see what it actually is or savor the
-          mystery.
-        </p>
-        <div className="sheet-actions">
-          <button className="primary" onClick={onClose}>
-            Close
-          </button>
+          <div className="result-price">Priceless</div>
         </div>
       </div>
-    </div>,
-    document.body,
+      <p className="fine-print">
+        This card is face down, so this is all you get. Double-tap it to see what it actually is or savor the
+        mystery.
+      </p>
+      <div className="sheet-actions">
+        <button className="primary" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </Sheet>
   );
 }

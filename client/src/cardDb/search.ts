@@ -60,7 +60,7 @@ export function invalidateSearchIndex(): void {
  * you don't own has. Falls out of the index build's existing pass over the
  * printings table, so it costs a string compare per printing and nothing else.
  */
-interface Debut {
+export interface Debut {
   releasedAt: string;
   set: string;
   setName: string;
@@ -155,6 +155,16 @@ async function getIndex(): Promise<Indexed[]> {
 export async function getSetIndex(): Promise<SetInfo[]> {
   await getIndex();
   return sets ?? [];
+}
+
+/**
+ * Where each card first appeared, keyed by oracleId. Falls out of the same
+ * index build, so reading it here (Spoilers' new-vs-reprint call) costs nothing
+ * over a search — where it used to re-scan the whole printings table.
+ */
+export async function getDebutIndex(): Promise<ReadonlyMap<string, Debut>> {
+  await getIndex();
+  return debuts ?? new Map();
 }
 
 /**

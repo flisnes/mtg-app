@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { CONDITIONS, type Condition, type SealedPriceMap, type SealedProduct } from '@mtg/shared';
 import { addSealedItem } from '../db/dataAccess.js';
 import { loadSealedProducts } from '../sealed/store.js';
@@ -17,8 +16,8 @@ import {
 } from '../sealed/product.js';
 import { useFileThese } from '../deck/useFileThese.js';
 import { LANGS } from './CardSheet.js';
+import { Sheet } from './Sheet.js';
 import { useToast } from './Toast.js';
-import { useDismiss } from './useDismiss.js';
 
 // "Add sealed product" (see sealed-products feature). Search any sealed product
 // MTGJSON knows, then choose what owning it means: keep the box sealed, or open
@@ -52,10 +51,6 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
   // A precon lives in a box on the shelf far more often than loose in a
   // collection, so the add ends with the same question every other intake asks.
   const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
-
-  // Back / Escape steps out of a chosen product first (mirroring the ‹ Back
-  // button), then closes the sheet.
-  useDismiss(adding ? null : selected ? () => setSelected(null) : onClose);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,44 +122,48 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
     }
   };
 
-  return createPortal(
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet sealed-sheet" role="dialog" aria-label="Add sealed product" onClick={(e) => e.stopPropagation()}>
-        <div className="scan-sheet-head">
-          <h2>{selected ? 'Add product' : 'Add sealed product'}</h2>
-          {selected && (
-            <button className="sealed-back" onClick={() => setSelected(null)} aria-label="Back to search">
-              ‹ Back
-            </button>
-          )}
-          <button className="scan-close" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </div>
-
-        {!selected && <SearchView load={load} query={query} setQuery={setQuery} results={results} onPick={(p) => void openProduct(p)} />}
-
+  return (
+    <Sheet
+      onClose={onClose}
+      // Back / Escape steps out of a chosen product first (mirroring the
+      // ‹ Back button), then closes the sheet.
+      dismiss={adding ? null : selected ? () => setSelected(null) : onClose}
+      className="sealed-sheet"
+      label="Add sealed product"
+    >
+      <div className="scan-sheet-head">
+        <h2>{selected ? 'Add product' : 'Add sealed product'}</h2>
         {selected && (
-          <DetailView
-            product={selected}
-            detail={detail}
-            prices={load.kind === 'ready' ? load.prices : {}}
-            outcome={outcome}
-            setOutcome={setOutcome}
-            copies={copies}
-            setCopies={setCopies}
-            condition={condition}
-            setCondition={setCondition}
-            lang={lang}
-            setLang={setLang}
-            adding={adding}
-            onAdd={() => void add()}
-          />
+          <button className="sealed-back" onClick={() => setSelected(null)} aria-label="Back to search">
+            ‹ Back
+          </button>
         )}
+        <button className="scan-close" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
       </div>
+
+      {!selected && <SearchView load={load} query={query} setQuery={setQuery} results={results} onPick={(p) => void openProduct(p)} />}
+
+      {selected && (
+        <DetailView
+          product={selected}
+          detail={detail}
+          prices={load.kind === 'ready' ? load.prices : {}}
+          outcome={outcome}
+          setOutcome={setOutcome}
+          copies={copies}
+          setCopies={setCopies}
+          condition={condition}
+          setCondition={setCondition}
+          lang={lang}
+          setLang={setLang}
+          adding={adding}
+          onAdd={() => void add()}
+        />
+      )}
       {fileTheseSheet}
-    </div>,
-    document.body,
+    </Sheet>
   );
 }
 

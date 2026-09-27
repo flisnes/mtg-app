@@ -19,9 +19,11 @@ import { CodeJoinForm } from '../components/CodeJoinForm.js';
 import { Icon } from '../components/icons.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { ownedBadge, type OwnedBadgeSpec } from '../components/OwnedBadge.js';
+import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
 import { langMark } from '../components/LangFlag.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheetLazy.js';
+import { Sheet } from '../components/Sheet.js';
 import { clearTradeScanSessions } from '../scan/tradeSessions.js';
 import { TradeQr } from '../components/TradeQr.js';
 import { useDismiss } from '../components/useDismiss.js';
@@ -40,16 +42,6 @@ import {
 /** Offer lines merge on the same compound key as collection entries. */
 const lineKey = collectionKey;
 
-/** Per-oracle ownership summary, for the "do I actually have this?" indicators. */
-interface Owned {
-  qty: number;
-  forTrade: number;
-  /** The best entry for add defaults (prefers for-trade copies, then the printing with most copies). */
-  entry: CollectionEntry;
-  /** Every entry for this oracle — the edition dropdown highlights these printings. */
-  entries: CollectionEntry[];
-}
-
 /** Add-default preference: for-trade copies beat idle ones, then more copies win. */
 function betterAddDefault(a: CollectionEntry, b: CollectionEntry): boolean {
   const at = a.quantityForTrade > 0 ? 1 : 0;
@@ -57,23 +49,11 @@ function betterAddDefault(a: CollectionEntry, b: CollectionEntry): boolean {
   return at !== bt ? at > bt : a.quantity > b.quantity;
 }
 
-function useOwnership(): Map<string, Owned> | undefined {
-  return useLiveQuery(async () => {
-    const entries = await db.collection.toArray();
-    const map = new Map<string, Owned>();
-    for (const e of entries) {
-      const cur = map.get(e.oracleId);
-      if (cur) {
-        cur.qty += e.quantity;
-        cur.forTrade += e.quantityForTrade;
-        cur.entries.push(e);
-        if (betterAddDefault(e, cur.entry)) cur.entry = e;
-      } else {
-        map.set(e.oracleId, { qty: e.quantity, forTrade: e.quantityForTrade, entry: e, entries: [e] });
-      }
-    }
-    return map;
-  }, []);
+/** The best entry to seed an add with (prefers for-trade copies, then the printing with most copies). */
+function bestAddDefault(entries: CollectionEntry[]): CollectionEntry | undefined {
+  let best: CollectionEntry | undefined;
+  for (const e of entries) if (!best || betterAddDefault(e, best)) best = e;
+  return best;
 }
 
 /** Their highest-quantity tradelist line for an oracle — the best printing guess for "you get". */
@@ -86,12 +66,12 @@ function bestPeerLine(lines: TradeLine[] | null, oracleId: string): TradeLine | 
 }
 
 /** The shared ownership checkmark for a card I might give (own exact/other, or for trade). */
-function ownIndicator(own: Owned | undefined, scryfallId?: string): OwnedBadgeSpec | null {
-  if (!own) return null;
-  const ownsExact = !!scryfallId && own.entries.some((e) => e.scryfallId === scryfallId);
+function ownIndicator(ownership: OwnershipIndex | undefined, oracleId: string, scryfallId?: string): OwnedBadgeSpec | null {
+  if (!ownership) return null;
+  const s = ownership.lookup(oracleId, scryfallId);
   // No wishlist rung: this is the "you give" side, so what you're after is
   // beside the point (the "you get" panel stars its own wishlist matches).
-  return ownedBadge({ qty: own.qty, forTrade: own.forTrade, ownsExact, wished: 0 });
+  return ownedBadge({ qty: s.qty, forTrade: s.forTrade, ownsExact: s.ownsExact, wished: 0 });
 }
 
 /**
@@ -368,7 +348,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   // An offer line being edited in place: the same sheet, seeded from the line,
   // writing edition/condition/finish/language/quantity back through onApply.
   const [editingLine, setEditingLine] = useState<{ side: Side; line: TradeLine; oracle: Priced<OracleCard> } | null>(null);
-  const ownership = useOwnership();
+  const ownership = useOwnershipIndex();
 
   const seatOf = (side: Side): Seat => (side === 'give' ? seat : peer);
   const myOffer = offers[seat];
@@ -454,7 +434,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   function infoHighlights(target: InfoTarget): { label: string; notes: Map<string, string> } | undefined {
     if (!target.ctx) return undefined;
     if (target.ctx.side === 'give') {
-      const entries = ownership?.get(target.oracle.oracleId)?.entries ?? [];
+      const entries = ownership?.ownedCopies(target.oracle.oracleId) ?? [];
       if (entries.length === 0) return undefined;
       const per = new Map<string, { qty: number; forTrade: number }>();
       for (const e of entries) {
@@ -667,7 +647,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           onQty={setQty}
           onAdd={() => setSheet('give')}
           onScan={() => setScanFor('give')}
-          badge={(l) => (ownership ? ownIndicator(ownership.get(l.oracleId), l.scryfallId) : null)}
+          badge={(l) => ownIndicator(ownership, l.oracleId, l.scryfallId)}
           printings={printMap}
           oracles={oracleMap}
           onInfo={openInfo}
@@ -1004,22 +984,18 @@ function OfferPanel({
   );
 }
 
-/** Generic bottom sheet for the trade tools (portals to <body>, like CardSheet). */
+/** Generic bottom sheet for the trade tools. */
 function TradeSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  useDismiss(onClose);
-  return createPortal(
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
-        <div className="sheet-title-row">
-          <strong>{title}</strong>
-          <button className="chip" onClick={onClose}>
-            Close
-          </button>
-        </div>
-        {children}
+  return (
+    <Sheet onClose={onClose} label={title}>
+      <div className="sheet-title-row">
+        <strong>{title}</strong>
+        <button className="chip" onClick={onClose}>
+          Close
+        </button>
       </div>
-    </div>,
-    document.body,
+      {children}
+    </Sheet>
   );
 }
 
@@ -1277,7 +1253,7 @@ function AddCardsPanel({
   theirWanted,
   onCompose,
 }: {
-  ownership: Map<string, Owned> | undefined;
+  ownership: OwnershipIndex | undefined;
   theirWanted: WantFn;
   onCompose: (card: Priced<OracleCard>, prefill?: Partial<SessionCardValues>) => void;
 }) {
@@ -1293,7 +1269,7 @@ function AddCardsPanel({
   // finish/language); anything you don't own starts from the printing the search
   // result was showing, then the card's defaults.
   const compose = (card: Priced<OracleCard>, printing?: Priced<Printing>) => {
-    const e = ownership?.get(card.oracleId)?.entry;
+    const e = bestAddDefault(ownership?.ownedCopies(card.oracleId) ?? []);
     if (e) {
       onCompose(card, { scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang });
       return;
@@ -1352,7 +1328,7 @@ function AddCardsPanel({
       filters={filters}
       setFilters={setFilters}
       emptyState={emptyState}
-      badgeFor={(card, printing) => ownIndicator(ownership?.get(card.oracleId), printing?.scryfallId ?? card.defaultScryfallId)}
+      badgeFor={(card, printing) => ownIndicator(ownership, card.oracleId, printing?.scryfallId ?? card.defaultScryfallId)}
       onCardClick={compose}
     />
   );

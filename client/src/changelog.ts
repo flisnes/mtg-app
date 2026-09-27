@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.182.2',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The app downloads about a fifth less on first load and updates. Trade, the scanner and deck analysis now load when you open them, and the analysis defaults file no longer downloads on install.',
+      },
+    ],
+  },
+  {
     version: '0.182.1',
     changes: [
       {
@@ -186,19 +195,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Rules can say "only if" (threshold, metalcraft) and "once each turn", and a move can take the biggest card instead of a random one. 31 more popular cards model themselves, and 18 do more.',
-      },
-    ],
-  },
-  {
-    version: '0.173.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Any creature without haste waits a turn to tap for mana, Dryad Arbor included, and rocks tap the turn they land. Desert Warfare, Path to Exile and about 300 others no longer read as land ramp.',
-      },
-      {
-        kind: 'added',
-        text: 'Rules can give haste, vigilance or double strike to a card itself, and a mana ability can be limited to spells matching a search.',
       },
     ],
   },

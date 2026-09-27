@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.182.2
+
+- **Changed: the app you download shrank by a fifth, and installs got 400 KB lighter.** The trade screen, the card scanner and the deck analysis pages now load the moment you open them instead of riding along with every first load and every update (315 KB compressed now, down from 405). The deck analysis defaults file — 400 KB that only matters once you open an analysis — also stopped downloading on install; it arrives the first time you actually look at a deck's numbers and stays cached from then on. On the screens themselves nothing changed.
+
 ## 0.182.1
 
 - **Added: a solo commander with a pairing ability offers a "Find a partner" button.** Tymna in your command zone used to mean hunting for Tana with the color identity filter hiding her. The Commander section now shows a button under a lone partner/Background/Doctor commander — "Find a partner", "Find a Background" and so on — that opens the search listing exactly the cards that can share the command zone, with a "Can partner with …" checkbox in place of the identity filter. Adding the second commander ends the special search on its own.

@@ -22,7 +22,7 @@ import { HeaderValue } from '../components/ValueSummary.js';
 import { ListSearchButton, useListFilter, useOpenSearch } from '../components/GlobalSearch.js';
 import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
-import { ScanSheet } from '../components/ScanSheet.js';
+import { ScanSheet } from '../components/ScanSheetLazy.js';
 import { useToast } from '../components/Toast.js';
 import { useUndoShortcut } from '../history/useUndoShortcut.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';

@@ -18,8 +18,6 @@ import { Tradelist } from './routes/Tradelist.js';
 import { SealedProducts } from './routes/SealedProducts.js';
 import { Containers } from './routes/Containers.js';
 import { ContainerDetail } from './routes/ContainerDetail.js';
-import { DeckAnalysisPage } from './routes/DeckAnalysisPage.js';
-import { Trade } from './routes/Trade.js';
 import { History } from './routes/History.js';
 import { PriceMovers } from './routes/PriceMovers.js';
 import { Spoilers } from './routes/Spoilers.js';
@@ -49,6 +47,13 @@ const Licenses = lazy(() => import('./routes/Licenses.js').then((m) => ({ defaul
 // a URL away without the weight.
 const ScanTest = lazy(() => import('./routes/ScanTest.js').then((m) => ({ default: m.ScanTest })));
 const AvatarLab = lazy(() => import('./routes/AvatarLab.js').then((m) => ({ default: m.AvatarLab })));
+// The two heaviest destinations. Trade brings the relay protocol and its whole
+// flow; the analysis page brings the sim engine and every panel. Both are
+// entered deliberately, never on boot, so they load when someone goes there.
+const Trade = lazy(() => import('./routes/Trade.js').then((m) => ({ default: m.Trade })));
+const DeckAnalysisPage = lazy(() =>
+  import('./routes/DeckAnalysisPage.js').then((m) => ({ default: m.DeckAnalysisPage })),
+);
 import { Icon, type IconName } from './components/icons.js';
 
 const PRIMARY_NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [

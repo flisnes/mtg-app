@@ -4,7 +4,7 @@ import { useUndoShortcut } from '../history/useUndoShortcut.js';
 import { Page } from './Page.js';
 import { CollectionListView } from '../components/CollectionListView.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
-import { ScanSheet } from '../components/ScanSheet.js';
+import { ScanSheet } from '../components/ScanSheetLazy.js';
 import { AddSealedProductSheet } from '../components/AddSealedProductSheet.js';
 import { HeaderValue, headerValue, useCollectionValue, useSealedValue } from '../components/ValueSummary.js';
 import { CollectionValueChartSheet } from '../components/CollectionValueChart.js';

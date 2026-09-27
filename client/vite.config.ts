@@ -26,6 +26,11 @@ export default defineConfig({
       injectRegister: null, // registration handled explicitly in src/pwa.ts
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // The EDH defaults chunk is 400+ KB that only the deck-analysis page
+        // reads (a lazy JSON import in @mtg/sim). Precaching it would download
+        // it on every install whether or not anyone opens analysis, so it is
+        // cached on first use instead — see the runtime rule below.
+        globIgnores: ['**/edhDefaults-*.js'],
         // Card imagery is hotlinked from Scryfall's CDN; cache it bounded &
         // cache-first so the collection stays browsable offline (beta plan §3).
         // maxEntries here is the ceiling, not the setting: it is baked in at
@@ -33,6 +38,18 @@ export default defineConfig({
         // enforced from the app in src/util/imageCache.ts. Keep the 10000 in
         // step with IMAGE_CACHE_CEILING there.
         runtimeCaching: [
+          // The EDH defaults chunk excluded from precache above. The filename
+          // is content-hashed, so CacheFirst is safe; maxEntries 2 keeps the
+          // previous version until the new one has been fetched once.
+          {
+            urlPattern: ({ url }) => /\/edhDefaults-[^/]+\.js$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'analysis-defaults',
+              expiration: { maxEntries: 2 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             urlPattern: ({ url }) =>
               url.hostname.endsWith('scryfall.io') || url.hostname.endsWith('scryfall.com'),

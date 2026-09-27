@@ -76,7 +76,7 @@ import { yearMark } from '../components/cardRows.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { containerValue, HeaderValue, missingValue, valueText } from '../components/ValueSummary.js';
 import { ContainerValueChartSheet } from '../components/CollectionValueChart.js';
-import { DeckStatsLine } from '../components/DeckAnalysis.js';
+import { DeckStatsLine } from '../components/DeckStatsLine.js';
 import { deckManaStats } from '../deck/manaStats.js';
 import {
   SortControls,
@@ -95,7 +95,7 @@ import { OptionsMenu } from '../components/OptionsMenu.js';
 import { Emblem } from '../components/Emblem.js';
 import { EmblemPickerSheet } from '../components/EmblemPickerSheet.js';
 import { AssembleSheet, type AssembleItem } from '../components/AssembleSheet.js';
-import { ScanSheet } from '../components/ScanSheet.js';
+import { ScanSheet } from '../components/ScanSheetLazy.js';
 import { Sheet } from '../components/Sheet.js';
 import { DeckHistory, HISTORY_ANCHOR } from '../components/DeckHistory.js';
 import { BulkActionBar, type BulkAction } from '../components/BulkActionBar.js';

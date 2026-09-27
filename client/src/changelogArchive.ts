@@ -1,4 +1,4 @@
-// The older half of the changelog (0.173.0 down to 0.98.0), split out of
+// The older half of the changelog (0.173.1 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,19 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.173.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Any creature without haste waits a turn to tap for mana, Dryad Arbor included, and rocks tap the turn they land. Desert Warfare, Path to Exile and about 300 others no longer read as land ramp.',
+      },
+      {
+        kind: 'added',
+        text: 'Rules can give haste, vigilance or double strike to a card itself, and a mana ability can be limited to spells matching a search.',
+      },
+    ],
+  },
   {
     version: '0.173.0',
     changes: [

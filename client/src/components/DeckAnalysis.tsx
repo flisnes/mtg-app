@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { namedTokenIds, type CardBehavior, type DeckFormat } from '@mtg/shared';
 import { Icon } from './icons.js';
@@ -11,7 +11,9 @@ import { ContributionsSheet } from './ContributionsSheet.js';
 import { FlowTurnsPanel } from './FlowTurnsPanel.js';
 import { DeckTrajectory } from './DeckTrajectory.js';
 import { GameTraceSheet } from './GameTraceSheet.js';
-import { CardBehaviorPanel } from './CardBehaviorPanel.js';
+// The rule editor is a third of this page's code and only the Model tab needs
+// it — lazy keeps the analysis chunk (loaded on every deck) that much smaller.
+const CardBehaviorPanel = lazy(() => import('./CardBehaviorPanel.js').then((m) => ({ default: m.CardBehaviorPanel })));
 import { AnalysisOverview } from './AnalysisOverview.js';
 import { HowWorked } from './HowWorked.js';
 import { changeLines, ModelChangeToast } from './ModelChangeToast.js';
@@ -183,22 +185,6 @@ function contribNote(result: SimResult, idle: IdleEngines | null): string {
 function idleCount(idle: IdleEngines | null): number {
   if (!idle) return 0;
   return new Set([...idle.mana, ...idle.cards].map((c) => c.oracleId)).size;
-}
-
-/** One tappable line under the legality panel: the headline, and the way in. */
-export function DeckStatsLine({ stats, onOpen }: { stats: DeckManaStats; onOpen: () => void }) {
-  return (
-    <button type="button" className="deck-stats-line" onClick={onOpen} aria-label="Open deck analysis">
-      <span className="deck-stats-bits">
-        <span>
-          <strong>{stats.lands}</strong> land{plural(stats.lands)}
-        </span>
-        {stats.hasManaData && stats.tappedAlways > 0 && <span>{stats.tappedAlways} enter tapped</span>}
-        <span className={`deck-stats-tone tone-${stats.land.tone}`}>{stats.land.short}</span>
-      </span>
-      <Icon name="chevronRight" />
-    </button>
-  );
 }
 
 /** Is any late cost, the commander's included, held back by color rather than by mana. */
@@ -641,22 +627,26 @@ export function DeckAnalysis({
         {tab === 'model' && (
           <>
             <p className={`deck-stats-verdict${toCheck > 0 ? ' tone-warn' : ''}`}>{behaviorNote(simDeck.coverage, toCheck)}.</p>
-            <CardBehaviorPanel
-              deckId={deckId}
-              rows={rows}
-              behaviors={behaviors ?? EMPTY_BEHAVIORS}
-              defaults={defaults}
-              policy={policy}
-              onPolicy={savePolicy}
-              openId={modelCard}
-              onOpenId={setModelCard}
-              queue={queue}
-              onSaved={onModelSaved}
-              fires={simResult?.fires}
-              onWatch={(oracleId) => setTracing({ focus: oracleId })}
-              spread={freshSpread ?? lastSpread.current}
-              spreadStale={!freshSpread}
-            />
+            {/* Local boundary: without it a suspend here would blank the whole
+                page through the route-level Suspense in App.tsx. */}
+            <Suspense fallback={null}>
+              <CardBehaviorPanel
+                deckId={deckId}
+                rows={rows}
+                behaviors={behaviors ?? EMPTY_BEHAVIORS}
+                defaults={defaults}
+                policy={policy}
+                onPolicy={savePolicy}
+                openId={modelCard}
+                onOpenId={setModelCard}
+                queue={queue}
+                onSaved={onModelSaved}
+                fires={simResult?.fires}
+                onWatch={(oracleId) => setTracing({ focus: oracleId })}
+                spread={freshSpread ?? lastSpread.current}
+                spreadStale={!freshSpread}
+              />
+            </Suspense>
           </>
         )}
 

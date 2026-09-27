@@ -22,6 +22,7 @@ import type { ResolvedLine } from '../import/types.js';
 import { CardSheet, FINISH_LABELS, LANGS, type SessionCardValues } from './CardSheet.js';
 import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
 import { getScanExcludedIds } from '../scan/exclusions.js';
+import { TRADE_SCAN_PREFIX } from '../scan/tradeSessions.js';
 import {
   CameraScan,
   CONSENSUS_FRAMES,
@@ -382,7 +383,8 @@ function targetLabel(target: ScanTarget): string {
 // it. Every destination gets its own key — a re-scan is *not* the same session
 // as an add (one reconciles the deck to exactly what was scanned, the other
 // appends), and a trade scan belongs to one trade and one side of it.
-const TRADE_SCAN_PREFIX = 'scan-session:trade:';
+// (The trade prefix and its cleanup live in scan/tradeSessions.ts so Trade.tsx
+// can call them without pulling this whole module into its chunk.)
 
 function sessionStorageKey(target: ScanTarget): string | null {
   switch (target.kind) {
@@ -396,26 +398,6 @@ function sessionStorageKey(target: ScanTarget): string | null {
       return `scan-session:${target.rescan ? 'rescan' : 'deck'}:${target.deckId}`;
     case 'trade':
       return target.sessionKey ? `${TRADE_SCAN_PREFIX}${target.sessionKey}` : null;
-  }
-}
-
-/**
- * Drop persisted trade scans that don't belong to trade `keep` (omit it to drop
- * all of them). An offer only exists inside its own trade, so a scan for one
- * that has finished — or that was walked away from — has nowhere left to land.
- */
-export function clearTradeScanSessions(keep?: string): void {
-  try {
-    const doomed: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (!k?.startsWith(TRADE_SCAN_PREFIX)) continue;
-      if (keep && k.startsWith(`${TRADE_SCAN_PREFIX}${keep}:`)) continue;
-      doomed.push(k);
-    }
-    for (const k of doomed) localStorage.removeItem(k);
-  } catch {
-    /* ignore */
   }
 }
 

@@ -4,7 +4,7 @@ import { Page } from './Page.js';
 import { CollectionListView } from '../components/CollectionListView.js';
 import { HeaderValue, headerValue, useCollectionValue } from '../components/ValueSummary.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
-import { ScanSheet } from '../components/ScanSheet.js';
+import { ScanSheet } from '../components/ScanSheetLazy.js';
 import { clearTradelist } from '../db/dataAccess.js';
 import { useToast } from '../components/Toast.js';
 import { useUndoShortcut } from '../history/useUndoShortcut.js';

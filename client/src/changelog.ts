@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.182.3',
+    changes: [
+      {
+        kind: 'added',
+        text: 'A card that belongs to a cycle (bond lands, shocklands, Titans, ...) now has a "See the other cards in this cycle" link on its card sheet, jumping straight to a search for its cycle-mates.',
+      },
+    ],
+  },
+  {
     version: '0.182.2',
     changes: [
       {
@@ -178,23 +187,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'The "saved" popup no longer waits forever when you save while the games are still being dealt.',
-      },
-    ],
-  },
-  {
-    version: '0.174.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Rules can fire at your end step, when another creature of yours dies, or when you sacrifice something (Treasures and Clues count). Blood Artist drains, Pitiless Plunderer makes Treasures.',
-      },
-      {
-        kind: 'added',
-        text: 'Abilities you pay for: mana, {T}, a sacrifice, a discard or life. The simulator uses them with spare mana, so Mind Stone, Clues and War Room draw cards now.',
-      },
-      {
-        kind: 'added',
-        text: 'Rules can say "only if" (threshold, metalcraft) and "once each turn", and a move can take the biggest card instead of a random one. 31 more popular cards model themselves, and 18 do more.',
       },
     ],
   },

@@ -3419,6 +3419,17 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   }
 }
 
+/* "See the other cards in this cycle": rides in the info column under the
+   rules text, sized like the pick-copy link rather than body text. */
+.sheet-cycle-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  font-size: 0.85rem;
+  padding: 0.1rem 0;
+  text-align: left;
+}
 /* Highlight a phrase in the rules text and this offers to search for it. It sits
    below the text rather than floating at the selection, so the OS's own
    selection menu (which floats above) has nothing to fight over. Outside the

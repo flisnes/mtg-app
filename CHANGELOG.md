@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.182.3
+
+- **Added: find the rest of a card's cycle from its card sheet.** Open Morphic Pool and a "See the other cards in this cycle" link sits under the rules text; tap it and the search shows the other four bond lands. Works for any card the Scryfall Tagger community has filed in a cycle (shocklands, Signets, Titans, ...), and cards in no cycle simply don't show the link.
+
 ## 0.182.2
 
 - **Changed: the app you download shrank by a fifth, and installs got 400 KB lighter.** The trade screen, the card scanner and the deck analysis pages now load the moment you open them instead of riding along with every first load and every update (315 KB compressed now, down from 405). The deck analysis defaults file — 400 KB that only matters once you open an analysis — also stopped downloading on install; it arrives the first time you actually look at a deck's numbers and stays cached from then on. On the screens themselves nothing changed.

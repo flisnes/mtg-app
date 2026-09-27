@@ -36,6 +36,8 @@ import { getMergedPriceHistory } from '../price/serverHistory.js';
 import { acquisitionGain, useCostBasis } from '../price/costBasis.js';
 import { historyChange, type HistoryChange } from '../price/history.js';
 import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
+import { cycleSlugsOf } from '../cardDb/oracleTags.js';
+import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { CardHistorySheet } from './CardHistory.js';
 import { ContainerPickerSheet } from './ContainerPickerSheet.js';
 import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
@@ -249,6 +251,15 @@ export function CardSheet(props: CardSheetProps) {
   const openDbSearch = useOpenDbSearch();
   // Highlighting a phrase in the rules text offers to search the database for it.
   const oracleSelection = useOracleSelection(oracleCard.oracleText, oracleCard.name);
+  // The cycles this card is part of (Tagger's `cycle` subtree), for the "see
+  // the other cards" link. The vocabulary loads lazily; the counter ticks once
+  // it's there and the link appears.
+  const otagsReady = useOracleTags();
+  const cycleSlugs = useMemo(
+    () => cycleSlugsOf(oracleCard.tags),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [oracleCard.tags, otagsReady],
+  );
   const toast = useToast();
   // An owned collection entry opens read-only with an Edit toggle; add/wish/
   // deck/session are always a form; info is never editable.
@@ -1069,6 +1080,22 @@ export function CardSheet(props: CardSheetProps) {
                   openDbSearch(query);
                 }}
               />
+            )}
+            {/* The card's cycle-mates (bondlands, shocklands, …), one search
+                away. Only when Tagger filed the card in a cycle; a card in
+                several searches them all at once. */}
+            {cycleSlugs.length > 0 && (
+              <button
+                type="button"
+                className="linklike sheet-cycle-link"
+                onClick={() => {
+                  onClose();
+                  openDbSearch(cycleSlugs.map((s) => `otag:${s}`).join(' or '));
+                }}
+              >
+                <Icon name="refresh" size={14} />
+                {cycleSlugs.length > 1 ? 'See the other cards in these cycles' : 'See the other cards in this cycle'}
+              </button>
             )}
           </div>
         </div>

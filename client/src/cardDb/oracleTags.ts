@@ -159,6 +159,23 @@ export function oracleTagClosure(slug: string): ReadonlySet<number> | null {
 }
 
 /**
+ * The cycles a card belongs to, as `otag:` slugs — its tags intersected with
+ * the `cycle` root's subtree. Membership, not a slug-prefix test: a handful of
+ * cycle tags (`tricycle-land`, `vertical-cycle`, …) don't start with `cycle-`.
+ * The root itself is skipped — "is in some cycle" names no cycle to show.
+ * Empty until the vocabulary is loaded, so the affordance simply doesn't
+ * appear rather than searching for nothing.
+ */
+export function cycleSlugsOf(tagIds: readonly number[] | undefined): string[] {
+  const idx = index;
+  if (!idx || !tagIds?.length) return [];
+  const root = idx.bySlug.get('cycle');
+  if (root === undefined) return [];
+  const cycles = closure(idx, root);
+  return tagIds.filter((id) => id !== root && cycles.has(id)).map((id) => idx.dictionary[id]![0]);
+}
+
+/**
  * Forget the loaded vocabulary so the next search fetches it again. Called
  * after a card-DB import: the tags artifact only appeared in the manifest with
  * v0.145.0, so a client that looked before the rebuilt DB was published cached

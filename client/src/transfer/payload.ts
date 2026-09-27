@@ -1,4 +1,5 @@
 import {
+  COLORS,
   CONDITIONS,
   CONTAINER_KINDS,
   DECK_FORMATS,
@@ -14,6 +15,7 @@ import {
   sanitizeCardBehavior,
   sanitizeContainerEmblem,
   type CollectionEntry,
+  type Color,
   type Condition,
   type ContainerKind,
   type Deck,
@@ -117,6 +119,7 @@ export function countsOf(p: TransferPayload): TransferCounts {
 
 const CONDS = new Set<string>(CONDITIONS);
 const FINS = new Set<string>(FINISHES);
+const COLOR_SET = new Set<string>(COLORS);
 const FORMATS = new Set<string>(DECK_FORMATS);
 const BOARDS = new Set<string>(['main', 'side', 'commander', 'token']);
 const CONTAINERS = new Set<string>(CONTAINER_KINDS);
@@ -344,12 +347,15 @@ export function sanitizeDeckCardRow(raw: unknown): DeckCard | null {
   // "The card isn't in the deck right now" (see DeckCard.unfiled) only means
   // anything on a slot that names a copy, which an "any printing" basic never does.
   const unfiled = r.unfiled === true;
+  // A commander's chosen color (Prismatic Piper & co) — only a real color survives.
+  const chosenColor = COLOR_SET.has(r.chosenColor as string) ? (r.chosenColor as Color) : undefined;
   return {
     id: slotId,
     deckId,
     oracleId,
     ...(anyBasic ? { anyBasic } : { ...(scryfallId ? { scryfallId } : {}), ...wants, ...(unfiled ? { unfiled } : {}) }),
     ...(tags ? { tags } : {}),
+    ...(chosenColor ? { chosenColor } : {}),
     quantity: qty(r.quantity),
     board: (BOARDS.has(r.board as string) ? r.board : 'main') as DeckBoard,
     updatedAt: ts(r.updatedAt),
@@ -459,7 +465,7 @@ const KNOWN_KEYS: Record<SyncTable, Record<string, true>> = {
   deckCards: {
     id: true, deckId: true, oracleId: true, scryfallId: true, quantity: true, board: true,
     condition: true, finish: true, lang: true, anyBasic: true, unfiled: true, tags: true,
-    updatedAt: true,
+    chosenColor: true, updatedAt: true,
   } satisfies Record<keyof Required<DeckCard>, true>,
   deckFolders: {
     id: true, name: true, createdAt: true, updatedAt: true,

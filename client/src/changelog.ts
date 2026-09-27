@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.182.1',
+    changes: [
+      {
+        kind: 'added',
+        text: 'A lone commander with Partner, a Background or a Doctor pairing now offers a "Find a partner" button that lists exactly the cards that can join them — no more fighting the color identity filter for Tana.',
+      },
+      {
+        kind: 'added',
+        text: 'The Prismatic Piper and friends show five mana pips on their card in the command zone: tap one to choose the color, and the deck’s identity follows.',
+      },
+    ],
+  },
+  {
     version: '0.182.0',
     changes: [
       {
@@ -186,19 +199,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Rules can give haste, vigilance or double strike to a card itself, and a mana ability can be limited to spells matching a search.',
-      },
-    ],
-  },
-  {
-    version: '0.173.0',
-    changes: [
-      {
-        kind: 'added',
-        text: "About 220 of the most-played Commander cards now come with a simulator rule written for them, used until you write your own. Find them on the Model tab under Written for you.",
-      },
-      {
-        kind: 'fixed',
-        text: 'Search understands pow and tou, so pow>=3 finds power 3 or more instead of searching card names.',
       },
     ],
   },

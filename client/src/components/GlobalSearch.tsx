@@ -13,7 +13,7 @@ import { CONTAINER_KINDS, type Color, type DeckBoard, type DeckFormat, type Orac
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
 import { addDeckCard, addToCollection, addToWishlist, addToWishlistBulk } from '../db/dataAccess.js';
-import { formatLabel, isBackground, isBasicLand, isValidCommanderPair } from '../deck/legality.js';
+import { formatLabel, isBackground, isBasicLand, isValidCommanderPair, needsColorChoice } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView, splitResultKey } from './CardSearchView.js';
@@ -132,6 +132,10 @@ interface SearchCtx {
   /** The one list the search is narrowed to, or null for the whole database. */
   scope: PageScope | null;
   setScope: (s: PageScope | null) => void;
+  /** A solo commander looking for their pair: results are narrowed to cards
+   *  that can share the command zone with them, identity filter waived. */
+  pairWith: OracleCard | null;
+  setPairWith: (o: OracleCard | null) => void;
   /** Scope+query to apply on the next pathname-change reset, instead of the
    *  usual blank slate — see `useOpenCollectionSearch`. */
   queuePending: (p: { scope: Scope; query: string }) => void;
@@ -159,6 +163,7 @@ export function useOpenSearch(): () => void {
     // These entry points mean "go find a card", so they always search the whole
     // database — never the (usually empty) list that offered the button.
     ctx?.setScope(null);
+    ctx?.setPairWith(null);
     ctx?.setOpen(true);
     ctx?.inputRef.current?.focus();
   };
@@ -175,6 +180,7 @@ export function useOpenListSearch(): () => void {
   const { pathname } = useLocation();
   return () => {
     ctx?.setScope(listScopeFor(pathname));
+    ctx?.setPairWith(null);
     ctx?.setOpen(true);
     ctx?.inputRef.current?.focus();
   };
@@ -233,6 +239,24 @@ export function useOpenCollectionSearch(): (cardName: string) => void {
 }
 
 /**
+ * The Commander section's "Find a partner" button: open the search narrowed to
+ * cards that can share the command zone with the solo commander. The identity
+ * checkbox is replaced by a "Can partner with …" one, so Tymna's WB doesn't
+ * hide Tana (see SearchFilters.pairOnly). No focus: the results ARE the answer,
+ * and a mobile keyboard would just cover them.
+ */
+export function useOpenPairSearch(): (commander: OracleCard) => void {
+  const ctx = useContext(Ctx);
+  return (commander: OracleCard) => {
+    ctx?.setScope(null);
+    ctx?.setFilters({});
+    ctx?.setQuery('');
+    ctx?.setPairWith(commander);
+    ctx?.setOpen(true);
+  };
+}
+
+/**
  * Open the overlay on a query we wrote ourselves, against the whole database —
  * the rules-text chip's route out of the card sheet (see OracleSearchChip). No
  * navigation, so no pathname-change reset to queue behind: scope, filters and
@@ -261,6 +285,7 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
   // card you were looking for. Narrowing to the list you're standing on is one
   // tap away on the list's own button (see `ListSearchButton`).
   const [scope, setScope] = useState<PageScope | null>(null);
+  const [pairWith, setPairWith] = useState<OracleCard | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const pendingRef = useRef<{ scope: Scope; query: string } | null>(null);
   const queuePending = (p: { scope: Scope; query: string }) => {
@@ -283,13 +308,14 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
     setQuery(pending?.query ?? '');
     setFilters({});
     setScope(pending?.scope ?? null);
+    setPairWith(null);
     setOpen(!!pending);
     if (!pending) inputRef.current?.blur();
   }, [pathname, query]);
 
   const value = useMemo(
-    () => ({ open, setOpen, inputRef, query, setQuery, filters, setFilters, scope, setScope, queuePending }),
-    [open, query, filters, scope],
+    () => ({ open, setOpen, inputRef, query, setQuery, filters, setFilters, scope, setScope, pairWith, setPairWith, queuePending }),
+    [open, query, filters, scope, pairWith],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -297,7 +323,7 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
 /** The header search bar + results overlay. Render once, inside the provider. */
 export function GlobalSearchBar() {
   const ctx = useContext(Ctx)!;
-  const { open, setOpen, inputRef, query, setQuery, setFilters, setScope } = ctx;
+  const { open, setOpen, inputRef, query, setQuery, setFilters, setScope, setPairWith } = ctx;
   const { enabled: accountsEnabled, session, syncReady, pendingChanges, sync } = useAccount();
   const signedIn = !!session;
   const ownAvatar = useOwnAvatar(session);
@@ -330,6 +356,7 @@ export function GlobalSearchBar() {
     // (the usual "find a card to add") rather than resuming a list filter the
     // user already dismissed. The list's own button re-scopes in one tap.
     setScope(null);
+    setPairWith(null);
     setOpen(false);
     inputRef.current?.blur();
   }
@@ -381,6 +408,7 @@ export function GlobalSearchBar() {
         <SearchHotkey
           onOpen={() => {
             setScope(null);
+            setPairWith(null);
             setOpen(true);
             inputRef.current?.focus();
             inputRef.current?.select();
@@ -469,7 +497,7 @@ export function GlobalSearchBar() {
 }
 
 function SearchOverlay() {
-  const { query, filters, setFilters, scope, setScope } = useContext(Ctx)!;
+  const { query, filters, setFilters, scope, setScope, pairWith, setPairWith } = useContext(Ctx)!;
   const { pathname } = useLocation();
   // The sheet opens on the printing the result was showing, so tapping a tile
   // doesn't silently swap to a different edition than the one you tapped.
@@ -601,7 +629,17 @@ function SearchOverlay() {
       if (rows.length) {
         const oracles = await db.oracleCards.bulkGet(rows.map((c) => c.oracleId));
         commanders = oracles.filter((o): o is OracleCard => !!o);
-        identity = [...new Set(commanders.flatMap((o) => o.colorIdentity))];
+        // A choose-a-color commander's pick (Prismatic Piper & co) is part of
+        // the identity, exactly as the legality checker counts it.
+        identity = [
+          ...new Set(
+            rows.flatMap((r, i) => {
+              const o = oracles[i];
+              if (!o) return [];
+              return r.chosenColor && needsColorChoice(o) ? [...o.colorIdentity, r.chosenColor] : o.colorIdentity;
+            }),
+          ),
+        ];
       }
     }
     return { format, identity, commanders };
@@ -618,17 +656,36 @@ function SearchOverlay() {
       (/\bLegendary\b/.test(c.typeLine) || isBackground(c)) && isValidCommanderPair(solo, c);
   }, [deckCtx]);
 
+  // Pair mode ("Find a partner"): only cards that can share the command zone
+  // with the named commander, in place of the identity filter. It ends itself
+  // once the zone stops holding exactly that one commander — adding the partner
+  // is the point, and from there the ordinary identity filter is the right one.
+  const pairFilter = useMemo(() => {
+    if (!pairWith) return undefined;
+    return (c: OracleCard) =>
+      c.oracleId !== pairWith.oracleId &&
+      (/\bLegendary\b/.test(c.typeLine) || isBackground(c)) &&
+      isValidCommanderPair(pairWith, c);
+  }, [pairWith]);
+  const pairDone =
+    !!pairWith && !!deckCtx && !(deckCtx.commanders.length === 1 && deckCtx.commanders[0]!.oracleId === pairWith.oracleId);
+  useEffect(() => {
+    if (pairDone) setPairWith(null);
+  }, [pairDone, setPairWith]);
+
   const effectiveFilters = useMemo<SearchFilters>(
     () =>
-      deckFilterActive
-        ? {
-            ...filters,
-            legalIn: deckCtx!.format,
-            identity: deckCtx!.identity ?? undefined,
-            identityExempt: partnerExempt,
-          }
-        : filters,
-    [filters, deckFilterActive, deckCtx, partnerExempt],
+      pairFilter && deckCtx
+        ? { ...filters, legalIn: deckCtx.format, pairOnly: pairFilter }
+        : deckFilterActive
+          ? {
+              ...filters,
+              legalIn: deckCtx!.format,
+              identity: deckCtx!.identity ?? undefined,
+              identityExempt: partnerExempt,
+            }
+          : filters,
+    [filters, deckFilterActive, deckCtx, partnerExempt, pairFilter],
   );
 
   // Scoped to the list this very page renders: it filters itself (keeping its
@@ -772,12 +829,22 @@ function SearchOverlay() {
     default: null,
   }[target.kind];
 
-  const filterExtras = deckCtx && deckCtx.format !== 'casual' && (
-    <label className="deck-filter-toggle" title="Hide cards this deck can't legally play">
-      <input type="checkbox" checked={deckLegalOnly} onChange={(e) => setDeckLegalOnly(e.target.checked)} />
-      {formatLabel(deckCtx.format)}-legal
-      {deckCtx.identity && ` · ${deckCtx.identity.length ? deckCtx.identity.join('') : 'C'} identity`}
+  const filterExtras = pairWith ? (
+    // Pair mode replaces the identity toggle: unchecking it is the way back to
+    // the ordinary deck-legal search.
+    <label className="deck-filter-toggle" title={`Only cards that can share the command zone with ${pairWith.name}`}>
+      <input type="checkbox" checked onChange={() => setPairWith(null)} />
+      Can partner with {pairWith.name}
     </label>
+  ) : (
+    deckCtx &&
+    deckCtx.format !== 'casual' && (
+      <label className="deck-filter-toggle" title="Hide cards this deck can't legally play">
+        <input type="checkbox" checked={deckLegalOnly} onChange={(e) => setDeckLegalOnly(e.target.checked)} />
+        {formatLabel(deckCtx.format)}-legal
+        {deckCtx.identity && ` · ${deckCtx.identity.length ? deckCtx.identity.join('') : 'C'} identity`}
+      </label>
+    )
   );
 
   // Nothing typed yet: recent searches hang off the search bar itself, so all

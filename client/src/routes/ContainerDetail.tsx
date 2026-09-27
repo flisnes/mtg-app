@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  COLORS,
   DECK_FORMATS,
   MAX_DECK_NAME_LENGTH,
   isMarkerCard,
@@ -33,6 +34,7 @@ import {
   removeDeckCardsMatching,
   renameDeck,
   setContainerForTrade,
+  setDeckCardChosenColor,
   setDeckCardQuantity,
   setDeckCardsForTrade,
   setDeckArchived,
@@ -42,7 +44,16 @@ import {
   unfileWholeContainer,
 } from '../db/dataAccess.js';
 import { addToWishlistBulk, applyImport } from '../db/dataAccess.js';
-import { checkDeckLegality, formatLabel, isBasicLand, isNonDeckCard, type LegalityReport } from '../deck/legality.js';
+import {
+  checkDeckLegality,
+  formatLabel,
+  isBasicLand,
+  isNonDeckCard,
+  needsColorChoice,
+  pairButtonLabel,
+  type LegalityReport,
+} from '../deck/legality.js';
+import { useOpenPairSearch } from '../components/GlobalSearch.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { useFiling } from '../deck/useFiling.js';
 import { buildDeckText } from '../deck/deckText.js';
@@ -206,6 +217,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const { file, sheet: filingSheet } = useFiling();
   const { confirm, sheet: confirmSheet } = useConfirm();
   const action = useAsyncAction();
+  const openPairSearch = useOpenPairSearch();
 
   const data = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
@@ -324,7 +336,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     () =>
       checkDeckLegality(
         data?.deck?.format,
-        (data?.rows ?? []).map((r) => ({ oracleId: r.oracleId, quantity: r.quantity, board: r.board, oracle: r.oracle })),
+        (data?.rows ?? []).map((r) => ({ oracleId: r.oracleId, quantity: r.quantity, board: r.board, oracle: r.oracle, chosenColor: r.chosenColor })),
       ),
     [data],
   );
@@ -1004,6 +1016,19 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               commanderDeck={isCommander}
               showYear={sort.key === 'released'}
               emptyHint="No commander yet. Tap a card below and set its zone, or use the +Cmdr button in search."
+              colorChoice={isCommander}
+              // A solo commander with a pairing ability gets a shortcut to the
+              // other half — search narrowed to legal pairs, identity waived.
+              footer={(() => {
+                if (!isCommander || commander.length !== 1) return undefined;
+                const solo = commander[0]!.oracle;
+                const label = solo && pairButtonLabel(solo);
+                return solo && label ? (
+                  <button className="chip pair-find-btn" onClick={() => openPairSearch(solo)}>
+                    <Icon name="search" size={14} /> {label}
+                  </button>
+                ) : undefined;
+              })()}
             />
           )}
           <Board title="Mainboard" rows={main} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
@@ -1280,6 +1305,8 @@ function Board({
   commanderDeck = false,
   showYear = false,
   emptyHint,
+  colorChoice = false,
+  footer,
 }: {
   title: string;
   rows: Row[];
@@ -1298,6 +1325,10 @@ function Board({
   /** Sorted by release date: every slot shows the year it's being ordered on. */
   showYear?: boolean;
   emptyHint?: string;
+  /** Command zone only: offer the choose-a-color pips on commanders that ask. */
+  colorChoice?: boolean;
+  /** Rendered under the cards — the "Find a partner" button. */
+  footer?: ReactNode;
 }) {
   const ownership = useOwnershipIndex();
   const cutIds = useCutSlots(deckId);
@@ -1343,10 +1374,16 @@ function Board({
     // so a deck built out of your Japanese cards reads as one at a glance.
     const lang = langMark(r.lang);
     const year = yearMark(r.printing, showYear);
+    // Prismatic Piper & co: pick the color the commander is, right on the card.
+    const colorPips =
+      colorChoice && r.oracle && needsColorChoice(r.oracle) ? (
+        <ColorChoicePicker chosen={r.chosenColor} onPick={(c) => void setDeckCardChosenColor(r.id, c)} />
+      ) : undefined;
     return {
       key: r.id,
       ...(lang ? { lang } : {}),
       ...(year ? { year } : {}),
+      ...(colorPips ? { sideStrip: colorPips } : {}),
       name: r.oracle ? (r.board === 'token' ? tokenLabel(r.oracle) : r.oracle.name) : '(unknown card)',
       image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
       mana: r.oracle?.manaCost,
@@ -1425,6 +1462,44 @@ function Board({
       ) : (
         <CardItems view={view} items={rows.map(toItem)} {...selProps} />
       )}
+      {footer && <div className="board-footer">{footer}</div>}
+    </div>
+  );
+}
+
+/**
+ * The mana pips a choose-a-color commander shows until a color is picked (see
+ * DeckCard.chosenColor). Picking collapses the strip to the one chosen pip;
+ * tapping that pip reopens the strip to change the choice.
+ */
+function ColorChoicePicker({ chosen, onPick }: { chosen?: Color; onPick: (c: Color) => void }) {
+  const [changing, setChanging] = useState(false);
+  if (chosen && !changing) {
+    return (
+      <button
+        className="color-pip color-pip-chosen"
+        title={`Chosen color: ${COLOR_WORDS[chosen]}. Tap to change.`}
+        onClick={() => setChanging(true)}
+      >
+        <i className={`ms ms-${chosen.toLowerCase()} ms-cost`} aria-hidden />
+      </button>
+    );
+  }
+  return (
+    <div className="color-pip-strip" role="group" aria-label="Choose this commander's color">
+      {COLORS.map((c) => (
+        <button
+          key={c}
+          className={`color-pip${chosen === c ? ' color-pip-chosen' : ''}`}
+          title={`Be ${COLOR_WORDS[c].toLowerCase()}`}
+          onClick={() => {
+            setChanging(false);
+            onPick(c);
+          }}
+        >
+          <i className={`ms ms-${c.toLowerCase()} ms-cost`} aria-hidden />
+        </button>
+      ))}
     </div>
   );
 }

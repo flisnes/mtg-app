@@ -1,4 +1,4 @@
-// The older half of the changelog (0.172.1 down to 0.98.0), split out of
+// The older half of the changelog (0.173.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,19 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.173.0',
+    changes: [
+      {
+        kind: 'added',
+        text: "About 220 of the most-played Commander cards now come with a simulator rule written for them, used until you write your own. Find them on the Model tab under Written for you.",
+      },
+      {
+        kind: 'fixed',
+        text: 'Search understands pow and tou, so pow>=3 finds power 3 or more instead of searching card names.',
+      },
+    ],
+  },
   {
     version: '0.172.1',
     changes: [

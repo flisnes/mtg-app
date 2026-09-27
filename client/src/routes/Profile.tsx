@@ -20,7 +20,7 @@ import { rememberOwnAvatar } from '../account/ownProfile.js';
 import { useAccount } from '../account/useAccount.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds, getPrintingsForOracle } from '../db/queries.js';
-import { formatLabel } from '../deck/legality.js';
+import { formatLabel, needsColorChoice } from '../deck/legality.js';
 import { containerKind } from '../deck/containers.js';
 import { Avatar } from '../components/Avatar.js';
 import { AvatarEditorSheet, CardSearch } from '../components/AvatarEditorSheet.js';
@@ -418,7 +418,9 @@ function FavoriteDeckPickerSheet({
         const present = new Set<Color>();
         for (const card of cards) {
           if (card.board === 'token') continue;
-          for (const c of oracles.get(card.oracleId)?.colorIdentity ?? []) present.add(c);
+          const o = oracles.get(card.oracleId);
+          for (const c of o?.colorIdentity ?? []) present.add(c);
+          if (card.board === 'commander' && card.chosenColor && o && needsColorChoice(o)) present.add(card.chosenColor);
         }
         return { deck, main, colors: COLOR_ORDER.filter((c) => present.has(c)) };
       }),

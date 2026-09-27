@@ -13,7 +13,7 @@
 //    edition/finish/condition/language only counts as *had* when some owned copy
 //    meets those (the double check); otherwise it's the single check.
 
-import type { Finish, Format } from './card.js';
+import type { Color, Finish, Format } from './card.js';
 import { sanitizeAvatar, type ProfileAvatar } from './profile.js';
 
 export type Condition = 'NM' | 'LP' | 'MP' | 'HP' | 'DMG';
@@ -329,6 +329,13 @@ export interface DeckCard {
    * normalizeCardTags; absent = untagged.
    */
   tags?: string[];
+  /**
+   * The color picked for a commander whose text says "choose a color before the
+   * game begins" (The Prismatic Piper, Faceless One, Clara Oswald). Only read on
+   * a commander-board slot whose card carries that clause — it widens the deck's
+   * color identity everywhere identity is computed. Absent = not chosen yet.
+   */
+  chosenColor?: Color;
   updatedAt: number;
 }
 

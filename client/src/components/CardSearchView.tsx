@@ -117,8 +117,12 @@ export function CardSearchView({
   // runs either way — an unsorted caller just never shows or sends the prefs.
   const [sort, setSort] = useCardSort(sortKey ?? 'search', { key: 'relevance', dir: 'desc' });
   const eff = effectiveFilters ?? filters;
+  // A pair browse ("can partner with X") is a complete question on its own, so
+  // it lists its matches before anything is typed.
   const hasCriteria =
-    query.trim().length > 0 || (showFilters && (!!filters.color || !!filters.rarity || !!filters.type));
+    query.trim().length > 0 ||
+    !!eff.pairOnly ||
+    (showFilters && (!!filters.color || !!filters.rarity || !!filters.type));
 
   // New criteria start back at the first page — keyed on a serialized signature
   // so opening/closing a card sheet over the results doesn't reset the count.

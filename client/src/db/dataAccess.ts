@@ -10,6 +10,7 @@ import {
 import type {
   CardBehavior,
   CollectionEntry,
+  Color,
   Condition,
   ContainerEmblem,
   ContainerKind,
@@ -2036,6 +2037,23 @@ async function patchDeckCard(
 /** Set a slot's quantity; deletes the slot at zero. */
 export async function setDeckCardQuantity(id: string, quantity: number): Promise<void> {
   await patchDeckCard(id, { quantity });
+}
+
+/**
+ * Pick (or clear) the color a choose-a-color commander is (see
+ * DeckCard.chosenColor). Like a tag edit, it adds and removes no cardboard, so
+ * there is no history event to emit — just the slot rewrite and the sync stage.
+ */
+export async function setDeckCardChosenColor(id: string, color: Color | undefined): Promise<void> {
+  await db.transaction('rw', DECK_TABLES, async () => {
+    const card = await db.deckCards.get(id);
+    if (!card || card.chosenColor === color) return;
+    const now = Date.now();
+    const next: DeckCard = { ...card, chosenColor: color, updatedAt: now };
+    await db.deckCards.put(next);
+    await stagePut('deckCards', next);
+    await touchDeck(card.deckId, now);
+  });
 }
 
 /** Update a slot's quantity, preferred printing and wants (deck edit sheet).

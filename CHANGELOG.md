@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.182.1
+
+- **Added: a solo commander with a pairing ability offers a "Find a partner" button.** Tymna in your command zone used to mean hunting for Tana with the color identity filter hiding her. The Commander section now shows a button under a lone partner/Background/Doctor commander — "Find a partner", "Find a Background" and so on — that opens the search listing exactly the cards that can share the command zone, with a "Can partner with …" checkbox in place of the identity filter. Adding the second commander ends the special search on its own.
+- **Added: choose-a-color commanders can actually choose.** The Prismatic Piper, Faceless One and Clara Oswald say "choose a color before the game begins", and until now the app had nowhere to say it. Their card in the command zone shows the five mana pips along its right edge; tap one and the pick becomes a badge on the card, sets the deck's color identity for search and legality, and colors the deck's pips in the deck list. Tap the badge to change your mind.
+
 ## 0.182.0
 
 - **Fixed: a finished background data update no longer resets the screen you are on.** When card data or prices updated in the background, the whole view reloaded the moment it finished — and if you were mid-way through adding cards or editing a deck, your place went with it. The update now lands quietly: open screens pick up the new data on their own and a small toast says it arrived. Your edit stays exactly where you left it.

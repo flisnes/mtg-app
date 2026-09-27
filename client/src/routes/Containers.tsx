@@ -25,7 +25,7 @@ import {
   unfileWholeContainer,
 } from '../db/dataAccess.js';
 import { getOracleCardsByIds } from '../db/queries.js';
-import { formatLabel } from '../deck/legality.js';
+import { formatLabel, needsColorChoice } from '../deck/legality.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { Icon } from '../components/icons.js';
 import { Emblem } from '../components/Emblem.js';
@@ -213,7 +213,10 @@ export function Containers({ kind }: { kind: ContainerKind }) {
           const present = new Set<Color>();
           for (const card of cards) {
             if (card.board === 'token') continue;
-            for (const c of oracles.get(card.oracleId)?.colorIdentity ?? []) present.add(c);
+            const o = oracles.get(card.oracleId);
+            for (const c of o?.colorIdentity ?? []) present.add(c);
+            // A choose-a-color commander is the color it chose.
+            if (card.board === 'commander' && card.chosenColor && o && needsColorChoice(o)) present.add(card.chosenColor);
           }
           colors = COLOR_ORDER.filter((c) => present.has(c));
         } else {

@@ -33,6 +33,9 @@ export interface SearchFilters {
   identity?: readonly Color[];
   /** Let these through the identity filter anyway (a second commander widens it). */
   identityExempt?: (card: OracleCard) => boolean;
+  /** Only cards this predicate accepts — the "can partner with X" browse, which
+   *  replaces the identity filter (the second commander is what widens it). */
+  pairOnly?: (card: OracleCard) => boolean;
 }
 
 type Indexed = SearchableEntry;
@@ -320,6 +323,7 @@ export async function searchCards(
       !filters.identityExempt?.(entry.card)
     )
       continue;
+    if (filters.pairOnly && !filters.pairOnly(entry.card)) continue;
     if (!matchesQuery(entry, parsed)) continue;
 
     // Rank: exact > prefix > word-start > substring > scattered words. Terms

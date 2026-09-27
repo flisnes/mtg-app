@@ -8846,3 +8846,64 @@ a.seg {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border-radius: 4px;
 }
+
+/* ---- Choose-a-color commander (Prismatic Piper & co) ---- */
+/* Grid: the pip column hugs the card's right edge. It's a sibling of the tile
+   button (pips are buttons themselves), so the tile is the anchor. */
+.card-tile {
+  position: relative;
+}
+.tile-side-strip {
+  position: absolute;
+  top: 6px;
+  right: 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.color-pip-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.color-pip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.8);
+  cursor: pointer;
+  line-height: 1;
+}
+.color-pip .ms {
+  font-size: 0.95rem;
+}
+.color-pip-chosen {
+  outline: 2px solid var(--accent);
+}
+/* List rows: the pips sit with the quick actions, as a row. */
+.quick-actions .color-pip-strip {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0.4rem;
+  align-self: center;
+}
+.quick-actions button.color-pip {
+  padding: 3px;
+  border-left: none;
+  border-radius: 50%;
+  align-self: center;
+}
+
+/* Under the command zone's cards: the "Find a partner" shortcut. */
+.board-footer {
+  margin-top: 0.55rem;
+}
+.pair-find-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}

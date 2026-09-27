@@ -112,6 +112,36 @@ export function canJoinCommandZone(oracle: OracleCard, present: readonly OracleC
   return false;
 }
 
+/**
+ * The "find my other commander" button a solo commander earns: what to write on
+ * it, per pairing ability. Null when the card pairs with nothing. A lone
+ * Background is offered the reverse trip (it needs a "Choose a Background"
+ * commander), which is also why the isBackground arm sits last — Faceless One
+ * is a Background that itself says "Choose a Background".
+ */
+export function pairButtonLabel(o: OracleCard): string | null {
+  const named = partnerWithName(o);
+  if (named) return `Add ${named}`;
+  if (hasPlainPartner(o)) return 'Find a partner';
+  const r = restrictedPartnerLabel(o);
+  if (r) return `Find a partner (${r})`;
+  if (hasFriendsForever(o)) return 'Find a friend forever';
+  if (hasChooseABackground(o)) return 'Find a Background';
+  if (isDoctor(o)) return 'Find a companion';
+  if (hasDoctorsCompanion(o)) return 'Find the Doctor';
+  if (isBackground(o)) return 'Find a commander';
+  return null;
+}
+
+/**
+ * "Choose a color before the game begins" commanders (The Prismatic Piper,
+ * Faceless One, Clara Oswald): the deck's identity is whatever the player
+ * picked, stored on the slot as DeckCard.chosenColor.
+ */
+export function needsColorChoice(o: OracleCard): boolean {
+  return /is your commander, choose a color before the game begins/i.test(text(o));
+}
+
 // ---- Companions ----
 // The companion starts the game outside the deck — in this model, in the
 // sideboard — so it is checked against the starting deck (main + command zone)
@@ -176,15 +206,23 @@ export function copiesWelcome(
   return Math.max(0, limit - inDeck);
 }
 
+/** A command-zone slot's identity: the card's, plus the chosen color where the
+ *  card asks for one (see DeckCard.chosenColor). */
+function slotIdentity(c: { oracle?: OracleCard; chosenColor?: Color }): Color[] {
+  if (!c.oracle) return [];
+  const extra = c.chosenColor && needsColorChoice(c.oracle) ? [c.chosenColor] : [];
+  return [...c.oracle.colorIdentity, ...extra];
+}
+
 /** The commanders' combined color identity, or null when the format doesn't enforce one. */
 export function commanderIdentity(
   format: DeckFormat | undefined,
-  cards: readonly { board: DeckBoard; oracle?: OracleCard }[],
+  cards: readonly { board: DeckBoard; oracle?: OracleCard; chosenColor?: Color }[],
 ): Set<Color> | null {
   if (!RULES[format ?? 'casual']?.commander) return null;
   const commanders = cards.filter((c) => c.board === 'commander' && c.oracle);
   if (commanders.length === 0) return null;
-  return new Set<Color>(commanders.flatMap((c) => c.oracle!.colorIdentity));
+  return new Set<Color>(commanders.flatMap(slotIdentity));
 }
 
 /**
@@ -295,6 +333,8 @@ export interface LegalityCard {
   quantity: number;
   board: DeckBoard;
   oracle?: OracleCard;
+  /** A choose-a-color commander's pick — part of the command zone's identity. */
+  chosenColor?: Color;
 }
 
 export interface LegalityReport {
@@ -405,7 +445,7 @@ export function checkDeckLegality(format: DeckFormat | undefined, allCards: Lega
     // identity. Sideboard is treated as scratch space and skipped (companions
     // are checked separately below).
     if (commanderCount > 0 && commanders.every((c) => c.oracle)) {
-      commanderIdentity = new Set<Color>(commanders.flatMap((c) => c.oracle!.colorIdentity));
+      commanderIdentity = new Set<Color>(commanders.flatMap(slotIdentity));
       let offenders = 0;
       for (const c of cards) {
         if (c.board !== 'main' || !c.oracle) continue;

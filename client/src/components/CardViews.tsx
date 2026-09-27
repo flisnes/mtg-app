@@ -147,6 +147,10 @@ export interface CardItem {
   /** Action buttons: right edge of list rows, under the image on grid tiles,
    *  in the panel beside an expanded stacked card. */
   actions?: ReactNode;
+  /** Interactive strip hugging the card's right edge (grid) or sitting with the
+   *  actions (list) — the choose-a-color commander's mana pips. Its own slot
+   *  because it must be clickable, and the tile image is already one button. */
+  sideStrip?: ReactNode;
 }
 
 /**
@@ -307,7 +311,12 @@ export function CardList({
             ) : (
               <div className="result-open">{body}</div>
             )}
-            {!selectable && it.actions && <div className="quick-actions">{it.actions}</div>}
+            {!selectable && (it.actions || it.sideStrip) && (
+              <div className="quick-actions">
+                {it.sideStrip}
+                {it.actions}
+              </div>
+            )}
           </li>
         );
       })}
@@ -523,6 +532,8 @@ export function CardGrid({
                 </span>
               )}
             </button>
+            {/* Outside the tile button — its pips are buttons of their own. */}
+            {!selectable && it.sideStrip && <div className="tile-side-strip">{it.sideStrip}</div>}
             {!selectable && it.actions && <div className="tile-footer">{it.actions}</div>}
           </li>
         );

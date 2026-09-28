@@ -20,5 +20,5 @@
     "noEmit": true,
     "types": ["vite/client", "vite-plugin-pwa/client"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "test", "vite.config.ts", "vitest.config.ts"]
 }

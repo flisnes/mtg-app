@@ -125,7 +125,7 @@ function stampOf(row: Record<string, unknown>): number {
  * (the `syncTableAdditions` repair). Refusing to advance costs a re-pull of one
  * page per sync until that device updates, which it does on its next open.
  */
-async function applyServerChanges(changes: SyncChange[]): Promise<number | null> {
+export async function applyServerChanges(changes: SyncChange[]): Promise<number | null> {
   if (!changes.length) return null;
   return db.transaction('rw', [...Object.values(TABLES), db.outbox], async () => {
     let blockedFrom: number | null = null;
@@ -183,7 +183,7 @@ async function wipeForResync(): Promise<void> {
 }
 
 /** Drop pushed outbox entries — unless a newer local change replaced them mid-flight. */
-async function ackOutbox(pushed: SyncChange[]): Promise<void> {
+export async function ackOutbox(pushed: SyncChange[]): Promise<void> {
   if (!pushed.length) return;
   await db.transaction('rw', db.outbox, async () => {
     for (const c of pushed) {

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.182.6
+
+- Internal: the sync engine and the row sanitizers behind device transfer and account sync now have a test suite (48 tests). These are the parts that historically needed four repair releases when they went wrong, so regressions there now fail before they ship. No visible changes.
+
 ## 0.182.5
 
 - **Fixed: every popup sheet now behaves the same.** Twenty sheets across the app (favorite pickers, emblem picker, edit history, scan review steps, the trade tools and more) each rolled their own frame, and most had drifted: no protection against the tap that opened them landing on a button inside, missing screen-reader dialog markup, and a few that could be covered by the tab bar. They all go through the one shared sheet now, so the 400ms double-tap guard, Escape/back handling and proper dialog semantics apply everywhere.

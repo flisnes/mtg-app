@@ -3,14 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import type { OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
 import { useToast } from '../components/Toast.js';
-import { useFileThese } from '../deck/useFileThese.js';
 import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
-import { ImportConflicts } from '../import/ImportConflicts.js';
 import { ImportDefaultsRow, IMPORT_DEFAULTS } from '../import/ImportExtras.js';
-import { commitResolvedLines, filingCopiesFor } from '../import/commit.js';
-import { useReplaceFlow } from '../import/useReplaceFlow.js';
-import { findImportConflicts, type ConflictChoice, type ImportConflict } from '../import/conflicts.js';
+import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import type { ImportDefaults, ResolvedLine, TradelistMode, UnmatchedLine } from '../import/types.js';
 
 export function Import() {
@@ -20,14 +16,9 @@ export function Import() {
   // pile pins, for a pasted list.
   const [defaults, setDefaults] = useState<ImportDefaults>(IMPORT_DEFAULTS);
   const { status, analyze, reset } = useImportAnalysis();
-  // Set when review found cards already in the collection: the conflict-
-  // resolution step replaces the review until resolved or backed out of.
-  const [conflictStep, setConflictStep] = useState<{ lines: ResolvedLine[]; conflicts: ImportConflict[] } | null>(null);
-  // The per-card answers, kept here so Back to the review and forward again
-  // doesn't reset them. A fresh analysis starts over.
-  const [choices, setChoices] = useState<Map<string, ConflictChoice>>(new Map());
-  const { resolveReplacements, sheet: replaceSheet } = useReplaceFlow();
-  const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
+  // Cards already in the collection, where they should live, and whether a copy
+  // moved: one questionnaire, asked after the review and before anything is written.
+  const { open: review, sheet: intakeSheet } = useIntakeReview();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -40,32 +31,17 @@ export function Import() {
   }
 
   async function confirmImport(lines: ResolvedLine[]) {
-    const conflicts = await findImportConflicts(lines);
-    if (conflicts.length > 0) {
-      setConflictStep({ lines, conflicts });
-      return;
-    }
-    await commit(lines, new Map(), []);
-  }
-
-  async function commit(lines: ResolvedLine[], choices: Map<string, ConflictChoice>, conflicts: ImportConflict[]) {
-    // "Update" swaps one owned copy for the incoming printing and asks which
-    // one when you own several — the same surgical swap the scanner does,
-    // rather than deleting every copy of the card you own.
-    const outcome = await resolveReplacements(conflicts, choices);
-    if (!outcome) return; // backed out of a pick — nothing written
-
-    const res = await commitResolvedLines(lines, choices, outcome, { source: 'import' });
-    const skipped = lines.length - res.written.length;
-    if (res.written.length === 0) {
+    const res = await review({ flow: 'collection', lines, source: 'import', incomingLabel: 'Import' });
+    if (!res) return; // backed out — nothing written, the review is still there
+    if (res.added === 0) {
       toast('Nothing imported: every card was skipped');
       navigate('/collection');
       return;
     }
-    toast(`Imported ${res.added} cards (${res.entries} entries${skipped > 0 ? `, ${skipped} skipped` : ''})`);
-    await offerFiling(
-      filingCopiesFor(res.written),
-      res.written.reduce((n, l) => n + l.quantity, 0),
+    toast(
+      `Imported ${res.added} card${res.added === 1 ? '' : 's'} (${res.entries} entries${
+        res.skipped > 0 ? `, ${res.skipped} skipped` : ''
+      })${describeFiling(res)}`,
     );
     navigate('/collection');
   }
@@ -116,26 +92,12 @@ export function Import() {
             <div className="progress-bar" style={{ width: `${Math.round(status.fraction * 100)}%` }} />
           </div>
         </>
-      ) : conflictStep ? (
-        <ImportConflicts
-          conflicts={conflictStep.conflicts}
-          otherCount={
-            conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0)
-          }
-          initialChoices={choices}
-          onChange={setChoices}
-          onConfirm={(choices) => commit(conflictStep.lines, choices, conflictStep.conflicts)}
-          onBack={() => setConflictStep(null)}
-        />
       ) : (
         <ImportReview
           result={status.result}
           makeResolved={makeResolved}
           onConfirm={confirmImport}
-          onCancel={() => {
-            setChoices(new Map());
-            reset();
-          }}
+          onCancel={reset}
           extraSummary={(lines) => {
             const forTrade = lines.reduce((s, l) => s + l.quantityForTrade, 0);
             return (
@@ -147,8 +109,7 @@ export function Import() {
           }}
         />
       )}
-      {replaceSheet}
-      {fileTheseSheet}
+      {intakeSheet}
     </Page>
   );
 }

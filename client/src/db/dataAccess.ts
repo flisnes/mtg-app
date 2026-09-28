@@ -660,11 +660,11 @@ export interface MarkForTradeRequest {
  */
 export async function markOwnedForTrade(
   requests: MarkForTradeRequest[],
-  meta: { source?: EventSource } = {},
+  meta: { source?: EventSource } & BatchMeta = {},
 ): Promise<number> {
   if (requests.length === 0) return 0;
   let flagged = 0;
-  const batchId = newId();
+  const batchId = meta.batchId ?? newId();
   await db.transaction('rw', [db.collection, db.events, db.outbox], async () => {
     const now = Date.now();
     const oracleIds = [...new Set(requests.map((r) => r.oracleId))];
@@ -719,6 +719,7 @@ export async function markOwnedForTrade(
           ...(e.special ? { special: e.special } : {}),
           source: meta.source ?? 'manual',
           batchId,
+          ...(meta.batchLabel ? { batchLabel: meta.batchLabel } : {}),
         })),
       );
     }

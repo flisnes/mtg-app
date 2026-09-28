@@ -4,9 +4,9 @@ import { setSealedItemQuantity } from '../db/dataAccess.js';
 import { LANGS } from '../components/CardSheet.js';
 import { Sheet } from '../components/Sheet.js';
 import { useToast } from '../components/Toast.js';
-import { useFileThese } from '../deck/useFileThese.js';
+import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import { SealedContentsList } from './SealedContents.js';
-import { loadContents, openIntoCollection, perCopyCount, type OpenContents } from './open.js';
+import { loadContents, openedLines, perCopyCount, type OpenContents } from './open.js';
 
 // Cracking a box you already own. The add sheet has always been able to open a
 // product on the way in; a box that sat on the shelf for a year had no way out
@@ -29,7 +29,7 @@ export function OpenSealedSheet({
   const [lang, setLang] = useState('en');
   const [opening, setOpening] = useState(false);
   const toast = useToast();
-  const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
+  const { open: review, sheet: intakeSheet } = useIntakeReview();
 
   useEffect(() => {
     let cancelled = false;
@@ -48,13 +48,17 @@ export function OpenSealedSheet({
     if (!contents || opening) return;
     setOpening(true);
     try {
-      const { cards, filing } = await openIntoCollection(contents.rows, { copies, condition, lang, label: product.name });
+      // "Where do these live?" first; backing out of it opens nothing.
+      const res = await review({ flow: 'sealed', lines: openedLines(contents.rows, { copies, condition, lang }), source: 'sealed', label: product.name });
+      if (!res) {
+        setOpening(false);
+        return;
+      }
       // Only after the cards are safely in: a failed decrement would otherwise
       // lose the box without adding anything.
       await setSealedItemQuantity(item.id, item.quantity - copies);
-      toast(`Opened ${copies} ${product.name}, added ${cards} card${cards === 1 ? '' : 's'}`);
+      toast(`Opened ${copies} ${product.name}, added ${res.added} card${res.added === 1 ? '' : 's'}${describeFiling(res)}`);
       setOpening(false);
-      await offerFiling(filing, cards);
       onClose();
     } catch (e) {
       toast(`Couldn't open product: ${(e as Error).message}`);
@@ -149,7 +153,7 @@ export function OpenSealedSheet({
           </button>
         </div>
       </Sheet>
-      {fileTheseSheet}
+      {intakeSheet}
     </>
   );
 }

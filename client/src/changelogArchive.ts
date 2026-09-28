@@ -1,4 +1,4 @@
-// The older half of the changelog (0.174.2 down to 0.98.0), split out of
+// The older half of the changelog (0.175.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,19 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.175.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Rules can create any token by name, like Moloids or Everywhere, built from the real token card. A new "cards in a zone can be cast" step gives your graveyard retrace, flashback or escape, like Six.',
+      },
+      {
+        kind: 'fixed',
+        text: 'A commander that exiles itself at upkeep keeps its upkeep rule after you recast it.',
+      },
+    ],
+  },
   {
     version: '0.174.2',
     changes: [

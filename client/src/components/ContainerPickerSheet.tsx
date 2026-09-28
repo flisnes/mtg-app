@@ -27,15 +27,24 @@ export function ContainerPickerSheet({
   onClose,
   title = 'File away',
   label = 'Choose a deck, binder or box',
-  excludeId,
-  only,
-  noteFor,
-  emptyText,
-}: {
-  onPick: (containerId: string, kind: ContainerKind) => void;
+  ...body
+}: ContainerPickerProps & {
   onClose: () => void;
   title?: string;
   label?: string;
+}) {
+  return (
+    <Sheet onClose={onClose} title={title} label={label} className="container-picker">
+      <ContainerPickerBody onPick={onPick} {...body} />
+      <div className="sheet-actions">
+        <button onClick={onClose}>Cancel</button>
+      </div>
+    </Sheet>
+  );
+}
+
+export interface ContainerPickerProps {
+  onPick: (containerId: string, kind: ContainerKind) => void;
   /** Container to leave out — the one you're already looking at. */
   excludeId?: string;
   /** Restrict the list to these container ids (and show them as one flat list). */
@@ -44,7 +53,15 @@ export function ContainerPickerSheet({
   noteFor?: (containerId: string) => string | undefined;
   /** Shown instead of the list when nothing qualifies. */
   emptyText?: string;
-}) {
+}
+
+/**
+ * The picker without its sheet: kind tabs, the list, and the create field. The
+ * intake questionnaire shows it as its "where do these live?" step inside its
+ * own sheet (give that sheet the `container-picker` class so only the list
+ * scrolls).
+ */
+export function ContainerPickerBody({ onPick, excludeId, only, noteFor, emptyText }: ContainerPickerProps) {
   const action = useAsyncAction();
   const navigate = useNavigate();
   const [kind, setKind] = useState<ContainerKind>('deck');
@@ -63,7 +80,7 @@ export function ContainerPickerSheet({
   }
 
   return (
-    <Sheet onClose={onClose} title={title} label={label} className="container-picker">
+    <>
       {!restricted && (
         <div className="seg-row" role="tablist" aria-label="Container kind">
           {CONTAINER_KINDS.map((k) => (
@@ -153,10 +170,6 @@ export function ContainerPickerSheet({
           </button>
         </div>
       )}
-
-      <div className="sheet-actions">
-        <button onClick={onClose}>Cancel</button>
-      </div>
-    </Sheet>
+    </>
   );
 }

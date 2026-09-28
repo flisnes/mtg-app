@@ -105,10 +105,45 @@ export type FilingMode = 'move' | 'copy';
  * now" rather than "add these": what the target holds today is on its way out, so
  * it mustn't be counted against the collection alongside the copies replacing it.
  */
+/**
+ * A change to the collection that hasn't been written yet, by copy key: what an
+ * intake is about to add (+) or swap out (−). Lets the move question be asked
+ * before the write, against the shelf as it will be.
+ */
+export type OwnedDelta = Map<string, number>;
+
+/**
+ * Pending changes to the collection, for a clash check that runs before the
+ * write: `delta` is copies added (+) or swapped out (−) by key, and `rekey`
+ * maps the key of a copy being swapped out to the one swapping in, since the
+ * slots holding the old copy follow it (see applyImport's refile).
+ */
+export interface PendingChanges {
+  delta?: OwnedDelta;
+  rekey?: Map<string, string>;
+}
+
+/** A slot's claim key, as it will read once the pending swaps have landed. */
+function pendingClaimKey(s: SlotShape, rekey?: Map<string, string>): string | undefined {
+  const k = claimKeyOf(s);
+  return k !== undefined ? rekey?.get(k) ?? k : undefined;
+}
+
+/** Copies owned per key, with a pending change applied. */
+function ownedByKey(entries: { scryfallId: string; condition: string; finish: string; lang?: string; quantity: number }[], delta?: OwnedDelta): Map<string, number> {
+  const owned = new Map<string, number>();
+  for (const e of entries) {
+    const k = collectionKey(e);
+    owned.set(k, (owned.get(k) ?? 0) + e.quantity);
+  }
+  delta?.forEach((n, k) => owned.set(k, Math.max(0, (owned.get(k) ?? 0) + n)));
+  return owned;
+}
+
 export async function findFilingClashes(
   targetId: string,
   copies: FilingCopy[],
-  opts: { replacing?: boolean } = {},
+  opts: { replacing?: boolean } & PendingChanges = {},
 ): Promise<FilingClash[]> {
   // Pool by the copy they name, keeping the first line's card details for the
   // prompt: the removal below spends one shared pile of cardboard.
@@ -130,11 +165,8 @@ export async function findFilingClashes(
   const slots = allSlots.filter((s) => claimKeyOf(s));
   if (slots.length === 0) return [];
 
-  const owned = new Map<string, number>();
-  for (const e of entries) {
-    const k = collectionKey(e);
-    owned.set(k, (owned.get(k) ?? 0) + e.quantity);
-  }
+  const owned = ownedByKey(entries, opts.delta);
+  const slotKey = (s: SlotShape) => pendingClaimKey(s, opts.rekey);
 
   const rows = await db.decks.bulkGet([...new Set(slots.map((s) => s.deckId))]);
   const containers = new Map(rows.filter((d) => !!d).map((d) => [d.id, d]));
@@ -146,7 +178,7 @@ export async function findFilingClashes(
     let held = 0;
     const elsewhereBy = new Map<string, { quantity: number; updatedAt: number }>();
     for (const s of slots) {
-      if (s.oracleId !== copy.oracleId || claimKeyOf(s) !== key) continue;
+      if (s.oracleId !== copy.oracleId || slotKey(s) !== key) continue;
       if (s.deckId === targetId) {
         if (!opts.replacing) held += s.quantity;
         continue;
@@ -187,21 +219,24 @@ export async function findFilingClashes(
  * identity (collectionKey). The cap below enforces it, and the "which copies?"
  * picker counts against it, so what the user taps is what the write honours.
  */
-export async function roomForCopies(targetId: string, oracleIds: string[]): Promise<Map<string, number>> {
+export async function roomForCopies(
+  targetId: string,
+  oracleIds: string[],
+  opts: PendingChanges = {},
+): Promise<Map<string, number>> {
   const [held, entries] = await Promise.all([
     db.deckCards.where('deckId').equals(targetId).toArray(),
     db.collection.where('oracleId').anyOf(oracleIds).toArray(),
   ]);
-  const room = new Map<string, number>();
-  for (const e of entries) {
-    const k = collectionKey(e);
-    room.set(k, (room.get(k) ?? 0) + e.quantity);
-  }
+  const room = ownedByKey(entries, opts.delta);
+  // A pending add of a copy you own none of is room too; a pending removal
+  // that empties a key leaves no room, so the key comes out of the map.
+  for (const [k, n] of room) if (n <= 0) room.delete(k);
   // An emptied-out slot (DeckCard.unfiled) holds nothing — claimKeyOf skips it —
   // so the card can always go back in. Copies you own none of stay out of the
   // map entirely: that isn't cardboard off your shelf, so nothing caps it.
   for (const s of held) {
-    const k = claimKeyOf(s);
+    const k = pendingClaimKey(s, opts.rekey);
     if (k !== undefined && room.has(k)) room.set(k, Math.max(0, room.get(k)! - s.quantity));
   }
   return room;
@@ -224,11 +259,15 @@ export async function roomForCopies(targetId: string, oracleIds: string[]): Prom
  * copy of a card you own none of all pass through untouched: none of them is a
  * card on your shelf, so there's nothing to over-promise.
  */
-export async function capToOwnedCopies(targetId: string, copies: FilingCopy[]): Promise<FilingCopy[]> {
+export async function capToOwnedCopies(
+  targetId: string,
+  copies: FilingCopy[],
+  opts: PendingChanges = {},
+): Promise<FilingCopy[]> {
   const keys = copies.map((c) => claimKeyOf({ ...c.wants, scryfallId: c.scryfallId, anyBasic: c.anyBasic }));
   if (!keys.some((k) => k)) return copies;
 
-  const room = await roomForCopies(targetId, [...new Set(copies.map((c) => c.oracleId))]);
+  const room = await roomForCopies(targetId, [...new Set(copies.map((c) => c.oracleId))], opts);
   const capped: FilingCopy[] = [];
   copies.forEach((c, i) => {
     const key = keys[i];

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CONDITIONS, type Condition, type SealedPriceMap, type SealedProduct } from '@mtg/shared';
 import { addSealedItem } from '../db/dataAccess.js';
 import { loadSealedProducts } from '../sealed/store.js';
-import { loadContents, openIntoCollection, perCopyCount, type OpenContents } from '../sealed/open.js';
+import { loadContents, openedLines, perCopyCount, type OpenContents } from '../sealed/open.js';
 import { SealedContentsList } from '../sealed/SealedContents.js';
 import { SealedImage } from '../sealed/SealedImage.js';
 import {
@@ -14,7 +14,7 @@ import {
   sealedPriceSourceLabel,
   subtitle,
 } from '../sealed/product.js';
-import { useFileThese } from '../deck/useFileThese.js';
+import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import { LANGS } from './CardSheet.js';
 import { Sheet } from './Sheet.js';
 import { useToast } from './Toast.js';
@@ -49,8 +49,9 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
   const [lang, setLang] = useState('en');
   const toast = useToast();
   // A precon lives in a box on the shelf far more often than loose in a
-  // collection, so the add ends with the same question every other intake asks.
-  const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
+  // collection, so the add asks the same "where do these live?" every other
+  // intake asks, before writing anything.
+  const { open: review, sheet: intakeSheet } = useIntakeReview();
 
   useEffect(() => {
     let cancelled = false;
@@ -103,10 +104,10 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
   };
 
   const addCards = async (product: SealedProduct, d: OpenContents) => {
-    const { cards, filing } = await openIntoCollection(d.rows, { copies, condition, lang, label: product.name });
-    toast(`Added ${cards} card${cards === 1 ? '' : 's'} from ${product.name}`);
+    const res = await review({ flow: 'sealed', lines: openedLines(d.rows, { copies, condition, lang }), source: 'sealed', label: product.name });
     setAdding(false);
-    await offerFiling(filing, cards);
+    if (!res) return; // backed out: nothing added, the product is still on screen
+    toast(`Added ${res.added} card${res.added === 1 ? '' : 's'} from ${product.name}${describeFiling(res)}`);
     onClose();
   };
 
@@ -162,7 +163,7 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
           onAdd={() => void add()}
         />
       )}
-      {fileTheseSheet}
+      {intakeSheet}
     </Sheet>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { ContainerKind } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
 import type { FilingClash, FilingMode } from '../deck/filing.js';
@@ -29,6 +29,33 @@ export function FilingChoiceSheet({
   onChoose: (mode: FilingMode) => void;
   onClose: () => void;
 }) {
+  return (
+    <Sheet onClose={onClose} title="Already filed somewhere else" label="Choose how to file these cards">
+      <FilingChoiceBody clashes={clashes} targetName={targetName} targetKind={targetKind} onChoose={onChoose}>
+        <button onClick={onClose}>Cancel</button>
+      </FilingChoiceBody>
+    </Sheet>
+  );
+}
+
+/**
+ * The question itself, without the sheet: the intake questionnaire asks it as
+ * one of its steps, inside its own sheet. `children` are extra actions under
+ * the two answers (Cancel here, Back there).
+ */
+export function FilingChoiceBody({
+  clashes,
+  targetName,
+  targetKind,
+  onChoose,
+  children,
+}: {
+  clashes: FilingClash[];
+  targetName: string;
+  targetKind: ContainerKind;
+  onChoose: (mode: FilingMode) => void;
+  children?: ReactNode;
+}) {
   const [remember, setRemember] = useState(false);
   const meta = CONTAINER_META[targetKind];
   const n = clashes.length;
@@ -39,7 +66,7 @@ export function FilingChoiceSheet({
   }
 
   return (
-    <Sheet onClose={onClose} title="Already filed somewhere else" label="Choose how to file these cards">
+    <>
       <p className="search-meta">
         {n === 1 ? 'This card is' : `${n} of these cards are`} filed elsewhere already, and you own no spare
         copy. A card can only be in one place at a time — did {n === 1 ? 'it' : 'they'} move into {targetName}?
@@ -79,8 +106,8 @@ export function FilingChoiceSheet({
         <button onClick={() => choose('copy')}>
           No, file here too and leave the other{n === 1 ? '' : 's'}
         </button>
-        <button onClick={onClose}>Cancel</button>
+        {children}
       </div>
-    </Sheet>
+    </>
   );
 }

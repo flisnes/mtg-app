@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Condition, ContainerKind, DeckBoard, DeckCard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
-import { addToWishlistBulk, newId, reconcileDeck, type SlotWants } from '../db/dataAccess.js';
+import { addToWishlistBulk, type SlotWants } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
 import {
   getOracleCard,
@@ -12,12 +12,7 @@ import {
   getPrintingsByIds,
   getPrintingsForOracle,
 } from '../db/queries.js';
-import { ImportConflicts } from '../import/ImportConflicts.js';
-import { findImportConflicts, type ConflictChoice, type ImportConflict } from '../import/conflicts.js';
-import { commitResolvedLines, filingCopiesFor } from '../import/commit.js';
-import { useReplaceFlow } from '../import/useReplaceFlow.js';
-import { UnownedPromptSheet, type UnownedCard } from './UnownedPromptSheet.js';
-import { useFileThese } from '../deck/useFileThese.js';
+import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import type { ResolvedLine } from '../import/types.js';
 import { CardSheet, FINISH_LABELS, LANGS, type SessionCardValues } from './CardSheet.js';
 import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
@@ -47,8 +42,6 @@ import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
 import { useDismiss } from './useDismiss.js';
 import { useConfirm } from './ConfirmSheet.js';
 import { Sheet } from './Sheet.js';
-import { useFiling } from '../deck/useFiling.js';
-import { unfileClashes, type FilingCopy } from '../deck/filing.js';
 import { useAsyncAction } from './useAsyncAction.js';
 import { CardStacks, ViewToggle, useScanViewMode, type CardItem } from './CardViews.js';
 import { addToTotal, formatPrice, formatTotal, pricedForFinish, type PriceTotal } from './cardSort.js';
@@ -243,14 +236,7 @@ interface RescanReview {
   /** The write would file copies the deck isn't holding, even where the diff is
    *  empty: same cards, but listed rather than filed, or a different printing. */
   refiles: boolean;
-  /** Scanned cards you own no copy of, in any printing — offered as a tick-list add. */
-  unowned: SessionEntry[];
-  /** Scanned cards already in the collection — offered the import's per-card Skip/Add/Update. */
-  conflicts: ImportConflict[];
 }
-
-/** The review steps a container scan walks before anything is written (empty ones are skipped). */
-type ReviewPhase = 'changes' | 'collection' | 'owned';
 
 /** What the picker bar decides: applied to every +1, and to this lock's adds when changed. */
 interface PickValues {
@@ -264,52 +250,6 @@ interface PickValues {
 // into whichever one landed first.
 const entryKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'condition' | 'lang' | 'board'>) =>
   `${e.scryfallId}|${e.finish}|${e.condition}|${e.lang}|${e.board}`;
-
-/** A scanned line, described for the "add these to your collection too?" tick-list. */
-const unownedCard = (e: SessionEntry): UnownedCard => ({
-  key: entryKey(e),
-  name: e.name,
-  ...(e.image ? { image: e.image } : {}),
-  sub: [
-    `${e.set.toUpperCase()} #${e.collectorNumber}`,
-    e.lang,
-    e.finish !== 'nonfoil' ? FINISH_LABELS[e.finish] : null,
-    e.condition !== 'NM' ? e.condition : null,
-    e.qty > 1 ? `×${e.qty}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · '),
-  qty: e.qty,
-});
-
-/**
- * Session entries as filing-engine copies. A scan names every trait, so a line
- * claims the exact physical copy it saw — unless the review said the card isn't
- * yours: an unowned card left unticked in "Add to collection?" goes into the
- * container as a list-only line (printing, no traits), which claims nothing and
- * so never turns up in a filing question later. Everything else is cardboard on
- * your shelf by the time this is filed: a ticked card was just added, an owned
- * card was there already, an Update just swapped the scanned printing in.
- */
-function scanCopiesFor(
-  entries: SessionEntry[],
-  unownedPicked: Set<string>,
-  conflicts: ImportConflict[],
-): FilingCopy[] {
-  const owned = new Set(conflicts.map((c) => c.oracleId));
-  return entries.map((e) => {
-    const yours = owned.has(e.oracleId) || unownedPicked.has(entryKey(e));
-    return {
-      oracleId: e.oracleId,
-      scryfallId: e.scryfallId,
-      quantity: e.qty,
-      board: e.board,
-      ...(yours ? { wants: { condition: e.condition, finish: e.finish, lang: e.lang } } : {}),
-      label: e.name,
-      sub: [e.set, e.condition, e.finish, e.lang !== 'en' ? e.lang : null].filter(Boolean).join(' · '),
-    };
-  });
-}
 
 /** Collapse duplicate (printing, finish, condition, language, board) lines after a row edit. */
 function mergeSession(entries: SessionEntry[]): SessionEntry[] {
@@ -556,19 +496,6 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // True while the session is being written — guards against the double-tap
   // that used to commit the whole scan twice (adding two copies of everything).
   const [committing, setCommitting] = useState(false);
-  // Set when a collection/tradelist commit finds cards already owned: the
-  // skip/add/replace resolution screen (reused from import) shows until resolved.
-  const [conflictStep, setConflictStep] = useState<{ lines: ResolvedLine[]; conflicts: ImportConflict[] } | null>(null);
-  // Container scan review: the computed diff + which review phase is showing
-  // ('changes' → 'collection' → 'owned'), plus the ticked unowned cards.
-  const [rescanStep, setRescanStep] = useState<RescanReview | null>(null);
-  const [rescanPhase, setRescanPhase] = useState<ReviewPhase>('changes');
-  const [rescanPicked, setRescanPicked] = useState<Set<string>>(new Set());
-  // The per-card Skip / Add / Update answers of either review, kept beside the
-  // step rather than inside the sheet: stepping back and forward again must
-  // find every chip where it was left, not ask the whole list over.
-  const [rescanChoices, setRescanChoices] = useState<Map<string, ConflictChoice>>(new Map());
-  const [conflictChoices, setConflictChoices] = useState<Map<string, ConflictChoice>>(new Map());
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraScan | null>(null);
   const closedRef = useRef(false);
@@ -610,17 +537,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // re-tag it (tap +1 first, then notice the card is foil).
   const lockAddsRef = useRef<{ scryfallId: string; board: DeckBoard; qty: number }[]>([]);
   const toast = useToast();
-  // Scanning a card into a deck/binder/box means it's physically there now —
-  // route the write through the same filing engine "File away" uses, so a
-  // scan that names an exact copy already filed elsewhere asks (or, unattended,
-  // moves it) instead of leaving a stale claim behind.
-  const { file, ask, sheet: filingSheet } = useFiling();
-  // "Update" (swap a copy you own for the scanned printing) is the same
-  // question an import asks, so it comes from the same place.
-  const { resolveReplacements, sheet: replaceSheet } = useReplaceFlow();
-  // Cards you own but haven't filed are cards you'll have to file by hand
-  // later, so a collection scan ends by offering to put the pile somewhere.
-  const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
+  // Everything between "Add N cards" and the write: which scanned cards are
+  // yours, what the collection should make of them, where they live and whether
+  // a copy moved. One questionnaire, shared with import, so it asks each
+  // question once and the container write goes through the same filing engine
+  // "File away" uses.
+  const { open: review, sheet: intakeSheet } = useIntakeReview();
   const { confirm, sheet: confirmSheet } = useConfirm();
 
   const total = session.reduce((n, e) => n + e.qty, 0);
@@ -1200,6 +1122,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     condition: e.condition,
     finish: e.finish,
     lang: e.lang,
+    board: e.board,
   });
 
   /** The session as import lines (collection/tradelist go through applyImport). */
@@ -1212,72 +1135,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   };
 
   /**
-   * Commit the collection/tradelist lines, honoring the conflict screen's
-   * per-card choices — the same write an import does, through the same code.
-   * A queued "which copy does this replace?" pick resolves first; backing out
-   * of it leaves the scan untouched. Whatever lands is then offered a home.
+   * Deck re-scan: collapse the session to deck slots (one per physical copy and
+   * board) and diff it against the deck's current contents for the preview.
    */
-  const commitLines = async (
-    lines: ResolvedLine[],
-    choices: Map<string, ConflictChoice>,
-    conflicts: ImportConflict[] = [],
-  ) => {
-    const outcome = await resolveReplacements(conflicts, choices);
-    if (!outcome) return; // backed out of a pick — the session is still there
-
-    setCommitting(true);
-    let written: ResolvedLine[] = [];
-    try {
-      const res = await commitResolvedLines(lines, choices, outcome, { source: 'scan' });
-      written = res.written;
-      const n = res.added + res.flagged;
-      toast(
-        n === 0 ? 'Nothing added: every card was skipped' : `Added ${n} card${n === 1 ? '' : 's'} to ${targetLabel(target)}`,
-      );
-    } finally {
-      setCommitting(false);
-    }
-    // You're holding the pile right now — this is the cheapest moment to say
-    // where it goes, and the only one that doesn't mean re-selecting all of it.
-    await offerFiling(filingCopiesFor(written), written.reduce((n, l) => n + l.quantity, 0));
-    finishScan();
-  };
-
-  /**
-   * Deck re-scan: collapse the session to deck slots (oracle + board, since
-   * decks store no finish/condition/lang), diff it against the deck's current
-   * contents, and list any scanned printing not in the collection.
-   */
-  /**
-   * Split the scan for the "…and your collection?" step. A pile scanned into a
-   * deck, binder or box is cardboard in hand, and it can be a mix: cards you've
-   * never owned, cards you already have, or both. So both get a say —
-   *
-   *  - own none of it (any printing): the tick-list, everything on by default.
-   *  - already own it: the import's per-card Skip / Add / Update.
-   *
-   * The split is per card, not per printing — the same rule findImportConflicts
-   * uses — so no scanned card can turn up in both lists.
-   */
-  const buildCollectionStep = async (): Promise<Pick<RescanReview, 'unowned' | 'conflicts'>> => {
-    const conflicts = await findImportConflicts(sessionLines());
-    const owned = new Set(conflicts.map((c) => c.oracleId));
-    return { unowned: session.filter((e) => !owned.has(e.oracleId)), conflicts };
-  };
-
-  /** Review steps with something to show, in the order they're walked. */
-  const reviewPhases = (r: RescanReview): ReviewPhase[] => [
-    ...(r.changes.length || r.refiles ? (['changes'] as ReviewPhase[]) : []),
-    ...(r.unowned.length ? (['collection'] as ReviewPhase[]) : []),
-    ...(r.conflicts.length ? (['owned'] as ReviewPhase[]) : []),
-  ];
-
-  /** Step `delta` phases from the current one; null means there's nothing further that way. */
-  const stepPhase = (r: RescanReview, delta: 1 | -1): ReviewPhase | null => {
-    const phases = reviewPhases(r);
-    return phases[phases.indexOf(rescanPhase) + delta] ?? null;
-  };
-
   const buildRescanReview = async (deckId: string): Promise<RescanReview> => {
     // What gets written: one slot per physical copy, exactly as filing writes
     // them, so the deck holds the cardboard the camera saw.
@@ -1345,87 +1205,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     const refiles =
       filed.size !== slotMap.size || [...slotMap].some(([key, s]) => filed.get(key) !== s.quantity);
 
-    return { slots: [...slotMap.values()], changes, refiles, ...(await buildCollectionStep()) };
-  };
-
-  /**
-   * Apply what the review settled: first the collection write (the ticked
-   * unowned cards, plus whatever the already-owned cards were told to do), then
-   * the container write. That order matters. The filing engine counts the
-   * copies you own to decide whether a card is over-promised, so a card the
-   * review just called a second copy has to be on the shelf before the deck
-   * claims it — filed first, it read as the *same* copy the other deck holds
-   * and raised "did it move?" straight after you'd answered "it's a new one".
-   * Re-scan reconciles the container to exactly the scan; a regular scan appends.
-   */
-  const applyRescan = async (r: RescanReview, choices: Map<string, ConflictChoice> = new Map()) => {
-    if (committing || target.kind !== 'deck') return;
-    // "Update" swaps a copy you own for the scanned printing, and asks which
-    // one when you own several — settle that before touching anything.
-    const outcome = await resolveReplacements(r.conflicts, choices);
-    if (outcome === null) {
-      toast('Nothing changed: the swap was cancelled');
-      return;
-    }
-    setCommitting(true);
-    try {
-      // One write for the whole collection side, through the same pipeline an
-      // import uses (commitResolvedLines drops the lines set to Skip).
-      const toAdd = [
-        ...r.unowned.filter((e) => rescanPicked.has(entryKey(e))).map(entryLine),
-        ...r.conflicts.flatMap((c) => c.incoming),
-      ];
-      const res = toAdd.length
-        ? await commitResolvedLines(toAdd, choices, outcome, { source: 'scan' })
-        : { added: 0, flagged: 0 };
-      const addedToColl = res.added + res.flagged;
-      const collSuffix = addedToColl ? ` · ${addedToColl} added to collection` : '';
-      const label = targetLabel(target);
-      // The collection is written; backing out of the filing question below
-      // can't unwrite it, so it ends the scan with the cards on the shelf,
-      // unfiled — the same place "Leave them unfiled" puts every other intake.
-      const cancelled = () => {
-        toast(addedToColl ? `${addedToColl} added to your collection, nothing filed in ${label}` : `Nothing changed in ${label}`);
-        finishScan();
-      };
-
-      const copies = scanCopiesFor(session, rescanPicked, r.conflicts);
-      if (target.rescan) {
-        // "This is what's in the deck now" means any of these copies claimed by
-        // another deck has physically left it. The add path has always asked;
-        // re-scan reconciles its own slots, so it settles the same question by
-        // hand rather than skipping it and leaving stale claims behind.
-        const decided = await ask(target.deckId, copies, { replacing: true });
-        if (decided === null) {
-          cancelled();
-          return;
-        }
-        const batchId = newId();
-        if (decided.mode === 'move') await unfileClashes(decided.clashes, { source: 'scan', batchId });
-        await reconcileDeck(
-          target.deckId,
-          copies.map((c) => ({
-            oracleId: c.oracleId,
-            board: c.board,
-            quantity: c.quantity,
-            ...(c.scryfallId ? { scryfallId: c.scryfallId } : {}),
-            ...(c.wants ? { wants: c.wants } : {}),
-          })),
-          { source: 'scan', batchId },
-        );
-        toast(`Updated ${label}${collSuffix}`);
-      } else {
-        const filing = await file(target.deckId, copies, { source: 'scan' });
-        if (filing === null) {
-          cancelled();
-          return;
-        }
-        toast(`Added ${total} card${total === 1 ? '' : 's'} to ${label}${collSuffix}`);
-      }
-      finishScan();
-    } finally {
-      setCommitting(false);
-    }
+    return { slots: [...slotMap.values()], changes, refiles };
   };
 
   /**
@@ -1439,57 +1219,57 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   /** Write the whole session to the target and leave the scanner. */
   const complete = async () => {
     if (committing || session.length === 0) return;
-    // Deck re-scan reconciles instead of adding: build the diff and route into
-    // the two-step review (deck changes, then unowned-card collection prompt).
-    if (target.kind === 'deck' && target.rescan) {
-      const review = await buildRescanReview(target.deckId);
-      const phase = reviewPhases(review)[0];
-      if (!phase) {
+    const label = targetLabel(target);
+    // A deck, binder or box: the pile is in your hands, so the questionnaire
+    // asks which cards are yours and what the collection should make of them,
+    // then writes the collection and the container together. A re-scan shows
+    // its diff first and reconciles instead of appending.
+    if (target.kind === 'deck') {
+      const rescan = !!target.rescan;
+      const changes = rescan ? await buildRescanReview(target.deckId) : null;
+      if (changes && changes.changes.length === 0 && !changes.refiles) {
         toast(`No changes — this ${targetNoun(target)} already matches your scan`);
         finishScan();
         return;
       }
-      setRescanPicked(new Set(review.unowned.map((e) => entryKey(e))));
-      setRescanChoices(new Map());
-      setRescanPhase(phase);
-      setRescanStep(review);
+      const res = await review({
+        flow: rescan ? 'rescan' : 'container',
+        lines: sessionLines(),
+        source: 'scan',
+        incomingLabel: 'Scanned',
+        target: { id: target.deckId, name: label, kind: target.containerKind ?? 'deck' },
+        ...(changes
+          ? {
+              preface: {
+                title: 'Re-scan changes',
+                body: <RescanChangesList changes={changes.changes} deckName={label} showBoards={deckBoards(target).length > 1} />,
+                nextLabel: changes.changes.length
+                  ? `Apply ${changes.changes.length} change${changes.changes.length === 1 ? '' : 's'}`
+                  : 'File the copies you scanned',
+              },
+            }
+          : {}),
+      });
+      if (!res) return; // backed out: the session is still there
+      const collSuffix = res.added ? ` · ${res.added} added to collection` : '';
+      const what = rescan ? `Updated ${label}` : `Added ${total} card${total === 1 ? '' : 's'} to ${label}`;
+      toast(`${what}${collSuffix}`);
+      finishScan();
       return;
     }
-    // Regular deck scan: physical cards are usually in hand, so — like re-scan —
-    // ask what the collection should make of them. New cards, cards you already
-    // own, or a mix: each one gets its own answer. The deck append itself is
-    // deferred to applyRescan so both writes land together.
-    if (target.kind === 'deck') {
-      const review: RescanReview = { slots: [], changes: [], refiles: false, ...(await buildCollectionStep()) };
-      const phase = reviewPhases(review)[0];
-      if (phase) {
-        setRescanPicked(new Set(review.unowned.map((e) => entryKey(e))));
-        setRescanChoices(new Map());
-        setRescanPhase(phase);
-        setRescanStep(review);
-      } else {
-        // Every scanned card is either owned or not, so a non-empty session
-        // always has a step to show; kept for safety, not a path in practice.
-        await applyRescan(review);
-      }
+    // Collection & tradelist route through the import pipeline: the batch scan
+    // becomes one history entry, any card already owned gets its Skip / Add /
+    // Update, and the pile is offered a home while you're holding it.
+    if (target.kind === 'collection' || target.kind === 'tradelist') {
+      const res = await review({ flow: target.kind, lines: sessionLines(), source: 'scan', incomingLabel: 'Scanned' });
+      if (!res) return;
+      const n = res.added + res.flagged;
+      toast(n === 0 ? 'Nothing added: every card was skipped' : `Added ${n} card${n === 1 ? '' : 's'} to ${label}${describeFiling(res)}`);
+      finishScan();
       return;
     }
     setCommitting(true);
     try {
-      // Collection & tradelist route through the import pipeline: the batch scan
-      // becomes one history entry, and any card already owned surfaces the
-      // skip/add/replace screen instead of silently stacking extra copies.
-      if (target.kind === 'collection' || target.kind === 'tradelist') {
-        const lines = sessionLines();
-        const conflicts = await findImportConflicts(lines);
-        if (conflicts.length > 0) {
-          setConflictChoices(new Map());
-          setConflictStep({ lines, conflicts });
-          return;
-        }
-        await commitLines(lines, new Map());
-        return;
-      }
       switch (target.kind) {
         case 'wishlist':
           // A scanned card is a specific printing, so the wish is for that
@@ -1924,227 +1704,33 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         />
       )}
 
-      {conflictStep &&
-        (() => {
-          const nConflicts = conflictStep.conflicts.length;
-          const otherCount = conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0);
-          const toTradelist = target.kind === 'tradelist';
-          return (
-            <Sheet
-              onClose={() => setConflictStep(null)}
-              dismiss={committing ? null : () => setConflictStep(null)}
-              label="Resolve duplicates"
-              // Rendered inline by the scanner, so the guard clock has to start
-              // when the step appears, not when the scanner opened.
-              resetKey={conflictStep}
-            >
-                <ImportConflicts
-                  conflicts={conflictStep.conflicts}
-                  otherCount={otherCount}
-                  options={
-                    toTradelist
-                      ? [
-                          { value: 'trade', label: 'Trade' },
-                          { value: 'add', label: 'Add' },
-                          { value: 'skip', label: 'Skip' },
-                        ]
-                      : [
-                          { value: 'skip', label: 'Skip' },
-                          { value: 'add', label: 'Add' },
-                          { value: 'replace', label: 'Update' },
-                        ]
-                  }
-                  defaultChoice={toTradelist ? 'trade' : 'add'}
-                  incomingLabel="Scanned"
-                  intro={
-                    toTradelist ? (
-                      <>
-                        {nConflicts} scanned card{nConflicts === 1 ? '' : 's'} {nConflicts === 1 ? 'is' : 'are'} already in your
-                        collection. Per card: <strong>Trade</strong> marks the copies you already own for trade (adds nothing),{' '}
-                        <strong>Add</strong> adds new copies and marks them, <strong>Skip</strong> leaves it off your tradelist.
-                        {otherCount > 0 && (
-                          <>
-                            {' '}
-                            The other {otherCount} card{otherCount === 1 ? '' : 's'} you don&rsquo;t own yet {otherCount === 1 ? 'is' : 'are'}{' '}
-                            added to your collection and marked for trade.
-                          </>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        {nConflicts} scanned card{nConflicts === 1 ? '' : 's'} {nConflicts === 1 ? 'is' : 'are'} already in your
-                        collection (any printing counts). Per card: <strong>Add</strong> adds the scanned copy as a new one,{' '}
-                        <strong>Update</strong> swaps one copy you already own for the scanned printing (your total stays the same
-                        &mdash; you&rsquo;ll pick which copy if you own more than one version), <strong>Skip</strong> changes nothing.
-                        {otherCount > 0 && (
-                          <>
-                            {' '}
-                            The other {otherCount} card{otherCount === 1 ? '' : 's'} you don&rsquo;t own yet {otherCount === 1 ? 'is' : 'are'}{' '}
-                            added either way.
-                          </>
-                        )}
-                      </>
-                    )
-                  }
-                  confirmLabel={(n) => (n === 0 ? 'Nothing to add' : `Add ${n} card${n === 1 ? '' : 's'} to ${targetLabel(target)}`)}
-                  initialChoices={conflictChoices}
-                  onChange={setConflictChoices}
-                  onConfirm={(choices) => runCommit(() => commitLines(conflictStep.lines, choices, conflictStep.conflicts))}
-                  onBack={() => setConflictStep(null)}
-                />
-            </Sheet>
-          );
-        })()}
-
-      {rescanStep && target.kind === 'deck' && rescanPhase === 'changes' && (
-        <RescanChangesSheet
-          changes={rescanStep.changes}
-          deckName={targetLabel(target)}
-          showBoards={deckBoards(target).length > 1}
-          busy={committing}
-          nextLabel={
-            stepPhase(rescanStep, 1)
-              ? 'Next'
-              : rescanStep.changes.length
-                ? `Apply ${rescanStep.changes.length} change${rescanStep.changes.length === 1 ? '' : 's'}`
-                : 'File the copies you scanned'
-          }
-          onNext={() => {
-            const next = stepPhase(rescanStep, 1);
-            if (next) setRescanPhase(next);
-            else void runCommit(() => applyRescan(rescanStep, rescanChoices));
-          }}
-          onBack={() => setRescanStep(null)}
-        />
-      )}
-
-      {rescanStep && target.kind === 'deck' && rescanPhase === 'collection' && (
-        <UnownedPromptSheet
-          cards={rescanStep.unowned.map(unownedCard)}
-          picked={rescanPicked}
-          busy={committing}
-          intro={
-            <>
-              You scanned {rescanStep.unowned.length} card{rescanStep.unowned.length === 1 ? '' : 's'} you don’t own
-              yet. Pick which to also add to your collection:
-            </>
-          }
-          confirmLabel={(q) =>
-            stepPhase(rescanStep, 1) ? 'Next' : q > 0 ? `Apply · add ${q} to collection` : 'Apply without adding'
-          }
-          backLabel={stepPhase(rescanStep, -1) ? 'Back' : 'Cancel'}
-          onToggle={(key) =>
-            setRescanPicked((prev) => {
-              const next = new Set(prev);
-              if (next.has(key)) next.delete(key);
-              else next.add(key);
-              return next;
-            })
-          }
-          onToggleAll={() =>
-            setRescanPicked((prev) =>
-              prev.size === rescanStep.unowned.length ? new Set() : new Set(rescanStep.unowned.map((e) => entryKey(e))),
-            )
-          }
-          onBack={() => {
-            const prev = stepPhase(rescanStep, -1);
-            if (prev) setRescanPhase(prev);
-            else setRescanStep(null);
-          }}
-          onConfirm={() => {
-            const next = stepPhase(rescanStep, 1);
-            if (next) setRescanPhase(next);
-            else void runCommit(() => applyRescan(rescanStep, rescanChoices));
-          }}
-        />
-      )}
-
-      {/* Last review step: the scanned cards you already own. Filing a pile into
-          a container says where it lives, not that you suddenly have more of it,
-          so these start on Skip — but a second physical copy (Add) or a printing
-          correction (Update) is one tap away, per card. */}
-      {rescanStep && target.kind === 'deck' && rescanPhase === 'owned' && (
-        <Sheet
-          onClose={() => setRescanStep(null)}
-          dismiss={committing ? null : () => setRescanStep(null)}
-          label="Cards you already own"
-        >
-            <ImportConflicts
-              conflicts={rescanStep.conflicts}
-              otherCount={rescanStep.unowned.filter((e) => rescanPicked.has(entryKey(e))).length}
-              options={[
-                { value: 'skip', label: 'Skip' },
-                { value: 'add', label: 'Add' },
-                { value: 'replace', label: 'Update' },
-              ]}
-              defaultChoice="skip"
-              incomingLabel="Scanned"
-              intro={
-                <>
-                  {rescanStep.conflicts.length} scanned card{rescanStep.conflicts.length === 1 ? '' : 's'}{' '}
-                  {rescanStep.conflicts.length === 1 ? 'is' : 'are'} already in your collection (any printing counts).
-                  Per card: <strong>Skip</strong> leaves your collection as it is (the copy is just being filed),{' '}
-                  <strong>Add</strong> adds the scanned copy as a new one, <strong>Update</strong> swaps a copy you own
-                  for the scanned printing (your total stays the same).
-                </>
-              }
-              confirmLabel={(n) => (n > 0 ? `Apply · add ${n} to collection` : 'Apply without adding')}
-              initialChoices={rescanChoices}
-              onChange={setRescanChoices}
-              onConfirm={(choices) => runCommit(() => applyRescan(rescanStep, choices))}
-              onBack={() => {
-                const prev = stepPhase(rescanStep, -1);
-                if (prev) setRescanPhase(prev);
-                else setRescanStep(null);
-              }}
-            />
-        </Sheet>
-      )}
-
-      {/* Last, so it stacks above any review step that can raise it: every
-          sheet shares one z-index, so DOM order is what decides. */}
-      {replaceSheet}
-
-      {filingSheet}
-      {fileTheseSheet}
+      {/* The questionnaire stacks above the session list: every sheet shares
+          one z-index, so DOM order is what decides. */}
+      {intakeSheet}
       {confirmSheet}
     </div>,
     document.body,
   );
 }
 
-/** Deck re-scan step 1: the add/remove/quantity diff, before anything is written. */
-function RescanChangesSheet({
+/** Deck re-scan step 1: the add/remove/quantity diff, before anything is written
+ *  (the first step of the intake questionnaire, which supplies the sheet). */
+function RescanChangesList({
   changes,
   deckName,
   showBoards,
-  busy,
-  nextLabel,
-  onNext,
-  onBack,
 }: {
   changes: DeckChange[];
   deckName: string;
   /** Decks split into boards; a binder or box is one pile, so the label is noise. */
   showBoards: boolean;
-  busy: boolean;
-  nextLabel: string;
-  onNext: () => void;
-  onBack: () => void;
 }) {
   const added = changes.filter((c) => c.kind === 'add');
   const changed = changes.filter((c) => c.kind === 'change');
   const removed = changes.filter((c) => c.kind === 'remove');
   const rows = [...added, ...changed, ...removed];
   return (
-    <Sheet onClose={onBack} dismiss={busy ? null : onBack} className="scan-list-sheet" label="Re-scan changes">
-      <div className="scan-sheet-head">
-        <h2>Re-scan changes</h2>
-        <span className="scan-target">→ {deckName}</span>
-        <button className="scan-close" onClick={onBack} aria-label="Back">
-          <Icon name="close" size={18} />
-        </button>
-      </div>
+    <>
       <p className="fine-print">
         Sets “{deckName}” to exactly what you scanned, and files those copies into it. Cards left unchanged aren’t
         listed.
@@ -2175,15 +1761,7 @@ function RescanChangesSheet({
           ))}
         </ul>
       )}
-      <div className="scan-confirm-actions">
-        <button className="primary" disabled={busy} onClick={onNext}>
-          {busy ? 'Applying…' : nextLabel}
-        </button>
-        <button onClick={onBack} disabled={busy}>
-          Keep scanning
-        </button>
-      </div>
-    </Sheet>
+    </>
   );
 }
 

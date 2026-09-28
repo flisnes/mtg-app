@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.184.0
+
+- **Changed: every way cards come in now ends in one questionnaire.** Scanning into your collection, the tradelist, a deck, binder or box, importing a list, buying from the wishlist and opening a sealed product all walk the same steps in one sheet: which cards are already yours, where they live, and whether a copy moved. Each step shows "Step 2 of 3", Back keeps every answer, and nothing is written until the last one, so backing out of any step leaves your collection exactly as it was.
+- **Changed: scanning into a deck asks "Are these yours?" once, per card.** Cards you don't own yet are a tick-list (ticked ones are added to your collection and filed; unticked ones just go on the list). Cards you already have get *Already mine*, *New copy* or *Not mine*. "Already mine" on a different printing than the one you own corrects your record and carries the filing along.
+- **Changed: "Which copy to replace?" is part of the row.** When Update could swap out more than one version, the choice sits under the card instead of coming as a separate question afterwards; with one version it just says which copy goes.
+- **Changed: the move question is asked once, before anything is written**, against your collection as it will be after the add. A card you just called a new copy is never mistaken for the one already in another deck, and a swap that moves a filing along is counted too.
+- **Changed: one history entry per intake.** Trade flags, the collection rows and the deck slots from one scan or import land as one entry, and one undo takes it all back.
+
 ## 0.183.0
 
 - **Fixed: scanning cards into a deck, binder or box no longer asks "did it move?" about a card you just called a new copy.** The scan filed the cards before it wrote them to your collection, so a card you had marked *Add* was counted against the copies you owned before the scan and came back as "you own no spare copy, did it move into this deck?". Answering yes then pulled the copy out of the other deck. The collection is written first now, so the question only comes up when the containers really would hold more copies than you own.

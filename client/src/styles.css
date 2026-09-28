@@ -6729,6 +6729,63 @@ a.seg {
   flex: 1;
 }
 
+/* ---- Intake questionnaire (import/intake) ---- */
+/* The sheet's own header, sections and footer keep their height; only the
+   body scrolls, so a forty-card pile never squashes the buttons off a phone. */
+.intake-sheet > .scan-sheet-head,
+.intake-sheet > .sheet-actions {
+  flex-shrink: 0;
+}
+.intake-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.intake-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.intake-heading {
+  margin: 0;
+  font-size: 1rem;
+}
+.intake-card {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0.6rem;
+  gap: 0.45rem;
+}
+.intake-wrap {
+  white-space: normal;
+}
+/* One incoming line of a card: what came in, its chips, and the swap pick. */
+.intake-line {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border);
+}
+.intake-swap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.intake-swap-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.intake-hint {
+  margin: 0;
+}
+
 /* Add sealed product sheet */
 .sealed-sheet {
   min-height: 40dvh;

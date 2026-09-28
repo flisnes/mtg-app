@@ -9,15 +9,11 @@ import { clearTradelist } from '../db/dataAccess.js';
 import { useToast } from '../components/Toast.js';
 import { useUndoShortcut } from '../history/useUndoShortcut.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
-import { useFileThese } from '../deck/useFileThese.js';
 import { buildTradelistCsv, downloadText } from '../import/export.js';
 import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
-import { ImportConflicts } from '../import/ImportConflicts.js';
 import { ImportDefaultsRow, IMPORT_DEFAULTS } from '../import/ImportExtras.js';
-import { commitResolvedLines, filingCopiesFor } from '../import/commit.js';
-import { useReplaceFlow } from '../import/useReplaceFlow.js';
-import { findImportConflicts, type ConflictChoice, type ImportConflict } from '../import/conflicts.js';
+import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/types.js';
 
 export function Tradelist() {
@@ -81,13 +77,9 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
   const [text, setText] = useState('');
   const [defaults, setDefaults] = useState<ImportDefaults>(IMPORT_DEFAULTS);
   const { status, analyze, reset } = useImportAnalysis();
-  // Set when review found cards already in the collection: the conflict-
-  // resolution step replaces the review until resolved or backed out of.
-  const [conflictStep, setConflictStep] = useState<{ lines: ResolvedLine[]; conflicts: ImportConflict[] } | null>(null);
-  // Kept outside the step so Back and forward again finds every chip as left.
-  const [choices, setChoices] = useState<Map<string, ConflictChoice>>(new Map());
-  const { resolveReplacements, sheet: replaceSheet } = useReplaceFlow();
-  const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
+  // The same three choices the tradelist *scan* offers, then where the new
+  // copies live: one questionnaire, before anything is written.
+  const { open: review, sheet: intakeSheet } = useIntakeReview();
   const toast = useToast();
 
   // Importing to the tradelist means "offer these for trade", so every copy is
@@ -112,29 +104,15 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
   });
 
   async function confirmImport(lines: ResolvedLine[]) {
-    const conflicts = await findImportConflicts(lines);
-    if (conflicts.length > 0) {
-      setConflictStep({ lines, conflicts });
-      return;
-    }
-    await commit(lines, new Map(), []);
-  }
-
-  async function commit(lines: ResolvedLine[], choices: Map<string, ConflictChoice>, conflicts: ImportConflict[]) {
-    const outcome = await resolveReplacements(conflicts, choices);
-    if (!outcome) return;
-    const res = await commitResolvedLines(lines, choices, outcome, { source: 'import', label: 'Tradelist import' });
-    if (res.written.length === 0 && res.flagged === 0) {
+    const res = await review({ flow: 'tradelist', lines, source: 'import', label: 'Tradelist import', incomingLabel: 'Import' });
+    if (!res) return;
+    if (res.added === 0 && res.flagged === 0) {
       toast('Nothing imported: every card was skipped');
       onDone();
       return;
     }
-    const forTrade = res.written.reduce((s, l) => s + l.quantityForTrade, 0) + res.flagged;
-    toast(`Added ${forTrade} card${forTrade === 1 ? '' : 's'} to the tradelist`);
-    await offerFiling(
-      filingCopiesFor(res.written),
-      res.written.reduce((n, l) => n + l.quantity, 0),
-    );
+    const forTrade = res.added + res.flagged;
+    toast(`Added ${forTrade} card${forTrade === 1 ? '' : 's'} to the tradelist${describeFiling(res)}`);
     onDone();
   }
 
@@ -149,50 +127,6 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
     );
   }
 
-  if (conflictStep) {
-    const nConflicts = conflictStep.conflicts.length;
-    const otherCount = conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0);
-    return (
-      <div className="about-section">
-        {/* The same three choices the tradelist *scan* offers. Importing a list
-            of cards you already own should be able to say "these are the ones
-            on my shelf" rather than only "add another copy" or "delete mine". */}
-        <ImportConflicts
-          conflicts={conflictStep.conflicts}
-          otherCount={otherCount}
-          options={[
-            { value: 'trade', label: 'Trade' },
-            { value: 'add', label: 'Add' },
-            { value: 'skip', label: 'Skip' },
-          ]}
-          defaultChoice="trade"
-          intro={
-            <>
-              {nConflicts} card{nConflicts === 1 ? '' : 's'} in this list {nConflicts === 1 ? 'is' : 'are'} already in
-              your collection. Per card: <strong>Trade</strong> marks the copies you already own for trade (adds
-              nothing), <strong>Add</strong> adds new copies and marks them, <strong>Skip</strong> leaves it off your
-              tradelist.
-              {otherCount > 0 && (
-                <>
-                  {' '}
-                  The other {otherCount} card{otherCount === 1 ? '' : 's'} you don&rsquo;t own yet{' '}
-                  {otherCount === 1 ? 'is' : 'are'} added to your collection and marked for trade.
-                </>
-              )}
-            </>
-          }
-          confirmLabel={(n) => (n === 0 ? 'Nothing to add' : `Add ${n} card${n === 1 ? '' : 's'} to the tradelist`)}
-          initialChoices={choices}
-          onChange={setChoices}
-          onConfirm={(choices) => commit(conflictStep.lines, choices, conflictStep.conflicts)}
-          onBack={() => setConflictStep(null)}
-        />
-        {replaceSheet}
-        {fileTheseSheet}
-      </div>
-    );
-  }
-
   if (status.kind === 'review') {
     return (
       <div className="about-section">
@@ -200,14 +134,10 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
           result={status.result}
           makeResolved={makeResolved}
           onConfirm={confirmImport}
-          onCancel={() => {
-            setChoices(new Map());
-            reset();
-          }}
+          onCancel={reset}
           confirmLabel={(n) => `Add ${n} to tradelist`}
         />
-        {replaceSheet}
-        {fileTheseSheet}
+        {intakeSheet}
       </div>
     );
   }

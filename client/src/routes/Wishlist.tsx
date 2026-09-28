@@ -4,11 +4,11 @@ import type { OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
 import { db } from '../db/schema.js';
 import { joinWishlistEntries, type JoinedWish } from '../db/queries.js';
-import { addToWishlistBulk, applyImport, removeFromWishlist, wishKey } from '../db/dataAccess.js';
+import { addToWishlistBulk, removeFromWishlist, wishKey } from '../db/dataAccess.js';
 import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
-import { useFileThese } from '../deck/useFileThese.js';
+import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import { CardItems, ViewToggle, useViewMode } from '../components/CardViews.js';
 import { wishCardItem } from '../components/cardRows.js';
 import { BulkActionBar } from '../components/BulkActionBar.js';
@@ -30,7 +30,6 @@ import { buildWishlistText, downloadText } from '../import/export.js';
 import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
 import { ImportDefaultsRow, IMPORT_DEFAULTS, OverlapChoice, applyOverlap, type OverlapMode } from '../import/ImportExtras.js';
-import { filingCopiesFor } from '../import/commit.js';
 import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/types.js';
 
 export function Wishlist() {
@@ -46,7 +45,7 @@ export function Wishlist() {
   const toast = useToast();
   const sel = useMultiSelect();
   const { confirm, sheet: confirmSheet } = useConfirm();
-  const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
+  const { open: review, sheet: intakeSheet } = useIntakeReview();
   const rows = useLiveQuery(async () => joinWishlistEntries(await db.wishlist.toArray()), []);
   // Header search scoped to the wishlist narrows these rows in place, so sort,
   // Select and the bulk remove all act on the search result.
@@ -109,14 +108,12 @@ export function Wishlist() {
         lang: r.entry.lang ?? 'en',
       });
     }
-    const res = await applyImport(lines, { source: 'import', label: 'Bought from wishlist' });
+    // "Where do these live?" comes first; nothing is written if they back out.
+    const res = await review({ flow: 'bought', lines, source: 'import', label: 'Bought from wishlist' });
+    if (!res) return;
     for (const r of rows) await removeFromWishlist(r.entry.id);
-    toast(`Moved ${res.cards} card${res.cards === 1 ? '' : 's'} into your collection`);
+    toast(`Moved ${res.added} card${res.added === 1 ? '' : 's'} into your collection${describeFiling(res)}`);
     sel.exit();
-    await offerFiling(
-      filingCopiesFor(lines),
-      lines.reduce((n, l) => n + l.quantity, 0),
-    );
   }
 
   async function exportWishlist() {
@@ -205,7 +202,7 @@ export function Wishlist() {
 
       {scanning && <ScanSheet target={{ kind: 'wishlist' }} onClose={() => setScanning(false)} />}
       {confirmSheet}
-      {fileTheseSheet}
+      {intakeSheet}
     </Page>
   );
 }

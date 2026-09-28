@@ -23,6 +23,9 @@ export function Import() {
   // Set when review found cards already in the collection: the conflict-
   // resolution step replaces the review until resolved or backed out of.
   const [conflictStep, setConflictStep] = useState<{ lines: ResolvedLine[]; conflicts: ImportConflict[] } | null>(null);
+  // The per-card answers, kept here so Back to the review and forward again
+  // doesn't reset them. A fresh analysis starts over.
+  const [choices, setChoices] = useState<Map<string, ConflictChoice>>(new Map());
   const { resolveReplacements, sheet: replaceSheet } = useReplaceFlow();
   const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
   const toast = useToast();
@@ -119,6 +122,8 @@ export function Import() {
           otherCount={
             conflictStep.lines.length - conflictStep.conflicts.reduce((s, c) => s + c.incoming.length, 0)
           }
+          initialChoices={choices}
+          onChange={setChoices}
           onConfirm={(choices) => commit(conflictStep.lines, choices, conflictStep.conflicts)}
           onBack={() => setConflictStep(null)}
         />
@@ -127,7 +132,10 @@ export function Import() {
           result={status.result}
           makeResolved={makeResolved}
           onConfirm={confirmImport}
-          onCancel={reset}
+          onCancel={() => {
+            setChoices(new Map());
+            reset();
+          }}
           extraSummary={(lines) => {
             const forTrade = lines.reduce((s, l) => s + l.quantityForTrade, 0);
             return (

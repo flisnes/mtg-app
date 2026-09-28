@@ -2,9 +2,11 @@ import type { ContainerKind, DeckBoard, EventSource, SlotShape } from '@mtg/shar
 import {
   addDeckCardsBulk,
   collectionKey,
+  newId,
   removeDeckCardsMatching,
   setDeckCardQuantity,
   updateDeckCard,
+  type BatchMeta,
   type SlotWants,
 } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
@@ -250,16 +252,22 @@ export async function capToOwnedCopies(targetId: string, copies: FilingCopy[]): 
  *
  * On 'move' the over-promised copies come out of their old homes first, oldest
  * claim first, and only as many as the collection is short: pull one Island out
- * of a box of four and the other three stay put.
+ * of a box of four and the other three stay put. The leaving and the arriving
+ * share one batch, so the history shows one move and one undo reverses it all.
  */
 export async function applyFiling(
   targetId: string,
   copies: FilingCopy[],
   mode: FilingMode,
   clashes: FilingClash[] = [],
-  meta: { source?: EventSource } = {},
+  meta: { source?: EventSource } & BatchMeta = {},
 ): Promise<void> {
-  if (mode === 'move') await unfileClashes(clashes);
+  const shared = {
+    ...(meta.source ? { source: meta.source } : {}),
+    batchId: meta.batchId ?? newId(),
+    ...(meta.batchLabel ? { batchLabel: meta.batchLabel } : {}),
+  };
+  if (mode === 'move') await unfileClashes(clashes, shared);
 
   await addDeckCardsBulk(
     targetId,
@@ -271,7 +279,7 @@ export async function applyFiling(
       ...(c.anyBasic ? { anyBasic: true } : {}),
       ...(c.wants ? { wants: c.wants } : {}),
     })),
-    { exact: true, ...meta },
+    { exact: true, ...shared },
   );
 }
 
@@ -283,7 +291,10 @@ export async function applyFiling(
  * Exported for the deck re-scan, which writes its slots through `reconcileDeck`
  * rather than by adding, and so has to settle the same question by hand.
  */
-export async function unfileClashes(clashes: FilingClash[]): Promise<void> {
+export async function unfileClashes(
+  clashes: FilingClash[],
+  meta: { source?: EventSource } & BatchMeta = {},
+): Promise<void> {
   if (clashes.length === 0) return;
   const bySource = new Map<string, { oracleId: string; scryfallId?: string; quantity: number; wants?: SlotWants }[]>();
   for (const clash of clashes) {
@@ -302,7 +313,7 @@ export async function unfileClashes(clashes: FilingClash[]): Promise<void> {
       bySource.set(place.containerId, arr);
     }
   }
-  for (const [containerId, cards] of bySource) await removeDeckCardsMatching(containerId, cards);
+  for (const [containerId, cards] of bySource) await removeDeckCardsMatching(containerId, cards, meta);
 }
 
 /** A slot the assembler is about to point at a real card. */

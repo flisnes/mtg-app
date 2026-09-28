@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { CollectionEntry, Condition, Finish, Priced, Printing, SpecialCondition } from '@mtg/shared';
 import { specialLabel } from '@mtg/shared';
-import { collectionKey } from '../db/dataAccess.js';
+import { collectionKey, type CopyRef } from '../db/dataAccess.js';
 import { getPrintingsByIds } from '../db/queries.js';
 import { Icon } from '../components/icons.js';
 import { Sheet } from '../components/Sheet.js';
@@ -28,9 +28,11 @@ export interface ReplacePlan {
   need: number;
 }
 
-/** What the caller needs to hand `applyImport`: surgical removals, plus the cards whose Update was a no-op. */
+/** What the caller needs to hand `applyImport`: surgical removals (each saying
+ *  which copy swaps in, so the slots holding the old one follow it), plus the
+ *  cards whose Update was a no-op. */
 export interface ReplaceOutcome {
-  removals: { id: string; qty: number }[];
+  removals: { id: string; qty: number; to: CopyRef }[];
   /** 'Update' conflicts with nothing distinct to replace — their lines are dropped. */
   noSource: Set<string>;
 }
@@ -39,18 +41,23 @@ export interface ReplaceOutcome {
  * Which owned copies a swap draws from: the chosen version first, then the rest
  * (so N copies still net out even if the picked version holds fewer).
  */
-export function planRemovals(plan: ReplacePlan, chosenId?: string): { id: string; qty: number }[] {
+export function planRemovals(plan: ReplacePlan, chosenId?: string): ReplaceOutcome['removals'] {
   const order = [
     ...plan.candidates.filter((e) => e.id === chosenId),
     ...plan.candidates.filter((e) => e.id !== chosenId),
   ];
+  // The copy swapping in: an Update is one printing per card, so the first
+  // incoming line names it (a scan of two versions of a card is two lines with
+  // one answer between them, and the first is as good as any).
+  const first = plan.conflict.incoming[0]!;
+  const to: CopyRef = { scryfallId: first.scryfallId, condition: first.condition, finish: first.finish, lang: first.lang || 'en' };
   let need = plan.need;
-  const out: { id: string; qty: number }[] = [];
+  const out: ReplaceOutcome['removals'] = [];
   for (const e of order) {
     if (need <= 0) break;
     const take = Math.min(need, e.quantity);
     if (take > 0) {
-      out.push({ id: e.id, qty: take });
+      out.push({ id: e.id, qty: take, to });
       need -= take;
     }
   }
@@ -69,7 +76,7 @@ export function useReplaceFlow(): {
   const [flow, setFlow] = useState<{
     queue: ReplacePlan[];
     idx: number;
-    removals: { id: string; qty: number }[];
+    removals: ReplaceOutcome['removals'];
     noSource: Set<string>;
     resolve: (out: ReplaceOutcome | null) => void;
   } | null>(null);

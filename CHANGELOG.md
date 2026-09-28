@@ -2,6 +2,16 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.183.0
+
+- **Fixed: scanning cards into a deck, binder or box no longer asks "did it move?" about a card you just called a new copy.** The scan filed the cards before it wrote them to your collection, so a card you had marked *Add* was counted against the copies you owned before the scan and came back as "you own no spare copy, did it move into this deck?". Answering yes then pulled the copy out of the other deck. The collection is written first now, so the question only comes up when the containers really would hold more copies than you own.
+- **Fixed: "Where do these live?" no longer reappears underneath the move question.** After a scan, an import, a bought wishlist card or an opened booster, picking a container showed the "Where do these live?" sheet again while the app asked whether the card had moved, and a second tap on "Choose a deck" could file the pile twice. One question at a time now.
+- **Fixed: a scanned card you say you don't own goes into the deck as a list line, not as your copy.** Leaving a card unticked in "Add to collection?" still filed it as if it were on your shelf, which raised a filing conflict at once and asked about it again on the next scan.
+- **Fixed: Update now carries a card's filing along.** Swapping a copy you own for the scanned or imported printing left the deck holding the old copy, which resurfaced later as a filing conflict about a swap you had made on purpose. The deck now names the new copy.
+- **Fixed: stepping back through a scan or import review keeps your answers.** Back and forward again used to reset every card to Skip (or Add) and make you answer the whole list over.
+- **Fixed: pasting copied cards into another deck goes through the filing engine.** A copied slot that named one of your copies was written straight in, silently double-filing the card; it now caps at what you own and asks like "File away" does.
+- **Fixed: moving a card between containers undoes in one step.** A filing that moved a card out of one place and into another landed as two or three history entries; it is one entry now.
+
 ## 0.182.6
 
 - Internal: the sync engine and the row sanitizers behind device transfer and account sync now have a test suite (48 tests). These are the parts that historically needed four repair releases when they went wrong, so regressions there now fail before they ship. No visible changes.

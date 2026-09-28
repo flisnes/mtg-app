@@ -57,7 +57,7 @@ import type { TransferPayload } from '../transfer/payload.js';
 // Changes received FROM sync are applied directly to the tables, never through
 // these functions, so they are not re-staged or re-evented.
 
-function newId(): string {
+export function newId(): string {
   return crypto.randomUUID();
 }
 
@@ -357,7 +357,17 @@ function namedCopy(s: SlotCopyFields): CopyRef | undefined {
 }
 
 type SlotCopyFields = Pick<DeckCard, 'scryfallId' | 'condition' | 'finish' | 'lang' | 'anyBasic'>;
-type CopyRef = { scryfallId: string; condition: Condition; finish: Finish; lang: string };
+export type CopyRef = { scryfallId: string; condition: Condition; finish: Finish; lang: string };
+
+/**
+ * Lets one user action that runs through several writers (a filing that moves
+ * copies out of two boxes and into a deck) land as a single history entry:
+ * every writer takes the id and label instead of minting its own.
+ */
+export interface BatchMeta {
+  batchId?: string;
+  batchLabel?: string;
+}
 
 /** The one physical copy a slot names, when it names one at all — the collection
  *  key its own fields spell out. The same rule as claimKeyOf in deck/filing.ts,
@@ -422,11 +432,24 @@ async function touchNamedCopies(slots: Iterable<SlotCopyFields>, now: number): P
 async function refileEditedCopy(before: CollectionEntry, after: CollectionEntry, now: number): Promise<void> {
   const from = collectionKey(before);
   if (from === collectionKey(after)) return;
-  const all = await db.deckCards.where('oracleId').equals(before.oracleId).toArray();
-  const moving = all.filter((s) => slotClaimKey(s) === from);
+  await refileSlots(before.oracleId, from, after, Infinity, now);
+}
+
+/**
+ * Re-point up to `limit` copies' worth of the slots naming copy `from` at copy
+ * `to` — the mechanism behind refileEditedCopy, also used when an import's
+ * "Update" swaps a copy out: the deck holding the old one is holding the new
+ * one now. Oldest claim first, so a slot that outlived its copy is the first to
+ * be corrected; a slot only partly covered splits, the corrected part merging
+ * into any slot of the container that already names the new copy.
+ */
+async function refileSlots(oracleId: string, from: string, to: CopyRef, limit: number, now: number): Promise<void> {
+  if (limit <= 0) return;
+  const all = await db.deckCards.where('oracleId').equals(oracleId).toArray();
+  const moving = all.filter((s) => slotClaimKey(s) === from).sort((a, b) => a.updatedAt - b.updatedAt);
   if (moving.length === 0) return;
 
-  const wants: SlotWants = { condition: after.condition, finish: after.finish, lang: after.lang };
+  const wants: SlotWants = { condition: to.condition, finish: to.finish, lang: to.lang };
   const identity = (s: DeckCard, scryfallId = s.scryfallId, w: SlotWants = s) =>
     `${s.deckId}|${exactSlotKey({ ...s, scryfallId }, w)}`;
   const movingIds = new Set(moving.map((s) => s.id));
@@ -436,16 +459,27 @@ async function refileEditedCopy(before: CollectionEntry, after: CollectionEntry,
 
   const writes = new Map<string, DeckCard>();
   const merged: string[] = [];
+  let left = limit;
   for (const slot of moving) {
-    const key = identity(slot, after.scryfallId, wants);
+    if (left <= 0) break;
+    const take = Math.min(left, slot.quantity);
+    left -= take;
+    const key = identity(slot, to.scryfallId, wants);
     const target = byIdentity.get(key);
+    const rest = slot.quantity - take;
     if (target) {
-      const grown: DeckCard = { ...target, quantity: target.quantity + slot.quantity, updatedAt: now };
+      const grown: DeckCard = { ...target, quantity: target.quantity + take, updatedAt: now };
       byIdentity.set(key, grown);
       writes.set(grown.id, grown);
-      merged.push(slot.id);
+      if (rest > 0) writes.set(slot.id, { ...slot, quantity: rest, updatedAt: now });
+      else merged.push(slot.id);
+    } else if (rest > 0) {
+      const split: DeckCard = { ...slot, id: newId(), quantity: take, scryfallId: to.scryfallId, ...wants, updatedAt: now };
+      byIdentity.set(key, split);
+      writes.set(split.id, split);
+      writes.set(slot.id, { ...slot, quantity: rest, updatedAt: now });
     } else {
-      const next: DeckCard = { ...slot, scryfallId: after.scryfallId, ...wants, updatedAt: now };
+      const next: DeckCard = { ...slot, scryfallId: to.scryfallId, ...wants, updatedAt: now };
       byIdentity.set(key, next);
       writes.set(next.id, next);
     }
@@ -916,25 +950,31 @@ export interface ImportLine {
  * N copies from specific existing entries (by id) before adding the new lines,
  * so an incoming printing swaps in for a chosen owned copy without wiping the
  * rest. It happens in the same batch as the adds — one undo restores all.
+ * A removal that says what it swaps in for (`to`) is a correction of the copy,
+ * so the slots holding the old copy follow it (see refileSlots); left behind
+ * they'd claim a card that no longer exists and raise a filing conflict about
+ * a swap the user just made on purpose. The slot relabel isn't undone with the
+ * import, same as correcting a copy from its sheet.
  */
 export async function applyImport(
   lines: ImportLine[],
   meta: {
     source?: 'import' | 'sealed' | 'scan';
     label?: string;
-    removals?: { id: string; qty: number }[];
-  } = {},
+    removals?: { id: string; qty: number; to?: CopyRef }[];
+  } & BatchMeta = {},
 ): Promise<{ entries: number; cards: number }> {
   let cards = 0;
   // Every line of one import/sealed add shares a batchId, so the edit-history
   // view can collapse the whole operation into a single entry.
   const source = meta.source ?? 'import';
-  const batchId = newId();
-  const batchExtra = { source, batchId, ...(meta.label ? { batchLabel: meta.label } : {}) };
+  const batchId = meta.batchId ?? newId();
+  const label = meta.batchLabel ?? meta.label;
+  const batchExtra = { source, batchId, ...(label ? { batchLabel: label } : {}) };
   // One bulk price lookup for the acquisition price on every line's event.
   const prices = await getPricesByIds(lines.map((l) => l.scryfallId));
   const removals = meta.removals ?? [];
-  await db.transaction('rw', COLLECTION_TABLES, async () => {
+  await db.transaction('rw', [...COLLECTION_TABLES, db.decks, db.deckCards], async () => {
     const existing = await db.collection.toArray();
     const map = new Map(existing.map((e) => [entryKey(e), e]));
     const now = Date.now();
@@ -963,6 +1003,15 @@ export async function applyImport(
           e.quantityForTrade = clamp(e.quantityForTrade, 0, remaining);
           e.updatedAt = now;
           await putSynced('collection', e);
+        }
+        if (r.to) {
+          // Only the slots the remaining copies can no longer back move along;
+          // a copy that stays on the shelf keeps its filing.
+          const from = collectionKey(e);
+          const claimed = (await db.deckCards.where('oracleId').equals(e.oracleId).toArray())
+            .filter((s) => slotClaimKey(s) === from)
+            .reduce((n, s) => n + s.quantity, 0);
+          await refileSlots(e.oracleId, from, r.to, Math.min(take, Math.max(0, claimed - remaining)), now);
         }
         events.push({
           ts: now,
@@ -1493,9 +1542,9 @@ export async function addDeckCardsBulk(
     anyBasic?: boolean;
     wants?: SlotWants;
   }>,
-  meta: { source?: EventSource; exact?: boolean } = {},
+  meta: { source?: EventSource; exact?: boolean } & BatchMeta = {},
 ): Promise<void> {
-  const batchId = newId();
+  const batchId = meta.batchId ?? newId();
   const keyOf = meta.exact
     ? (c: { oracleId: string; board: DeckBoard; anyBasic?: boolean; scryfallId?: string }, w?: SlotWants) =>
         exactSlotKey(c, w)
@@ -1510,10 +1559,11 @@ export async function addDeckCardsBulk(
     const deck = await touchDeck(deckId, now);
     // Default 'manual' (not 'import') so deck adds don't land in the collection
     // "Imports" filter; the batchId still collapses them into one history entry.
+    const label = meta.batchLabel ?? deck?.name;
     const batchExtra = {
       source: meta.source ?? 'manual',
       batchId,
-      ...(deck ? { batchLabel: deck.name } : {}),
+      ...(label ? { batchLabel: label } : {}),
     };
     for (const c of cards) {
       const ex = map.get(keyOf(c, c.wants));
@@ -1580,9 +1630,9 @@ export async function addDeckCardsBulk(
 export async function reconcileDeck(
   deckId: string,
   target: Array<{ oracleId: string; board: DeckBoard; quantity: number; scryfallId?: string; wants?: SlotWants }>,
-  meta: { source?: EventSource } = {},
+  meta: { source?: EventSource } & BatchMeta = {},
 ): Promise<{ added: number; removed: number; changed: number }> {
-  const batchId = newId();
+  const batchId = meta.batchId ?? newId();
   let added = 0;
   let removed = 0;
   let changed = 0;
@@ -1624,10 +1674,11 @@ export async function reconcileDeck(
     const swept: DeckCard[] = [];
     const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
     const deck = await touchDeck(deckId, now);
+    const label = meta.batchLabel ?? deck?.name;
     const batchExtra = {
       source: meta.source ?? 'manual',
       batchId,
-      ...(deck ? { batchLabel: deck.name } : {}),
+      ...(label ? { batchLabel: label } : {}),
     };
     const nameExtra = containerRef(deck);
 
@@ -2230,12 +2281,13 @@ export async function removeDeckCardsBulk(ids: string[]): Promise<number> {
 export async function removeDeckCardsMatching(
   containerId: string,
   cards: Array<{ oracleId: string; scryfallId?: string; quantity: number; wants?: CopyPrefs }>,
+  meta: { source?: EventSource } & BatchMeta = {},
 ): Promise<number> {
   if (cards.length === 0) return 0;
   let removed = 0;
   await db.transaction('rw', DECK_TABLES, async () => {
     const now = Date.now();
-    const batchId = newId();
+    const batchId = meta.batchId ?? newId();
     const slots = await db.deckCards.where('deckId').equals(containerId).toArray();
     const byOracle = new Map<string, DeckCard[]>();
     for (const s of slots) {
@@ -2272,6 +2324,7 @@ export async function removeDeckCardsMatching(
     }
     if (taken.size === 0) return;
     const deck = await touchDeck(containerId, now);
+    const label = meta.batchLabel ?? deck?.name;
     const puts: DeckCard[] = [];
     const deletes: string[] = [];
     const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
@@ -2287,9 +2340,9 @@ export async function removeDeckCardsMatching(
         deckId: containerId,
         ...containerRef(deck),
         board: slot.board,
-        source: 'manual',
+        source: meta.source ?? 'manual',
         batchId,
-        ...(deck ? { batchLabel: deck.name } : {}),
+        ...(label ? { batchLabel: label } : {}),
       });
     });
     if (puts.length > 0) {

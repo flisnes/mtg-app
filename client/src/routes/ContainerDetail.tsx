@@ -464,7 +464,11 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       toast(`Moved ${moved} card${plural(moved)} into this ${meta.noun}`);
       return;
     }
-    await addDeckCardsBulk(
+    // A copied slot that names a real copy of yours is that copy being filed
+    // here too, so it takes the same road as "File away": capped at what you
+    // own, and asked about when the copy is already promised elsewhere. Brew
+    // lines and lands-box basics pass straight through, as they do everywhere.
+    const filing = await file(
       id,
       payload.slots.map((s) => ({
         oracleId: s.oracleId,
@@ -474,9 +478,11 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         ...(s.finish || s.condition || s.lang
           ? { wants: { ...(s.finish ? { finish: s.finish } : {}), ...(s.condition ? { condition: s.condition } : {}), ...(s.lang ? { lang: s.lang } : {}) } }
           : {}),
+        label: oracles.get(s.oracleId)?.name,
       })),
       { source: 'manual' },
     );
+    if (filing === null) return;
     const n = payload.slots.reduce((sum, s) => sum + s.quantity, 0);
     toast(`Pasted ${n} card${plural(n)} into this ${meta.noun}`);
   }

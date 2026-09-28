@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.183.0',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Scanning into a deck, binder or box no longer asks "did it move?" about a card you just marked as a new copy, and "Where do these live?" no longer reappears under that question.',
+      },
+      {
+        kind: 'fixed',
+        text: 'Update carries a card\'s filing along instead of leaving a conflict behind, review steps keep your answers when you go back, and a move between containers undoes in one step.',
+      },
+    ],
+  },
+  {
     version: '0.182.5',
     changes: [
       {

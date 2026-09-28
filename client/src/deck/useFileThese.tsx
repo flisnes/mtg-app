@@ -4,7 +4,7 @@ import { ContainerPickerSheet } from '../components/ContainerPickerSheet.js';
 import { Sheet } from '../components/Sheet.js';
 import { useToast } from '../components/Toast.js';
 import { CONTAINER_META } from './containers.js';
-import { useFiling } from './useFiling.js';
+import { useFiling, type FilingResult } from './useFiling.js';
 import type { FilingCopy } from './filing.js';
 
 /**
@@ -28,6 +28,11 @@ export function useFileThese(): {
   const toast = useToast();
   const [pending, setPending] = useState<{ copies: FilingCopy[]; count: number; resolve: () => void } | null>(null);
   const [picking, setPicking] = useState(false);
+  // The filing engine is at work (and may be asking its own question). The
+  // offer sheet stays out of the way until it's done: otherwise it re-renders
+  // beneath the move-or-both sheet, and a second tap on "Choose a deck" starts
+  // a second filing of the same pile.
+  const [filing, setFiling] = useState(false);
 
   const offer = useCallback(
     (copies: FilingCopy[], count: number) =>
@@ -47,33 +52,40 @@ export function useFileThese(): {
     pending?.resolve();
     setPending(null);
     setPicking(false);
+    setFiling(false);
   };
 
   async function pick(containerId: string, kind: ContainerKind) {
-    if (!pending) return;
+    if (!pending || filing) return;
     setPicking(false);
-    const filing = await file(containerId, pending.copies);
+    setFiling(true);
+    let result: FilingResult | null;
+    try {
+      result = await file(containerId, pending.copies);
+    } finally {
+      setFiling(false);
+    }
     // Backed out of the move-or-both question: back to the picker, not out of
     // the whole step — they were mid-decision, not cancelling the filing.
-    if (filing === null) {
+    if (result === null) {
       setPicking(true);
       return;
     }
     const noun = CONTAINER_META[kind].noun;
     // Copies that went in, which is at most what you own of each — not the
     // number of cards the intake landed.
-    const n = filing.filed;
+    const n = result.filed;
     toast(
       n === 0
         ? `Already in that ${noun}`
-        : filing.mode === 'move'
+        : result.mode === 'move'
           ? `Moved ${n} card${n === 1 ? '' : 's'} to ${noun}`
           : `Filed ${n} card${n === 1 ? '' : 's'} in ${noun}`,
     );
     done();
   }
 
-  const sheet = pending ? (
+  const sheet = pending && !filing ? (
     picking ? (
       <ContainerPickerSheet
         title="Where do these live?"

@@ -84,6 +84,8 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
   // Set when review found cards already in the collection: the conflict-
   // resolution step replaces the review until resolved or backed out of.
   const [conflictStep, setConflictStep] = useState<{ lines: ResolvedLine[]; conflicts: ImportConflict[] } | null>(null);
+  // Kept outside the step so Back and forward again finds every chip as left.
+  const [choices, setChoices] = useState<Map<string, ConflictChoice>>(new Map());
   const { resolveReplacements, sheet: replaceSheet } = useReplaceFlow();
   const { offer: offerFiling, sheet: fileTheseSheet } = useFileThese();
   const toast = useToast();
@@ -180,6 +182,8 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
             </>
           }
           confirmLabel={(n) => (n === 0 ? 'Nothing to add' : `Add ${n} card${n === 1 ? '' : 's'} to the tradelist`)}
+          initialChoices={choices}
+          onChange={setChoices}
           onConfirm={(choices) => commit(conflictStep.lines, choices, conflictStep.conflicts)}
           onBack={() => setConflictStep(null)}
         />
@@ -196,7 +200,10 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
           result={status.result}
           makeResolved={makeResolved}
           onConfirm={confirmImport}
-          onCancel={reset}
+          onCancel={() => {
+            setChoices(new Map());
+            reset();
+          }}
           confirmLabel={(n) => `Add ${n} to tradelist`}
         />
         {replaceSheet}

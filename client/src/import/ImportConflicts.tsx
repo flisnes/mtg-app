@@ -9,6 +9,10 @@ import type { ConflictChoice, ImportConflict } from './conflicts.js';
 // lines always go through. The choices, default, intro copy, and confirm label
 // are configurable so the same screen serves collection import (skip/add/
 // replace) and the tradelist scan (trade/add/skip).
+//
+// The choices are the caller's to keep (`initialChoices` / `onChange`): a step
+// back to the review and forward again must find every chip where it was left,
+// not reset to the default and ask the whole list over.
 
 const CHOICES: { value: ConflictChoice; label: string }[] = [
   { value: 'skip', label: 'Skip' },
@@ -26,12 +30,18 @@ export function ImportConflicts({
   intro,
   confirmLabel,
   incomingLabel = 'Import',
+  initialChoices,
+  onChange,
 }: {
   conflicts: ImportConflict[];
   /** Lines with no conflict — they go through regardless. */
   otherCount: number;
   onConfirm: (choices: Map<string, ConflictChoice>) => void | Promise<void>;
   onBack: () => void;
+  /** Choices from an earlier visit to this step, so Back and forth loses nothing. */
+  initialChoices?: Map<string, ConflictChoice>;
+  /** Every change, for the caller to keep alongside the step. */
+  onChange?: (choices: Map<string, ConflictChoice>) => void;
   /** Choice buttons offered per card (and as "… all" presets). */
   options?: { value: ConflictChoice; label: string }[];
   /** Which choice each card starts on. */
@@ -43,9 +53,14 @@ export function ImportConflicts({
   /** What the incoming lines are called on each row — a scan isn't an import. */
   incomingLabel?: string;
 }) {
-  const [choices, setChoices] = useState<Map<string, ConflictChoice>>(
-    () => new Map(conflicts.map((c) => [c.oracleId, defaultChoice])),
+  const [choices, setChoicesState] = useState<Map<string, ConflictChoice>>(
+    () => new Map(conflicts.map((c) => [c.oracleId, initialChoices?.get(c.oracleId) ?? defaultChoice])),
   );
+  const setChoices = (next: Map<string, ConflictChoice> | ((m: Map<string, ConflictChoice>) => Map<string, ConflictChoice>)) => {
+    const resolved = typeof next === 'function' ? next(choices) : next;
+    setChoicesState(resolved);
+    onChange?.(resolved);
+  };
   const [busy, setBusy] = useState(false);
 
   // Set/collector info for every printing involved, for compact line labels.

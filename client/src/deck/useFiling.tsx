@@ -75,18 +75,17 @@ export function useFiling() {
   );
 
   /**
-   * File these copies. `capToOwned` (on by default) is the physical rule: the
-   * target ends up holding at most as many of a copy as you own. Pass false only
-   * when the cardboard hasn't reached the collection yet — a scan files the deck
-   * first and writes the collection after, so there'd be nothing to cap against.
+   * File these copies. The physical rule applies: the target ends up holding at
+   * most as many of a copy as you own, so callers write the collection first
+   * (an intake) and file after, never the other way round.
    */
   const file = useCallback(
     async (
       targetId: string,
       copies: FilingCopy[],
-      meta: { source?: EventSource; capToOwned?: boolean } = {},
+      meta: { source?: EventSource } = {},
     ): Promise<FilingResult | null> => {
-      const decided = await decide(targetId, copies, { cap: meta.capToOwned ?? true });
+      const decided = await decide(targetId, copies, { cap: true });
       if (!decided) return null;
       const filed = decided.copies.reduce((n, c) => n + c.quantity, 0);
       // Nothing to put away (and so nothing to move out of the way either):

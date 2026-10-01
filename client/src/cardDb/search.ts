@@ -1,4 +1,4 @@
-import type { Color, DeckFormat, Finish, Format, OracleCard, Priced, Printing, PrintingVariant, Rarity } from '@mtg/shared';
+import { isUncheckedFormat, type Color, type DeckFormat, type Finish, type Format, type OracleCard, type Priced, type Printing, type PrintingVariant, type Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPricesByIds, withPrices } from './prices.js';
 import { loadOracleTags } from './oracleTags.js';
@@ -27,7 +27,7 @@ export interface SearchFilters {
   color?: Color | '';
   type?: string;
   rarity?: Rarity | '';
-  /** Only cards legal (or restricted) in this format; 'casual' is a no-op. */
+  /** Only cards legal (or restricted) in this format; an unchecked format is a no-op. */
   legalIn?: DeckFormat;
   /** Only cards whose color identity fits within this set (Commander). */
   identity?: readonly Color[];
@@ -315,7 +315,7 @@ export async function searchCards(
   const parsed = parseSearchQuery(query.trim());
   const pins = expandPrintings ? pinnedSets(parsed) : null;
   const pinned = pins ? await printingsForSets(pins) : null;
-  const legalIn = filters.legalIn && filters.legalIn !== 'casual' ? (filters.legalIn as Format) : undefined;
+  const legalIn = filters.legalIn && !isUncheckedFormat(filters.legalIn) ? (filters.legalIn as Format) : undefined;
 
   const matches: Array<{ card: OracleCard; score: number; printing?: Printing }> = [];
   for (const entry of index) {

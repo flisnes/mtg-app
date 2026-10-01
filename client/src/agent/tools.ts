@@ -440,7 +440,7 @@ export const AGENT_TOOLS: AgentTool[] = [
         kind: { type: 'string', enum: ['deck', 'binder', 'box'], default: 'deck' },
         format: {
           type: 'string',
-          enum: ['casual', 'standard', 'pioneer', 'modern', 'legacy', 'vintage', 'pauper', 'commander'],
+          enum: [...DECK_FORMATS],
           description: 'Decks only',
         },
         folder: { type: 'string', description: 'Decks only: folder name, created if it does not exist' },

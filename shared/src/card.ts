@@ -28,7 +28,7 @@ export type Rarity = 'common' | 'uncommon' | 'rare' | 'mythic' | 'special' | 'bo
 export type Finish = 'nonfoil' | 'foil' | 'etched';
 
 /** Formats we track legality for (a curated subset of Scryfall's ~20). */
-export type Format = 'standard' | 'pioneer' | 'modern' | 'legacy' | 'vintage' | 'pauper' | 'commander';
+export type Format = 'standard' | 'pioneer' | 'modern' | 'legacy' | 'vintage' | 'pauper' | 'premodern' | 'commander';
 
 export type LegalityStatus = 'legal' | 'not_legal' | 'banned' | 'restricted';
 
@@ -39,6 +39,7 @@ export const FORMATS: readonly Format[] = [
   'legacy',
   'vintage',
   'pauper',
+  'premodern',
   'commander',
 ];
 

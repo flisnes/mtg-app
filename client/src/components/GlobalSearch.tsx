@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { matchPath, useLocation, useNavigate } from 'react-router-dom';
-import { CONTAINER_KINDS, type Color, type DeckBoard, type DeckFormat, type OracleCard, type Priced, type Printing } from '@mtg/shared';
+import { CONTAINER_KINDS, isUncheckedFormat, type Color, type DeckBoard, type DeckFormat, type OracleCard, type Priced, type Printing } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
 import { addDeckCard, addToCollection, addToWishlist, addToWishlistBulk } from '../db/dataAccess.js';
@@ -644,7 +644,7 @@ function SearchOverlay() {
     }
     return { format, identity, commanders };
   }, [deckId]);
-  const deckFilterActive = deckLegalOnly && !!deckCtx && deckCtx.format !== 'casual';
+  const deckFilterActive = deckLegalOnly && !!deckCtx && !isUncheckedFormat(deckCtx.format);
 
   // One commander in the zone shouldn't hide the partner or Background that
   // would join them: the second commander is exactly what widens the identity.
@@ -838,7 +838,7 @@ function SearchOverlay() {
     </label>
   ) : (
     deckCtx &&
-    deckCtx.format !== 'casual' && (
+    !isUncheckedFormat(deckCtx.format) && (
       <label className="deck-filter-toggle" title="Hide cards this deck can't legally play">
         <input type="checkbox" checked={deckLegalOnly} onChange={(e) => setDeckLegalOnly(e.target.checked)} />
         {formatLabel(deckCtx.format)}-legal

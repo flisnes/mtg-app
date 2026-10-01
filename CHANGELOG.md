@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.187.0
+
+- **Added: four more deck formats.** Premodern, Cube, Dan-dan Variant and Judge's Tower join the format picker. Premodern is a real sanctioned format, so decks set to it get the full legality check (bannings, 60-card minimum, 4-copy limit) and the card legality sheet gains a Premodern row. Cube, Dan-dan Variant and Judge's Tower are kitchen-table formats with no official card pool, so they run no checks at all, same as Casual.
+- **Changed: Commander moved to the top of the format list,** right after Casual, instead of sitting at the bottom.
+
 ## 0.186.0
 
 - **Added: agent tools now support filtering with the app's search syntax.** The `get_collection` and `get_container` agent tools accept a `query` parameter (e.g., "id:b t:creature pow<=1", "o:sacrifice -t:land", "set:neo is:foil") to filter results using the same matcher as the collection screen's search box. Printing terms like `:foil` match the row's own printing.

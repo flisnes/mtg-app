@@ -1239,7 +1239,7 @@ function sortRows(rows: Row[], prefs: CardSortPrefs): Row[] {
 }
 
 function LegalityPanel({ report, format }: { report: LegalityReport; format: DeckFormat }) {
-  if (!report.checked) return <p className="fine-print">Casual (no legality checks).</p>;
+  if (!report.checked) return <p className="fine-print">{formatLabel(format)} (no legality checks).</p>;
   if (report.legal) return <div className="legality legality-ok">✓ Legal in {formatLabel(format)}</div>;
   return (
     <div className="legality legality-bad">

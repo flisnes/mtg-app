@@ -1,4 +1,4 @@
-import type { Color, DeckBoard, DeckFormat, Format, OracleCard } from '@mtg/shared';
+import { isUncheckedFormat, type Color, type DeckBoard, type DeckFormat, type Format, type OracleCard } from '@mtg/shared';
 
 // Deck legality checking. Covers per-card format legality (banned / not-legal /
 // restricted), the common construction rules (deck size, copy limits, singleton
@@ -26,7 +26,11 @@ const RULES: Record<DeckFormat, FormatRule> = {
   legacy: { label: 'Legacy', minMain: 60, maxCopies: 4, maxSideboard: 15 },
   vintage: { label: 'Vintage', minMain: 60, maxCopies: 4, maxSideboard: 15 },
   pauper: { label: 'Pauper', minMain: 60, maxCopies: 4, maxSideboard: 15 },
+  premodern: { label: 'Premodern', minMain: 60, maxCopies: 4, maxSideboard: 15 },
   commander: { label: 'Commander', exactTotal: 100, maxCopies: 1, commander: true },
+  cube: { label: 'Cube' },
+  'dandan variant': { label: 'Dan-dan Variant' },
+  "judge's tower": { label: "Judge's Tower" },
 };
 
 export function formatLabel(format: DeckFormat | undefined): string {
@@ -195,8 +199,9 @@ export function copiesWelcome(
   if (isNonDeckCard(oracle)) return 0;
   if (identity && oracle.colorIdentity.some((c) => !identity.has(c))) return 0;
   const rule = RULES[fmt];
-  // Casual checks nothing, so nothing is ever in the way.
-  if (fmt === 'casual') return Infinity;
+  // Casual, Cube and the kitchen-table variants check nothing, so nothing is
+  // ever in the way.
+  if (isUncheckedFormat(fmt)) return Infinity;
   const status = oracle.legalities?.[fmt as Format];
   // An absent legality is a card DB older than the field, not a banning.
   if (status === 'banned' || status === 'not_legal') return 0;
@@ -338,7 +343,7 @@ export interface LegalityCard {
 }
 
 export interface LegalityReport {
-  /** false for Casual (no checks run). */
+  /** false for Casual and the other unchecked formats (no checks run). */
   checked: boolean;
   legal: boolean;
   problems: string[];
@@ -349,7 +354,7 @@ export interface LegalityReport {
 export function checkDeckLegality(format: DeckFormat | undefined, allCards: LegalityCard[]): LegalityReport {
   const fmt = format ?? 'casual';
   const rule = RULES[fmt];
-  if (fmt === 'casual') return { checked: false, legal: true, problems: [], issues: new Map() };
+  if (isUncheckedFormat(fmt)) return { checked: false, legal: true, problems: [], issues: new Map() };
   const key = fmt as Format;
   // The token board holds tokens on purpose — it's not part of the deck being
   // built, so it's exempt from every rule below (size, copy limits, legality,

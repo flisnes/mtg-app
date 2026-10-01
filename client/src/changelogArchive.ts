@@ -9,6 +9,50 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.179.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The top 500 EDH cards per color (3,500 total, by color-wheel and colorless splits) are now reviewed. More rules ship out of the box: Treasures and Clues auto-crack, lands tutor themselves, creatures grant evasion. 1,801 rules now play the top 3,000 cards.',
+      },
+    ],
+  },
+  {
+    version: '0.178.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The 1000 most-played commanders are now reviewed: 522 of them ship with a rule, like the top 1000 cards before them. Your own rule still wins.',
+      },
+      {
+        kind: 'fixed',
+        text: 'Mana that can only be spent on some spells now only pays for those. Ancient Ziggurat, Cormela and Jeweled Lotus used to pay for anything.',
+      },
+    ],
+  },
+  {
+    version: '0.177.0',
+    changes: [
+      {
+        kind: 'added',
+        text: "Rules can count your devotion to a color, so Gray Merchant drains for the right amount and Karametra's Acolyte taps for it. Your permanents matching can count different names, which is how Field of the Dead ships now.",
+      },
+    ],
+  },
+  {
+    version: '0.176.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Dredge in the simulator. Printed Dredge is read off the card, a new "While it is in your graveyard" rule sets it by hand, and a new static step gives cards in your graveyard dredge, like the lands under The Necrobloom.',
+      },
+      {
+        kind: 'changed',
+        text: 'Milled cards now count toward cards seen.',
+      },
+    ],
+  },
+  {
     version: '0.175.0',
     changes: [
       {

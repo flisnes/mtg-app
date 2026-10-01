@@ -234,18 +234,34 @@ export function sanitizeContainerEmblem(raw: unknown): ContainerEmblem | undefin
   return undefined;
 }
 
-/** A deck's format; 'casual' means no legality checks. */
-export type DeckFormat = Format | 'casual';
+/** Formats Scryfall publishes no legality for: whatever the table agreed on. */
+export const UNCHECKED_FORMATS = ['casual', 'cube', 'dandan variant', "judge's tower"] as const;
+
+export type UncheckedFormat = (typeof UNCHECKED_FORMATS)[number];
+
+/** A deck's format. An UncheckedFormat ('casual' and friends) runs no legality checks. */
+export type DeckFormat = Format | UncheckedFormat;
+
+const UNCHECKED_SET: ReadonlySet<string> = new Set(UNCHECKED_FORMATS);
+
+/** Whether this format has card legality data to check a deck against. */
+export function isUncheckedFormat(format: DeckFormat | undefined): boolean {
+  return UNCHECKED_SET.has(format ?? 'casual');
+}
 
 export const DECK_FORMATS: readonly DeckFormat[] = [
   'casual',
+  'commander',
   'standard',
   'pioneer',
   'modern',
   'legacy',
   'vintage',
   'pauper',
-  'commander',
+  'premodern',
+  'cube',
+  'dandan variant',
+  "judge's tower",
 ];
 
 export interface Deck {

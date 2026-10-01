@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.185.1
+
+- **Added: agent collection tool now returns per-copy market prices.** The `get_collection` agent tool (used when Claude Code is connected) returns each owned card's market price in EUR and USD for its exact printing and finish, null when unknown. Use `sort: "price"` to list cards ranked by value per copy, highest first.
+
 ## 0.185.0
 
 - **Added: Agent connections (desktop).** A new Settings section lets a Claude Code session on your computer work with the app through the open tab: search cards, read your collection, decks, wishlist and tradelist, and (if you allow changes) add cards, build lists and mark cards for trade. Off by default and local only: the connection never leaves your machine, and every agent write is one history entry you can undo. Deck edits by the agent are list-only: it never files or moves your physical copies.

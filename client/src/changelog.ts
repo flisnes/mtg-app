@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.185.1',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Agent collection tool now returns market prices per copy, in both EUR and USD for each card\'s exact printing and finish. Sort by "price" to rank cards by value.',
+      },
+    ],
+  },
+  {
     version: '0.185.0',
     changes: [
       {

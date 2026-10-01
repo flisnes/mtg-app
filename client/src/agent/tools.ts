@@ -17,7 +17,9 @@ import {
   type DeckFormat,
   type Finish,
 } from '@mtg/shared';
+import { getPricesByIds, priceForFinish } from '../cardDb/prices.js';
 import { resolveOracleByName, searchCards } from '../cardDb/search.js';
+import { priceValue } from '../components/cardSort.js';
 import {
   addDeckCardsBulk,
   addToWishlistBulk,
@@ -152,12 +154,19 @@ export const AGENT_TOOLS: AgentTool[] = [
   },
   {
     name: 'get_collection',
-    description: 'List owned cards, optionally filtered by name substring and/or set code. Paged with limit/offset.',
+    description:
+      'List owned cards, optionally filtered by name substring and/or set code. Paged with limit/offset. Each row carries the market price per copy of its own printing and finish (priceEur/priceUsd, null when unknown); sort "price" ranks the most valuable first.',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Case-insensitive name substring' },
         set: { type: 'string', description: 'Set code, e.g. "neo"' },
+        sort: {
+          type: 'string',
+          enum: ['none', 'price'],
+          default: 'none',
+          description: '"price": highest price per copy first, in the display currency',
+        },
         limit: { type: 'integer', minimum: 1, maximum: 300, default: 100 },
         offset: { type: 'integer', minimum: 0, default: 0 },
       },
@@ -171,11 +180,21 @@ export const AGENT_TOOLS: AgentTool[] = [
         if (set && (j.printing?.set.toLowerCase() ?? '') !== set) return false;
         return true;
       });
+      // Priced per finish: a foil row quotes the foil price, as in the app.
+      const prices = await getPricesByIds(filtered.map((j) => j.entry.scryfallId));
+      const priced = filtered.map((j) => {
+        const { eur, usd } = priceForFinish(prices.get(j.entry.scryfallId), j.entry.finish);
+        return { j, eur, usd };
+      });
+      if (str(args.sort) === 'price') {
+        const value = new Map(priced.map((p) => [p, priceValue({ priceEur: p.eur, priceUsd: p.usd }) ?? -1]));
+        priced.sort((a, b) => value.get(b)! - value.get(a)!);
+      }
       const offset = int(args.offset, 0, 0, 1_000_000);
       const limit = int(args.limit, 100, 1, 300);
       return {
-        total: filtered.length,
-        rows: filtered.slice(offset, offset + limit).map((j) => ({
+        total: priced.length,
+        rows: priced.slice(offset, offset + limit).map(({ j, eur, usd }) => ({
           id: j.entry.id,
           name: j.oracle?.name ?? '(unknown)',
           set: j.printing?.set,
@@ -185,6 +204,8 @@ export const AGENT_TOOLS: AgentTool[] = [
           lang: j.entry.lang,
           quantity: j.entry.quantity,
           quantityForTrade: j.entry.quantityForTrade,
+          priceEur: eur,
+          priceUsd: usd,
           ...(j.entry.special ? { special: j.entry.special } : {}),
         })),
       };

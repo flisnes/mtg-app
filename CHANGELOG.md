@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.187.1
+
+- **Fixed: the card data download no longer flickers.** Cards are downloaded and installed at the same time, and the status line used to flip between "Downloading card data" and "Installing cards" many times a second. It now shows the download counter until every chunk has arrived, then switches to installing once. Download speed is unchanged.
+
 ## 0.187.0
 
 - **Added: four more deck formats.** Premodern, Cube, Dan-dan Variant and Judge's Tower join the format picker. Premodern is a real sanctioned format, so decks set to it get the full legality check (bannings, 60-card minimum, 4-copy limit) and the card legality sheet gains a Premodern row. Cube, Dan-dan Variant and Judge's Tower are kitchen-table formats with no official card pool, so they run no checks at all, same as Casual.

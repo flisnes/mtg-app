@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.187.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The card data download no longer flickers between "Downloading" and "Installing".',
+      },
+    ],
+  },
+  {
     version: '0.187.0',
     changes: [
       {

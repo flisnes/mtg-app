@@ -104,10 +104,21 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
         fraction: totalBytes ? (downloadedBytes * DOWNLOAD_SHARE + importedBytes * (1 - DOWNLOAD_SHARE)) / totalBytes : 0,
         label,
       });
-    // Card-chunk downloads share one counter and a live MB label.
+    // Downloads and imports overlap, so both report through one label that only
+    // moves forward: the MB counter while any chunk is still downloading, then
+    // the install step once the network side is done. Letting each side post
+    // its own label made the gate flicker between the two.
+    let chunksDownloaded = 0;
+    let installing: ChunkTask['artifact'] = 'oracle';
+    const emitCards = () =>
+      emit(
+        chunksDownloaded < req.chunks.length
+          ? `Downloading card data (${mb(Math.min(downloadedBytes, cardBytes))}/${mb(cardBytes)} MB)`
+          : `Installing ${installing === 'oracle' ? 'cards' : 'editions'}…`,
+      );
     const onCardDelta = (bytes: number) => {
       downloadedBytes += bytes;
-      emit(`Downloading card data (${mb(Math.min(downloadedBytes, cardBytes))}/${mb(cardBytes)} MB)`);
+      emitCards();
     };
 
     const chunkState = await readChunkState();
@@ -130,6 +141,7 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
           if ((await sha256Hex(text)) !== task.sha256) {
             throw new Error(`${task.artifact} chunk ${task.key} checksum mismatch: download corrupt`);
           }
+          chunksDownloaded++;
           return { text };
         })().then(
           (v) => v,
@@ -146,11 +158,11 @@ self.onmessage = async (e: MessageEvent<ImportRequest>) => {
       if ('err' in fetched) throw fetched.err;
       const { text } = fetched;
 
-      const label = `Installing ${task.artifact === 'oracle' ? 'cards' : 'editions'}…`;
+      installing = task.artifact;
       const base = importedBytes;
       const importProgress = (rowFraction: number) => {
         importedBytes = base + task.bytes * rowFraction;
-        emit(label);
+        emitCards();
       };
       await importChunk(task, JSON.parse(text) as unknown[], importProgress);
       importedBytes = base + task.bytes;

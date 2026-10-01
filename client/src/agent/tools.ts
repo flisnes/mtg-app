@@ -11,12 +11,18 @@ import {
   CONTAINER_KINDS,
   DECK_FORMATS,
   FINISHES,
+  compileCardQuery,
+  rowPrintingSummary,
+  toSearchableEntry,
   type Condition,
   type ContainerKind,
   type DeckBoard,
   type DeckFormat,
   type Finish,
+  type OracleCard,
+  type RowPrinting,
 } from '@mtg/shared';
+import { loadOracleTags } from '../cardDb/oracleTags.js';
 import { getPricesByIds, priceForFinish } from '../cardDb/prices.js';
 import { resolveOracleByName, searchCards } from '../cardDb/search.js';
 import { priceValue } from '../components/cardSort.js';
@@ -25,9 +31,11 @@ import {
   addToWishlistBulk,
   applyImport,
   createContainer,
+  createDeckFolder,
   newId,
   removeDeckCardsBulk,
   setDeckCardQuantity,
+  setDeckFolder,
   setQuantityForTradeBulk,
   undoEntry,
   type ImportLine,
@@ -113,10 +121,50 @@ function linesSchema(extraProps: Record<string, unknown>, description: string): 
 // Shared row shapes
 // ---------------------------------------------------------------------------
 
-function cardRow(oracle: { name: string; manaCost: string | null; typeLine: string; oracleText: string | null } | undefined) {
-  return oracle
-    ? { name: oracle.name, manaCost: oracle.manaCost, typeLine: oracle.typeLine, oracleText: oracle.oracleText }
-    : { name: '(unknown card — card DB too small?)' };
+/** P/T as one "2/2" string (fewer tokens than two fields); absent for non-creatures. */
+function pt(oracle: OracleCard | undefined): { pt?: string } {
+  return oracle?.power != null && oracle.toughness != null ? { pt: `${oracle.power}/${oracle.toughness}` } : {};
+}
+
+/** `brief` drops the oracle text, by far the largest field in a list. */
+function cardRow(oracle: OracleCard | undefined, brief = false) {
+  if (!oracle) return { name: '(unknown card — card DB too small?)' };
+  return {
+    name: oracle.name,
+    manaCost: oracle.manaCost,
+    typeLine: oracle.typeLine,
+    ...pt(oracle),
+    ...(brief ? {} : { oracleText: oracle.oracleText }),
+  };
+}
+
+const QUERY_PROP = {
+  type: 'string',
+  description:
+    'Filter with the app search syntax, e.g. "id:b t:creature pow<=1", "o:sacrifice -t:land", "set:neo is:foil". Printing terms match the row\'s own printing.',
+} as const;
+const BRIEF_PROP = { type: 'boolean', default: false, description: 'Omit oracle text to save tokens' } as const;
+
+/**
+ * Predicate over joined rows for an optional query: the same matcher as the
+ * collection screen's search box. Null when there is no query.
+ */
+async function rowMatcher(
+  query: string | undefined,
+): Promise<((oracle: OracleCard | undefined, printing: RowPrinting | undefined, finish?: Finish) => boolean) | null> {
+  if (!query) return null;
+  // `otag:` resolves its slug at parse time, so the tags must be loaded first.
+  await loadOracleTags();
+  const q = compileCardQuery(query);
+  if (q.isEmpty) return null;
+  return (oracle, printing, finish) => !!oracle && q.matches(toSearchableEntry(oracle, rowPrintingSummary(printing, finish)));
+}
+
+/** Folder id for a name, matched case-insensitively; created when missing. */
+async function folderIdFor(name: string): Promise<string> {
+  const lower = name.toLowerCase();
+  const existing = (await db.deckFolders.toArray()).find((f) => f.name.toLowerCase() === lower);
+  return existing ? existing.id : createDeckFolder(name);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +181,7 @@ export const AGENT_TOOLS: AgentTool[] = [
       properties: {
         query: { type: 'string' },
         limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+        brief: BRIEF_PROP,
       },
       required: ['query'],
     },
@@ -141,9 +190,10 @@ export const AGENT_TOOLS: AgentTool[] = [
       if (!query) throw new Error('query is required');
       const limit = int(args.limit, 20, 1, 50);
       const res = await searchCards(query, {}, limit);
+      const brief = args.brief === true;
       return {
         cards: res.cards.slice(0, limit).map((c) => ({
-          ...cardRow(c),
+          ...cardRow(c, brief),
           oracleId: c.oracleId,
           rarity: c.rarity,
           priceEur: c.priceEur,
@@ -155,10 +205,11 @@ export const AGENT_TOOLS: AgentTool[] = [
   {
     name: 'get_collection',
     description:
-      'List owned cards, optionally filtered by name substring and/or set code. Paged with limit/offset. Each row carries the market price per copy of its own printing and finish (priceEur/priceUsd, null when unknown); sort "price" ranks the most valuable first.',
+      'List owned cards, filtered by query (app search syntax), name substring and/or set code. Paged with limit/offset. Rows carry pt for creatures. Each row carries the market price per copy of its own printing and finish (priceEur/priceUsd, null when unknown); sort "price" ranks the most valuable first.',
     inputSchema: {
       type: 'object',
       properties: {
+        query: QUERY_PROP,
         name: { type: 'string', description: 'Case-insensitive name substring' },
         set: { type: 'string', description: 'Set code, e.g. "neo"' },
         sort: {
@@ -175,9 +226,11 @@ export const AGENT_TOOLS: AgentTool[] = [
       const joined = await joinCollectionEntries(await db.collection.toArray());
       const name = str(args.name)?.toLowerCase();
       const set = str(args.set)?.toLowerCase();
+      const matches = await rowMatcher(str(args.query));
       const filtered = joined.filter((j) => {
         if (name && !(j.oracle?.name.toLowerCase().includes(name) ?? false)) return false;
         if (set && (j.printing?.set.toLowerCase() ?? '') !== set) return false;
+        if (matches && !matches(j.oracle, j.printing, j.entry.finish)) return false;
         return true;
       });
       // Priced per finish: a foil row quotes the foil price, as in the app.
@@ -197,6 +250,7 @@ export const AGENT_TOOLS: AgentTool[] = [
         rows: priced.slice(offset, offset + limit).map(({ j, eur, usd }) => ({
           id: j.entry.id,
           name: j.oracle?.name ?? '(unknown)',
+          ...pt(j.oracle),
           set: j.printing?.set,
           collectorNumber: j.printing?.collectorNumber,
           condition: j.entry.condition,
@@ -213,10 +267,16 @@ export const AGENT_TOOLS: AgentTool[] = [
   },
   {
     name: 'list_containers',
-    description: 'List every deck, binder and box: id, name, kind, format, card count, archived flag.',
+    description:
+      'List every deck, binder and box: id, name, kind, format, folder, card count, archived flag. Also lists the deck folders.',
     inputSchema: { type: 'object', properties: {} },
     handler: async () => {
-      const [decks, slots] = await Promise.all([db.decks.toArray(), db.deckCards.toArray()]);
+      const [decks, slots, folders] = await Promise.all([
+        db.decks.toArray(),
+        db.deckCards.toArray(),
+        db.deckFolders.toArray(),
+      ]);
+      const folderName = new Map(folders.map((f) => [f.id, f.name]));
       const counts = new Map<string, number>();
       for (const s of slots) counts.set(s.deckId, (counts.get(s.deckId) ?? 0) + s.quantity);
       return {
@@ -225,18 +285,21 @@ export const AGENT_TOOLS: AgentTool[] = [
           name: d.name,
           kind: d.kind ?? 'deck',
           ...(d.format ? { format: d.format } : {}),
+          ...(d.folderId && folderName.has(d.folderId) ? { folder: folderName.get(d.folderId) } : {}),
           cards: counts.get(d.id) ?? 0,
           ...(d.archivedAt ? { archived: true } : {}),
         })),
+        folders: folders.map((f) => f.name),
       };
     },
   },
   {
     name: 'get_container',
-    description: 'The full list of one deck, binder or box (by id from list_containers), with boards and pinned printings.',
+    description:
+      'The list of one deck, binder or box (by id from list_containers), with boards and pinned printings. Use query to filter and brief to drop oracle text on big boxes.',
     inputSchema: {
       type: 'object',
-      properties: { id: { type: 'string' } },
+      properties: { id: { type: 'string' }, query: QUERY_PROP, brief: BRIEF_PROP },
       required: ['id'],
     },
     handler: async (args) => {
@@ -245,13 +308,16 @@ export const AGENT_TOOLS: AgentTool[] = [
       const deck = await db.decks.get(id);
       if (!deck) throw new Error(`no container with id ${id}`);
       const joined = await joinDeckCards(await db.deckCards.where('deckId').equals(id).toArray());
+      const matches = await rowMatcher(str(args.query));
+      const brief = args.brief === true;
+      const rows = matches ? joined.filter((j) => matches(j.oracle, j.printing, j.entry.finish)) : joined;
       return {
         id: deck.id,
         name: deck.name,
         kind: deck.kind ?? 'deck',
         ...(deck.format ? { format: deck.format } : {}),
-        cards: joined.map((j) => ({
-          ...cardRow(j.oracle),
+        cards: rows.map((j) => ({
+          ...cardRow(j.oracle, brief),
           quantity: j.entry.quantity,
           board: j.entry.board,
           ...(j.printing ? { set: j.printing.set, collectorNumber: j.printing.collectorNumber } : {}),
@@ -377,6 +443,7 @@ export const AGENT_TOOLS: AgentTool[] = [
           enum: ['casual', 'standard', 'pioneer', 'modern', 'legacy', 'vintage', 'pauper', 'commander'],
           description: 'Decks only',
         },
+        folder: { type: 'string', description: 'Decks only: folder name, created if it does not exist' },
       },
       required: ['name'],
     },
@@ -387,8 +454,35 @@ export const AGENT_TOOLS: AgentTool[] = [
       if (!CONTAINER_KINDS.includes(kind)) throw new Error('kind must be deck, binder or box');
       const format = (str(args.format) ?? 'casual') as DeckFormat;
       if (!DECK_FORMATS.includes(format)) throw new Error(`format must be one of ${DECK_FORMATS.join(', ')}`);
+      const folder = str(args.folder);
+      if (folder && kind !== 'deck') throw new Error('only decks go in folders');
       const id = await createContainer(name, kind, format);
-      return { id, name, kind };
+      if (folder) await setDeckFolder(id, await folderIdFor(folder));
+      return { id, name, kind, ...(folder ? { folder } : {}) };
+    },
+  },
+  {
+    name: 'set_deck_folder',
+    description:
+      'Move a deck into a folder by name (created if it does not exist), or out of its folder when folder is omitted.',
+    write: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        containerId: { type: 'string', description: 'From list_containers' },
+        folder: { type: 'string', description: 'Folder name; omit to take the deck out of its folder' },
+      },
+      required: ['containerId'],
+    },
+    handler: async (args) => {
+      const containerId = str(args.containerId);
+      if (!containerId) throw new Error('containerId is required');
+      const deck = await db.decks.get(containerId);
+      if (!deck) throw new Error(`no container with id ${containerId}`);
+      if ((deck.kind ?? 'deck') !== 'deck') throw new Error('only decks go in folders');
+      const folder = str(args.folder);
+      await setDeckFolder(containerId, folder ? await folderIdFor(folder) : undefined);
+      return { id: containerId, folder: folder ?? null };
     },
   },
   {

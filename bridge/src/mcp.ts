@@ -26,7 +26,8 @@ export async function startMcp(hub: TabHub, version: string): Promise<void> {
     try {
       const result = await hub.call(name, (args ?? {}) as Record<string, unknown>);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result ?? null, null, 2) }],
+        // Compact, not pretty-printed: indentation is about a third of a large result's tokens.
+        content: [{ type: 'text' as const, text: JSON.stringify(result ?? null) }],
       };
     } catch (err) {
       return {

@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.186.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Agent tools support filtering with the app\'s search syntax (e.g., "t:creature pow<=1"), showing creature P/T in rows, deck folders, and a brief option to drop oracle text on large results. Responses are compact JSON now instead of pretty-printed.',
+      },
+    ],
+  },
+  {
     version: '0.185.1',
     changes: [
       {

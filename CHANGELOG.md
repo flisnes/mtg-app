@@ -2,6 +2,14 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.186.0
+
+- **Added: agent tools now support filtering with the app's search syntax.** The `get_collection` and `get_container` agent tools accept a `query` parameter (e.g., "id:b t:creature pow<=1", "o:sacrifice -t:land", "set:neo is:foil") to filter results using the same matcher as the collection screen's search box. Printing terms like `:foil` match the row's own printing.
+- **Added: creature power and toughness in agent card rows.** Card rows returned by agent tools now include `pt` as a single "2/2" string for creatures (omitted for non-creatures), keeping token usage tight.
+- **Added: brief option for agent tools.** `get_collection` and `get_container` accept `brief: true` to omit oracle text (the largest field), cutting the size of large results significantly.
+- **Added: deck folder support for agent tools.** `list_containers` now returns a `folders` array listing all deck folders and includes a `folder` field per deck. `create_container` accepts a `folder` parameter to file a new deck immediately. A new `set_deck_folder` tool moves decks in and out of folders by name, creating folders when missing.
+- **Changed: agent responses are compact JSON instead of pretty-printed.** Indentation in large results now takes about a third of the tokens. This does not affect the data returned, only its formatting.
+
 ## 0.185.1
 
 - **Added: agent collection tool now returns per-copy market prices.** The `get_collection` agent tool (used when Claude Code is connected) returns each owned card's market price in EUR and USD for its exact printing and finish, null when unknown. Use `sort: "price"` to list cards ranked by value per copy, highest first.

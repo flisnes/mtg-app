@@ -54,6 +54,15 @@ export interface Prefs {
    * different number than a desktop.
    */
   imageCacheLimit: number;
+  /**
+   * Agent connections (agent/bridge.ts): while on, this tab keeps a WebSocket
+   * to the local MCP bridge so Claude Code can read the collection and decks.
+   * Desktop only, off by default — the bridge only exists on a machine that
+   * deliberately runs it.
+   */
+  agentBridge: boolean;
+  /** Whether agent tools may change anything. Reads are always allowed. */
+  agentWrites: boolean;
 }
 
 // 'ask' across the board: a fresh install downloads nothing the user didn't
@@ -71,6 +80,8 @@ const DEFAULTS: Prefs = {
   // IMAGE_CACHE_DEFAULT in util/imageCache.ts; the literal keeps that module,
   // which imports this one, out of an import cycle.
   imageCacheLimit: 3000,
+  agentBridge: false,
+  agentWrites: true,
 };
 
 const STORAGE_KEY = 'prefs';

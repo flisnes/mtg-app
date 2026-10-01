@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.185.0
+
+- **Added: Agent connections (desktop).** A new Settings section lets a Claude Code session on your computer work with the app through the open tab: search cards, read your collection, decks, wishlist and tradelist, and (if you allow changes) add cards, build lists and mark cards for trade. Off by default and local only: the connection never leaves your machine, and every agent write is one history entry you can undo. Deck edits by the agent are list-only: it never files or moves your physical copies.
+
 ## 0.184.0
 
 - **Changed: every way cards come in now ends in one questionnaire.** Scanning into your collection, the tradelist, a deck, binder or box, importing a list, buying from the wishlist and opening a sealed product all walk the same steps in one sheet: which cards are already yours, where they live, and whether a copy moved. Each step shows "Step 2 of 3", Back keeps every answer, and nothing is written until the last one, so backing out of any step leaves your collection exactly as it was.

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mtg-app": {
+      "command": "node",
+      "args": ["node_modules/tsx/dist/cli.mjs", "bridge/src/index.ts"]
+    }
+  }
+}

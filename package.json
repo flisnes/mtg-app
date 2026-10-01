@@ -8,7 +8,8 @@
     "sim",
     "client",
     "server",
-    "pipeline"
+    "pipeline",
+    "bridge"
   ],
   "scripts": {
     "dev:client": "npm run dev --workspace client",

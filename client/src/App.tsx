@@ -33,6 +33,7 @@ import { Import } from './routes/Import.js';
 import { Export } from './routes/Export.js';
 import { maybeFetchMatches } from './account/notifications.js';
 import { initSyncEngine } from './sync/engine.js';
+import { initAgentBridge } from './agent/bridge.js';
 import { recordCollectionPrices } from './price/tracking.js';
 import { recordSealedPrices } from './price/sealedTracking.js';
 import { ensureRates } from './price/rates.js';
@@ -82,6 +83,8 @@ export function App() {
       // refresh trade-match notifications (throttled).
       initSyncEngine();
       void maybeFetchMatches();
+      // Agent connections (Settings): no-op unless the pref is on.
+      initAgentBridge();
       // Trim the card-image cache back to this device's budget (Settings → Card
       // images); the service worker only enforces the build-time ceiling.
       startImageCacheUpkeep();

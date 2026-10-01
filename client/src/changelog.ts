@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.185.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Agent connections (desktop): a new Settings toggle lets a Claude Code session on your computer search cards and work with your collection, decks and lists through the open tab. Off by default, local only, and every agent change is one undoable history entry.',
+      },
+    ],
+  },
+  {
     version: '0.184.0',
     changes: [
       {

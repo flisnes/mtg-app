@@ -815,10 +815,10 @@ export interface WishlistBulkLine {
  */
 export async function addToWishlistBulk(
   lines: WishlistBulkLine[],
-  meta: { label?: string; source?: EventSource } = {},
+  meta: { label?: string; source?: EventSource } & BatchMeta = {},
 ): Promise<{ entries: number; cards: number }> {
   let cards = 0;
-  const batchId = newId();
+  const batchId = meta.batchId ?? newId();
   const batchExtra = { source: meta.source ?? 'import', batchId, ...(meta.label ? { batchLabel: meta.label } : {}) };
   await db.transaction('rw', WISHLIST_TABLES, async () => {
     const now = Date.now();

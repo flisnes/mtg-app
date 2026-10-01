@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { MIN_PASSWORD_CHARS, USERNAME_RE } from '@mtg/shared';
 import { ApiError } from '../account/api.js';
@@ -11,6 +11,7 @@ import {
 } from '../account/session.js';
 import { useAccount } from '../account/useAccount.js';
 import { syncNow } from '../sync/engine.js';
+import { getAgentStatusSnapshot, subscribeAgentStatus, type AgentStatus } from '../agent/bridge.js';
 import { useToast } from '../components/Toast.js';
 import { DataTransfer } from '../components/DataTransfer.js';
 import { deleteAllUserData } from '../db/dataAccess.js';
@@ -85,6 +86,7 @@ export function Settings() {
       <FilingSection />
       <DownloadsSection />
       <ImageCacheSection />
+      <AgentSection />
       <PreferencesSection />
       <DataSection signedIn={!!account.session} />
       <TroubleSection />
@@ -567,6 +569,55 @@ function FilingSection() {
         </select>
       </label>
       <p className="fine-print">{FILING_OPTIONS.find((o) => o.value === filingPolicy)?.hint}</p>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Agent connections: let a local Claude Code session drive this tab
+// ---------------------------------------------------------------------------
+
+const AGENT_STATUS_TEXT: Record<AgentStatus, string> = {
+  off: 'Off.',
+  waiting: 'Looking for the bridge. Start a Claude Code session in the app repo and it will appear.',
+  connected: 'Connected. The agent can see this tab.',
+  replaced: 'Another tab took over the connection. Toggle this off and on to reclaim it.',
+};
+
+function AgentSection() {
+  const { agentBridge, agentWrites } = usePrefs();
+  const status = useSyncExternalStore(subscribeAgentStatus, getAgentStatusSnapshot);
+
+  return (
+    <section className="about-section">
+      <h2>Agent connections</h2>
+      <p className="fine-print">
+        Lets a Claude Code session on this computer work with your collection and decks through this tab. Desktop
+        only, local only: the connection never leaves your machine, and nothing is shared until you turn it on.
+      </p>
+
+      <label className="agree-row">
+        <input
+          type="checkbox"
+          checked={agentBridge}
+          onChange={(e) => setPrefs({ agentBridge: e.target.checked })}
+        />
+        <span>Enable agent connections</span>
+      </label>
+
+      {agentBridge && (
+        <>
+          <label className="agree-row">
+            <input
+              type="checkbox"
+              checked={agentWrites}
+              onChange={(e) => setPrefs({ agentWrites: e.target.checked })}
+            />
+            <span>Allow changes (adding cards, editing lists). Off = read only.</span>
+          </label>
+          <p className="fine-print">{AGENT_STATUS_TEXT[status]}</p>
+        </>
+      )}
     </section>
   );
 }

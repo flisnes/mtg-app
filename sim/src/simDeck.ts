@@ -141,6 +141,27 @@ export interface SimSuspend {
   n: number;
 }
 
+/**
+ * What an Equipment or an Aura gives the creature it is on, read off its
+ * "Equipped creature gets +N/+M and has ..." line (rebuild plan §6 step 2).
+ *
+ * The floor version, no targeting: while it is on the battlefield the bonus
+ * sits on your best attacker (`recompute` in simulate.ts), free of its equip
+ * cost. Reconfigure and living weapon are left out, and so is any bonus behind
+ * an "as long as".
+ */
+export interface SimAttach {
+  /** Equipment pays an equip cost at sorcery speed, so it goes on from the turn after it lands. An Aura is on as it resolves. */
+  equipment: boolean;
+  /** Power and toughness per unit of `per`. */
+  power: number;
+  toughness: number;
+  /** How many units: a fixed 1, or your permanents matching a query ("+1/+1 for each artifact you control"). */
+  per: BehaviorAmount;
+  /** Keywords it grants, as KW_ bits: haste, vigilance, double strike. */
+  kw: number;
+}
+
 export interface SimCard {
   oracleId: string;
   name: string;
@@ -277,6 +298,8 @@ export interface SimCard {
    * card (The Necrobloom) is read off the battlefield instead.
    */
   dredge: number;
+  /** Printed "Equipped/Enchanted creature gets ..." bonus, or null. See SimAttach. */
+  attach: SimAttach | null;
 }
 
 /**
@@ -552,7 +575,7 @@ export function buildSimDeck(
     if (card.copies <= 0) continue;
     if (card.role === 'land' || card.role === 'fetch') coverage.lands += card.copies;
     else if (card.role !== 'spell') coverage.mana += card.copies;
-    else if (card.effect || card.behavior) coverage.effects += card.copies;
+    else if (card.effect || card.behavior || card.attach) coverage.effects += card.copies;
     else coverage.blanks += card.copies;
     if (card.behavior && defaulted?.has(card.oracleId)) coverage.defaults += card.copies;
     else if (card.behavior) coverage.authored += card.copies;
@@ -633,6 +656,7 @@ function simCardOf(o: OracleCard, behavior: CompiledBehavior | null, copies: num
     gyCast: null,
     suspend: null,
     dredge: printedDredge(o.oracleText),
+    attach: printedAttach(o.typeLine, o.oracleText),
   };
   return card;
 }
@@ -775,6 +799,100 @@ export function printedDredge(text: string | null | undefined): number {
   const m = /^dredge (\d+)\b/im.exec(text.replace(/\([^)]*\)/g, ''));
   return m ? Math.min(MAX_DREDGE, Number(m[1])) : 0;
 }
+
+/** "for each <these> you control" on an attachment's bonus, as the query that counts them. Anything else is unread. */
+const ATTACH_PER: Readonly<Record<string, string>> = {
+  artifact: 't:artifact',
+  enchantment: 't:enchantment',
+  'artifact and/or enchantment': 't:artifact or t:enchantment',
+  'artifact and enchantment': 't:artifact or t:enchantment',
+  // Last of the three, so the sentence (ATTACH_PER_WORDS) says this one.
+  'artifact or enchantment': 't:artifact or t:enchantment',
+  creature: 't:creature',
+  land: 't:land',
+  plains: 't:plains',
+  island: 't:island',
+  swamp: 't:swamp',
+  mountain: 't:mountain',
+  forest: 't:forest',
+  'basic land': 't:basic',
+};
+/** Bigger than any real bonus; a reading past it is a misparse. */
+const MAX_ATTACH_BONUS = 20;
+
+/**
+ * An Equipment's or an Aura's printed bonus (rebuild plan §6 step 2), or null
+ * for a card that is neither, one this reader will not touch, or one whose
+ * bonus is nothing the model can act on.
+ *
+ * Read: sentences that *start* "Equipped creature gets +N/+M" or "Enchanted
+ * creature has ...", a flat bonus or "+N/+M for each <artifact | enchantment |
+ * creature | land | basic type> you control", and haste, vigilance and double
+ * strike among the keywords. Not read, so the card plays as its type line
+ * alone: a creature on the front face (reconfigure, bestow), living weapon
+ * (the shipped defaults play those as the token they make), an Aura that is
+ * not plainly "Enchant creature", a bonus behind "as long as", a "for each"
+ * this table cannot count, and a bonus that costs toughness (Skullclamp's
+ * +1/-1 kills the creature it is for).
+ */
+export function printedAttach(typeLine: string, text: string | null | undefined): SimAttach | null {
+  const front = typeLine.split('//')[0] ?? '';
+  if (/\bCreature\b/i.test(front)) return null;
+  const equipment = /\bEquipment\b/.test(front);
+  if (!equipment && !/\bAura\b/.test(front)) return null;
+  if (!text) return null;
+  const plain = text.replace(/\([^)]*\)/g, '');
+  if (/\b(living weapon|reconfigure)\b/i.test(plain)) return null;
+  if (!equipment && !/^enchant creature( you control)?\s*$/im.test(plain)) return null;
+  const who = equipment ? 'equipped' : 'enchanted';
+  let power = 0;
+  let toughness = 0;
+  let per: BehaviorAmount | null = null;
+  let kw = 0;
+  for (const raw of plain.split(/(?<=\.)\s+|\n/)) {
+    const sentence = raw.trim().toLowerCase();
+    if (!sentence.startsWith(`${who} creature `)) continue;
+    if (/\b(as long as|if|unless|only|instead)\b/.test(sentence)) continue;
+    if (sentence.includes('haste')) kw |= KW_HASTE;
+    if (sentence.includes('vigilance')) kw |= KW_VIGILANCE;
+    if (sentence.includes('double strike')) kw |= KW_DOUBLE;
+    const m = /\bgets ([+-]\d+)\/([+-]\d+)(.*)$/.exec(sentence);
+    if (!m) continue;
+    const p = Number(m[1]);
+    const t = Number(m[2]);
+    if (!Number.isFinite(p) || !Number.isFinite(t) || t < 0 || p < 0 || p > MAX_ATTACH_BONUS || t > MAX_ATTACH_BONUS) continue;
+    // "+1/+1 for each artifact you control": the thing counted has to be one
+    // the table can count, or the whole bonus is left unread. " and " with the
+    // spaces, so "and/or" stays inside the phrase.
+    const rest = m[3] ?? '';
+    const each = /^ for each (.+?)(?: you control)?(?:[,.]| and | that | with |$)/.exec(rest);
+    const perQ = each ? ATTACH_PER[each[1]!.trim()] : undefined;
+    if ((rest.startsWith(' for each') || /\bwhere\b/.test(rest)) && !perQ) continue;
+    // One bonus per card: the first readable one wins, which is the printed one on every card we have looked at.
+    if (power > 0 || toughness > 0) continue;
+    power = p;
+    toughness = t;
+    per = perQ ? { kind: 'matching', q: perQ } : { kind: 'fixed', n: 1 };
+  }
+  if (!per && kw === 0) return null;
+  return { equipment, power, toughness, per: per ?? { kind: 'fixed', n: 1 }, kw };
+}
+
+/** "+2/+2 and double strike on your best attacker", for the Model tab. */
+export function describeAttach(a: SimAttach): string {
+  const parts: string[] = [];
+  if (a.power > 0 || a.toughness > 0) {
+    const bonus = `+${a.power}/+${a.toughness}`;
+    parts.push(a.per.kind === 'matching' ? `${bonus} per ${ATTACH_PER_WORDS[a.per.q ?? ''] ?? 'permanent matching'} you control` : bonus);
+  }
+  const words: string[] = [];
+  if (a.kw & KW_HASTE) words.push('haste');
+  if (a.kw & KW_VIGILANCE) words.push('vigilance');
+  if (a.kw & KW_DOUBLE) words.push('double strike');
+  if (words.length > 0) parts.push(words.join(', '));
+  return `${parts.join(' and ')} on your best attacker`;
+}
+const ATTACH_PER_WORDS: Readonly<Record<string, string>> = Object.fromEntries(Object.entries(ATTACH_PER).map(([w, q]) => [q, w]));
 
 /**
  * The parts of an authored behavior that change what the card *is* rather than
@@ -921,6 +1039,7 @@ function tokenCard(key: string, spec: TokenOption): { card: SimCard; oracle: Ora
     gyCast: null,
     suspend: null,
     dredge: 0,
+    attach: null,
   };
   return { card, oracle };
 }
@@ -969,6 +1088,8 @@ function applyKeepQuery(cards: SimCard[], oracles: readonly OracleCard[], q: str
 function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[], typeGrants: readonly string[]): SimFilter[] {
   const queries = new Set<string>();
   for (const card of cards) collectBehaviorQueries(card.behavior, queries);
+  // An attachment's "+1/+1 for each artifact you control" counts through the same filters.
+  for (const card of cards) if (card.attach?.per.q) queries.add(card.attach.per.q);
   let commanderOnly = false;
   for (const card of cards) {
     if (card.spendQ === SPEND_COMMANDER) commanderOnly = true;

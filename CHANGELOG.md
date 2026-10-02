@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.189.0
+
+- **Added: the deck simulator reads Equipment and Auras.** "Equipped creature gets +2/+2", "+1/+1 for each artifact you control", haste, vigilance and double strike are read straight off the card, and the bonus sits on whichever creature would swing hardest with it while the Equipment or Aura is out. Swords, Colossus Hammer, All That Glitters, Lightning Greaves and Rancor all count in combat damage now. Deliberately not read: reconfigure, living weapon (those keep their shipped token rules), bonuses behind "as long as", and Auras that are not plainly "Enchant creature". The Model tab shows the reading under each card, and the goldfish trace says how much of a swing came from attachments.
+
 ## 0.188.0
 
 - **Added: a Considering section in every deck.** Park the cards you might play there. They never count toward the deck's size, legality, value or the "missing cards" wishlist, but they can still be filed in the deck like any other card. Add them with +Maybe in search or "Add to considering" on the card, or move a card there from its zone. Deck imports read "Maybeboard" and "Considering" sections into it.

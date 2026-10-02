@@ -9,6 +9,24 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.181.3',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Editing a card no longer makes every badge, total and list re-read your whole collection separately — they now share one pass, so edits feel snappier on big collections.',
+      },
+    ],
+  },
+  {
+    version: '0.181.2',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The deck simulator moved into its own package with a proper test suite, and out of the main download: the app fetches a little less and the engine loads when you first watch a game play out.',
+      },
+    ],
+  },
+  {
     version: '0.181.0',
     changes: [
       {

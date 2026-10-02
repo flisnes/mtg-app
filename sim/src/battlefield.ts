@@ -40,6 +40,8 @@ export class Permanents {
   readonly staticPump: Int32Array;
   /** Pumps until end of turn: a Craterhoof's +X/+X. */
   readonly eotPump: Int32Array;
+  /** Power from the Equipment and Auras read as sitting on it (rebuild plan §6 step 2), recomputed with the statics. */
+  readonly attachPump: Int32Array;
   /** Tapped this turn, for mana. Untapped at the start of every turn. */
   readonly tapped: Uint8Array;
   /** Current card types, T_ bits. The printed ones plus whatever a static rule added. */
@@ -72,6 +74,7 @@ export class Permanents {
     this.charge = new Int32Array(capacity);
     this.staticPump = new Int32Array(capacity);
     this.eotPump = new Int32Array(capacity);
+    this.attachPump = new Int32Array(capacity);
     this.tapped = new Uint8Array(capacity);
     this.types = new Uint8Array(capacity);
     this.added = new Uint8Array(capacity);
@@ -107,6 +110,7 @@ export class Permanents {
     this.charge[p] = 0;
     this.staticPump[p] = 0;
     this.eotPump[p] = 0;
+    this.attachPump[p] = 0;
     this.tapped[p] = 0;
     this.types[p] = card.types;
     this.added[p] = 0;
@@ -135,6 +139,7 @@ export class Permanents {
     this.charge[at] = this.charge[last]!;
     this.staticPump[at] = this.staticPump[last]!;
     this.eotPump[at] = this.eotPump[last]!;
+    this.attachPump[at] = this.attachPump[last]!;
     this.tapped[at] = this.tapped[last]!;
     this.types[at] = this.types[last]!;
     this.added[at] = this.added[last]!;
@@ -183,7 +188,8 @@ export class Permanents {
   /** Power, toughness and keywords from their parts. Called whenever a part changes. */
   refresh(p: number, card: SimCard): void {
     const bonus = this.p1p1[p]! + this.staticPump[p]! + this.eotPump[p]!;
-    this.power[p] = Math.max(0, card.power + bonus);
+    // An attachment's power and toughness can differ (+2/+0), so only the power is kept; nothing here reads toughness.
+    this.power[p] = Math.max(0, card.power + bonus + this.attachPump[p]!);
     this.toughness[p] = card.toughness + bonus;
     this.kw[p] = card.keywords | this.kwOwn[p]! | this.kwStatic[p]! | this.kwEot[p]!;
   }

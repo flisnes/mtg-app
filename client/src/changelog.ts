@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.189.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The deck simulator reads Equipment and Auras: the printed bonus goes on your best attacker. Swords, Colossus Hammer and Rancor count in combat now.',
+      },
+    ],
+  },
+  {
     version: '0.188.0',
     changes: [
       {
@@ -169,24 +178,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Background card-data and price downloads now show a slim progress strip under the header while they run.',
-      },
-    ],
-  },
-  {
-    version: '0.181.3',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Editing a card no longer makes every badge, total and list re-read your whole collection separately — they now share one pass, so edits feel snappier on big collections.',
-      },
-    ],
-  },
-  {
-    version: '0.181.2',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'The deck simulator moved into its own package with a proper test suite, and out of the main download: the app fetches a little less and the engine loads when you first watch a game play out.',
       },
     ],
   },

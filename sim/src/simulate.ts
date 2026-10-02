@@ -2505,6 +2505,8 @@ export function simulate(
     ensureFresh(turn);
     const attackers: number[] = [];
     let power = 0;
+    /** Of that, what the Equipment and Auras on them add (for the trace). */
+    let worn = 0;
     let tappedOut = 0;
     for (let p = 0; p < perms.len; p++) {
       const index = perms.card[p]!;
@@ -2527,6 +2529,7 @@ export function simulate(
       }
       attackers.push(index);
       power += perms.kw[p]! & KW_DOUBLE ? 2 * perms.power[p]! : perms.power[p]!;
+      worn += perms.kw[p]! & KW_DOUBLE ? 2 * perms.attachPump[p]! : perms.attachPump[p]!;
     }
     if (sink && tappedOut > 0) {
       say(sink, 'note', `${tappedOut} creature${tappedOut === 1 ? ' was' : 's were'} tapped for mana, so ${tappedOut === 1 ? 'it does' : 'they do'} not attack`);
@@ -2536,7 +2539,8 @@ export function simulate(
     // what keeps a trigger that makes a creature from handing it an attack.
     dealDamage(power, true);
     if (sink && power > 0) {
-      say(sink, 'effect', `Attacks with ${attackers.length} creature${attackers.length === 1 ? '' : 's'} for ${power}`);
+      const wearing = worn > 0 ? ` (${worn} of it from Equipment and Auras)` : '';
+      say(sink, 'effect', `Attacks with ${attackers.length} creature${attackers.length === 1 ? '' : 's'} for ${power}${wearing}`);
     }
     for (const index of attackers) {
       const card = cards[index]!;
@@ -3691,8 +3695,10 @@ export function simulate(
 
   /** Filter rows per `[X]` value: one per combination of the types a static rule adds. */
   const V = deck.variants;
-  /** Any card with a static rule. Without one, nothing below ever recomputes. */
-  const anyStatics = cards.some((c) => c.permanent && !!c.behavior && c.behavior.statics.length > 0);
+  /** Any Equipment or Aura with a printed bonus the model reads (rebuild plan §6 step 2). */
+  const anyAttach = cards.some((c) => c.permanent && !!c.attach);
+  /** Any card with a static rule, or an attachment. Without one, nothing below ever recomputes. */
+  const anyStatics = anyAttach || cards.some((c) => c.permanent && !!c.behavior && c.behavior.statics.length > 0);
   /** Any static on a card of this deck that lets cards in a zone be cast (Six's retrace, Future Sight). */
   const grantsFrom = (zone: string): boolean =>
     cards.some((c) => c.permanent && !!c.behavior?.statics.some((r) => r.steps.some((s) => s.op === 'grantcast' && s.from === zone)));
@@ -3858,6 +3864,7 @@ export function simulate(
       perms.sub[p] = 0;
       perms.kwStatic[p] = 0;
       perms.staticPump[p] = 0;
+      perms.attachPump[p] = 0;
       perms.extra[p] = 0;
       perms.extraMask[p] = 0;
       perms.extraBy[p] = -1;
@@ -3948,6 +3955,34 @@ export function simulate(
       }
     }
     for (let p = 0; p < len; p++) perms.refresh(p, cards[perms.card[p]!]!);
+    // Pass three: Equipment and Auras (rebuild plan §6 step 2), on top of what
+    // the statics made of everyone. Each goes on the creature that would swing
+    // hardest with it: one that can attack this turn (or could, with the haste
+    // it brings), then the biggest. They pile onto the same creature, which is
+    // what a voltron deck does with them. An Equipment waits a turn: the equip
+    // cost is mana the spend loop has already committed the turn it lands.
+    if (anyAttach) {
+      for (let p = 0; p < len; p++) {
+        const a = cards[perms.card[p]!]!.attach;
+        if (!a || !stillOut(p, turn) || (a.equipment && perms.since[p]! >= turn)) continue;
+        let best = -1;
+        let bestScore = -1;
+        for (let t = 0; t < len; t++) {
+          if (!(perms.types[t]! & T_CREATURE) || !stillOut(t, turn) || perms.kw[t]! & KW_DEFENDER) continue;
+          const swings = perms.ready(t, turn) || (a.kw & KW_HASTE) !== 0;
+          const score = perms.power[t]! + (swings ? 1000 : 0);
+          if (score > bestScore) {
+            bestScore = score;
+            best = t;
+          }
+        }
+        if (best < 0) continue;
+        const units = a.per.kind === 'fixed' ? (a.per.n ?? 1) : behaviorAmount(a.per, turn);
+        perms.attachPump[best] = perms.attachPump[best]! + a.power * units;
+        perms.kwStatic[best] = perms.kwStatic[best]! | a.kw;
+        perms.refresh(best, cards[perms.card[best]!]!);
+      }
+    }
     // The mana view follows. Granted sources that lost their grant (or their
     // permanent) go; the rest of the sources pick up their permanent's added
     // colors, land-ness and extra mana.
@@ -4621,6 +4656,9 @@ export function simulate(
       // Untap. The only tapped state this model keeps is a creature that paid
       // for last turn's spells, so it is also the only thing to untap.
       if (perms.len > 0) perms.untapAll();
+      // Which creature an attachment is best on, and whether an Equipment is
+      // on at all, both turn on the turn number, so a new turn is a change.
+      if (anyAttach && perms.len > 0) dirty = true;
       if (sink) {
         sink.turn = { turn, lines: [], available: 0, spent: 0, damage: 0, board: EMPTY_BOARD };
         sink.game.turns.push(sink.turn);

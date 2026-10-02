@@ -79,7 +79,7 @@ import { PolicySpread } from './PolicySpread.js';
 import type { QueueCard, QueueReason } from '@mtg/sim';
 import { templatesFor, type Template } from '@mtg/sim';
 import { gapWords, type ShippedDefaults } from '@mtg/sim';
-import { KW_HASTE, printedDredge, printedKeywords } from '@mtg/sim';
+import { KW_HASTE, describeAttach, printedAttach, printedDredge, printedKeywords } from '@mtg/sim';
 import { oracleTagClosure } from '../cardDb/oracleTags.js';
 import {
   COMBAT_POLICIES,
@@ -130,6 +130,8 @@ interface BehaviorCard {
   extraLand: string | null;
   /** A printed Dredge N, or 0. Like haste, a keyword: it holds whatever else is written, unless a graveyard rule says another number. */
   dredge: number;
+  /** An Equipment's or Aura's printed bonus, as a phrase, or null. Read off the card and not replaced by a rule. */
+  attach: string | null;
   /**
    * And what the card *is*: a land, a rock, a mana creature. The one reading a
    * rule written here does not replace, listed anyway because every effect the
@@ -181,6 +183,28 @@ const isNotACard = (typeLine: string) => {
   return t.startsWith('token') || t.includes('emblem') || t === 'card';
 };
 
+/** What an Equipment or Aura is read as giving your best attacker, or null. */
+const attachPhrase = (o: OracleCard): string | null => {
+  const a = printedAttach(o.typeLine, o.oracleText);
+  return a ? describeAttach(a) : null;
+};
+
+/** Every derived reading, not some of them. A fetchland and an Exploration were both missing from this test once. */
+const isRead = (c: BehaviorCard) => !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source || c.dredge || c.attach);
+
+/**
+ * What a hand-reviewed card still waits on. The review listed "equipment and
+ * auras" on every Sword; now that the bonus is read, that word is answered
+ * and only the rest is still a gap. Null when nobody has looked.
+ */
+const openGaps = (c: BehaviorCard): readonly string[] | null => {
+  if (!c.idle) return null;
+  if (!c.attach) return c.idle;
+  const rest = c.idle.filter((g) => g !== 'attach');
+  // Reviewed as waiting only on the attach: nothing left to wait on, and not "right as nothing" either.
+  return rest.length === 0 && c.idle.length > 0 ? null : rest;
+};
+
 /**
  * The deck's distinct cards, merged the way buildSimDeck merges them: by
  * oracleId, across the mainboard and the command zone. A behavior is authored
@@ -212,6 +236,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       ritual: describeRitual(decodeManaProfile(o.mana), o.produces),
       extraLand: describeExtraLand(decodeManaProfile(o.mana)),
       dredge: printedDredge(o.oracleText),
+      attach: attachPhrase(o),
       // Sick is a creature without haste, off the type line: a Dryad Arbor too.
       source: describeManaSource(decodeManaProfile(o.mana), o.produces, isCreature(o.typeLine) && !(printedKeywords(o.oracleText) & KW_HASTE)),
       authored: behaviors.get(o.oracleId) ?? null,
@@ -239,6 +264,7 @@ function summaryOf(card: BehaviorCard): string {
   if (card.extraLand) return `${PLAY_LEAD}: ${card.extraLand}`;
   // No lead on this one: a Forest taps for green whenever you like, which is
   // not a thing that happens when you play it.
+  if (card.attach) return card.attach;
   if (card.source) return card.source;
   if (card.dredge) return `Dredge ${card.dredge}`;
   return 'Do nothing';
@@ -257,6 +283,7 @@ function playsOutAs(card: BehaviorCard, preview: readonly BehaviorRule[], cast: 
   const derived = card.ramp ?? card.fetch ?? card.ritual ?? card.extraLand;
   if (derived) return `${PLAY_LEAD}: ${derived}, read from the card`;
   if (card.dredge) return `Dredge ${card.dredge}, printed on the card.`;
+  if (card.attach) return `${card.attach}, read from the card.`;
   // A Forest is not a blank, it is a Forest. The line under this one says so.
   if (card.source) return 'Nothing beyond what it is.';
   return 'Nothing. In the simulator this card does nothing.';
@@ -455,10 +482,6 @@ function BehaviorList({
   spread: readonly SpendRun[] | undefined;
   spreadStale: boolean;
 }) {
-  // Every derived reading, not some of them. A fetchland and an Exploration
-  // were both missing from this test, so both sat under "Nothing read yet"
-  // with a line underneath saying what had in fact been read off them.
-  const isRead = (c: BehaviorCard) => !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source || c.dredge);
   const authored = cards.filter((c) => c.authored);
   const shipped = cards.filter((c) => !c.authored && c.shipped);
   const blank = cards.filter((c) => !c.authored && !c.shipped && !isRead(c));
@@ -480,8 +503,8 @@ function BehaviorList({
   const ready = (c: BehaviorCard) => borrowable.has(c.oracleId);
   const elsewhere = blank.filter((c) => !reasons.has(c.oracleId) && ready(c));
   // Read by hand and waiting on something the simulator does not model yet.
-  const waiting = blank.filter((c) => !reasons.has(c.oracleId) && !ready(c) && !!c.idle?.length);
-  const quiet = blank.filter((c) => !reasons.has(c.oracleId) && !ready(c) && !c.idle?.length);
+  const waiting = blank.filter((c) => !reasons.has(c.oracleId) && !ready(c) && !!openGaps(c)?.length);
+  const quiet = blank.filter((c) => !reasons.has(c.oracleId) && !ready(c) && !openGaps(c)?.length);
 
   if (cards.length === 0) {
     return <p className="fine-print">Nothing in the mainboard yet.</p>;
@@ -648,7 +671,9 @@ function Section({
       {cards.map((card) => {
         const reason = reasons?.get(card.oracleId);
         const offer = card.authored || !suggest ? undefined : borrowable?.get(card.oracleId)?.[0];
-        const waits = !card.authored && !card.shipped && card.idle?.length ? card.idle : null;
+        // A read card says what was read; a Sword with its bonus read is not "waiting".
+        const gaps = openGaps(card);
+        const waits = !card.authored && !card.shipped && !isRead(card) && gaps?.length ? gaps : null;
         return (
           <li key={card.oracleId}>
             <button type="button" className="behavior-row" onClick={() => onOpen(card.oracleId)}>
@@ -798,6 +823,7 @@ function BehaviorEditor({
   // Starting points only for a card nobody has written: with a rule of yours or
   // a shipped one, a guess from the tags is a step backwards. And not for one
   // read by hand and found to have nothing worth writing yet.
+  const gaps = openGaps(card);
   const starts: Template[] = active || card.idle ? [] : templatesFor(card, oracleTagClosure);
   const use = (b: CardBehavior) => {
     setRules(b.rules.map((r) => ({ ...r, steps: [...r.steps] })));
@@ -822,10 +848,10 @@ function BehaviorEditor({
           is left out. Change anything below and save, and it becomes yours instead.
         </p>
       )}
-      {!active && card.idle && (
+      {!active && gaps && (
         <p className="fine-print">
-          {card.idle.length > 0
-            ? `Read by hand: what this card does needs ${gapWords(card.idle)}, which the simulator does not model yet, so it plays as nothing.`
+          {gaps.length > 0
+            ? `Read by hand: ${card.attach ? 'the rest of ' : ''}what this card does needs ${gapWords(gaps)}, which the simulator does not model yet${card.attach ? '' : ', so it plays as nothing'}.`
             : 'Read by hand: nothing on this card changes a game with nobody across the table, so it is right as nothing.'}
         </p>
       )}
@@ -876,7 +902,14 @@ function BehaviorEditor({
           only when your hand has none. A "While it is in your graveyard" rule replaces the number; nothing else here touches it.
         </p>
       )}
-      {!card.derived && !card.ramp && !card.fetch && !card.ritual && !card.extraLand && !card.source && !card.dredge && !active && !card.idle && (
+      {card.attach && (
+        <p className="fine-print">
+          Read off the card: <em>{card.attach}</em>. There is no targeting yet, so the simulator puts it on whichever creature would
+          swing hardest with it, free of its equip cost: an Aura as it resolves, an Equipment from the turn after it lands. Rules
+          written here add to that; nothing replaces it.
+        </p>
+      )}
+      {!isRead(card) && !active && !gaps && (
         <p className="fine-print">
           The card database finds nothing on this card it can play out, so in the simulator it does nothing. Add a rule and it
           will.

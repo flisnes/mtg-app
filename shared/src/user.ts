@@ -156,8 +156,19 @@ export interface WishlistEntry {
  * color identity. 'token' holds the tokens a deck needs to play — never
  * counted toward deck/sideboard size or checked for format legality (see
  * deck/legality.ts), and never a wishlist candidate.
+ *
+ * 'maybe' is the Considering pile: cards you might play, never counted toward
+ * the deck, legality or what it still needs, but still yours to file in it.
+ * 'companion' is Commander's companion (Commander has no sideboard, so it gets
+ * its own zone): checked as the deck's companion, never counted in the 100.
  */
-export type DeckBoard = 'main' | 'side' | 'commander' | 'token';
+export type DeckBoard = 'main' | 'side' | 'commander' | 'companion' | 'maybe' | 'token';
+
+/** Every DeckBoard, for sanitizers that check a value off the wire. */
+export const DECK_BOARDS: readonly DeckBoard[] = ['main', 'side', 'commander', 'companion', 'maybe', 'token'];
+
+/** The zones that make up the deck you sit down with: its card count. */
+export const countsTowardDeck = (board: unknown): boolean => board === 'main' || board === 'commander';
 
 /**
  * What a `Deck` row actually is. Decks are lists you brew (format, legality,

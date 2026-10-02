@@ -303,14 +303,16 @@ const BOARD_LABELS: Record<DeckBoard, string> = {
   main: 'mainboard',
   side: 'sideboard',
   commander: 'command zone',
+  companion: 'companion',
+  maybe: 'considering',
   token: 'tokens',
 };
 
 /** Which boards a scan can target: storage has one pile, decks have boards
- *  (and the command zone only in Commander). */
+ *  (the command zone only in Commander, which has no sideboard). */
 function deckBoards(target: { containerKind?: ContainerKind; format?: DeckFormat }): DeckBoard[] {
   if ((target.containerKind ?? 'deck') !== 'deck') return ['main'];
-  return target.format === 'commander' ? ['main', 'side', 'commander'] : ['main', 'side'];
+  return target.format === 'commander' ? ['main', 'maybe', 'commander'] : ['main', 'side', 'maybe'];
 }
 
 /** "deck" / "binder" / "box" for a container target; the target's own name otherwise. */
@@ -1515,7 +1517,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           <div className="seg-row scan-cam-board" role="radiogroup" aria-label="Add to board">
             {deckBoards(target).map((b) => (
               <button key={b} role="radio" aria-checked={board === b} className={board === b ? 'seg seg-active' : 'seg'} onClick={() => setBoard(b)}>
-                {b === 'main' ? 'Main' : b === 'side' ? 'Side' : 'Commander'}
+                {b === 'main' ? 'Main' : b === 'side' ? 'Side' : b === 'maybe' ? 'Maybe' : 'Commander'}
               </button>
             ))}
           </div>

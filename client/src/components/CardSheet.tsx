@@ -22,7 +22,7 @@ import {
   updateWishlistEntry,
 } from '../db/dataAccess.js';
 import { getPrintingsForOracle } from '../db/queries.js';
-import { canJoinCommandZone, isBasicLand, isNonDeckCard } from '../deck/legality.js';
+import { canJoinCommandZone, isBasicLand, isCompanion, isNonDeckCard } from '../deck/legality.js';
 import { BOARD_LABEL, boardOptions } from '../deck/boards.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { claimKeyOf, type FilingCopy } from '../deck/filing.js';
@@ -318,6 +318,9 @@ export function CardSheet(props: CardSheetProps) {
           from: deckCard?.board,
         })
       : [];
+  // A companion card in a Commander deck, not yet the companion: one tap seats it.
+  const canSetCompanion =
+    mode === 'deck' && deckCard?.board !== 'companion' && zones.some((z) => z.board === 'companion' && !z.refusal);
   // Viewing someone else's wish (Community): the same wish fields, but the
   // sheet is read-only, so nothing here is editable.
   const wishInfo = mode === 'info' && !!wishView;
@@ -799,6 +802,16 @@ export function CardSheet(props: CardSheetProps) {
         special,
       });
     }
+    onClose();
+  }
+
+  /** Save the slot's form, then seat it as the deck's companion (the one
+   *  already there, if any, moves to Considering). */
+  async function saveAsCompanion() {
+    if (!deckCard) return;
+    setBusy(true);
+    await updateDeckCard(deckCard.id, { quantity: 1, scryfallId, anyBasic: anyBasicPicked, wants: wishPrefs, tags });
+    await moveDeckCard(deckCard.id, 'companion');
     onClose();
   }
 
@@ -1358,9 +1371,25 @@ export function CardSheet(props: CardSheetProps) {
                 {commandZone.length === 1 ? 'Add as second commander' : 'Add as commander'}
               </button>
             )}
-            {deckAdd && deckAddIsDeck && !cardIsToken && (
+            {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && !cardIsToken && addTo.format === 'commander' && isCompanion(oracleCard) && (
+              <button onClick={() => save('companion')} disabled={busy}>
+                Set as companion
+              </button>
+            )}
+            {/* Commander has no sideboard: its companion has the button above. */}
+            {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && !cardIsToken && addTo.format !== 'commander' && (
               <button onClick={() => save('side')} disabled={busy}>
                 Add to sideboard
+              </button>
+            )}
+            {deckAdd && deckAddIsDeck && !cardIsToken && (
+              <button onClick={() => save('maybe')} disabled={busy}>
+                Add to considering
+              </button>
+            )}
+            {canSetCompanion && (
+              <button onClick={() => void saveAsCompanion()} disabled={busy}>
+                Set as companion
               </button>
             )}
             {deckAdd && deckAddIsDeck && cardIsToken ? (

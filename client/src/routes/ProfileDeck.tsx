@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
+  countsTowardDeck,
   sanitizeDeckLines,
   type DeckFormat,
   type OracleCard,
@@ -37,8 +38,10 @@ interface LoadedDeck {
 
 const BOARD_ORDER = [
   { board: 'commander', title: 'Commander' },
+  { board: 'companion', title: 'Companion' },
   { board: 'main', title: 'Mainboard' },
   { board: 'side', title: 'Sideboard' },
+  { board: 'maybe', title: 'Considering' },
   { board: 'token', title: 'Tokens' },
 ] as const;
 
@@ -158,7 +161,7 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
   }, [deck, cards, sort]);
 
   const total = deck
-    ? deck.lines.filter((l) => l.board !== 'side' && l.board !== 'token').reduce((s, l) => s + l.quantity, 0)
+    ? deck.lines.filter((l) => countsTowardDeck(l.board)).reduce((s, l) => s + l.quantity, 0)
     : 0;
 
   async function share() {

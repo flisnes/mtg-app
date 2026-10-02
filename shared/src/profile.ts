@@ -6,6 +6,7 @@
 // from their own local card DB by id.
 
 import type { Color } from './card.js';
+import { DECK_BOARDS } from './user.js';
 
 export const MAX_FAVORITES = 3;
 /** Serialized-profile cap; a full profile is well under 2 KB. */
@@ -154,14 +155,13 @@ export function sanitizeProfile(v: unknown): UserProfile {
 /** Per-deck line cap (a Commander deck is ~100; this is just a sanity bound). */
 export const MAX_DECK_LINES = 1_000;
 
-const DECK_BOARDS = new Set(['main', 'side', 'commander', 'token']);
 
 export interface PublicDeckLine {
   oracleId: string;
   /** Preferred printing for display; absent = the card's default printing. */
   scryfallId?: string;
   quantity: number;
-  /** DeckBoard as a plain string ('main' | 'side' | 'commander' | 'token'). */
+  /** DeckBoard as a plain string (see DECK_BOARDS). */
   board: string;
 }
 
@@ -190,7 +190,9 @@ export function sanitizeDeckLines(v: unknown): PublicDeckLine[] {
       oracleId,
       ...(scryfallId ? { scryfallId } : {}),
       quantity,
-      board: DECK_BOARDS.has(r.board as string) ? (r.board as string) : 'main',
+      // Read at call time, not module load: user.ts imports this file, so
+      // DECK_BOARDS isn't initialised yet while this module evaluates.
+      board: (DECK_BOARDS as readonly string[]).includes(r.board as string) ? (r.board as string) : 'main',
     });
   }
   return lines;

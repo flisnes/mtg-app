@@ -39,6 +39,7 @@ import { getPricesByIds } from '../cardDb/prices.js';
 import { acquisitionCents } from '../price/acquisition.js';
 import { stagePut, stagePutMany, stageDelete } from '../sync/outbox.js';
 import { rowKeysOf } from './undoScope.js';
+import { boardForFormat } from '../deck/boards.js';
 import type { TransferPayload } from '../transfer/payload.js';
 
 // The single mutation path for user data (beta plan §4). All invariants live
@@ -1162,13 +1163,54 @@ export async function renameDeck(id: string, name: string): Promise<void> {
 }
 
 export async function setDeckFormat(id: string, format: DeckFormat): Promise<void> {
-  await db.transaction('rw', [db.decks, db.outbox], async () => {
+  await db.transaction('rw', [...DECK_TABLES, db.oracleCards], async () => {
     const deck = await db.decks.get(id);
     if (!deck) return;
     deck.format = format;
     deck.updatedAt = Date.now();
     await putSynced('decks', deck);
+    await tidyBoardsRaw(id, format === 'commander', deck.updatedAt);
   });
+}
+
+/**
+ * Put every slot in a zone its deck's format has (see boardForFormat): a
+ * Commander deck's sideboard goes to its Companion zone and Considering, and
+ * a companion leaving Commander goes back to the sideboard. No history: this
+ * is the app keeping its own shape, not something you did.
+ */
+async function tidyBoardsRaw(deckId: string, commanderDeck: boolean, now: number): Promise<number> {
+  const slots = await db.deckCards.where('deckId').equals(deckId).toArray();
+  const strays = slots.filter((s) => s.board === (commanderDeck ? 'side' : 'companion'));
+  if (strays.length === 0) return 0;
+  const oracles = await db.oracleCards.bulkGet(strays.map((s) => s.oracleId));
+  let taken = slots.some((s) => s.board === 'companion');
+  let moved = 0;
+  for (const [i, s] of strays.entries()) {
+    const board = boardForFormat(s.board, oracles[i], commanderDeck, taken);
+    if (!board) continue;
+    if (board === 'companion') taken = true;
+    // An MTGA list names its companion twice, once up top and once in the
+    // sideboard. Folding the two would make it a playset of two.
+    if (board === 'side' && slots.some((o) => o.board === 'side' && o.oracleId === s.oracleId)) {
+      await deleteSynced('deckCards', s.id);
+      continue;
+    }
+    moved += await moveSlotRaw(s.id, board, now, []);
+  }
+  return moved;
+}
+
+/** Tidy a deck's zones for its format (the deck page runs this on open, which
+ *  catches decks from before the Companion zone and edits from older builds). */
+export async function tidyDeckBoards(deckId: string): Promise<number> {
+  let moved = 0;
+  await db.transaction('rw', [...DECK_TABLES, db.oracleCards], async () => {
+    const deck = await db.decks.get(deckId);
+    if (!deck || (deck.kind ?? 'deck') !== 'deck') return;
+    moved = await tidyBoardsRaw(deckId, (deck.format ?? 'casual') === 'commander', Date.now());
+  });
+  return moved;
 }
 
 /**
@@ -1489,6 +1531,15 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
   const key = exactSlotKey({ oracleId: input.oracleId, board, anyBasic, scryfallId: input.scryfallId || undefined }, wants);
   await db.transaction('rw', DECK_TABLES, async () => {
     const now = Date.now();
+    if (board === 'companion') {
+      // One companion a deck: setting a new one moves the old one to Considering,
+      // and setting the same one again is not a second copy of it.
+      const seated = await db.deckCards.where('[deckId+board]').equals([input.deckId, 'companion']).toArray();
+      if (seated.some((s) => s.oracleId === input.oracleId)) return;
+      const events: Array<Omit<UserEvent, 'id' | 'updatedAt'>> = [];
+      for (const s of seated) await moveSlotRaw(s.id, 'maybe', now, events, { source: 'manual' });
+      await emitMany(events);
+    }
     const candidates = await db.deckCards
       .where('[deckId+board]')
       .equals([input.deckId, board])
@@ -1797,6 +1848,14 @@ async function moveSlotRaw(
 ): Promise<number> {
   const card = await db.deckCards.get(id);
   if (!card || card.board === board) return 0;
+  // A deck has one companion: setting a new one sends the old one to
+  // Considering, in the same batch, so one undo swaps them back.
+  if (board === 'companion') {
+    const seated = await db.deckCards.where('[deckId+board]').equals([card.deckId, 'companion']).toArray();
+    for (const s of seated) {
+      if (s.oracleId !== card.oracleId) await moveSlotRaw(s.id, 'maybe', now, events, extra);
+    }
+  }
   const existing = await db.deckCards
     .where('[deckId+board]')
     .equals([card.deckId, board])

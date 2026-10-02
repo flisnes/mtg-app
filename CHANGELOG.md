@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.188.0
+
+- **Added: a Considering section in every deck.** Park the cards you might play there. They never count toward the deck's size, legality, value or the "missing cards" wishlist, but they can still be filed in the deck like any other card. Add them with +Maybe in search or "Add to considering" on the card, or move a card there from its zone. Deck imports read "Maybeboard" and "Considering" sections into it.
+- **Added: a Companion zone for Commander decks.** Companion cards get a "Set as companion" button (and +Comp in search). The companion is checked against its deckbuilding rule and the commander's colors, but does not count toward the 100. Setting a new companion moves the old one to Considering.
+- **Changed: Commander decks no longer have a sideboard.** Cards already in one move on their own the next time you open the deck: a companion becomes the companion, everything else goes to Considering. Switching a deck to Commander does the same, and switching away from Commander puts the companion back in the sideboard.
+
 ## 0.187.1
 
 - **Fixed: the card data download no longer flickers.** Cards are downloaded and installed at the same time, and the status line used to flip between "Downloading card data" and "Installing cards" many times a second. It now shows the download counter until every chunk has arrived, then switches to installing once. Download speed is unchanged.

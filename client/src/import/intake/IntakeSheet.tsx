@@ -33,6 +33,8 @@ const BOARD_LABELS: Record<DeckBoard, string> = {
   main: 'mainboard',
   side: 'sideboard',
   commander: 'command zone',
+  companion: 'companion',
+  maybe: 'considering',
   token: 'tokens',
 };
 

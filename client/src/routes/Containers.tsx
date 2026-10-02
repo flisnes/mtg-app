@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   CONTAINER_KINDS,
   DECK_FORMATS,
+  countsTowardDeck,
   normalizeColors,
   type Color,
   type ContainerKind,
@@ -198,8 +199,8 @@ export function Containers({ kind }: { kind: ContainerKind }) {
       list.map(async (deck) => {
         const cards = await db.deckCards.where('deckId').equals(deck.id).toArray();
         // Commander sits in the 100-card deck, so count it toward the mainboard.
-        // Tokens never count toward the deck's size.
-        const main = cards.filter((c) => c.board !== 'side' && c.board !== 'token').reduce((s, c) => s + c.quantity, 0);
+        // Tokens, the companion and Considering never count toward its size.
+        const main = cards.filter((c) => countsTowardDeck(c.board)).reduce((s, c) => s + c.quantity, 0);
         const side = cards.filter((c) => c.board === 'side').reduce((s, c) => s + c.quantity, 0);
         // A deck's colours are the union of every card's colour identity (for a
         // legal commander deck that collapses to the commander's identity). A
@@ -212,7 +213,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
           // is still mono-white.
           const present = new Set<Color>();
           for (const card of cards) {
-            if (card.board === 'token') continue;
+            if (card.board === 'token' || card.board === 'maybe') continue;
             const o = oracles.get(card.oracleId);
             for (const c of o?.colorIdentity ?? []) present.add(c);
             // A choose-a-color commander is the color it chose.

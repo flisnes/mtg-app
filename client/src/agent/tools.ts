@@ -9,6 +9,7 @@
 import {
   CONDITIONS,
   CONTAINER_KINDS,
+  DECK_BOARDS,
   DECK_FORMATS,
   FINISHES,
   compileCardQuery,
@@ -45,7 +46,7 @@ import { db } from '../db/schema.js';
 import type { AgentTool } from './registry.js';
 import { resolveNames, type NameLine } from './resolveNames.js';
 
-const BOARDS: readonly DeckBoard[] = ['main', 'side', 'commander', 'token'];
+const BOARDS: readonly DeckBoard[] = DECK_BOARDS;
 
 // ---------------------------------------------------------------------------
 // Argument coercion (args arrive as unknown JSON from the agent)

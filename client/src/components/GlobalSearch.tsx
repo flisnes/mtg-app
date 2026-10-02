@@ -13,7 +13,7 @@ import { CONTAINER_KINDS, isUncheckedFormat, type Color, type DeckBoard, type De
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
 import { addDeckCard, addToCollection, addToWishlist, addToWishlistBulk } from '../db/dataAccess.js';
-import { formatLabel, isBackground, isBasicLand, isValidCommanderPair, needsColorChoice } from '../deck/legality.js';
+import { formatLabel, isBackground, isBasicLand, isCompanion, isValidCommanderPair, needsColorChoice } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView, splitResultKey } from './CardSearchView.js';
@@ -732,7 +732,12 @@ function SearchOverlay() {
     // The printing the result is showing, like the collection quick-adds: tap +
     // on an edition tile and that edition is what lands in the container.
     await addDeckCard({ deckId, oracleId: card.oracleId, board, anyBasic, scryfallId: shownId(card, printing) });
-    const suffix = board === 'side' ? ' (sideboard)' : board === 'commander' ? ' (commander)' : '';
+    if (board === 'companion') {
+      toast(`${card.name} is the companion`);
+      return;
+    }
+    const suffix =
+      board === 'side' ? ' (sideboard)' : board === 'commander' ? ' (commander)' : board === 'maybe' ? ' (considering)' : '';
     toast(`Added ${card.name}${suffix} to ${noun}${anyBasic ? ' (any printing)' : ''}`);
   }
 
@@ -772,12 +777,23 @@ function SearchOverlay() {
             <button title="Add to mainboard" onClick={() => quickDeck(card, target.deckId, 'main', 'deck', printing)}>
               +Main
             </button>
-            <button title="Add to sideboard" onClick={() => quickDeck(card, target.deckId, 'side', 'deck', printing)}>
-              +SB
+            {/* Commander has no sideboard; its companion gets a zone of its own. */}
+            {deckCtx?.format !== 'commander' && (
+              <button title="Add to sideboard" onClick={() => quickDeck(card, target.deckId, 'side', 'deck', printing)}>
+                +SB
+              </button>
+            )}
+            <button title="Add to considering" onClick={() => quickDeck(card, target.deckId, 'maybe', 'deck', printing)}>
+              +Maybe
             </button>
             {deckCtx?.format === 'commander' && (
               <button title="Add as commander" onClick={() => quickDeck(card, target.deckId, 'commander', 'deck', printing)}>
                 +Cmdr
+              </button>
+            )}
+            {deckCtx?.format === 'commander' && isCompanion(card) && (
+              <button title="Set as companion" onClick={() => quickDeck(card, target.deckId, 'companion', 'deck', printing)}>
+                +Comp
               </button>
             )}
           </>

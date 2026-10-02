@@ -41,6 +41,7 @@ import {
   setDeckCardsUnfiled,
   setDeckEmblem,
   setDeckFormat,
+  tidyDeckBoards,
   unfileWholeContainer,
 } from '../db/dataAccess.js';
 import { addToWishlistBulk, applyImport } from '../db/dataAccess.js';
@@ -296,9 +297,18 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     navigate(location.pathname, { replace: true, state: null });
   }, [data?.deck, location.state, location.pathname, navigate]);
 
+  // A deck from before the Companion zone (or a sideboard an older build synced
+  // into a Commander deck) gets its zones tidied for its format when it opens.
+  const deckFormat = data?.deck?.format;
+  const strayBoards = !!data?.rows.some((r) => r.board === (deckFormat === 'commander' ? 'side' : 'companion'));
+  useEffect(() => {
+    if (strayBoards) void tidyDeckBoards(id);
+  }, [id, deckFormat, strayBoards]);
+
   const summary = useMemo(() => {
-    // Tokens never count toward "cards" — they're a separate, uncounted list.
-    const rows = (data?.rows ?? []).filter((r) => r.board !== 'token');
+    // Tokens never count toward "cards" — they're a separate, uncounted list —
+    // and neither do the cards you're only considering.
+    const rows = (data?.rows ?? []).filter((r) => r.board !== 'token' && r.board !== 'maybe');
     const byOracle = new Map<string, { need: number; owned: number }>();
     let need = 0;
     let have = 0;
@@ -324,7 +334,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // Worth leads with the copies you own — the money actually sitting here — and
   // names the gap separately, rather than quoting a total you don't hold.
   const value = useMemo(() => {
-    const rows = (data?.rows ?? []).filter((r) => r.board !== 'token');
+    const rows = (data?.rows ?? []).filter((r) => r.board !== 'token' && r.board !== 'maybe');
     if (rows.length === 0) return undefined;
     // A slot that asks for a foil is worth the foil price.
     return containerValue(rows.map((r) => ({ ...r, printing: pricedForFinish(r.printing, r.finish ?? 'nonfoil') })));
@@ -362,6 +372,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const commander = sortRows(data.rows.filter((r) => r.board === 'commander'), sort);
   const main = sortRows(data.rows.filter((r) => r.board === 'main'), sort);
   const side = sortRows(data.rows.filter((r) => r.board === 'side'), sort);
+  const companion = sortRows(data.rows.filter((r) => r.board === 'companion'), sort);
+  const maybe = sortRows(data.rows.filter((r) => r.board === 'maybe'), sort);
   const tokens = sortRows(data.rows.filter((r) => r.board === 'token'), sort);
 
   async function goBack() {
@@ -403,7 +415,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
    */
   function startAssemble() {
     if (!placements) return;
-    const todo: AssembleItem[] = [...commander, ...main, ...side, ...tokens]
+    const todo: AssembleItem[] = [...commander, ...companion, ...main, ...side, ...maybe, ...tokens]
       .filter((r) => !r.anyBasic && r.owned > 0 && placements.allocated(r.id) < r.quantity)
       .map((r) => ({ slotId: r.id, oracleId: r.oracleId, name: r.oracle?.name ?? 'Card' }));
     if (todo.length === 0) {
@@ -771,6 +783,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       side.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
       commander.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
       tokens.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
+      companion.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
+      maybe.map((r) => ({ name: r.oracle?.name ?? '', quantity: r.quantity })),
     );
     downloadText(`${deck.name.replace(/[^\w-]+/g, '_')}.txt`, text);
     toast(`Exported ${meta.noun}`);
@@ -1037,8 +1051,26 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               })()}
             />
           )}
+          {companion.length > 0 && (
+            <Board title="Companion" rows={companion} deckId={id} group="none" view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
+          )}
           <Board title="Mainboard" rows={main} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
           <Board title="Sideboard" rows={side} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
+          {/* Not part of the deck: no count, no legality, nothing it "needs". */}
+          <Board
+            title="Considering"
+            rows={maybe}
+            deckId={id}
+            group={sort.group}
+            view={view}
+            issues={EMPTY_ISSUES}
+            onEdit={setInfo}
+            placements={placements}
+            sel={sel}
+            commanderDeck={isCommander}
+            showYear={sort.key === 'released'}
+            emptyHint="Cards you might play. They don't count toward the deck. Use +Maybe in search, or move cards here from their zone."
+          />
           {tokens.length > 0 && (
             <Board title="Tokens" rows={tokens} deckId={id} group="none" view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
           )}
@@ -1051,7 +1083,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         // (or by an import that guessed a sideboard) still show up here.
         <Board
           title="Cards"
-          rows={sortRows([...commander, ...main, ...side], sort)}
+          rows={sortRows([...commander, ...companion, ...main, ...side, ...maybe], sort)}
           deckId={id}
           group={sort.group}
           view={view}
@@ -1223,6 +1255,9 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     </CardCursorProvider>
   );
 }
+
+/** Considering is outside the deck, so legality has nothing to say about it. */
+const EMPTY_ISSUES = new Map<string, string>();
 
 function sortRows(rows: Row[], prefs: CardSortPrefs): Row[] {
   return sortCards(

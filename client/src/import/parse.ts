@@ -43,13 +43,15 @@ function normLang(v: string | undefined): string | undefined {
 
 // ---- Plain text / MTGA ----
 
-const SECTION_RE = /^(deck|sideboard|commander|companion|maybeboard|tokens?|about)\b/i;
+const SECTION_RE = /^(deck|sideboard|commander|companion|maybeboard|maybe|considering|tokens?|about)\b/i;
 
 /** Which board a lone section header switches to (deck imports; ignored by collection import). */
 function sectionBoard(line: string): DeckBoard | undefined {
   if (!SECTION_RE.test(line) || /^\d/.test(line)) return undefined;
   if (/^sideboard\b/i.test(line)) return 'side';
   if (/^commander\b/i.test(line)) return 'commander';
+  if (/^companion\b/i.test(line)) return 'companion';
+  if (/^(maybeboard|maybe|considering)\b/i.test(line)) return 'maybe';
   if (/^tokens?\b/i.test(line)) return 'token';
   return 'main';
 }

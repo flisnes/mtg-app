@@ -2,6 +2,7 @@ import {
   COLORS,
   CONDITIONS,
   CONTAINER_KINDS,
+  DECK_BOARDS,
   DECK_FORMATS,
   EVENT_SOURCES,
   FINISHES,
@@ -121,7 +122,7 @@ const CONDS = new Set<string>(CONDITIONS);
 const FINS = new Set<string>(FINISHES);
 const COLOR_SET = new Set<string>(COLORS);
 const FORMATS = new Set<string>(DECK_FORMATS);
-const BOARDS = new Set<string>(['main', 'side', 'commander', 'token']);
+const BOARDS = new Set<string>(DECK_BOARDS);
 const CONTAINERS = new Set<string>(CONTAINER_KINDS);
 
 const MAX_ID = SYNC_MAX_ROW_ID;

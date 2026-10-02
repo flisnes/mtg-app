@@ -160,7 +160,14 @@ export function wishCardItem(
   };
 }
 
-const BOARD_LABEL: Record<DeckBoard, string> = { main: '', side: 'Sideboard', commander: 'Commander', token: 'Token' };
+const BOARD_LABEL: Record<DeckBoard, string> = {
+  main: '',
+  side: 'Sideboard',
+  commander: 'Commander',
+  companion: 'Companion',
+  maybe: 'Considering',
+  token: 'Token',
+};
 
 /** A deck/binder/box slot: which board it's in (deck), or its printing (storage). */
 export function deckCardItem(

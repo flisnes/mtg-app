@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   MAX_FAVORITES,
+  countsTowardDeck,
   sanitizeProfile,
   type Color,
   type DeckFormat,
@@ -404,12 +405,12 @@ function FavoriteDeckPickerSheet({
     return Promise.all(
       list.map(async (deck) => {
         const cards = await db.deckCards.where('deckId').equals(deck.id).toArray();
-        const main = cards.filter((c) => c.board !== 'side' && c.board !== 'token').reduce((s, c) => s + c.quantity, 0);
+        const main = cards.filter((c) => countsTowardDeck(c.board)).reduce((s, c) => s + c.quantity, 0);
         const oracles = await getOracleCardsByIds(cards.map((c) => c.oracleId));
-        // Tokens don't vote toward the deck's colours.
+        // Tokens and Considering don't vote toward the deck's colours.
         const present = new Set<Color>();
         for (const card of cards) {
-          if (card.board === 'token') continue;
+          if (card.board === 'token' || card.board === 'maybe') continue;
           const o = oracles.get(card.oracleId);
           for (const c of o?.colorIdentity ?? []) present.add(c);
           if (card.board === 'commander' && card.chosenColor && o && needsColorChoice(o)) present.add(card.chosenColor);

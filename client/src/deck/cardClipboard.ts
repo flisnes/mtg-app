@@ -52,14 +52,14 @@ export function isPayload(v: unknown): v is ClipboardPayload {
   return !!p && p.app === 'mtg-pwa' && p.v === 1 && Array.isArray(p.slots);
 }
 
-const BOARD_ORDER: DeckBoard[] = ['commander', 'main', 'side', 'token'];
+const BOARD_ORDER: DeckBoard[] = ['commander', 'main', 'side', 'token', 'companion', 'maybe'];
 
 /** The decklist a paste into any other app should produce. */
 export function payloadText(slots: readonly ClipboardSlot[]): string {
   const of = (board: DeckBoard) =>
     slots.filter((s) => s.board === board).map((s) => ({ name: s.name, quantity: s.quantity }));
-  const [commander, main, side, token] = BOARD_ORDER.map(of);
-  return buildDeckText(main!, side!, commander!, token!);
+  const [commander, main, side, token, companion, maybe] = BOARD_ORDER.map(of);
+  return buildDeckText(main!, side!, commander!, token!, companion!, maybe!);
 }
 
 // ---------------------------------------------------------------------------

@@ -515,6 +515,9 @@ const KEY_REPAIRS = 'syncRepairs';
  * - `behaviorGrammarDevotion` (v0.177.0): the devotion amount, and "count
  *   different names" on a matching one. An older build drops the first and
  *   counts every permanent for the second.
+ * - `deckBoardsMaybeCompanion` (v0.188.0): the Considering and Companion zones.
+ *   An older build's sanitizer turns an unknown board into 'main', so a card
+ *   you were only considering landed in the mainboard until this re-pull.
  */
 const REPAIRS = [
   'containerKinds',
@@ -526,6 +529,7 @@ const REPAIRS = [
   'behaviorGrammarGrants',
   'behaviorGrammarDredge',
   'behaviorGrammarDevotion',
+  'deckBoardsMaybeCompanion',
 ] as const;
 
 async function runOneTimeRepairs(): Promise<void> {

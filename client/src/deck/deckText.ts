@@ -7,14 +7,22 @@ export function buildDeckText(
   side: Array<{ name: string; quantity: number }>,
   commander: Array<{ name: string; quantity: number }> = [],
   tokens: Array<{ name: string; quantity: number }> = [],
+  companion: Array<{ name: string; quantity: number }> = [],
+  maybe: Array<{ name: string; quantity: number }> = [],
 ): string {
   const lines: string[] = [];
   if (commander.length) {
     lines.push('Commander', ...commander.map((c) => `${c.quantity} ${c.name}`), '');
   }
+  if (companion.length) {
+    lines.push('Companion', ...companion.map((c) => `${c.quantity} ${c.name}`), '');
+  }
   lines.push('Deck', ...main.map((c) => `${c.quantity} ${c.name}`));
   if (side.length) {
     lines.push('', 'Sideboard', ...side.map((c) => `${c.quantity} ${c.name}`));
+  }
+  if (maybe.length) {
+    lines.push('', 'Maybeboard', ...maybe.map((c) => `${c.quantity} ${c.name}`));
   }
   if (tokens.length) {
     lines.push('', 'Tokens', ...tokens.map((c) => `${c.quantity} ${c.name}`));

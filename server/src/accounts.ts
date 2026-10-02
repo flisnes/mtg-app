@@ -11,6 +11,7 @@ import {
   SYNC_MAX_ROW_ID,
   SYNC_TABLES,
   USERNAME_RE,
+  countsTowardDeck,
   sanitizeDeckLines,
   sanitizeProfile,
   sanitizeTradeLines,
@@ -439,7 +440,7 @@ function deckMainCounts(store: AccountStore, userId: number): Map<string, number
   for (const row of store.listSyncRows(userId, 'deckCards')) {
     if (!row || typeof row !== 'object') continue;
     const c = row as Record<string, unknown>;
-    if (typeof c.deckId !== 'string' || c.board === 'side' || c.board === 'token') continue;
+    if (typeof c.deckId !== 'string' || !countsTowardDeck(c.board ?? 'main')) continue;
     const q = Math.floor(Number(c.quantity));
     if (Number.isFinite(q) && q > 0) map.set(c.deckId, (map.get(c.deckId) ?? 0) + q);
   }

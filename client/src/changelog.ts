@@ -32,6 +32,23 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.188.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Decks have a Considering section for cards you might play. They never count toward the deck.',
+      },
+      {
+        kind: 'added',
+        text: 'Commander decks get a Companion zone. Tap "Set as companion" on a companion card.',
+      },
+      {
+        kind: 'changed',
+        text: 'Commander decks no longer have a sideboard. Cards in one move to Companion or Considering.',
+      },
+    ],
+  },
+  {
     version: '0.187.1',
     changes: [
       {
@@ -170,24 +187,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'The deck simulator moved into its own package with a proper test suite, and out of the main download: the app fetches a little less and the engine loads when you first watch a game play out.',
-      },
-    ],
-  },
-  {
-    version: '0.181.0',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'A Theros god no longer attacks below its devotion threshold, and creatures with defender no longer attack at all. Damage curves read a little lower and closer to how the deck plays.',
-      },
-    ],
-  },
-  {
-    version: '0.180.0',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'The card database read some mana too generously. Mana priced in a sacrifice or another permanent (Ashnod\'s Altar, Springleaf Drum), one-shots without a tap cost (Blood Pet, the Spirit Guides), spells with a sacrifice attached (Deadly Dispute), "activate only if" abilities (Mox Opal) and loyalty or Saga mana no longer read as free repeating sources, and tapped rocks like Coldsteel Heart now enter tapped. Around 250 cards read lower and closer to how they play.',
       },
     ],
   },

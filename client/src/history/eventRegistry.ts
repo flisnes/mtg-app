@@ -35,7 +35,11 @@ function boardSuffix(e: UserEvent): string {
       ? ' (commander)'
       : e.board === 'token'
         ? ' (tokens)'
-        : '';
+        : e.board === 'companion'
+          ? ' (companion)'
+          : e.board === 'maybe'
+            ? ' (considering)'
+            : '';
 }
 
 // Deck slot events cover binders and boxes too (same rows); `deckKind` is only
@@ -100,6 +104,8 @@ const BOARD_NOUN: Record<DeckBoard, string> = {
   main: 'mainboard',
   side: 'sideboard',
   commander: 'command zone',
+  companion: 'companion',
+  maybe: 'considering',
   token: 'tokens',
 };
 

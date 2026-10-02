@@ -147,12 +147,15 @@ export function needsColorChoice(o: OracleCard): boolean {
 }
 
 // ---- Companions ----
-// The companion starts the game outside the deck — in this model, in the
-// sideboard — so it is checked against the starting deck (main + command zone)
-// without being part of it. Any sideboard card with a Companion ability is
-// treated as the deck's chosen companion.
+// The companion starts the game outside the deck, so it is checked against the
+// starting deck (main + command zone) without being part of it. Commander has
+// no sideboard, so there it sits in its own zone ('companion'); elsewhere any
+// sideboard card with a Companion ability is a companion you might pick.
 
 const COMPANION_RE = /^Companion *[—–-] /m;
+
+/** The card has a Companion ability (Lurrus, Yorion, …). */
+export const isCompanion = (o: OracleCard) => COMPANION_RE.test(text(o));
 
 interface StartingDeck {
   /** Main + command zone slots whose oracle data is present. */
@@ -356,25 +359,30 @@ export function checkDeckLegality(format: DeckFormat | undefined, allCards: Lega
   const rule = RULES[fmt];
   if (isUncheckedFormat(fmt)) return { checked: false, legal: true, problems: [], issues: new Map() };
   const key = fmt as Format;
-  // The token board holds tokens on purpose — it's not part of the deck being
-  // built, so it's exempt from every rule below (size, copy limits, legality,
-  // color identity, isNonDeckCard's "no tokens in the deck" check).
-  const cards = allCards.filter((c) => c.board !== 'token');
+  // The token board holds tokens on purpose and Considering is cards you might
+  // play: neither is part of the deck being built, so both are exempt from
+  // every rule below (size, copy limits, legality, color identity,
+  // isNonDeckCard's "no tokens in the deck" check).
+  const cards = allCards.filter((c) => c.board !== 'token' && c.board !== 'maybe');
+  // Commander has no sideboard. A slot still sitting in one (a deck from before
+  // the Companion zone, before it was tidied) is scratch space, not the deck.
+  const playing = rule.commander ? cards.filter((c) => c.board !== 'side') : cards;
 
   const problems: string[] = [];
   const issues = new Map<string, string>();
 
-  // Aggregate quantities per oracle card across boards.
+  // Aggregate quantities per oracle card across boards. The companion is
+  // checked for legality like any card, but it isn't a copy in the deck.
   const agg = new Map<string, { qty: number; oracle?: OracleCard }>();
   let mainCount = 0;
   let sideCount = 0;
   let commanderCount = 0;
-  for (const c of cards) {
+  for (const c of playing) {
     if (c.board === 'main') mainCount += c.quantity;
     else if (c.board === 'side') sideCount += c.quantity;
-    else commanderCount += c.quantity;
+    else if (c.board === 'commander') commanderCount += c.quantity;
     const a = agg.get(c.oracleId) ?? { qty: 0, oracle: c.oracle };
-    a.qty += c.quantity;
+    if (c.board !== 'companion') a.qty += c.quantity;
     a.oracle = c.oracle ?? a.oracle;
     agg.set(c.oracleId, a);
   }
@@ -464,24 +472,32 @@ export function checkDeckLegality(format: DeckFormat | undefined, allCards: Lega
     }
   }
 
-  // Companions: a sideboard card with a Companion ability is validated as the
-  // deck's chosen companion — color identity (Commander) plus its deckbuilding
-  // restriction over the starting deck it would accompany.
+  // Companions: validated as the deck's chosen companion — color identity
+  // (Commander) plus its deckbuilding restriction over the starting deck it
+  // would accompany.
   //
-  // Only Commander allows a single companion in the sideboard, so the
+  // Commander names its one companion in the Companion zone, so the
   // deckbuilding-restriction check runs there alone. In constructed formats
   // (Modern, Pioneer, …) the active companion is chosen at game start and the
   // sideboard may hold several companion-keyword cards whose requirements aren't
   // met — they can be sided into the deck between games — so an unmet
   // requirement must not mark the deck illegal.
   const startingDeck: StartingDeck = {
-    cards: cards.filter((c) => c.board !== 'side' && c.oracle).map((c) => ({ qty: c.quantity, oracle: c.oracle! })),
+    cards: playing
+      .filter((c) => (c.board === 'main' || c.board === 'commander') && c.oracle)
+      .map((c) => ({ qty: c.quantity, oracle: c.oracle! })),
     mainCount,
     rule,
   };
   let companionCount = 0;
-  for (const c of cards) {
-    if (c.board !== 'side' || !c.oracle || !COMPANION_RE.test(text(c.oracle))) continue;
+  for (const c of playing) {
+    if (c.board === 'companion' && c.oracle && !isCompanion(c.oracle)) {
+      problems.push(`${c.oracle.name} has no Companion ability, so it can't be the deck's companion.`);
+      issues.set(c.oracleId, 'not a companion');
+      continue;
+    }
+    const asCompanion = rule.commander ? c.board === 'companion' : c.board === 'side' || c.board === 'companion';
+    if (!asCompanion || !c.oracle || !isCompanion(c.oracle)) continue;
     companionCount += c.quantity;
     if (commanderIdentity && c.oracle.colorIdentity.some((col) => !commanderIdentity!.has(col))) {
       problems.push(`${c.oracle.name} (companion) is outside the commander's ${describeIdentity(commanderIdentity)} identity.`);
@@ -494,12 +510,13 @@ export function checkDeckLegality(format: DeckFormat | undefined, allCards: Lega
       if (!issues.has(c.oracleId)) issues.set(c.oracleId, 'companion unmet');
     }
   }
-  // Commander's sideboard holds at most the single chosen companion.
+  // A Commander deck has one companion at most.
   if (rule.commander && companionCount > 1) {
-    problems.push(`${companionCount} companions in the sideboard; Commander allows only one.`);
+    problems.push(`${companionCount} companions; a deck has only one.`);
   }
 
-  // The sideboard is scratch space in Commander; only main + command zone count.
+  // Only main + command zone count toward the deck: the companion, Considering
+  // and the tokens all sit outside it.
   const deckTotal = mainCount + commanderCount;
   if (rule.exactTotal != null) {
     if (deckTotal < rule.exactTotal) problems.push(`Deck has ${deckTotal} cards; ${rule.label} needs ${rule.exactTotal}.`);

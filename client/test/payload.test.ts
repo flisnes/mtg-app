@@ -306,6 +306,80 @@ describe('sanitizeSyncedRow (preserveUnknown)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Variants: an enum value this build has never seen (the v0.187.0 formats, the
+// v0.188.0 zones) rides through on the sync path, so a release that adds one
+// needs no repair re-pull. The transfer path keeps coercing.
+// ---------------------------------------------------------------------------
+
+describe('sanitizeSyncedRow (variants of known enums)', () => {
+  const slot = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id: 'c1', deckId: 'd1', oracleId: 'o1', scryfallId: 's1', quantity: 1, board: 'main', updatedAt: 1, ...over,
+  });
+
+  test('a zone this build does not know stays on the slot (the v0.188.0 bug shape)', () => {
+    expect((sanitizeSyncedRow('deckCards', slot({ board: 'wishboard' })) as DeckCard).board).toBe('wishboard');
+    // The transfer path still coerces: a stranger's rows are rebuilt.
+    expect(sanitizeDeckCardRow(slot({ board: 'wishboard' }))!.board).toBe('main');
+  });
+
+  test('a format this build does not know stays on the deck (the v0.187.0 bug shape)', () => {
+    const raw = { id: 'd1', name: 'X', kind: 'deck', format: 'oathbreaker', createdAt: 1, updatedAt: 2 };
+    expect((sanitizeSyncedRow('decks', raw) as Deck).format).toBe('oathbreaker');
+    expect(sanitizeDeckRow(raw)!.format).toBe('casual');
+  });
+
+  test('an unknown finish, condition, reason, source and event kind ride through', () => {
+    const entry = sanitizeSyncedRow('collection', collectionRow({ finish: 'gilded', condition: 'PSA10' })) as CollectionEntry;
+    expect(entry.finish).toBe('gilded');
+    expect(entry.condition).toBe('PSA10');
+    const ev = sanitizeSyncedRow('events', {
+      id: 'ev1', ts: 1, updatedAt: 1, kind: 'collection.lend', oracleId: 'o1', reason: 'eaten', source: 'telepathy', board: 'wishboard',
+    }) as UserEvent;
+    expect(ev.kind).toBe('collection.lend');
+    expect(ev.reason).toBe('eaten');
+    expect(ev.source).toBe('telepathy');
+    expect(ev.board).toBe('wishboard');
+    // Transfer path: an unknown kind still drops the event.
+    expect(sanitizeEventRow({ id: 'ev1', ts: 1, updatedAt: 1, kind: 'collection.lend', oracleId: 'o1' })).toBeNull();
+  });
+
+  test('a value the sanitizer dropped on purpose stays dropped (known values are not variants)', () => {
+    // anyBasic wins over a pinned finish the build DOES know.
+    const basic = sanitizeSyncedRow('deckCards', slot({ anyBasic: true, finish: 'foil' })) as DeckCard;
+    expect(basic).not.toHaveProperty('finish');
+    // A binder keeps losing a stray (known) format.
+    const binder = sanitizeSyncedRow('decks', { id: 'd1', name: 'B', kind: 'binder', format: 'commander', createdAt: 1, updatedAt: 2 }) as Deck;
+    expect(binder).not.toHaveProperty('format');
+  });
+
+  test('a variant is a short string: junk shapes and long strings are still coerced', () => {
+    expect((sanitizeSyncedRow('deckCards', slot({ board: 42 })) as DeckCard).board).toBe('main');
+    expect((sanitizeSyncedRow('deckCards', slot({ board: '' })) as DeckCard).board).toBe('main');
+    expect((sanitizeSyncedRow('deckCards', slot({ board: 'x'.repeat(41) })) as DeckCard).board).toBe('main');
+    expect((sanitizeSyncedRow('deckCards', slot({ board: { nested: true } })) as DeckCard).board).toBe('main');
+  });
+
+  test('container kind and deckKind are NOT variants: they index CONTAINER_META everywhere', () => {
+    const raw = { id: 'd1', name: 'X', kind: 'shoebox', createdAt: 1, updatedAt: 2 };
+    expect((sanitizeSyncedRow('decks', raw) as Deck).kind).toBe('deck');
+    const ev = sanitizeSyncedRow('events', { id: 'ev1', ts: 1, updatedAt: 1, kind: 'deck.add', oracleId: 'o1', deckKind: 'shoebox' }) as UserEvent;
+    expect(ev).not.toHaveProperty('deckKind');
+  });
+
+  test('a card behavior is stored whole on the sync path, grammar this build cannot read included', () => {
+    const future = { v: CARD_BEHAVIOR_VERSION + 1, rules: [{ on: 'etb', steps: [{ op: 'teleport' }] }] };
+    const row = { id: 'd1:o1', deckId: 'd1', oracleId: 'o1', behavior: future, updatedAt: 1 };
+    const clean = sanitizeSyncedRow('deckBehaviors', row) as unknown as { behavior: unknown };
+    expect(clean.behavior).toEqual(future);
+    // The transfer path stays strict all the way down.
+    expect(sanitizeDeckBehaviorRow(row)).toBeNull();
+    // Something that is not a behavior at all is still refused on both paths.
+    expect(sanitizeSyncedRow('deckBehaviors', { ...row, behavior: 'draw a card' })).toBeNull();
+    expect(sanitizeSyncedRow('deckBehaviors', { ...row, behavior: { v: 1 } })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The whole-payload path (device transfer): dedup, merge, cross-table checks.
 // ---------------------------------------------------------------------------
 

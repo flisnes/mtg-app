@@ -1,3 +1,4 @@
+import { RangeSet } from 'dexie';
 import type { CardDbArtifactMeta, CardDbManifest } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getSetting, setSetting } from '../db/settings.js';
@@ -142,6 +143,27 @@ function totalBytes(chunks: ChunkTask[], prices: CardDbArtifactMeta | null): num
   return chunks.reduce((s, c) => s + c.bytes, 0) + (prices?.bytes ?? 0);
 }
 
+/**
+ * Dexie's cross-context change channel. The import worker writes with change
+ * broadcasting switched off (see import.worker.ts), so once a run is done the
+ * main thread announces the whole database as changed, once: every live query
+ * re-runs and every cached read is dropped, in this tab and any other. Posted
+ * on a channel of our own because a BroadcastChannel message reaches every
+ * other channel of that name in the same origin, this document's included.
+ * The name and the `all` shape are Dexie's own (dexie.mjs: STORAGE_MUTATED_DOM
+ * _EVENT_NAME, and the pageshow handler that uses the same `all` part).
+ */
+function announceEverythingChanged(): void {
+  const parts = { all: new RangeSet(-Infinity, [[]]) };
+  if (typeof BroadcastChannel !== 'undefined') {
+    const bc = new BroadcastChannel('x-storagemutated-1');
+    bc.postMessage(parts);
+    bc.close();
+  } else {
+    dispatchEvent(new CustomEvent('x-storagemutated-1', { detail: parts }));
+  }
+}
+
 /** Build a run that imports the given chunks + prices via the worker, then refreshes caches. */
 function workerRun(
   manifest: NonNullable<CardDbManifest['v2']>,
@@ -151,23 +173,29 @@ function workerRun(
   stampVersion = true,
 ): RunSync {
   return async (onState) => {
-    await runImportWorker(
-      {
-        baseUrl: CARD_DB_BASE!,
-        dataVersion: manifest.dataVersion,
-        cardDbUpdatedAt: meta.cardDbVersion,
-        pricesUpdatedAt: meta.pricesUpdatedAt,
-        chunks,
-        prices,
-        stampVersion,
-      },
-      onState,
-    );
-    invalidateSearchIndex();
-    invalidatePriceCache();
-    invalidateOracleTags();
-    invalidateSetIndex();
-    invalidateSetList();
+    try {
+      await runImportWorker(
+        {
+          baseUrl: CARD_DB_BASE!,
+          dataVersion: manifest.dataVersion,
+          cardDbUpdatedAt: meta.cardDbVersion,
+          pricesUpdatedAt: meta.pricesUpdatedAt,
+          chunks,
+          prices,
+          stampVersion,
+        },
+        onState,
+      );
+    } finally {
+      // Also on failure: chunk imports are atomic, so whatever landed before
+      // the error is real data the screens should be reading.
+      invalidateSearchIndex();
+      invalidatePriceCache();
+      invalidateOracleTags();
+      invalidateSetIndex();
+      invalidateSetList();
+      announceEverythingChanged();
+    }
   };
 }
 

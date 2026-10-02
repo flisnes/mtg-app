@@ -116,6 +116,21 @@ describe('applyServerChanges', () => {
     expect(await db.outbox.get(['collection', 'e1'])).toBeDefined();
   });
 
+  test('a page mixing tables and the same row twice applies in one write, last change winning', async () => {
+    await db.outbox.put({ tbl: 'collection', rowId: 'e1', updatedAt: 500, row: entry({ updatedAt: 500 }) });
+    const blocked = await applyServerChanges([
+      change({ updatedAt: 1000, row: entry({ quantity: 1, updatedAt: 1000 }), seq: 1 }),
+      { tbl: 'decks', rowId: 'd1', updatedAt: 1, row: { id: 'd1', name: 'Goblins', kind: 'deck', format: 'casual', createdAt: 1, updatedAt: 1 }, seq: 2 },
+      change({ updatedAt: 3000, row: entry({ quantity: 9, updatedAt: 3000 }), seq: 3 }),
+      { tbl: 'decks', rowId: 'd1', updatedAt: 2, deleted: true, seq: 4 },
+    ]);
+    expect(blocked).toBeNull();
+    expect((await db.collection.get('e1'))!.quantity).toBe(9);
+    expect(await db.decks.get('d1')).toBeUndefined();
+    // The superseded pending change went with it.
+    expect(await db.outbox.get(['collection', 'e1'])).toBeUndefined();
+  });
+
   test('a field this build does not know survives the trip into Dexie', async () => {
     const row = { ...entry(), fieldFromTheFuture: 'keep me' };
     await applyServerChanges([change({ row })]);

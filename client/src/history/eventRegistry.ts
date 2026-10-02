@@ -71,7 +71,7 @@ export function describeEvent(e: UserEvent): EventDisplay {
       return { verb: 'Added to collection', icon: 'plus', direction: 'in' };
     case 'collection.remove':
       if (isTrade(e)) return { verb: 'Traded away', icon: 'trade', direction: 'out' };
-      return { verb: REASON_LABELS[e.reason ?? 'sold'], icon: 'minus', direction: 'out' };
+      return { verb: REASON_LABELS[e.reason ?? 'sold'] ?? 'Removed', icon: 'minus', direction: 'out' };
     case 'deck.add':
       return { verb: `Added to ${e.deckName ?? containerNoun(e)}${boardSuffix(e)}`, icon: containerIcon(e), direction: 'in' };
     case 'deck.remove':
@@ -84,6 +84,10 @@ export function describeEvent(e: UserEvent): EventDisplay {
       return { verb: 'Removed from wishlist', icon: 'wishlist', direction: 'neutral' };
     case 'tradelist.mark':
       return { verb: 'Marked for trade', icon: 'tradelist', direction: 'neutral' };
+    default:
+      // A kind from a newer build, kept by the sync sanitizer rather than
+      // dropped (payload.ts VARIANT_KEYS). Named once the app updates.
+      return { verb: 'Changed', icon: 'history', direction: 'neutral' };
   }
 }
 
@@ -150,7 +154,7 @@ export function describeBatch(source: EventSource, label?: string, events: reado
       };
     }
     return {
-      verb: arrived?.board ? `Moved to ${BOARD_NOUN[arrived.board]}` : 'Moved between zones',
+      verb: arrived?.board && BOARD_NOUN[arrived.board] ? `Moved to ${BOARD_NOUN[arrived.board]}` : 'Moved between zones',
       icon: 'moveTo',
       direction: 'neutral',
     };
@@ -183,6 +187,8 @@ export function describeDeckEvent(e: UserEvent, kind: ContainerKind): EventDispl
   const shape = { icon: (added ? 'plus' : 'minus') as IconName, direction: (added ? 'in' : 'out') as EventDirection };
   if (kind !== 'deck') return { verb: added ? 'Filed here' : 'Taken out', ...shape };
   const where = BOARD_NOUN[e.board ?? 'main'];
+  // A zone this build has no noun for (see payload.ts VARIANT_KEYS).
+  if (!where) return { verb: added ? 'Added' : 'Removed', ...shape };
   return { verb: added ? `Added to ${where}` : `Removed from ${where}`, ...shape };
 }
 

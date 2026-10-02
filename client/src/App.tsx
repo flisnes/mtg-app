@@ -164,9 +164,9 @@ function AppShell() {
   }, []);
 
   // A completed background card-data update bumps epoch. Just say so — the
-  // worker's table writes re-fire mounted live queries on their own (Dexie
-  // propagates changes across contexts), and anything cached refreshes on the
-  // next query. No remount: the user may be mid-edit when the update lands.
+  // run announces one whole-database change when it finishes (cardDb/sync.ts),
+  // which re-fires every mounted live query, and anything cached refreshes on
+  // the next query. No remount: the user may be mid-edit when the update lands.
   useEffect(() => {
     if (epoch > 0) toast('Card data updated');
   }, [epoch, toast]);

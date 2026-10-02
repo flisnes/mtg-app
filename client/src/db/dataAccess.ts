@@ -4,6 +4,7 @@ import {
   normalizeSpecialConditions,
   prefsCompatible,
   sameCardTags,
+  sanitizeCardBehavior,
   sanitizeContainerEmblem,
   specialKey,
 } from '@mtg/shared';
@@ -1264,10 +1265,26 @@ export async function deleteDeck(id: string): Promise<void> {
 // card database's reading of its oracle text. See shared/src/behavior.ts.
 // ---------------------------------------------------------------------------
 
+/**
+ * A stored behavior, read through the sanitizer. A row that came down from
+ * another device is stored as written there (transfer/payload.ts keeps the
+ * grammar whole so nothing is lost on an older build), which means the rules
+ * in it are only what THIS build can read once they pass through here. A
+ * behavior this build cannot read at all plays as nothing, as it always did.
+ */
+function readBehavior(row: DeckBehavior): CardBehavior | null {
+  return sanitizeCardBehavior(row.behavior);
+}
+
 /** Every authored behavior in one deck, as a map the sim deck builder can take. */
 export async function deckBehaviorMap(deckId: string): Promise<Map<string, CardBehavior>> {
   const rows = await db.deckBehaviors.where('deckId').equals(deckId).toArray();
-  return new Map(rows.map((r) => [r.oracleId, r.behavior]));
+  const out = new Map<string, CardBehavior>();
+  for (const r of rows) {
+    const behavior = readBehavior(r);
+    if (behavior) out.set(r.oracleId, behavior);
+  }
+  return out;
 }
 
 /** One card's rule as another deck wrote it, with every deck that wrote the same one. */
@@ -1293,13 +1310,15 @@ export async function otherDeckBehaviors(deckId: string): Promise<Map<string, Bo
     const name = names.get(r.deckId);
     // A row whose deck has not synced down yet has nobody to credit.
     if (name === undefined) continue;
-    const key = `${r.oracleId}\n${JSON.stringify(r.behavior)}`;
+    const behavior = readBehavior(r);
+    if (!behavior) continue;
+    const key = `${r.oracleId}\n${JSON.stringify(behavior)}`;
     const seen = byKey.get(key);
     if (seen) {
       if (!seen.decks.includes(name)) seen.decks.push(name);
       continue;
     }
-    const offer: BorrowableBehavior = { behavior: r.behavior, decks: [name], updatedAt: r.updatedAt };
+    const offer: BorrowableBehavior = { behavior, decks: [name], updatedAt: r.updatedAt };
     byKey.set(key, offer);
     const list = out.get(r.oracleId);
     if (list) list.push(offer);

@@ -201,10 +201,11 @@ export function copiesWelcome(
   const fmt = format ?? 'casual';
   if (isNonDeckCard(oracle)) return 0;
   if (identity && oracle.colorIdentity.some((c) => !identity.has(c))) return 0;
-  const rule = RULES[fmt];
+  const rule = RULES[fmt] ?? RULES.casual;
   // Casual, Cube and the kitchen-table variants check nothing, so nothing is
-  // ever in the way.
-  if (isUncheckedFormat(fmt)) return Infinity;
+  // ever in the way. Nor does a format this build has no rules for yet (a
+  // newer device's deck, kept as-is by the sync sanitizer).
+  if (isUncheckedFormat(fmt) || !RULES[fmt]) return Infinity;
   const status = oracle.legalities?.[fmt as Format];
   // An absent legality is a card DB older than the field, not a banning.
   if (status === 'banned' || status === 'not_legal') return 0;
@@ -356,8 +357,9 @@ export interface LegalityReport {
 
 export function checkDeckLegality(format: DeckFormat | undefined, allCards: LegalityCard[]): LegalityReport {
   const fmt = format ?? 'casual';
-  const rule = RULES[fmt];
-  if (isUncheckedFormat(fmt)) return { checked: false, legal: true, problems: [], issues: new Map() };
+  const rule = RULES[fmt] ?? RULES.casual;
+  // Unchecked formats check nothing; neither does one this build has no rules for.
+  if (isUncheckedFormat(fmt) || !RULES[fmt]) return { checked: false, legal: true, problems: [], issues: new Map() };
   const key = fmt as Format;
   // The token board holds tokens on purpose and Considering is cards you might
   // play: neither is part of the deck being built, so both are exempt from

@@ -21,6 +21,17 @@ import type { ChunkTask, ImportRequest, WorkerResponse } from './messages.js';
 
 type InstalledChunks = Record<'oracle' | 'printings', Record<string, { sha256: string; count: number }>>;
 
+// Write quietly. Dexie tells every other context (the app's main thread, other
+// tabs) about each committed transaction over a BroadcastChannel, and every
+// live query that touched the written keys re-runs. A card-data update is 512
+// chunk transactions back to back over key ranges the whole app reads from,
+// so every screen's queries restarted after each chunk, and the restarted
+// query queued behind the next chunk's write lock: nothing settled until the
+// import was over, minutes on a phone. With the observability middleware
+// gone from this worker's connection nothing is broadcast; the main thread
+// fires a single "everything changed" when the run completes (sync.ts).
+db.unuse({ stack: 'dbcore', name: 'Observability' });
+
 function post(msg: WorkerResponse): void {
   (self as DedicatedWorkerGlobalScope).postMessage(msg);
 }

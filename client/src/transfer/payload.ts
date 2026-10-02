@@ -312,13 +312,23 @@ export function sanitizeDeckFolderRow(raw: unknown): DeckFolder | null {
  * how "no behavior" is stored anyway (the row is deleted), so keeping the row
  * with nothing in it would only make a deck look authored when it is not.
  */
-export function sanitizeDeckBehaviorRow(raw: unknown): DeckBehavior | null {
+export function sanitizeDeckBehaviorRow(raw: unknown, keepUnparsed = false): DeckBehavior | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const rowId = id(r.id);
   const deckId = id(r.deckId);
   const oracleId = id(r.oracleId);
   if (!rowId || !deckId || !oracleId) return null;
+  // The sync path stores the behavior as the other device wrote it, grammar
+  // and all: readers sanitize when they load it (dataAccess.deckBehaviorMap),
+  // so a rule this build cannot read plays as nothing here and as itself once
+  // the build catches up. Rebuilding it here is how five repair releases
+  // (behaviorGrammarF through behaviorGrammarDevotion) came to be.
+  if (keepUnparsed) {
+    const b = r.behavior;
+    if (!isPlainObject(b) || !Array.isArray(b.rules)) return null;
+    return { id: rowId, deckId, oracleId, behavior: b as unknown as DeckBehavior['behavior'], updatedAt: ts(r.updatedAt) };
+  }
   const behavior = sanitizeCardBehavior(r.behavior);
   if (!behavior) return null;
   return { id: rowId, deckId, oracleId, behavior, updatedAt: ts(r.updatedAt) };
@@ -381,12 +391,15 @@ const KINDS = new Set<string>(USER_EVENT_KINDS);
 const REASONS = new Set<string>(REMOVAL_REASONS);
 const SOURCES = new Set<string>(EVENT_SOURCES);
 
-export function sanitizeEventRow(raw: unknown): UserEvent | null {
+export function sanitizeEventRow(raw: unknown, keepUnknownKind = false): UserEvent | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const eventId = id(r.id);
   const oracleId = id(r.oracleId);
-  if (!eventId || !oracleId || !KINDS.has(r.kind as string)) return null;
+  if (!eventId || !oracleId) return null;
+  // A kind this build predates (sync path only): kept, and shown as a plain
+  // "Changed" line by describeEvent until the build that knows it arrives.
+  if (!KINDS.has(r.kind as string) && !(keepUnknownKind && isVariant(r.kind))) return null;
   const when = ts(r.ts);
   return {
     id: eventId,
@@ -485,6 +498,37 @@ const KNOWN_KEYS: Record<SyncTable, Record<string, true>> = {
   } satisfies Record<keyof Required<UserEvent>, true>,
 };
 
+/**
+ * Enum-valued keys that gain values over time, with the values this build
+ * knows. On the sync path a value outside the set is not junk but a variant
+ * this build predates (Considering and Companion boards in v0.188.0, four
+ * formats in v0.187.0), and it rides through as-is while the readers fall back
+ * gracefully (a format with no rules checks nothing, a slot in a zone this
+ * build has no section for stays out of sight, a finish without a label shows
+ * its raw name). Before this, every such value was coerced to a default, so an
+ * older device that edited the row pushed the default back and the account
+ * lost it for good, and the rows it never edited needed a full re-pull.
+ *
+ * Deliberately not every enum: a container `kind` and an event's `deckKind`
+ * index CONTAINER_META on every screen, and an unknown one would throw rather
+ * than degrade, so those two stay coerced.
+ */
+const VARIANT_KEYS: Partial<Record<SyncTable, Record<string, ReadonlySet<string>>>> = {
+  collection: { condition: CONDS, finish: FINS },
+  wishlist: { condition: CONDS, finish: FINS },
+  decks: { format: FORMATS },
+  deckCards: { board: BOARDS, condition: CONDS, finish: FINS },
+  events: { kind: KINDS, board: BOARDS, condition: CONDS, finish: FINS, reason: REASONS, source: SOURCES },
+};
+
+/** Long enough for any enum value we would ever mint; short enough that a
+ *  variant can never smuggle a paragraph. */
+const MAX_VARIANT_LENGTH = 40;
+
+function isVariant(v: unknown): v is string {
+  return typeof v === 'string' && v.length > 0 && v.length <= MAX_VARIANT_LENGTH;
+}
+
 /** Keys that would rewrite the object's prototype rather than sit on it. */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -520,7 +564,12 @@ function keepUnmentioned(raw: Record<string, unknown>, clean: Record<string, unk
  *   and undefined is exactly what it returns for junk. New fields are safe now;
  *   a new variant of an existing shape still wants a thought.
  */
-function preserveUnknown<T extends { id: string }>(raw: unknown, clean: T, known: Record<string, true>): T {
+function preserveUnknown<T extends { id: string }>(
+  raw: unknown,
+  clean: T,
+  known: Record<string, true>,
+  variants: Record<string, ReadonlySet<string>> = {},
+): T {
   if (!isPlainObject(raw)) return clean;
   const cleanRec = clean as unknown as Record<string, unknown>;
   let out: Record<string, unknown> | undefined;
@@ -529,6 +578,12 @@ function preserveUnknown<T extends { id: string }>(raw: unknown, clean: T, known
     if (Object.hasOwn(known, k)) {
       const rawVal = raw[k];
       const cleanVal = cleanRec[k];
+      // A value of a known enum this build has never seen: a variant, not junk.
+      const knownValues = Object.hasOwn(variants, k) ? variants[k] : undefined;
+      if (knownValues && isVariant(rawVal) && !knownValues.has(rawVal)) {
+        (out ??= { ...cleanRec })[k] = rawVal;
+        continue;
+      }
       if (isPlainObject(rawVal) && isPlainObject(cleanVal)) {
         const merged = keepUnmentioned(rawVal, cleanVal);
         if (merged !== cleanVal) (out ??= { ...cleanRec })[k] = merged;
@@ -547,15 +602,23 @@ const SYNC_SANITIZERS: Record<SyncTable, (raw: unknown) => { id: string } | null
   decks: sanitizeDeckRow,
   deckCards: sanitizeDeckCardRow,
   deckFolders: sanitizeDeckFolderRow,
-  deckBehaviors: sanitizeDeckBehaviorRow,
+  deckBehaviors: (raw) => sanitizeDeckBehaviorRow(raw, true),
   trades: sanitizeTradeRow,
-  events: sanitizeEventRow,
+  events: (raw) => sanitizeEventRow(raw, true),
 };
 
-/** Sanitize one row that arrived from the user's own account (sync/engine.ts). */
+/**
+ * Sanitize one row that arrived from the user's own account (sync/engine.ts).
+ * Three things ride through here that the transfer path rebuilds: fields this
+ * build has never heard of, enum values it has never seen (VARIANT_KEYS), and
+ * a card behavior whole, grammar and all. Together they are what lets a device
+ * on an older build hold a newer device's rows without losing anything, so a
+ * release that adds a zone, a format or a rule kind no longer needs a repair
+ * that re-pulls the whole account (see REPAIRS in sync/engine.ts).
+ */
 export function sanitizeSyncedRow(tbl: SyncTable, raw: unknown): { id: string } | null {
   const clean = SYNC_SANITIZERS[tbl](raw);
-  return clean && preserveUnknown(raw, clean, KNOWN_KEYS[tbl]);
+  return clean && preserveUnknown(raw, clean, KNOWN_KEYS[tbl], VARIANT_KEYS[tbl]);
 }
 
 /**

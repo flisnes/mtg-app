@@ -139,7 +139,7 @@ interface DeckCardEdit extends SlotShape {
 /** A slot's wants, spelled out for the row's sub-line ('' = it wants nothing special). */
 function wantsDetail(r: Row): string {
   const bits: string[] = [];
-  if (r.finish) bits.push(FINISH_LABELS[r.finish]);
+  if (r.finish) bits.push(FINISH_LABELS[r.finish] ?? r.finish);
   if (r.condition) bits.push(`min ${r.condition}`);
   if (r.lang) bits.push(r.lang);
   return bits.join(' · ');

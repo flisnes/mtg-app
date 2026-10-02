@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.189.1
+
+- **Fixed: the app no longer crawls while card data downloads or the account syncs.** Opening the deck list could take a minute and a deck page several, because every screen re-read its data after each of the hundreds of small writes an update or a sync makes, and each re-read queued behind the next write. Card-data updates now install quietly and tell the screens once, at the end. Account syncs write each page in one go instead of row by row, and a full re-pull of the account lands in a single write.
+- **Fixed: a release that adds a deck zone, a format, a finish or a card rule no longer makes every device re-download the whole account.** A phone on an older build keeps those values as they are, and shows them once it updates. Until then an unknown zone's cards stay out of sight and an unknown format checks no legality, which is the safe direction. This is what caused most of the slow syncs after recent updates.
+
 ## 0.189.0
 
 - **Added: the deck simulator reads Equipment and Auras.** "Equipped creature gets +2/+2", "+1/+1 for each artifact you control", haste, vigilance and double strike are read straight off the card, and the bonus sits on whichever creature would swing hardest with it while the Equipment or Aura is out. Swords, Colossus Hammer, All That Glitters, Lightning Greaves and Rancor all count in combat damage now. Deliberately not read: reconfigure, living weapon (those keep their shipped token rules), bonuses behind "as long as", and Auras that are not plainly "Enchant creature". The Model tab shows the reading under each card, and the goldfish trace says how much of a swing came from attachments.

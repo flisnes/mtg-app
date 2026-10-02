@@ -127,42 +127,73 @@ function stampOf(row: Record<string, unknown>): number {
  */
 export async function applyServerChanges(changes: SyncChange[]): Promise<number | null> {
   if (!changes.length) return null;
-  return db.transaction('rw', [...Object.values(TABLES), db.outbox], async () => {
-    let blockedFrom: number | null = null;
-    for (const c of changes) {
-      const table = TABLES[c.tbl];
-      if (!table) {
-        const seq = typeof c.seq === 'number' ? c.seq : 0;
-        blockedFrom = blockedFrom === null ? seq : Math.min(blockedFrom, seq);
-        continue;
-      }
 
-      // A pending local change that is NEWER wins locally and will win on the
-      // server too — skip the incoming row. Anything older is superseded.
-      const pending = await db.outbox.get([c.tbl, c.rowId]);
-      if (pending && pending.updatedAt > c.updatedAt) continue;
-
-      // Belt-and-braces LWW, applied to BOTH puts and deletes: a newer local
-      // row (even one already acked, so with no pending outbox entry) must not
-      // be clobbered by an older incoming change — including an older tombstone.
-      const local = (await table.get(c.rowId)) as Record<string, unknown> | undefined;
-      if (local && stampOf(local) > c.updatedAt) continue;
-
-      if (c.deleted) {
-        await table.delete(c.rowId);
-      } else {
-        // Sanitize BEFORE dropping the pending entry: a corrupt/mismatched row
-        // is skipped without discarding the valid local change it would lose to.
-        const row = sanitizeSyncedRow(c.tbl, c.row);
-        if (!row || row.id !== c.rowId) continue;
-        await (table as (typeof TABLES)['collection']).put(row as never);
-      }
-      // The incoming change was applied, so the pending local change (if any) is
-      // now superseded and can be dropped.
-      if (pending) await db.outbox.delete([c.tbl, c.rowId]);
+  // Group per table, last change per row winning (the server sends one change
+  // per row per page, but a buffered reseed concatenates pages and a row may
+  // have moved on between them). Done outside the transaction: the write lock
+  // below blocks every read of these tables on every screen, so it is held for
+  // a handful of bulk operations per table, not three round trips per row. A
+  // 2000-row page used to take seconds of lock time, and a reseed has dozens.
+  let blockedFrom: number | null = null;
+  const byTable = new Map<SyncTable, Map<string, SyncChange>>();
+  for (const c of changes) {
+    if (!TABLES[c.tbl]) {
+      const seq = typeof c.seq === 'number' ? c.seq : 0;
+      blockedFrom = blockedFrom === null ? seq : Math.min(blockedFrom, seq);
+      continue;
     }
-    return blockedFrom;
+    let rows = byTable.get(c.tbl);
+    if (!rows) byTable.set(c.tbl, (rows = new Map()));
+    rows.set(c.rowId, c);
+  }
+  if (byTable.size === 0) return blockedFrom;
+
+  await db.transaction('rw', [...Object.values(TABLES), db.outbox], async () => {
+    for (const [tbl, rows] of byTable) {
+      const table = TABLES[tbl] as (typeof TABLES)['collection'];
+      const list = [...rows.values()];
+      const ids = list.map((c) => c.rowId);
+      const [pendings, locals] = await Promise.all([
+        db.outbox.bulkGet(ids.map((id) => [tbl, id] as [string, string])),
+        table.bulkGet(ids),
+      ]);
+
+      const puts: unknown[] = [];
+      const deletes: string[] = [];
+      const acked: [string, string][] = [];
+      list.forEach((c, i) => {
+        // A pending local change that is NEWER wins locally and will win on
+        // the server too — skip the incoming row. Anything older is superseded.
+        const pending = pendings[i];
+        if (pending && pending.updatedAt > c.updatedAt) return;
+
+        // Belt-and-braces LWW, applied to BOTH puts and deletes: a newer local
+        // row (even one already acked, so with no pending outbox entry) must
+        // not be clobbered by an older incoming change, tombstones included.
+        const local = locals[i] as Record<string, unknown> | undefined;
+        if (local && stampOf(local) > c.updatedAt) return;
+
+        if (c.deleted) {
+          deletes.push(c.rowId);
+        } else {
+          // Sanitize BEFORE dropping the pending entry: a corrupt/mismatched
+          // row is skipped without discarding the valid local change it would
+          // lose to.
+          const row = sanitizeSyncedRow(c.tbl, c.row);
+          if (!row || row.id !== c.rowId) return;
+          puts.push(row);
+        }
+        // The incoming change was applied, so the pending local change (if
+        // any) is now superseded and can be dropped.
+        if (pending) acked.push([tbl, c.rowId]);
+      });
+
+      if (deletes.length) await table.bulkDelete(deletes);
+      if (puts.length) await table.bulkPut(puts as never[]);
+      if (acked.length) await db.outbox.bulkDelete(acked);
+    }
   });
+  return blockedFrom;
 }
 
 /**
@@ -198,6 +229,13 @@ export async function ackOutbox(pushed: SyncChange[]): Promise<void> {
 // ---------------------------------------------------------------------------
 // The sync loop
 // ---------------------------------------------------------------------------
+
+/**
+ * How many changes a reseed may hold in memory before applying what it has.
+ * Ten pages; a row is well under a kilobyte, so this is a few MB at most, and
+ * an account that size still lands in a handful of writes rather than dozens.
+ */
+const RESEED_BUFFER_MAX = 20_000;
 
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -252,9 +290,21 @@ export async function syncNow(): Promise<void> {
     if (retryTimer) clearTimeout(retryTimer);
     setStatus({ ...status, phase: 'syncing' });
     try {
+      // The cursor on record: everything below it has been applied locally.
       let cursor = lockedState.cursor;
+      // Where the next pull asks from. Runs ahead of `cursor` only while a
+      // reseed is being buffered (below); otherwise the two are the same.
+      let fetchFrom = cursor;
       // A capped reseed takes many passes; only the first one wipes.
       let reseeding = lockedState.reseeding === true;
+      // Pages of a reseed held back until the last one arrives, so the whole
+      // account lands in ONE write instead of one per page. Every page applied
+      // separately re-ran every live query on every screen (the collection
+      // join, the deck list, the open deck) while the next page was already
+      // being written, so nothing settled until the reseed was over. Bounded:
+      // past RESEED_BUFFER_MAX changes the buffer is applied and the cursor
+      // saved, so memory stays flat and an interrupted reseed loses less.
+      let buffered: SyncChange[] = [];
       let publishedAnything = false;
       // Bounded loop: each pass pushes ≤SYNC_MAX_PUSH and pulls ≤SYNC_MAX_PULL.
       for (let pass = 0; pass < 100; pass++) {
@@ -265,7 +315,7 @@ export async function syncNow(): Promise<void> {
           : undefined;
         const req: SyncRequest = {
           clientId: lockedState.clientId,
-          cursor,
+          cursor: fetchFrom,
           changes: batch,
           ...(publish ? { publish } : {}),
           ...(reseeding ? { reseeding: true as const } : {}),
@@ -281,13 +331,25 @@ export async function syncNow(): Promise<void> {
           if (!reseeding) await wipeForResync();
           reseeding = true;
           cursor = 0;
+          fetchFrom = 0;
+          buffered = [];
           const reset = await getSyncState();
           if (!reset || reset.account !== locked.username) return;
           await setSetting(KEY_SYNC_STATE, { ...reset, cursor, reseeding: true } satisfies SyncState);
           continue;
         }
 
-        const blockedFrom = await applyServerChanges(res.changes);
+        // Mid-reseed with more to come: hold the page, ask for the next one.
+        // Nothing is persisted, so a reseed cut short here starts over from
+        // the cursor on record, which the reseeding flag already allows for.
+        if (reseeding && res.hasMore && buffered.length + res.changes.length < RESEED_BUFFER_MAX) {
+          buffered.push(...res.changes);
+          fetchFrom = res.cursor;
+          continue;
+        }
+
+        const blockedFrom = await applyServerChanges(buffered.length ? [...buffered, ...res.changes] : res.changes);
+        buffered = [];
         // Caught up: the account is whole again, so stop claiming a reseed.
         if (!res.hasMore) reseeding = false;
         // When the pull was capped the server did NOT apply the push.
@@ -296,6 +358,7 @@ export async function syncNow(): Promise<void> {
         // backwards (Math.max also absorbs the seq-less case, which is -1).
         const ceiling = blockedFrom === null ? res.cursor : Math.min(res.cursor, blockedFrom - 1);
         cursor = Math.max(cursor, ceiling);
+        fetchFrom = cursor;
         // A sign-out during the request deletes the sync state; don't recreate it.
         const current = await getSyncState();
         if (!current || current.account !== locked.username) return;
@@ -518,6 +581,15 @@ const KEY_REPAIRS = 'syncRepairs';
  * - `deckBoardsMaybeCompanion` (v0.188.0): the Considering and Companion zones.
  *   An older build's sanitizer turns an unknown board into 'main', so a card
  *   you were only considering landed in the mainboard until this re-pull.
+ *
+ * Since v0.189.1 the third hole is closed too, and THIS LIST SHOULD BE DONE:
+ * an enum value a build has never seen (a zone, a format, a finish, an event
+ * kind) rides through as-is (payload.ts VARIANT_KEYS), and a card behavior is
+ * stored whole and sanitized when read, not when stored. Seven of the ten ids
+ * above shipped in the ten days before that, and each one re-pulled every
+ * account on every device, which is what made the app crawl after an update.
+ * A repair is now only for a real bug in what was stored, never for a field,
+ * a value or a grammar an older build did not know.
  */
 const REPAIRS = [
   'containerKinds',

@@ -26,7 +26,7 @@ export const FINISH_LABELS: Record<Finish, string> = { nonfoil: 'Nonfoil', foil:
 /** Condition · finish · language · special, leaving the unremarkable defaults unsaid. */
 export function copyDetail(e: CollectionEntry): string {
   const bits: string[] = [e.condition];
-  if (e.finish !== 'nonfoil') bits.push(FINISH_LABELS[e.finish]);
+  if (e.finish !== 'nonfoil') bits.push(FINISH_LABELS[e.finish] ?? e.finish);
   if (e.lang !== 'en') bits.push(e.lang);
   if (e.special?.length) bits.push(specialLabel(e.special));
   return bits.join(' · ');

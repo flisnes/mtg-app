@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.189.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The app no longer crawls while card data downloads or the account syncs. Updates install quietly and refresh the screens once, and syncs write in bulk.',
+      },
+      {
+        kind: 'fixed',
+        text: 'New zones, formats and card rules no longer make every device re-download the whole account after an update.',
+      },
+    ],
+  },
+  {
     version: '0.189.0',
     changes: [
       {

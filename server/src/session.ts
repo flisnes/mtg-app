@@ -18,6 +18,8 @@ export interface Session extends CodeEntry {
   tokens: { a: string; b: string | null };
   /** Nonce the seat-b joiner sent, so a retried join_session (lost reply) can be recognized as the same joiner. */
   joinerNonce: string | null;
+  /** Opaque identity of whoever created the session (account id or device id), so they can't also join it. */
+  creatorIdentity: string | null;
   present: Record<Seat, boolean>;
   /** Per-seat disconnect timers (beta plan §7 reconnect window). */
   graceTimers: Partial<Record<Seat, ReturnType<typeof setTimeout>>>;
@@ -35,7 +37,7 @@ export class SessionStore extends CodeStore<Session> {
     super({ maxPerIp: config.maxSessionsPerIp, ttlMs: config.sessionTtlMs });
   }
 
-  create(ip: string): Session {
+  create(ip: string, creatorIdentity: string | null = null): Session {
     const session = this.register(ip, (code) => ({
       code,
       ip,
@@ -47,6 +49,7 @@ export class SessionStore extends CodeStore<Session> {
       confirmed: { a: false, b: false },
       tokens: { a: randomUUID(), b: null },
       joinerNonce: null,
+      creatorIdentity,
       present: { a: true, b: false },
       graceTimers: {},
     }));
@@ -54,9 +57,15 @@ export class SessionStore extends CodeStore<Session> {
     return session;
   }
 
-  join(code: string, joinerNonce?: string): { session: Session; token: string } {
+  join(code: string, joinerNonce?: string, joinerIdentity: string | null = null): { session: Session; token: string } {
     const session = this.get(code);
     if (!session) throw new TransitionError('unknown_session', 'this code doesn’t match an active trade');
+    // The creator can't take the other seat too: same account on another
+    // device, or the same install in a second tab. A trade with yourself is
+    // "Trade solo", which never comes through the relay.
+    if (joinerIdentity && session.creatorIdentity === joinerIdentity) {
+      throw new TransitionError('self_join', 'that’s your own trade code — the other person enters it');
+    }
     if (session.tokens.b) {
       // The same joiner retrying after a lost reply (e.g. a network blip right
       // as they joined) gets their existing seat back instead of "session full".

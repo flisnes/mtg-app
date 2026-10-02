@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.189.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'You can no longer join your own trade from a second device or tab. Trade solo is still there for recording a trade with someone who isn’t on the app.',
+      },
+    ],
+  },
+  {
     version: '0.189.1',
     changes: [
       {
@@ -178,19 +187,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'The Prismatic Piper and friends show five mana pips on their card in the command zone: tap one to choose the color, and the deck’s identity follows.',
-      },
-    ],
-  },
-  {
-    version: '0.182.0',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'A background data update no longer resets the screen when it finishes — if you were adding cards or editing a deck, you stay right where you were.',
-      },
-      {
-        kind: 'added',
-        text: 'Background card-data and price downloads now show a slim progress strip under the header while they run.',
       },
     ],
   },

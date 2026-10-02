@@ -6,6 +6,7 @@ import {
   TRANSFER_CHUNK_CHARS,
   type ClientMessage,
   type Seat,
+  type SeatIdentity,
   type ServerMessage,
   type TradeErrorCode,
   type TransferClientMessage,
@@ -296,7 +297,7 @@ function handle(
     }
 
     case 'create_session': {
-      const session = store.create(ctx.ip);
+      const session = store.create(ctx.ip, seatIdentity(msg, accounts));
       ctx.code = session.code;
       ctx.seat = 'a';
       attach(session.code, 'a', socket);
@@ -313,7 +314,7 @@ function handle(
 
     case 'join_session': {
       const joinNonce = typeof msg.joinNonce === 'string' ? msg.joinNonce.slice(0, 64) : undefined;
-      const { session, token } = store.join(normalizeCode(msg.sessionCode), joinNonce);
+      const { session, token } = store.join(normalizeCode(msg.sessionCode), joinNonce, seatIdentity(msg, accounts));
       ctx.code = session.code;
       ctx.seat = 'b';
       attach(session.code, 'b', socket);
@@ -401,6 +402,20 @@ function handle(
       broadcast(session);
     }
   }
+}
+
+/**
+ * Resolve who is sitting down: the account (token verified against the store)
+ * when signed in, else the client's per-install device id. Neither is stored
+ * beyond the session, and an identity-less older client gets null (never refused).
+ */
+function seatIdentity(msg: SeatIdentity, accounts: AccountStore): string | null {
+  if (typeof msg.accountToken === 'string' && msg.accountToken) {
+    const user = accounts.userForToken(msg.accountToken);
+    if (user) return `account:${user.id}`;
+  }
+  if (typeof msg.deviceId === 'string' && msg.deviceId) return `device:${msg.deviceId.slice(0, 64)}`;
+  return null;
 }
 
 function requireSession(socket: WebSocket, ctx: SocketCtx, code: string): Session | undefined {

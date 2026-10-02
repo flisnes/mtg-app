@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.189.2
+
+- **Fixed: you can no longer join your own trade.** Entering your own code on a second device signed into the same account, or in a second tab on the same device, used to put you on both sides of the trade. The relay now turns that join away with a note that the other person enters the code. Nothing changes for "Trade solo", which is still the way to record a trade with someone who isn't on the app.
+
 ## 0.189.1
 
 - **Fixed: the app no longer crawls while card data downloads or the account syncs.** Opening the deck list could take a minute and a deck page several, because every screen re-read its data after each of the hundreds of small writes an update or a sync makes, and each re-read queued behind the next write. Card-data updates now install quietly and tell the screens once, at the end. Account syncs write each page in one go instead of row by row, and a full re-pull of the account lands in a single write.

@@ -4,7 +4,9 @@ import {
   USERNAME_RE,
   type ClientMessage,
   type Seat,
+  type SeatIdentity,
   type ServerMessage,
+  type TradeErrorCode,
   type SessionSnapshot,
   type TradeLine,
   type TradeState,
@@ -82,6 +84,32 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 
 export function otherSeat(seat: Seat): Seat {
   return seat === 'a' ? 'b' : 'a';
+}
+
+/** Random per-install id so the relay can tell a signed-out creator from their own joiner. */
+const DEVICE_ID_KEY = 'tradeDeviceId';
+function tradeDeviceId(): string {
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_KEY);
+    if (existing) return existing;
+    const fresh = crypto.randomUUID();
+    localStorage.setItem(DEVICE_ID_KEY, fresh);
+    return fresh;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+/** Who we are for the relay's self-join check: the account when signed in, else this install. */
+async function seatIdentity(): Promise<SeatIdentity> {
+  const session = await getAccountSession();
+  return { accountToken: session?.token, deviceId: tradeDeviceId() };
+}
+
+/** User-facing text for a handshake error, where the server's wording is too terse. */
+function joinErrorText(code: TradeErrorCode, message: string): string {
+  if (code === 'self_join') return 'That’s your own trade code. The person you’re trading with enters it on their device.';
+  return message;
 }
 
 /** Read any persisted in-flight trade (for the resume prompt). */
@@ -300,8 +328,8 @@ export function useTradeSession(): TradeSession {
           setPeerWishlist(sanitizeWishlist(msg.lines));
           break;
         case 'error':
-          setError(msg.message);
-          if (msg.code === 'unknown_session' || msg.code === 'bad_resume' || msg.code === 'session_full') {
+          setError(joinErrorText(msg.code, msg.message));
+          if (msg.code === 'unknown_session' || msg.code === 'bad_resume' || msg.code === 'session_full' || msg.code === 'self_join') {
             setStatus('error');
             void clearPersisted();
           }
@@ -450,17 +478,28 @@ export function useTradeSession(): TradeSession {
 
   const resumeSolo = useCallback((snap: SessionSnapshot) => enterSolo(snap), [enterSolo]);
 
-  const create = useCallback(() => connect({ v: PROTOCOL_VERSION, type: 'create_session' }), [connect]);
+  // Both handshakes carry who we are, so the relay can refuse the creator
+  // joining their own session. Show "connecting" while the identity is read
+  // so the button doesn't look dead for the IndexedDB round trip.
+  const create = useCallback(() => {
+    setStatus('connecting');
+    void seatIdentity().then((who) => connect({ v: PROTOCOL_VERSION, type: 'create_session', ...who }));
+  }, [connect]);
   const join = useCallback(
-    (c: string) =>
-      connect({
-        v: PROTOCOL_VERSION,
-        type: 'join_session',
-        sessionCode: c.trim().toUpperCase(),
-        // Identifies this join attempt so a retry (lost reply) reclaims the
-        // same seat instead of hitting "session full".
-        joinNonce: crypto.randomUUID(),
-      }),
+    (c: string) => {
+      setStatus('connecting');
+      void seatIdentity().then((who) =>
+        connect({
+          v: PROTOCOL_VERSION,
+          type: 'join_session',
+          sessionCode: c.trim().toUpperCase(),
+          // Identifies this join attempt so a retry (lost reply) reclaims the
+          // same seat instead of hitting "session full".
+          joinNonce: crypto.randomUUID(),
+          ...who,
+        }),
+      );
+    },
     [connect],
   );
   const resume = useCallback(

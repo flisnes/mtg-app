@@ -42,12 +42,26 @@ export interface SessionSnapshot {
 // Client -> server
 // ---------------------------------------------------------------------------
 
+/**
+ * Who is sitting down at a trade seat. The relay uses it for one thing only:
+ * refusing a join from whoever created the session (the same account on a
+ * second device, or the same install in a second tab), since a trade with
+ * yourself is what "Trade solo" is for and that never touches the relay.
+ * `accountToken` is the bearer token (verified server-side, never echoed);
+ * `deviceId` is a random per-install id for the signed-out case. Both optional
+ * so older clients keep working; a seat with no identity is never refused.
+ */
+export interface SeatIdentity {
+  accountToken?: string;
+  deviceId?: string;
+}
+
 export type ClientMessage =
-  | { v: typeof PROTOCOL_VERSION; type: 'create_session' }
+  | ({ v: typeof PROTOCOL_VERSION; type: 'create_session' } & SeatIdentity)
   // joinNonce identifies this join *attempt*: if the reply is lost and the
   // client retries with the same nonce, the server hands back the same seat
   // instead of rejecting it as already taken.
-  | { v: typeof PROTOCOL_VERSION; type: 'join_session'; sessionCode: string; joinNonce?: string }
+  | ({ v: typeof PROTOCOL_VERSION; type: 'join_session'; sessionCode: string; joinNonce?: string } & SeatIdentity)
   | { v: typeof PROTOCOL_VERSION; type: 'resume'; sessionCode: string; resumeToken: string }
   // Either participant may edit either side's offer (in-person trades are
   // built face to face, often from each other's binders). `side` says which
@@ -115,6 +129,8 @@ export type ServerMessage =
 export type TradeErrorCode =
   | 'unknown_session'
   | 'session_full'
+  /** The joiner is the session's own creator (same account or same install). */
+  | 'self_join'
   | 'bad_resume'
   | 'invalid_transition'
   | 'rate_limited'

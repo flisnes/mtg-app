@@ -1,6 +1,8 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { namedTokenIds, type CardBehavior, type DeckFormat } from '@mtg/shared';
+import { namedTokenIds, type CardBehavior, type DeckFormat, type OracleCard } from '@mtg/shared';
+import { BracketPanel } from './BracketPanel.js';
+import { bracketReport } from '@mtg/sim';
 import { Icon } from './icons.js';
 import { CURVE_MAX, TAX_TURNS, type DeckManaStats } from '../deck/manaStats.js';
 import { DrawOddsPanel } from './DrawOddsPanel.js';
@@ -235,6 +237,7 @@ export const ANALYSIS_TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'mana', label: 'Mana' },
   { id: 'flow', label: 'Flow' },
+  { id: 'bracket', label: 'Bracket' },
   { id: 'model', label: 'Model' },
 ] as const;
 export type AnalysisTab = (typeof ANALYSIS_TABS)[number]['id'];
@@ -330,10 +333,21 @@ export function DeckAnalysis({
   // Everywhere). Until they load those rules make nothing, the floor side.
   const tokenIds = useMemo(() => namedTokenIds(effective.behaviors.values()), [effective]);
   const tokenOracles = useLiveQuery(() => (tokenIds.length > 0 ? getOracleCardsRaw(tokenIds) : new Map()), [tokenIds.join()]);
-  const simDeck = useMemo(
-    () => buildSimDeck(rows, effective.behaviors, keepRule.query, effective.defaulted, tokenOracles),
-    [rows, effective, keepRule.query, tagsReady, tokenOracles],
+  // A token found by name gets the shipped rule written for it too (a Treasure
+  // found by name still cracks), the same way the deck's own cards do.
+  const withTokens = useMemo(
+    () => (tokenOracles && tokenOracles.size > 0 ? effectiveBehaviors(tokenOracles.values() as Iterable<OracleCard>, effective.behaviors, defaults) : effective),
+    [effective, tokenOracles, defaults],
   );
+  const simDeck = useMemo(
+    () => buildSimDeck(rows, withTokens.behaviors, keepRule.query, new Set([...effective.defaulted, ...withTokens.defaulted]), tokenOracles),
+    [rows, effective, withTokens, keepRule.query, tagsReady, tokenOracles],
+  );
+  // What the Commander Brackets count in this deck (rebuild plan D1). Read
+  // off the rows, not the simulated game; the tags give the tutor count.
+  const bracket = useMemo(() => bracketReport(rows, oracleTagClosure), [rows, tagsReady]);
+  // Taxes that land on you too, which the simulator does not apply.
+  const staxNames = useMemo(() => simDeck.cards.filter((c) => c.stax && (c.copies > 0 || c.commander)).map((c) => c.name), [simDeck]);
   const simOpts = useMemo(
     () => ({ ...defaultSimOptions(format, onPlay), ...policy, keepMin: keepRule.min, keepMax: keepRule.max }),
     [format, onPlay, policy, keepRule.min, keepRule.max],
@@ -499,9 +513,12 @@ export function DeckAnalysis({
             games={simOpts.games}
             coverage={simDeck.coverage}
             toCheck={toCheck}
+            bracket={format === 'commander' ? bracket : null}
             onTab={onTab}
           />
         )}
+
+        {tab === 'bracket' && <BracketPanel report={bracket} commander={format === 'commander'} />}
 
         {tab === 'mana' && (
           <>
@@ -627,6 +644,12 @@ export function DeckAnalysis({
         {tab === 'model' && (
           <>
             <p className={`deck-stats-verdict${toCheck > 0 ? ' tone-warn' : ''}`}>{behaviorNote(simDeck.coverage, toCheck)}.</p>
+            {staxNames.length > 0 && (
+              <p className="fine-print tone-warn">
+                {staxNames.length === 1 ? 'One card taxes' : `${staxNames.length} cards tax`} you as well as the table ({staxNames.join(', ')}). The
+                simulator does not apply that to your own spells, so with {staxNames.length === 1 ? 'it' : 'them'} out the numbers here run high.
+              </p>
+            )}
             {/* Local boundary: without it a suspend here would blank the whole
                 page through the route-level Suspense in App.tsx. */}
             <Suspense fallback={null}>

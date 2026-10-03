@@ -53,6 +53,10 @@ export const PREWRITTEN: Readonly<Record<string, CardBehavior>> = {
   'Ramunap Excavator': behavior(rule('static', [{ op: 'landfrom', x: n(1), from: 'graveyard' }])),
   'Courser of Kruphix': behavior(rule('static', [{ op: 'landfrom', x: n(1), from: 'librarytop' }])),
   'Reliquary Tower': behavior(rule('static', [{ op: 'nomaxhand', x: n(1) }])),
+  // Imprint: the Mox costs a card. The mana's color follows the deck (the
+  // chosen-color reading in buildSimDeck); this is the half the database
+  // cannot see, the card out of your hand.
+  'Chrome Mox': behavior(rule('etb', [{ op: 'move', x: n(1), from: 'hand', to: 'exile', q: '-t:land -t:artifact', pick: 'least' }])),
   // "During your turn" is every turn a goldfish has. The attack's land pick is
   // left out: milling three and keeping none is the floor.
   Six: behavior(

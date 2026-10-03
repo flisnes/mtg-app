@@ -8675,6 +8675,33 @@ a.seg {
     width: 7.5rem;
   }
 }
+/* Bracket tab (rebuild plan D1): the cards each count found, one per line. */
+.bracket-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.bracket-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+.bracket-name {
+  font-weight: 600;
+}
+/* The folded section's heading sits on the marker's line, like the Model tab's folds. */
+.bracket-fold > summary > .deck-stats-head {
+  display: inline;
+  margin: 0;
+}
 /* Overview (rebuild plan A5): one row per question, each a way into its tab. */
 .overview-rows {
   list-style: none;

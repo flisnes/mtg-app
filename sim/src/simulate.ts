@@ -49,6 +49,7 @@ import {
   popcount,
   T_CREATURE,
   T_LAND,
+  T_TOKEN,
   TYPE_BIT,
   UNIT_BY_MASK,
   type SimCard,
@@ -764,6 +765,14 @@ export function simulate(
   let life = startLife;
   /** Life gained so far this turn (rebuild plan §6 step 3), for the `lifegained` amount. */
   let lifeGainedTurn = 0;
+  /** Creatures of yours that went from the battlefield to the graveyard this turn, for the `died` amount. */
+  let diedTurn = 0;
+  /**
+   * The battlefield slot the last `takeFrom`/`takeChosen` pulled was a token
+   * copy (rebuild plan §6 step 7), so no card is on its way anywhere: the
+   * caller fires the death and moves nothing.
+   */
+  let tookToken = false;
   /**
    * The number behind the event that woke the rule running now, for the
    * `cause` amount: the life gained, the power of the permanent that entered or
@@ -1997,6 +2006,9 @@ export function simulate(
       case 'lifegained':
         n = lifeGainedTurn;
         break;
+      case 'died':
+        n = diedTurn;
+        break;
       case 'cause':
         n = causeAmount;
         break;
@@ -2213,8 +2225,11 @@ export function simulate(
         const index = perms.card[pick]!;
         // The slot it picked, not the first slot carrying that card index:
         // two copies are two slots and only one of them is leaving.
+        tookToken = perms.token[pick] === 1;
+        const oid = perms.oid[pick]!;
         dropPermanent(pick);
-        unsource(index);
+        if (tookToken) unsourceOid(oid);
+        else unsource(index);
         unrecur(index);
         return index;
       }
@@ -2297,8 +2312,11 @@ export function simulate(
         }
         if (at < 0) return -1;
         const index = perms.card[at]!;
+        tookToken = perms.token[at] === 1;
+        const oid = perms.oid[at]!;
         dropPermanent(at);
-        unsource(index);
+        if (tookToken) unsourceOid(oid);
+        else unsource(index);
         unrecur(index);
         return index;
       }
@@ -2759,6 +2777,7 @@ export function simulate(
    */
   const afterLeaving = (index: number, turn: number, sacrificed: boolean): void => {
     if (index < 0) return;
+    if (cards[index]!.types & T_CREATURE) diedTurn++;
     if (anyDiesWatchers && cards[index]!.types & T_CREATURE) fireWatchers('dies', index, turn);
     if (sacrificed && anySacWatchers) fireWatchers('sacrifice', index, turn);
   };
@@ -2911,16 +2930,22 @@ export function simulate(
       }
       if (pick < 0) break;
       const index = perms.card[pick]!;
+      // A token copy of a real card ceases to exist too; `-1 - index` marks it
+      // so the list below can name it and not bring it back.
+      const wasToken = perms.token[pick] === 1;
+      const oid = perms.oid[pick]!;
       dropPermanent(pick);
-      unsource(index);
+      if (wasToken) unsourceOid(oid);
+      else unsource(index);
       unrecur(index);
-      taken.push(index);
+      taken.push(wasToken ? -1 - index : index);
     }
-    for (const index of taken) {
+    for (const raw of taken) {
+      const index = raw < 0 ? -1 - raw : raw;
       if (sink) movedNames.push(cards[index]!.name);
       // A token that leaves the battlefield ceases to exist, so a flickered
       // one does not come back.
-      if (cards[index]!.token) continue;
+      if (raw < 0 || cards[index]!.token) continue;
       // A flicker is the one arrival that credits the card itself. It was
       // already yours and already making this mana; blinking it is not the
       // flicker spell going and getting you a Sol Ring.
@@ -2952,9 +2977,21 @@ export function simulate(
     let moved = 0;
     for (let k = 0; k < count; k++) {
       if (!roomIn(to)) break;
+      tookToken = false;
       const index = takeFrom(from, mask, base, turn, step.pick);
       if (index < 0) break;
       moved++;
+      // A token copy leaving the battlefield ceases to exist: it dies like the
+      // card it copied, and then there is nothing to put anywhere.
+      if (tookToken) {
+        tookToken = false;
+        if (sink) movedNames.push(cards[index]!.name);
+        if (to === 'graveyard') {
+          fireDeath(index, cards[index]!, turn);
+          afterLeaving(index, turn, true);
+        }
+        continue;
+      }
       // `seen` is cards off the library that you got to look at, which is what
       // the cards chart reads: a tutor counts, and so does one binned face up
       // like a mill. A regrowth does not.
@@ -2996,6 +3033,15 @@ export function simulate(
       // card: a rule that sacrifices a Lotus Cobra must not sacrifice the mana
       // its last landfall trigger put in the pool instead.
       if (srcCard[s] !== index || srcFloating[s]) continue;
+      dropSource(s);
+      return;
+    }
+  };
+
+  /** The mana view of one permanent, by its object id: a token copy's source, which shares its card index with the original. */
+  const unsourceOid = (oid: number): void => {
+    for (let s = 0; s < srcLen; s++) {
+      if (srcOid[s] !== oid || srcFloating[s]) continue;
       dropSource(s);
       return;
     }
@@ -3052,6 +3098,80 @@ export function simulate(
       addPoison(made * strikes * card.toxic);
       if (card.keywords & KW_LIFELINK) for (let k = 0; k < made && strikes * card.power > 0; k++) gainLife(strikes * card.power, turn);
     }
+    return made;
+  };
+
+  /** The permanent a `copy` step last copied, for the trace line. */
+  let copiedName = '';
+
+  /**
+   * Token copies of a permanent you control (rebuild plan §6 step 7), or this
+   * card entering as one. The copy is a slot carrying the copied card's index,
+   * so power, types, filters, combat and the copied card's own entry and death
+   * rules all read it as that card; `Permanents.token` is what makes it cease
+   * to exist rather than go to the graveyard when it leaves.
+   *
+   * Which permanent: the biggest of the ones the criteria find (your creatures
+   * when there are none), never the card holding the rule, newest on a tie.
+   * No choice beyond that, no "another nonlegendary" unless the criteria say
+   * it. Returns how many copies were made.
+   */
+  const copyPermanents = (step: BehaviorStep, count: number, turn: number, self: number): number => {
+    ensureFresh(turn);
+    const filter = step.q ? filterFor.get(step.q) : undefined;
+    if (step.q && !filter) return 0;
+    let best = -1;
+    let bestScore = -1;
+    for (let p = 0; p < perms.len; p++) {
+      if (!stillOut(p, turn) || perms.card[p] === self) continue;
+      if (filter) {
+        if (filter.match[perms.added[p]! * n + perms.card[p]!] !== 1) continue;
+      } else if (!(perms.types[p]! & T_CREATURE)) continue;
+      const score = perms.power[p]! * 1_000_000 + perms.oid[p]!;
+      if (score > bestScore) {
+        bestScore = score;
+        best = p;
+      }
+    }
+    if (best < 0) return 0;
+    const index = perms.card[best]!;
+    const card = cards[index]!;
+    copiedName = card.name;
+    const source = (card.role === 'land' || card.role === 'rock' || card.role === 'dork') && (card.adds > 0 || !!card.manaAmount);
+    const kw = keywordBits(step.kw);
+    let made = 0;
+    for (let k = 0; k < (step.own ? 1 : count); k++) {
+      if (step.own) {
+        // This card is the copy: its own slot goes, nothing dies, and the
+        // copied card's slot takes its place. The card index on the battlefield
+        // is now the copied card's, which is what a Clone is.
+        const mine = self >= 0 ? perms.newest(self) : -1;
+        if (mine < 0) break;
+        unsourceOid(perms.oid[mine]!);
+        dropPermanent(mine);
+      }
+      let slot: number;
+      if (source) {
+        if (!addSource(index, card, turn + 1, turn, self)) break;
+        colorsHeld |= card.mask;
+        // A copy that goes at end of turn never gets to tap: it is online from
+        // next turn and gone by then.
+        if (step.eot) srcExpires[srcLen - 1] = turn;
+        slot = perms.newest(index);
+      } else slot = addPermanent(index, card, turn);
+      if (slot < 0) break;
+      if (!step.own) perms.markToken(slot);
+      if (kw) {
+        perms.kwOwn[slot] = perms.kwOwn[slot]! | kw;
+        perms.refresh(slot, card);
+      }
+      // Gone at the end of this turn: around for its entry rule and one combat.
+      if (step.eot) perms.until[slot] = turn;
+      made++;
+      fireEntry(index, card, turn);
+      fireArrival(index, card, turn);
+    }
+    if (made > 0) dirty = true;
     return made;
   };
 
@@ -3265,6 +3385,14 @@ export function simulate(
           if (sink && did > 0) {
             const how = step.attacking ? (inCombat ? ', attacking' : ', tapped') : step.tapped ? ', tapped' : '';
             bits.push(`creates ${did} ${cards[deck.tokens[tokenKey(step)] ?? 0]?.name ?? 'token'}${did === 1 ? '' : 's'}${how}`);
+          }
+          break;
+        }
+        case 'copy': {
+          did = copyPermanents(step, n, turn, self);
+          if (sink && did > 0) {
+            const gone = step.eot ? ' until end of turn' : '';
+            bits.push(step.own ? `enters as a copy of ${copiedName}` : `creates ${did} token cop${did === 1 ? 'y' : 'ies'} of ${copiedName}${gone}`);
           }
           break;
         }
@@ -4066,7 +4194,7 @@ export function simulate(
     if (anyDiscounts) discountOf.fill(0);
     const len = perms.len;
     for (let p = 0; p < len; p++) {
-      perms.types[p] = cards[perms.card[p]!]!.types;
+      perms.types[p] = cards[perms.card[p]!]!.types | (perms.token[p] ? T_TOKEN : 0);
       perms.added[p] = 0;
       perms.sub[p] = 0;
       perms.kwStatic[p] = 0;
@@ -4593,6 +4721,7 @@ export function simulate(
     const slot = perms.slotOf(oid);
     if (slot < 0) return;
     const index = perms.card[slot]!;
+    const wasToken = perms.token[slot] === 1;
     dropPermanent(slot);
     for (let s = 0; s < srcLen; s++) {
       if (srcOid[s] !== oid || srcFloating[s]) continue;
@@ -4600,7 +4729,8 @@ export function simulate(
       break;
     }
     unrecur(index);
-    bury(index);
+    // A token copy of a real card leaves no card behind (rebuild plan §6 step 7).
+    if (!wasToken) bury(index);
     fireDeath(index, cards[index]!, turn);
     afterLeaving(index, turn, true);
   };
@@ -4846,6 +4976,8 @@ export function simulate(
     cmdCasts.fill(0);
     life = startLife;
     lifeGainedTurn = 0;
+    diedTurn = 0;
+    tookToken = false;
     causeAmount = 0;
     gamePoison = 0;
     inCombat = false;
@@ -4923,6 +5055,7 @@ export function simulate(
       // can a static's condition (the turn number, your life).
       if ((anyAttach || anyCondStatics) && perms.len > 0) dirty = true;
       lifeGainedTurn = 0;
+      diedTurn = 0;
       if (sink) {
         sink.turn = { turn, lines: [], available: 0, spent: 0, damage: 0, board: EMPTY_BOARD };
         sink.game.turns.push(sink.turn);

@@ -176,6 +176,11 @@ export type BehaviorStepKind =
   // four only mean anything in a `static` rule; `tapsfor` is the one step of a
   // `tap` rule.
   | 'token'
+  // Rebuild plan §6 step 7: a token copy of a permanent you already control
+  // (Kiki-Jiki, Rite of Replication), or, with `own`, this card entering as a
+  // copy of one (Clone). The copy is the copied card for everything that reads
+  // a permanent: its power, its types, its own entry and death rules.
+  | 'copy'
   | 'counter'
   | 'pump'
   | 'keyword'
@@ -242,6 +247,9 @@ export type BehaviorAmountKind =
   | 'devotion'
   // Rebuild plan §6 step 3: life you have gained this turn.
   | 'lifegained'
+  // Rebuild plan §6 step 1 leftovers: creatures of yours that went from the
+  // battlefield to the graveyard this turn. Mahadi's end step, Garna.
+  | 'died'
   // Rebuild plan §6 step 6: the number behind what woke this rule. On a
   // life-gain rule the life gained; on an enters, dies or sacrifice rule the
   // power of the permanent; on a cast rule the spell's mana value. Zero on a
@@ -388,8 +396,19 @@ export interface BehaviorStep {
    * `keyword` and `pump`: the card holding the rule gets it, not the creatures
    * the rule's criteria find. "This creature has vigilance", a hasty dork, or
    * prowess (+1/+1 to this card until end of turn).
+   *
+   * `copy`: this card itself enters as the copy (Clone, Phantasmal Image)
+   * rather than making a token copy beside the original.
    */
   own?: true;
+  /**
+   * `copy` only: the copy is sacrificed (or exiled) at the beginning of the
+   * next end step, so it is around for this turn only. Kiki-Jiki, Splinter
+   * Twin, Flameshadow Conjuring. On `copy`, `q` says which of your permanents
+   * may be copied (creatures when absent; the card holding the rule never is)
+   * and `kw` what the copy gains for as long as it stays (Kiki's haste).
+   */
+  eot?: true;
   /** `pump` only: power alone, +X/+0. */
   po?: true;
   /** `counter` only: `p1p1` for +1/+1 counters, `charge` for everything that only gets counted. */
@@ -1120,6 +1139,7 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'surveil', label: 'Surveil X', verb: 'surveil' },
   { id: 'treasure', label: 'Create X Treasures', verb: 'create' },
   { id: 'token', label: 'Create X tokens', verb: 'create' },
+  { id: 'copy', label: 'Copy a permanent you control', verb: 'copy' },
   { id: 'mana', label: 'Add X mana', verb: 'add' },
   { id: 'damage', label: 'Deal X damage', verb: 'deal' },
   { id: 'move', label: 'Move X between zones', verb: 'move' },
@@ -1281,6 +1301,7 @@ export const BEHAVIOR_AMOUNTS: readonly AmountOption[] = [
   { id: 'kicked', label: 'the times kicked', phrase: 'the times it was kicked', needsKicker: true },
   { id: 'life', label: 'your life', phrase: 'your life total' },
   { id: 'lifegained', label: 'life gained this turn', phrase: 'the life you gained this turn' },
+  { id: 'died', label: 'creatures that died this turn', phrase: 'the creatures of yours that died this turn' },
   { id: 'cause', label: 'what woke it', phrase: 'what woke this rule', needsCause: true },
 ];
 
@@ -1440,6 +1461,15 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
       const plural = many && !name.includes(' token') ? `${name} tokens` : name.includes(' token') ? name : `${name} token`;
       const how = step.attacking ? ', tapped and attacking' : step.tapped ? ', tapped' : '';
       return `${verb} ${count} ${plural}${how}${tail}`;
+    }
+    case 'copy': {
+      // Which permanent: the biggest of the ones the criteria find, or of your
+      // creatures. The copy keeps whatever it is handed for as long as it stays.
+      const of = step.q ? `your biggest permanent matching ${step.q}` : 'your biggest creature';
+      const gains = cleanKeywords(step.kw) ? `, with ${keywordWords(step.kw)}` : '';
+      const gone = step.eot ? ', sacrificed at the end of the turn' : '';
+      if (step.own) return `this card enters as a copy of ${of}${gains}${gone}`;
+      return `create ${count} token cop${many ? 'ies' : 'y'} of ${of}${gains}${gone}${tail}`;
     }
     case 'counter': {
       const kind = step.ck === 'charge' ? 'charge' : '+1/+1';
@@ -2013,6 +2043,7 @@ function objectStepOk(step: BehaviorStep): boolean {
     case 'tapsfor':
     case 'discount':
     case 'poison':
+    case 'copy':
       return step.x.kind !== 'all';
     default:
       return true;
@@ -2304,6 +2335,17 @@ function cleanObjectStep(op: BehaviorStepKind, s: Record<string, unknown>, kind:
       const creature = ty.includes('C') ? { tp: clampInt(s.tp, 0, MAX_TOKEN_PT, 1), tt: clampInt(s.tt, 1, MAX_TOKEN_PT, 1) } : {};
       const kw = cleanKeywords(s.kw) && ty.includes('C') ? { kw: cleanKeywords(s.kw) } : {};
       return { op, x, tk, ty, ...creature, ...kw, ...how };
+    }
+    case 'copy': {
+      const x = amount();
+      if (!x) return null;
+      // Which permanents it may copy, what the copy gains, whether it is gone
+      // at end of turn, and whether this card *is* the copy (Clone). The card
+      // becoming the copy is one copy, so its count is normalized away.
+      const kw = cleanKeywords(s.kw) ? { kw: cleanKeywords(s.kw) } : {};
+      const eot = s.eot === true ? { eot: true as const } : {};
+      if (s.own === true) return { op, x: one, own: true, ...cleanQuery(s.q), ...kw, ...eot };
+      return { op, x, ...cleanQuery(s.q), ...kw, ...eot };
     }
     case 'counter': {
       const x = amount();

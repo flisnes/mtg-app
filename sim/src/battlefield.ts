@@ -1,4 +1,4 @@
-import { KW_HASTE, type SimCard } from './simDeck.js';
+import { KW_HASTE, T_TOKEN, type SimCard } from './simDeck.js';
 
 // The permanents you control, one slot each (rebuild plan F0/F2).
 //
@@ -64,6 +64,13 @@ export class Permanents {
   readonly extraMask: Uint8Array;
   /** The card whose static rule that extra mana is, for the mana credit. */
   readonly extraBy: Int32Array;
+  /**
+   * A token copy of a real card (rebuild plan §6 step 7): the slot carries the
+   * copied card's index, so everything reads it as that card, but when it
+   * leaves the battlefield no card goes anywhere. Catalog tokens have their
+   * own SimCard with `token` set and never need this.
+   */
+  readonly token: Uint8Array;
   private nextOid = 1;
 
   constructor(readonly capacity: number) {
@@ -91,6 +98,7 @@ export class Permanents {
     this.extra = new Int32Array(capacity);
     this.extraMask = new Uint8Array(capacity);
     this.extraBy = new Int32Array(capacity);
+    this.token = new Uint8Array(capacity);
   }
 
   /** A new game. */
@@ -128,8 +136,15 @@ export class Permanents {
     this.extra[p] = 0;
     this.extraMask[p] = 0;
     this.extraBy[p] = -1;
+    this.token[p] = 0;
     this.refresh(p, card);
     return p;
+  }
+
+  /** The permanent is a token copy of its card (rebuild plan §6 step 7). */
+  markToken(p: number): void {
+    this.token[p] = 1;
+    this.types[p] = this.types[p]! | T_TOKEN;
   }
 
   /** Swap-remove a slot. Every array moves together or not at all. */
@@ -160,6 +175,7 @@ export class Permanents {
     this.extra[at] = this.extra[last]!;
     this.extraMask[at] = this.extraMask[last]!;
     this.extraBy[at] = this.extraBy[last]!;
+    this.token[at] = this.token[last]!;
   }
 
   /** The first slot holding this card, or -1. */

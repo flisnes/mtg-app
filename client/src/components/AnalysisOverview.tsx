@@ -1,7 +1,7 @@
 import { Icon } from './icons.js';
 import type { DeckManaStats } from '../deck/manaStats.js';
 import { shortfallHeadline, type ManaReport } from '@mtg/sim';
-import type { SimLimits, SimResult } from '@mtg/sim';
+import type { BracketReport, SimLimits, SimResult } from '@mtg/sim';
 import { heldBackBy } from './OnCurvePanel.js';
 import type { SimCoverage } from '@mtg/sim';
 import { FLOW_TURN } from './FlowTurnsPanel.js';
@@ -38,7 +38,7 @@ interface Answer {
   next?: string;
 }
 
-export type OverviewTarget = 'mana' | 'flow' | 'model';
+export type OverviewTarget = 'mana' | 'flow' | 'bracket' | 'model';
 
 export function AnalysisOverview({
   stats,
@@ -48,6 +48,7 @@ export function AnalysisOverview({
   games,
   coverage,
   toCheck,
+  bracket,
   onTab,
 }: {
   stats: DeckManaStats;
@@ -59,11 +60,14 @@ export function AnalysisOverview({
   coverage: SimCoverage;
   /** Draw cards the tags say should draw and the model reads as nothing. */
   toCheck: number;
+  /** What the Commander Brackets count, or null off the Commander format. */
+  bracket: BracketReport | null;
   onTab: (tab: OverviewTarget) => void;
 }) {
   const rows: { goal: string; tab: OverviewTarget; answer: Answer }[] = [
     { goal: 'Mana', tab: 'mana', answer: manaAnswer(stats, report, result, hasManaData, games) },
     { goal: 'Flow', tab: 'flow', answer: flowAnswer(result, hasManaData, games) },
+    ...(bracket ? [{ goal: 'Bracket', tab: 'bracket' as const, answer: bracketAnswer(bracket) }] : []),
     { goal: 'Model', tab: 'model', answer: modelAnswer(coverage, toCheck) },
   ];
   return (
@@ -207,6 +211,26 @@ function flowAnswer(result: SimResult | undefined, hasManaData: boolean, games: 
     return { tone: 'warn', status: 'runs dry', text: `Your hand is empty by turn ${t}. ${facts}`, next: 'More card draw.' };
   }
   return { tone: 'ok', status: 'steady', text: facts };
+}
+
+/**
+ * Which bracket the cards put a floor under (rebuild plan D1). No tone of
+ * alarm: a Bracket 4 deck is a fine thing to be, as long as the table knows.
+ */
+function bracketAnswer(b: BracketReport): Answer {
+  const counts = [
+    `${b.gameChangers.length} Game Changer${plural(b.gameChangers.length)}`,
+    b.massLandDenial.length > 0 ? `${b.massLandDenial.length} mass land denial` : '',
+    b.extraTurns.length > 0 ? `${b.extraTurns.length} extra turn${plural(b.extraTurns.length)}` : '',
+    b.tutors ? `${b.tutors.length} tutor${plural(b.tutors.length)}` : '',
+  ].filter(Boolean);
+  const text = b.reasons.length > 0 ? `At least ${b.level.name}, because of ${b.reasons.join(' and ')}. ${counts.join(', ')}.` : `${counts.join(', ')}. Nothing here pushes it higher; combos and speed are not read.`;
+  return {
+    tone: 'ok',
+    status: `${b.level.id} ${b.level.name}`,
+    text,
+    next: b.reasons.length > 0 ? 'Say so when the table agrees a bracket.' : undefined,
+  };
 }
 
 /**

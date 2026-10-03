@@ -1804,11 +1804,14 @@ function RuleEditor({
         const grantQuery = step.op === 'grantcast' || step.op === 'grantdredge';
         // Which spells a cost reduction is for.
         const discountQuery = step.op === 'discount';
+        // Which of your permanents a copy may be of.
+        const copyQuery = step.op === 'copy';
         // Dredge is a printed number, never one read off the game.
         const fixedOnly = step.op === 'dredge' || step.op === 'grantdredge';
-        const narrows = move || flicker || creatureQuery || spendQuery || grantQuery || discountQuery;
+        const narrows = move || flicker || creatureQuery || spendQuery || grantQuery || discountQuery || copyQuery;
         const objectControls =
           step.op === 'token' ||
+          step.op === 'copy' ||
           step.op === 'counter' ||
           step.op === 'addtype' ||
           step.op === 'landfrom' ||
@@ -1985,10 +1988,24 @@ function RuleEditor({
                     type="text"
                     value={step.q ?? ''}
                     maxLength={MAX_BEHAVIOR_QUERY}
-                    aria-label={creatureQuery ? 'Which creatures' : spendQuery ? 'Spend it only on' : grantQuery ? 'Which cards in that zone' : discountQuery ? 'Which spells cost less' : 'Which cards'}
+                    aria-label={
+                      creatureQuery
+                        ? 'Which creatures'
+                        : spendQuery
+                          ? 'Spend it only on'
+                          : grantQuery
+                            ? 'Which cards in that zone'
+                            : discountQuery
+                              ? 'Which spells cost less'
+                              : copyQuery
+                                ? 'Which of your permanents it may copy'
+                                : 'Which cards'
+                    }
                     placeholder={
                       creatureQuery
                         ? 'All your creatures, or t:elf, …'
+                        : copyQuery
+                          ? 'Your creatures, or t:creature -t:legendary, t:artifact, …'
                         : spendQuery
                           ? 'Spend it on anything, or only on t:creature, …'
                           : grantQuery
@@ -2011,7 +2028,7 @@ function RuleEditor({
                 )}
                 {/* The control appears because the query asked for it. No
                     placeholder, no dropdown, and nothing to explain away. */}
-                {!creatureQuery && !spendQuery && !grantQuery && !discountQuery && queryHasX(step.q) && (
+                {!creatureQuery && !spendQuery && !grantQuery && !discountQuery && !copyQuery && queryHasX(step.q) && (
                   <>
                     <span className="fine-print behavior-plug-lead">[X] in that query is:</span>
                     <AmountPicker
@@ -2328,6 +2345,30 @@ function ObjectControls({
       </div>
     );
   }
+  if (step.op === 'copy') {
+    return (
+      <div className="behavior-obj">
+        <label className="field">
+          <select
+            value={step.own ? 'own' : 'token'}
+            aria-label="What the copy is"
+            onChange={(e) =>
+              onChange(e.target.value === 'own' ? { ...step, x: { kind: 'fixed', n: 1 }, own: true } : without(step, 'own'))
+            }
+          >
+            <option value="token">A token copy, beside the original</option>
+            <option value="own">This card enters as the copy (Clone)</option>
+          </select>
+        </label>
+        <span className="fine-print">The copy has</span>
+        <KeywordChecks step={step} onChange={onChange} />
+        <label className="behavior-check" title="Kiki-Jiki, Splinter Twin, Flameshadow Conjuring: the copy is around for this turn only.">
+          <input type="checkbox" checked={!!step.eot} onChange={(e) => onChange(e.target.checked ? { ...step, eot: true } : without(step, 'eot'))} />
+          <span>Sacrificed at the end of the turn</span>
+        </label>
+      </div>
+    );
+  }
   if (step.op === 'counter') {
     return (
       <div className="behavior-obj behavior-zones">
@@ -2508,6 +2549,12 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
     notes.push({
       key: 'oneshot',
       text: 'Only the first time each game, then never again: a Saga\'s first chapter written as an entry rule, a Class level you only reach once. Counted per card rather than per copy, so two copies share the one firing.',
+    });
+  }
+  if (has('copy')) {
+    notes.push({
+      key: 'copy',
+      text: 'The copy is of the biggest permanent the criteria find (your creatures when the box is empty), never this card itself. It is that card for everything: its power, its types, its own "when it enters" and "when it dies" rules fire for the copy too. A token copy ceases to exist when it leaves the battlefield; "this card enters as the copy" swaps this card for the copy, the way a Clone does. Nothing here copies a spell, or doubles tokens.',
     });
   }
   if (rule.steps.some((s) => s.op === 'token' && (s.tapped || s.attacking))) {

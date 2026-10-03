@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.191.0
+
+- **Added: copies in the deck simulator.** A card rule can now say "Copy a permanent you control": a token copy of your biggest creature (or whatever the criteria name), with keywords the copy gains and "sacrificed at the end of the turn" for Kiki-Jiki and Splinter Twin, or "this card enters as the copy" for Clone. The copy is that card for everything, so a copied Avenger of Zendikar makes its Plants and a copied Solemn Simulacrum draws when it dies. Rite of Replication, Kiki-Jiki and Clone are the first three; spell copies and token doubling are not in yet.
+- **Added: a Bracket tab on the deck analysis page.** For Commander decks it counts what the Commander Brackets ask about, straight off the cards: Game Changers (Scryfall's list, which updates with the card data), mass land denial, extra turns and tutors, and names the lowest bracket those counts fit, with the cards behind each count. It is a floor set by the cardboard: two-card combos and how fast the deck wins are not read yet, and it says so. The Overview gets a Bracket row.
+- **Changed: a few places the simulator used to err high.** Mana that scales with the board ("Add {G} for each Elf you control", Gaea's Cradle, Everflowing Chalice's counters) now counts what is actually out instead of a flat one. A rock whose color you choose as it enters (Coldsteel Heart, the Thriving lands, Chrome Mox) is one of your deck's colors, not all five; Chrome Mox also costs you the imprinted card. Mahadi's Treasures arrive at your end step for the creatures that died that turn, as printed, through a new "creatures that died this turn" amount. A Clue or Food found by name cracks like the catalog's. And cards that tax you as well as the table (Thalia, Rule of Law, Winter Orb) are now flagged on the Model tab, since the simulator does not apply their tax to your own spells.
+
 ## 0.190.0
 
 - **Added: the deck simulator counts life and poison.** Lifelink, infect and toxic are read straight off the card: a lifelink creature's hits gain you life, infect hits are poison instead of damage, toxic adds poison on top. Your life total and the opponent's poison counters are tracked through the game, the Flow tab shows both (poison as a third line on the damage chart, ten being the game), and the goldfish trace says when they move. Card rules get a "When you gain life" trigger (Ajani's Pridemate, Archangel of Thune, Sanguine Bond), a "life gained this turn" amount, and a "Give X poison counters" step.

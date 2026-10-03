@@ -32,6 +32,23 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.191.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Card rules can copy a permanent you control: token copies for Kiki-Jiki and Rite of Replication, or "this card enters as the copy" for Clone.',
+      },
+      {
+        kind: 'added',
+        text: 'A Bracket tab on the deck analysis page counts Game Changers, mass land denial, extra turns and tutors in a Commander deck and names the lowest bracket they fit.',
+      },
+      {
+        kind: 'changed',
+        text: 'Board-scaling mana (Gaea\'s Cradle, Priest of Titania), chosen-color rocks and Mahadi\'s Treasures now read closer to the card, and cards that tax you too (Thalia, Rule of Law) are flagged on the Model tab.',
+      },
+    ],
+  },
+  {
     version: '0.190.0',
     changes: [
       {

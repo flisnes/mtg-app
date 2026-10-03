@@ -312,6 +312,14 @@ export interface SimCard {
    * Null for every card without the keyword.
    */
   affinity: string | null;
+  /**
+   * A printed tax or lock that lands on you as well as the table (rebuild
+   * plan §6 step 1 leftovers): Thalia's "noncreature spells cost {1} more",
+   * Winter Orb, Rule of Law. The sentence, or null. Not applied to the deck's
+   * own numbers, which is why it has to be said: these cards read as blanks and
+   * the deck's own curve comes out faster than it is.
+   */
+  stax: string | null;
 }
 
 /**
@@ -361,6 +369,11 @@ export interface SimCoverage {
    * reading above the database's, and the coverage line says how many.
    */
   defaults: number;
+  /**
+   * Copies whose printed tax or lock hits your own spells too (SimCard.stax)
+   * and is not applied. The one count here that says the numbers run *high*.
+   */
+  stax: number;
 }
 
 /**
@@ -540,6 +553,20 @@ export function buildSimDeck(
     if (fetch) fetchInfo.push({ index, types: fetch.types, basicOnly: fetch.basicOnly });
   }
 
+  // A source whose color is chosen as it enters (Coldsteel Heart, Chrome Mox's
+  // imprint) is read by the database as every color. You would choose one the
+  // deck can use, so it is narrowed to the deck's own identity: still generous
+  // (the choice is made once, not per spell), no longer a five-color rock in a
+  // mono-green deck.
+  const deckMask = oracles.reduce((mask, o) => mask | colorMask(Array.isArray(o.colorIdentity) ? o.colorIdentity.join('') : String(o.colorIdentity ?? '')), 0);
+  if (deckMask !== 0) {
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i]!;
+      if (card.behavior?.tap || popcount(card.mask) < 5 || !printedChosenColor(oracles[i]!.oracleText)) continue;
+      card.mask &= deckMask;
+    }
+  }
+
   for (const f of fetchInfo) {
     const wanted = [...f.types].map((letter) => BASIC_LAND_TYPES[letter]).filter((t): t is string => !!t);
     const targets: number[] = [];
@@ -582,8 +609,9 @@ export function buildSimDeck(
     for (let c = 0; c < cards[i]!.copies; c++) library[at++] = i;
   }
 
-  const coverage: SimCoverage = { library: libraryCopies, lands: 0, mana: 0, effects: 0, floored: 0, blanks: 0, authored: 0, defaults: 0 };
+  const coverage: SimCoverage = { library: libraryCopies, lands: 0, mana: 0, effects: 0, floored: 0, blanks: 0, authored: 0, defaults: 0, stax: 0 };
   for (const card of cards) {
+    if (card.stax && (card.copies > 0 || card.commander)) coverage.stax += Math.max(1, card.copies);
     if (card.copies <= 0) continue;
     if (card.role === 'land' || card.role === 'fetch') coverage.lands += card.copies;
     else if (card.role !== 'spell') coverage.mana += card.copies;
@@ -661,7 +689,10 @@ function simCardOf(o: OracleCard, behavior: CompiledBehavior | null, copies: num
     god: godClause(o.oracleText),
     toughness: powerOf(o.toughness),
     token: false,
-    manaAmount: null,
+    // An amount the database floored at one ("for each Elf you control"), or
+    // read as a flat one (Gaea's Cradle), is read off the card when its words
+    // say what to count, so it can be zero, which on most turns it is.
+    manaAmount: profile && (role === 'rock' || role === 'dork' || role === 'land') ? printedManaAmount(o.oracleText) : null,
     spendQ: profile?.restricted ? restrictionQuery(o.oracleText) : null,
     manaCond: null,
     kicker: null,
@@ -671,6 +702,7 @@ function simCardOf(o: OracleCard, behavior: CompiledBehavior | null, copies: num
     attach: printedAttach(o.typeLine, o.oracleText),
     toxic: printedToxic(o.oracleText),
     affinity: printedAffinity(o.oracleText),
+    stax: printedSymmetricTax(o.oracleText),
   };
   return card;
 }
@@ -819,6 +851,96 @@ export function printedAffinity(text: string | null | undefined): string | null 
   if (!text) return null;
   const m = /^affinity for ([a-z ]+?)\s*$/im.exec(text.replace(/\([^)]*\)/g, ''));
   return m ? (AFFINITY_FOR[m[1]!.trim().toLowerCase()] ?? null) : null;
+}
+
+/**
+ * A printed tax or lock that lands on you too (rebuild plan §6 step 1
+ * leftovers): the sentence, or null. Symmetric means the sentence does not
+ * name opponents. "Noncreature spells cost {1} more to cast" (Thalia, Sphere,
+ * Thorn), "each player can't cast more than one spell each turn" (Rule of
+ * Law, Eidolon), "don't untap during their controllers' untap steps" (Winter
+ * Orb, Static Orb), "players skip their untap steps" (Stasis), "each player
+ * can't draw more than one card each turn" (Spirit of the Labyrinth). The
+ * simulator does not apply any of it to the deck's own game; this is the flag.
+ */
+export function printedSymmetricTax(text: string | null | undefined): string | null {
+  if (!text) return null;
+  for (const raw of text.replace(/\([^)]*\)/g, '').split(/\n|(?<=\.)\s+/)) {
+    const line = raw.trim();
+    // "Those creatures don't untap" is a targeted effect, not a lock.
+    if (!line || /\bopponent/i.test(line) || /^(?:they|those|that|it|the exiled)\b/i.test(line)) continue;
+    if (SYMMETRIC_TAX.some((re) => re.test(line))) return line.replace(/\.$/, '');
+  }
+  return null;
+}
+const SYMMETRIC_TAX: readonly RegExp[] = [
+  /^(?:[a-z-]+ )*spells cost \{\d\} more to cast/i,
+  /^(?:each|every) player can't (?:cast|draw|activate|play)/i,
+  /^players can't (?:cast|draw|activate|play|untap)/i,
+  /don't untap during their controllers' untap steps/i,
+  /players skip their untap steps/i,
+  /players can't untap more than/i,
+];
+
+/**
+ * A mana source whose color is chosen as it enters, or is a card's colors
+ * (Chrome Mox's imprint): the database says every color, and the deck says
+ * which it would be. See buildSimDeck.
+ */
+export function printedChosenColor(text: string | null | undefined): boolean {
+  return !!text && /\b(?:choose a color|of the chosen color|the exiled card's colors?)\b/i.test(text.replace(/\([^)]*\)/g, ''));
+}
+
+/** Words after "for each" that name a type the criteria can count; anything else single is a subtype. */
+const PER_WORDS: Readonly<Record<string, string>> = {
+  creature: 't:creature',
+  artifact: 't:artifact',
+  enchantment: 't:enchantment',
+  land: 't:land',
+  permanent: '',
+  'basic land': 't:basic',
+  'untapped creature': 't:creature',
+  'artifact creature': 't:artifact t:creature',
+  'nontoken creature': 't:creature -t:token',
+  'legendary creature': 't:legendary t:creature',
+  // Plurals the trailing-s rule gets wrong.
+  elve: 't:elf',
+  wolve: 't:wolf',
+  dwarve: 't:dwarf',
+  allie: 't:ally',
+  faerie: 't:faerie',
+  zombie: 't:zombie',
+};
+
+/**
+ * The amount of a mana ability the database floored at one, read off the card
+ * when its words say what to count (rebuild plan §6 step 1 leftovers): "Add
+ * {G} for each Elf you control" is your permanents matching t:elf, which is
+ * zero with no Elves out, where the floor said one. "For each charge counter
+ * on it" is the counters on it. Null when the words say something this cannot
+ * count (Bloom Tender's colors, an opponent's board), which keeps the floor.
+ */
+export function printedManaAmount(text: string | null | undefined): BehaviorAmount | null {
+  if (!text) return null;
+  const clean = text.replace(/\([^)]*\)/g, '');
+  // Only when the "Add" line is the card's one mana ability, or the database
+  // already said it could not count it: a Nykthos has a plain {C} too, and
+  // reading its devotion line onto that would be the wrong number both ways.
+  const addLines = clean.split('\n').filter((l) => /\badd\b/i.test(l));
+  if (addLines.length !== 1) return null;
+  const line = addLines[0]!;
+  if (/\bopponent|each player\b/i.test(line)) return null;
+  if (/for each (?:charge |\+1\/\+1 )?counter on (?:it|this)/i.test(line)) return { kind: 'counters' };
+  if (/for each card in your hand/i.test(line)) return { kind: 'hand' };
+  // "for each Elf you control", "for each Elf on the battlefield" (yours is the
+  // floor of everyone's), "where X is the number of creatures you control".
+  const m = /(?:for each|equal to the number of|where x is the number of) ([a-z+\/ -]+?)s? (?:you control|on the battlefield|that entered)/i.exec(line);
+  if (!m) return null;
+  const words = m[1]!.trim().toLowerCase();
+  const known = PER_WORDS[words];
+  if (known !== undefined) return known ? { kind: 'matching', q: known } : { kind: 'matching' };
+  // One word, a subtype: Elf, Zombie, Snake, Forest.
+  return /^[a-z]+$/.test(words) ? { kind: 'matching', q: `t:${words}` } : null;
 }
 
 /**
@@ -1030,7 +1152,10 @@ function tokenFromCard(
 ): { card: SimCard; oracle: OracleCard } | null {
   const oracle = tokenOracles?.get(oracleId);
   if (!oracle) return null;
-  const behavior = compileBehavior(behaviors?.get(oracleId));
+  // A Clue or a Food found by name cracks like the catalog's: the printed
+  // ability is what the catalog entry already says, and finding the token in
+  // the database should not lose it (rebuild plan §6 step 1 leftovers).
+  const behavior = compileBehavior(behaviors?.get(oracleId) ?? TOKEN_ABILITIES[oracle.name.toLowerCase()]);
   const card = simCardOf(oracle, behavior, 0, false);
   if (behavior) applyAuthoredObject(card, behavior);
   // Never cast and never in a hand: a token only exists on the battlefield.
@@ -1113,6 +1238,7 @@ function tokenCard(key: string, spec: TokenOption): { card: SimCard; oracle: Ora
     attach: null,
     toxic: 0,
     affinity: null,
+    stax: null,
   };
   return { card, oracle };
 }
@@ -1164,6 +1290,8 @@ function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[],
   // An attachment's "+1/+1 for each artifact you control" counts through the same filters, and so does affinity.
   for (const card of cards) if (card.attach?.per.q) queries.add(card.attach.per.q);
   for (const card of cards) if (card.affinity) queries.add(card.affinity);
+  // And a mana amount read off the card ("for each Elf you control").
+  for (const card of cards) if (card.manaAmount?.q) queries.add(card.manaAmount.q);
   let commanderOnly = false;
   for (const card of cards) {
     if (card.spendQ === SPEND_COMMANDER) commanderOnly = true;

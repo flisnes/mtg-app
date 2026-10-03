@@ -442,6 +442,14 @@ export interface BehaviorStep {
    */
   win?: number;
   rest?: 'graveyard';
+  /**
+   * `move` into exile only (rebuild plan §6 step 4): the cards may be cast
+   * from exile this turn (1) or until the end of your next turn (2). Red's
+   * impulse draw: Light Up the Stage, Reckless Impulse. Absent is plain exile.
+   * A land exiled this way is not played (the land drop does not look there),
+   * which is the floor side.
+   */
+  play?: 1 | 2;
 }
 
 /** Cards a move may look at off the top. Muxus looks at six; the headroom is for a Gishath with a big X. */
@@ -661,11 +669,25 @@ export const BASIC_BY_COLOR: Readonly<Record<string, string>> = {
  * something the card does, they are a different price and a different zone for
  * the same spell: the rules still run, whichever way it was cast.
  */
-export type CastOptionKind = 'kicker' | 'multikicker' | 'flashback' | 'retrace' | 'escape' | 'mayhem' | 'suspend';
+export type CastOptionKind =
+  | 'kicker'
+  | 'multikicker'
+  | 'flashback'
+  | 'retrace'
+  | 'escape'
+  | 'mayhem'
+  | 'madness'
+  | 'suspend'
+  | 'evoke'
+  | 'foretell'
+  | 'plot'
+  | 'warp'
+  | 'convoke'
+  | 'delve';
 
 export interface CastOption {
   kind: CastOptionKind;
-  /** The price, as printed: `{2}{U}`. Retrace has none of its own: it is the card's mana cost. */
+  /** The price, as printed: `{2}{U}`. Retrace, convoke and delve have none of their own. */
   cost?: string;
   /** Suspend: time counters. Escape: other cards exiled from your graveyard. */
   n?: number;
@@ -681,6 +703,12 @@ export interface CastOptionInfo {
   n?: string;
   /** Cast out of the graveyard rather than the hand. */
   graveyard?: boolean;
+  /** Only a spell that goes to the graveyard can be cast from it again (flashback, retrace). */
+  spellOnly?: boolean;
+  /** Only a creature prints it (evoke). */
+  creatureOnly?: boolean;
+  /** Only a permanent prints it (warp). */
+  permanentOnly?: boolean;
 }
 
 export const CAST_OPTIONS: readonly CastOptionInfo[] = [
@@ -702,6 +730,7 @@ export const CAST_OPTIONS: readonly CastOptionInfo[] = [
     hint: 'Cast from your graveyard for this cost, then exiled.',
     hasCost: true,
     graveyard: true,
+    spellOnly: true,
   },
   {
     id: 'retrace',
@@ -709,6 +738,7 @@ export const CAST_OPTIONS: readonly CastOptionInfo[] = [
     hint: 'Cast from your graveyard for its mana cost, discarding a land from your hand as well. It goes back to the graveyard.',
     hasCost: false,
     graveyard: true,
+    spellOnly: true,
   },
   {
     id: 'escape',
@@ -726,18 +756,63 @@ export const CAST_OPTIONS: readonly CastOptionInfo[] = [
     graveyard: true,
   },
   {
+    id: 'madness',
+    label: 'Madness',
+    hint: 'Cast for this cost as you discard it, when the turn still has the mana. A discard at cleanup never does.',
+    hasCost: true,
+    graveyard: true,
+  },
+  {
     id: 'suspend',
     label: 'Suspend',
     hint: 'Exiled from your hand for this cost with that many time counters. One comes off each upkeep; at zero it is cast for free, and a creature has haste.',
     hasCost: true,
     n: 'time counters',
   },
+  {
+    id: 'evoke',
+    label: 'Evoke',
+    hint: 'Cast for this cost when its mana cost is out of reach: it enters, does what it does on arrival, and is sacrificed. Only when something on this card happens on arrival or on death.',
+    hasCost: true,
+    creatureOnly: true,
+  },
+  {
+    id: 'foretell',
+    label: 'Foretell',
+    hint: 'Exiled face down for {2} on a turn with the mana spare and nothing else to cast, then cast for this cost from the next turn on.',
+    hasCost: true,
+  },
+  {
+    id: 'plot',
+    label: 'Plot',
+    hint: 'Exiled for this cost on a turn with the mana spare and nothing else to cast, then cast for free from the next turn on.',
+    hasCost: true,
+  },
+  {
+    id: 'warp',
+    label: 'Warp',
+    hint: 'Cast for this cost when its mana cost is out of reach. It is exiled at the end of that turn and can be cast again from exile for its mana cost.',
+    hasCost: true,
+    permanentOnly: true,
+  },
+  {
+    id: 'convoke',
+    label: 'Convoke',
+    hint: 'Each untapped creature you control that is not tapping for mana pays {1} of the generic part. Those creatures do not attack that turn.',
+    hasCost: false,
+  },
+  {
+    id: 'delve',
+    label: 'Delve',
+    hint: 'Each card exiled from your graveyard pays {1} of the generic part. Cards with a way to be cast from the graveyard are kept.',
+    hasCost: false,
+  },
 ];
 
 const CAST_OPTION_BY_ID = new Map(CAST_OPTIONS.map((o) => [o.id as string, o]));
 
-/** Cast options on one card. Kicker, a graveyard cast and suspend is already a lot of card. */
-export const MAX_CAST_OPTIONS = 3;
+/** Cast options on one card. Kicker, a graveyard cast, suspend and convoke is already a lot of card. */
+export const MAX_CAST_OPTIONS = 4;
 /** Time counters, or cards exiled for escape. */
 export const MAX_CAST_N = 20;
 
@@ -765,8 +840,22 @@ export function describeCastOption(o: CastOption): string {
       return `Escape ${cost}, exiling ${o.n ?? 0} other card${o.n === 1 ? '' : 's'}: cast from the graveyard`;
     case 'mayhem':
       return `Mayhem ${cost}: cast from the graveyard the turn it was discarded`;
+    case 'madness':
+      return `Madness ${cost}: cast as it is discarded, when the mana is there`;
     case 'suspend':
       return `Suspend ${o.n ?? 0} for ${cost}: cast for free ${o.n ?? 0} upkeep${o.n === 1 ? '' : 's'} later`;
+    case 'evoke':
+      return `Evoke ${cost}: cast for that and sacrificed on arrival when its mana cost is out of reach`;
+    case 'foretell':
+      return `Foretell ${cost}: exiled for {2} with mana to spare, cast for ${cost} from the next turn`;
+    case 'plot':
+      return `Plot ${cost}: exiled for that with mana to spare, cast for free from the next turn`;
+    case 'warp':
+      return `Warp ${cost}: cast for that, exiled at end of turn, cast again from exile for its mana cost`;
+    case 'convoke':
+      return 'Convoke: untapped creatures pay the generic part';
+    case 'delve':
+      return 'Delve: cards exiled from the graveyard pay the generic part';
   }
 }
 
@@ -1442,7 +1531,8 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
     const to = intoPhrase(step.to) + tappedPhrase(step);
     const filter = step.q ? ` matching ${step.q}` : '';
     const rest = look ? (step.rest === 'graveyard' ? ', the rest into your graveyard' : ', the rest on the bottom') : '';
-    const where = ` from ${from} to ${to}${rest}`;
+    const playable = step.to === 'exile' && step.play ? (step.play === 2 ? ', playable until the end of your next turn' : ', playable this turn') : '';
+    const where = ` from ${from} to ${to}${rest}${playable}`;
     // What the query's own placeholder is worth, named separately from the
     // count because they are two different numbers on the same step.
     const plug = step.q && queryHasX(step.q) ? `, with [X] = ${describeAmount(step.qx ?? { kind: 'fixed', n: 0 })}` : '';
@@ -2232,7 +2322,9 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
       const winRaw = from === 'library' && typeof s.win === 'number' ? Math.round(s.win) : 0;
       const win = winRaw >= 1 ? { win: Math.min(MAX_LOOK, winRaw) } : {};
       const rest = winRaw >= 1 && s.rest === 'graveyard' ? { rest: 'graveyard' as const } : {};
-      steps.push({ op, x, from, to, ...narrowed, ...landing, ...pick, ...win, ...rest });
+      // Playable from exile: only into exile, this turn or through the next.
+      const play = to === 'exile' && (s.play === 1 || s.play === 2) ? { play: s.play as 1 | 2 } : {};
+      steps.push({ op, x, from, to, ...narrowed, ...landing, ...pick, ...win, ...rest, ...play });
     }
     if (steps.length === 0) continue;
     const on = r.on as BehaviorTrigger;

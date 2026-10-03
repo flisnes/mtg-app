@@ -80,7 +80,7 @@ import { PolicySpread } from './PolicySpread.js';
 import type { QueueCard, QueueReason } from '@mtg/sim';
 import { templatesFor, type Template } from '@mtg/sim';
 import { gapWords, type ShippedDefaults } from '@mtg/sim';
-import { KW_HASTE, describeAttach, describeCombatKeywords, printedAttach, printedDredge, printedKeywords, printedToxic } from '@mtg/sim';
+import { KW_HASTE, describeAttach, describeCastWays, describeCombatKeywords, printedAdditionalSacrifice, printedAttach, printedCastOptions, printedDredge, printedKeywords, printedToxic } from '@mtg/sim';
 import { oracleTagClosure } from '../cardDb/oracleTags.js';
 import {
   COMBAT_POLICIES,
@@ -135,6 +135,13 @@ interface BehaviorCard {
   attach: string | null;
   /** Printed lifelink, infect, toxic and double strike, as a phrase, or null. Keywords, so a rule adds to them. */
   combat: string | null;
+  /**
+   * The other ways the card prints to cast it (rebuild plan §6 step 4), as a
+   * phrase, or null: evoke, foretell, convoke, a printed "as an additional
+   * cost, sacrifice". An option written under "Cast it another way" replaces
+   * the printed one of the same kind.
+   */
+  castWays: string | null;
   /**
    * And what the card *is*: a land, a rock, a mana creature. The one reading a
    * rule written here does not replace, listed anyway because every effect the
@@ -192,8 +199,20 @@ const attachPhrase = (o: OracleCard): string | null => {
   return a ? describeAttach(a) : null;
 };
 
+/**
+ * The printed ways to cast a card, with its printed additional sacrifice, as
+ * one phrase, or null. The kicker read depends on a rule reading "the times
+ * it was kicked", so the rule that would play is passed along.
+ */
+const castWaysPhrase = (o: OracleCard, behavior: CardBehavior | null): string | null => {
+  const ways = describeCastWays(printedCastOptions(o.oracleText, compileBehavior(behavior ?? undefined)));
+  const sac = printedAdditionalSacrifice(o.oracleText);
+  const sacWords = sac === null ? null : `Sacrifices ${sac === '' ? 'a permanent' : sac === 't:creature' ? 'a creature' : `a permanent matching ${sac}`} as it is cast, and waits in hand until there is one`;
+  return [ways, sacWords].filter(Boolean).join('. ') || null;
+};
+
 /** Every derived reading, not some of them. A fetchland and an Exploration were both missing from this test once. */
-const isRead = (c: BehaviorCard) => !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source || c.dredge || c.attach || c.combat);
+const isRead = (c: BehaviorCard) => !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source || c.dredge || c.attach || c.combat || c.castWays);
 
 /**
  * What a hand-reviewed card still waits on. The review listed "equipment and
@@ -242,6 +261,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       attach: attachPhrase(o),
       // Only on a creature: an Equipment's "has lifelink" is the attach line's.
       combat: isCreature(o.typeLine) ? describeCombatKeywords(printedKeywords(o.oracleText), printedToxic(o.oracleText)) : null,
+      castWays: castWaysPhrase(o, behaviors.get(o.oracleId) ?? defaults.behaviors.get(o.name) ?? null),
       // Sick is a creature without haste, off the type line: a Dryad Arbor too.
       source: describeManaSource(decodeManaProfile(o.mana), o.produces, isCreature(o.typeLine) && !(printedKeywords(o.oracleText) & KW_HASTE)),
       authored: behaviors.get(o.oracleId) ?? null,
@@ -273,6 +293,7 @@ function summaryOf(card: BehaviorCard): string {
   if (card.source) return card.source;
   if (card.dredge) return `Dredge ${card.dredge}`;
   if (card.combat) return card.combat;
+  if (card.castWays) return card.castWays;
   return 'Do nothing';
 }
 
@@ -291,6 +312,7 @@ function playsOutAs(card: BehaviorCard, preview: readonly BehaviorRule[], cast: 
   if (card.dredge) return `Dredge ${card.dredge}, printed on the card.`;
   if (card.attach) return `${card.attach}, read from the card.`;
   if (card.combat) return `${card.combat}, printed on the card.`;
+  if (card.castWays) return `${card.castWays}, printed on the card.`;
   // A Forest is not a blank, it is a Forest. The line under this one says so.
   if (card.source) return 'Nothing beyond what it is.';
   return 'Nothing. In the simulator this card does nothing.';
@@ -925,6 +947,13 @@ function BehaviorEditor({
           beside the damage.
         </p>
       )}
+      {card.castWays && (
+        <p className="fine-print">
+          Printed on the card: <em>{card.castWays}</em>. The simulator takes the cheap way in only when the mana cost is out of
+          reach, and sets a card aside (foretell, plot) only with mana nothing else wants. An option written under "Cast it
+          another way" replaces the printed one of its kind; the rest stay as printed.
+        </p>
+      )}
       {!isRead(card) && !active && !gaps && (
         <p className="fine-print">
           The card database finds nothing on this card it can play out, so in the simulator it does nothing. Add a rule and it
@@ -990,7 +1019,7 @@ function BehaviorEditor({
         </button>
       )}
 
-      <CastOptionsEditor options={cast} onChange={setCast} permanent={card.permanent} />
+      <CastOptionsEditor options={cast} onChange={setCast} permanent={card.permanent} creature={card.creature} />
 
       <h4 className="deck-stats-head">Plays out as</h4>
       {/* With no rules of your own, what plays out is whatever the database
@@ -1349,7 +1378,7 @@ const firstStep = (kind: RuleKind): BehaviorStep =>
  */
 const UNNARROWED: ReadonlySet<string> = new Set(['grantcast', 'grantdredge', 'landfrom', 'nomaxhand', 'discount']);
 
-const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub', 'pick', 'tid', 'tn', 'gk', 'own', 'po', 'each', 'tapped', 'attacking', 'win', 'rest'];
+const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub', 'pick', 'tid', 'tn', 'gk', 'own', 'po', 'each', 'tapped', 'attacking', 'win', 'rest', 'play'];
 
 /** A number box for the cost editor: whole numbers from 0 to `max`. */
 function CountBox({ value, max, label, onChange }: { value: number; max: number; label: string; onChange: (n: number) => void }) {
@@ -1697,8 +1726,8 @@ function RuleEditor({
     }
     const from = step.from === zone ? BEHAVIOR_FROM_ZONES.find((z) => z.id !== zone)?.id : step.from;
     // Only the battlefield has two ways to arrive, so moving the destination
-    // anywhere else takes the answer with it.
-    const base = zone === 'battlefield' ? step : without(step, 'untapped');
+    // anywhere else takes the answer with it. The same for exile's "playable".
+    const base = zone === 'battlefield' ? without(step, 'play') : zone === 'exile' ? without(step, 'untapped') : without(step, 'untapped', 'play');
     setStep(i, { ...base, to: zone, from });
   };
 
@@ -1918,6 +1947,24 @@ function RuleEditor({
                   </select>
                 </label>
                 {lands && <TapPicker step={step} onChange={(next) => setStep(i, next)} />}
+                {/* Into exile: plain, or playable from there (rebuild plan §6
+                    step 4), which is red's impulse draw. */}
+                {step.to === 'exile' && (
+                  <label className="field">
+                    <select
+                      value={step.play ?? 0}
+                      aria-label="Playable from exile"
+                      onChange={(e) => {
+                        const play = Number(e.target.value);
+                        setStep(i, play === 1 || play === 2 ? { ...step, play } : without(step, 'play'));
+                      }}
+                    >
+                      <option value={0}>Exiled for good</option>
+                      <option value={1}>Playable this turn</option>
+                      <option value={2}>Playable until the end of your next turn</option>
+                    </select>
+                  </label>
+                )}
                 {/* Off the library: the whole library, or a look at the top N
                     (rebuild plan §6 step 5), and where the rest go. */}
                 {(step.from ?? 'library') === 'library' && (
@@ -2526,6 +2573,12 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
       text: 'A flicker takes permanents off the battlefield and puts them straight back, which fires everything they do on the way in. What it costs is what they were already doing: the mana arrives tapped again, and a creature is summoning sick again, so it cannot attack this turn. A token that leaves does not come back.',
     });
   }
+  if (rule.steps.some((s) => s.op === 'move' && s.to === 'exile' && s.play)) {
+    notes.push({
+      key: 'play',
+      text: 'Playable from exile is the impulse draw: the cards sit in exile and the simulator casts them for their mana cost while the turn lasts (this turn, or through the end of your next turn), the way it would cards in hand. A land exiled this way is not played, and whatever is not cast in time stays in exile. The cards count as seen, like a draw.',
+    });
+  }
   if (rule.steps.some((s) => s.op === 'move' && s.from === 'library' && s.win)) {
     notes.push({
       key: 'look',
@@ -2730,15 +2783,18 @@ function CastOptionsEditor({
   options,
   onChange,
   permanent,
+  creature,
 }: {
   options: CastOption[];
   onChange: (next: CastOption[]) => void;
   permanent: boolean;
+  creature: boolean;
 }) {
   const used = new Set(options.map((o) => o.kind));
-  // Flashback, retrace and mayhem cast a spell again; a permanent cast from the
-  // graveyard stays out, which only escape prints.
-  const offered = CAST_OPTIONS.filter((o) => !permanent || !o.graveyard || o.id === 'escape');
+  // Flashback and retrace cast a spell again, so a permanent is not offered
+  // them; evoke is a creature's, warp a permanent's. Escape, mayhem and
+  // madness are printed on both.
+  const offered = CAST_OPTIONS.filter((o) => (!o.spellOnly || !permanent) && (!o.creatureOnly || creature) && (!o.permanentOnly || permanent));
   const set = (i: number, next: CastOption) => onChange(options.map((o, k) => (k === i ? next : o)));
   const add = () => {
     const kind = offered.find((o) => !used.has(o.id));

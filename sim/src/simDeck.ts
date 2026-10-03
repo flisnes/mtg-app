@@ -8,6 +8,7 @@ import {
   decodeEffectProfile,
   decodeFetchProfile,
   decodeManaProfile,
+  describeCastOption,
   manaStepColors,
   normalizeCost,
   queryHasX,
@@ -20,6 +21,8 @@ import {
   type BehaviorAmount,
   type BehaviorCondition,
   type CardBehavior,
+  type CastOption,
+  type CastOptionKind,
   type CompiledBehavior,
   type DeckBoard,
   type EffectProfile,
@@ -133,8 +136,12 @@ export interface SimKicker {
 }
 
 export interface SimGraveyardCast {
-  /** `cast` is a plain cast for its mana cost, which only a grant hands out (Muldrotha). */
-  kind: 'flashback' | 'retrace' | 'escape' | 'mayhem' | 'cast';
+  /**
+   * `cast` is a plain cast for its mana cost, which only a grant hands out
+   * (Muldrotha). Madness is mayhem with another name: cast the turn it was
+   * discarded, for its own price (rebuild plan §6 step 4).
+   */
+  kind: 'flashback' | 'retrace' | 'escape' | 'mayhem' | 'madness' | 'cast';
   cost: ParsedCost;
   /** Escape: other cards exiled from the graveyard. */
   n: number;
@@ -144,6 +151,19 @@ export interface SimSuspend {
   cost: ParsedCost;
   /** Time counters. */
   n: number;
+}
+
+/**
+ * A way into exile that the card can be cast back out of (rebuild plan §6
+ * step 4). Foretell: `setup` is the {2} paid to exile it, `cast` the foretell
+ * cost. Plot: `setup` is the plot cost and `cast` is free. Warp: `setup` is
+ * the warp cost the creature is cast for, it is exiled at that end step, and
+ * `cast` is null for its own mana cost from then on.
+ */
+export interface SimExileCast {
+  kind: 'foretell' | 'plot' | 'warp';
+  setup: ParsedCost;
+  cast: ParsedCost | null;
 }
 
 /**
@@ -297,6 +317,26 @@ export interface SimCard {
   kicker: SimKicker | null;
   gyCast: SimGraveyardCast | null;
   suspend: SimSuspend | null;
+  /**
+   * Evoke (rebuild plan §6 step 4): cast for this when its mana cost is out of
+   * reach, sacrificed on arrival. Null when it has none, or when nothing on the
+   * card happens on arrival or on death, since evoking a blank is a card thrown
+   * away.
+   */
+  evoke: ParsedCost | null;
+  /** Foretell, plot or warp: a way into exile it is cast back out of. See SimExileCast. */
+  exileCast: SimExileCast | null;
+  /** Convoke: untapped creatures pay the generic part. Delve: cards exiled from the graveyard do. */
+  convoke: boolean;
+  delve: boolean;
+  /**
+   * "As an additional cost to cast this spell, sacrifice a <creature>": the
+   * query that finds what qualifies, '' for any permanent, null for no such
+   * cost. The spell waits in hand until the board has one. A rule on the card
+   * is trusted to do the sacrificing (the shipped verdicts do); a card with no
+   * rule sacrifices the least useful match as it is cast.
+   */
+  addlSac: string | null;
   /**
    * Dredge N of its own: printed, or from a "While it is in your graveyard"
    * rule, which replaces the printed number. 0 for none. A grant from another
@@ -710,13 +750,228 @@ function simCardOf(o: OracleCard, behavior: CompiledBehavior | null, copies: num
     kicker: null,
     gyCast: null,
     suspend: null,
+    evoke: null,
+    exileCast: null,
+    convoke: false,
+    delve: false,
+    addlSac: printedAdditionalSacrifice(o.oracleText),
     dredge: printedDredge(o.oracleText),
     attach: printedAttach(o.typeLine, o.oracleText),
     toxic: printedToxic(o.oracleText),
     affinity: printedAffinity(o.oracleText),
     stax: printedSymmetricTax(o.oracleText),
   };
+  // The other ways the card prints to cast it (rebuild plan §6 step 4), before
+  // an authored option replaces any of them in applyAuthoredObject.
+  applyCastOptions(card, printedCastOptions(o.oracleText, behavior));
   return card;
+}
+
+/** The kinds that share one slot on the card: an authored one replaces the printed one of the same slot. */
+const CAST_SLOT: Readonly<Record<CastOptionKind, 'kicker' | 'graveyard' | 'suspend' | 'evoke' | 'exile' | 'convoke' | 'delve'>> = {
+  kicker: 'kicker',
+  multikicker: 'kicker',
+  flashback: 'graveyard',
+  retrace: 'graveyard',
+  escape: 'graveyard',
+  mayhem: 'graveyard',
+  madness: 'graveyard',
+  suspend: 'suspend',
+  evoke: 'evoke',
+  foretell: 'exile',
+  plot: 'exile',
+  warp: 'exile',
+  convoke: 'convoke',
+  delve: 'delve',
+};
+
+/**
+ * Something happens when this card arrives or dies, so an evoke is worth
+ * paying for: an arrival or death rule, or a one-shot reading of its text.
+ */
+function evokeWorth(card: SimCard): boolean {
+  const b = card.behavior;
+  if (b) return b.etb.length > 0 || b.play.length > 0 || b.death.length > 0;
+  return !!card.effect && !card.effect.repeatable;
+}
+
+/** File a list of cast options onto the card, parsed once so the spend loop never meets a string. */
+function applyCastOptions(card: SimCard, options: readonly CastOption[]): void {
+  for (const o of options) {
+    const cost = o.cost ? parseManaCost(normalizeCost(o.cost)) : null;
+    switch (o.kind) {
+      case 'kicker':
+      case 'multikicker':
+        if (cost) card.kicker = { cost, multi: o.kind === 'multikicker' };
+        break;
+      case 'retrace':
+        if (card.cost) card.gyCast = { kind: 'retrace', cost: card.cost, n: 0 };
+        break;
+      case 'flashback':
+      case 'escape':
+      case 'mayhem':
+      case 'madness':
+        if (cost) card.gyCast = { kind: o.kind, cost, n: o.n ?? 0 };
+        break;
+      case 'suspend':
+        if (cost) card.suspend = { cost, n: Math.max(1, o.n ?? 1) };
+        break;
+      case 'evoke':
+        // Only a creature, and only one worth evoking. Read after the rules
+        // are on the card, so an authored arrival rule makes it worth it.
+        if (cost && card.creature && evokeWorth(card)) card.evoke = cost;
+        break;
+      case 'foretell':
+        if (cost) card.exileCast = { kind: 'foretell', setup: FORETELL_SETUP, cast: cost };
+        break;
+      case 'plot':
+        if (cost) card.exileCast = { kind: 'plot', setup: cost, cast: FREE_COST };
+        break;
+      case 'warp':
+        if (cost && card.permanent) card.exileCast = { kind: 'warp', setup: cost, cast: null };
+        break;
+      case 'convoke':
+        card.convoke = true;
+        break;
+      case 'delve':
+        card.delve = true;
+        break;
+    }
+  }
+}
+
+const FORETELL_SETUP: ParsedCost = parseManaCost('{2}');
+const FREE_COST: ParsedCost = parseManaCost('{0}');
+
+/** An authored option empties the printed one of the same slot before it is applied. */
+function clearCastSlot(card: SimCard, slot: (typeof CAST_SLOT)[CastOptionKind]): void {
+  switch (slot) {
+    case 'kicker':
+      card.kicker = null;
+      break;
+    case 'graveyard':
+      card.gyCast = null;
+      break;
+    case 'suspend':
+      card.suspend = null;
+      break;
+    case 'evoke':
+      card.evoke = null;
+      break;
+    case 'exile':
+      card.exileCast = null;
+      break;
+    case 'convoke':
+      card.convoke = false;
+      break;
+    case 'delve':
+      card.delve = false;
+      break;
+  }
+}
+
+const CAST_KEYWORDS = new Set<string>(['kicker', 'multikicker', 'flashback', 'retrace', 'mayhem', 'madness', 'evoke', 'foretell', 'plot', 'warp', 'convoke', 'delve']);
+/** `kicker {2}`, `foretell {1}{U}`, `convoke`, `suspend 3—{0}`: one keyword and its cost, as one comma-separated part of a keyword line. */
+const CAST_PART = /^([a-z]+)(?: (\d+))?(?:\s*[—–-]\s*|\s+)?((?:\{[^}]+\})+)?$/;
+/** "Escape—{2}{U}, Exile five other cards from your graveyard." */
+const ESCAPE_LINE = /^escape\s*[—–-]\s*((?:\{[^}]+\})+), exile (\w+) other cards?/i;
+/** "Flashback—{1}{U}, Pay 3 life.": a keyword whose cost has more to it than mana. */
+const COST_WITH_RIDER = /^[a-z]+(?: \d+)?\s*[—–-]\s*(?:\{[^}]+\})+,\s*\S/i;
+const SMALL_NUMBERS: Readonly<Record<string, number>> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+
+/**
+ * The other ways to cast it that the card prints as keywords (rebuild plan §6
+ * step 4): kicker, flashback, escape, suspend, madness, evoke, foretell, plot,
+ * warp, convoke, delve, retrace, mayhem. Read off the keyword lines the way
+ * printed haste is; a kicker whose cost is not plain mana ("Kicker—Sacrifice
+ * an artifact", "{B} and/or {R}") is not read. Kicker and multikicker only
+ * count when a rule on the card reads "the times it was kicked": kicking a
+ * card whose kicker the model cannot see is mana thrown away.
+ */
+export function printedCastOptions(text: string | null | undefined, behavior: CompiledBehavior | null): CastOption[] {
+  if (!text) return [];
+  const out: CastOption[] = [];
+  const seen = new Set<string>();
+  const add = (o: CastOption) => {
+    if (seen.has(o.kind)) return;
+    seen.add(o.kind);
+    out.push(o);
+  };
+  const readsKicked = !!behavior && JSON.stringify(behavior).includes('"kicked"');
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\([^)]*\)/g, '').trim();
+    if (!line) continue;
+    const escape = ESCAPE_LINE.exec(line);
+    if (escape) {
+      const cost = normalizeCost(escape[1]);
+      const n = SMALL_NUMBERS[escape[2]!.toLowerCase()] ?? (/^\d+$/.test(escape[2]!) ? Number(escape[2]) : null);
+      if (cost && n !== null) add({ kind: 'escape', cost, n });
+      continue;
+    }
+    // "Flashback—{1}{U}, Pay 3 life": the dash means the price has a rider
+    // beyond the mana, which this does not read. A plain "Flashback {3}{R}"
+    // has none.
+    if (COST_WITH_RIDER.test(line)) continue;
+    for (const part of line.split(/,\s*/)) {
+      const m = CAST_PART.exec(part.trim().toLowerCase());
+      if (!m) continue;
+      const word = m[1]!;
+      const cost = m[3] ? normalizeCost(m[3]) : null;
+      if (word === 'suspend') {
+        const n = m[2] ? Number(m[2]) : 0;
+        if (cost && n >= 1) add({ kind: 'suspend', cost, n });
+        continue;
+      }
+      if (!CAST_KEYWORDS.has(word) || m[2]) continue;
+      if (word === 'convoke' || word === 'delve' || word === 'retrace') {
+        if (!cost) add({ kind: word });
+        continue;
+      }
+      if (!cost) continue;
+      if ((word === 'kicker' || word === 'multikicker') && !readsKicked) continue;
+      add({ kind: word as CastOptionKind, cost });
+    }
+  }
+  return out;
+}
+
+/** The sacrificed thing's words, as the query that finds it; "permanent" is any. */
+const SAC_WORDS: Readonly<Record<string, string>> = {
+  creature: 't:creature',
+  artifact: 't:artifact',
+  enchantment: 't:enchantment',
+  land: 't:land',
+  planeswalker: 't:planeswalker',
+  permanent: '',
+  token: 't:token',
+};
+const ADDITIONAL_SAC = /\bas an additional cost to cast this spell, sacrifice (?:an?|one) ([a-z ]+?)\./i;
+
+/**
+ * "As an additional cost to cast this spell, sacrifice a creature" (rebuild
+ * plan §6 step 4), as the query for what qualifies, '' for any permanent, or
+ * null when the card has no such line or names something this cannot find
+ * ("a Goblin", "two creatures", "a creature or discard a card").
+ */
+export function printedAdditionalSacrifice(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const m = ADDITIONAL_SAC.exec(text.replace(/\([^)]*\)/g, ''));
+  if (!m) return null;
+  const words = m[1]!.toLowerCase().split(/ or an? | or /);
+  const parts: string[] = [];
+  for (const w of words) {
+    const q = SAC_WORDS[w.replace(/^nontoken /, '').trim()];
+    if (q === undefined) return null;
+    if (q === '') return '';
+    parts.push(w.startsWith('nontoken ') ? `${q} -t:token` : q);
+  }
+  return parts.join(' or ');
+}
+
+/** The printed cast options as a phrase for the Model tab, or null. */
+export function describeCastWays(options: readonly CastOption[]): string | null {
+  if (options.length === 0) return null;
+  return options.map(describeCastOption).join('. ');
 }
 
 /**
@@ -1130,26 +1385,10 @@ function applyAuthoredObject(card: SimCard, b: CompiledBehavior): void {
     // reading, so a hand-ruled Coldsteel Heart tapped a turn early.
   }
   if (b.dredge > 0) card.dredge = b.dredge;
-  for (const o of b.options) {
-    const cost = o.cost ? parseManaCost(normalizeCost(o.cost)) : null;
-    switch (o.kind) {
-      case 'kicker':
-      case 'multikicker':
-        if (cost) card.kicker = { cost, multi: o.kind === 'multikicker' };
-        break;
-      case 'retrace':
-        if (card.cost) card.gyCast = { kind: 'retrace', cost: card.cost, n: 0 };
-        break;
-      case 'flashback':
-      case 'escape':
-      case 'mayhem':
-        if (cost) card.gyCast = { kind: o.kind, cost, n: o.n ?? 0 };
-        break;
-      case 'suspend':
-        if (cost) card.suspend = { cost, n: Math.max(1, o.n ?? 1) };
-        break;
-    }
-  }
+  // An authored way to cast replaces the printed one of the same slot, the way
+  // every other rule replaces its reading; the other slots keep their print.
+  for (const o of b.options) clearCastSlot(card, CAST_SLOT[o.kind]);
+  applyCastOptions(card, b.options);
 }
 
 /**
@@ -1246,6 +1485,11 @@ function tokenCard(key: string, spec: TokenOption): { card: SimCard; oracle: Ora
     kicker: null,
     gyCast: null,
     suspend: null,
+    evoke: null,
+    exileCast: null,
+    convoke: false,
+    delve: false,
+    addlSac: null,
     dredge: 0,
     attach: null,
     toxic: 0,
@@ -1304,6 +1548,8 @@ function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[],
   // An attachment's "+1/+1 for each artifact you control" counts through the same filters, and so does affinity.
   for (const card of cards) if (card.attach?.per.q) queries.add(card.attach.per.q);
   for (const card of cards) if (card.affinity) queries.add(card.affinity);
+  // And a printed additional cost's "sacrifice a creature" (rebuild plan §6 step 4).
+  for (const card of cards) if (card.addlSac) queries.add(card.addlSac);
   // And a mana amount read off the card ("for each Elf you control").
   for (const card of cards) if (card.manaAmount?.q) queries.add(card.manaAmount.q);
   let commanderOnly = false;

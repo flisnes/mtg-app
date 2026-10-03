@@ -3036,7 +3036,10 @@ export function simulate(
         graveyard[gyLen++] = index;
         return;
       case 'exile':
-        exiled[exLen++] = index;
+        // An impulse draw's exile (rebuild plan §6 step 4): playable this turn,
+        // or through the next, for its own mana cost.
+        if (moveExilePlay > 0) addExileCast(index, null, turn, turn + moveExilePlay - 1, EXC_IMPULSE);
+        else exiled[exLen++] = index;
         return;
       case 'battlefield':
         // Whatever rule moved it is what put it there, so that is who its mana
@@ -3158,7 +3161,13 @@ export function simulate(
     // there were.
     const ordered = to === 'librarytop' || to === 'librarybottom';
     if (ordered) stack.length = 0;
-    if (from === 'library' && step.win) return lookAtTop(step, count, turn, mask, base, wantGoal, ordered);
+    // Into exile, playable: the cards join the castable-exile list instead.
+    moveExilePlay = to === 'exile' && step.play ? step.play : 0;
+    if (from === 'library' && step.win) {
+      const got = lookAtTop(step, count, turn, mask, base, wantGoal, ordered);
+      moveExilePlay = 0;
+      return got;
+    }
     let moved = 0;
     for (let k = 0; k < count; k++) {
       if (!roomIn(to)) break;
@@ -3180,7 +3189,7 @@ export function simulate(
       // `seen` is cards off the library that you got to look at, which is what
       // the cards chart reads: a tutor counts, and so does one binned face up
       // like a mill. A regrowth does not.
-      if (from === 'library' && (to === 'hand' || to === 'graveyard')) {
+      if (from === 'library' && (to === 'hand' || to === 'graveyard' || moveExilePlay > 0)) {
         seen++;
         creditSeen(creditTo, 1);
       }
@@ -3198,6 +3207,7 @@ export function simulate(
       shuffleStack();
       for (const index of stack) putTo(index, to, turn);
     }
+    moveExilePlay = 0;
     return moved;
   };
 
@@ -3255,7 +3265,7 @@ export function simulate(
       library[at] = library[top + winLen - 1]!;
       winLen--;
       moved++;
-      if (to === 'hand' || to === 'graveyard') {
+      if (to === 'hand' || to === 'graveyard' || moveExilePlay > 0) {
         seen++;
         creditSeen(creditTo, 1);
       }
@@ -3892,8 +3902,8 @@ export function simulate(
       treasures: countTreasures(),
       hand: zone(hand, handLen),
       graveyard: zone(graveyard, gyLen),
-      // Suspended cards are in exile too, waiting.
-      exile: suspLen > 0 ? [...zone(exiled, exLen), ...zone(suspCard, suspLen)].sort(byName) : zone(exiled, exLen),
+      // Suspended cards are in exile too, waiting, and so are the foretold, plotted and impulse-exiled ones.
+      exile: suspLen > 0 || exCastLen > 0 ? [...zone(exiled, exLen), ...zone(suspCard, suspLen), ...zone(exCastCard, exCastLen)].sort(byName) : zone(exiled, exLen),
     };
   };
 
@@ -4117,9 +4127,15 @@ export function simulate(
    * A spell has been paid for: it resolves. Shared by the spend loop, a
    * suspended card coming off its last time counter, and a graveyard cast, so
    * the three can never disagree about what casting a card does. Returns the
-   * mana it added to this turn. `exileAfter` is flashback's "then exile it".
+   * mana it added to this turn. `after` is what the way it was cast does to it
+   * once it has resolved: flashback's "then exile it", evoke's sacrifice, or
+   * warp's exile at the end step.
    */
-  const resolveCast = (index: number, card: SimCard, turn: number, goal: readonly Pip[] | null, exileAfter: boolean): number => {
+  const AFTER_NONE = 0;
+  const AFTER_EXILE = 1;
+  const AFTER_EVOKE = 2;
+  const AFTER_WARP = 3;
+  const resolveCast = (index: number, card: SimCard, turn: number, goal: readonly Pip[] | null, after: number): number => {
     let added = 0;
     // Counted for the plan's `cast` terms (rebuild plan E1), whichever zone
     // it was cast from; a land played counts at the land drop.
@@ -4262,8 +4278,20 @@ export function simulate(
     // destination, which is the whole of "exile this card instead" and of
     // a Green Sun's Zenith shuffling back in.
     if (!card.permanent && !(opts.effects && selfPlaced)) {
-      if (exileAfter) exileCard(index);
+      if (after === AFTER_EXILE) exileCard(index);
       else bury(index);
+    } else if (card.permanent && !(opts.effects && selfPlaced) && (after === AFTER_EVOKE || after === AFTER_WARP)) {
+      const slot = perms.newest(index);
+      if (slot >= 0) {
+        if (after === AFTER_EVOKE) {
+          // Evoke: "when it enters, if its evoke cost was paid, sacrifice it".
+          // Its arrival has fired; now its death does.
+          if (sink) say(sink, 'effect', `${card.name} is sacrificed (evoked)`);
+          sacrificeOid(perms.oid[slot]!, turn);
+        } else if (warpedLen < warpedOid.length) {
+          warpedOid[warpedLen++] = perms.oid[slot]!;
+        }
+      }
     }
     return added;
   };
@@ -4293,6 +4321,12 @@ export function simulate(
   const anyTopGrants = grantsFrom('librarytop');
   /** Any card with a way to be cast from the graveyard, so the spend loop looks there. */
   const anyGraveyardCasts = anyGraveyardGrants || cards.some((c) => !!c.gyCast);
+  /** Rebuild plan §6 step 4: the ways to cast that need a look each pass. */
+  const anyConvoke = cards.some((c) => c.convoke);
+  const anyDelve = cards.some((c) => c.delve);
+  const anyAddlSac = cards.some((c) => c.addlSac !== null);
+  /** Foretell or plot in the deck: leftover mana may set a card aside. */
+  const anyExileSetups = cards.some((c) => !!c.exileCast && c.exileCast.kind !== 'warp');
   /**
    * The grants on the battlefield right now, filled by `recompute`: which cards
    * in the graveyard may be cast and how, and which top card of the library.
@@ -4340,6 +4374,13 @@ export function simulate(
   const ZONE_GRAVEYARD = 1;
   /** The top card of the library, which a grant lets you cast (Future Sight). */
   const ZONE_TOP = 2;
+  /** The castable-exile list (rebuild plan §6 step 4): foretold, plotted, warped, impulse-exiled. */
+  const ZONE_EXILE = 3;
+  /** How a spend-loop pick is being cast. */
+  const CAST_PLAIN = 0;
+  const CAST_SUSPEND = 1;
+  const CAST_EVOKE = 2;
+  const CAST_WARP = 3;
 
   /** Times each commander has been cast this game, for the tax. */
   const cmdCasts = new Int32Array(n);
@@ -4399,6 +4440,126 @@ export function simulate(
     if (exLen < exiled.length) exiled[exLen++] = index;
   };
 
+  // --- Exile the spend loop can cast out of (rebuild plan §6 step 4) --------
+  //
+  // Foretold and plotted cards, a warped permanent after its end step, and the
+  // cards an impulse draw exiled "playable this turn". One list, one scan: each
+  // entry knows its price from there (null for the card's own mana cost), the
+  // first turn it may be cast and the last (0 for no end). An entry whose
+  // window closes goes to plain exile at cleanup.
+  const EXC_FORETOLD = 0;
+  const EXC_PLOTTED = 1;
+  const EXC_WARPED = 2;
+  const EXC_IMPULSE = 3;
+  const EXC_WORDS = ['foretold', 'plotted', 'warped', 'exiled'] as const;
+  const exCastCard = new Int32Array(MAX_HAND * 2);
+  const exCastCost: (ParsedCost | null)[] = new Array<ParsedCost | null>(MAX_HAND * 2).fill(null);
+  const exCastFrom = new Int32Array(MAX_HAND * 2);
+  const exCastUntil = new Int32Array(MAX_HAND * 2);
+  const exCastWhy = new Uint8Array(MAX_HAND * 2);
+  let exCastLen = 0;
+  const addExileCast = (index: number, cost: ParsedCost | null, from: number, until: number, why: number): void => {
+    if (leavesNoCard(index)) return;
+    if (exCastLen >= exCastCard.length) {
+      exileCard(index);
+      return;
+    }
+    exCastCard[exCastLen] = index;
+    exCastCost[exCastLen] = cost;
+    exCastFrom[exCastLen] = from;
+    exCastUntil[exCastLen] = until;
+    exCastWhy[exCastLen] = why;
+    exCastLen++;
+  };
+  const dropExileCast = (k: number): void => {
+    exCastLen--;
+    exCastCard[k] = exCastCard[exCastLen]!;
+    exCastCost[k] = exCastCost[exCastLen]!;
+    exCastFrom[k] = exCastFrom[exCastLen]!;
+    exCastUntil[k] = exCastUntil[exCastLen]!;
+    exCastWhy[k] = exCastWhy[exCastLen]!;
+  };
+  /** Cleanup: the entries whose last turn this was are plain exile from now on. */
+  const expireExileCasts = (turn: number): void => {
+    for (let k = 0; k < exCastLen; ) {
+      const until = exCastUntil[k]!;
+      if (until === 0 || until > turn) {
+        k++;
+        continue;
+      }
+      const index = exCastCard[k]!;
+      dropExileCast(k);
+      if (exLen < exiled.length) exiled[exLen++] = index;
+      if (sink) say(sink, 'note', `${cards[index]!.name} stays in exile: the turn to play it has passed`);
+    }
+  };
+  /** A `move` into exile that says the cards may be played: set around the move, read by `putTo`. */
+  let moveExilePlay = 0;
+
+  /** Warped permanents (by object id), exiled at this turn's end step and castable from exile after. */
+  const warpedOid = new Int32Array(MAX_HAND);
+  let warpedLen = 0;
+  const exileWarped = (turn: number): void => {
+    for (let w = 0; w < warpedLen; w++) {
+      const slot = perms.slotOf(warpedOid[w]!);
+      if (slot < 0) continue;
+      const index = perms.card[slot]!;
+      const wasToken = perms.token[slot] === 1;
+      dropPermanent(slot);
+      for (let s = 0; s < srcLen; s++) {
+        if (srcOid[s] !== warpedOid[w] || srcFloating[s]) continue;
+        dropSource(s);
+        break;
+      }
+      unrecur(index);
+      if (!wasToken) addExileCast(index, null, turn + 1, 0, EXC_WARPED);
+      if (sink) say(sink, 'note', `${cards[index]!.name} is exiled at end of turn (warp); it can be cast again from exile`);
+    }
+    warpedLen = 0;
+  };
+
+  /**
+   * A permanent on the battlefield this spell's additional cost could
+   * sacrifice ("as an additional cost, sacrifice a creature"). Never the
+   * commander.
+   */
+  const hasSacTarget = (q: string, turn: number): boolean => {
+    const filter = q ? filterFor.get(q) : undefined;
+    if (q && !filter) return false;
+    for (let t = 0; t < perms.len; t++) {
+      if (!stillOut(t, turn)) continue;
+      const index = perms.card[t]!;
+      if (cards[index]!.commander) continue;
+      if (filter && filter.match[perms.added[t]! * n + index] !== 1) continue;
+      return true;
+    }
+    return false;
+  };
+  /** Pay it: the least useful match goes. Only for a card with no rule of its own, which is trusted to do it. */
+  const payAdditionalSac = (index: number, turn: number): string => {
+    const card = cards[index]!;
+    if (card.addlSac === null || card.behavior) return '';
+    const filter = card.addlSac ? filterFor.get(card.addlSac) : undefined;
+    if (card.addlSac && !filter) return '';
+    let best = -1;
+    let bestScore = -Infinity;
+    for (let t = 0; t < perms.len; t++) {
+      if (!stillOut(t, turn)) continue;
+      const i = perms.card[t]!;
+      if (cards[i]!.commander) continue;
+      if (filter && filter.match[perms.added[t]! * n + i] !== 1) continue;
+      const score = pickScore(i, 'least');
+      if (score > bestScore) {
+        best = t;
+        bestScore = score;
+      }
+    }
+    if (best < 0) return '';
+    const name = cards[perms.card[best]!]!.name;
+    sacrificeOid(perms.oid[best]!, turn);
+    return `, sacrificing ${name}`;
+  };
+
   /** The rest of what casting it from the graveyard asks, beyond the mana: can it be paid? */
   const graveyardCastable = (index: number, g: SimGraveyardCast, stamp: number): boolean => {
     switch (g.kind) {
@@ -4414,6 +4575,7 @@ export function simulate(
       case 'escape':
         return gyLen - 1 >= g.n;
       case 'mayhem':
+      case 'madness':
         return discardedAt[index] === stamp;
       case 'cast':
         return true;
@@ -4744,7 +4906,7 @@ export function simulate(
       if (sink) say(sink, 'cast', `${card.name} comes off suspend and is cast for free`);
       xSpent = 0;
       kickedNow = 0;
-      resolveCast(index, card, turn, turnGoal, false);
+      resolveCast(index, card, turn, turnGoal, AFTER_NONE);
       if (card.creature) {
         const p = perms.newest(index);
         if (p >= 0) {
@@ -5156,18 +5318,24 @@ export function simulate(
   let pickZone = 0;
   /** What it costs this time: taxed, a graveyard price, a suspend price. */
   let pickCost: ParsedCost | null = null;
-  /** It is being suspended, not cast. */
-  let pickSuspend = false;
+  /** How it is being cast: plain, suspended rather than cast, evoked, warped. */
+  let pickMode = CAST_PLAIN;
   /** A graveyard pick: which of its ways to be cast from there, its own or a grant. */
   let pickGy: SimGraveyardCast | null = null;
+  /** Generic mana paid by tapping creatures (convoke) and by exiling graveyard cards (delve) instead of the pool. */
+  let pickConvoke = 0;
+  let pickDelve = 0;
   /** This turn's ritual target, for `consider`. */
   let spendRitualGoal: ParsedCost | null = null;
+  /** Scratch for `consider`: this pass's convoke and delve counts, set by the hand scan. */
+  let altConvoke = 0;
+  let altDelve = 0;
     /**
      * One candidate against the best so far. `size` is what the priciest-first
      * order reads, which is the card's worth rather than this price for a
      * suspended one.
      */
-    const consider = (at: number, zone: number, card: SimCard, cost: ParsedCost, size: number, suspending: boolean, gy: SimGraveyardCast | null = null): void => {
+    const consider = (at: number, zone: number, card: SimCard, cost: ParsedCost, size: number, mode: number, gy: SimGraveyardCast | null = null): void => {
       // A ritual is ramp for one turn, so it is ramp for the ordering that
       // matters: cast before the spell it is paying for, or the burst is
       // gone by the time anything wants it.
@@ -5178,14 +5346,14 @@ export function simulate(
       // still lands in the pool when it resolves, it just does not get to
       // jump the queue or answer to `ritualGoal`, which is somebody else's
       // burst.
-      const burst = !suspending && castsAsRitual(card);
+      const burst = mode === CAST_PLAIN && castsAsRitual(card);
       const ramp = card.role === 'rock' || card.role === 'dork' || card.role === 'landramp' || burst;
       if (burst && !ritualNeeded(spendRitualGoal)) return;
       // Held up, which in a goldfish means never cast. See InteractionPolicy.
       if (holding && card.instant) return;
       // What the policy came for, ahead of ramp, because a deck that wants
       // its two-drop on turn two wants it more than it wants a Signet.
-      const index = zone === ZONE_HAND ? hand[at]! : zone === ZONE_GRAVEYARD ? graveyard[at]! : library[at]!;
+      const index = zone === ZONE_HAND ? hand[at]! : zone === ZONE_GRAVEYARD ? graveyard[at]! : zone === ZONE_EXILE ? exCastCard[at]! : library[at]!;
       const favored = spendDraw ? drawsCards[index]! : spendCreatures ? card.creature : false;
       // An X spell goes last, under every fixed cost, because X is going to
       // take whatever the turn has left and a Fireball cast first would end
@@ -5214,8 +5382,107 @@ export function simulate(
       pick = at;
       pickZone = zone;
       pickCost = cost;
-      pickSuspend = suspending;
+      pickMode = mode;
       pickGy = gy;
+      pickConvoke = altConvoke;
+      pickDelve = altDelve;
+    };
+
+    // --- Convoke and delve (rebuild plan §6 step 4) --------------------------
+    /**
+     * Untapped creatures that could convoke this turn: not already tapped, and
+     * not a mana source, whose mana the pool already counts. Summoning-sick
+     * creatures may convoke, so readiness is not asked. Counted once per spend
+     * pass, cheap enough that it is simply recounted.
+     */
+    const convokeFree = (turn: number): number => {
+      let free = 0;
+      for (let p = 0; p < perms.len; p++) {
+        if (!(perms.types[p]! & T_CREATURE) || perms.tapped[p] || !stillOut(p, turn)) continue;
+        if (sourceOf(p) >= 0) continue;
+        free++;
+      }
+      return free;
+    };
+    /** Graveyard cards delve may exile: the ones with no way of their own to be cast from there, and no dredge. */
+    const delveFree = (): number => {
+      let free = 0;
+      for (let j = 0; j < gyLen; j++) {
+        const c = cards[graveyard[j]!]!;
+        if (c.gyCast || c.dredge > 0) continue;
+        free++;
+      }
+      return free;
+    };
+    /** Tap `count` convoking creatures, weakest first, so the strongest still attack. */
+    const tapForConvoke = (count: number, turn: number): void => {
+      for (let k = 0; k < count; k++) {
+        let best = -1;
+        for (let p = 0; p < perms.len; p++) {
+          if (!(perms.types[p]! & T_CREATURE) || perms.tapped[p] || !stillOut(p, turn) || sourceOf(p) >= 0) continue;
+          if (best < 0 || perms.power[p]! < perms.power[best]!) best = p;
+        }
+        if (best < 0) return;
+        perms.tapped[best] = 1;
+      }
+    };
+    /** Exile `count` graveyard cards for delve, from the far end, keeping the ones a cast or a dredge could want. */
+    const exileForDelve = (count: number): void => {
+      for (let k = 0; k < count; k++) {
+        let at = -1;
+        for (let j = 0; j < gyLen; j++) {
+          const c = cards[graveyard[j]!]!;
+          if (c.gyCast || c.dredge > 0) continue;
+          at = j;
+          break;
+        }
+        if (at < 0) return;
+        const index = graveyard[at]!;
+        graveyard[at] = graveyard[--gyLen]!;
+        if (exLen < exiled.length) exiled[exLen++] = index;
+      }
+    };
+
+    /** Foretell or plot the card in hand most worth it, with the mana the turn has left over. */
+    let setupSpent = 0;
+    const trySetup = (turn: number, left: number): boolean => {
+      let best = -1;
+      let bestWorth = -1;
+      for (let i = 0; i < handLen; i++) {
+        const index = hand[i]!;
+        const card = cards[index]!;
+        const ex = card.exileCast;
+        if (!ex || ex.kind === 'warp' || card.commander) continue;
+        if (ex.setup.mana > left) continue;
+        // Castable now is cast now, not set aside.
+        if (card.spell && card.cost && priced(index, turn).mana <= left) continue;
+        const worth = card.cost?.mana ?? card.cmc;
+        if (worth > bestWorth) {
+          best = i;
+          bestWorth = worth;
+        }
+      }
+      if (best < 0) return false;
+      const index = hand[best]!;
+      const card = cards[index]!;
+      const ex = card.exileCast!;
+      const mark = paid.pips.length;
+      paid.generic += ex.setup.generic;
+      for (const pip of ex.setup.pips) paid.pips.push(pip);
+      if (!canPay(paid, units, unitGroups)) {
+        paid.generic -= ex.setup.generic;
+        paid.pips.length = mark;
+        return false;
+      }
+      paid.mana += ex.setup.mana;
+      setupSpent = ex.setup.mana;
+      hand[best] = hand[--handLen]!;
+      addExileCast(index, ex.cast, turn + 1, 0, ex.kind === 'plot' ? EXC_PLOTTED : EXC_FORETOLD);
+      if (sink && sink.turn) {
+        say(sink, 'cast', ex.kind === 'plot' ? `Plots ${card.name} for ${ex.setup.mana} mana, to cast for free from next turn` : `Foretells ${card.name} for {2}`);
+        castLines.push({ line: sink.turn.lines[sink.turn.lines.length - 1]!, card: index, generic: ex.setup.generic, pips: ex.setup.pips.length });
+      }
+      return true;
     };
 
   let handSizeSum = 0;
@@ -5251,6 +5518,8 @@ export function simulate(
     gameDamage = 0;
     gameCombat = 0;
     suspLen = 0;
+    exCastLen = 0;
+    warpedLen = 0;
     cmdCasts.fill(0);
     life = startLife;
     lifeGainedTurn = 0;
@@ -5652,43 +5921,83 @@ export function simulate(
         // Out of mana. An ability whose price is not mana ({T}, a sacrifice)
         // can still be used, so a deck with one looks before it stops.
         const dry = left <= 0 && (spendSrc.length === 0 || spendAny() === 0);
-        if (dry && !anyAbilities) break;
+        // A plotted card is free, so a dry turn still looks at the exile list.
+        if (dry && !anyAbilities && exCastLen === 0) break;
         pick = -1;
         pickRank = -1;
         ties = 0;
         pickZone = ZONE_HAND;
         pickCost = null;
-        pickSuspend = false;
+        pickMode = CAST_PLAIN;
         pickGy = null;
+        pickConvoke = 0;
+        pickDelve = 0;
+        altConvoke = 0;
+        altDelve = 0;
         spendRitualGoal = ritualGoal;
+        // Convoke and delve (rebuild plan §6 step 4): what the board and the
+        // graveyard could pay this pass, counted once for every card asking.
+        const convokable = anyConvoke && !dry ? convokeFree(turn) : 0;
+        const delvable = anyDelve && !dry ? delveFree() : 0;
         for (let i = 0; i < (dry ? 0 : handLen); i++) {
           const index = hand[i]!;
           const card = cards[index]!;
           // Suspend, when casting it is not on: no mana cost at all (Ancestral
           // Visions), or more than the turn has. The price is the suspend cost.
           if (card.suspend && (!card.spell || !card.cost || card.cost.mana > left)) {
-            if (card.suspend.cost.mana <= left) consider(i, ZONE_HAND, card, card.suspend.cost, card.cost?.mana ?? card.cmc, true);
+            if (card.suspend.cost.mana <= left) consider(i, ZONE_HAND, card, card.suspend.cost, card.cost?.mana ?? card.cmc, CAST_SUSPEND);
             continue;
           }
           if (!card.spell || !card.cost) continue;
           // The commander pays two more for every time it has been cast, and
           // the discounts on the battlefield take generic off (§6 step 8).
           const cost = priced(index, turn);
+          // "As an additional cost, sacrifice a creature": with nothing to
+          // sacrifice the card waits in hand (rebuild plan §6 step 4).
+          if (card.addlSac !== null && !hasSacTarget(card.addlSac, turn)) continue;
+          // Evoke and warp: the cheap way in, only when the mana cost is out
+          // of reach this turn. Neither is kicked, neither reads X.
+          if (cost.mana > left) {
+            if (card.evoke && card.evoke.mana <= left) consider(i, ZONE_HAND, card, card.evoke, cost.mana, CAST_EVOKE);
+            else if (card.exileCast?.kind === 'warp' && card.exileCast.setup.mana <= left) consider(i, ZONE_HAND, card, card.exileCast.setup, cost.mana, CAST_WARP);
+          }
+          // Convoke and delve pay generic out of the board and the graveyard.
+          altConvoke = card.convoke ? Math.min(cost.generic, convokable) : 0;
+          altDelve = card.delve ? Math.min(cost.generic - altConvoke, delvable) : 0;
+          const alt = altConvoke + altDelve;
           // The cheap test first: a cost that wants more mana than is left
           // cannot be paid whatever colors it wants, and skipping it here is
           // what keeps the solver off nine tenths of the hand.
           // Restricted mana counts only toward the spells it may pay for.
-          if (cost.mana > left + (spendSrc.length > 0 ? spendFor(index) : 0)) continue;
+          if (cost.mana - alt > left + (spendSrc.length > 0 ? spendFor(index) : 0)) continue;
           // An X spell with nothing left over for X is a card you hold, not a
           // card you cast. Spending a Fireball for zero uses the card up and
           // buys nothing, which is not the conservative direction — it is just
           // worse play. Holding it is what happens at a table, and it is what
           // makes "the mana you spent on X" a number worth reading.
-          if (cost.hasX && cost.mana >= left) continue;
+          if (cost.hasX && cost.mana - alt >= left) continue;
           // The same for a free spell whose whole point is its multikicker: an
           // Everflowing Chalice cast unkicked is a card thrown away.
           if (card.kicker?.multi && cost.mana === 0 && card.kicker.cost.mana > left) continue;
-          consider(i, ZONE_HAND, card, cost, cost.mana, false);
+          consider(i, ZONE_HAND, card, cost, cost.mana, CAST_PLAIN);
+        }
+        altConvoke = 0;
+        altDelve = 0;
+        // Exile the deck can cast out of (rebuild plan §6 step 4): foretold
+        // and plotted cards from the turn after, a warped permanent again, an
+        // impulse draw's cards while their turn lasts. Kicker and X are paid
+        // as from the hand.
+        for (let k = 0; k < exCastLen; k++) {
+          if (exCastFrom[k]! > turn) continue;
+          const index = exCastCard[k]!;
+          const card = cards[index]!;
+          // A land exiled playable is not played: the land drop does not look here.
+          if (!card.spell && !exCastCost[k]) continue;
+          const cost = exCastCost[k] ?? priced(index, turn);
+          if (cost.mana > left) continue;
+          if (cost.hasX && cost.mana >= left) continue;
+          if (card.addlSac !== null && !hasSacTarget(card.addlSac, turn)) continue;
+          consider(k, ZONE_EXILE, card, cost, card.cost?.mana ?? card.cmc, CAST_PLAIN);
         }
         // The graveyard, for the cards with a way to be cast from there.
         if (anyGraveyardCasts && !dry) {
@@ -5701,7 +6010,7 @@ export function simulate(
             const g = card.gyCast;
             // Its own way first, then whatever the battlefield grants it. The
             // same card offered twice is fine: `consider` keeps the one pick.
-            if (g && g.cost.mana <= left && graveyardCastable(index, g, stamp)) consider(j, ZONE_GRAVEYARD, card, g.cost, g.cost.mana, false, g);
+            if (g && g.cost.mana <= left && graveyardCastable(index, g, stamp)) consider(j, ZONE_GRAVEYARD, card, g.cost, g.cost.mana, CAST_PLAIN, g);
             if (gyGrants.length === 0 || !card.spell || !card.cost || card.cost.mana > left) continue;
             // An X spell cast from here gets no X (only a hand cast reads
             // it), so it is held for the same reason a hand one is.
@@ -5710,7 +6019,7 @@ export function simulate(
               if (grant.filter && grant.filter.match[index] !== 1) continue;
               const granted = grantedCast(index, grant.kind, grant.n);
               if (!graveyardCastable(index, granted, stamp)) continue;
-              consider(j, ZONE_GRAVEYARD, card, granted.cost, granted.cost.mana, false, granted);
+              consider(j, ZONE_GRAVEYARD, card, granted.cost, granted.cost.mana, CAST_PLAIN, granted);
               break;
             }
           }
@@ -5721,7 +6030,7 @@ export function simulate(
           const index = library[top]!;
           const card = cards[index]!;
           if (topGrants.length > 0 && card.spell && card.cost && card.cost.mana <= left && !(card.cost.hasX && card.cost.mana >= left)) {
-            if (topGrants.some((filter) => !filter || filter.match[index] === 1)) consider(top, ZONE_TOP, card, card.cost, card.cost.mana, false);
+            if (topGrants.some((filter) => !filter || filter.match[index] === 1)) consider(top, ZONE_TOP, card, card.cost, card.cost.mana, CAST_PLAIN);
           }
         }
         if (pick < 0) {
@@ -5734,6 +6043,12 @@ export function simulate(
             continue;
           }
           if (dry) break;
+          // Or on foretelling or plotting a card for a later turn (rebuild
+          // plan §6 step 4): mana that would otherwise go unspent.
+          if (anyExileSetups && trySetup(turn, left)) {
+            spent += setupSpent;
+            continue;
+          }
           if (holding) {
             // Only the ones it could actually have cast. "Holding up a
             // Cryptic Command on turn two" is not a decision anybody made.
@@ -5760,22 +6075,26 @@ export function simulate(
         // Only now does the matching solver run, and only on the one card the
         // policy actually wants to cast.
         const cost: ParsedCost = pickCost!;
-        const index = pickZone === ZONE_HAND ? hand[pick]! : pickZone === ZONE_GRAVEYARD ? graveyard[pick]! : library[pick]!;
-        /** Cast the ordinary way, if from somewhere unusual: kicker and X are paid as from the hand. */
-        const plain = pickZone !== ZONE_GRAVEYARD || pickGy!.kind === 'cast';
+        const index = pickZone === ZONE_HAND ? hand[pick]! : pickZone === ZONE_GRAVEYARD ? graveyard[pick]! : pickZone === ZONE_EXILE ? exCastCard[pick]! : library[pick]!;
+        /** Why an exile pick is there, read before the entry is dropped. */
+        const exWhy = pickZone === ZONE_EXILE ? exCastWhy[pick]! : -1;
+        /** Cast the ordinary way, if from somewhere unusual: kicker and X are paid as from the hand. Not when evoked or warped. */
+        const plain = (pickZone !== ZONE_GRAVEYARD || pickGy!.kind === 'cast') && pickMode !== CAST_EVOKE && pickMode !== CAST_WARP;
         const card = cards[index]!;
         const before = paid.pips.length;
         // What restricted mana does not pay for is what the pool has to.
         const pay = payRestricted(index, cost);
-        const payGeneric = pay.generic;
+        // Convoke and delve take generic off what the pool is asked for.
+        const altPaid = Math.min(pickConvoke + pickDelve, pay.generic);
+        const payGeneric = pay.generic - altPaid;
         const payPips = pay.pips.length;
-        paid.generic += pay.generic;
+        paid.generic += payGeneric;
         for (const pip of pay.pips) paid.pips.push(pip);
         if (!canPay(paid, units, unitGroups)) {
           // Unaffordable in *these* colors alongside what is already committed.
           // Roll it back and stop: the next-best card is usually the same
           // colors and re-scanning the hand for it costs more than it wins.
-          paid.generic -= pay.generic;
+          paid.generic -= payGeneric;
           paid.pips.length = before;
           // The mana is still there for an ability (rebuild plan E3), and the
           // card it draws may be one these colors can pay for.
@@ -5796,23 +6115,35 @@ export function simulate(
           }
           break;
         }
-        paid.mana += cost.mana - spendUsed;
-        spent += cost.mana;
+        paid.mana += cost.mana - spendUsed - altPaid;
+        spent += cost.mana - altPaid;
         // Restricted mana becomes this turn's mana the moment it is spent.
         let spendNote = '';
         if (spendUsed > 0) {
           spendNote = commitRestricted(turn);
           available += spendUsed;
         }
+        // Convoke taps its creatures (they skip combat); delve exiles its cards.
+        const convoked = Math.min(pickConvoke, altPaid);
+        const delved = altPaid - convoked;
+        if (convoked > 0) tapForConvoke(convoked, turn);
+        if (delved > 0) exileForDelve(delved);
+        if (convoked > 0 || delved > 0) {
+          const bits: string[] = [];
+          if (convoked > 0) bits.push(`convoking ${convoked} creature${convoked === 1 ? '' : 's'}`);
+          if (delved > 0) bits.push(`delving ${delved} card${delved === 1 ? '' : 's'} from the graveyard`);
+          spendNote += `, ${bits.join(' and ')}`;
+        }
         castCount++;
         if (pickZone === ZONE_HAND) hand[pick] = hand[--handLen]!;
         else if (pickZone === ZONE_GRAVEYARD) graveyard[pick] = graveyard[--gyLen]!;
+        else if (pickZone === ZONE_EXILE) dropExileCast(pick);
         // Off the top: the next card down is the top now, and the next draw.
         else top++;
 
         // --- Suspend ----------------------------------------------------
         // Exiled with its time counters; it resolves at an upkeep, not now.
-        if (pickSuspend) {
+        if (pickMode === CAST_SUSPEND) {
           if (suspLen < suspCard.length) {
             suspCard[suspLen] = index;
             suspTime[suspLen] = card.suspend!.n;
@@ -5827,6 +6158,8 @@ export function simulate(
 
         // --- The rest of a graveyard cast's price ------------------------
         const extraCost = pickZone === ZONE_GRAVEYARD ? payGraveyardExtras(index, pickGy!, stamp) : '';
+        // --- A printed "as an additional cost, sacrifice" (rebuild plan §6 step 4) ---
+        const sacNote = anyAddlSac ? payAdditionalSac(index, turn) : '';
 
         // --- Kicker -----------------------------------------------------
         // Paid whenever the mana left covers it, as many times as it allows for
@@ -5892,13 +6225,16 @@ export function simulate(
           const from =
             pickZone === ZONE_TOP
               ? ' from the top of the library'
-              : pickZone !== ZONE_GRAVEYARD
-                ? ''
-                : pickGy!.kind === 'cast'
-                  ? ' from the graveyard'
-                  : ` from the graveyard (${pickGy!.kind}${extraCost})`;
-          const price = pickZone === ZONE_GRAVEYARD && pickGy!.kind !== 'cast' ? '' : ` ${card.manaCost}`;
-          say(sink, 'cast', `Casts ${card.name}${price}${from}${cheaper}${forX}${kicked}${tax}${why}${spendNote}`);
+              : pickZone === ZONE_EXILE
+                ? ` from exile (${EXC_WORDS[exWhy] ?? 'exiled'}${exWhy === EXC_PLOTTED ? ', for free' : exWhy === EXC_FORETOLD ? ', for its foretell cost' : ''})`
+                : pickZone !== ZONE_GRAVEYARD
+                  ? ''
+                  : pickGy!.kind === 'cast'
+                    ? ' from the graveyard'
+                    : ` from the graveyard (${pickGy!.kind}${extraCost})`;
+          const how = pickMode === CAST_EVOKE ? ` for its evoke cost (${cost.mana} mana)` : pickMode === CAST_WARP ? ` for its warp cost (${cost.mana} mana)` : '';
+          const price = (pickZone === ZONE_GRAVEYARD && pickGy!.kind !== 'cast') || how || (pickZone === ZONE_EXILE && exWhy !== EXC_WARPED && exWhy !== EXC_IMPULSE) ? '' : ` ${card.manaCost}`;
+          say(sink, 'cast', `Casts ${card.name}${price}${how}${from}${cheaper}${forX}${kicked}${tax}${why}${sacNote}${spendNote}`);
           // The taps arrive on this line later. The turn has to finish
           // committing first, because there is only one cost to solve and it is
           // the whole turn's.
@@ -5914,7 +6250,13 @@ export function simulate(
           });
         }
 
-        available += resolveCast(index, card, turn, goal, pickZone === ZONE_GRAVEYARD && pickGy!.kind === 'flashback');
+        available += resolveCast(
+          index,
+          card,
+          turn,
+          goal,
+          pickMode === CAST_EVOKE ? AFTER_EVOKE : pickMode === CAST_WARP ? AFTER_WARP : pickZone === ZONE_GRAVEYARD && pickGy!.kind === 'flashback' ? AFTER_EXILE : AFTER_NONE,
+        );
         // A card with no effect profile still resolves as a blank. For a
         // Lightning Bolt that is correct; for a draw spell whose draw hangs off
         // a trigger the pipeline would not read, it is the floor §11.4 warned
@@ -5969,6 +6311,8 @@ export function simulate(
       emptyPool();
       // The end step (rebuild plan E3), then cleanup.
       if (anyEndSteps && opts.effects) runEndStep(turn);
+      // A warped permanent leaves at the end step (rebuild plan §6 step 4).
+      if (warpedLen > 0) exileWarped(turn);
       // The plan (rebuild plan E1), read with the board and the hand as the
       // turn leaves them, and the speed signal (D2) off the same damage the
       // chart reads.
@@ -5981,6 +6325,7 @@ export function simulate(
       // Cleanup: discard to hand size (F1), and every until-end-of-turn pump
       // and keyword wears off.
       cleanup(turn);
+      if (exCastLen > 0) expireExileCasts(turn);
       perms.clearEot(cards);
 
       if (sink && sink.turn) {

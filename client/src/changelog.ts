@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.193.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The deck simulator reads the other ways to cast a card off its text: evoke, foretell, plot, warp, madness, convoke, delve, flashback, escape and suspend. It takes the cheap way in only when the mana cost is out of reach.',
+      },
+      {
+        kind: 'added',
+        text: '"As an additional cost, sacrifice a creature" is a real cost now, and a card rule can exile cards "playable this turn" for red\'s impulse draw. Light Up the Stage and friends play that way instead of as a draw.',
+      },
+    ],
+  },
+  {
     version: '0.192.0',
     changes: [
       {
@@ -172,32 +185,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Agent connections (desktop): a new Settings toggle lets a Claude Code session on your computer search cards and work with your collection, decks and lists through the open tab. Off by default, local only, and every agent change is one undoable history entry.',
-      },
-    ],
-  },
-  {
-    version: '0.184.0',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Scans, imports, wishlist purchases and opened sealed products all end in one questionnaire: which cards are already yours, where they live, whether a copy moved. One sheet, numbered steps, Back keeps your answers, and nothing is written until the last step.',
-      },
-      {
-        kind: 'changed',
-        text: 'Scanning into a deck asks "Are these yours?" once per card (Already mine, New copy, Not mine), the "which copy?" pick sits inside the row, and one scan or import is one history entry to undo.',
-      },
-    ],
-  },
-  {
-    version: '0.183.0',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Scanning into a deck, binder or box no longer asks "did it move?" about a card you just marked as a new copy, and "Where do these live?" no longer reappears under that question.',
-      },
-      {
-        kind: 'fixed',
-        text: 'Update carries a card\'s filing along instead of leaving a conflict behind, review steps keep your answers when you go back, and a move between containers undoes in one step.',
       },
     ],
   },

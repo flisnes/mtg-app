@@ -32,6 +32,23 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.190.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The deck simulator reads lifelink, infect and toxic off your cards, tracks your life and the opponent’s poison, and card rules get a "When you gain life" trigger and a poison step.',
+      },
+      {
+        kind: 'added',
+        text: 'Cost reduction: a standing rule can make the spells you name cost less (Medallions, Electromancer, Animar), and printed affinity is read off the card.',
+      },
+      {
+        kind: 'added',
+        text: 'Smaller rule grammar: prowess-style "this card" pumps, +X/+0, counters on each creature, "what woke it" as an amount, conditions on standing effects, a beginning-of-combat trigger, attacking tokens and "only once each game".',
+      },
+    ],
+  },
+  {
     version: '0.189.2',
     changes: [
       {
@@ -156,37 +173,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Every popup sheet in the app now shares one frame, so the guard against a double-tap landing inside a freshly opened sheet, Escape/back handling and screen-reader dialog markup apply everywhere.',
-      },
-    ],
-  },
-  {
-    version: '0.182.3',
-    changes: [
-      {
-        kind: 'added',
-        text: 'A card that belongs to a cycle (bond lands, shocklands, Titans, ...) now has a "See the other cards in this cycle" link on its card sheet, jumping straight to a search for its cycle-mates.',
-      },
-    ],
-  },
-  {
-    version: '0.182.2',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'The app downloads about a fifth less on first load and updates. Trade, the scanner and deck analysis now load when you open them, and the analysis defaults file no longer downloads on install.',
-      },
-    ],
-  },
-  {
-    version: '0.182.1',
-    changes: [
-      {
-        kind: 'added',
-        text: 'A lone commander with Partner, a Background or a Doctor pairing now offers a "Find a partner" button that lists exactly the cards that can join them — no more fighting the color identity filter for Tana.',
-      },
-      {
-        kind: 'added',
-        text: 'The Prismatic Piper and friends show five mana pips on their card in the command zone: tap one to choose the color, and the deck’s identity follows.',
       },
     ],
   },

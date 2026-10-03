@@ -9,6 +9,37 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.182.3',
+    changes: [
+      {
+        kind: 'added',
+        text: 'A card that belongs to a cycle (bond lands, shocklands, Titans, ...) now has a "See the other cards in this cycle" link on its card sheet, jumping straight to a search for its cycle-mates.',
+      },
+    ],
+  },
+  {
+    version: '0.182.2',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The app downloads about a fifth less on first load and updates. Trade, the scanner and deck analysis now load when you open them, and the analysis defaults file no longer downloads on install.',
+      },
+    ],
+  },
+  {
+    version: '0.182.1',
+    changes: [
+      {
+        kind: 'added',
+        text: 'A lone commander with Partner, a Background or a Doctor pairing now offers a "Find a partner" button that lists exactly the cards that can join them — no more fighting the color identity filter for Tana.',
+      },
+      {
+        kind: 'added',
+        text: 'The Prismatic Piper and friends show five mana pips on their card in the command zone: tap one to choose the color, and the deck’s identity follows.',
+      },
+    ],
+  },
+  {
     version: '0.182.0',
     changes: [
       {

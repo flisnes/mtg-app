@@ -40,6 +40,9 @@ export class Permanents {
   readonly staticPump: Int32Array;
   /** Pumps until end of turn: a Craterhoof's +X/+X. */
   readonly eotPump: Int32Array;
+  /** Power-only pumps (+X/+0), static and until end of turn (rebuild plan §6 step 6). */
+  readonly staticPow: Int32Array;
+  readonly eotPow: Int32Array;
   /** Power from the Equipment and Auras read as sitting on it (rebuild plan §6 step 2), recomputed with the statics. */
   readonly attachPump: Int32Array;
   /** Tapped this turn, for mana. Untapped at the start of every turn. */
@@ -74,6 +77,8 @@ export class Permanents {
     this.charge = new Int32Array(capacity);
     this.staticPump = new Int32Array(capacity);
     this.eotPump = new Int32Array(capacity);
+    this.staticPow = new Int32Array(capacity);
+    this.eotPow = new Int32Array(capacity);
     this.attachPump = new Int32Array(capacity);
     this.tapped = new Uint8Array(capacity);
     this.types = new Uint8Array(capacity);
@@ -110,6 +115,8 @@ export class Permanents {
     this.charge[p] = 0;
     this.staticPump[p] = 0;
     this.eotPump[p] = 0;
+    this.staticPow[p] = 0;
+    this.eotPow[p] = 0;
     this.attachPump[p] = 0;
     this.tapped[p] = 0;
     this.types[p] = card.types;
@@ -139,6 +146,8 @@ export class Permanents {
     this.charge[at] = this.charge[last]!;
     this.staticPump[at] = this.staticPump[last]!;
     this.eotPump[at] = this.eotPump[last]!;
+    this.staticPow[at] = this.staticPow[last]!;
+    this.eotPow[at] = this.eotPow[last]!;
     this.attachPump[at] = this.attachPump[last]!;
     this.tapped[at] = this.tapped[last]!;
     this.types[at] = this.types[last]!;
@@ -189,7 +198,7 @@ export class Permanents {
   refresh(p: number, card: SimCard): void {
     const bonus = this.p1p1[p]! + this.staticPump[p]! + this.eotPump[p]!;
     // An attachment's power and toughness can differ (+2/+0), so only the power is kept; nothing here reads toughness.
-    this.power[p] = Math.max(0, card.power + bonus + this.attachPump[p]!);
+    this.power[p] = Math.max(0, card.power + bonus + this.attachPump[p]! + this.staticPow[p]! + this.eotPow[p]!);
     this.toughness[p] = card.toughness + bonus;
     this.kw[p] = card.keywords | this.kwOwn[p]! | this.kwStatic[p]! | this.kwEot[p]!;
   }
@@ -197,8 +206,9 @@ export class Permanents {
   /** End of turn: every until-end-of-turn pump and keyword wears off. */
   clearEot(cards: readonly SimCard[]): void {
     for (let p = 0; p < this.len; p++) {
-      if (this.eotPump[p] === 0 && this.kwEot[p] === 0) continue;
+      if (this.eotPump[p] === 0 && this.kwEot[p] === 0 && this.eotPow[p] === 0) continue;
       this.eotPump[p] = 0;
+      this.eotPow[p] = 0;
       this.kwEot[p] = 0;
       this.refresh(p, cards[this.card[p]!]!);
     }

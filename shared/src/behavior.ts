@@ -69,6 +69,11 @@ import { BASIC_LAND_TYPES, MANA_LETTERS, sourceColors, type EffectProfile, type 
  * `graveyard` is the one kind that works from somewhere other than the
  * battlefield: a standing fact about the card while it sits in your graveyard.
  * Dredge is the first thing it holds.
+ *
+ * Rebuild plan §6 steps 3 and 6 added two more plain moments. `lifegain` fires
+ * each time you gain life (a lifelink creature connecting, a Food, a rule that
+ * says so): Ajani's Pridemate, Sanguine Bond. `combat` is the beginning of your
+ * combat step, after the turn's spells and before the attack.
  */
 export type BehaviorTrigger =
   | 'play'
@@ -84,7 +89,9 @@ export type BehaviorTrigger =
   | 'dies'
   | 'sacrifice'
   | 'activate'
-  | 'graveyard';
+  | 'graveyard'
+  | 'lifegain'
+  | 'combat';
 
 /**
  * What kind of rule it is, which decides the steps it may hold (rebuild plan F).
@@ -189,6 +196,12 @@ export type BehaviorStepKind =
   // Rebuild plan E3: a life total, so life can be a price.
   | 'gainlife'
   | 'loselife'
+  // Rebuild plan §6 step 3: poison counters on the opponent, the same counter
+  // life is the other way. Fynn, Triumph of the Hordes.
+  | 'poison'
+  // Rebuild plan §6 step 8: on a `static` rule, your spells matching `q` cost
+  // X generic less. Medallions, Goblin Electromancer, Animar.
+  | 'discount'
   // Internal: a rule's condition, compiled in front of its steps. Never stored,
   // never offered; see GateStep.
   | 'gate';
@@ -226,7 +239,14 @@ export type BehaviorAmountKind =
   | 'life'
   // The mana symbols among your permanents' costs that are one of the
   // amount's colors (`c`): Gray Merchant, Nykthos, Karametra's Acolyte.
-  | 'devotion';
+  | 'devotion'
+  // Rebuild plan §6 step 3: life you have gained this turn.
+  | 'lifegained'
+  // Rebuild plan §6 step 6: the number behind what woke this rule. On a
+  // life-gain rule the life gained; on an enters, dies or sacrifice rule the
+  // power of the permanent; on a cast rule the spell's mana value. Zero on a
+  // rule nothing woke.
+  | 'cause';
 
 /**
  * Arithmetic on an amount, so "half your library" and "that many minus one" are
@@ -365,12 +385,23 @@ export interface BehaviorStep {
   /** `token` (custom) and `keyword`: keywords as letters from BEHAVIOR_KEYWORDS, in that order. */
   kw?: string;
   /**
-   * `keyword` only: the card holding the rule gets it, not the creatures the
-   * rule's criteria find. "This creature has vigilance", or a hasty dork.
+   * `keyword` and `pump`: the card holding the rule gets it, not the creatures
+   * the rule's criteria find. "This creature has vigilance", a hasty dork, or
+   * prowess (+1/+1 to this card until end of turn).
    */
   own?: true;
+  /** `pump` only: power alone, +X/+0. */
+  po?: true;
   /** `counter` only: `p1p1` for +1/+1 counters, `charge` for everything that only gets counted. */
   ck?: 'p1p1' | 'charge';
+  /**
+   * `counter` only: the counters go on each creature you control matching `q`
+   * (every creature when absent) rather than on this card. Archangel of Thune.
+   */
+  each?: true;
+  /** `token` only: the tokens enter tapped, or enter attacking (when made during combat, they hit). */
+  tapped?: true;
+  attacking?: true;
   /**
    * `addtype` with `ty: 'L'` only: a basic land type, as the color letter it
    * taps for (G is Forest). Ashaya makes creatures Forest lands, and a Forest
@@ -435,6 +466,7 @@ export interface GateStep extends BehaviorStep {
   span: number;
   cond?: BehaviorCondition;
   once?: true;
+  oneshot?: true;
 }
 
 // ---------------------------------------------------------------------------
@@ -553,6 +585,8 @@ export const BEHAVIOR_KEYWORDS: readonly { letter: string; word: string; hint: s
   { letter: 'H', word: 'haste', hint: 'Attacks, and taps for mana, the turn it arrives.' },
   { letter: 'V', word: 'vigilance', hint: 'Still attacks on a turn it tapped for mana, because that mana could have been spent after combat.' },
   { letter: 'D', word: 'double strike', hint: 'Its power counts twice in the attack.' },
+  { letter: 'L', word: 'lifelink', hint: 'Its combat damage gains you that much life, which wakes your life-gain rules.' },
+  { letter: 'I', word: 'infect', hint: 'Its combat damage is poison counters instead of damage.' },
 ];
 const KEYWORD_LETTERS = BEHAVIOR_KEYWORDS.map((k) => k.letter).join('');
 
@@ -822,10 +856,16 @@ export interface BehaviorRule {
   q?: string;
   /** `activate` only: the price. */
   cost?: ActivationCost;
-  /** Runs only while this holds. Triggers, activations and mana abilities. */
+  /** Runs only while this holds. Triggers, activations, mana abilities and statics (Serra Ascendant). */
   cond?: BehaviorCondition;
   /** At most once each turn. Triggers and activations. */
   once?: true;
+  /**
+   * At most once each game: the first time it would fire, and never again
+   * (rebuild plan §6 step 6). Sagas, Classes and Rooms were written as charge
+   * counters before this; a one-shot entry rule says it plainly.
+   */
+  oneshot?: true;
 }
 
 /**
@@ -1043,6 +1083,20 @@ export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
     hint: 'A standing fact about the card while it sits in your graveyard, whatever put it there: discarded, milled, died or cast. Dredge is the one step it holds. A printed Dredge is already read off the card; a rule here replaces that number.',
     kind: 'graveyard',
   },
+  {
+    id: 'lifegain',
+    label: 'When you gain life',
+    lead: 'Whenever you gain life',
+    hint: 'Each time, while this permanent is on the battlefield: a lifelink creature connecting (once per creature), a Food, a rule that gains life. "What woke it" reads the life gained that time; "life gained this turn" reads the running total.',
+    needs: 'permanent',
+  },
+  {
+    id: 'combat',
+    label: 'At the beginning of your combat',
+    lead: 'At the beginning of your combat',
+    hint: 'Every turn, after the turn\'s spells and before the attack, so a pump or a token here is in time to swing. It fires the turn it lands too.',
+    needs: 'permanent',
+  },
 ];
 
 export interface StepOption {
@@ -1084,6 +1138,8 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'tapsfor', label: 'Taps for X mana', verb: 'tap', kinds: ['tap'] },
   { id: 'gainlife', label: 'Gain X life', verb: 'gain' },
   { id: 'loselife', label: 'Lose X life', verb: 'lose' },
+  { id: 'poison', label: 'Give X poison counters', verb: 'give' },
+  { id: 'discount', label: 'Spells cost X less', verb: 'cost', kinds: ['static'] },
 ];
 
 /** Whether a rule of this kind may hold this step. An ability holds what a trigger does. */
@@ -1197,6 +1253,8 @@ export interface AmountOption {
   needsKicker?: boolean;
   /** Carries a criteria of its own. */
   hasQuery?: boolean;
+  /** Only means anything on a rule something wakes: a watched trigger, or "when you gain life". */
+  needsCause?: boolean;
 }
 
 /**
@@ -1222,6 +1280,8 @@ export const BEHAVIOR_AMOUNTS: readonly AmountOption[] = [
   { id: 'counters', label: 'counters on it', phrase: 'the counters on it', needsPermanent: true },
   { id: 'kicked', label: 'the times kicked', phrase: 'the times it was kicked', needsKicker: true },
   { id: 'life', label: 'your life', phrase: 'your life total' },
+  { id: 'lifegained', label: 'life gained this turn', phrase: 'the life you gained this turn' },
+  { id: 'cause', label: 'what woke it', phrase: 'what woke this rule', needsCause: true },
 ];
 
 export interface AmountOpOption {
@@ -1378,15 +1438,24 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
       // "2 Beast tokens", "a 3/3 Creature token, haste": the custom name
       // already ends in "token".
       const plural = many && !name.includes(' token') ? `${name} tokens` : name.includes(' token') ? name : `${name} token`;
-      return `${verb} ${count} ${plural}${tail}`;
+      const how = step.attacking ? ', tapped and attacking' : step.tapped ? ', tapped' : '';
+      return `${verb} ${count} ${plural}${how}${tail}`;
     }
     case 'counter': {
       const kind = step.ck === 'charge' ? 'charge' : '+1/+1';
-      return `put ${count} ${kind} counter${many ? 's' : ''} on this card${tail}`;
+      const where = step.each ? `each creature you control${whose}` : 'this card';
+      return `put ${count} ${kind} counter${many ? 's' : ''} on ${where}${tail}`;
     }
     // On a static rule the rule's criteria already said which permanents.
-    case 'pump':
-      return kind === 'static' ? `they get +${count}/+${count}${tail}` : `creatures you control${whose} get +${count}/+${count} until end of turn${tail}`;
+    case 'pump': {
+      const bonus = `+${count}/+${step.po ? '0' : count}`;
+      if (step.own) return kind === 'static' ? `this card gets ${bonus}${tail}` : `this card gets ${bonus} until end of turn${tail}`;
+      return kind === 'static' ? `they get ${bonus}${tail}` : `creatures you control${whose} get ${bonus} until end of turn${tail}`;
+    }
+    case 'discount':
+      return `your spells${whose} cost ${count} less${tail}`;
+    case 'poison':
+      return `give ${count} poison counter${many ? 's' : ''}${tail}`;
     case 'keyword':
       if (step.own) return kind === 'static' ? `this card has ${keywordWords(step.kw)}` : `this card gains ${keywordWords(step.kw)} until end of turn`;
       return kind === 'static' ? `they have ${keywordWords(step.kw)}` : `creatures you control${whose} gain ${keywordWords(step.kw)} until end of turn`;
@@ -1453,7 +1522,7 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
 export function describeTrigger(rule: BehaviorRule): string {
   const t = TRIGGER_BY_ID.get(rule.on);
   const lead = t?.kind === 'activate' ? describeCost(rule.cost) : (t?.lead ?? rule.on);
-  if (t?.kind === 'static') return rule.q ? `${lead}, for your permanents matching ${rule.q}` : lead;
+  if (t?.kind === 'static') return `${rule.q ? `${lead}, for your permanents matching ${rule.q}` : lead}${rule.cond ? `, ${describeCondition(rule.cond)}` : ''}`;
   const base = t?.watches && rule.q ? `${lead} matching ${rule.q}` : lead;
   return `${base}${guardPhrase(rule)}`;
 }
@@ -1486,7 +1555,7 @@ export function describeCondition(c: BehaviorCondition): string {
 
 /** The condition and the once-a-turn limit, as a tail on the lead. */
 const guardPhrase = (rule: BehaviorRule): string =>
-  `${rule.cond ? `, ${describeCondition(rule.cond)}` : ''}${rule.once ? ', once each turn' : ''}`;
+  `${rule.cond ? `, ${describeCondition(rule.cond)}` : ''}${rule.once ? ', once each turn' : ''}${rule.oneshot ? ', only the first time each game' : ''}`;
 
 /** One rule as a sentence: "When you play it: draw 2, then discard 1". */
 export function describeRule(rule: BehaviorRule): string {
@@ -1707,6 +1776,8 @@ export interface WatchRule {
   /** Which cards wake it. Absent is any of them. */
   q?: string;
   steps: BehaviorStep[];
+  /** A static rule only: it applies while this holds (Serra Ascendant's thirty life). */
+  cond?: BehaviorCondition;
 }
 
 export interface CompiledBehavior {
@@ -1747,6 +1818,9 @@ export interface CompiledBehavior {
    * that card's `statics` instead.
    */
   dredge: number;
+  /** Rebuild plan §6 steps 3 and 6: whenever you gain life, and the beginning of combat. */
+  lifegain: BehaviorStep[];
+  combat: BehaviorStep[];
 }
 
 export interface ActivateRule {
@@ -1755,10 +1829,11 @@ export interface ActivateRule {
   steps: BehaviorStep[];
   cond?: BehaviorCondition;
   once?: true;
+  oneshot?: true;
 }
 
 /** The plain triggers, whose rules flatten into one list of steps each. */
-export const PLAIN_TRIGGERS = ['play', 'etb', 'attack', 'death', 'upkeep', 'endstep'] as const;
+export const PLAIN_TRIGGERS = ['play', 'etb', 'attack', 'death', 'upkeep', 'endstep', 'lifegain', 'combat'] as const;
 export type PlainTrigger = (typeof PLAIN_TRIGGERS)[number];
 
 /**
@@ -1789,6 +1864,8 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     sacrifice: [],
     activate: [],
     dredge: 0,
+    lifegain: [],
+    combat: [],
   };
   for (const rule of b.rules) {
     const trigger = rule ? TRIGGER_BY_ID.get(rule.on) : undefined;
@@ -1803,9 +1880,13 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     // A condition or a limit goes in front of the rule's steps as a gate, so a
     // plain trigger's list can still be one list (see GateStep). Its span is
     // filled in once the steps that survive are known.
-    const cond = kind === 'trigger' || kind === 'tap' || kind === 'activate' ? compiledCondition(rule.cond) : null;
+    const cond = kind !== 'graveyard' ? compiledCondition(rule.cond) : null;
     const once = (kind === 'trigger' || kind === 'activate') && rule.once === true;
-    const gate: GateStep | null = kind === 'trigger' && (cond || once) ? { op: 'gate', x: cond?.x ?? ZERO, span: 0, ...(cond ? { cond } : {}), ...(once ? { once: true as const } : {}) } : null;
+    const oneshot = (kind === 'trigger' || kind === 'activate') && rule.oneshot === true;
+    const gate: GateStep | null =
+      kind === 'trigger' && (cond || once || oneshot)
+        ? { op: 'gate', x: cond?.x ?? ZERO, span: 0, ...(cond ? { cond } : {}), ...(once ? { once: true as const } : {}), ...(oneshot ? { oneshot: true as const } : {}) }
+        : null;
     const start = bucket.length;
     if (gate) bucket.push(gate);
     for (const step of rule.steps) {
@@ -1837,13 +1918,13 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     if (bucket.length === start) continue;
     const q = typeof rule.q === 'string' ? rule.q.trim() : '';
     if (trigger.watches) out[rule.on as WatchedTrigger].push(q ? { q, steps: bucket } : { steps: bucket });
-    else if (kind === 'static') out.statics.push(q ? { q, steps: bucket } : { steps: bucket });
+    else if (kind === 'static') out.statics.push({ ...(q ? { q } : {}), ...(cond ? { cond } : {}), steps: bucket });
     else if (kind === 'tap' && !out.tap) {
       out.tap = bucket[0]!;
       out.tapCond = cond;
     } else if (kind === 'activate') {
       const cost = cleanCost(rule.cost);
-      if (cost) out.activate.push({ cost, steps: bucket, ...(cond ? { cond } : {}), ...(once ? { once: true as const } : {}) });
+      if (cost) out.activate.push({ cost, steps: bucket, ...(cond ? { cond } : {}), ...(once ? { once: true as const } : {}), ...(oneshot ? { oneshot: true as const } : {}) });
     } else if (kind === 'graveyard') {
       // Two dredge numbers on one card is one of them being wrong; the bigger
       // one is what the card would be played for.
@@ -1873,7 +1954,9 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     out.dies.length > 0 ||
     out.sacrifice.length > 0 ||
     out.activate.length > 0 ||
-    out.dredge > 0;
+    out.dredge > 0 ||
+    out.lifegain.length > 0 ||
+    out.combat.length > 0;
   return fires ? out : null;
 }
 
@@ -1928,6 +2011,8 @@ function objectStepOk(step: BehaviorStep): boolean {
     case 'pump':
     case 'extramana':
     case 'tapsfor':
+    case 'discount':
+    case 'poison':
       return step.x.kind !== 'all';
     default:
       return true;
@@ -1958,6 +2043,7 @@ export function collectBehaviorQueries(b: CompiledBehavior | null | undefined, i
   for (const rules of [b.cast, b.enters, b.dies, b.sacrifice, b.statics]) {
     for (const rule of rules) {
       if (rule.q) into.add(rule.q);
+      if (rule.cond?.x.q) into.add(rule.cond.x.q);
       for (const step of rule.steps) add(step);
     }
   }
@@ -2112,16 +2198,18 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
     if (kind === 'activate' && !cost) continue;
     // A condition this build cannot read drops the rule rather than the
     // condition, since running it unguarded is the generous direction.
-    const guarded = kind === 'trigger' || kind === 'tap' || kind === 'activate';
+    const guarded = kind !== 'graveyard';
     const cond = guarded && r.cond !== undefined ? cleanCondition(r.cond) : null;
     if (guarded && r.cond !== undefined && !cond) continue;
     const once = (kind === 'trigger' || kind === 'activate') && r.once === true;
+    const oneshot = (kind === 'trigger' || kind === 'activate') && r.oneshot === true;
     rules.push({
       on,
       ...(q ? { q } : {}),
       ...(cost ? { cost } : {}),
       ...(cond ? { cond } : {}),
       ...(once ? { once: true as const } : {}),
+      ...(oneshot ? { oneshot: true as const } : {}),
       steps,
     });
   }
@@ -2195,33 +2283,52 @@ function cleanObjectStep(op: BehaviorStepKind, s: Record<string, unknown>, kind:
     const x = cleanAmount(s.x);
     return x && x.kind !== 'all' ? x : null;
   };
-  // Only a trigger's pump or keyword narrows on the step: a static rule says
-  // which permanents on the rule itself.
-  const narrowed = kind === 'trigger' ? cleanQuery(s.q) : {};
+  // Only a trigger's (or an ability's) pump or keyword narrows on the step: a
+  // static rule says which permanents on the rule itself.
+  const narrowed = kind === 'trigger' || kind === 'activate' ? cleanQuery(s.q) : {};
   switch (op) {
     case 'token': {
       const x = amount();
       const tk = typeof s.tk === 'string' && TOKEN_BY_ID.has(s.tk) ? s.tk : null;
       if (!x || !tk) return null;
+      // How they arrive. Attacking tokens are tapped too, so one flag covers both.
+      const how = s.attacking === true ? { attacking: true as const } : s.tapped === true ? { tapped: true as const } : {};
       if (tk === 'card') {
         const tid = typeof s.tid === 'string' && ORACLE_ID_RE.test(s.tid) ? s.tid : null;
         if (!tid) return null;
         const tn = typeof s.tn === 'string' ? s.tn.trim().slice(0, MAX_TOKEN_NAME) : '';
-        return { op, x, tk, tid, ...(tn ? { tn } : {}) };
+        return { op, x, tk, tid, ...(tn ? { tn } : {}), ...how };
       }
-      if (tk !== 'custom') return { op, x, tk };
+      if (tk !== 'custom') return { op, x, tk, ...how };
       const ty = cleanTypes(s.ty, 'CAE') || 'C';
       const creature = ty.includes('C') ? { tp: clampInt(s.tp, 0, MAX_TOKEN_PT, 1), tt: clampInt(s.tt, 1, MAX_TOKEN_PT, 1) } : {};
       const kw = cleanKeywords(s.kw) && ty.includes('C') ? { kw: cleanKeywords(s.kw) } : {};
-      return { op, x, tk, ty, ...creature, ...kw };
+      return { op, x, tk, ty, ...creature, ...kw, ...how };
     }
     case 'counter': {
       const x = amount();
-      return x ? { op, x, ck: s.ck === 'charge' ? 'charge' : 'p1p1' } : null;
+      if (!x) return null;
+      const ck = s.ck === 'charge' ? 'charge' : 'p1p1';
+      // On each of your creatures matching the criteria, or on this card. The
+      // criteria only means something with `each`.
+      return s.each === true ? { op, x, ck, each: true, ...cleanQuery(s.q) } : { op, x, ck };
     }
     case 'pump': {
       const x = amount();
-      return x ? { op, x, ...narrowed } : null;
+      if (!x) return null;
+      const po = s.po === true ? { po: true as const } : {};
+      // Its own pump has no criteria to narrow on: it is the one card.
+      return s.own === true ? { op, x, own: true, ...po } : { op, x, ...narrowed, ...po };
+    }
+    case 'discount': {
+      const x = amount();
+      // Which spells, on the step: the rule's criteria is about your
+      // permanents and a spell in hand is not one.
+      return x ? { op, x, ...cleanQuery(s.q) } : null;
+    }
+    case 'poison': {
+      const x = amount();
+      return x ? { op, x } : null;
     }
     case 'keyword': {
       const kw = cleanKeywords(s.kw);

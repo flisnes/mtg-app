@@ -97,6 +97,38 @@ export const PREWRITTEN: Readonly<Record<string, CardBehavior>> = {
   'Monastery Mentor': behavior(rule('cast', [token(1, 1)], '-t:creature')),
   'Impact Tremors': behavior(rule('enters', [{ op: 'damage', x: n(1) }], 't:creature')),
   'Purphoros, God of the Forge': behavior(rule('enters', [{ op: 'damage', x: n(2) }], 't:creature')),
+  'Warstorm Surge': behavior(rule('enters', [{ op: 'damage', x: { kind: 'cause' } }], 't:creature')),
+  // Lifegain (rebuild plan §6 step 3). Each lifelink hit is one event.
+  "Ajani's Pridemate": behavior(rule('lifegain', [{ op: 'counter', x: n(1), ck: 'p1p1' }])),
+  'Archangel of Thune': behavior(rule('lifegain', [{ op: 'counter', x: n(1), ck: 'p1p1', each: true }])),
+  'Sanguine Bond': behavior(rule('lifegain', [{ op: 'damage', x: { kind: 'cause' } }])),
+  'Vito, Thorn of the Dusk Rose': behavior(rule('lifegain', [{ op: 'damage', x: { kind: 'cause' } }])),
+  'Marauding Blight-Priest': behavior(rule('lifegain', [{ op: 'damage', x: n(1) }])),
+  'Soul Warden': behavior(rule('enters', [{ op: 'gainlife', x: n(1) }], 't:creature')),
+  "Soul's Attendant": behavior(rule('enters', [{ op: 'gainlife', x: n(1) }], 't:creature')),
+  'Essence Warden': behavior(rule('enters', [{ op: 'gainlife', x: n(1) }], 't:creature')),
+  'Serra Ascendant': behavior({ on: 'static', cond: { x: { kind: 'life' }, op: '>=', n: 30 }, steps: [{ op: 'pump', x: n(5), own: true }] }),
+  // Cost reduction (rebuild plan §6 step 8). Generic only, which is what every one of these takes off.
+  'Pearl Medallion': behavior(rule('static', [{ op: 'discount', x: n(1), q: 'c:w' }])),
+  'Sapphire Medallion': behavior(rule('static', [{ op: 'discount', x: n(1), q: 'c:u' }])),
+  'Jet Medallion': behavior(rule('static', [{ op: 'discount', x: n(1), q: 'c:b' }])),
+  'Ruby Medallion': behavior(rule('static', [{ op: 'discount', x: n(1), q: 'c:r' }])),
+  'Emerald Medallion': behavior(rule('static', [{ op: 'discount', x: n(1), q: 'c:g' }])),
+  'Goblin Electromancer': behavior(rule('static', [{ op: 'discount', x: n(1), q: INSTANT_SORCERY }])),
+  'Baral, Chief of Compliance': behavior(rule('static', [{ op: 'discount', x: n(1), q: INSTANT_SORCERY }])),
+  'Goblin Anarchomancer': behavior(rule('static', [{ op: 'discount', x: n(1), q: 'c:r or c:g' }])),
+  'Foundry Inspector': behavior(rule('static', [{ op: 'discount', x: n(1), q: 't:artifact' }])),
+  'Etherium Sculptor': behavior(rule('static', [{ op: 'discount', x: n(1), q: 't:artifact' }])),
+  "Jhoira's Familiar": behavior(rule('static', [{ op: 'discount', x: n(1), q: 't:legendary or t:artifact or t:saga' }])),
+  // "Each player": a goldfish is the only player.
+  'Helm of Awakening': behavior(rule('static', [{ op: 'discount', x: n(1) }])),
+  "Rhonas's Monument": behavior(rule('static', [{ op: 'discount', x: n(1), q: 't:creature c:g' }])),
+  "Oketra's Monument": behavior(rule('static', [{ op: 'discount', x: n(1), q: 't:creature c:w' }])),
+  // The counter clause and the discount, written as two rules; the protection is left out.
+  'Animar, Soul of Elements': behavior(
+    rule('cast', [{ op: 'counter', x: n(1), ck: 'p1p1' }], 't:creature'),
+    rule('static', [{ op: 'discount', x: { kind: 'counters' }, q: 't:creature' }]),
+  ),
   // Mana (F4, F5).
   "Karametra's Acolyte": behavior(rule('tap', [{ op: 'tapsfor', x: { kind: 'devotion', c: 'G' }, colors: 'G' }])),
   'Everflowing Chalice': {

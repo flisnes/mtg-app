@@ -111,7 +111,11 @@ export const KW_VIGILANCE = 2;
 export const KW_DOUBLE = 4;
 /** Printed only — the authored keyword step has no letter for it. */
 export const KW_DEFENDER = 8;
-const KW_BY_LETTER: Readonly<Record<string, number>> = { H: KW_HASTE, V: KW_VIGILANCE, D: KW_DOUBLE };
+/** Rebuild plan §6 step 3: combat damage gains that much life, and wakes the life-gain rules. */
+export const KW_LIFELINK = 16;
+/** Combat damage is poison counters instead of damage. */
+export const KW_INFECT = 32;
+const KW_BY_LETTER: Readonly<Record<string, number>> = { H: KW_HASTE, V: KW_VIGILANCE, D: KW_DOUBLE, L: KW_LIFELINK, I: KW_INFECT };
 
 /** A step's keyword letters as KW_ bits. */
 export function keywordBits(kw: string | undefined): number {
@@ -300,6 +304,14 @@ export interface SimCard {
   dredge: number;
   /** Printed "Equipped/Enchanted creature gets ..." bonus, or null. See SimAttach. */
   attach: SimAttach | null;
+  /** Printed "Toxic N": poison counters alongside its combat damage, or 0. */
+  toxic: number;
+  /**
+   * Printed "Affinity for <these>" (rebuild plan §6 step 8), as the query that
+   * counts them: it costs {1} less for each permanent you control matching it.
+   * Null for every card without the keyword.
+   */
+  affinity: string | null;
 }
 
 /**
@@ -575,7 +587,7 @@ export function buildSimDeck(
     if (card.copies <= 0) continue;
     if (card.role === 'land' || card.role === 'fetch') coverage.lands += card.copies;
     else if (card.role !== 'spell') coverage.mana += card.copies;
-    else if (card.effect || card.behavior || card.attach) coverage.effects += card.copies;
+    else if (card.effect || card.behavior || card.attach || card.affinity) coverage.effects += card.copies;
     else coverage.blanks += card.copies;
     if (card.behavior && defaulted?.has(card.oracleId)) coverage.defaults += card.copies;
     else if (card.behavior) coverage.authored += card.copies;
@@ -657,6 +669,8 @@ function simCardOf(o: OracleCard, behavior: CompiledBehavior | null, copies: num
     suspend: null,
     dredge: printedDredge(o.oracleText),
     attach: printedAttach(o.typeLine, o.oracleText),
+    toxic: printedToxic(o.oracleText),
+    affinity: printedAffinity(o.oracleText),
   };
   return card;
 }
@@ -765,8 +779,61 @@ export function printedKeywords(text: string | null | undefined): number {
     if (parts.includes('vigilance')) bits |= KW_VIGILANCE;
     if (parts.includes('double strike')) bits |= KW_DOUBLE;
     if (parts.includes('defender')) bits |= KW_DEFENDER;
+    if (parts.includes('lifelink')) bits |= KW_LIFELINK;
+    if (parts.includes('infect')) bits |= KW_INFECT;
   }
   return bits;
+}
+
+/** A printed "Toxic N" keyword line, or 0. Read the way the keywords above are. */
+export function printedToxic(text: string | null | undefined): number {
+  if (!text) return 0;
+  const m = /^(?:[a-z ,]*,\s*)?toxic (\d+)\b/im.exec(text.replace(/\([^)]*\)/g, ''));
+  return m ? Math.min(MAX_TOXIC, Number(m[1])) : 0;
+}
+/** Bigger than any printed toxic number. */
+const MAX_TOXIC = 10;
+
+/** The words after "Affinity for" this reader can count, as queries. Anything else is unread. */
+const AFFINITY_FOR: Readonly<Record<string, string>> = {
+  artifacts: 't:artifact',
+  equipment: 't:equipment',
+  enchantments: 't:enchantment',
+  creatures: 't:creature',
+  plains: 't:plains',
+  islands: 't:island',
+  swamps: 't:swamp',
+  mountains: 't:mountain',
+  forests: 't:forest',
+  tokens: 't:token',
+  historic: 't:legendary or t:artifact or t:saga',
+  planeswalkers: 't:planeswalker',
+  'artifact creatures': 't:artifact t:creature',
+};
+
+/**
+ * A printed "Affinity for <these>" line (rebuild plan §6 step 8), as the query
+ * counting the permanents it costs {1} less for each of, or null.
+ */
+export function printedAffinity(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const m = /^affinity for ([a-z ]+?)\s*$/im.exec(text.replace(/\([^)]*\)/g, ''));
+  return m ? (AFFINITY_FOR[m[1]!.trim().toLowerCase()] ?? null) : null;
+}
+
+/**
+ * The printed combat keywords this model acts on, for the Model tab: what a
+ * card does in a fight that the type line does not say. Null when nothing.
+ */
+export function describeCombatKeywords(kw: number, toxic: number): string | null {
+  const words: string[] = [];
+  if (kw & KW_LIFELINK) words.push('lifelink: its combat damage gains you life');
+  if (kw & KW_INFECT) words.push('infect: its combat damage is poison instead');
+  if (toxic > 0) words.push(`toxic ${toxic}: ${toxic} poison counter${toxic === 1 ? '' : 's'} alongside its combat damage`);
+  if (kw & KW_DOUBLE) words.push('double strike: its power counts twice');
+  if (words.length === 0) return null;
+  const line = words.join('; ');
+  return line[0]!.toUpperCase() + line.slice(1);
 }
 
 /** "As long as your devotion to black is less than five, this isn't a creature." */
@@ -856,6 +923,8 @@ export function printedAttach(typeLine: string, text: string | null | undefined)
     if (sentence.includes('haste')) kw |= KW_HASTE;
     if (sentence.includes('vigilance')) kw |= KW_VIGILANCE;
     if (sentence.includes('double strike')) kw |= KW_DOUBLE;
+    if (sentence.includes('lifelink')) kw |= KW_LIFELINK;
+    if (sentence.includes('infect')) kw |= KW_INFECT;
     const m = /\bgets ([+-]\d+)\/([+-]\d+)(.*)$/.exec(sentence);
     if (!m) continue;
     const p = Number(m[1]);
@@ -889,6 +958,8 @@ export function describeAttach(a: SimAttach): string {
   if (a.kw & KW_HASTE) words.push('haste');
   if (a.kw & KW_VIGILANCE) words.push('vigilance');
   if (a.kw & KW_DOUBLE) words.push('double strike');
+  if (a.kw & KW_LIFELINK) words.push('lifelink');
+  if (a.kw & KW_INFECT) words.push('infect');
   if (words.length > 0) parts.push(words.join(', '));
   return `${parts.join(' and ')} on your best attacker`;
 }
@@ -1040,6 +1111,8 @@ function tokenCard(key: string, spec: TokenOption): { card: SimCard; oracle: Ora
     suspend: null,
     dredge: 0,
     attach: null,
+    toxic: 0,
+    affinity: null,
   };
   return { card, oracle };
 }
@@ -1088,8 +1161,9 @@ function applyKeepQuery(cards: SimCard[], oracles: readonly OracleCard[], q: str
 function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[], typeGrants: readonly string[]): SimFilter[] {
   const queries = new Set<string>();
   for (const card of cards) collectBehaviorQueries(card.behavior, queries);
-  // An attachment's "+1/+1 for each artifact you control" counts through the same filters.
+  // An attachment's "+1/+1 for each artifact you control" counts through the same filters, and so does affinity.
   for (const card of cards) if (card.attach?.per.q) queries.add(card.attach.per.q);
+  for (const card of cards) if (card.affinity) queries.add(card.affinity);
   let commanderOnly = false;
   for (const card of cards) {
     if (card.spendQ === SPEND_COMMANDER) commanderOnly = true;

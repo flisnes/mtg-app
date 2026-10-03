@@ -7,7 +7,7 @@ import { expect, test } from 'vitest';
 //
 //   npx vitest run sim/test/attach-sim.test.ts
 import { MANA_TAPPED, type OracleCard } from '../../shared/src/card.js';
-import { KW_DOUBLE, KW_HASTE, KW_VIGILANCE, buildSimDeck, describeAttach, printedAttach, type DeckRow } from '../src/simDeck.js';
+import { KW_DOUBLE, KW_HASTE, KW_LIFELINK, KW_VIGILANCE, buildSimDeck, describeAttach, printedAttach, type DeckRow } from '../src/simDeck.js';
 import { defaultSimOptions, simulate, traceGame, type SimOptions } from '../src/simulate.js';
 
 let seq = 0;
@@ -97,7 +97,8 @@ console.log('\n=== the reading ===');
   check(printedAttach('Artifact Creature — Equipment Lizard', 'Double strike\nEquipped creature has double strike.\nReconfigure {2}') === null, 'Lizard Blades (reconfigure, a creature) is not read');
   check(printedAttach('Enchantment — Aura', 'Enchant Forest\nAs this Aura enters, choose a color.\nWhenever enchanted Forest is tapped for mana, its controller adds an additional one mana of the chosen color.') === null, 'Utopia Sprawl (Enchant Forest) is not read');
   check(printedAttach('Enchantment — Aura', 'Enchant creature with another Aura attached to it\nEnchanted creature gets +3/+3 and has first strike, vigilance, and lifelink.') === null, 'Daybreak Coronet (needs another Aura) is not read');
-  check(printedAttach('Legendary Artifact — Equipment', 'Equipped creature has lifelink.\nAs long as you have 30 or more life, equipped creature gets +5/+5 and has indestructible.\nEquip {W}{W}') === null, 'Caduceus (as long as) is not read');
+  const caduceus = printedAttach('Legendary Artifact — Equipment', 'Equipped creature has lifelink.\nAs long as you have 30 or more life, equipped creature gets +5/+5 and has indestructible.\nEquip {W}{W}');
+  check(caduceus?.kw === KW_LIFELINK && caduceus.power === 0, 'Caduceus: lifelink read, the +5/+5 behind "as long as" is not');
   check(printedAttach('Artifact — Equipment', 'Equipped creature gets +1/-1.\nWhenever equipped creature dies, draw two cards.\nEquip {1}') === null, 'Skullclamp (+1/-1) is not read');
   check(printedAttach('Enchantment — Aura', 'Enchant creature\nEnchanted creature gets +2/+2 for each other enchantment on the battlefield.') === null, 'Ancestral Mask (per other enchantment, everyone\'s) is not read');
   check(printedAttach('Artifact — Equipment', 'Equipped creature gets +1/+1 for each color among permanents you control.\nEquip {2}') === null, 'Conqueror\'s Flail (per color) is not read');

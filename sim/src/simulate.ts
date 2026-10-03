@@ -18,6 +18,7 @@ import {
   type EffectProfile,
   type GateStep,
   type WatchedTrigger,
+  type WatchRule,
 } from '@mtg/shared';
 import { canPay, explainPayment, maxMatching, missingColors, PAY_GENERIC, PAY_UNUSED, type ManaUnit, type UnitGroup } from './canPay.js';
 import {
@@ -40,6 +41,8 @@ import {
   KW_DEFENDER,
   KW_DOUBLE,
   KW_HASTE,
+  KW_INFECT,
+  KW_LIFELINK,
   KW_VIGILANCE,
   keywordBits,
   MASK_BITS,
@@ -425,6 +428,14 @@ export interface SimResult {
   combatDamage: number;
   /** Mean damage from everything else: burn, drain, a rule that says so. */
   otherDamage: number;
+  /**
+   * Mean poison counters an opponent had by end of turn t, cumulative (rebuild
+   * plan §6 step 3): infect and toxic creatures connecting, and rules that say
+   * so. The same counter life is, the other way: ten is the game.
+   */
+  poisonByTurn: number[];
+  /** Mean life total at end of turn t. Starts at 40 in Commander and 20 elsewhere; only your own cards move it. */
+  lifeByTurn: number[];
   /** Cards seen by turn t that came off the opener, mulligans included. */
   seenFromOpener: number[];
   /** Cards seen by turn t that came off the draw step. */
@@ -509,7 +520,7 @@ export function simulate(
     }
     const b = cards[i]!.behavior;
     if (!b) continue;
-    for (const on of ['play', 'etb', 'attack', 'death', 'upkeep', 'endstep'] as const) {
+    for (const on of ['play', 'etb', 'attack', 'death', 'upkeep', 'endstep', 'lifegain', 'combat'] as const) {
       if (b[on].length === 0) continue;
       fireSlot.set(b[on], fireMeta.length);
       fireMeta.push({ card: i, on });
@@ -751,6 +762,18 @@ export function simulate(
   const startLife = opts.format === 'commander' ? 40 : 20;
   const lifeFloor = Math.floor(startLife / 4);
   let life = startLife;
+  /** Life gained so far this turn (rebuild plan §6 step 3), for the `lifegained` amount. */
+  let lifeGainedTurn = 0;
+  /**
+   * The number behind the event that woke the rule running now, for the
+   * `cause` amount: the life gained, the power of the permanent that entered or
+   * died, the mana value of the spell cast. Zero when nothing woke it.
+   */
+  let causeAmount = 0;
+  /** Poison counters on the opponent this game, and the per-turn tally. */
+  let gamePoison = 0;
+  const poisonSum = new Float64Array(opts.maxTurn + 1);
+  const lifeSum = new Float64Array(opts.maxTurn + 1);
 
   /**
    * The mana available this turn, as the payment solver wants it, and how much
@@ -1971,6 +1994,12 @@ export function simulate(
       case 'life':
         n = life;
         break;
+      case 'lifegained':
+        n = lifeGainedTurn;
+        break;
+      case 'cause':
+        n = causeAmount;
+        break;
       case 'all':
         // Bounded by the zone rather than by a number. This is only the ceiling
         // the move loop stops at; it stops sooner the moment nothing matches,
@@ -1993,17 +2022,21 @@ export function simulate(
     return c.op === '<=' ? v <= c.n : v >= c.n;
   };
 
-  /** The turn each "once each turn" gate last let its rule through, as `turnStamp`. */
+  /** The turn each "once each turn" gate last let its rule through, as `turnStamp`; and the game, for a one-shot. */
   const gateTurn = new Map<BehaviorStep, number>();
+  const gateGame = new Map<BehaviorStep, number>();
   /**
-   * A gate in front of a rule's steps: its condition, and its once-a-turn
-   * limit, which it spends when it lets the rule through. Per card rather than
-   * per copy, the cheap side of it: two copies of one card share a rule.
+   * A gate in front of a rule's steps: its condition, and its once-a-turn (or
+   * once-a-game) limit, which it spends when it lets the rule through. Per card
+   * rather than per copy, the cheap side of it: two copies of one card share a
+   * rule.
    */
   const gatePasses = (g: GateStep, turn: number): boolean => {
     if (g.once && gateTurn.get(g) === turnStamp) return false;
+    if (g.oneshot && gateGame.get(g) === gameNo) return false;
     if (g.cond && !condHolds(g.cond, turn)) return false;
     if (g.once) gateTurn.set(g, turnStamp);
+    if (g.oneshot) gateGame.set(g, gameNo);
     return true;
   };
 
@@ -2058,7 +2091,7 @@ export function simulate(
   for (let i = 0; i < n; i++) {
     const b = cards[i]!.behavior;
     if (!b || drawsCards[i]) continue;
-    const lists = [b.endstep, ...b.dies.map((r) => r.steps), ...b.sacrifice.map((r) => r.steps), ...b.activate.map((r) => r.steps)];
+    const lists = [b.endstep, b.lifegain, b.combat, ...b.dies.map((r) => r.steps), ...b.sacrifice.map((r) => r.steps), ...b.activate.map((r) => r.steps)];
     drawsCards[i] = lists.some((steps) => steps.some((step) => step.op === 'draw'));
   }
   const anyEnterWatchers = cards.some((c) => c.permanent && !!c.behavior && c.behavior.enters.length > 0);
@@ -2066,6 +2099,9 @@ export function simulate(
   const anyDiesWatchers = cards.some((c) => c.permanent && !!c.behavior && c.behavior.dies.length > 0);
   const anySacWatchers = cards.some((c) => c.permanent && !!c.behavior && c.behavior.sacrifice.length > 0);
   const anyEndSteps = cards.some((c) => c.permanent && !!c.behavior && c.behavior.endstep.length > 0);
+  /** Rebuild plan §6 steps 3 and 6: anything watching for life gained, or the beginning of combat. */
+  const anyLifegainWatchers = cards.some((c) => c.permanent && !!c.behavior && c.behavior.lifegain.length > 0);
+  const anyCombatSteps = cards.some((c) => c.permanent && !!c.behavior && c.behavior.combat.length > 0);
 
   /**
    * The mana that went into the `{X}` of the spell resolving right now, so a
@@ -2508,6 +2544,9 @@ export function simulate(
     /** Of that, what the Equipment and Auras on them add (for the trace). */
     let worn = 0;
     let tappedOut = 0;
+    /** Rebuild plan §6 step 3: poison from infect and toxic, and each lifelink creature's hit, one life-gain event apiece. */
+    let poison = 0;
+    linkHits.length = 0;
     for (let p = 0; p < perms.len; p++) {
       const index = perms.card[p]!;
       const card = cards[index]!;
@@ -2528,8 +2567,15 @@ export function simulate(
         continue;
       }
       attackers.push(index);
-      power += perms.kw[p]! & KW_DOUBLE ? 2 * perms.power[p]! : perms.power[p]!;
-      worn += perms.kw[p]! & KW_DOUBLE ? 2 * perms.attachPump[p]! : perms.attachPump[p]!;
+      const kw = perms.kw[p]!;
+      const strikes = kw & KW_DOUBLE ? 2 : 1;
+      const hit = strikes * perms.power[p]!;
+      // Infect deals its damage as poison; toxic adds poison on top of damage.
+      if (kw & KW_INFECT) poison += hit;
+      else power += hit;
+      poison += strikes * card.toxic;
+      worn += strikes * perms.attachPump[p]!;
+      if (kw & KW_LIFELINK && hit > 0) linkHits.push(hit);
     }
     if (sink && tappedOut > 0) {
       say(sink, 'note', `${tappedOut} creature${tappedOut === 1 ? ' was' : 's were'} tapped for mana, so ${tappedOut === 1 ? 'it does' : 'they do'} not attack`);
@@ -2538,10 +2584,21 @@ export function simulate(
     // Declared before any of them resolves anything, which is both the rule and
     // what keeps a trigger that makes a creature from handing it an attack.
     dealDamage(power, true);
-    if (sink && power > 0) {
+    addPoison(poison);
+    let linked = 0;
+    for (const hit of linkHits) linked += hit;
+    if (sink && (power > 0 || poison > 0)) {
       const wearing = worn > 0 ? ` (${worn} of it from Equipment and Auras)` : '';
-      say(sink, 'effect', `Attacks with ${attackers.length} creature${attackers.length === 1 ? '' : 's'} for ${power}${wearing}`);
+      const toxic = poison > 0 ? ` and ${poison} poison` : '';
+      const gains = linked > 0 ? `, gaining ${linked} life` : '';
+      say(sink, 'effect', `Attacks with ${attackers.length} creature${attackers.length === 1 ? '' : 's'} for ${power}${wearing}${toxic}${gains}`);
     }
+    // Lifelink: each creature that connected is one life-gain event, so a
+    // Pridemate grows once per lifelinker rather than once per combat.
+    for (const hit of linkHits) gainLife(hit, turn);
+    sayEffect('');
+    // Tokens an attack trigger makes "tapped and attacking" hit this combat.
+    inCombat = true;
     for (const index of attackers) {
       const card = cards[index]!;
       if (!opts.effects || !card.behavior || card.behavior.attack.length === 0) continue;
@@ -2552,7 +2609,12 @@ export function simulate(
       runSteps(card.behavior.attack, turn, index);
       sayEffect(lastEffectText ? `Attacks with ${card.name}: ${lastEffectText}` : '');
     }
+    inCombat = false;
   };
+  /** Scratch for attackWith: each lifelink attacker's hit. */
+  const linkHits: number[] = [];
+  /** Inside the attack: a token made "attacking" now is swinging too. */
+  let inCombat = false;
 
   /** It arrived on the battlefield without being cast. */
   const fireEntry = (index: number, card: SimCard, turn: number): void => {
@@ -2619,11 +2681,65 @@ export function simulate(
       if (!rules || rules.length === 0 || !stillOut(p, turn)) continue;
       for (const rule of rules) if (watched(rule.q, subject, v)) woken.push({ index, steps: rule.steps });
     }
+    if (woken.length === 0) return;
+    // The number behind the event, for the `cause` amount (rebuild plan §6
+    // step 6): a spell's mana value, or the permanent's power as it is now
+    // (printed, once it has died). Restored after, so a plain rule running
+    // later reads nothing.
+    const wasCause = causeAmount;
+    if (which === 'cast') causeAmount = Math.ceil(cards[subject]!.cmc);
+    else {
+      const slot = which === 'enters' ? perms.newest(subject) : -1;
+      causeAmount = slot >= 0 ? perms.power[slot]! : cards[subject]!.power;
+    }
     for (const w of woken) fireNested(w.index, cards[w.index]!, turn, w.steps);
+    causeAmount = wasCause;
     // Drained here rather than left for whatever says the next effect line: the
     // event that woke these has already been written down, so the triggers
     // belong under it and not under the next card to resolve.
-    if (outermost && woken.length > 0) sayEffect('');
+    if (outermost) sayEffect('');
+  };
+
+  /**
+   * You gained life (rebuild plan §6 step 3), and every permanent with a
+   * life-gain rule goes off, once per copy: Ajani's Pridemate, Sanguine Bond.
+   * `cause` reads the life gained this time.
+   */
+  const fireLifegain = (gained: number, turn: number): void => {
+    if (!opts.effects || triggerDepth >= MAX_TRIGGER_DEPTH) return;
+    const outermost = triggerDepth === 0;
+    const woken: number[] = [];
+    for (let p = 0; p < perms.len; p++) {
+      const index = perms.card[p]!;
+      const b = cards[index]!.behavior;
+      if (!b || b.lifegain.length === 0 || !stillOut(p, turn)) continue;
+      woken.push(index);
+    }
+    if (woken.length === 0) return;
+    const wasCause = causeAmount;
+    causeAmount = gained;
+    for (const index of woken) fireNested(index, cards[index]!, turn, cards[index]!.behavior!.lifegain);
+    causeAmount = wasCause;
+    if (outermost) sayEffect('');
+  };
+
+  /** Your life total moves. A gain is an event (lifelink, a Food, a rule); a loss is only the number. */
+  const gainLife = (n: number, turn: number): void => {
+    if (n <= 0) return;
+    life += n;
+    lifeGainedTurn += n;
+    // A static that reads your life (Serra Ascendant) has to be re-read.
+    if (anyCondStatics) dirty = true;
+    if (anyLifegainWatchers) fireLifegain(n, turn);
+  };
+  const loseLife = (n: number): void => {
+    if (n <= 0) return;
+    life -= n;
+    if (anyCondStatics) dirty = true;
+  };
+  /** Poison counters on the opponent: infect, toxic, or a rule that says so. Ten is the game. */
+  const addPoison = (n: number): void => {
+    if (n > 0) gamePoison += n;
   };
 
   /**
@@ -2918,9 +3034,47 @@ export function simulate(
         colorsHeld |= card.mask;
       } else if (addPermanent(index, card, turn) < 0) break;
       made++;
+      // Entering tapped (or attacking, which is tapped too): no mana and no
+      // vigilance attack from it this turn.
+      if (step.tapped || step.attacking) {
+        const slot = perms.newest(index);
+        if (slot >= 0) perms.tapped[slot] = 1;
+      }
       fireArrival(index, card, turn);
     }
+    // Made attacking in the middle of the attack: they connect this combat for
+    // their printed power. Outside combat "attacking" is just tapped.
+    if (step.attacking && inCombat && made > 0) {
+      const strikes = card.keywords & KW_DOUBLE ? 2 : 1;
+      const hit = made * strikes * card.power;
+      if (card.keywords & KW_INFECT) addPoison(hit);
+      else dealDamage(hit, true);
+      addPoison(made * strikes * card.toxic);
+      if (card.keywords & KW_LIFELINK) for (let k = 0; k < made && strikes * card.power > 0; k++) gainLife(strikes * card.power, turn);
+    }
     return made;
+  };
+
+  /**
+   * +1/+1 (or charge) counters on each creature you control matching the
+   * step's criteria (rebuild plan §6 step 6): Archangel of Thune. Returns how
+   * many creatures got them.
+   */
+  const counterEach = (step: BehaviorStep, amount: number, turn: number): number => {
+    ensureFresh(turn);
+    const filter = step.q ? filterFor.get(step.q) : undefined;
+    if (step.q && !filter) return 0;
+    let reached = 0;
+    for (let p = 0; p < perms.len; p++) {
+      if (!(perms.types[p]! & T_CREATURE) || !stillOut(p, turn)) continue;
+      if (filter && filter.match[perms.added[p]! * n + perms.card[p]!] !== 1) continue;
+      if (step.ck === 'charge') perms.charge[p] = perms.charge[p]! + amount;
+      else perms.p1p1[p] = perms.p1p1[p]! + amount;
+      perms.refresh(p, cards[perms.card[p]!]!);
+      reached++;
+    }
+    if (reached > 0) dirty = true;
+    return reached;
   };
 
   /**
@@ -2940,8 +3094,9 @@ export function simulate(
       if (only >= 0 && p !== only) continue;
       if (!(perms.types[p]! & T_CREATURE) || !stillOut(p, turn)) continue;
       if (filter && filter.match[perms.added[p]! * n + perms.card[p]!] !== 1) continue;
-      if (step.op === 'pump') perms.eotPump[p] = perms.eotPump[p]! + amount;
-      else perms.kwEot[p] = perms.kwEot[p]! | kw;
+      if (step.op !== 'pump') perms.kwEot[p] = perms.kwEot[p]! | kw;
+      else if (step.po) perms.eotPow[p] = perms.eotPow[p]! + amount;
+      else perms.eotPump[p] = perms.eotPump[p]! + amount;
       perms.refresh(p, cards[perms.card[p]!]!);
       reached++;
     }
@@ -3107,10 +3262,19 @@ export function simulate(
             break;
           }
           did = makeTokens(step, n, turn, self);
-          if (sink && did > 0) bits.push(`creates ${did} ${cards[deck.tokens[tokenKey(step)] ?? 0]?.name ?? 'token'}${did === 1 ? '' : 's'}`);
+          if (sink && did > 0) {
+            const how = step.attacking ? (inCombat ? ', attacking' : ', tapped') : step.tapped ? ', tapped' : '';
+            bits.push(`creates ${did} ${cards[deck.tokens[tokenKey(step)] ?? 0]?.name ?? 'token'}${did === 1 ? '' : 's'}${how}`);
+          }
           break;
         }
         case 'counter': {
+          const kind = step.ck === 'charge' ? 'charge' : '+1/+1';
+          if (step.each) {
+            did = counterEach(step, n, turn);
+            if (sink && did > 0) bits.push(`puts ${n} ${kind} counter${n === 1 ? '' : 's'} on ${did} creature${did === 1 ? '' : 's'}`);
+            break;
+          }
           const slot = self >= 0 ? perms.newest(self) : -1;
           if (slot < 0) {
             did = 0;
@@ -3120,16 +3284,19 @@ export function simulate(
           else perms.p1p1[slot] = perms.p1p1[slot]! + n;
           perms.refresh(slot, cards[self]!);
           dirty = true;
-          if (sink) bits.push(`gets ${n} ${step.ck === 'charge' ? 'charge' : '+1/+1'} counter${n === 1 ? '' : 's'}`);
+          if (sink) bits.push(`gets ${n} ${kind} counter${n === 1 ? '' : 's'}`);
           break;
         }
         case 'pump':
         case 'keyword': {
           did = pumpUntilEot(step, n, turn, self);
           if (sink && did > 0) {
+            const bonus = `+${n}/+${step.po ? 0 : n}`;
             bits.push(
               step.op === 'pump'
-                ? `gives ${did} creature${did === 1 ? '' : 's'} +${n}/+${n}`
+                ? step.own
+                  ? `gets ${bonus}`
+                  : `gives ${did} creature${did === 1 ? '' : 's'} ${bonus}`
                 : step.own
                   ? `gains ${keywordWords(step.kw)}`
                   : `gives ${did} creature${did === 1 ? '' : 's'} ${keywordWords(step.kw)}`,
@@ -3138,12 +3305,16 @@ export function simulate(
           break;
         }
         case 'gainlife':
-          life += n;
+          gainLife(n, turn);
           if (sink) bits.push(`gains ${n} life`);
           break;
         case 'loselife':
-          life -= n;
+          loseLife(n);
           if (sink) bits.push(`loses ${n} life`);
+          break;
+        case 'poison':
+          addPoison(n);
+          if (sink) bits.push(`gives ${n} poison counter${n === 1 ? '' : 's'}`);
           break;
       }
       lastAmount = did;
@@ -3699,6 +3870,16 @@ export function simulate(
   const anyAttach = cards.some((c) => c.permanent && !!c.attach);
   /** Any card with a static rule, or an attachment. Without one, nothing below ever recomputes. */
   const anyStatics = anyAttach || cards.some((c) => c.permanent && !!c.behavior && c.behavior.statics.length > 0);
+  /** A static behind a condition (Serra Ascendant): re-read whenever the thing it reads could have moved. */
+  const anyCondStatics = cards.some((c) => c.permanent && !!c.behavior?.statics.some((r) => !!r.cond));
+  /**
+   * Cost reduction (rebuild plan §6 step 8): a static `discount` on the
+   * battlefield, or printed affinity. `discountOf` is what the statics take off
+   * each card's generic cost right now, filled by `recompute`; affinity is
+   * counted at the cast, since it reads the board for the card being cast.
+   */
+  const anyDiscounts = cards.some((c) => !!c.affinity) || cards.some((c) => c.permanent && !!c.behavior?.statics.some((r) => r.steps.some((s) => s.op === 'discount')));
+  const discountOf = new Int32Array(n);
   /** Any static on a card of this deck that lets cards in a zone be cast (Six's retrace, Future Sight). */
   const grantsFrom = (zone: string): boolean =>
     cards.some((c) => c.permanent && !!c.behavior?.statics.some((r) => r.steps.some((s) => s.op === 'grantcast' && s.from === zone)));
@@ -3766,6 +3947,31 @@ export function simulate(
       const base = cards[index]!.cost!;
       cost = { ...base, generic: base.generic + 2 * casts, mana: base.mana + 2 * casts };
       taxed.set(key, cost);
+    }
+    return cost;
+  };
+
+  /** A card's cost with a discount off its generic part, one per card per tax level per discount, built on first use. */
+  const discounted = new Map<number, ParsedCost>();
+  /**
+   * What casting a card costs this turn: its printed cost, the commander tax on
+   * top, and the discounts on the battlefield off the generic part (rebuild
+   * plan §6 step 8). Only generic: a Medallion never pays a pip.
+   */
+  const priced = (index: number, turn: number): ParsedCost => {
+    const card = cards[index]!;
+    const base = card.commander && cmdCasts[index]! > 0 ? taxedCost(index) : card.cost!;
+    if (!anyDiscounts || base.generic <= 0) return base;
+    ensureFresh(turn);
+    let d = discountOf[index]!;
+    if (card.affinity) d += matchingInPlay(card.affinity, false, turn);
+    if (d <= 0) return base;
+    const off = Math.min(d, base.generic);
+    const key = (index * (MAX_KICKS + 1) + Math.min(cmdCasts[index]!, MAX_KICKS)) * 64 + Math.min(off, 63);
+    let cost = discounted.get(key);
+    if (!cost) {
+      cost = { ...base, generic: base.generic - off, mana: base.mana - off };
+      discounted.set(key, cost);
     }
     return cost;
   };
@@ -3857,6 +4063,7 @@ export function simulate(
     gyGrants.length = 0;
     topGrants.length = 0;
     dredgeGrants.length = 0;
+    if (anyDiscounts) discountOf.fill(0);
     const len = perms.len;
     for (let p = 0; p < len; p++) {
       perms.types[p] = cards[perms.card[p]!]!.types;
@@ -3864,6 +4071,7 @@ export function simulate(
       perms.sub[p] = 0;
       perms.kwStatic[p] = 0;
       perms.staticPump[p] = 0;
+      perms.staticPow[p] = 0;
       perms.attachPump[p] = 0;
       perms.extra[p] = 0;
       perms.extraMask[p] = 0;
@@ -3873,11 +4081,21 @@ export function simulate(
     /** Does permanent `t` match a static rule's criteria, in variant `v`? */
     const covers = (filter: SimFilter | undefined, q: string | undefined, t: number, v: number): boolean =>
       !q || (!!filter && filter.match[v * n + perms.card[t]!] === 1);
+    /** A static behind a condition applies only while it holds, read against the card holding it. */
+    const holds = (rule: WatchRule, self: number): boolean => {
+      if (!rule.cond) return true;
+      const was = stepSelf;
+      stepSelf = self;
+      const ok = condHolds(rule.cond, turn);
+      stepSelf = was;
+      return ok;
+    };
     // Pass one: types.
     for (let p = 0; p < len; p++) {
       const statics = cards[perms.card[p]!]!.behavior?.statics;
       if (!statics || statics.length === 0 || !stillOut(p, turn)) continue;
       for (const rule of statics) {
+        if (!holds(rule, perms.card[p]!)) continue;
         const filter = rule.q ? filterFor.get(rule.q) : undefined;
         for (const step of rule.steps) {
           if (step.op !== 'addtype' || !step.ty) continue;
@@ -3901,12 +4119,29 @@ export function simulate(
       const statics = cards[self]!.behavior?.statics;
       if (!statics || statics.length === 0 || !stillOut(p, turn)) continue;
       for (const rule of statics) {
+        if (!holds(rule, self)) continue;
         const filter = rule.q ? filterFor.get(rule.q) : undefined;
         for (const step of rule.steps) {
           switch (step.op) {
             case 'nomaxhand':
               noMaxHand = true;
               break;
+            case 'discount': {
+              // Off every card in the deck matching the step's criteria, as
+              // printed: a spell in hand has had no type added to it.
+              const wasSelf = stepSelf;
+              stepSelf = self;
+              const amount = behaviorAmount(step.x, turn);
+              stepSelf = wasSelf;
+              if (amount <= 0) break;
+              const spellFilter = step.q ? filterFor.get(step.q) : undefined;
+              if (step.q && !spellFilter) break;
+              for (let i = 0; i < n; i++) {
+                if (!cards[i]!.cost || (spellFilter && spellFilter.match[i] !== 1)) continue;
+                discountOf[i] = discountOf[i]! + amount;
+              }
+              break;
+            }
             case 'landfrom':
               if (step.from === 'graveyard') landFromGraveyard = true;
               else if (step.from === 'librarytop') landFromTop = true;
@@ -3945,8 +4180,9 @@ export function simulate(
                   continue;
                 }
                 if (!(perms.types[t]! & T_CREATURE)) continue;
-                if (step.op === 'pump') perms.staticPump[t] = perms.staticPump[t]! + amount;
-                else perms.kwStatic[t] = perms.kwStatic[t]! | kw;
+                if (step.op !== 'pump') perms.kwStatic[t] = perms.kwStatic[t]! | kw;
+                else if (step.po) perms.staticPow[t] = perms.staticPow[t]! + amount;
+                else perms.staticPump[t] = perms.staticPump[t]! + amount;
               }
               break;
             }
@@ -4156,6 +4392,23 @@ export function simulate(
     emptyPool();
   };
 
+  /** At the beginning of your combat (rebuild plan §6 step 6): after the spells, before the attack. Every copy fires. */
+  const runCombatStep = (turn: number): void => {
+    const due: number[] = [];
+    for (let p = 0; p < perms.len; p++) {
+      const index = perms.card[p]!;
+      if ((cards[index]!.behavior?.combat.length ?? 0) > 0 && stillOut(p, turn)) due.push(index);
+    }
+    for (const index of due) {
+      const card = cards[index]!;
+      xSpent = 0;
+      kickedNow = 0;
+      selfPlaced = false;
+      runSteps(card.behavior!.combat, turn, index);
+      sayEffect(lastEffectText ? `Beginning of combat: ${card.name} ${lastEffectText}` : '');
+    }
+  };
+
   // --- Activated abilities (rebuild plan E3) ---------------------------------
   // The spend loop reaches for these when nothing in hand is castable: the
   // turn's leftover mana, and then it tries casting again, since a Clue can
@@ -4188,8 +4441,9 @@ export function simulate(
     }));
   });
   const anyAbilities = opts.effects && abilitiesOf.some((a) => a !== null);
-  /** The turn a permanent's once-a-turn ability was last used, keyed `oid * 8 + k`, as `turnStamp`. */
+  /** The turn a permanent's once-a-turn ability was last used, keyed `oid * 8 + k`, as `turnStamp`; and the game, for a one-shot. */
   const abilityTurn = new Map<number, number>();
+  const abilityGame = new Map<number, number>();
   /** What the last activation spent, and what it did to the turn's available mana. */
   let actSpent = 0;
   let actAvail = 0;
@@ -4377,6 +4631,7 @@ export function simulate(
         const price = a.cost?.mana ?? 0;
         if (price > left) continue;
         if (a.rule.once && abilityTurn.get(perms.oid[p]! * 8 + a.k) === turnStamp) continue;
+        if (a.rule.oneshot && abilityGame.get(perms.oid[p]! * 8 + a.k) === gameNo) continue;
         if (c.tap && (perms.tapped[p] || (perms.types[p]! & T_CREATURE && !perms.ready(p, turn)))) continue;
         if (c.life && life - c.life < lifeFloor) continue;
         if (c.discard && discardable() < c.discard) continue;
@@ -4458,7 +4713,8 @@ export function simulate(
     }
     if (c.tap) perms.tapped[p] = 1;
     if (a.rule.once) abilityTurn.set(oid * 8 + a.k, turnStamp);
-    if (c.life) life -= c.life;
+    if (a.rule.oneshot) abilityGame.set(oid * 8 + a.k, gameNo);
+    if (c.life) loseLife(c.life);
     let note = '';
     if (c.discard) {
       if (sink) discardedNames.length = 0;
@@ -4589,6 +4845,10 @@ export function simulate(
     suspLen = 0;
     cmdCasts.fill(0);
     life = startLife;
+    lifeGainedTurn = 0;
+    causeAmount = 0;
+    gamePoison = 0;
+    inCombat = false;
     dirty = false;
     noMaxHand = false;
     landFromGraveyard = false;
@@ -4651,14 +4911,18 @@ export function simulate(
       // run, not after.
       poolCredited = false;
       const damageBefore = gameDamage;
+      const lifeBefore = life;
+      const poisonBefore = gamePoison;
       turnStamp = game * stride + turn;
       turnNow = turn;
       // Untap. The only tapped state this model keeps is a creature that paid
       // for last turn's spells, so it is also the only thing to untap.
       if (perms.len > 0) perms.untapAll();
       // Which creature an attachment is best on, and whether an Equipment is
-      // on at all, both turn on the turn number, so a new turn is a change.
-      if (anyAttach && perms.len > 0) dirty = true;
+      // on at all, both turn on the turn number, so a new turn is a change. So
+      // can a static's condition (the turn number, your life).
+      if ((anyAttach || anyCondStatics) && perms.len > 0) dirty = true;
+      lifeGainedTurn = 0;
       if (sink) {
         sink.turn = { turn, lines: [], available: 0, spent: 0, damage: 0, board: EMPTY_BOARD };
         sink.game.turns.push(sink.turn);
@@ -4922,6 +5186,10 @@ export function simulate(
         }
         if (firstPay[g] !== 0) {
           firstCast[index] = turn;
+        } else if (anyDiscounts && canPay(priced(index, turn), units, unitGroups)) {
+          // Payable with the discounts out (rebuild plan §6 step 8): this card
+          // is castable, though the group's printed cost is not.
+          firstCast[index] = turn;
         } else if (turn === curveOf[index] && limitSeen[index] !== game) {
           // In hand on its own turn and not payable: the limiter's one question.
           // Once per card, not per copy in hand, because `heldAt` counts games.
@@ -4988,8 +5256,9 @@ export function simulate(
             continue;
           }
           if (!card.spell || !card.cost) continue;
-          // The commander pays two more for every time it has been cast.
-          const cost = card.commander && cmdCasts[index]! > 0 ? taxedCost(index) : card.cost;
+          // The commander pays two more for every time it has been cast, and
+          // the discounts on the battlefield take generic off (§6 step 8).
+          const cost = priced(index, turn);
           // The cheap test first: a cost that wants more mana than is left
           // cannot be paid whatever colors it wants, and skipping it here is
           // what keeps the solver off nine tenths of the hand.
@@ -5200,7 +5469,11 @@ export function simulate(
           const why = rampFirst ? ' (ramp first)' : '';
           const forX = cost.hasX ? ` with X = ${xSpent}` : '';
           const kicked = kickedNow > 0 ? `, kicked${kickedNow > 1 ? ` ${kickedNow} times` : ''}` : '';
-          const tax = cost !== card.cost && card.commander ? ` with ${cost.mana - card.cost!.mana} commander tax` : '';
+          // Counted after the increment above, so the tax is on the casts before this one.
+          const taxed = card.commander && cmdCasts[index]! > 1 ? 2 * (cmdCasts[index]! - 1) : 0;
+          const tax = taxed > 0 ? ` with ${taxed} commander tax` : '';
+          const less = plain && pickZone === ZONE_HAND ? card.cost!.mana + taxed - cost.mana : 0;
+          const cheaper = less > 0 ? ` for ${less} less` : '';
           const from =
             pickZone === ZONE_TOP
               ? ' from the top of the library'
@@ -5210,7 +5483,7 @@ export function simulate(
                   ? ' from the graveyard'
                   : ` from the graveyard (${pickGy!.kind}${extraCost})`;
           const price = pickZone === ZONE_GRAVEYARD && pickGy!.kind !== 'cast' ? '' : ` ${card.manaCost}`;
-          say(sink, 'cast', `Casts ${card.name}${price}${from}${forX}${kicked}${tax}${why}${spendNote}`);
+          say(sink, 'cast', `Casts ${card.name}${price}${from}${cheaper}${forX}${kicked}${tax}${why}${spendNote}`);
           // The taps arrive on this line later. The turn has to finish
           // committing first, because there is only one cost to solve and it is
           // the whole turn's.
@@ -5255,6 +5528,8 @@ export function simulate(
         }
       }
       if (sink && !attributed) attributeTaps(castLines, units, unitOwner);
+      // The beginning of combat (rebuild plan §6 step 6), then who was tapped, then the attack.
+      if (anyCombatSteps && opts.effects) runCombatStep(turn);
       if (spent > 0 && (opts.combat === 'all' || (opts.effects && anyAttackers))) tapCreatures(turn, cracked);
       attackWith(turn);
 
@@ -5285,6 +5560,9 @@ export function simulate(
       perms.clearEot(cards);
 
       if (sink && sink.turn) {
+        // Life and poison, said only when they moved: most decks never do.
+        if (life !== lifeBefore) say(sink, 'note', `Life total ${life} (${life > lifeBefore ? '+' : ''}${life - lifeBefore} this turn)`);
+        if (gamePoison !== poisonBefore) say(sink, 'note', `Opponent has ${gamePoison} poison counter${gamePoison === 1 ? '' : 's'}`);
         sink.turn.available = available;
         sink.turn.spent = spent;
         sink.turn.damage = gameDamage - damageBefore;
@@ -5294,6 +5572,8 @@ export function simulate(
       }
       damageSum[turn] = damageSum[turn]! + gameDamage;
       combatSum[turn] = combatSum[turn]! + gameCombat;
+      poisonSum[turn] = poisonSum[turn]! + gamePoison;
+      lifeSum[turn] = lifeSum[turn]! + life;
       manaSum[turn] = manaSum[turn]! + available;
       spentSum[turn] = spentSum[turn]! + spent;
       manaHist[turn * MANA_BINS + Math.min(Math.floor(available), MANA_BINS - 1)]!++;
@@ -5377,6 +5657,8 @@ export function simulate(
     sourcesInPlay,
     damageSum,
     combatSum,
+    poisonSum,
+    lifeSum,
     manaCredit,
     seenCredit,
     openerSeen,
@@ -5580,6 +5862,8 @@ interface Tallies {
   sourcesInPlay: Float64Array;
   damageSum: Float64Array;
   combatSum: Float64Array;
+  poisonSum: Float64Array;
+  lifeSum: Float64Array;
   manaCredit: Float64Array;
   seenCredit: Float64Array;
   openerSeen: Float64Array;
@@ -5814,6 +6098,9 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     combatDamageByTurn: combat,
     combatDamage: combat[opts.maxTurn] ?? 0,
     otherDamage: (damage[opts.maxTurn] ?? 0) - (combat[opts.maxTurn] ?? 0),
+    poisonByTurn: [...t.poisonSum].map((sum) => sum * per),
+    // Turn zero is the start of the game, which nothing tallied.
+    lifeByTurn: [...t.lifeSum].map((sum, turn) => (turn === 0 ? (opts.format === 'commander' ? 40 : 20) : sum * per)),
     pMulligan: t.mulliganed * per,
     meanHandSize: t.handSizeSum * per,
     deckOnCurve: weight > 0 ? weighted / weight : 0,

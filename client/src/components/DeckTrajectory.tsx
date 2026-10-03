@@ -29,6 +29,8 @@ const CHART_TURNS = 8;
  */
 const SERIES_A = '#7c6cff';
 const SERIES_B = '#c98230';
+/** Poison, the third line on the damage chart when a deck gives any. */
+const SERIES_C = '#4caf7d';
 
 const one = (n: number) => n.toFixed(1);
 
@@ -62,10 +64,18 @@ export function DeckTrajectory({
   // Only for the decks that deal any. A flat pair of zeroes under a combo deck
   // is a chart that says nothing and takes a screenful to say it.
   const dealt = result.damageByTurn[turns] ?? 0;
+  // Poison (rebuild plan §6 step 3) is the opponent's other counter: a third
+  // line only in the decks that give any, since ten of it is a different game.
+  const poison = result.poisonByTurn?.[turns] ?? 0;
   const damage: Series[] = [
     { name: 'total', values: result.damageByTurn, color: SERIES_A, dashed: false },
     { name: 'combat', values: result.combatDamageByTurn, color: SERIES_B, dashed: true },
+    ...(poison > 0 ? [{ name: 'poison', values: result.poisonByTurn, color: SERIES_C, dashed: false }] : []),
   ];
+  // Your own life total, said only when something in the deck moves it.
+  const life = result.lifeByTurn?.[turns];
+  const startLife = result.lifeByTurn?.[0];
+  const lifeMoved = life !== undefined && startLife !== undefined && Math.abs(life - startLife) > 0.05;
 
   return (
     <>
@@ -77,12 +87,18 @@ export function DeckTrajectory({
       <TrendChart series={cards} turns={turns} unit="cards" />
       <p className="fine-print">{cardsNote(result, turns)}</p>
 
-      {dealt > 0 && (
+      {(dealt > 0 || poison > 0) && (
         <>
           <h4 className="deck-stats-head">Damage</h4>
           <TrendChart series={damage} turns={turns} unit="damage" />
           <p className="fine-print">{damageNote(result, turns)}</p>
         </>
+      )}
+      {lifeMoved && (
+        <p className="fine-print">
+          Your own life ends turn {turns} at {one(life)}, from {one(startLife)}. Nobody across the table deals damage here, so only
+          your own cards move it: lifelink, Food, the rules that say so.
+        </p>
       )}
 
       <p className="fine-print">
@@ -170,7 +186,10 @@ function damageNote(result: SimResult, turns: number): string {
       : combat > other
         ? 'all of it in combat'
         : 'none of it in combat';
-  return `An opponent is down ${one(total)} by turn ${turns}, ${split}. Nothing blocks and nobody gains life here, so that is the ceiling rather than a clock, and only the cards this model can read are swinging or burning, so it is a low ceiling.`;
+  const poison = result.poisonByTurn?.[turns] ?? 0;
+  const poisoned = poison > 0.05 ? ` They also have ${one(poison)} poison counters by then, and ten is the game.` : '';
+  const lead = total > 0.05 ? `An opponent is down ${one(total)} by turn ${turns}, ${split}.` : `An opponent has taken no damage by turn ${turns}.`;
+  return `${lead}${poisoned} Nothing blocks and nobody across the table gains life, so that is the ceiling rather than a clock, and only the cards this model can read are swinging or burning, so it is a low ceiling.`;
 }
 
 /**

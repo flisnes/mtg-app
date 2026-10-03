@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.190.0
+
+- **Added: the deck simulator counts life and poison.** Lifelink, infect and toxic are read straight off the card: a lifelink creature's hits gain you life, infect hits are poison instead of damage, toxic adds poison on top. Your life total and the opponent's poison counters are tracked through the game, the Flow tab shows both (poison as a third line on the damage chart, ten being the game), and the goldfish trace says when they move. Card rules get a "When you gain life" trigger (Ajani's Pridemate, Archangel of Thune, Sanguine Bond), a "life gained this turn" amount, and a "Give X poison counters" step.
+- **Added: cost reduction.** A "While it is on the battlefield" rule can say "Spells cost X less" for the spells you name (Medallions, Goblin Electromancer, Animar with "the counters on it"), and a printed "Affinity for artifacts" is read off the card. The discount comes off the generic part of the cost, the trace says "for 1 less", and castable-on-curve odds follow it.
+- **Added: the small grammar the card reviews kept asking for.** "This card" on a +X/+X step (prowess), +X/+0, criteria on a pump inside an ability, counters on each of your creatures, "What woke it" as an amount (the life gained, the entering creature's power, the cast spell's mana value), a condition on a standing effect (Serra Ascendant's thirty life), a beginning-of-combat trigger, tokens that enter tapped or attacking, and "Only once each game" for Sagas and the like. Pre-written rules for the Medallions, Electromancer, Baral, Animar, Pridemate, Archangel of Thune, Sanguine Bond, Vito, Soul Warden and friends, Serra Ascendant and Warstorm Surge.
+
 ## 0.189.2
 
 - **Fixed: you can no longer join your own trade.** Entering your own code on a second device signed into the same account, or in a second tab on the same device, used to put you on both sides of the trade. The relay now turns that join away with a note that the other person enters the code. Nothing changes for "Trade solo", which is still the way to record a trade with someone who isn't on the app.

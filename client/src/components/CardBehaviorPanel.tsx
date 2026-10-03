@@ -79,7 +79,7 @@ import { PolicySpread } from './PolicySpread.js';
 import type { QueueCard, QueueReason } from '@mtg/sim';
 import { templatesFor, type Template } from '@mtg/sim';
 import { gapWords, type ShippedDefaults } from '@mtg/sim';
-import { KW_HASTE, describeAttach, printedAttach, printedDredge, printedKeywords } from '@mtg/sim';
+import { KW_HASTE, describeAttach, describeCombatKeywords, printedAttach, printedDredge, printedKeywords, printedToxic } from '@mtg/sim';
 import { oracleTagClosure } from '../cardDb/oracleTags.js';
 import {
   COMBAT_POLICIES,
@@ -132,6 +132,8 @@ interface BehaviorCard {
   dredge: number;
   /** An Equipment's or Aura's printed bonus, as a phrase, or null. Read off the card and not replaced by a rule. */
   attach: string | null;
+  /** Printed lifelink, infect, toxic and double strike, as a phrase, or null. Keywords, so a rule adds to them. */
+  combat: string | null;
   /**
    * And what the card *is*: a land, a rock, a mana creature. The one reading a
    * rule written here does not replace, listed anyway because every effect the
@@ -190,7 +192,7 @@ const attachPhrase = (o: OracleCard): string | null => {
 };
 
 /** Every derived reading, not some of them. A fetchland and an Exploration were both missing from this test once. */
-const isRead = (c: BehaviorCard) => !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source || c.dredge || c.attach);
+const isRead = (c: BehaviorCard) => !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source || c.dredge || c.attach || c.combat);
 
 /**
  * What a hand-reviewed card still waits on. The review listed "equipment and
@@ -237,6 +239,8 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       extraLand: describeExtraLand(decodeManaProfile(o.mana)),
       dredge: printedDredge(o.oracleText),
       attach: attachPhrase(o),
+      // Only on a creature: an Equipment's "has lifelink" is the attach line's.
+      combat: isCreature(o.typeLine) ? describeCombatKeywords(printedKeywords(o.oracleText), printedToxic(o.oracleText)) : null,
       // Sick is a creature without haste, off the type line: a Dryad Arbor too.
       source: describeManaSource(decodeManaProfile(o.mana), o.produces, isCreature(o.typeLine) && !(printedKeywords(o.oracleText) & KW_HASTE)),
       authored: behaviors.get(o.oracleId) ?? null,
@@ -267,6 +271,7 @@ function summaryOf(card: BehaviorCard): string {
   if (card.attach) return card.attach;
   if (card.source) return card.source;
   if (card.dredge) return `Dredge ${card.dredge}`;
+  if (card.combat) return card.combat;
   return 'Do nothing';
 }
 
@@ -284,6 +289,7 @@ function playsOutAs(card: BehaviorCard, preview: readonly BehaviorRule[], cast: 
   if (derived) return `${PLAY_LEAD}: ${derived}, read from the card`;
   if (card.dredge) return `Dredge ${card.dredge}, printed on the card.`;
   if (card.attach) return `${card.attach}, read from the card.`;
+  if (card.combat) return `${card.combat}, printed on the card.`;
   // A Forest is not a blank, it is a Forest. The line under this one says so.
   if (card.source) return 'Nothing beyond what it is.';
   return 'Nothing. In the simulator this card does nothing.';
@@ -852,7 +858,9 @@ function BehaviorEditor({
         <p className="fine-print">
           {gaps.length > 0
             ? `Read by hand: ${card.attach ? 'the rest of ' : ''}what this card does needs ${gapWords(gaps)}, which the simulator does not model yet${card.attach ? '' : ', so it plays as nothing'}.`
-            : 'Read by hand: nothing on this card changes a game with nobody across the table, so it is right as nothing.'}
+            : card.combat
+              ? 'Read by hand: beyond what is printed below, nothing on this card changes a game with nobody across the table.'
+              : 'Read by hand: nothing on this card changes a game with nobody across the table, so it is right as nothing.'}
         </p>
       )}
       {card.derived && !active && (
@@ -907,6 +915,13 @@ function BehaviorEditor({
           Read off the card: <em>{card.attach}</em>. There is no targeting yet, so the simulator puts it on whichever creature would
           swing hardest with it, free of its equip cost: an Aura as it resolves, an Equipment from the turn after it lands. Rules
           written here add to that; nothing replaces it.
+        </p>
+      )}
+      {card.combat && (
+        <p className="fine-print">
+          Printed on the card: <em>{card.combat}</em>. Lifelink's life wakes any "When you gain life" rule in the deck, once per
+          creature that connects. Poison is the opponent's counter: ten of them is the game, and the trajectory tab counts them
+          beside the damage.
         </p>
       )}
       {!isRead(card) && !active && !gaps && (
@@ -1331,9 +1346,9 @@ const firstStep = (kind: RuleKind): BehaviorStep =>
  * game, not your permanents. A rule of only these hides the box, unless it
  * already holds something, which stays visible so it can be cleared.
  */
-const UNNARROWED: ReadonlySet<string> = new Set(['grantcast', 'grantdredge', 'landfrom', 'nomaxhand']);
+const UNNARROWED: ReadonlySet<string> = new Set(['grantcast', 'grantdredge', 'landfrom', 'nomaxhand', 'discount']);
 
-const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub', 'pick', 'tid', 'tn', 'gk'];
+const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub', 'pick', 'tid', 'tn', 'gk', 'own', 'po', 'each', 'tapped', 'attacking'];
 
 /** A number box for the cost editor: whole numbers from 0 to `max`. */
 function CountBox({ value, max, label, onChange }: { value: number; max: number; label: string; onChange: (n: number) => void }) {
@@ -1450,11 +1465,13 @@ function GuardEditor({
   onChange: (next: BehaviorRule) => void;
 }) {
   const cond = rule.cond;
-  const drop = (key: 'cond' | 'once') => {
+  const drop = (key: 'cond' | 'once' | 'oneshot') => {
     const next = { ...rule };
     delete next[key];
     onChange(next);
   };
+  /** A mana ability is read every turn and a static is a standing fact, so a limit on either says nothing. */
+  const limited = kind === 'trigger' || kind === 'activate';
   return (
     <div className="behavior-guard">
       <div className="behavior-obj-row">
@@ -1466,11 +1483,16 @@ function GuardEditor({
           />
           <span>Only if…</span>
         </label>
-        {/* A mana ability is read every turn, so a limit on it says nothing. */}
-        {kind !== 'tap' && (
+        {limited && (
           <label className="behavior-check">
             <input type="checkbox" checked={!!rule.once} onChange={(e) => (e.target.checked ? onChange({ ...rule, once: true }) : drop('once'))} />
             <span>Once each turn</span>
+          </label>
+        )}
+        {limited && (
+          <label className="behavior-check" title="The first time it would fire each game, and never again: a Saga's chapter, a one-time entry.">
+            <input type="checkbox" checked={!!rule.oneshot} onChange={(e) => (e.target.checked ? onChange({ ...rule, oneshot: true }) : drop('oneshot'))} />
+            <span>Only once each game</span>
           </label>
         )}
       </div>
@@ -1491,8 +1513,9 @@ function GuardEditor({
             <CountBox value={cond.n} max={MAX_BEHAVIOR_AMOUNT} label="The number" onChange={(n) => onChange({ ...rule, cond: { ...cond, n } })} />
           </div>
           <p className="fine-print">
-            Read each time, before anything happens: threshold is "your graveyard, at least 7", metalcraft is "your permanents
-            matching t:artifact, at least 3".
+            {kind === 'static'
+              ? 'Read whenever the battlefield or your life changes: Serra Ascendant is "your life total, at least 30".'
+              : 'Read each time, before anything happens: threshold is "your graveyard, at least 7", metalcraft is "your permanents matching t:artifact, at least 3".'}
           </p>
         </>
       )}
@@ -1540,6 +1563,8 @@ function RuleEditor({
   const xAvailable = hasX && rule.on === 'play';
   /** And the kick count, while it is being cast or arriving from that cast. */
   const kickAvailable = kicker && (rule.on === 'play' || rule.on === 'etb');
+  /** "What woke it" is a number only on a rule something wakes. */
+  const causeAvailable = !!trigger?.watches || rule.on === 'lifegain';
   /** The amounts that read a moment make no sense in a standing effect. An ability is a moment. */
   const momentary = kind === 'trigger' || kind === 'activate';
 
@@ -1619,10 +1644,13 @@ function RuleEditor({
         setStep(i, { op, x: counted, ck: 'p1p1' });
         return;
       case 'pump':
-        setStep(i, { op, x: counted, ...(kind === 'trigger' && base.q ? { q: base.q } : {}) });
+        setStep(i, { op, x: counted, ...(momentary && base.q ? { q: base.q } : {}) });
         return;
       case 'keyword':
-        setStep(i, { op, x: one, kw: 'H', ...(kind === 'trigger' && base.q ? { q: base.q } : {}) });
+        setStep(i, { op, x: one, kw: 'H', ...(momentary && base.q ? { q: base.q } : {}) });
+        return;
+      case 'discount':
+        setStep(i, { op, x: counted, ...(base.q ? { q: base.q } : {}) });
         return;
       case 'addtype':
         setStep(i, { op, x: one, ty: 'L', sub: 'G' });
@@ -1740,7 +1768,7 @@ function RuleEditor({
       )}
 
       {kind === 'activate' && <CostEditor cost={rule.cost ?? {}} matcher={matcher} onChange={(cost) => onChange({ ...rule, cost })} />}
-      {kind !== 'static' && kind !== 'graveyard' && (
+      {kind !== 'graveyard' && (
         <GuardEditor
           rule={rule}
           kind={kind}
@@ -1749,6 +1777,7 @@ function RuleEditor({
             o.id !== 'fixed' &&
             !o.moveOnly &&
             !o.needsPrev &&
+            !o.needsCause &&
             (!o.needsX || xAvailable) &&
             (!o.needsKicker || kickAvailable) &&
             (!o.needsPermanent || permanent)
@@ -1764,22 +1793,27 @@ function RuleEditor({
         const colorsStep = step.op === 'mana' || step.op === 'extramana' || step.op === 'tapsfor';
         const info = BEHAVIOR_STEPS.find((o) => o.id === step.op);
         // Both of them narrow what they reach with a criteria box; only a move
-        // has two zones to pick. A pump or a haste grant on a trigger narrows
-        // which creatures get it; on a static the rule's own criteria does.
-        const creatureQuery = (step.op === 'pump' || (step.op === 'keyword' && !step.own)) && kind === 'trigger';
+        // has two zones to pick. A pump, a haste grant or counters-on-each on a
+        // trigger (or an ability) narrows which creatures get it; on a static
+        // the rule's own criteria does.
+        const creatureQuery =
+          momentary && (((step.op === 'pump' || step.op === 'keyword') && !step.own) || (step.op === 'counter' && !!step.each));
         // A mana ability's "spend this mana only on", as criteria.
         const spendQuery = step.op === 'tapsfor';
         // Which cards in the zone a grant reaches.
         const grantQuery = step.op === 'grantcast' || step.op === 'grantdredge';
+        // Which spells a cost reduction is for.
+        const discountQuery = step.op === 'discount';
         // Dredge is a printed number, never one read off the game.
         const fixedOnly = step.op === 'dredge' || step.op === 'grantdredge';
-        const narrows = move || flicker || creatureQuery || spendQuery || grantQuery;
+        const narrows = move || flicker || creatureQuery || spendQuery || grantQuery || discountQuery;
         const objectControls =
           step.op === 'token' ||
           step.op === 'counter' ||
           step.op === 'addtype' ||
           step.op === 'landfrom' ||
           step.op === 'keyword' ||
+          step.op === 'pump' ||
           step.op === 'grantcast';
         // The one destination with two ways to arrive, and the only place the
         // question is worth asking.
@@ -1823,6 +1857,7 @@ function RuleEditor({
                   (!o.needsX || (xAvailable && momentary)) &&
                   (!o.needsPrev || (i > 0 && momentary)) &&
                   (!o.needsKicker || kickAvailable) &&
+                  (!o.needsCause || causeAvailable) &&
                   (!o.needsPermanent || permanent)
                 }
                 onChange={(x) => setStep(i, { ...step, x })}
@@ -1944,12 +1979,13 @@ function RuleEditor({
               <div className="behavior-q">
                 {spendQuery && <span className="fine-print behavior-plug-lead">Spend its mana only on:</span>}
                 {grantQuery && <span className="fine-print behavior-plug-lead">Which cards there:</span>}
+                {discountQuery && <span className="fine-print behavior-plug-lead">Which of your spells:</span>}
                 <label className="field">
                   <input
                     type="text"
                     value={step.q ?? ''}
                     maxLength={MAX_BEHAVIOR_QUERY}
-                    aria-label={creatureQuery ? 'Which creatures' : spendQuery ? 'Spend it only on' : grantQuery ? 'Which cards in that zone' : 'Which cards'}
+                    aria-label={creatureQuery ? 'Which creatures' : spendQuery ? 'Spend it only on' : grantQuery ? 'Which cards in that zone' : discountQuery ? 'Which spells cost less' : 'Which cards'}
                     placeholder={
                       creatureQuery
                         ? 'All your creatures, or t:elf, …'
@@ -1957,6 +1993,8 @@ function RuleEditor({
                           ? 'Spend it on anything, or only on t:creature, …'
                           : grantQuery
                           ? 'Any card, or is:permanent, t:instant, …'
+                          : discountQuery
+                          ? 'Every spell, or t:artifact, c:w, t:instant or t:sorcery, …'
                           : flicker
                           ? 'Any permanent, or t:creature, …'
                           : 'Any card, or t:basic, t:creature mv<=3, …'
@@ -1973,7 +2011,7 @@ function RuleEditor({
                 )}
                 {/* The control appears because the query asked for it. No
                     placeholder, no dropdown, and nothing to explain away. */}
-                {!creatureQuery && !spendQuery && !grantQuery && queryHasX(step.q) && (
+                {!creatureQuery && !spendQuery && !grantQuery && !discountQuery && queryHasX(step.q) && (
                   <>
                     <span className="fine-print behavior-plug-lead">[X] in that query is:</span>
                     <AmountPicker
@@ -2170,10 +2208,10 @@ function ObjectControls({
       </div>
     );
   }
-  if (step.op === 'keyword') {
+  if (step.op === 'keyword' || step.op === 'pump') {
     return (
       <div className="behavior-obj">
-        <KeywordChecks step={step} onChange={onChange} required />
+        {step.op === 'keyword' && <KeywordChecks step={step} onChange={onChange} required />}
         <label className="field">
           <select
             value={step.own ? 'own' : 'them'}
@@ -2184,6 +2222,12 @@ function ObjectControls({
             <option value="own">This card</option>
           </select>
         </label>
+        {step.op === 'pump' && (
+          <label className="behavior-check" title="+X/+0 rather than +X/+X. Nothing here reads toughness, so the two play out the same; this is for the rule reading as the card does.">
+            <input type="checkbox" checked={!!step.po} onChange={(e) => onChange(e.target.checked ? { ...step, po: true } : without(step, 'po'))} />
+            <span>Power only (+X/+0)</span>
+          </label>
+        )}
       </div>
     );
   }
@@ -2262,12 +2306,31 @@ function ObjectControls({
             {creature && <KeywordChecks step={step} onChange={onChange} />}
           </>
         )}
+        <label className="field">
+          <select
+            value={step.attacking ? 'attacking' : step.tapped ? 'tapped' : 'untapped'}
+            aria-label="How they arrive"
+            onChange={(e) =>
+              onChange(
+                e.target.value === 'attacking'
+                  ? { ...without(step, 'tapped'), attacking: true }
+                  : e.target.value === 'tapped'
+                    ? { ...without(step, 'attacking'), tapped: true }
+                    : without(step, 'tapped', 'attacking'),
+              )
+            }
+          >
+            <option value="untapped">Arrive untapped</option>
+            <option value="tapped">Arrive tapped</option>
+            <option value="attacking">Arrive tapped and attacking</option>
+          </select>
+        </label>
       </div>
     );
   }
   if (step.op === 'counter') {
     return (
-      <div className="behavior-obj">
+      <div className="behavior-obj behavior-zones">
         <label className="field">
           <select
             value={step.ck ?? 'p1p1'}
@@ -2276,6 +2339,16 @@ function ObjectControls({
           >
             <option value="p1p1">+1/+1 counters</option>
             <option value="charge">Charge counters (or any other kind)</option>
+          </select>
+        </label>
+        <label className="field">
+          <select
+            value={step.each ? 'each' : 'own'}
+            aria-label="On which permanents"
+            onChange={(e) => onChange(e.target.value === 'each' ? { ...step, each: true } : without(step, 'each', 'q'))}
+          >
+            <option value="own">On this card</option>
+            <option value="each">On each of your creatures</option>
           </select>
         </label>
       </div>
@@ -2389,7 +2462,7 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
   if (has('counter')) {
     notes.push({
       key: 'counter',
-      text: 'The counters go on this card, the copy that just arrived if there are two. +1/+1 counters add to its power; any other kind is only counted, which is what "the counters on it" reads, so an Everflowing Chalice is an entry rule putting "the times it was kicked" charge counters on it and a mana rule tapping for that many.',
+      text: 'On this card, the counters go on the copy that just arrived if there are two. "On each of your creatures" puts them on every creature the criteria finds, Archangel of Thune\'s way. +1/+1 counters add to power; any other kind is only counted, which is what "the counters on it" reads, so an Everflowing Chalice is an entry rule putting "the times it was kicked" charge counters on it and a mana rule tapping for that many.',
     });
   }
   if (has('pump', 'keyword')) {
@@ -2397,14 +2470,50 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
       key: 'pump',
       text:
         kind === 'static'
-          ? 'For as long as this card is out, every creature the criteria above finds gets it, the ones that arrive later included. The amount is read again whenever the battlefield changes.'
-          : 'Until end of turn, for the creatures on the battlefield now: a Craterhoof\'s +X/+X, read once as it resolves. Combat comes after the turn\'s spells, so a pump in a play or entry rule is in time for the attack.',
+          ? 'For as long as this card is out, every creature the criteria above finds gets it, the ones that arrive later included. The amount is read again whenever the battlefield changes. "This card" is the card holding the rule alone.'
+          : 'Until end of turn, for the creatures on the battlefield now: a Craterhoof\'s +X/+X, read once as it resolves. Combat comes after the turn\'s spells, so a pump in a play or entry rule is in time for the attack. "This card" is prowess: the card holding the rule alone.',
     });
   }
   if (has('keyword')) {
     notes.push({
       key: 'keyword',
-      text: 'Only the keywords a goldfish can act on. Haste lets a creature attack and tap for mana the turn it arrives. Vigilance lets one that tapped for mana attack anyway, as if that mana went on spells after combat. Double strike counts its power twice. Nothing blocks here, so flying, trample and the rest would change nothing. "This card" gives them to the card holding the rule and nothing else.',
+      text: 'Only the keywords a goldfish can act on. Haste lets a creature attack and tap for mana the turn it arrives. Vigilance lets one that tapped for mana attack anyway, as if that mana went on spells after combat. Double strike counts its power twice. Lifelink turns its combat damage into life, which wakes "When you gain life" rules. Infect deals poison instead of damage. Nothing blocks here, so flying, trample and the rest would change nothing. "This card" gives them to the card holding the rule and nothing else.',
+    });
+  }
+  if (has('discount')) {
+    notes.push({
+      key: 'discount',
+      text: 'While this card is out, each of your spells matching the criteria costs that much less, generic mana only: a Medallion never pays a pip, and a {G}{G} spell costs {G}{G} whatever is out. The amount is read whenever the battlefield changes, so "the counters on it" is Animar. A printed "Affinity for artifacts" is read off the card already.',
+    });
+  }
+  if (has('poison')) {
+    notes.push({
+      key: 'poison',
+      text: 'Poison counters on the opponent, the same counter your life is the other way: ten is the game. Printed infect and toxic are read off the card; this step is for the cards that say it in a sentence, Fynn and Triumph of the Hordes.',
+    });
+  }
+  if (rule.on === 'lifegain') {
+    notes.push({
+      key: 'lifegain',
+      text: 'Fires once per time you gain life: each lifelink creature that connects is its own time, so is a Food, so is a rule that gains life. "What woke it" is the life gained that time; "life gained this turn" is the running total, reset each turn.',
+    });
+  }
+  if (amounts.some((x) => x.kind === 'cause')) {
+    notes.push({
+      key: 'cause',
+      text: '"What woke it" is the number behind the event: on a life-gain rule the life gained, on an enters, dies or sacrifice rule the power of the permanent (as it was, counters and anthems included while it was out), on a cast rule the spell\'s mana value. On a rule nothing woke it reads zero.',
+    });
+  }
+  if (rule.oneshot) {
+    notes.push({
+      key: 'oneshot',
+      text: 'Only the first time each game, then never again: a Saga\'s first chapter written as an entry rule, a Class level you only reach once. Counted per card rather than per copy, so two copies share the one firing.',
+    });
+  }
+  if (rule.steps.some((s) => s.op === 'token' && (s.tapped || s.attacking))) {
+    notes.push({
+      key: 'tokentapped',
+      text: 'Tokens that arrive tapped make no mana and do not attack this turn, haste or not. "Attacking" tokens made during the attack (an attack trigger) connect this combat for their printed power; made anywhere else, attacking is only tapped.',
     });
   }
   if (has('addtype')) {

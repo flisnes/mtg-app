@@ -58,6 +58,7 @@ import {
   type SimGraveyardCast,
 } from './simDeck.js';
 import { MANA_BINS, type SimOptions, type SpendPolicy } from './simConfig.js';
+import { describeGoal, type GoalTermKind, type SimGoalResult } from './goals.js';
 export * from './simConfig.js';
 
 // The simulator: phase 5, and the only engine here that can answer a question
@@ -441,6 +442,16 @@ export interface SimResult {
   seenFromOpener: number[];
   /** Cards seen by turn t that came off the draw step. */
   seenFromDrawStep: number[];
+  /**
+   * P(one opponent would be dead by end of turn t), cumulative (rebuild plan
+   * D2): the damage dealt so far has reached a starting life total (40 in
+   * Commander, 20 elsewhere), or the poison has reached ten. A goldfish kill
+   * on one of three opponents, with nothing blocking: the speed signal the
+   * Bracket tab reads, and a ceiling like the damage line it comes from.
+   */
+  lethalByTurn: number[];
+  /** The deck's goals (rebuild plan E1), one result each, in the deck's order. */
+  goals: SimGoalResult[];
 }
 
 /**
@@ -783,6 +794,15 @@ export function simulate(
   let gamePoison = 0;
   const poisonSum = new Float64Array(opts.maxTurn + 1);
   const lifeSum = new Float64Array(opts.maxTurn + 1);
+  /**
+   * The speed signal (rebuild plan D2): the first turn this game's damage or
+   * poison would have killed one opponent, who starts on what you start on.
+   */
+  const oppLife = startLife;
+  let gameLethal = false;
+  const lethalFirst = new Uint32Array(stride);
+  /** Times each card was cast or played this game, for a goal's `cast` term. */
+  const gameCasts = new Int32Array(n);
 
   /**
    * The mana available this turn, as the payment solver wants it, and how much
@@ -2063,6 +2083,125 @@ export function simulate(
   const NO_MATCH = new Uint8Array(0);
   const filterFor = new Map<string, SimFilter>();
   for (const f of deck.filters) filterFor.set(f.q, f);
+
+  // --- The plan (rebuild plan E1) --------------------------------------------
+  // Each goal is a conjunction read at the end of each turn; the first turn it
+  // holds is tallied, so the result is "by turn t". A term's criteria is a
+  // compiled filter like a move step's; a card term with no criteria is any
+  // card. Nothing here runs in a deck without goals.
+  const goals = deck.goals;
+  interface GoalTermC {
+    kind: GoalTermKind;
+    n: number;
+    /** Null is any card; NO_MATCH is a criteria the build could not compile. */
+    mask: Uint8Array | null;
+  }
+  const goalTerms: GoalTermC[][] = goals.map((g) => g.terms.map((t) => ({ kind: t.kind, n: t.n, mask: t.q ? (filterFor.get(t.q)?.match ?? NO_MATCH) : null })));
+  const anyGoals = goals.length > 0;
+  const goalFirst = new Uint32Array(goals.length * stride);
+  const goalDone = new Uint8Array(goals.length);
+  /** Copies of each card still in the live library, for the `drawn` term: what you have seen is what is not there. */
+  const libCount = new Int32Array(n);
+  const countLibrary = (): void => {
+    libCount.fill(0);
+    for (let i = top; i < libLen; i++) libCount[library[i]!]!++;
+  };
+  /** The card at `index` matches the term, as printed (variant 0: off the battlefield nothing has an added type). */
+  const termAccepts = (t: GoalTermC, index: number): boolean => !t.mask || t.mask[index] === 1;
+
+  /** Does the term hold right now. `available` is this turn's mana, for the `mana` term only. */
+  const termMet = (t: GoalTermC, turn: number, available: number): boolean => {
+    switch (t.kind) {
+      case 'mana':
+        return available >= t.n;
+      case 'commander':
+        for (const c of deck.commanders) if (cmdCasts[c]! > 0) return true;
+        return false;
+      case 'have': {
+        let k = 0;
+        for (let i = 0; i < handLen; i++) {
+          const index = hand[i]!;
+          if (cards[index]!.commander || !termAccepts(t, index)) continue;
+          if (++k >= t.n) return true;
+        }
+        return false;
+      }
+      case 'inPlay': {
+        ensureFresh(turn);
+        let k = 0;
+        for (let p = 0; p < perms.len; p++) {
+          if (!stillOut(p, turn)) continue;
+          const index = perms.card[p]!;
+          // The row for what it is now, like every battlefield filter.
+          if (t.mask && t.mask[perms.added[p]! * n + index] !== 1) continue;
+          if (++k >= t.n) return true;
+        }
+        return false;
+      }
+      case 'cast': {
+        let k = 0;
+        for (let i = 0; i < n; i++) {
+          if (gameCasts[i]! <= 0 || !termAccepts(t, i)) continue;
+          k += gameCasts[i]!;
+          if (k >= t.n) return true;
+        }
+        return false;
+      }
+      case 'drawn': {
+        countLibrary();
+        let k = 0;
+        for (let i = 0; i < n; i++) {
+          const c = cards[i]!;
+          if (c.copies <= 0 || !termAccepts(t, i)) continue;
+          k += c.copies - libCount[i]!;
+          if (k >= t.n) return true;
+        }
+        return false;
+      }
+    }
+  };
+
+  const checkGoals = (turn: number, available: number): void => {
+    for (let g = 0; g < goals.length; g++) {
+      if (goalDone[g]) continue;
+      const terms = goalTerms[g]!;
+      let held = true;
+      for (const t of terms) {
+        if (!termMet(t, turn, available)) {
+          held = false;
+          break;
+        }
+      }
+      if (!held) continue;
+      goalDone[g] = 1;
+      goalFirst[g * stride + turn]!++;
+      if (sink) say(sink, 'note', `Plan reached: ${describeGoal(goals[g]!)}`);
+    }
+  };
+
+  /**
+   * The cards that would fill a missing piece of goal `g`, into `wanted` as a
+   * mask over the deck (rebuild plan E2). False when no search can help it:
+   * it is met, or what is missing is mana or the commander. A search asks the
+   * goals in order and takes the first one it can do something about, so a
+   * creature tutor passes over "four lands" and fetches the finisher.
+   */
+  const wanted = new Uint8Array(n);
+  const wantedFor = (g: number, turn: number): boolean => {
+    if (goalDone[g]) return false;
+    let any = false;
+    wanted.fill(0);
+    for (const t of goalTerms[g]!) {
+      if (t.kind === 'mana' || t.kind === 'commander' || termMet(t, turn, 0)) continue;
+      any = true;
+      if (!t.mask) {
+        wanted.fill(1);
+        break;
+      }
+      for (let i = 0; i < n; i++) if (t.mask[i] === 1) wanted[i] = 1;
+    }
+    return any;
+  };
   /**
    * Does any card in the deck care about attacking? Almost none do, and combat
    * is otherwise a scan of the battlefield every turn of every one of twenty
@@ -2150,8 +2289,19 @@ export function simulate(
    * it, which is the honest answer for a goldfish: there is no opponent to play
    * around and no reason to prefer one Mountain in the yard over another.
    */
-  const takeFrom = (zone: BehaviorZone, mask: Uint8Array | null, base: number, turn: number, pick?: BehaviorPick): number => {
+  const takeFrom = (zone: BehaviorZone, mask: Uint8Array | null, base: number, turn: number, pick?: BehaviorPick, wantGoal = false): number => {
     if (pick) return takeChosen(zone, mask, base, turn, pick);
+    // What the plan is missing comes first (rebuild plan E2): a search goes
+    // for a piece of the first unmet goal the criteria let it fill, and only
+    // then for a random match. The battlefield and the hand are not searched,
+    // so the plan is not asked there.
+    if (wantGoal) {
+      for (let g = 0; g < goals.length; g++) {
+        if (!wantedFor(g, turn)) continue;
+        const found = takeWanted(zone, mask, base, wanted);
+        if (found >= 0) return found;
+      }
+    }
     switch (zone) {
       case 'library': {
         if (!mask) {
@@ -2236,6 +2386,32 @@ export function simulate(
       default:
         return -1;
     }
+  };
+
+  /**
+   * A card the plan wants, out of the library, graveyard or exile: a uniform
+   * pick among the cards that match the step's criteria *and* fill a missing
+   * piece of the first unmet goal. -1 when none does.
+   */
+  const takeWanted = (zone: BehaviorZone, mask: Uint8Array | null, base: number, want: Uint8Array): number => {
+    const list = zone === 'library' ? library : zone === 'graveyard' ? graveyard : zone === 'exile' ? exiled : null;
+    if (!list) return -1;
+    const start = zone === 'library' ? top : 0;
+    const end = zone === 'library' ? libLen : zone === 'graveyard' ? gyLen : exLen;
+    let at = -1;
+    let matches = 0;
+    for (let i = start; i < end; i++) {
+      const index = list[i]!;
+      if (want[index] !== 1 || !accepts(mask, base, index)) continue;
+      matches++;
+      if (rng.int(matches) === 0) at = i;
+    }
+    if (at < 0) return -1;
+    const index = list[at]!;
+    if (zone === 'library') list[at] = list[--libLen]!;
+    else if (zone === 'graveyard') list[at] = list[--gyLen]!;
+    else list[at] = list[--exLen]!;
+    return index;
   };
 
   /**
@@ -2954,9 +3130,13 @@ export function simulate(
     return taken.length;
   };
 
+  /** What the last `moveCards` looked at off the top, for its trace line. '' when it searched. */
+  let lastLook = '';
+
   const moveCards = (step: BehaviorStep, count: number, turn: number): number => {
     const from = step.from;
     const to = step.to;
+    if (sink) lastLook = '';
     if (!from || !to || from === to) return 0;
     let mask: Uint8Array | null = null;
     let base = 0;
@@ -2969,16 +3149,21 @@ export function simulate(
       // table with X_VARIANTS rows, and an amount is no longer bounded by it.
       if (filter?.varies) base = Math.min(MAX_QUERY_X, behaviorAmount(step.qx ?? ZERO_AMOUNT, turn)) * V * n;
     }
+    // A search that puts cards in your hand or onto the battlefield goes for
+    // what the plan is missing (rebuild plan E2), unless the rule already says
+    // which card to take. Nothing changes in a deck without goals.
+    const wantGoal = anyGoals && !step.pick && (to === 'hand' || to === 'battlefield') && from !== 'hand' && from !== 'battlefield';
     // A stack of cards going to one end of the library goes in a random order,
     // so they are collected first and placed once the step knows how many
     // there were.
     const ordered = to === 'librarytop' || to === 'librarybottom';
     if (ordered) stack.length = 0;
+    if (from === 'library' && step.win) return lookAtTop(step, count, turn, mask, base, wantGoal, ordered);
     let moved = 0;
     for (let k = 0; k < count; k++) {
       if (!roomIn(to)) break;
       tookToken = false;
-      const index = takeFrom(from, mask, base, turn, step.pick);
+      const index = takeFrom(from, mask, base, turn, step.pick, wantGoal);
       if (index < 0) break;
       moved++;
       // A token copy leaving the battlefield ceases to exist: it dies like the
@@ -3008,6 +3193,92 @@ export function simulate(
         fireDeath(index, cards[index]!, turn);
         afterLeaving(index, turn, true);
       }
+    }
+    if (ordered) {
+      shuffleStack();
+      for (const index of stack) putTo(index, to, turn);
+    }
+    return moved;
+  };
+
+  /**
+   * A `move` off the top N cards rather than the whole library (rebuild plan
+   * §6 step 5): Muxus looks at six and takes the Goblins, Gishath reveals X
+   * and takes the Dinosaurs. The matches among those N come out (the plan's
+   * missing piece first, then the step's pick, then at random); what is left
+   * goes to the bottom in a random order, or into the graveyard when the step
+   * says so. Nothing outside the window is touched, which is the whole
+   * difference from a search.
+   */
+  const lookAtTop = (step: BehaviorStep, count: number, turn: number, mask: Uint8Array | null, base: number, wantGoal: boolean, ordered: boolean): number => {
+    const to = step.to!;
+    // The window: library[top .. top + winLen). Shrinks as cards are taken.
+    let winLen = Math.min(step.win ?? 0, libLen - top);
+    if (winLen <= 0) return 0;
+    if (sink) {
+      const names: string[] = [];
+      for (let i = top; i < top + winLen; i++) names.push(cards[library[i]!]!.name);
+      lastLook = `looks at the top ${winLen} (${names.join(', ')})`;
+    }
+    /** The best match in the window (by the pick's score, a coin flip between equals), among the wanted cards when a mask is given. -1 for none. */
+    const bestInWindow = (want: Uint8Array | null): number => {
+      let at = -1;
+      let best = -Infinity;
+      let ties = 0;
+      for (let i = top; i < top + winLen; i++) {
+        const index = library[i]!;
+        if (!accepts(mask, base, index) || (want && want[index] !== 1)) continue;
+        const score = step.pick ? pickScore(index, step.pick) : 0;
+        if (score < best) continue;
+        if (score === best) {
+          ties++;
+          if (rng.int(ties) !== 0) continue;
+        } else {
+          ties = 1;
+          best = score;
+        }
+        at = i;
+      }
+      return at;
+    };
+    let moved = 0;
+    for (let k = 0; k < count; k++) {
+      if (!roomIn(to)) break;
+      // The plan's missing pieces first, goal by goal, then any match.
+      let at = -1;
+      if (wantGoal) {
+        for (let g = 0; g < goals.length && at < 0; g++) if (wantedFor(g, turn)) at = bestInWindow(wanted);
+      }
+      if (at < 0) at = bestInWindow(null);
+      if (at < 0) break;
+      const index = library[at]!;
+      library[at] = library[top + winLen - 1]!;
+      winLen--;
+      moved++;
+      if (to === 'hand' || to === 'graveyard') {
+        seen++;
+        creditSeen(creditTo, 1);
+      }
+      if (ordered) stack.push(index);
+      else putTo(index, to, turn, step.untapped);
+      if (sink) movedNames.push(cards[index]!.name);
+    }
+    // The rest leave the top. Into the graveyard they count as seen, like a
+    // mill; on the bottom they do not, since you never get them.
+    const restStart = top;
+    top += winLen;
+    if (step.rest === 'graveyard') {
+      for (let i = restStart; i < restStart + winLen; i++) bury(library[i]!);
+      seen += winLen;
+      creditSeen(creditTo, winLen);
+    } else {
+      for (let i = winLen - 1; i > 0; i--) {
+        const j = rng.int(i + 1);
+        const t = library[restStart + i]!;
+        library[restStart + i] = library[restStart + j]!;
+        library[restStart + j] = t;
+      }
+      for (let i = restStart; i < restStart + winLen; i++) insertInLibrary(library[i]!, libLen);
     }
     if (ordered) {
       shuffleStack();
@@ -3361,9 +3632,13 @@ export function simulate(
         case 'move': {
           if (sink) movedNames.length = 0;
           did = moveCards(step, n, turn);
+          if (sink && lastLook) bits.push(lastLook);
           if (sink && movedNames.length) {
             const where = ZONE_PHRASE.get(step.to ?? '') ?? 'somewhere';
-            bits.push(`moves ${movedNames.join(', ')} to ${where}`);
+            const rest = lastLook ? (step.rest === 'graveyard' ? ', the rest into the graveyard' : ', the rest on the bottom') : '';
+            bits.push(`moves ${movedNames.join(', ')} to ${where}${rest}`);
+          } else if (sink && lastLook) {
+            bits.push(step.rest === 'graveyard' ? 'finds nothing, all of them into the graveyard' : 'finds nothing, all of them on the bottom');
           }
           break;
         }
@@ -3846,6 +4121,9 @@ export function simulate(
    */
   const resolveCast = (index: number, card: SimCard, turn: number, goal: readonly Pip[] | null, exileAfter: boolean): number => {
     let added = 0;
+    // Counted for the plan's `cast` terms (rebuild plan E1), whichever zone
+    // it was cast from; a land played counts at the land drop.
+    gameCasts[index] = gameCasts[index]! + 1;
     // Cast triggers, and they go off *before* the spell does — which is
     // both the rule and the reason they are worth writing. An Archmage
     // Emeritus draws off the Windfall before the Windfall empties your
@@ -4980,6 +5258,9 @@ export function simulate(
     tookToken = false;
     causeAmount = 0;
     gamePoison = 0;
+    gameLethal = false;
+    gameCasts.fill(0);
+    goalDone.fill(0);
     inCombat = false;
     dirty = false;
     noMaxHand = false;
@@ -5230,6 +5511,7 @@ export function simulate(
         if (landZone[best] === LAND_HAND) hand[at] = hand[--handLen]!;
         else if (landZone[best] === LAND_GRAVEYARD) graveyard[at] = graveyard[--gyLen]!;
         else top++;
+        gameCasts[cardIndex] = gameCasts[cardIndex]! + 1;
         if (card.role === 'fetch') {
           // The fetch was *played*, so the fetch's own rule fires — and until
           // this release it never did. This path resolved the land it found and
@@ -5687,6 +5969,15 @@ export function simulate(
       emptyPool();
       // The end step (rebuild plan E3), then cleanup.
       if (anyEndSteps && opts.effects) runEndStep(turn);
+      // The plan (rebuild plan E1), read with the board and the hand as the
+      // turn leaves them, and the speed signal (D2) off the same damage the
+      // chart reads.
+      if (anyGoals) checkGoals(turn, available);
+      if (!gameLethal && (gameDamage >= oppLife || gamePoison >= 10)) {
+        gameLethal = true;
+        lethalFirst[turn]!++;
+        if (sink) say(sink, 'note', gamePoison >= 10 ? 'An opponent would be out on poison' : `An opponent would be dead: ${gameDamage} damage so far`);
+      }
       // Cleanup: discard to hand size (F1), and every until-end-of-turn pump
       // and keyword wears off.
       cleanup(turn);
@@ -5792,6 +6083,8 @@ export function simulate(
     combatSum,
     poisonSum,
     lifeSum,
+    lethalFirst,
+    goalFirst,
     manaCredit,
     seenCredit,
     openerSeen,
@@ -5997,6 +6290,9 @@ interface Tallies {
   combatSum: Float64Array;
   poisonSum: Float64Array;
   lifeSum: Float64Array;
+  lethalFirst: Uint32Array;
+  /** Per goal, `stride` wide: the first turn every term held. */
+  goalFirst: Uint32Array;
   manaCredit: Float64Array;
   seenCredit: Float64Array;
   openerSeen: Float64Array;
@@ -6234,6 +6530,11 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     poisonByTurn: [...t.poisonSum].map((sum) => sum * per),
     // Turn zero is the start of the game, which nothing tallied.
     lifeByTurn: [...t.lifeSum].map((sum, turn) => (turn === 0 ? (opts.format === 'commander' ? 40 : 20) : sum * per)),
+    lethalByTurn: [...cumulative(t.lethalFirst, 0)].map((count) => count * per),
+    goals: deck.goals.map((g, i) => {
+      const byTurn = [...cumulative(t.goalFirst, i * stride)].map((count) => count * per);
+      return { id: g.id, byTurn, p: byTurn[Math.min(g.turn, stride - 1)] ?? 0 };
+    }),
     pMulligan: t.mulliganed * per,
     meanHandSize: t.handSizeSum * per,
     deckOnCurve: weight > 0 ? weighted / weight : 0,

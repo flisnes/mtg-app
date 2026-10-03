@@ -2,7 +2,8 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { namedTokenIds, type CardBehavior, type DeckFormat, type OracleCard } from '@mtg/shared';
 import { BracketPanel } from './BracketPanel.js';
-import { bracketReport } from '@mtg/sim';
+import { PlanPanel } from './PlanPanel.js';
+import { bracketReport, bracketSpeed, cleanGoals, SIM_MAX_TURN, type SimGoal } from '@mtg/sim';
 import { Icon } from './icons.js';
 import { CURVE_MAX, TAX_TURNS, type DeckManaStats } from '../deck/manaStats.js';
 import { DrawOddsPanel } from './DrawOddsPanel.js';
@@ -136,6 +137,21 @@ function loadKeepRule(deckId: string): KeepRule {
 }
 
 /**
+ * The Plan tab's goals (rebuild plan E1), beside the policy and the keep rule
+ * and for the same reason: how you mean to play the deck, kept on the device.
+ */
+const goalsKey = (deckId: string) => `sim-goals:${deckId}`;
+
+function loadGoals(deckId: string): SimGoal[] {
+  try {
+    const raw = localStorage.getItem(goalsKey(deckId));
+    return raw ? cleanGoals(JSON.parse(raw), SIM_MAX_TURN) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * The headline on the behavior line: what is worth going in there for.
  *
  * The queue leads when there is one (rebuild plan C1). `blanks` counts every
@@ -237,6 +253,7 @@ export const ANALYSIS_TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'mana', label: 'Mana' },
   { id: 'flow', label: 'Flow' },
+  { id: 'plan', label: 'Plan' },
   { id: 'bracket', label: 'Bracket' },
   { id: 'model', label: 'Model' },
 ] as const;
@@ -295,6 +312,17 @@ export function DeckAnalysis({
       // Same as the policy: the session keeps it even when storage refuses.
     }
   };
+  // The game plan (E1). Part of the built deck, so a goal saved re-runs the
+  // simulation: the goals are read inside the games and steer the searches.
+  const [goals, setGoals] = useState<SimGoal[]>(() => loadGoals(deckId));
+  const saveGoals = (next: SimGoal[]) => {
+    setGoals(next);
+    try {
+      localStorage.setItem(goalsKey(deckId), JSON.stringify(next));
+    } catch {
+      // As above.
+    }
+  };
 
   // The trace sheet, open or not, and the card it picks out when a rule's
   // "Watch it in a game" opened it.
@@ -340,12 +368,9 @@ export function DeckAnalysis({
     [effective, tokenOracles, defaults],
   );
   const simDeck = useMemo(
-    () => buildSimDeck(rows, withTokens.behaviors, keepRule.query, new Set([...effective.defaulted, ...withTokens.defaulted]), tokenOracles),
-    [rows, effective, withTokens, keepRule.query, tagsReady, tokenOracles],
+    () => buildSimDeck(rows, withTokens.behaviors, keepRule.query, new Set([...effective.defaulted, ...withTokens.defaulted]), tokenOracles, goals, SIM_MAX_TURN),
+    [rows, effective, withTokens, keepRule.query, tagsReady, tokenOracles, goals],
   );
-  // What the Commander Brackets count in this deck (rebuild plan D1). Read
-  // off the rows, not the simulated game; the tags give the tutor count.
-  const bracket = useMemo(() => bracketReport(rows, oracleTagClosure), [rows, tagsReady]);
   // Taxes that land on you too, which the simulator does not apply.
   const staxNames = useMemo(() => simDeck.cards.filter((c) => c.stax && (c.copies > 0 || c.commander)).map((c) => c.name), [simDeck]);
   const simOpts = useMemo(
@@ -354,6 +379,13 @@ export function DeckAnalysis({
   );
   const sim = useSimulation(simDeck, simOpts);
   const simResult = sim.kind === 'done' ? sim.result : sim.kind === 'running' ? sim.previous : undefined;
+  // What the Commander Brackets count in this deck (rebuild plan D1), read
+  // off the rows with the tags giving the tutor count, plus the clock (D2)
+  // off the simulated run once it has dealt.
+  const bracket = useMemo(
+    () => bracketReport(rows, oracleTagClosure, simResult && simDeck.hasManaData ? bracketSpeed(simResult) : null),
+    [rows, tagsReady, simResult, simDeck.hasManaData],
+  );
   // The spend orders side by side (C6). The last set stays up while the next
   // deals, so tapping an order does not blank the table it was tapped in.
   const freshSpread = sim.kind === 'done' ? sim.spread : undefined;
@@ -514,11 +546,24 @@ export function DeckAnalysis({
             coverage={simDeck.coverage}
             toCheck={toCheck}
             bracket={format === 'commander' ? bracket : null}
+            goals={goals}
             onTab={onTab}
           />
         )}
 
-        {tab === 'bracket' && <BracketPanel report={bracket} commander={format === 'commander'} />}
+        {tab === 'plan' && (
+          <PlanPanel
+            goals={goals}
+            onGoals={saveGoals}
+            result={simResult}
+            games={simOpts.games}
+            maxTurn={SIM_MAX_TURN}
+            hasManaData={simDeck.hasManaData}
+            commander={simDeck.commanders.length > 0}
+          />
+        )}
+
+        {tab === 'bracket' && <BracketPanel report={bracket} commander={format === 'commander'} games={simOpts.games} />}
 
         {tab === 'mana' && (
           <>

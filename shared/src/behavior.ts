@@ -433,7 +433,19 @@ export interface BehaviorStep {
    * there was a choice. See BEHAVIOR_PICKS.
    */
   pick?: BehaviorPick;
+  /**
+   * `move` from the library only (rebuild plan §6 step 5): look at the top
+   * this many cards and take the matches from among them, rather than
+   * searching the whole library. Muxus looks at six, Gishath at X. What is
+   * not taken goes to the bottom in a random order, or to the graveyard when
+   * `rest` says so (Grisly Salvage, Commune with the Gods).
+   */
+  win?: number;
+  rest?: 'graveyard';
 }
+
+/** Cards a move may look at off the top. Muxus looks at six; the headroom is for a Gishath with a big X. */
+export const MAX_LOOK = 20;
 
 /** Which card a move takes when more than one matches. */
 export type BehaviorPick = 'most' | 'least';
@@ -1423,10 +1435,14 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
   // cards it can reach, so it has no count and no criteria to read out.
   if (step.op === 'self') return `put this card ${intoPrep(step.to)} ${intoPhrase(step.to)}${tappedPhrase(step)}`;
   if (step.op === 'move') {
-    const from = ZONE_BY_ID.get(step.from ?? '')?.phrase ?? 'somewhere';
+    // A look at the top N reads as its own clause: where the cards come
+    // from is the window, and where the rest go is part of the step.
+    const look = step.from === 'library' && step.win ? step.win : 0;
+    const from = look ? `the top ${look} card${look === 1 ? '' : 's'} of your library` : (ZONE_BY_ID.get(step.from ?? '')?.phrase ?? 'somewhere');
     const to = intoPhrase(step.to) + tappedPhrase(step);
     const filter = step.q ? ` matching ${step.q}` : '';
-    const where = ` from ${from} to ${to}`;
+    const rest = look ? (step.rest === 'graveyard' ? ', the rest into your graveyard' : ', the rest on the bottom') : '';
+    const where = ` from ${from} to ${to}${rest}`;
     // What the query's own placeholder is worth, named separately from the
     // count because they are two different numbers on the same step.
     const plug = step.q && queryHasX(step.q) ? `, with [X] = ${describeAmount(step.qx ?? { kind: 'fixed', n: 0 })}` : '';
@@ -2212,7 +2228,11 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
       if (!from || !to || from === to || ZONE_BY_ID.get(from)!.toOnly) continue;
       // "All that match" takes every one, so which comes first says nothing.
       const pick = x.kind !== 'all' && (s.pick === 'most' || s.pick === 'least') ? { pick: s.pick as BehaviorPick } : {};
-      steps.push({ op, x, from, to, ...narrowed, ...landing, ...pick });
+      // A look at the top N: library only, and where the rest go only with it.
+      const winRaw = from === 'library' && typeof s.win === 'number' ? Math.round(s.win) : 0;
+      const win = winRaw >= 1 ? { win: Math.min(MAX_LOOK, winRaw) } : {};
+      const rest = winRaw >= 1 && s.rest === 'graveyard' ? { rest: 'graveyard' as const } : {};
+      steps.push({ op, x, from, to, ...narrowed, ...landing, ...pick, ...win, ...rest });
     }
     if (steps.length === 0) continue;
     const on = r.on as BehaviorTrigger;

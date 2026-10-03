@@ -219,8 +219,8 @@ export function MulliganPanel({
 
 const TAGS: Record<HandRow['verdict'], string> = { keep: 'keep', short: 'too few', flood: 'too many' };
 
-/** The minus/plus pair. Two of them make the keep range, which is why it is its own thing. */
-function Step({
+/** The minus/plus pair. Two of them make the keep range, which is why it is its own thing. The Plan tab borrows it. */
+export function Step({
   value,
   lo,
   hi,

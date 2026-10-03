@@ -29,6 +29,7 @@ import {
 import { parseManaCost, type ParsedCost, type PipColor } from './manaCost.js';
 import type { ManaUnit } from './canPay.js';
 import { compileCardQuery, toSearchableEntry } from '@mtg/shared';
+import { cleanGoals, collectGoalQueries, type SimGoal } from './goals.js';
 
 // The deck, flattened into the shape the simulator wants: one entry per
 // distinct card, a library that is one number per copy, and every fact the turn
@@ -423,6 +424,11 @@ export interface SimDeck {
   typeGrants: string[];
   /** `2 ** typeGrants.length`: the filter rows per `[X]` value. */
   variants: number;
+  /**
+   * The deck's goals (rebuild plan E1), read at the end of each simulated
+   * turn, and what a search goes looking for. Their criteria are in `filters`.
+   */
+  goals: SimGoal[];
 }
 
 /** More added types than this and the grants past it are dropped: the filter stack doubles with each. */
@@ -496,6 +502,10 @@ export function buildSimDeck(
    * floor side: the caller loads them and the deck is rebuilt when they land.
    */
   tokenOracles?: ReadonlyMap<string, OracleCard>,
+  /** The Plan tab's goals, as stored. Cleaned here so the worker never sees a malformed one. */
+  goals?: readonly SimGoal[],
+  /** The turns simulated, which caps a goal's turn. */
+  maxTurn = 8,
 ): SimDeck {
   const cards: SimCard[] = [];
   /** The card behind each entry of `cards`, kept only long enough to run the filters. */
@@ -628,16 +638,18 @@ export function buildSimDeck(
 
   const typeGrants = collectTypeGrants(cards);
   const variants = 1 << typeGrants.length;
+  const cleanedGoals = cleanGoals(goals ?? [], maxTurn);
   return {
     cards,
     library,
     commanders,
     hasManaData: profiled > 0,
     coverage,
-    filters: buildFilters(cards, oracles, typeGrants),
+    filters: buildFilters(cards, oracles, typeGrants, cleanedGoals),
     tokens,
     typeGrants,
     variants,
+    goals: cleanedGoals,
   };
 }
 
@@ -1284,9 +1296,11 @@ function applyKeepQuery(cards: SimCard[], oracles: readonly OracleCard[], q: str
  * copies. A card that matches nothing is not an error — it is a deck where that
  * step finds nothing, which is what the trace will show.
  */
-function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[], typeGrants: readonly string[]): SimFilter[] {
+function buildFilters(cards: readonly SimCard[], oracles: readonly OracleCard[], typeGrants: readonly string[], goals: readonly SimGoal[]): SimFilter[] {
   const queries = new Set<string>();
   for (const card of cards) collectBehaviorQueries(card.behavior, queries);
+  // The goals' criteria (rebuild plan E1) go through the same compile.
+  collectGoalQueries(goals, queries);
   // An attachment's "+1/+1 for each artifact you control" counts through the same filters, and so does affinity.
   for (const card of cards) if (card.attach?.per.q) queries.add(card.attach.per.q);
   for (const card of cards) if (card.affinity) queries.add(card.affinity);

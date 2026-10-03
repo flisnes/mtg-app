@@ -11,10 +11,11 @@ import type { DeckRow } from './simDeck.js';
 // bracket mass land denial lands you in) are the JSON too, because WotC
 // revises them and a revision should be an edit to data, not to this file.
 //
-// Not read here: two-card infinite combos (D3, waiting on a licensing check of
-// a combo source) and how fast the deck is (D2, the simulator's own numbers).
-// So the bracket this names is the one the cardboard puts a floor under, and
-// the panel says so.
+// Speed (D2) is the simulator's number: how often a goldfish has one opponent
+// dead by a turn, against the turn each bracket is built around, with the
+// thresholds in the JSON too. Not read here: two-card infinite combos (D3,
+// waiting on a licensing check of a combo source). So the bracket this names
+// is a floor set by the cardboard and the clock, and the panel says so.
 
 /** One card the brackets count, and how many of it the deck runs. */
 export interface BracketCard {
@@ -44,17 +45,49 @@ export interface BracketReport {
   extraTurns: BracketCard[];
   /** Null when the tag vocabulary is not loaded, so the count could not be asked. */
   tutors: BracketCard[] | null;
-  /** The lowest bracket every count fits, and why it is not lower. */
+  /** The lowest bracket every count (and the clock, when it is in) fits, and why it is not lower. */
   level: BracketLevel;
   reasons: string[];
+  /** The bracket the cards alone put a floor under. */
+  cardLevel: BracketLevel;
+  /** How fast the simulated deck is, or null before the run has dealt. */
+  speed: BracketSpeed | null;
   levels: readonly BracketLevel[];
   source: string;
+}
+
+/**
+ * The speed signal (rebuild plan D2), read off the simulated games: in how
+ * many of them one opponent would be dead by each turn. A goldfish on one of
+ * three opponents with nothing blocking, so it runs fast; and every card the
+ * model cannot read deals nothing, so it runs slow. The panel says both.
+ */
+export interface BracketSpeed {
+  /** P(one opponent dead by end of turn t), cumulative; index 0 unused. */
+  lethalByTurn: number[];
+  /** The first turn by which at least half the games have a kill, or null inside the simulated horizon. */
+  halfTurn: number | null;
+  /** The last simulated turn, and the share of games with a kill by then. */
+  maxTurn: number;
+  lethalByEnd: number;
+  /** The bracket the clock alone reads as, with the sentence, or null when it says nothing. */
+  level: number | null;
+  why: string | null;
+  /** What would move it: each signal's threshold, for the panel to print. */
+  signals: readonly SpeedSignal[];
+}
+
+export interface SpeedSignal {
+  bracket: number;
+  lethalBy: number;
+  share: number;
 }
 
 interface Criteria {
   source: string;
   brackets: BracketLevel[];
   lowest: number;
+  speed: { note: string; signals: SpeedSignal[] };
   detect: {
     massLandDenial: { patterns: string[]; exclude: string[]; names: string[]; ignore: string[] };
     extraTurns: { patterns: string[]; exclude: string[] };
@@ -95,13 +128,46 @@ export function extraTurnWhy(card: Pick<OracleCard, 'oracleText'>): string | nul
 /** The bracket levels, lowest first, for a panel that wants to show the ladder. */
 export const BRACKET_LEVELS: readonly BracketLevel[] = DATA.brackets;
 
+/** The speed note, for the panel's fine print. */
+export const SPEED_NOTE = DATA.speed.note;
+
+/**
+ * The clock, off a simulated run (rebuild plan D2). The highest signal whose
+ * share is met names the bracket; a deck under every line says nothing, since
+ * a slow goldfish is also what a deck full of unread cards looks like.
+ */
+export function bracketSpeed(result: { lethalByTurn: readonly number[]; maxTurn: number }): BracketSpeed {
+  const lethalByTurn = [...result.lethalByTurn];
+  const maxTurn = result.maxTurn;
+  let halfTurn: number | null = null;
+  for (let t = 1; t <= maxTurn; t++) {
+    if ((lethalByTurn[t] ?? 0) >= 0.5) {
+      halfTurn = t;
+      break;
+    }
+  }
+  const signals = DATA.speed.signals;
+  let level: number | null = null;
+  let why: string | null = null;
+  for (const s of [...signals].sort((a, b) => b.bracket - a.bracket)) {
+    const p = lethalByTurn[Math.min(s.lethalBy, maxTurn)] ?? 0;
+    if (s.lethalBy <= maxTurn && p >= s.share) {
+      level = s.bracket;
+      why = `a goldfish kill by turn ${s.lethalBy} in ${Math.round(p * 100)}% of games`;
+      break;
+    }
+  }
+  return { lethalByTurn, halfTurn, maxTurn, lethalByEnd: lethalByTurn[maxTurn] ?? 0, level, why, signals };
+}
+
 /**
  * What the brackets count in this deck, and the lowest bracket it fits. Main
  * deck and commander only; copies count once per card for the "how many"
  * questions, which is how the brackets ask them (a deck with four Demonic
- * Tutors is a Standard deck, not a different bracket).
+ * Tutors is a Standard deck, not a different bracket). With a simulated run
+ * the clock joins the counts: the higher of the two names the bracket.
  */
-export function bracketReport(rows: readonly DeckRow[], oracleTagClosure: OracleTagClosure): BracketReport {
+export function bracketReport(rows: readonly DeckRow[], oracleTagClosure: OracleTagClosure, speed: BracketSpeed | null = null): BracketReport {
   const tutorTags = oracleTagClosure(TUTOR_SLUG);
   const seen = new Set<string>();
   const gameChangers: BracketCard[] = [];
@@ -143,18 +209,31 @@ export function bracketReport(rows: readonly DeckRow[], oracleTagClosure: Oracle
     if (l.tutors !== null && tutors.length > l.tutors && tutorTags) out.push(`${tutors.length} tutors`);
     return out;
   };
-  let level = levels.find((l) => l.id === DATA.lowest) ?? levels[0]!;
-  let reasons: string[] = [];
+  let cardLevel = levels.find((l) => l.id === DATA.lowest) ?? levels[0]!;
+  let cardReasons: string[] = [];
   for (const l of levels) {
     if (l.id < DATA.lowest) continue;
     const why = fits(l);
     if (why.length === 0) {
-      level = l;
+      cardLevel = l;
       break;
     }
     // The reasons the level below this one was not enough.
-    reasons = why;
-    level = l;
+    cardReasons = why;
+    cardLevel = l;
   }
-  return { gameChangers, massLandDenial, extraTurns, tutors: tutorTags ? tutors : null, level, reasons, levels, source: DATA.source };
+  // The clock (D2): the higher of the two names the bracket, and the reasons
+  // are whichever of them reached it.
+  let level = cardLevel;
+  let reasons = cardReasons;
+  if (speed?.level !== null && speed?.level !== undefined && speed.why) {
+    const clock = levels.find((l) => l.id === speed.level);
+    if (clock && clock.id > cardLevel.id) {
+      level = clock;
+      reasons = [speed.why];
+    } else if (clock && clock.id === cardLevel.id) {
+      reasons = [...cardReasons, speed.why];
+    }
+  }
+  return { gameChangers, massLandDenial, extraTurns, tutors: tutorTags ? tutors : null, level, reasons, cardLevel, speed, levels, source: DATA.source };
 }

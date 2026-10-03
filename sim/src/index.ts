@@ -19,6 +19,7 @@ export * from './combinatorics.js';
 export * from './drawOdds.js';
 export * from './coverage.js';
 export * from './bracket.js';
+export * from './goals.js';
 export * from './defaults.js';
 export * from './behaviorTemplates.js';
 export * from './trace.js';

@@ -1,6 +1,6 @@
 import { Icon } from './icons.js';
 import type { DeckManaStats } from '../deck/manaStats.js';
-import { shortfallHeadline, type ManaReport } from '@mtg/sim';
+import { describeGoal, shortfallHeadline, type ManaReport, type SimGoal } from '@mtg/sim';
 import type { BracketReport, SimLimits, SimResult } from '@mtg/sim';
 import { heldBackBy } from './OnCurvePanel.js';
 import type { SimCoverage } from '@mtg/sim';
@@ -38,7 +38,10 @@ interface Answer {
   next?: string;
 }
 
-export type OverviewTarget = 'mana' | 'flow' | 'bracket' | 'model';
+export type OverviewTarget = 'mana' | 'flow' | 'plan' | 'bracket' | 'model';
+
+/** Below this at its turn, a goal is a plan the deck is not getting to. */
+const SHAKY = 0.5;
 
 export function AnalysisOverview({
   stats,
@@ -49,6 +52,7 @@ export function AnalysisOverview({
   coverage,
   toCheck,
   bracket,
+  goals,
   onTab,
 }: {
   stats: DeckManaStats;
@@ -62,11 +66,14 @@ export function AnalysisOverview({
   toCheck: number;
   /** What the Commander Brackets count, or null off the Commander format. */
   bracket: BracketReport | null;
+  /** The Plan tab's goals, in order. */
+  goals: readonly SimGoal[];
   onTab: (tab: OverviewTarget) => void;
 }) {
   const rows: { goal: string; tab: OverviewTarget; answer: Answer }[] = [
     { goal: 'Mana', tab: 'mana', answer: manaAnswer(stats, report, result, hasManaData, games) },
     { goal: 'Flow', tab: 'flow', answer: flowAnswer(result, hasManaData, games) },
+    { goal: 'Plan', tab: 'plan', answer: planAnswer(goals, result, hasManaData, games) },
     ...(bracket ? [{ goal: 'Bracket', tab: 'bracket' as const, answer: bracketAnswer(bracket) }] : []),
     { goal: 'Model', tab: 'model', answer: modelAnswer(coverage, toCheck) },
   ];
@@ -214,8 +221,38 @@ function flowAnswer(result: SimResult | undefined, hasManaData: boolean, games: 
 }
 
 /**
- * Which bracket the cards put a floor under (rebuild plan D1). No tone of
- * alarm: a Bracket 4 deck is a fine thing to be, as long as the table knows.
+ * Does the deck get to its plan (rebuild plan E1). The first goal leads the
+ * sentence, the shakiest sets the tone. No goals is an invitation, not a
+ * warning: the plan is the user's to write.
+ */
+function planAnswer(goals: readonly SimGoal[], result: SimResult | undefined, hasManaData: boolean, games: number): Answer {
+  if (goals.length === 0) {
+    return {
+      tone: 'wait',
+      status: 'no goals yet',
+      text: 'Say what the deck wants to have done by a turn, and the simulator counts how often its games get there.',
+      next: 'Add a goal.',
+    };
+  }
+  if (!hasManaData) return noData;
+  if (!result) return waiting(games);
+  const ps = goals.map((g) => result.goals.find((r) => r.id === g.id)?.p ?? 0);
+  const worst = Math.min(...ps);
+  const first = goals[0]!;
+  const lead = `${pct(ps[0]!)} of games: ${describeGoal(first)}.`;
+  const rest = goals.length > 1 ? ` ${goals.length - 1} more goal${plural(goals.length - 1)}, the shakiest at ${pct(worst)}.` : '';
+  return {
+    tone: worst < SHAKY ? 'warn' : 'ok',
+    status: goals.length === 1 ? pct(ps[0]!) : `${goals.length} goals, worst ${pct(worst)}`,
+    text: lead + rest,
+    next: worst < SHAKY ? 'See which part the games miss, or write the cards that should be finding it.' : undefined,
+  };
+}
+
+/**
+ * Which bracket the cards put a floor under (rebuild plan D1), and the clock
+ * (D2). No tone of alarm: a Bracket 4 deck is a fine thing to be, as long as
+ * the table knows.
  */
 function bracketAnswer(b: BracketReport): Answer {
   const counts = [
@@ -224,7 +261,16 @@ function bracketAnswer(b: BracketReport): Answer {
     b.extraTurns.length > 0 ? `${b.extraTurns.length} extra turn${plural(b.extraTurns.length)}` : '',
     b.tutors ? `${b.tutors.length} tutor${plural(b.tutors.length)}` : '',
   ].filter(Boolean);
-  const text = b.reasons.length > 0 ? `At least ${b.level.name}, because of ${b.reasons.join(' and ')}. ${counts.join(', ')}.` : `${counts.join(', ')}. Nothing here pushes it higher; combos and speed are not read.`;
+  const s = b.speed;
+  const clock = !s
+    ? ' Speed: dealing…'
+    : s.halfTurn !== null
+      ? ` A goldfish has one opponent dead by turn ${s.halfTurn} in half the games.`
+      : ` A goldfish has one opponent dead by turn ${s.maxTurn} in ${pct(s.lethalByEnd)} of games.`;
+  const text =
+    b.reasons.length > 0
+      ? `At least ${b.level.name}, because of ${b.reasons.join(' and ')}. ${counts.join(', ')}.${clock}`
+      : `${counts.join(', ')}.${clock} Nothing here pushes it higher; combos are not read.`;
   return {
     tone: 'ok',
     status: `${b.level.id} ${b.level.name}`,

@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.192.0
+
+- **Added: a Plan tab on the deck analysis page.** Write what the deck wants to have done by a turn, as goals with several parts at once: "four lands on the battlefield and a creature cast by turn 4", "my commander cast and a ramp piece out by turn 4", "a card with mana value 8 or more cast by turn 8". The simulator reads every goal at the end of each turn and shows how often its games get there, by turn, with presets to start from and the card search syntax for which cards count. The Overview gets a Plan row. Goals also steer the games: a search or a look in a card rule (yours or a shipped one) now fetches the first piece the plan is missing, within what the card can find, instead of a random match. Goals are kept on the device beside the play style and keep rule.
+- **Added: the Bracket tab reads the clock.** How often a goldfish has one opponent dead by each turn (the damage dealt reaching a starting life total, or ten poison), the bracket that speed reads as (a kill by turn 5 in half the games is Optimized, by turn 7 is Upgraded), and what would move it. The higher of the cards and the clock names the bracket; the Overview row says the speed too.
+- **Added: card rules can look at the top cards instead of searching.** A move off the library can say "look at the top N": the matches among them are taken and the rest go to the bottom in a random order, or into the graveyard when the card says so. Muxus looks at six for Goblins, Gishath at X for Dinosaurs, Commune with the Gods at five and bins the rest. The goldfish trace names what it looked at.
+
 ## 0.191.0
 
 - **Added: copies in the deck simulator.** A card rule can now say "Copy a permanent you control": a token copy of your biggest creature (or whatever the criteria name), with keywords the copy gains and "sacrificed at the end of the turn" for Kiki-Jiki and Splinter Twin, or "this card enters as the copy" for Clone. The copy is that card for everything, so a copied Avenger of Zendikar makes its Plants and a copied Solemn Simulacrum draws when it dies. Rite of Replication, Kiki-Jiki and Clone are the first three; spell copies and token doubling are not in yet.

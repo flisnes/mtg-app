@@ -20,6 +20,7 @@ import {
   describeCost,
   MAX_COST_N,
   MAX_CAST_N,
+  MAX_LOOK,
   MAX_CAST_OPTIONS,
   MAX_TOKEN_PT,
   normalizeCost,
@@ -1348,7 +1349,7 @@ const firstStep = (kind: RuleKind): BehaviorStep =>
  */
 const UNNARROWED: ReadonlySet<string> = new Set(['grantcast', 'grantdredge', 'landfrom', 'nomaxhand', 'discount']);
 
-const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub', 'pick', 'tid', 'tn', 'gk', 'own', 'po', 'each', 'tapped', 'attacking'];
+const VERB_FIELDS: (keyof BehaviorStep)[] = ['colors', 'oneColor', 'tk', 'tp', 'tt', 'ty', 'kw', 'ck', 'sub', 'pick', 'tid', 'tn', 'gk', 'own', 'po', 'each', 'tapped', 'attacking', 'win', 'rest'];
 
 /** A number box for the cost editor: whole numbers from 0 to `max`. */
 function CountBox({ value, max, label, onChange }: { value: number; max: number; label: string; onChange: (n: number) => void }) {
@@ -1689,7 +1690,9 @@ function RuleEditor({
    */
   const changeZone = (i: number, step: BehaviorStep, end: 'from' | 'to', zone: BehaviorZone) => {
     if (end === 'from') {
-      setStep(i, { ...step, from: zone, to: step.to === zone ? (step.from ?? 'hand') : step.to });
+      // A look at the top N only means anything off the library.
+      const base = zone === 'library' ? step : without(step, 'win', 'rest');
+      setStep(i, { ...base, from: zone, to: step.to === zone ? (step.from ?? 'hand') : step.to });
       return;
     }
     const from = step.from === zone ? BEHAVIOR_FROM_ZONES.find((z) => z.id !== zone)?.id : step.from;
@@ -1915,6 +1918,47 @@ function RuleEditor({
                   </select>
                 </label>
                 {lands && <TapPicker step={step} onChange={(next) => setStep(i, next)} />}
+                {/* Off the library: the whole library, or a look at the top N
+                    (rebuild plan §6 step 5), and where the rest go. */}
+                {(step.from ?? 'library') === 'library' && (
+                  <>
+                    <label className="field">
+                      <select
+                        value={step.win ? 'look' : 'search'}
+                        aria-label="Search the library or look at the top"
+                        onChange={(e) => setStep(i, e.target.value === 'look' ? { ...step, win: 5 } : without(step, 'win', 'rest'))}
+                      >
+                        <option value="search">Search the whole library</option>
+                        <option value="look">Look at the top cards only</option>
+                      </select>
+                    </label>
+                    {step.win !== undefined && (
+                      <>
+                        <label className="field behavior-n">
+                          <input
+                            type="number"
+                            min={1}
+                            max={MAX_LOOK}
+                            inputMode="numeric"
+                            aria-label="Cards to look at"
+                            value={step.win}
+                            onChange={(e) => setStep(i, { ...step, win: Math.max(1, Math.min(MAX_LOOK, Math.round(Number(e.target.value) || 1))) })}
+                          />
+                        </label>
+                        <label className="field">
+                          <select
+                            value={step.rest ?? 'bottom'}
+                            aria-label="Where the rest go"
+                            onChange={(e) => setStep(i, e.target.value === 'graveyard' ? { ...step, rest: 'graveyard' } : without(step, 'rest'))}
+                          >
+                            <option value="bottom">The rest on the bottom</option>
+                            <option value="graveyard">The rest into the graveyard</option>
+                          </select>
+                        </label>
+                      </>
+                    )}
+                  </>
+                )}
                 {/* Which of the matches, when it is not all of them. */}
                 {step.x.kind !== 'all' && (
                   <label className="field">
@@ -2480,6 +2524,12 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
     notes.push({
       key: 'flicker',
       text: 'A flicker takes permanents off the battlefield and puts them straight back, which fires everything they do on the way in. What it costs is what they were already doing: the mana arrives tapped again, and a creature is summoning sick again, so it cannot attack this turn. A token that leaves does not come back.',
+    });
+  }
+  if (rule.steps.some((s) => s.op === 'move' && s.from === 'library' && s.win)) {
+    notes.push({
+      key: 'look',
+      text: 'Looking at the top cards takes the matches from among that many off the top and puts the rest on the bottom in a random order (or into your graveyard, if the card says so). Muxus looks at six for Goblins; a "search the whole library" would overstate it. When the deck has goals on the Plan tab, a search or a look goes for the first piece the plan is missing, within what the criteria allow; otherwise it takes a random match.',
     });
   }
   if (rule.steps.some((s) => (s.op === 'move' || s.op === 'self') && (s.to ?? '').startsWith('library'))) {

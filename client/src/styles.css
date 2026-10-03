@@ -8702,6 +8702,97 @@ a.seg {
   display: inline;
   margin: 0;
 }
+/* Plan tab (rebuild plan E1): one card per goal, the sentence and its number
+   on one line, the by-turn bars under it. The editor reuses the draw-odds
+   controls (query field, stepper, preset chips). */
+.plan-goals {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.plan-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+.plan-goal-new {
+  margin-bottom: 0.75rem;
+}
+.plan-goal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.plan-goal-text {
+  margin: 0;
+  line-height: 1.35;
+}
+.plan-pct {
+  font-size: 1.15rem;
+  white-space: nowrap;
+}
+.plan-pct.tone-ok {
+  color: var(--ok);
+}
+.plan-pct.tone-warn {
+  color: #e6a23c;
+}
+/* Shorter than the mana chart: eight bars of a percentage, not a histogram. */
+.plan-curve {
+  height: 92px;
+}
+.plan-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.plan-actions .linklike {
+  font-size: 0.85rem;
+  padding: 0.2rem 0;
+}
+.plan-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.plan-terms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.plan-term {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.plan-term .field {
+  margin: 0;
+}
+.plan-term .behavior-n input {
+  width: 3.5rem;
+}
+.plan-query {
+  flex: 1 1 12rem;
+  width: auto;
+}
+.plan-term .linklike {
+  font-size: 0.85rem;
+  padding: 0.2rem 0;
+}
 /* Overview (rebuild plan A5): one row per question, each a way into its tab. */
 .overview-rows {
   list-style: none;

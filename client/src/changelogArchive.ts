@@ -9,6 +9,15 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.182.5',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Every popup sheet in the app now shares one frame, so the guard against a double-tap landing inside a freshly opened sheet, Escape/back handling and screen-reader dialog markup apply everywhere.',
+      },
+    ],
+  },
+  {
     version: '0.182.3',
     changes: [
       {

@@ -32,6 +32,23 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.192.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'A Plan tab on the deck analysis page: write goals like "four lands and a creature on the battlefield by turn 4" and the simulator counts how often its games get there. Searches in your card rules fetch what the plan is missing first.',
+      },
+      {
+        kind: 'added',
+        text: 'The Bracket tab reads the clock: how often a goldfish has one opponent dead by each turn, and the bracket that speed reads as.',
+      },
+      {
+        kind: 'added',
+        text: 'A card rule can look at the top N cards instead of searching the whole library (Muxus, Gishath), with the rest going to the bottom or the graveyard.',
+      },
+    ],
+  },
+  {
     version: '0.191.0',
     changes: [
       {
@@ -181,15 +198,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Update carries a card\'s filing along instead of leaving a conflict behind, review steps keep your answers when you go back, and a move between containers undoes in one step.',
-      },
-    ],
-  },
-  {
-    version: '0.182.5',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Every popup sheet in the app now shares one frame, so the guard against a double-tap landing inside a freshly opened sheet, Escape/back handling and screen-reader dialog markup apply everywhere.',
       },
     ],
   },

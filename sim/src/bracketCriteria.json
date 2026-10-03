@@ -8,6 +8,13 @@
     { "id": 5, "name": "cEDH", "gameChangers": null, "massLandDenial": true, "extraTurnCards": null, "tutors": null }
   ],
   "lowest": 2,
+  "speed": {
+    "note": "Upgraded decks are not built to win before turn 6 or so; Core games run longer still; Optimized has no such line. Read off the simulator: the share of goldfish games in which one opponent is dead by a turn.",
+    "signals": [
+      { "bracket": 4, "lethalBy": 5, "share": 0.5 },
+      { "bracket": 3, "lethalBy": 7, "share": 0.5 }
+    ]
+  },
   "detect": {
     "massLandDenial": {
       "patterns": [

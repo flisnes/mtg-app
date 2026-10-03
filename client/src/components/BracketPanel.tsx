@@ -1,4 +1,4 @@
-import type { BracketCard, BracketReport } from '@mtg/sim';
+import { SPEED_NOTE, type BracketCard, type BracketReport, type BracketSpeed } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
 
 // The Bracket tab (rebuild plan D1): what the Commander Brackets count in this
@@ -6,11 +6,14 @@ import { HowWorked } from './HowWorked.js';
 // criteria are data in the sim package (bracketCriteria.json), so a WotC
 // revision is an edit there and nothing here.
 //
-// Honest about its edges: two-card combos (D3) and how fast the deck actually
-// is (D2) are not read, so the bracket named is a floor set by the cardboard.
-// A deck with no Game Changers and a turn-four win is still not a Core deck.
+// Plus the clock (D2): how often the simulated games have one opponent dead
+// by a turn, against the turn each bracket is built around. Still honest
+// about its edges: two-card combos (D3) are not read, so the bracket named is
+// a floor set by the cardboard and the clock.
 
-export function BracketPanel({ report, commander }: { report: BracketReport; commander: boolean }) {
+const pct = (p: number) => `${Math.round(p * 100)}%`;
+
+export function BracketPanel({ report, commander, games }: { report: BracketReport; commander: boolean; games: number }) {
   const { level, reasons } = report;
   const flagged = report.gameChangers.length + report.massLandDenial.length + report.extraTurns.length;
   const tutors = report.tutors;
@@ -23,14 +26,16 @@ export function BracketPanel({ report, commander }: { report: BracketReport; com
         {reasons.length > 0
           ? `at least, because of ${reasons.join(' and ')}.`
           : flagged === 0
-            ? 'by the cards: no Game Changers, no mass land denial, no extra turns.'
-            : 'by the cards.'}
+            ? 'by the cards and the clock: no Game Changers, no mass land denial, no extra turns, no early kills.'
+            : 'by the cards and the clock.'}
         {!commander && ' This is a Commander question; the counts below still hold for any deck.'}
       </p>
       <p className="fine-print">
-        A floor, not a verdict. Two-card combos and how fast the deck wins are not read here, and Exhibition is a way of
-        playing rather than a list of cards, so the lowest this names is Core.
+        A floor, not a verdict. Two-card combos are not read here, and Exhibition is a way of playing rather than a list of
+        cards, so the lowest this names is Core.
       </p>
+
+      <Speed speed={report.speed} games={games} />
 
       <Section title="Game Changers" cards={report.gameChangers} none="None. Bracket 3 allows up to three; Core allows none." />
       <Section title="Mass land denial" cards={report.massLandDenial} none="None. Allowed from Bracket 4." why />
@@ -60,8 +65,63 @@ export function BracketPanel({ report, commander }: { report: BracketReport; com
           The ladder: {report.levels.map((l) => `${l.id} ${l.name}`).join(', ')}. Core and Exhibition allow no Game Changers,
           Upgraded up to three, Optimized any number; mass land denial and chained extra turns start at Optimized.
         </p>
+        <p className="fine-print">
+          Speed: {SPEED_NOTE} The kill is counted when the damage dealt reaches one starting life total, or the poison reaches ten.
+          Nothing blocks and nobody answers, so it reads fast; every card the model cannot read deals nothing, so it reads slow.
+          The higher of the cards and the clock names the bracket.
+        </p>
         <p className="fine-print">{report.source}</p>
       </HowWorked>
+    </>
+  );
+}
+
+/** The clock (rebuild plan D2): one opponent dead by each turn, and the lines that would move the bracket. */
+function Speed({ speed, games }: { speed: BracketSpeed | null; games: number }) {
+  if (!speed) {
+    return (
+      <>
+        <h3 className="deck-stats-head">Speed</h3>
+        <p className="deck-stats-verdict sim-waiting">Dealing {games.toLocaleString()} games…</p>
+      </>
+    );
+  }
+  const turns = Array.from({ length: speed.maxTurn }, (_, i) => i + 1);
+  const head =
+    speed.halfTurn !== null
+      ? `One opponent is dead by turn ${speed.halfTurn} in half the games.`
+      : speed.lethalByEnd >= 0.005
+        ? `One opponent is dead by turn ${speed.maxTurn} in ${pct(speed.lethalByEnd)} of games.`
+        : `No game kills an opponent inside ${speed.maxTurn} turns.`;
+  return (
+    <>
+      <h3 className="deck-stats-head">Speed</h3>
+      <p className="deck-stats-verdict">
+        <strong>{head}</strong> {speed.why ? `That reads as Bracket ${speed.level}: ${speed.why}.` : 'Under every bracket line, so the clock says nothing here.'}
+      </p>
+      <div className="curve odds-curve plan-curve" role="img" aria-label={turns.map((t) => `dead by turn ${t} ${pct(speed.lethalByTurn[t] ?? 0)}`).join(', ')}>
+        {turns.map((t) => {
+          const p = speed.lethalByTurn[t] ?? 0;
+          return (
+            <div key={t} className="curve-col">
+              <div className="odds-track">
+                <div className="curve-bar" style={{ height: `${p * 100}%` }}>
+                  <span className="curve-count">{Math.round(p * 100)}</span>
+                </div>
+              </div>
+              <span className="curve-tick">{t}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="fine-print">
+        What would move it:{' '}
+        {[...speed.signals]
+          .sort((a, b) => a.bracket - b.bracket)
+          .map((s) => `a kill by turn ${s.lethalBy} in ${pct(s.share)} of games reads as Bracket ${s.bracket} (now ${pct(speed.lethalByTurn[s.lethalBy] ?? 0)})`)
+          .join('; ')}
+        . A goldfish on one of three opponents, with nothing in the way.
+      </p>
     </>
   );
 }

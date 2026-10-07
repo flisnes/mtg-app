@@ -11,7 +11,8 @@ import { ownedBadge } from './OwnedBadge.js';
 import { placementBadge } from './PlacementBadge.js';
 import { langMark } from './LangFlag.js';
 import { specialMark } from './SpecialConditions.js';
-import { formatPrice, pricedForFinish } from './CardSorting.js';
+import { formatPrice, formatTotal, pricedForFinish } from './CardSorting.js';
+import { stackPlacement, type EntryStack } from './stackPrintings.js';
 
 // One place that turns an owned entry (collection or wishlist) into a CardItem,
 // shared by the list pages (Collection / Tradelist / Wishlist) and the scoped
@@ -95,6 +96,66 @@ export function collectionCardItem(
     ),
     price: formatPrice(pricedForFinish(r.printing, r.entry.finish), r.oracle) ?? '—',
     trend: opts.moverFlags?.get(r.entry.scryfallId),
+    onClick: opts.onClick,
+  };
+}
+
+/**
+ * A stack of collection rows as one tile: every copy of the card you own,
+ * counted together, wearing the edition your printing preference picks out of
+ * the ones you hold. Marks follow "any copy": the sheen if any is foil, the
+ * flag if any is in another language, the A if any is altered, the filing
+ * badge if any is in a deck. A stack of one row is exactly that row's item,
+ * so the list looks the same with the toggle on and off wherever a card has
+ * only one kind of copy.
+ */
+export function stackCardItem(
+  s: EntryStack,
+  opts: { moverFlags?: MoverFlags; placements?: PlacementIndex; showYear?: boolean; onClick?: () => void },
+): CardItem {
+  if (s.members.length === 1) return { ...collectionCardItem(s.members[0]!, opts), key: s.key };
+  const place = placementBadge(stackPlacement(s, opts.placements));
+  const special = specialMark(s.special);
+  // The first language that isn't the one you collect in gets the flag.
+  const lang = s.langs.map((l) => langMark(l)).find((m) => !!m);
+  const year = yearMark(s.printing, opts.showYear);
+  const trend = s.members.map((m) => opts.moverFlags?.get(m.entry.scryfallId)).find((t) => !!t);
+  const kinds =
+    s.printingCount > 1
+      ? `${s.printingCount} editions`
+      : `${s.members.length} kinds`;
+  return {
+    ...(place ? { place } : {}),
+    ...(special ? { special } : {}),
+    ...(lang ? { lang } : {}),
+    ...(year ? { year } : {}),
+    key: s.key,
+    name: s.oracle?.name ?? '(unknown card)',
+    image: s.printing?.imageSmall ?? s.oracle?.imageSmall ?? null,
+    mana: s.oracle?.manaCost,
+    foil: s.foil,
+    count: s.quantity,
+    badge:
+      s.quantityForTrade > 0 ? (
+        <>
+          <Icon name="tradelist" size={12} />
+          {s.quantityForTrade > 1 && <span className="badge-ft-count">{s.quantityForTrade}</span>}
+        </>
+      ) : undefined,
+    badgeClass: 'badge-ft',
+    badgeTitle: s.quantityForTrade > 0 ? `${s.quantityForTrade} for trade` : undefined,
+    sub: (
+      <>
+        {s.printing && <SetSymbol set={s.printing.set} className="sub-set-symbol" title={s.printing.setName} />}
+        {s.printing ? `${s.printing.setName} · #${s.printing.collectorNumber} · ` : ''}
+        <span className="stack-kinds" title={`${s.quantity} copies across ${kinds}; tap to see each`}>
+          {kinds}
+        </span>
+      </>
+    ),
+    // The pile's worth, not one copy's: ten Bolts is a number about ten Bolts.
+    price: formatTotal(s.value),
+    trend,
     onClick: opts.onClick,
   };
 }

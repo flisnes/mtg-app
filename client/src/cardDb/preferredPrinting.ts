@@ -115,6 +115,40 @@ function pickOne(candidates: Printing[], opts: ResolveOptions): Printing | undef
 /** The slice of preferences that decides a printing. */
 export type PrintingPrefs = Pick<Prefs, 'printing' | 'preferOwnedPrinting' | 'baseCurrency'>;
 
+/**
+ * Which of the printings you *own* stands for the card when its copies are
+ * stacked into one tile. The same rule as the display preference, applied to
+ * the owned pool instead of every printing: 'latest' is the newest copy you
+ * hold, 'first' the oldest, 'cheapest' the one worth least today. Prefer-owned
+ * is moot here (everything in the pool is owned), so it is ignored.
+ *
+ * Falls back rather than returning nothing: a stack has to show *something*,
+ * so when no owned printing is English with art, the rule runs over the lot,
+ * and when a rule can't decide (no prices yet) the newest owned copy stands in.
+ *
+ * Pure and synchronous — the candidates are the printings already joined onto
+ * the collection rows, so stacking a thousand cards costs no extra query.
+ */
+export function pickOwnedPrinting(
+  candidates: Priced<Printing>[],
+  prefs: Pick<Prefs, 'printing' | 'baseCurrency'>,
+  setTypes: SetTypeMap | null,
+): Priced<Printing> | undefined {
+  if (!candidates.length) return undefined;
+  const displayable = candidates.filter(isDisplayable);
+  const pool = displayable.length ? displayable : candidates;
+  const priceOf = (id: string): number | null => {
+    const p = pool.find((c) => c.scryfallId === id);
+    if (!p) return null;
+    return (prefs.baseCurrency === 'EUR' ? p.priceEur ?? p.priceUsd : p.priceUsd ?? p.priceEur) ?? null;
+  };
+  const picked =
+    prefs.printing === 'latest'
+      ? [...pool].sort(byNewest)[0]
+      : pickOne(pool, { pref: prefs.printing, ownedIds: null, setTypes, priceOf });
+  return (picked as Priced<Printing> | undefined) ?? [...pool].sort(byNewest)[0];
+}
+
 export interface DisplayPrintingOptions {
   /**
    * An already-built ownership index, for callers that hold one. Without it the

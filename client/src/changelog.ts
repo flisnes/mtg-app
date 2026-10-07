@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.194.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Stack printings: a button beside the list/grid switch (or the S key) folds every copy of a card into one tile with the total count, wearing the edition your printing preference picks from the ones you own. Tap it and step between your copies on a strip in the card sheet. Works in the collection, tradelist and your decks, binders and boxes.',
+      },
+    ],
+  },
+  {
     version: '0.193.0',
     changes: [
       {

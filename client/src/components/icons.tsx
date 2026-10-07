@@ -55,7 +55,8 @@ export type IconName =
   | 'moveTo'
   | 'emblem'
   | 'chart'
-  | 'archive';
+  | 'archive'
+  | 'stack';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -107,6 +108,14 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M4 13v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
       <path d="M12 3v9" />
       <path d="M8.5 8.5 12 12l3.5-3.5" />
+    </>
+  ),
+  // Three cards fanned into a pile — every printing of a card stacked as one.
+  stack: (
+    <>
+      <rect x="7" y="8" width="11" height="13" rx="1.5" />
+      <path d="M5 17V6.5A1.5 1.5 0 0 1 6.5 5H15" />
+      <path d="M3 14V3.5A1.5 1.5 0 0 1 4.5 2H12" />
     </>
   ),
   // Folder with a tab — a group of decks.

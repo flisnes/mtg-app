@@ -39,7 +39,7 @@ import { cycleSlugsOf } from '../cardDb/oracleTags.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { CardHistorySheet } from './CardHistory.js';
 import { ContainerPickerSheet } from './ContainerPickerSheet.js';
-import { CopyPicker, FINISH_LABELS } from './CopyPicker.js';
+import { CopyPicker, FINISH_LABELS, copyDetail } from './CopyPicker.js';
 import { FileCopiesSheet } from './FileCopiesSheet.js';
 import { SheetSelectField, SheetSelectList, type SheetSelectOption } from './SheetSelect.js';
 import { EventSheet } from './EventSheet.js';
@@ -188,6 +188,9 @@ export type CardSheetProps = CardSheetCommon &
         /** An owned copy: opens as a line with an Edit toggle. */
         mode: 'edit';
         entry: CollectionEntry;
+        /** The other copies stacked under the same tile (stack printings on):
+         *  the sheet offers a strip to step between them. Includes `entry`. */
+        copies?: CollectionEntry[];
       }
     | {
         /** Edit a wishlist line (edition + quantity) instead of the collection. */
@@ -198,6 +201,8 @@ export type CardSheetProps = CardSheetCommon &
         /** Edit a deck slot's quantity + printing, and its zone. */
         mode: 'deck';
         deckCard: DeckSlotEdit;
+        /** The other slots of this card stacked under the same tile. Includes `deckCard`. */
+        slots?: DeckSlotEdit[];
       }
     | {
         /** Edit a scan/trade line held in memory; Apply reports back, nothing is written. */
@@ -231,10 +236,17 @@ export function CardSheet(props: CardSheetProps) {
   const { oracleCard, initialScryfallId, openHistory, highlightPrintings, onClose } = props;
   // The current mode's own props, unpacked once. Everything below reads these
   // rather than narrowing `props` at each of the three dozen sites that ask.
-  const entry = props.mode === 'edit' ? props.entry : undefined;
+  // Stacked printings: the tile the sheet opened from stood for several copies
+  // (or slots), and the strip under the price steps between them. Which one is
+  // up is the sheet's own business; the caller only hands the list over.
+  const copies = props.mode === 'edit' ? props.copies : props.mode === 'deck' ? props.slots : undefined;
+  const [pickedCopyId, setPickedCopyId] = useState<string | null>(null);
+  const entry =
+    props.mode === 'edit' ? props.copies?.find((c) => c.id === pickedCopyId) ?? props.entry : undefined;
   const wishEntry = props.mode === 'wish' ? props.wishEntry : undefined;
   const wishView = props.mode === 'info' ? props.wishView : undefined;
-  const deckCard = props.mode === 'deck' ? props.deckCard : undefined;
+  const deckCard =
+    props.mode === 'deck' ? props.slots?.find((s) => s.id === pickedCopyId) ?? props.deckCard : undefined;
   const sessionCard = props.mode === 'session' ? props.sessionCard : undefined;
   const onApply = props.mode === 'session' ? props.onApply : undefined;
   const applyLabel = props.mode === 'session' ? props.applyLabel : undefined;
@@ -425,6 +437,36 @@ export function CardSheet(props: CardSheetProps) {
   // Condition away. The lists live outside the row of triggers (they need its
   // whole width), so the row can't own this.
   const [openTrait, setOpenTrait] = useState<TraitKey | null>(null);
+  // Stepping to another copy on the strip: the form is that copy's now. Only
+  // edit and deck mode have a strip, so only their fields are re-read. Any
+  // half-made change to the previous copy is dropped, same as Cancel.
+  function switchCopy(id: string) {
+    if (id === (entry?.id ?? deckCard?.id)) return;
+    const c = props.mode === 'edit' ? props.copies?.find((x) => x.id === id) : undefined;
+    const s = props.mode === 'deck' ? props.slots?.find((x) => x.id === id) : undefined;
+    if (!c && !s) return;
+    setPickedCopyId(id);
+    setEditMode(false);
+    setTraitsOpen(false);
+    setOpenTrait(null);
+    if (c) {
+      setScryfallId(c.scryfallId);
+      setCondition(c.condition);
+      setFinish(c.finish);
+      setLang(c.lang);
+      setQuantity(c.quantity);
+      setForTrade(c.quantityForTrade);
+      setSpecial(c.special ?? []);
+    } else if (s) {
+      setScryfallId(s.anyBasic ? ANY_PRINTING : s.scryfallId ?? ANY_PRINTING);
+      setCondition(s.condition ?? '');
+      setFinish(s.finish ?? '');
+      setLang(s.lang ?? '');
+      setQuantity(s.quantity);
+      setTags(s.tags ?? []);
+      setZone(s.board ?? 'main');
+    }
+  }
   const [busy, setBusy] = useState(false);
   const [trend, setTrend] = useState<HistoryChange | null>(null);
   const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(null);
@@ -1140,6 +1182,17 @@ export function CardSheet(props: CardSheetProps) {
             />
           )}
         </div>
+        {/* Stack printings: the tile stood for several copies, so here they
+            are, one chip each, the one on the form lit. Tapping another swaps
+            the whole form over to it. */}
+        {copies && copies.length > 1 && (
+          <CopyStrip
+            copies={copies}
+            printings={printings}
+            currentId={entry?.id ?? deckCard?.id ?? ''}
+            onPick={switchCopy}
+          />
+        )}
         {/* Where the copies live. A binder name can be long, so the pills wrap
             rather than pushing the form down. */}
         {placement && placement.places.length > 0 && (
@@ -1646,6 +1699,63 @@ function OwnedHere({
     <button type="button" className={`${cls} sheet-owned-link`} title={`${owned}${detail} · open it in your collection`} onClick={onOpen}>
       {body}
     </button>
+  );
+}
+
+/**
+ * One chip per copy (or slot) stacked under the tile the sheet opened from:
+ * edition, what the copy is, how many. The current one is lit; tapping another
+ * hands the form over to it. Scrolls sideways past a handful, since a Bolt
+ * collector can hold a dozen kinds.
+ */
+function CopyStrip({
+  copies,
+  printings,
+  currentId,
+  onPick,
+}: {
+  copies: readonly (CollectionEntry | DeckSlotEdit)[];
+  printings: Priced<Printing>[];
+  currentId: string;
+  onPick: (id: string) => void;
+}) {
+  const byId = new Map(printings.map((p) => [p.scryfallId, p]));
+  return (
+    <div className="copy-strip" role="tablist" aria-label="Your copies of this card">
+      {copies.map((c) => {
+        const p = c.scryfallId ? byId.get(c.scryfallId) : undefined;
+        const detail =
+          'quantityForTrade' in c
+            ? copyDetail(c)
+            : [c.condition, c.finish && c.finish !== 'nonfoil' ? FINISH_LABELS[c.finish] : null, c.lang && c.lang !== 'en' ? c.lang : null]
+                .filter(Boolean)
+                .join(' · ');
+        const current = c.id === currentId;
+        return (
+          <button
+            key={c.id}
+            type="button"
+            role="tab"
+            aria-selected={current}
+            className={current ? 'copy-chip copy-chip-current' : 'copy-chip'}
+            onClick={() => onPick(c.id)}
+            title={p ? `${p.setName} #${p.collectorNumber}` : 'Any printing'}
+          >
+            <span className="copy-chip-edition">
+              {p ? (
+                <>
+                  <SetSymbol set={p.set} title={p.setName} /> {p.set.toUpperCase()}
+                </>
+              ) : (
+                'Any'
+              )}
+            </span>
+            {detail && <span className="copy-chip-detail">{detail}</span>}
+            <span className="copy-chip-qty">×{c.quantity}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

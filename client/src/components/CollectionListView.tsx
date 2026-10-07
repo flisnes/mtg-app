@@ -8,8 +8,11 @@ import { removeCollectionEntriesBulk, removeDeckCardsMatching, setQuantityForTra
 import { useFiling } from '../deck/useFiling.js';
 import { CardSheet } from './CardSheet.js';
 import { useConfirm } from './ConfirmSheet.js';
-import { CardItems, CardItemsSkeleton, ViewToggle, useGridColumns, useViewMode } from './CardViews.js';
-import { collectionCardItem } from './cardRows.js';
+import { CardItems, CardItemsSkeleton, StackToggle, ViewToggle, useGridColumns, useStackPrintings, useViewMode } from './CardViews.js';
+import { stackCardItem } from './cardRows.js';
+import { stackEntries, stackSortFields } from './stackPrintings.js';
+import { useSetTypes } from '../cardDb/useSetTypes.js';
+import { usePrefs } from '../usePrefs.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { LoadMoreSentinel } from './LoadMoreSentinel.js';
 import { BulkActionBar, type BulkAction } from './BulkActionBar.js';
@@ -19,7 +22,7 @@ import { useMultiSelect } from './useMultiSelect.js';
 import { SelectToggle } from './SelectToggle.js';
 import { PileView, CardBackSheet, type PileEntry } from './PileView.js';
 import { SortControls, sortCards, useCardSort } from './CardSorting.js';
-import { collectionSortFields, useEntrySortData } from './useEntrySort.js';
+import { useEntrySortData } from './useEntrySort.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { useGoblinMode } from './useGoblinMode.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
@@ -51,7 +54,9 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const entries = useCollectionEntries();
   const navigate = useNavigate();
   const { file, sheet: filingSheet } = useFiling();
-  const [editing, setEditing] = useState<JoinedEntry | null>(null);
+  // The copy whose sheet is open, plus the other rows stacked under the same
+  // tile (one entry, no siblings, when the list isn't stacking).
+  const [editing, setEditing] = useState<{ row: JoinedEntry; copies: JoinedEntry[] } | null>(null);
   // The header search bar, when it's scoped to this list, narrows these rows
   // instead of covering them — so sort, Select and the bulk actions below all
   // operate on the search result. Blank whenever search isn't pointed here.
@@ -63,6 +68,11 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   const goblin = useGoblinMode();
   const pileMode = goblin && !onlyTrade;
   const [view, setView] = useViewMode();
+  // Stack printings: every row of one card folds into a single tile. The pile
+  // is one card per copy by nature, so it never stacks.
+  const [stackPref, setStacking] = useStackPrintings();
+  const prefs = usePrefs();
+  const setTypes = useSetTypes(stackPref);
   const [cardBack, setCardBack] = useState(false);
   const [sort, setSort] = useCardSort(onlyTrade ? 'tradelist' : 'collection');
   const openSearch = useOpenSearch();
@@ -115,10 +125,17 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     [rows, onlyTrade, matchesPlacement, matchesQuery],
   );
 
+  // Filter first, then stack: a `set:m10` search on a stacked list shows the
+  // Bolt stack as the five M10 copies, which is the question that was asked.
+  const stacking = stackPref && !pileMode;
+  const stacks = useMemo(
+    () => stackEntries(matching, { stack: stacking, prefs, setTypes }),
+    [matching, stacking, prefs, setTypes],
+  );
   const filtered = useMemo(() => {
     if (!rows) return [];
-    return sortCards(matching, (r) => collectionSortFields(r, sortData), sort);
-  }, [rows, matching, sort, sortData]);
+    return sortCards(stacks, (s) => stackSortFields(s, sortData), sort);
+  }, [rows, stacks, sort, sortData]);
 
   // How many rows are on the way, straight off the collection table. Only used
   // while the join is in flight, which is the only time it can differ from what
@@ -129,8 +146,8 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // (both need the joined data to judge a row), so the line waits rather than
   // print a total the filter is about to change.
   const counted: { rows: number; qty: number } | null = rows
-    ? { rows: filtered.length, qty: filtered.reduce((s, r) => s + r.entry.quantity, 0) }
-    : entries && !query && placeFilter === 'all'
+    ? { rows: filtered.length, qty: filtered.reduce((s, st) => s + st.quantity, 0) }
+    : entries && !query && placeFilter === 'all' && !stacking
       ? entries
           .filter((e) => !onlyTrade || e.quantityForTrade > 0)
           .reduce((acc, e) => ({ rows: acc.rows + 1, qty: acc.qty + e.quantity }), { rows: 0, qty: 0 })
@@ -138,8 +155,11 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // The count belongs in the page header, right under the title, so the cards
   // start as high up the screen as they can. Standing outside a Page (never
   // today, but the view doesn't require one) it falls back to its own line.
+  // Stacked, the first number is cards (distinct names), so it says so.
   const countLine = counted
-    ? `${counted.rows} ${counted.rows === 1 ? 'entry' : 'entries'} · ${counted.qty} card${counted.qty === 1 ? '' : 's'}`
+    ? stacking
+      ? `${counted.rows} card${counted.rows === 1 ? '' : 's'} · ${counted.qty} cop${counted.qty === 1 ? 'y' : 'ies'}`
+      : `${counted.rows} ${counted.rows === 1 ? 'entry' : 'entries'} · ${counted.qty} card${counted.qty === 1 ? '' : 's'}`
     : '';
   const hoistedCount = usePageMeta(countLine);
 
@@ -172,7 +192,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
             // as a look at the card (the entry opens read-only), but the way in
             // to fixing the copy is there when the pile is what you're staring at.
             if (faceDown && !back) setCardBack(true);
-            else setEditing(r);
+            else setEditing({ row: r, copies: [r] });
           },
         };
       }),
@@ -187,14 +207,15 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // Page the rendered list — the collection is the one list guaranteed to reach
   // thousands of entries, so rendering all of them (each a tile with images and
   // badges) janks on phones. Reset to page one when the sort or search changes.
-  const filterSig = JSON.stringify({ onlyTrade, sort, query, placeFilter });
+  const filterSig = JSON.stringify({ onlyTrade, sort, query, placeFilter, stacking });
   const { gridRef, columns } = useGridColumns();
   const { limit, showMore } = usePagedLimit(filterSig, 60, columns);
   const visible = filtered.slice(0, limit);
 
-  // Selected keys (= entry ids) resolved back to their rows for bulk actions.
-  const selectedRows = filtered.filter((r) => sel.selected.has(r.entry.id));
-  const allKeys = filtered.map((r) => r.entry.id);
+  // Selected keys (entry ids, or stack keys) resolved back to the rows the
+  // bulk actions write: ticking a stack means every copy under it.
+  const selectedRows = filtered.filter((s) => sel.selected.has(s.key)).flatMap((s) => s.members);
+  const allKeys = filtered.map((s) => s.key);
   const plural = (n: number) => (n === 1 ? '' : 's');
 
   async function bulkAddTradelist() {
@@ -357,6 +378,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           </select>
         </div>
         {!pileMode && <SortControls prefs={sort} onChange={setSort} withChange withDates withRelease />}
+        {!pileMode && <StackToggle on={stackPref} onChange={setStacking} />}
         {!pileMode && <ViewToggle mode={view} onChange={setView} />}
       </div>
 
@@ -389,12 +411,12 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           selectable={sel.active}
           selectedKeys={sel.selected}
           onToggleSelect={sel.toggle}
-          items={visible.map((r) =>
-            collectionCardItem(r, {
+          items={visible.map((s) =>
+            stackCardItem(s, {
               moverFlags,
               placements,
               showYear: sort.key === 'released',
-              onClick: () => setEditing(r),
+              onClick: () => setEditing({ row: s.members[0]!, copies: s.members }),
             }),
           )}
         />
@@ -433,7 +455,15 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       {filingSheet}
       {confirmSheet}
 
-      {editing?.oracle && <CardSheet mode="edit" oracleCard={editing.oracle} entry={editing.entry} onClose={() => setEditing(null)} />}
+      {editing?.row.oracle && (
+        <CardSheet
+          mode="edit"
+          oracleCard={editing.row.oracle}
+          entry={editing.row.entry}
+          copies={editing.copies.length > 1 ? editing.copies.map((c) => c.entry) : undefined}
+          onClose={() => setEditing(null)}
+        />
+      )}
       {cardBack && <CardBackSheet onClose={() => setCardBack(false)} />}
     </>
   );

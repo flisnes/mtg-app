@@ -26,37 +26,44 @@ export type ViewMode = 'list' | 'grid' | 'stack';
  * until remount. Anything stored that isn't offered here reads back as the
  * default, which is also how a legacy 'pile' was retired.
  */
-function viewPref(key: string, allowed: readonly ViewMode[], dflt: ViewMode) {
-  const read = (): ViewMode => {
+function sharedPref<T>(key: string, parse: (stored: string | null) => T, serialize: (v: T) => string) {
+  const read = (): T => {
     try {
-      const stored = localStorage.getItem(key) as ViewMode | null;
-      return stored && allowed.includes(stored) ? stored : dflt;
+      return parse(localStorage.getItem(key));
     } catch {
-      return dflt;
+      return parse(null);
     }
   };
   let current = read();
-  const listeners = new Set<(m: ViewMode) => void>();
-  return function useView(): [ViewMode, (m: ViewMode) => void] {
-    const [mode, setMode] = useState<ViewMode>(current);
+  const listeners = new Set<(v: T) => void>();
+  return function usePref(): [T, (v: T) => void] {
+    const [value, setValue] = useState<T>(current);
     useEffect(() => {
-      listeners.add(setMode);
-      setMode(current); // catch a change between first render and subscribe
+      listeners.add(setValue);
+      setValue(current); // catch a change between first render and subscribe
       return () => {
-        listeners.delete(setMode);
+        listeners.delete(setValue);
       };
     }, []);
-    const set = (m: ViewMode) => {
-      current = m;
+    const set = (v: T) => {
+      current = v;
       try {
-        localStorage.setItem(key, m);
+        localStorage.setItem(key, serialize(v));
       } catch {
         /* ignore */
       }
-      listeners.forEach((cb) => cb(m));
+      listeners.forEach((cb) => cb(v));
     };
-    return [mode, set];
+    return [value, set];
   };
+}
+
+function viewPref(key: string, allowed: readonly ViewMode[], dflt: ViewMode) {
+  return sharedPref<ViewMode>(
+    key,
+    (stored) => (stored && allowed.includes(stored as ViewMode) ? (stored as ViewMode) : dflt),
+    (v) => v,
+  );
 }
 
 /** The app-wide list⇄grid preference, used by every card list that has one. */
@@ -65,6 +72,34 @@ export const useViewMode = viewPref('cardViewMode', ['list', 'grid'], 'grid');
 export const useTradeViewMode = viewPref('tradeViewMode', ['grid', 'stack'], 'stack');
 /** The scan session's review list: plain rows or visual stacks. */
 export const useScanViewMode = viewPref('scanViewMode', ['list', 'stack'], 'stack');
+/**
+ * Stack printings: every copy of a card you own folds into one tile, whatever
+ * edition, finish, condition or language it is, showing the total and the
+ * edition your printing preference picks out of the ones you hold. App-wide
+ * like list⇄grid, because "how do I count my cards" is one answer, not one per
+ * screen. Off by default: the per-copy rows are what the app has always shown.
+ */
+export const useStackPrintings = sharedPref<boolean>(
+  'stackPrintings',
+  (stored) => stored === '1',
+  (v) => (v ? '1' : '0'),
+);
+
+/** The stack-printings switch, sitting beside the view toggle. */
+export function StackToggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      className={`stack-toggle${on ? ' active' : ''}`}
+      onClick={() => onChange(!on)}
+      aria-pressed={on}
+      aria-label="Stack printings"
+      title={on ? 'Stacking every printing of a card into one. Tap to show each copy.' : 'Show each copy. Tap to stack every printing of a card into one.'}
+    >
+      <Icon name="stack" size={16} />
+    </button>
+  );
+}
 
 const VIEW_LABELS: Record<ViewMode, { glyph: string; title: string }> = {
   list: { glyph: '☰', title: 'List view' },

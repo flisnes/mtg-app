@@ -7,12 +7,17 @@ import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { CardSheet } from './CardSheet.js';
 import type { CardItem } from './CardViews.js';
 import { ResultsList, resultCount } from './ResultsList.js';
-import { collectionCardItem, wishCardItem } from './cardRows.js';
+import { wishCardItem } from './cardRows.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { SortControls, sortCards, useCardSort } from './CardSorting.js';
-import { collectionSortFields, useEntrySortData, wishSortFields } from './useEntrySort.js';
+import { useEntrySortData, wishSortFields } from './useEntrySort.js';
+import { useStackPrintings } from './CardViews.js';
+import { stackCardItem } from './cardRows.js';
+import { stackEntries, stackSortFields } from './stackPrintings.js';
+import { useSetTypes } from '../cardDb/useSetTypes.js';
+import { usePrefs } from '../usePrefs.js';
 
 export type Scope = 'collection' | 'wishlist' | 'tradelist';
 
@@ -33,11 +38,16 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
   // are separate lists with separate sorts, same as their two screens.
   const [sort, setSort] = useCardSort(scope);
   const sortData = useEntrySortData(sort);
-  const [editColl, setEditColl] = useState<JoinedEntry | null>(null);
+  const [editColl, setEditColl] = useState<{ row: JoinedEntry; copies: JoinedEntry[] } | null>(null);
   const [editWish, setEditWish] = useState<JoinedWish | null>(null);
   const moverFlags = useMoverFlags();
   const ownership = useOwnershipIndex();
   const placements = usePlacementIndex();
+  // The same stack-printings switch the list pages read, so a search into the
+  // collection shows the same tiles the collection does.
+  const [stacking] = useStackPrintings();
+  const prefs = usePrefs();
+  const setTypes = useSetTypes(stacking);
 
   const needCollection = scope === 'collection' || scope === 'tradelist';
   const needWishlist = scope === 'wishlist';
@@ -72,18 +82,19 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
     const matched = (collRows ?? []).filter(
       (r) => (scope !== 'tradelist' || r.entry.quantityForTrade > 0) && collMatches(r),
     );
-    return sortCards(matched, (r) => collectionSortFields(r, sortData), sort).map(
-      (r): CardItem => ({
-        ...collectionCardItem(r, {
+    const stacks = stackEntries(matched, { stack: stacking, prefs, setTypes });
+    return sortCards(stacks, (s) => stackSortFields(s, sortData), sort).map(
+      (s): CardItem => ({
+        ...stackCardItem(s, {
           moverFlags,
           placements,
           showYear: sort.key === 'released',
-          onClick: () => setEditColl(r),
+          onClick: () => setEditColl({ row: s.members[0]!, copies: s.members }),
         }),
-        key: `c:${r.entry.id}`,
+        key: `c:${s.key}`,
       }),
     );
-  }, [collRows, wishRows, collMatches, wishMatches, scope, needWishlist, sort, sortData, moverFlags, ownership, placements]);
+  }, [collRows, wishRows, collMatches, wishMatches, scope, needWishlist, sort, sortData, moverFlags, ownership, placements, stacking, prefs, setTypes]);
 
   const loading = (needCollection && collRows === undefined) || (needWishlist && wishRows === undefined);
 
@@ -97,7 +108,15 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
         showEmpty={!loading && items.length === 0}
       />
 
-      {editColl?.oracle && <CardSheet mode="edit" oracleCard={editColl.oracle} entry={editColl.entry} onClose={() => setEditColl(null)} />}
+      {editColl?.row.oracle && (
+        <CardSheet
+          mode="edit"
+          oracleCard={editColl.row.oracle}
+          entry={editColl.row.entry}
+          copies={editColl.copies.length > 1 ? editColl.copies.map((c) => c.entry) : undefined}
+          onClose={() => setEditColl(null)}
+        />
+      )}
       {editWish?.oracle && (
         <CardSheet mode="wish" oracleCard={editWish.oracle} wishEntry={editWish.entry} onClose={() => setEditWish(null)} />
       )}

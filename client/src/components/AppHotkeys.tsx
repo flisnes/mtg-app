@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ShortcutsSheet } from './ShortcutsSheet.js';
 import { useShortcuts } from './useShortcuts.js';
-import { useViewMode } from './CardViews.js';
+import { useStackPrintings, useViewMode } from './CardViews.js';
 
 // The keys that belong to the app rather than to any one screen. Mounted once,
 // inside the router, so they work wherever you are.
@@ -11,12 +11,15 @@ import { useViewMode } from './CardViews.js';
 
 export function AppHotkeys() {
   const [mode, setMode] = useViewMode();
+  const [stacking, setStacking] = useStackPrintings();
   const [helpOpen, setHelpOpen] = useState(false);
 
   useShortcuts({
     // The list/grid preference is shared by every screen, so one key flips it
     // everywhere rather than each page owning its own.
     v: () => setMode(mode === 'grid' ? 'list' : 'grid'),
+    // Same for stacking every printing of a card into one tile.
+    s: () => setStacking(!stacking),
     // Shift+/ on most layouts.
     '?': () => setHelpOpen(true),
   });

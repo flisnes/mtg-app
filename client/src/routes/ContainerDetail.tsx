@@ -13,6 +13,7 @@ import {
   type OracleCard,
   type Priced,
   type Printing,
+  type SetTypeMap,
   type SlotShape,
 } from '@mtg/shared';
 import { db } from '../db/schema.js';
@@ -70,7 +71,11 @@ import { useConfirm } from '../components/ConfirmSheet.js';
 import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/types.js';
 import { useToast } from '../components/Toast.js';
 import { CardSheet, FINISH_LABELS } from '../components/CardSheet.js';
-import { CardItems, ViewToggle, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
+import { CardItems, StackToggle, ViewToggle, useStackPrintings, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
+import { pickOwnedPrinting } from '../cardDb/preferredPrinting.js';
+import { useSetTypes } from '../cardDb/useSetTypes.js';
+import { usePrefs } from '../usePrefs.js';
+import type { Prefs } from '../prefs.js';
 import { ownedBadge } from '../components/OwnedBadge.js';
 import { langMark } from '../components/LangFlag.js';
 import { yearMark } from '../components/cardRows.js';
@@ -136,6 +141,55 @@ interface DeckCardEdit extends SlotShape {
   commanderDeck: boolean;
 }
 
+/** What a tile hands the sheet: the slot, and (stacked) the other slots of the same card. */
+interface EditTarget {
+  card: Priced<OracleCard>;
+  deckCard: DeckCardEdit;
+  slots?: DeckCardEdit[];
+}
+
+/**
+ * Stack printings, deck edition: the slots of one card in one board folded
+ * into one tile. The lead is the slot whose edition the tile wears (the
+ * preferred one among the slots' printings), so the tile's key is a real slot
+ * id and the cursor, the selection and the card keys keep working on it.
+ */
+interface SlotStack {
+  lead: Row;
+  rows: Row[];
+  quantity: number;
+}
+
+/** Grouping context, or null when the list isn't stacking. */
+type StackCtx = { prefs: Pick<Prefs, 'printing' | 'baseCurrency'>; setTypes: SetTypeMap | null } | null;
+
+function groupSlots(rows: Row[], stack: StackCtx): SlotStack[] {
+  if (!stack) return rows.map((r) => ({ lead: r, rows: [r], quantity: r.quantity }));
+  const byOracle = new Map<string, Row[]>();
+  for (const r of rows) {
+    const list = byOracle.get(r.oracleId);
+    if (list) list.push(r);
+    else byOracle.set(r.oracleId, [r]);
+  }
+  const out: SlotStack[] = [];
+  byOracle.forEach((group) => {
+    if (group.length === 1) {
+      out.push({ lead: group[0]!, rows: group, quantity: group[0]!.quantity });
+      return;
+    }
+    const printings = new Map<string, Priced<Printing>>();
+    for (const r of group) if (r.printing) printings.set(r.printing.scryfallId, r.printing);
+    const shown = pickOwnedPrinting([...printings.values()], stack.prefs, stack.setTypes);
+    const lead = (shown && group.find((r) => r.scryfallId === shown.scryfallId)) ?? group[0]!;
+    out.push({
+      lead,
+      rows: [lead, ...group.filter((r) => r !== lead)],
+      quantity: group.reduce((s, r) => s + r.quantity, 0),
+    });
+  });
+  return out;
+}
+
 /** A slot's wants, spelled out for the row's sub-line ('' = it wants nothing special). */
 function wantsDetail(r: Row): string {
   const bits: string[] = [];
@@ -199,8 +253,14 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [valueChartOpen, setValueChartOpen] = useState(false);
   const [view, setView] = useViewMode();
+  // Stack printings: two slots of one card (a Beta Bolt and an M10 one) read
+  // as one tile. Same switch the collection reads.
+  const [stacking, setStacking] = useStackPrintings();
+  const prefs = usePrefs();
+  const setTypes = useSetTypes(stacking);
+  const stackCtx: StackCtx = stacking ? { prefs, setTypes } : null;
   const [sort, setSort] = useCardSort('deck', { group: 'type' });
-  const [info, setInfo] = useState<{ card: Priced<OracleCard>; deckCard: DeckCardEdit } | null>(null);
+  const [info, setInfo] = useState<EditTarget | null>(null);
   const sel = useMultiSelect();
   // 'file' picks somewhere to *also* put the selection, 'unfile' picks somewhere
   // to take it out of — the two halves of sorting out a card promised twice.
@@ -428,8 +488,18 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // ---- Multi-select ----------------------------------------------------
   // Selection is keyed by slot id, so it spans every board: pick a commander
   // and three sideboard cards and one action covers the lot.
-  const selectedRows = data.rows.filter((r) => sel.selected.has(r.id));
-  const allKeys = data.rows.map((r) => r.id);
+  // Stacked, a tile's key is its lead slot's id and ticking it means every
+  // slot under it, so each slot answers to its lead. (Storage stacks across the
+  // whole pile; a deck stacks within each board, same as the tiles are drawn.)
+  const leadIdOf = new Map<string, string>();
+  if (stackCtx) {
+    const piles = isDeck
+      ? [commander, companion, main, side, maybe, tokens]
+      : [[...commander, ...companion, ...main, ...side, ...maybe]];
+    for (const pile of piles) for (const g of groupSlots(pile, stackCtx)) for (const r of g.rows) leadIdOf.set(r.id, g.lead.id);
+  }
+  const selectedRows = data.rows.filter((r) => sel.selected.has(leadIdOf.get(r.id) ?? r.id));
+  const allKeys = data.rows.filter((r) => (leadIdOf.get(r.id) ?? r.id) === r.id).map((r) => r.id);
   const selectedCopies = selectedRows.reduce((s, r) => s + r.quantity, 0);
   const plural = (n: number) => (n === 1 ? '' : 's');
 
@@ -1000,6 +1070,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           <SelectToggle onEnter={sel.enter} />
         )}
         <SortControls prefs={sort} onChange={setSort} groups tagGroups withRelease />
+        <StackToggle on={stacking} onChange={setStacking} />
         <ViewToggle mode={view} onChange={setView} />
       </div>
 
@@ -1176,7 +1247,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       )}
 
       {info && (
-        <CardSheet mode="deck" oracleCard={info.card} deckCard={{ ...info.deckCard, containerKind: kind }} onClose={() => setInfo(null)} />
+        <CardSheet
+          mode="deck"
+          oracleCard={info.card}
+          deckCard={{ ...info.deckCard, containerKind: kind }}
+          slots={info.slots?.map((s) => ({ ...s, containerKind: kind }))}
+          onClose={() => setInfo(null)}
+        />
       )}
 
       {scanning && (
@@ -1356,7 +1433,7 @@ function Board({
   group: GroupKey;
   view: ViewMode;
   issues: Map<string, string>;
-  onEdit: (target: { card: Priced<OracleCard>; deckCard: DeckCardEdit }) => void;
+  onEdit: (target: EditTarget) => void;
   /** Passed down (not re-queried) so every board reads the same allocation. */
   placements?: PlacementIndex;
   /** Multi-select state, shared across every board so one bar covers them all. */
@@ -1373,8 +1450,48 @@ function Board({
 }) {
   const ownership = useOwnershipIndex();
   const cutIds = useCutSlots(deckId);
+  const [stacking] = useStackPrintings();
+  const prefs = usePrefs();
+  const setTypes = useSetTypes(stacking);
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
+  const stacks = groupSlots(rows, stacking ? { prefs, setTypes } : null);
+  const toEdit = (r: Row): DeckCardEdit => ({ ...r, deckId, commanderDeck });
+  /** A stack of several slots as one tile; a stack of one is its slot's own item. */
+  const toStackItem = (g: SlotStack): CardItem => {
+    if (g.rows.length === 1) return toItem(g.rows[0]!);
+    const r = g.lead;
+    const issue = issues.get(r.oracleId);
+    const enough = g.rows.some((x) => x.anyBasic) || r.owned >= g.quantity;
+    // Per card, not per slot: a stack has no single edition, finish or
+    // language to be exact about, so the badge says "you own this card".
+    const own = ownedBadge(ownership?.lookup(r.oracleId), 13);
+    const year = yearMark(r.printing, showYear);
+    const editions = new Set(g.rows.map((x) => x.scryfallId ?? '')).size;
+    return {
+      key: r.id,
+      ...(year ? { year } : {}),
+      name: r.oracle ? (r.board === 'token' ? tokenLabel(r.oracle) : r.oracle.name) : '(unknown card)',
+      image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
+      mana: r.oracle?.manaCost,
+      foil: g.rows.some((x) => !!x.finish && x.finish !== 'nonfoil'),
+      count: g.quantity,
+      badge: issue ? '⚠' : own?.icon,
+      badgeClass: issue ? 'badge-illegal' : own?.cls,
+      badgeTitle: issue ?? own?.title,
+      dim: !enough,
+      cut: g.rows.every((x) => cutIds.has(x.id)),
+      sub: (
+        <>
+          {`owned ${r.owned} · ${editions > 1 ? `${editions} editions` : `${g.rows.length} slots`}`}
+          {issue && <span className="badge badge-illegal-chip">{issue}</span>}
+        </>
+      ),
+      onClick: r.oracle
+        ? () => onEdit({ card: r.oracle!, deckCard: toEdit(r), slots: g.rows.map(toEdit) })
+        : undefined,
+    };
+  };
   const toItem = (r: Row): CardItem => {
     const enough = r.anyBasic || r.owned >= r.quantity;
     const issue = issues.get(r.oracleId);
@@ -1466,7 +1583,7 @@ function Board({
         : undefined,
     };
   };
-  const groups = group === 'none' ? null : groupCards(rows, (r) => r.oracle, group, (r) => r.tags);
+  const groups = group === 'none' ? null : groupCards(stacks, (g) => g.lead.oracle, group, (g) => g.lead.tags);
   // Land drops the Land heading would otherwise miss: MDFC backs, Dryad Arbor.
   const landSources = group === 'type' ? extraLands(rows, (r) => r.oracle, (r) => r.quantity) : [];
   // Grouping by tag lists a multi-tagged card under each of its tags, so the
@@ -1493,15 +1610,15 @@ function Board({
             <h3 className="card-group-title">
               {g.label}{' '}
               <GroupCountBadge
-                quantity={g.items.reduce((s, r) => s + r.quantity, 0)}
+                quantity={g.items.reduce((s, st) => s + st.quantity, 0)}
                 extras={g.label === 'Land' && group === 'type' ? landSources : undefined}
               />
             </h3>
-            <CardItems view={view} items={g.items.map(toItem)} {...selProps} />
+            <CardItems view={view} items={g.items.map(toStackItem)} {...selProps} />
           </div>
         ))
       ) : (
-        <CardItems view={view} items={rows.map(toItem)} {...selProps} />
+        <CardItems view={view} items={stacks.map(toStackItem)} {...selProps} />
       )}
       {footer && <div className="board-footer">{footer}</div>}
     </div>

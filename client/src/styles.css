@@ -1385,6 +1385,74 @@ button.danger-outline {
   background: var(--surface-2);
   color: var(--accent);
 }
+/* Stack printings: one button, lit while every printing of a card folds into
+   one tile. Sits with the view toggle at the right end of the toolbar. */
+.stack-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-dim);
+  line-height: 1;
+}
+.stack-toggle.active {
+  background: var(--surface-2);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.list-toolbar .stack-toggle {
+  margin-left: auto;
+}
+.list-toolbar .stack-toggle + .view-toggle {
+  margin-left: 0;
+}
+
+/* The card sheet's strip of stacked copies: one chip per copy, the one on the
+   form lit, scrolling sideways past a handful. */
+.copy-strip {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+  scrollbar-width: thin;
+}
+.copy-chip {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  flex: none;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  text-align: left;
+}
+.copy-chip-current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.copy-chip-edition {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: 600;
+}
+.copy-chip-detail {
+  color: var(--text-dim);
+}
+.copy-chip-qty {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
 
 /* ---- Multi-select ---- */
 .select-toggle {

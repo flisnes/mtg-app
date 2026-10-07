@@ -22,6 +22,7 @@ const GROUPS: Group[] = [
       { press: ['Ctrl', 'K'], does: 'Jump to the search box' },
       { press: ['/'], does: 'Same, one key' },
       { press: ['V'], does: 'Switch between list and grid' },
+      { press: ['S'], does: 'Stack every printing of a card into one, or spread them out' },
       { press: ['?'], does: 'This list' },
       { press: ['Esc'], does: 'Close whatever is on top' },
     ],

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './icons.js';
+import { Sheet } from './Sheet.js';
 import {
   DEFAULT_PREFS,
   type CardSortPrefs,
@@ -72,14 +73,21 @@ export function useListSort<K extends string>(
 }
 
 // ---- UI ----
+//
+// One button per toolbar, reading "Price ↓" (or "Price ↓ · Type" when grouped),
+// that opens a sheet of chip rows: sort key, direction, group, and whatever
+// filter the list adds. Three selects and an arrow used to sit in the toolbar
+// itself and ate two rows of a phone screen above the first card; the toolbar
+// now spends that space on the cards and the sheet spells the choices out in
+// full when they're wanted.
 
 // Card-database search only: how well the card matches what was typed. Owned
 // lists have no query to be relevant to, so they never offer it.
-const RELEVANCE_OPTION: [SortKey, string] = ['relevance', 'Sort: Best match'];
+const RELEVANCE_OPTION: [SortKey, string] = ['relevance', 'Best match'];
 const SORT_OPTIONS: [SortKey, string][] = [
-  ['name', 'Sort: Name'],
-  ['cmc', 'Sort: Mana value'],
-  ['price', 'Sort: Price'],
+  ['name', 'Name'],
+  ['cmc', 'Mana value'],
+  ['price', 'Price'],
 ];
 // Only where recorded price history is wired up (collection/tradelist). Called
 // "value change" rather than "price change" because it isn't the card's move on
@@ -87,25 +95,109 @@ const SORT_OPTIONS: [SortKey, string][] = [
 // cost: the same figure the card sheet shows. Market moves over a comparable
 // window live on the Price movers page.
 const CHANGE_OPTIONS: [SortKey, string][] = [
-  ['change', 'Sort: Value change'],
-  ['changePct', 'Sort: Value change %'],
+  ['change', 'Value change'],
+  ['changePct', 'Value change %'],
 ];
 // Only where entries carry createdAt/updatedAt (collection/tradelist).
 const DATE_OPTIONS: [SortKey, string][] = [
-  ['added', 'Sort: Date added'],
-  ['updated', 'Sort: Last edited'],
+  ['added', 'Date added'],
+  ['updated', 'Last edited'],
 ];
 // When the cardboard came out. Every list that shows a printing can offer it,
 // including the card database — there it means the card's debut rather than the
 // printing you hold, which is the only release date a card you don't own has.
-const RELEASE_OPTION: [SortKey, string] = ['released', 'Sort: Release date'];
+const RELEASE_OPTION: [SortKey, string] = ['released', 'Release date'];
 const GROUP_OPTIONS: [GroupKey, string][] = [
-  ['none', 'Group: None'],
-  ['type', 'Group: Card type'],
-  ['color', 'Group: Color'],
+  ['none', 'None'],
+  ['type', 'Card type'],
+  ['color', 'Color'],
 ];
 // Only where the rows carry slot tags (your own containers — not a shared deck).
-const TAG_GROUP_OPTION: [GroupKey, string] = ['tag', 'Group: Tag'];
+const TAG_GROUP_OPTION: [GroupKey, string] = ['tag', 'Tag'];
+
+const DIR_OPTIONS: [SortDir, string][] = [
+  ['asc', '↑ Ascending'],
+  ['desc', '↓ Descending'],
+];
+
+/** One row of the sort sheet: a label and a set of chips, one of them lit. */
+export function OptionChips<V extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: V;
+  options: readonly (readonly [V, string])[];
+  onChange: (v: V) => void;
+}) {
+  return (
+    <div className="opt-row" role="radiogroup" aria-label={label}>
+      <span className="opt-label">{label}</span>
+      <div className="opt-chips">
+        {options.map(([v, text]) => (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={value === v}
+            className={`opt-chip${value === v ? ' active' : ''}`}
+            onClick={() => onChange(v)}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The toolbar button and the sheet it opens. `summary` is what the button
+ * reads; `filtering` lights it the way a filter-on select used to light up, so
+ * a short list is never a mystery. The rows are the children.
+ */
+function SortSheetButton({
+  summary,
+  filtering = false,
+  children,
+}: {
+  summary: ReactNode;
+  filtering?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className={`sort-btn${filtering ? ' filter-on' : ''}`}
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title="Sort and filter"
+      >
+        <Icon name="sliders" size={15} />
+        <span className="sort-btn-text">{summary}</span>
+      </button>
+      {open && (
+        <Sheet onClose={() => setOpen(false)} title="Sort and filter" className="sort-sheet">
+          {children}
+          <div className="sheet-actions">
+            <button type="button" className="primary" onClick={() => setOpen(false)}>
+              Done
+            </button>
+          </div>
+        </Sheet>
+      )}
+    </>
+  );
+}
+
+function labelFor<K extends string>(options: readonly (readonly [K, string])[], key: K): string {
+  return options.find(([k]) => k === key)?.[1] ?? key;
+}
 
 export function SortControls({
   prefs,
@@ -116,10 +208,12 @@ export function SortControls({
   withChange = false,
   withDates = false,
   withRelease = false,
+  filtering = false,
+  filters,
 }: {
   prefs: CardSortPrefs;
   onChange: (p: CardSortPrefs) => void;
-  /** Show the group-by select (deck views). */
+  /** Show the group-by row (deck views). */
   groups?: boolean;
   /** Also offer group-by-tag (views that hand groupCards a getTags accessor). */
   tagGroups?: boolean;
@@ -131,6 +225,10 @@ export function SortControls({
   withDates?: boolean;
   /** Offer the release-date sort (views that supply SortFields.released). */
   withRelease?: boolean;
+  /** A filter in `filters` is hiding rows: the button says so. */
+  filtering?: boolean;
+  /** The list's own filter rows (OptionChips), shown above the sort rows. */
+  filters?: ReactNode;
 }) {
   const sortOptions = [
     ...(withRelevance ? [RELEVANCE_OPTION] : []),
@@ -140,30 +238,26 @@ export function SortControls({
     ...(withRelease ? [RELEASE_OPTION] : []),
   ];
   const groupOptions = tagGroups ? [...GROUP_OPTIONS, TAG_GROUP_OPTION] : GROUP_OPTIONS;
+  const grouped = groups && prefs.group !== 'none';
+  const summary = (
+    <>
+      {labelFor(sortOptions, prefs.key)} {prefs.dir === 'asc' ? '↑' : '↓'}
+      {grouped && <span className="sort-btn-group"> · {labelFor(groupOptions, prefs.group)}</span>}
+    </>
+  );
   return (
-    <div className="sort-controls" role="group" aria-label="Sort and group">
+    <SortSheetButton summary={summary} filtering={filtering}>
+      {filters}
+      <OptionChips label="Sort by" value={prefs.key} options={sortOptions} onChange={(key) => onChange({ ...prefs, key })} />
+      <OptionChips label="Direction" value={prefs.dir} options={DIR_OPTIONS} onChange={(dir) => onChange({ ...prefs, dir })} />
       {groups && (
-        <select value={prefs.group} onChange={(e) => onChange({ ...prefs, group: e.target.value as GroupKey })} aria-label="Group by">
-          {groupOptions.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+        <OptionChips label="Group by" value={prefs.group} options={groupOptions} onChange={(group) => onChange({ ...prefs, group })} />
       )}
-      <select value={prefs.key} onChange={(e) => onChange({ ...prefs, key: e.target.value as SortKey })} aria-label="Sort by">
-        {sortOptions.map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </select>
-      <SortDirButton dir={prefs.dir} onChange={(dir) => onChange({ ...prefs, dir })} />
-    </div>
+    </SortSheetButton>
   );
 }
 
-/** The same sort select + direction button, for a list with its own key set. */
+/** The same button and sheet, for a list with its own key set. */
 export function ListSortControls<K extends string>({
   prefs,
   onChange,
@@ -173,31 +267,16 @@ export function ListSortControls<K extends string>({
   onChange: (p: ListSortPrefs<K>) => void;
   options: [K, string][];
 }) {
-  return (
-    <div className="sort-controls" role="group" aria-label="Sort">
-      <select value={prefs.key} onChange={(e) => onChange({ ...prefs, key: e.target.value as K })} aria-label="Sort by">
-        {options.map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </select>
-      <SortDirButton dir={prefs.dir} onChange={(dir) => onChange({ ...prefs, dir })} />
-    </div>
+  const summary = (
+    <>
+      {labelFor(options, prefs.key)} {prefs.dir === 'asc' ? '↑' : '↓'}
+    </>
   );
-}
-
-function SortDirButton({ dir, onChange }: { dir: SortDir; onChange: (d: SortDir) => void }) {
-  const asc = dir === 'asc';
   return (
-    <button
-      className="sort-dir"
-      onClick={() => onChange(asc ? 'desc' : 'asc')}
-      title={asc ? 'Ascending' : 'Descending'}
-      aria-label={asc ? 'Sort ascending' : 'Sort descending'}
-    >
-      {asc ? '↑' : '↓'}
-    </button>
+    <SortSheetButton summary={summary}>
+      <OptionChips label="Sort by" value={prefs.key} options={options} onChange={(key) => onChange({ ...prefs, key })} />
+      <OptionChips label="Direction" value={prefs.dir} options={DIR_OPTIONS} onChange={(dir) => onChange({ ...prefs, dir })} />
+    </SortSheetButton>
   );
 }
 

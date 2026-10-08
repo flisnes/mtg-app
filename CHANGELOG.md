@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.195.0
+
+- **Changed: sort and filter live behind one button.** The Filed dropdown, the Sort dropdown and the direction arrow above the collection used to take two rows of a phone screen before the first card. They are now a single button reading the current order ("Price ↓", or "Name ↑ · Card type" on a grouped deck page) that opens a sheet with every choice laid out as chips: where cards are filed, what to sort by, which direction, and on deck pages what to group by. The button turns purple while a filter is hiding cards, the way the dropdown used to. Same on the wishlist, tradelist, decks, binders, boxes, search results, sealed products and price movers.
+
 ## 0.194.0
 
 - **Added: stack printings.** A new button beside the list/grid switch (and the S key) folds every copy of a card into one tile, whatever edition, finish, condition or language it is: two Beta Bolts, three from Modern Masters and five from M10 read as one Lightning Bolt at x10. The tile wears the edition your printing preference picks out of the ones you own ("latest" means the latest you hold), shows the pile's total value, and carries the for-trade count, foil sheen, language flag and filing badge if any copy has them. The header counts cards and copies instead of entries. Tapping the tile opens one copy with a strip of chips for the others, so you can step between your editions without leaving the sheet. Ticking a stacked tile in Select mode selects every copy under it. Works on the collection, the tradelist, search scoped into either, and decks, binders and boxes, where two slots of the same card become one line. Off by default; the setting follows you across every screen.

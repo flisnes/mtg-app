@@ -1196,6 +1196,70 @@ button.danger-outline {
   line-height: 1;
 }
 
+/* The sort-and-filter button: one control in the toolbar reading the current
+   order ("Price ↓"), lit like a filter-on select while a filter hides rows.
+   The sheet it opens holds the rows of chips. */
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.sort-btn.filter-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.sort-btn-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sort-btn-group {
+  color: var(--text-dim);
+}
+.sort-sheet {
+  gap: 0.9rem;
+}
+.opt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.opt-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.opt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.opt-chip {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+.opt-chip.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
+  color: var(--text);
+  font-weight: 600;
+}
+
 .card-group + .card-group {
   margin-top: 0.9rem;
 }

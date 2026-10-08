@@ -21,7 +21,7 @@ import { usePlacementIndex } from '../db/usePlacements.js';
 import { useMultiSelect } from './useMultiSelect.js';
 import { SelectToggle } from './SelectToggle.js';
 import { PileView, CardBackSheet, type PileEntry } from './PileView.js';
-import { SortControls, sortCards, useCardSort } from './CardSorting.js';
+import { OptionChips, SortControls, sortCards, useCardSort } from './CardSorting.js';
 import { useEntrySortData } from './useEntrySort.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { useGoblinMode } from './useGoblinMode.js';
@@ -43,10 +43,10 @@ import { usePageMeta } from '../routes/Page.js';
 type PlaceFilter = 'all' | 'unfiled' | 'filed' | 'conflict';
 
 const PLACE_OPTIONS: [PlaceFilter, string][] = [
-  ['all', 'Filed: Any'],
-  ['unfiled', 'Filed: Nowhere'],
-  ['filed', 'Filed: Somewhere'],
-  ['conflict', 'Filed: In too many places'],
+  ['all', 'Any'],
+  ['unfiled', 'Nowhere'],
+  ['filed', 'Somewhere'],
+  ['conflict', 'In too many places'],
 ];
 
 export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean }) {
@@ -362,22 +362,35 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         )}
         {!sel.active && (hasRows || query) && <ListSearchButton />}
         {!sel.active && hasRows && <SelectToggle onEnter={sel.enter} />}
-        <div className="sort-controls">
-          <select
-            className={placeFilter === 'all' ? '' : 'filter-on'}
-            value={placeFilter}
-            onChange={(e) => setPlaceFilter(e.target.value as PlaceFilter)}
-            aria-label="Filter by where cards are filed"
-            title="Show only cards that are (or aren't) in a deck, binder or box"
-          >
-            {PLACE_OPTIONS.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-        {!pileMode && <SortControls prefs={sort} onChange={setSort} withChange withDates withRelease />}
+        {pileMode ? (
+          // Goblin mode has no order to sort by, so the Filed filter stands on
+          // its own instead of riding in the sort sheet.
+          <div className="sort-controls">
+            <select
+              className={placeFilter === 'all' ? '' : 'filter-on'}
+              value={placeFilter}
+              onChange={(e) => setPlaceFilter(e.target.value as PlaceFilter)}
+              aria-label="Filter by where cards are filed"
+              title="Show only cards that are (or aren't) in a deck, binder or box"
+            >
+              {PLACE_OPTIONS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  Filed: {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <SortControls
+            prefs={sort}
+            onChange={setSort}
+            withChange
+            withDates
+            withRelease
+            filtering={placeFilter !== 'all'}
+            filters={<OptionChips label="Filed" value={placeFilter} options={PLACE_OPTIONS} onChange={setPlaceFilter} />}
+          />
+        )}
         {!pileMode && <StackToggle on={stackPref} onChange={setStacking} />}
         {!pileMode && <ViewToggle mode={view} onChange={setView} />}
       </div>

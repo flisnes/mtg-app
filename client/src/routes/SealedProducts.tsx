@@ -39,15 +39,15 @@ import { useAsyncAction } from '../components/useAsyncAction.js';
 
 type SealedSort = 'name' | 'price' | 'value' | 'change' | 'changePct' | 'copies' | 'set' | 'released' | 'added';
 const SORT_OPTIONS: [SealedSort, string][] = [
-  ['name', 'Sort: Name'],
-  ['price', 'Sort: Price each'],
-  ['value', 'Sort: Total value'],
-  ['change', 'Sort: Price change'],
-  ['changePct', 'Sort: Price change %'],
-  ['copies', 'Sort: Copies'],
-  ['set', 'Sort: Set'],
-  ['released', 'Sort: Release date'],
-  ['added', 'Sort: Date added'],
+  ['name', 'Name'],
+  ['price', 'Price each'],
+  ['value', 'Total value'],
+  ['change', 'Price change'],
+  ['changePct', 'Price change %'],
+  ['copies', 'Copies'],
+  ['set', 'Set'],
+  ['released', 'Release date'],
+  ['added', 'Date added'],
 ];
 
 type PriceFilter = 'all' | 'priced' | 'unpriced';

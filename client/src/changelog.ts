@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.195.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The sort and filter dropdowns above every card list are now one button that reads the current order ("Price ↓") and opens a sheet of choices. The toolbar fits on one row on a phone, so the cards start higher up.',
+      },
+    ],
+  },
+  {
     version: '0.194.0',
     changes: [
       {

@@ -54,12 +54,12 @@ const MIN_VALUES = [0, 1, 5, 20, 50];
 
 type MoverSort = 'notable' | 'change' | 'changePct' | 'price' | 'position' | 'name';
 const SORT_OPTIONS: [MoverSort, string][] = [
-  ['notable', 'Sort: Most notable'],
-  ['change', 'Sort: Change'],
-  ['changePct', 'Sort: Change %'],
-  ['price', 'Sort: Price'],
-  ['position', 'Sort: Value held'],
-  ['name', 'Sort: Name'],
+  ['notable', 'Most notable'],
+  ['change', 'Change'],
+  ['changePct', 'Change %'],
+  ['price', 'Price'],
+  ['position', 'Value held'],
+  ['name', 'Name'],
 ];
 
 interface Mover {

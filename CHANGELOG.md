@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.196.0
+
+- **Added: drag card images into the app (desktop).** Drag a card picture off Scryfall or Gatherer, or a handful of image files off your disk, and drop it anywhere on your collection, a deck, binder or box, your tradelist or your wishlist. A Scryfall image or card link names the exact printing straight away. Anything else is matched by its art with the same index the camera scanner uses, and when several printings share the art the bottom line of the card picks the edition. Every card lands in a review list first: fix the edition or quantity with a tap, keep dropping more, then add them all through the usual questions. A site that won't let the app read its image says so; save the picture and drop the file instead.
+
 ## 0.195.0
 
 - **Changed: sort and filter live behind one button.** The Filed dropdown, the Sort dropdown and the direction arrow above the collection used to take two rows of a phone screen before the first card. They are now a single button reading the current order ("Price ↓", or "Name ↑ · Card type" on a grouped deck page) that opens a sheet with every choice laid out as chips: where cards are filed, what to sort by, which direction, and on deck pages what to group by. The button turns purple while a filter is hiding cards, the way the dropdown used to. Same on the wishlist, tradelist, decks, binders, boxes, search results, sealed products and price movers.

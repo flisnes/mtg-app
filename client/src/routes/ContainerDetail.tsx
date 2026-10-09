@@ -102,6 +102,7 @@ import { Emblem } from '../components/Emblem.js';
 import { EmblemPickerSheet } from '../components/EmblemPickerSheet.js';
 import { AssembleSheet, type AssembleItem } from '../components/AssembleSheet.js';
 import { ScanSheet } from '../components/ScanSheetLazy.js';
+import { CardDropZone } from '../components/CardDropZone.js';
 import { Sheet } from '../components/Sheet.js';
 import { DeckHistory, HISTORY_ANCHOR } from '../components/DeckHistory.js';
 import { BulkActionBar, type BulkAction } from '../components/BulkActionBar.js';
@@ -1269,6 +1270,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           onClose={() => setScanning(null)}
         />
       )}
+      <CardDropZone
+        target={
+          scanning
+            ? null
+            : { kind: 'deck', deckId: id, deckName: deck.name, containerKind: kind, format: deck.format }
+        }
+      />
 
       {wishSheet &&
         (() => {

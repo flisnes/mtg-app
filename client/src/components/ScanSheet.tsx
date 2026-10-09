@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Condition, ContainerKind, DeckBoard, DeckCard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
@@ -12,7 +12,7 @@ import {
   getPrintingsByIds,
   getPrintingsForOracle,
 } from '../db/queries.js';
-import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
+import { describeFiling, useIntakeReview, type IntakeConfig, type IntakeResult } from '../import/intake/useIntakeReview.js';
 import type { ResolvedLine } from '../import/types.js';
 import { CardSheet, FINISH_LABELS, LANGS, type SessionCardValues } from './CardSheet.js';
 import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
@@ -153,7 +153,7 @@ const TRAY_TOUCH_GRACE_MS = 1000;
 const TRAY_SETTLE_MS = 200;
 
 /** One line of the scan session — what "complete" will write. */
-interface SessionEntry {
+export interface SessionEntry {
   scryfallId: string;
   oracleId: string;
   name: string;
@@ -248,11 +248,11 @@ interface PickValues {
 // Language is part of the key (collectionKey has it too): scanning a card in
 // Japanese and later the same card in English must stay two lines, not merge
 // into whichever one landed first.
-const entryKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'condition' | 'lang' | 'board'>) =>
+export const entryKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'condition' | 'lang' | 'board'>) =>
   `${e.scryfallId}|${e.finish}|${e.condition}|${e.lang}|${e.board}`;
 
 /** Collapse duplicate (printing, finish, condition, language, board) lines after a row edit. */
-function mergeSession(entries: SessionEntry[]): SessionEntry[] {
+export function mergeSession(entries: SessionEntry[]): SessionEntry[] {
   const map = new Map<string, SessionEntry>();
   for (const e of entries) {
     const prev = map.get(entryKey(e));
@@ -321,7 +321,7 @@ function targetNoun(target: ScanTarget): string {
   return target.kind === 'trade' ? 'offer' : target.kind;
 }
 
-function targetLabel(target: ScanTarget): string {
+export function targetLabel(target: ScanTarget): string {
   switch (target.kind) {
     case 'collection':
       return 'Collection';
@@ -373,6 +373,93 @@ function loadStoredSession(key: string | null): SessionEntry[] {
   } catch {
     return [];
   }
+}
+
+/** One session line as an import line (the collection write is the import write). */
+function entryLine(e: SessionEntry, target: ScanTarget): ResolvedLine {
+  return {
+    oracleId: e.oracleId,
+    scryfallId: e.scryfallId,
+    name: e.name,
+    quantity: e.qty,
+    // Marked for trade only when the destination is the tradelist.
+    quantityForTrade: target.kind === 'tradelist' ? e.qty : 0,
+    condition: e.condition,
+    finish: e.finish,
+    lang: e.lang,
+    board: e.board,
+  };
+}
+
+/**
+ * Write a session to its destination: what "Add N cards" does in the scanner
+ * and in the drop review alike (a deck re-scan reconciles instead, and stays in
+ * the scanner). Resolves to the toast to show, or null when the user backed out
+ * of the questionnaire and nothing was written.
+ */
+export async function commitSession(
+  target: ScanTarget,
+  session: SessionEntry[],
+  review: (cfg: IntakeConfig) => Promise<IntakeResult | null>,
+  incomingLabel: string,
+): Promise<string | null> {
+  const label = targetLabel(target);
+  const total = session.reduce((n, e) => n + e.qty, 0);
+  const lines = session.map((e) => entryLine(e, target));
+  // A deck, binder or box: the pile is in your hands, so the questionnaire
+  // asks which cards are yours and what the collection should make of them,
+  // then writes the collection and the container together.
+  if (target.kind === 'deck') {
+    const res = await review({
+      flow: 'container',
+      lines,
+      source: 'scan',
+      incomingLabel,
+      target: { id: target.deckId, name: label, kind: target.containerKind ?? 'deck' },
+    });
+    if (!res) return null;
+    return `Added ${total} card${total === 1 ? '' : 's'} to ${label}${res.added ? ` · ${res.added} added to collection` : ''}`;
+  }
+  // Collection & tradelist route through the import pipeline: the batch
+  // becomes one history entry, any card already owned gets its Skip / Add /
+  // Update, and the pile is offered a home while you're holding it.
+  if (target.kind === 'collection' || target.kind === 'tradelist') {
+    const res = await review({ flow: target.kind, lines, source: 'scan', incomingLabel });
+    if (!res) return null;
+    const n = res.added + res.flagged;
+    return n === 0 ? 'Nothing added: every card was skipped' : `Added ${n} card${n === 1 ? '' : 's'} to ${label}${describeFiling(res)}`;
+  }
+  if (target.kind === 'wishlist') {
+    // A scanned card is a specific printing, so the wish is for that
+    // edition — plus whatever the pickers were moved off their defaults to.
+    await addToWishlistBulk(
+      session.map((e) => ({
+        oracleId: e.oracleId,
+        scryfallId: e.scryfallId,
+        quantity: e.qty,
+        finish: wishPreference(e.finish, 'nonfoil'),
+        condition: wishPreference(e.condition, 'NM'),
+        lang: wishPreference(e.lang, 'en'),
+      })),
+      { source: 'scan' },
+    );
+  } else {
+    target.onAdd(
+      session.map((e) => ({
+        oracleId: e.oracleId,
+        scryfallId: e.scryfallId,
+        name: e.name,
+        finish: e.finish,
+        // A trade values what's actually being handed over, and the picker bar
+        // is right there through the whole scan — so a played copy no longer
+        // enters the offer claiming to be Near Mint.
+        condition: e.condition,
+        lang: e.lang,
+        quantity: e.qty,
+      })),
+    );
+  }
+  return `Added ${total} card${total === 1 ? '' : 's'} to ${label}`;
 }
 
 /**
@@ -1113,22 +1200,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     cameraRef.current?.resume();
   };
 
-  /** One scanned line as an import line (the collection write is the import write). */
-  const entryLine = (e: SessionEntry): ResolvedLine => ({
-    oracleId: e.oracleId,
-    scryfallId: e.scryfallId,
-    name: e.name,
-    quantity: e.qty,
-    // Marked for trade only when the destination is the tradelist.
-    quantityForTrade: target.kind === 'tradelist' ? e.qty : 0,
-    condition: e.condition,
-    finish: e.finish,
-    lang: e.lang,
-    board: e.board,
-  });
-
   /** The session as import lines (collection/tradelist go through applyImport). */
-  const sessionLines = (): ResolvedLine[] => session.map(entryLine);
+  const sessionLines = (): ResolvedLine[] => session.map((e) => entryLine(e, target));
 
   const finishScan = () => {
     clearStored();
@@ -1221,94 +1294,46 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   /** Write the whole session to the target and leave the scanner. */
   const complete = async () => {
     if (committing || session.length === 0) return;
-    const label = targetLabel(target);
-    // A deck, binder or box: the pile is in your hands, so the questionnaire
-    // asks which cards are yours and what the collection should make of them,
-    // then writes the collection and the container together. A re-scan shows
-    // its diff first and reconciles instead of appending.
-    if (target.kind === 'deck') {
-      const rescan = !!target.rescan;
-      const changes = rescan ? await buildRescanReview(target.deckId) : null;
-      if (changes && changes.changes.length === 0 && !changes.refiles) {
+    // A deck re-scan shows its diff first and reconciles instead of appending.
+    // Every other destination is the shared write, which a drop uses too.
+    if (target.kind === 'deck' && target.rescan) {
+      const label = targetLabel(target);
+      const changes = await buildRescanReview(target.deckId);
+      if (changes.changes.length === 0 && !changes.refiles) {
         toast(`No changes — this ${targetNoun(target)} already matches your scan`);
         finishScan();
         return;
       }
       const res = await review({
-        flow: rescan ? 'rescan' : 'container',
+        flow: 'rescan',
         lines: sessionLines(),
         source: 'scan',
         incomingLabel: 'Scanned',
         target: { id: target.deckId, name: label, kind: target.containerKind ?? 'deck' },
-        ...(changes
-          ? {
-              preface: {
-                title: 'Re-scan changes',
-                body: <RescanChangesList changes={changes.changes} deckName={label} showBoards={deckBoards(target).length > 1} />,
-                nextLabel: changes.changes.length
-                  ? `Apply ${changes.changes.length} change${changes.changes.length === 1 ? '' : 's'}`
-                  : 'File the copies you scanned',
-              },
-            }
-          : {}),
+        preface: {
+          title: 'Re-scan changes',
+          body: <RescanChangesList changes={changes.changes} deckName={label} showBoards={deckBoards(target).length > 1} />,
+          nextLabel: changes.changes.length
+            ? `Apply ${changes.changes.length} change${changes.changes.length === 1 ? '' : 's'}`
+            : 'File the copies you scanned',
+        },
       });
       if (!res) return; // backed out: the session is still there
-      const collSuffix = res.added ? ` · ${res.added} added to collection` : '';
-      const what = rescan ? `Updated ${label}` : `Added ${total} card${total === 1 ? '' : 's'} to ${label}`;
-      toast(`${what}${collSuffix}`);
+      toast(`Updated ${label}${res.added ? ` · ${res.added} added to collection` : ''}`);
       finishScan();
       return;
     }
-    // Collection & tradelist route through the import pipeline: the batch scan
-    // becomes one history entry, any card already owned gets its Skip / Add /
-    // Update, and the pile is offered a home while you're holding it.
-    if (target.kind === 'collection' || target.kind === 'tradelist') {
-      const res = await review({ flow: target.kind, lines: sessionLines(), source: 'scan', incomingLabel: 'Scanned' });
-      if (!res) return;
-      const n = res.added + res.flagged;
-      toast(n === 0 ? 'Nothing added: every card was skipped' : `Added ${n} card${n === 1 ? '' : 's'} to ${label}${describeFiling(res)}`);
-      finishScan();
-      return;
-    }
-    setCommitting(true);
+    // The questionnaire flows carry their own busy state; only the direct
+    // writes need the double-tap guard.
+    const direct = target.kind === 'wishlist' || target.kind === 'trade';
+    if (direct) setCommitting(true);
     try {
-      switch (target.kind) {
-        case 'wishlist':
-          // A scanned card is a specific printing, so the wish is for that
-          // edition — plus whatever the pickers were moved off their defaults to.
-          await addToWishlistBulk(
-            session.map((e) => ({
-              oracleId: e.oracleId,
-              scryfallId: e.scryfallId,
-              quantity: e.qty,
-              finish: wishPreference(e.finish, 'nonfoil'),
-              condition: wishPreference(e.condition, 'NM'),
-              lang: wishPreference(e.lang, 'en'),
-            })),
-            { source: 'scan' },
-          );
-          break;
-        case 'trade':
-          target.onAdd(
-            session.map((e) => ({
-              oracleId: e.oracleId,
-              scryfallId: e.scryfallId,
-              name: e.name,
-              finish: e.finish,
-              // A trade values what's actually being handed over, and the
-              // picker bar is right there through the whole scan — so a played
-              // copy no longer enters the offer claiming to be Near Mint.
-              condition: e.condition,
-              lang: e.lang,
-              quantity: e.qty,
-            })),
-          );
-          break;
-      }
-      toast(`Added ${total} card${total === 1 ? '' : 's'} to ${targetLabel(target)}`);
+      const message = await commitSession(target, session, review, 'Scanned');
+      if (message === null) return; // backed out: the session is still there
+      toast(message);
       finishScan();
     } finally {
-      setCommitting(false);
+      if (direct) setCommitting(false);
     }
   };
 
@@ -1824,7 +1849,7 @@ function TrayTile({
   );
 }
 
-function SessionSheet({
+export function SessionSheet({
   entries,
   target,
   total,
@@ -1832,6 +1857,10 @@ function SessionSheet({
   onChange,
   onComplete,
   onClose,
+  title = 'Scanned cards',
+  emptyText = 'Nothing scanned yet. Tap the top half of a match to add it.',
+  closeLabel = 'Keep scanning',
+  notice,
 }: {
   entries: SessionEntry[];
   target: ScanTarget;
@@ -1840,6 +1869,12 @@ function SessionSheet({
   onChange: (next: SessionEntry[]) => void;
   onComplete: () => void;
   onClose: () => void;
+  /** Wording for the other user of this list, the drop review. */
+  title?: string;
+  emptyText?: string;
+  closeLabel?: string;
+  /** Status shown under the heading (what a drop is still identifying). */
+  notice?: ReactNode;
 }) {
   const action = useAsyncAction();
   // Row tap opens the card sheet on that line for full editing (edition,
@@ -1902,9 +1937,9 @@ function SessionSheet({
 
   // The per-line card sheet stacks above this one and dismisses first.
   return (
-    <Sheet onClose={onClose} dismiss={busy ? null : onClose} className="scan-list-sheet" label="Scanned cards">
+    <Sheet onClose={onClose} dismiss={busy ? null : onClose} className="scan-list-sheet" label={title}>
         <div className="scan-sheet-head">
-          <h2>Scanned cards</h2>
+          <h2>{title}</h2>
           <span className="scan-target">→ {targetLabel(target)}</span>
           <ViewToggle mode={view} onChange={setView} options={['list', 'stack']} />
           <button className="scan-close" onClick={onClose} aria-label="Close list">
@@ -1912,8 +1947,10 @@ function SessionSheet({
           </button>
         </div>
 
+        {notice}
+
         {entries.length === 0 ? (
-          <p className="scan-list-empty">Nothing scanned yet. Tap the top half of a match to add it.</p>
+          <p className="scan-list-empty">{emptyText}</p>
         ) : view === 'stack' ? (
           <CardStacks
             className="scan-stacks"
@@ -2010,7 +2047,7 @@ function SessionSheet({
                 ? `Review changes to ${targetLabel(target)}`
                 : `Add ${total} card${total === 1 ? '' : 's'} to ${targetLabel(target)}`}
           </button>
-          <button onClick={onClose} disabled={busy}>Keep scanning</button>
+          <button onClick={onClose} disabled={busy}>{closeLabel}</button>
         </div>
 
         {editing && entries[editing.index] && (

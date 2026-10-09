@@ -5,6 +5,7 @@ import { CollectionListView } from '../components/CollectionListView.js';
 import { HeaderValue, headerValue, useCollectionValue } from '../components/ValueSummary.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheetLazy.js';
+import { CardDropZone } from '../components/CardDropZone.js';
 import { clearTradelist } from '../db/dataAccess.js';
 import { useToast } from '../components/Toast.js';
 import { useUndoShortcut } from '../history/useUndoShortcut.js';
@@ -68,6 +69,7 @@ export function Tradelist() {
       {importing && <ImportPanel onDone={() => setImporting(false)} />}
       <CollectionListView onlyTrade />
       {scanning && <ScanSheet target={{ kind: 'tradelist' }} onClose={() => setScanning(false)} />}
+      <CardDropZone target={scanning ? null : { kind: 'tradelist' }} />
       {confirmSheet}
     </Page>
   );

@@ -5,6 +5,7 @@ import { Page } from './Page.js';
 import { CollectionListView } from '../components/CollectionListView.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheetLazy.js';
+import { CardDropZone } from '../components/CardDropZone.js';
 import { AddSealedProductSheet } from '../components/AddSealedProductSheet.js';
 import { HeaderValue, headerValue, useCollectionValue, useSealedValue } from '../components/ValueSummary.js';
 import { CollectionValueChartSheet } from '../components/CollectionValueChart.js';
@@ -48,6 +49,7 @@ export function Collection() {
     >
       <CollectionListView />
       {scanning && <ScanSheet target={{ kind: 'collection' }} onClose={() => setScanning(false)} />}
+      <CardDropZone target={scanning ? null : { kind: 'collection' }} />
       {addingSealed && <AddSealedProductSheet onClose={() => setAddingSealed(false)} />}
       {chartOpen && <CollectionValueChartSheet onClose={() => setChartOpen(false)} />}
     </Page>

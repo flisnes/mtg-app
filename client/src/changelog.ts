@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.196.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'On a computer, drag a card image from Scryfall or Gatherer (or image files from your disk) onto your collection, a deck, binder or box, or your trade or wish list. The app works out which card it is and lists it for you to check before it is added.',
+      },
+    ],
+  },
+  {
     version: '0.195.0',
     changes: [
       {
@@ -194,15 +203,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Agent collection tool now returns market prices per copy, in both EUR and USD for each card\'s exact printing and finish. Sort by "price" to rank cards by value.',
-      },
-    ],
-  },
-  {
-    version: '0.185.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Agent connections (desktop): a new Settings toggle lets a Claude Code session on your computer search cards and work with your collection, decks and lists through the open tab. Off by default, local only, and every agent change is one undoable history entry.',
       },
     ],
   },

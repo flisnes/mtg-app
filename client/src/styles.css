@@ -9225,3 +9225,58 @@ a.seg {
   align-items: center;
   gap: 0.35rem;
 }
+
+/* Drag-and-drop of card images (desktop): the whole window is the target while
+   a drag carrying an image is over it. pointer-events none, so the drag events
+   keep landing on the page underneath and the enter/leave count stays honest. */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-top);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+}
+.drop-overlay-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(100%, 26rem);
+  padding: 2.5rem 1.5rem;
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.05rem;
+  text-align: center;
+}
+.drop-overlay-box svg {
+  color: var(--accent);
+}
+.drop-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.drop-notice p {
+  margin: 0;
+}
+.drop-index button {
+  margin-left: 0.25rem;
+}
+.drop-failures {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--danger);
+}
+.drop-failures strong {
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

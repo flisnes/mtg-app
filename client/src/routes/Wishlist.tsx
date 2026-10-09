@@ -23,6 +23,7 @@ import { ListSearchButton, useListFilter, useOpenSearch } from '../components/Gl
 import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheetLazy.js';
+import { CardDropZone } from '../components/CardDropZone.js';
 import { useToast } from '../components/Toast.js';
 import { useUndoShortcut } from '../history/useUndoShortcut.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
@@ -201,6 +202,7 @@ export function Wishlist() {
       )}
 
       {scanning && <ScanSheet target={{ kind: 'wishlist' }} onClose={() => setScanning(false)} />}
+      <CardDropZone target={scanning ? null : { kind: 'wishlist' }} />
       {confirmSheet}
       {intakeSheet}
     </Page>

@@ -55,6 +55,12 @@ export interface BoardState {
   hand: BoardPile[];
   graveyard: BoardPile[];
   exile: BoardPile[];
+  /**
+   * The table (rebuild plan E4): how many creatures each opponent has out, in
+   * seat order. Empty with nobody there. Their boards hold nothing else the
+   * model knows about.
+   */
+  opponents: number[];
 }
 
 export interface TraceTurn {

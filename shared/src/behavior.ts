@@ -74,6 +74,13 @@ import { BASIC_LAND_TYPES, MANA_LETTERS, sourceColors, type EffectProfile, type 
  * each time you gain life (a lifelink creature connecting, a Food, a rule that
  * says so): Ajani's Pridemate, Sanguine Bond. `combat` is the beginning of your
  * combat step, after the turn's spells and before the attack.
+ *
+ * Rebuild plan E4 added the table: the four moments an opponent makes.
+ * `oppcast` is an opponent casting a spell (Rhystic Study), `oppdraw` an
+ * opponent drawing a card (Smothering Tithe), `oppenters` a creature of theirs
+ * arriving (Suture Priest), `oppdies` a creature of theirs dying (Blood
+ * Artist's other half). None of them fires with nobody at the table, which is
+ * the Model tab's opponents setting.
  */
 export type BehaviorTrigger =
   | 'play'
@@ -91,7 +98,18 @@ export type BehaviorTrigger =
   | 'activate'
   | 'graveyard'
   | 'lifegain'
-  | 'combat';
+  | 'combat'
+  | 'oppcast'
+  | 'oppdraw'
+  | 'oppenters'
+  | 'oppdies';
+
+/** The moments an opponent makes (rebuild plan E4). These are the rules a tax can sit on. */
+export const OPP_TRIGGERS = ['oppcast', 'oppdraw', 'oppenters', 'oppdies'] as const;
+export type OppTrigger = (typeof OPP_TRIGGERS)[number];
+export const isOppTrigger = (on: BehaviorTrigger | string): on is OppTrigger => (OPP_TRIGGERS as readonly string[]).includes(on);
+/** "Unless they pay {N}": the most a tax can ask. Remora's four is the biggest printed. */
+export const MAX_TAX = 9;
 
 /**
  * What kind of rule it is, which decides the steps it may hold (rebuild plan F).
@@ -117,7 +135,7 @@ export type BehaviorTrigger =
 export type RuleKind = 'trigger' | 'static' | 'tap' | 'activate' | 'graveyard';
 
 /** The triggers that watch other cards, and so carry a criteria of their own. */
-export const WATCHED_TRIGGERS = ['cast', 'enters', 'dies', 'sacrifice'] as const;
+export const WATCHED_TRIGGERS = ['cast', 'enters', 'dies', 'sacrifice', 'oppcast'] as const;
 export type WatchedTrigger = (typeof WATCHED_TRIGGERS)[number];
 
 /**
@@ -207,6 +225,11 @@ export type BehaviorStepKind =
   // Rebuild plan §6 step 8: on a `static` rule, your spells matching `q` cost
   // X generic less. Medallions, Goblin Electromancer, Animar.
   | 'discount'
+  // Rebuild plan E4: the table. `oppsac` is an edict, each opponent sacrifices
+  // X creatures (Fleshbag Marauder, Grave Pact); `oppdraws` has each opponent
+  // draw X (a wheel, Prosperity), which wakes whatever watches them draw.
+  | 'oppsac'
+  | 'oppdraws'
   // Internal: a rule's condition, compiled in front of its steps. Never stored,
   // never offered; see GateStep.
   | 'gate';
@@ -254,7 +277,11 @@ export type BehaviorAmountKind =
   // life-gain rule the life gained; on an enters, dies or sacrifice rule the
   // power of the permanent; on a cast rule the spell's mana value. Zero on a
   // rule nothing woke.
-  | 'cause';
+  | 'cause'
+  // Rebuild plan E4: the opponents at the table, and the creatures they
+  // control between them. Zero with nobody there.
+  | 'opponents'
+  | 'oppcreatures';
 
 /**
  * Arithmetic on an amount, so "half your library" and "that many minus one" are
@@ -506,6 +533,8 @@ export interface GateStep extends BehaviorStep {
   cond?: BehaviorCondition;
   once?: true;
   oneshot?: true;
+  /** "Unless they pay {N}" on an opponent's moment (rebuild plan E4): the table's pay rate decides. */
+  tax?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -986,6 +1015,13 @@ export interface BehaviorRule {
    * counters before this; a one-shot entry rule says it plainly.
    */
   oneshot?: true;
+  /**
+   * An opponent's moment only (rebuild plan E4): the rule fires unless they
+   * pay this much. Rhystic Study is {1}, Smothering Tithe {2}, Mystic Remora
+   * {4}. How often they pay is the table's setting on the Model tab, scaled
+   * down by the amount: nobody pays four as readily as one.
+   */
+  tax?: number;
 }
 
 /**
@@ -1217,6 +1253,35 @@ export const BEHAVIOR_TRIGGERS: readonly TriggerOption[] = [
     hint: 'Every turn, after the turn\'s spells and before the attack, so a pump or a token here is in time to swing. It fires the turn it lands too.',
     needs: 'permanent',
   },
+  {
+    id: 'oppcast',
+    label: 'When an opponent casts a spell',
+    lead: 'Whenever an opponent casts a spell',
+    hint: 'Each spell every opponent casts on their turn, as many as the table setting says. Narrow it below with t:creature or -t:creature; nothing else about their spells is known. "Unless they pay" is Rhystic Study and Esper Sentinel. Fires nowhere with no opponents set.',
+    needs: 'permanent',
+    watches: true,
+  },
+  {
+    id: 'oppdraw',
+    label: 'When an opponent draws a card',
+    lead: 'Whenever an opponent draws a card',
+    hint: 'Once per opponent per turn for their draw step, plus whatever a wheel of yours hands them. Smothering Tithe is this plus "unless they pay {2}"; Sheoldred is this plus a drain. Fires nowhere with no opponents set.',
+    needs: 'permanent',
+  },
+  {
+    id: 'oppenters',
+    label: 'When a creature an opponent controls enters',
+    lead: 'Whenever a creature an opponent controls enters',
+    hint: 'About half of what the opponents cast are creatures, and each one that resolves lands on their board. Suture Priest, Blood Seeker. "What woke it" reads its mana value.',
+    needs: 'permanent',
+  },
+  {
+    id: 'oppdies',
+    label: 'When a creature an opponent controls dies',
+    lead: 'Whenever a creature an opponent controls dies',
+    hint: 'Only what this deck kills: your removal, your edicts. The table does not trade creatures among itself here, so this is the floor. Blood Artist\'s other half, Syr Konrad.',
+    needs: 'permanent',
+  },
 ];
 
 export interface StepOption {
@@ -1260,6 +1325,8 @@ export const BEHAVIOR_STEPS: readonly StepOption[] = [
   { id: 'gainlife', label: 'Gain X life', verb: 'gain' },
   { id: 'loselife', label: 'Lose X life', verb: 'lose' },
   { id: 'poison', label: 'Give X poison counters', verb: 'give' },
+  { id: 'oppsac', label: 'Each opponent sacrifices X creatures', verb: 'make' },
+  { id: 'oppdraws', label: 'Each opponent draws X', verb: 'have' },
   { id: 'discount', label: 'Spells cost X less', verb: 'cost', kinds: ['static'] },
 ];
 
@@ -1404,6 +1471,8 @@ export const BEHAVIOR_AMOUNTS: readonly AmountOption[] = [
   { id: 'lifegained', label: 'life gained this turn', phrase: 'the life you gained this turn' },
   { id: 'died', label: 'creatures that died this turn', phrase: 'the creatures of yours that died this turn' },
   { id: 'cause', label: 'what woke it', phrase: 'what woke this rule', needsCause: true },
+  { id: 'opponents', label: 'your opponents', phrase: 'the opponents at the table' },
+  { id: 'oppcreatures', label: "opponents' creatures", phrase: 'creatures your opponents control' },
 ];
 
 export interface AmountOpOption {
@@ -1625,6 +1694,10 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
     case 'gainlife':
     case 'loselife':
       return `${verb} ${count} life${tail}`;
+    case 'oppsac':
+      return `each opponent sacrifices ${count} creature${many ? 's' : ''}${tail}`;
+    case 'oppdraws':
+      return `each opponent draws ${count}${tail}`;
   }
   if (step.op === 'damage') {
     // No target: a goldfish has one opponent and nothing to aim at. The step
@@ -1659,9 +1732,32 @@ export function describeTrigger(rule: BehaviorRule): string {
   const t = TRIGGER_BY_ID.get(rule.on);
   const lead = t?.kind === 'activate' ? describeCost(rule.cost) : (t?.lead ?? rule.on);
   if (t?.kind === 'static') return `${rule.q ? `${lead}, for your permanents matching ${rule.q}` : lead}${rule.cond ? `, ${describeCondition(rule.cond)}` : ''}`;
+  // An opponent's spell has no card behind it, only whether it is a creature,
+  // so its criteria reads as the one word it can be.
+  if (rule.on === 'oppcast') return `Whenever an opponent casts a ${oppSpellWord(rule.q)}spell${guardPhrase(rule)}`;
   const base = t?.watches && rule.q ? `${lead} matching ${rule.q}` : lead;
   return `${base}${guardPhrase(rule)}`;
 }
+
+/**
+ * What an `oppcast` criteria narrows to (rebuild plan E4): a creature spell, a
+ * noncreature spell, or any. The table's spells are a coin flip between the
+ * two and nothing else about them is known, so `t:instant`, `t:artifact` and
+ * every other type read as noncreature, and anything that does not mention a
+ * type at all reads as any spell. 0 any, 1 creature, 2 noncreature.
+ */
+export function oppSpellFilter(q: string | undefined): 0 | 1 | 2 {
+  if (!q) return 0;
+  const s = q.toLowerCase();
+  if (/(?:^|\s)-t:creature\b/.test(s) || /\bt:(?:instant|sorcery|artifact|enchantment|planeswalker|battle)\b/.test(s)) return 2;
+  if (/(?:^|\s)t:creature\b/.test(s)) return 1;
+  return 0;
+}
+
+const oppSpellWord = (q: string | undefined): string => {
+  const f = oppSpellFilter(q);
+  return f === 1 ? 'creature ' : f === 2 ? 'noncreature ' : '';
+};
 
 /** An ability's price, as printed: "{2}, {T}, sacrifice it". */
 export function describeCost(cost: ActivationCost | undefined): string {
@@ -1691,7 +1787,7 @@ export function describeCondition(c: BehaviorCondition): string {
 
 /** The condition and the once-a-turn limit, as a tail on the lead. */
 const guardPhrase = (rule: BehaviorRule): string =>
-  `${rule.cond ? `, ${describeCondition(rule.cond)}` : ''}${rule.once ? ', once each turn' : ''}${rule.oneshot ? ', only the first time each game' : ''}`;
+  `${rule.tax ? `, unless they pay {${rule.tax}}` : ''}${rule.cond ? `, ${describeCondition(rule.cond)}` : ''}${rule.once ? ', once each turn' : ''}${rule.oneshot ? ', only the first time each game' : ''}`;
 
 /** One rule as a sentence: "When you play it: draw 2, then discard 1". */
 export function describeRule(rule: BehaviorRule): string {
@@ -1957,6 +2053,16 @@ export interface CompiledBehavior {
   /** Rebuild plan §6 steps 3 and 6: whenever you gain life, and the beginning of combat. */
   lifegain: BehaviorStep[];
   combat: BehaviorStep[];
+  /**
+   * Rebuild plan E4, the table. `oppcast` keeps its rules apart like the other
+   * watched triggers (its criteria is creature or noncreature, see
+   * oppSpellFilter); the other three are plain moments. A tax rides in each
+   * rule's gate.
+   */
+  oppcast: WatchRule[];
+  oppdraw: BehaviorStep[];
+  oppenters: BehaviorStep[];
+  oppdies: BehaviorStep[];
 }
 
 export interface ActivateRule {
@@ -1969,7 +2075,7 @@ export interface ActivateRule {
 }
 
 /** The plain triggers, whose rules flatten into one list of steps each. */
-export const PLAIN_TRIGGERS = ['play', 'etb', 'attack', 'death', 'upkeep', 'endstep', 'lifegain', 'combat'] as const;
+export const PLAIN_TRIGGERS = ['play', 'etb', 'attack', 'death', 'upkeep', 'endstep', 'lifegain', 'combat', 'oppdraw', 'oppenters', 'oppdies'] as const;
 export type PlainTrigger = (typeof PLAIN_TRIGGERS)[number];
 
 /**
@@ -2002,6 +2108,10 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     dredge: 0,
     lifegain: [],
     combat: [],
+    oppcast: [],
+    oppdraw: [],
+    oppenters: [],
+    oppdies: [],
   };
   for (const rule of b.rules) {
     const trigger = rule ? TRIGGER_BY_ID.get(rule.on) : undefined;
@@ -2019,9 +2129,19 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     const cond = kind !== 'graveyard' ? compiledCondition(rule.cond) : null;
     const once = (kind === 'trigger' || kind === 'activate') && rule.once === true;
     const oneshot = (kind === 'trigger' || kind === 'activate') && rule.oneshot === true;
+    // A tax only means something on an opponent's moment (rebuild plan E4).
+    const tax = isOppTrigger(rule.on) ? cleanTax(rule.tax) : 0;
     const gate: GateStep | null =
-      kind === 'trigger' && (cond || once || oneshot)
-        ? { op: 'gate', x: cond?.x ?? ZERO, span: 0, ...(cond ? { cond } : {}), ...(once ? { once: true as const } : {}), ...(oneshot ? { oneshot: true as const } : {}) }
+      kind === 'trigger' && (cond || once || oneshot || tax)
+        ? {
+            op: 'gate',
+            x: cond?.x ?? ZERO,
+            span: 0,
+            ...(cond ? { cond } : {}),
+            ...(once ? { once: true as const } : {}),
+            ...(oneshot ? { oneshot: true as const } : {}),
+            ...(tax ? { tax } : {}),
+          }
         : null;
     const start = bucket.length;
     if (gate) bucket.push(gate);
@@ -2092,11 +2212,22 @@ export function compileBehavior(b: CardBehavior | null | undefined): CompiledBeh
     out.activate.length > 0 ||
     out.dredge > 0 ||
     out.lifegain.length > 0 ||
-    out.combat.length > 0;
+    out.combat.length > 0 ||
+    out.oppcast.length > 0 ||
+    out.oppdraw.length > 0 ||
+    out.oppenters.length > 0 ||
+    out.oppdies.length > 0;
   return fires ? out : null;
 }
 
 const ZERO: BehaviorAmount = { kind: 'fixed', n: 0 };
+
+/** A tax as stored: a whole number from 1 to MAX_TAX, or 0 for none. */
+function cleanTax(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0;
+  const n = Math.round(raw);
+  return n >= 1 ? Math.min(MAX_TAX, n) : 0;
+}
 
 /**
  * A condition this build can check, or null. A rule whose condition it cannot
@@ -2183,6 +2314,12 @@ export function collectBehaviorQueries(b: CompiledBehavior | null | undefined, i
       if (rule.cond?.x.q) into.add(rule.cond.x.q);
       for (const step of rule.steps) add(step);
     }
+  }
+  // An opponent's spell is no card of this deck, so its criteria never
+  // becomes a filter (oppSpellFilter reads it); the steps' own still do.
+  for (const rule of b.oppcast) {
+    if (rule.cond?.x.q) into.add(rule.cond.x.q);
+    for (const step of rule.steps) add(step);
   }
   // An ability's criteria: which permanents its cost may sacrifice, and what
   // its condition counts.
@@ -2346,6 +2483,10 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
     if (guarded && r.cond !== undefined && !cond) continue;
     const once = (kind === 'trigger' || kind === 'activate') && r.once === true;
     const oneshot = (kind === 'trigger' || kind === 'activate') && r.oneshot === true;
+    // "Unless they pay" only on an opponent's moment (rebuild plan E4). A
+    // build from before the table drops the whole rule with its trigger, so
+    // the tax never runs unguarded anywhere.
+    const tax = isOppTrigger(on) ? cleanTax(r.tax) : 0;
     rules.push({
       on,
       ...(q ? { q } : {}),
@@ -2353,6 +2494,7 @@ export function sanitizeCardBehavior(raw: unknown): CardBehavior | null {
       ...(cond ? { cond } : {}),
       ...(once ? { once: true as const } : {}),
       ...(oneshot ? { oneshot: true as const } : {}),
+      ...(tax ? { tax } : {}),
       steps,
     });
   }

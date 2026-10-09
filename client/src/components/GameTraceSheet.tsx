@@ -228,6 +228,7 @@ function LoadedTraceSheet({
             <span>Turn {at}</span>
             <span className="trace-board-numbers">
               {shown.spent} of {shown.available} mana{damage > 0 ? ` · ${damage} damage dealt` : ''}
+              {shown.board.opponents.length > 0 && ` · opponents' creatures: ${shown.board.opponents.join(' / ')}`}
             </span>
           </div>
           <BoardRow cards={deck.cards} piles={shown.board.permanents} empty="No permanents out" />

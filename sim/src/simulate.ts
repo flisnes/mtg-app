@@ -7,6 +7,7 @@ import {
   manaStepColors,
   MAX_CAST_N,
   MAX_QUERY_X,
+  oppSpellFilter,
   tokenKey,
   type ActivateRule,
   type BehaviorAmount,
@@ -57,7 +58,7 @@ import {
   type SimFilter,
   type SimGraveyardCast,
 } from './simDeck.js';
-import { MANA_BINS, type SimOptions, type SpendPolicy } from './simConfig.js';
+import { MANA_BINS, PAY_RATE, TEMPO_SPELLS, type SimOptions, type SpendPolicy } from './simConfig.js';
 import { describeGoal, type GoalTermKind, type SimGoalResult } from './goals.js';
 export * from './simConfig.js';
 
@@ -147,6 +148,7 @@ const EMPTY_BOARD: BoardState = Object.freeze({
   hand: [],
   graveyard: [],
   exile: [],
+  opponents: [],
 }) as BoardState;
 
 /** How a zone reads in a trace line as a destination: "to the top of your library". */
@@ -422,6 +424,10 @@ export interface SimResult {
    * clock. It is still the only number in this sheet that is about the deck's
    * *plan* instead of its mana, and a deck whose line is flat on turn six is
    * telling you something the curve cannot.
+   *
+   * With a table set (rebuild plan E4) it is the first seat's: everything you
+   * do on your turn, plus what your rules drain from that one opponent on
+   * their own turn. The other seats' drains are kept apart.
    */
   damageByTurn: number[];
   /** Of that, the half that came from creatures attacking. */
@@ -452,6 +458,14 @@ export interface SimResult {
   lethalByTurn: number[];
   /** The deck's goals (rebuild plan E1), one result each, in the deck's order. */
   goals: SimGoalResult[];
+  /**
+   * The table (rebuild plan E4). `oppSpells` is the mean number of spells the
+   * opponents cast over the game between them; `answers` the mean number of
+   * them this deck countered plus the creatures it removed. Both zero with
+   * nobody at the table.
+   */
+  oppSpells: number;
+  answers: number;
 }
 
 /**
@@ -532,12 +546,12 @@ export function simulate(
     }
     const b = cards[i]!.behavior;
     if (!b) continue;
-    for (const on of ['play', 'etb', 'attack', 'death', 'upkeep', 'endstep', 'lifegain', 'combat'] as const) {
+    for (const on of ['play', 'etb', 'attack', 'death', 'upkeep', 'endstep', 'lifegain', 'combat', 'oppdraw', 'oppenters', 'oppdies'] as const) {
       if (b[on].length === 0) continue;
       fireSlot.set(b[on], fireMeta.length);
       fireMeta.push({ card: i, on });
     }
-    for (const on of ['cast', 'enters', 'dies', 'sacrifice'] as const) {
+    for (const on of ['cast', 'enters', 'dies', 'sacrifice', 'oppcast'] as const) {
       b[on].forEach((rule, watch) => {
         fireSlot.set(rule.steps, fireMeta.length);
         fireMeta.push({ card: i, on, watch });
@@ -565,6 +579,21 @@ export function simulate(
   const spendCreatures = opts.spend === 'creatures';
   const spendCurve = opts.spend === 'curve';
   const holding = opts.interaction === 'hold';
+  /**
+   * The table (rebuild plan E4). Three knobs read once: who is there, how
+   * much they do, how readily they pay. `answering` is the interaction policy
+   * that waits for them, which with nobody there is plain `cast`.
+   */
+  const opponents = opts.opponents ?? 0;
+  const tableSpells = TEMPO_SPELLS[opts.tempo] ?? TEMPO_SPELLS.typical;
+  const payRate = PAY_RATE[opts.pay] ?? PAY_RATE.half;
+  const answering = opts.interaction === 'answer' && opponents > 0;
+  /**
+   * The table's own dice, so what the opponents do never moves this deck's
+   * shuffles: the same seed deals the same games with the table on or off,
+   * and the difference between the two runs is the table.
+   */
+  const tableRng = makeRng(opts.seed ^ 0x7ab1e);
 
   // Cards sharing a printed cost share an answer, so the payment solver runs
   // once per distinct cost per turn rather than once per card. That is also
@@ -793,6 +822,30 @@ export function simulate(
   /** Poison counters on the opponent this game, and the per-turn tally. */
   let gamePoison = 0;
   const poisonSum = new Float64Array(opts.maxTurn + 1);
+  /**
+   * The table's boards (rebuild plan E4): how many creatures each opponent
+   * has out. That is the whole of what the thin model knows about them, and
+   * it is enough for a removal spell to have a target, an edict to take one,
+   * and "creatures your opponents control" to be a number.
+   */
+  const oppBoard = new Int32Array(3);
+  let oppTotal = 0;
+  /**
+   * Whose turn it is across the table, or -1 on yours. Damage a rule deals
+   * during an opponent's turn ("that player loses 2") lands on that seat:
+   * seat 0 is the opponent the damage clock reads, who also takes everything
+   * you do on your own turn; the other seats keep their own tally so a drain
+   * of theirs can still end the game, but never inflates seat 0's clock. A
+   * Sheoldred across a three-player table drains the tracked opponent once a
+   * round, not three times.
+   */
+  let actingSeat = -1;
+  const seatDamage = new Int32Array(3);
+  /** Spells the table cast this game, and what this deck did about them. */
+  let gameOppSpells = 0;
+  let gameAnswers = 0;
+  let oppSpellSum = 0;
+  let answerSum = 0;
   const lifeSum = new Float64Array(opts.maxTurn + 1);
   /**
    * The speed signal (rebuild plan D2): the first turn this game's damage or
@@ -2032,6 +2085,12 @@ export function simulate(
       case 'cause':
         n = causeAmount;
         break;
+      case 'opponents':
+        n = opponents;
+        break;
+      case 'oppcreatures':
+        n = oppTotal;
+        break;
       case 'all':
         // Bounded by the zone rather than by a number. This is only the ceiling
         // the move loop stops at; it stops sooner the moment nothing matches,
@@ -2067,6 +2126,11 @@ export function simulate(
     if (g.once && gateTurn.get(g) === turnStamp) return false;
     if (g.oneshot && gateGame.get(g) === gameNo) return false;
     if (g.cond && !condHolds(g.cond, turn)) return false;
+    // "Unless they pay" (rebuild plan E4): the table pays a one-mana tax at
+    // its pay rate and a bigger one that much less often, and a paid tax is a
+    // rule that did not fire. Rolled before the once-a-turn mark is spent, so
+    // a paid Esper Sentinel still fires on the next spell.
+    if (g.tax && tableRng.next() < payRate / g.tax) return false;
     if (g.once) gateTurn.set(g, turnStamp);
     if (g.oneshot) gateGame.set(g, gameNo);
     return true;
@@ -2242,7 +2306,18 @@ export function simulate(
   for (let i = 0; i < n; i++) {
     const b = cards[i]!.behavior;
     if (!b || drawsCards[i]) continue;
-    const lists = [b.endstep, b.lifegain, b.combat, ...b.dies.map((r) => r.steps), ...b.sacrifice.map((r) => r.steps), ...b.activate.map((r) => r.steps)];
+    const lists = [
+      b.endstep,
+      b.lifegain,
+      b.combat,
+      b.oppdraw,
+      b.oppenters,
+      b.oppdies,
+      ...b.dies.map((r) => r.steps),
+      ...b.sacrifice.map((r) => r.steps),
+      ...b.oppcast.map((r) => r.steps),
+      ...b.activate.map((r) => r.steps),
+    ];
     drawsCards[i] = lists.some((steps) => steps.some((step) => step.op === 'draw'));
   }
   const anyEnterWatchers = cards.some((c) => c.permanent && !!c.behavior && c.behavior.enters.length > 0);
@@ -2253,6 +2328,14 @@ export function simulate(
   /** Rebuild plan §6 steps 3 and 6: anything watching for life gained, or the beginning of combat. */
   const anyLifegainWatchers = cards.some((c) => c.permanent && !!c.behavior && c.behavior.lifegain.length > 0);
   const anyCombatSteps = cards.some((c) => c.permanent && !!c.behavior && c.behavior.combat.length > 0);
+  /** The table's watchers (rebuild plan E4), asked once; none of them fire with nobody there. */
+  const anyOppCast = opponents > 0 && cards.some((c) => c.permanent && !!c.behavior && c.behavior.oppcast.length > 0);
+  const anyOppDraw = opponents > 0 && cards.some((c) => c.permanent && !!c.behavior && c.behavior.oppdraw.length > 0);
+  const anyOppEnters = opponents > 0 && cards.some((c) => c.permanent && !!c.behavior && c.behavior.oppenters.length > 0);
+  const anyOppDies = opponents > 0 && cards.some((c) => c.permanent && !!c.behavior && c.behavior.oppdies.length > 0);
+  /** Does anything in the deck answer the table: a counterspell to hold, removal that waits for a creature. */
+  const anyCounters = opponents > 0 && cards.some((c) => c.counter > 0);
+  const anyRemoval = opponents > 0 && cards.some((c) => c.removal);
 
   /**
    * The mana that went into the `{X}` of the spell resolving right now, so a
@@ -2915,6 +2998,160 @@ export function simulate(
     for (const index of woken) fireNested(index, cards[index]!, turn, cards[index]!.behavior!.lifegain);
     causeAmount = wasCause;
     if (outermost) sayEffect('');
+  };
+
+  /**
+   * The table did something (rebuild plan E4): an opponent drew, a creature of
+   * theirs arrived, a creature of theirs died. Every permanent of yours with a
+   * rule on that moment goes off. `cause` is the number behind it: a creature's
+   * mana value, or nothing for a draw.
+   */
+  const fireOpp = (which: 'oppdraw' | 'oppenters' | 'oppdies', turn: number, cause: number): void => {
+    if (!opts.effects || triggerDepth >= MAX_TRIGGER_DEPTH) return;
+    const outermost = triggerDepth === 0;
+    const woken: number[] = [];
+    for (let p = 0; p < perms.len; p++) {
+      const index = perms.card[p]!;
+      const b = cards[index]!.behavior;
+      if (!b || b[which].length === 0 || !stillOut(p, turn)) continue;
+      woken.push(index);
+    }
+    if (woken.length === 0) return;
+    const wasCause = causeAmount;
+    causeAmount = cause;
+    for (const index of woken) fireNested(index, cards[index]!, turn, cards[index]!.behavior![which]);
+    causeAmount = wasCause;
+    if (outermost) sayEffect('');
+  };
+
+  /** What each `oppcast` criteria narrows to, read once per distinct string. */
+  const oppFilterOf = new Map<string, 0 | 1 | 2>();
+  const oppFilter = (q: string | undefined): 0 | 1 | 2 => {
+    const key = q ?? '';
+    let f = oppFilterOf.get(key);
+    if (f === undefined) {
+      f = oppSpellFilter(q);
+      oppFilterOf.set(key, f);
+    }
+    return f;
+  };
+
+  /**
+   * An opponent cast a spell (rebuild plan E4). Rhystic Study, Esper Sentinel,
+   * Kaervek: every rule watching for it, narrowed to creature or noncreature
+   * spells where its criteria says so. `cause` is the spell's mana value. The
+   * triggers go off whether or not the spell is then countered, which is both
+   * the rule and the point of a Study.
+   */
+  const fireOppCast = (creature: boolean, mv: number, turn: number): void => {
+    if (!opts.effects || triggerDepth >= MAX_TRIGGER_DEPTH) return;
+    const outermost = triggerDepth === 0;
+    const woken: { index: number; steps: readonly BehaviorStep[] }[] = [];
+    for (let p = 0; p < perms.len; p++) {
+      const index = perms.card[p]!;
+      const rules = cards[index]!.behavior?.oppcast;
+      if (!rules || rules.length === 0 || !stillOut(p, turn)) continue;
+      for (const rule of rules) {
+        const f = oppFilter(rule.q);
+        if (f === 0 || (f === 1) === creature) woken.push({ index, steps: rule.steps });
+      }
+    }
+    if (woken.length === 0) return;
+    const wasCause = causeAmount;
+    causeAmount = mv;
+    for (const w of woken) fireNested(w.index, cards[w.index]!, turn, w.steps);
+    causeAmount = wasCause;
+    if (outermost) sayEffect('');
+  };
+
+  /**
+   * One creature leaves the table's boards (rebuild plan E4): the opponent
+   * with the most loses one, and whatever watches their creatures die fires.
+   * False when nobody has one.
+   */
+  const killOppCreature = (turn: number): boolean => {
+    if (oppTotal <= 0) return false;
+    let at = 0;
+    for (let o = 1; o < opponents; o++) if (oppBoard[o]! > oppBoard[at]!) at = o;
+    if (oppBoard[at]! <= 0) return false;
+    oppBoard[at]!--;
+    oppTotal--;
+    if (anyOppDies) fireOpp('oppdies', turn, 0);
+    return true;
+  };
+
+  /** An edict: each opponent sacrifices up to `n` creatures. Returns how many went. */
+  const oppSacrifice = (n: number, turn: number): number => {
+    let went = 0;
+    for (let o = 0; o < opponents; o++) {
+      const k = Math.min(n, oppBoard[o]!);
+      oppBoard[o]! -= k;
+      oppTotal -= k;
+      went += k;
+      if (anyOppDies) for (let i = 0; i < k; i++) fireOpp('oppdies', turn, 0);
+    }
+    return went;
+  };
+
+  /**
+   * An opponent's spell is on the stack and this deck may have a counter for
+   * it (rebuild plan E4, under the `answer` policy). The cheapest counterspell
+   * in hand that can hit it and that the mana left up can pay is cast: its
+   * cast triggers fire, it goes to the graveyard, and the spell is gone.
+   * Returns the mana it cost, or 0 when nothing was cast.
+   *
+   * `left` is the mana the turn did not spend; `plainLeft` is that minus the
+   * Treasures still sitting uncracked, which are cracked here only if the
+   * lands and rocks do not cover it. Mana that floated out of a ritual and
+   * emptied at the end of the turn is still inside `left`, which overstates
+   * the hold-up in a ritual deck by exactly that much; the rare case.
+   */
+  const answerSpell = (creature: boolean, mv: number, turn: number, left: number, plainLeft: number, spareTreasures: number, who: number): number => {
+    let best = -1;
+    let bestCost: ParsedCost | null = null;
+    for (let i = 0; i < handLen; i++) {
+      const index = hand[i]!;
+      const card = cards[index]!;
+      if (card.counter === 0 || !card.cost) continue;
+      if (card.counter === 2 && !creature) continue;
+      if (card.counter === 3 && creature) continue;
+      const cost = priced(index, turn);
+      if (cost.mana > left) continue;
+      if (bestCost && cost.mana >= bestCost.mana) continue;
+      best = i;
+      bestCost = cost;
+    }
+    if (best < 0) return 0;
+    const cost = bestCost!;
+    const before = paid.pips.length;
+    paid.generic += cost.generic;
+    for (const pip of cost.pips) paid.pips.push(pip);
+    const extra = cost.mana - plainLeft;
+    if (!canPay(paid, units, unitGroups) || extra > spareTreasures) {
+      paid.generic -= cost.generic;
+      paid.pips.length = before;
+      return 0;
+    }
+    paid.mana += cost.mana;
+    if (extra > 0) {
+      if (sink) say(sink, 'mana', `Sacrifices ${extra} Treasure${extra === 1 ? '' : 's'} to pay for it`);
+      crackTreasures(extra, turn);
+    }
+    const index = hand[best]!;
+    const card = cards[index]!;
+    hand[best] = hand[--handLen]!;
+    gameAnswers++;
+    if (sink) say(sink, 'cast', `Counters Opponent ${who + 1}'s ${creature ? 'creature' : 'spell'} (mana value ${mv}) with ${card.name}`);
+    resolveCast(index, card, turn, null, AFTER_NONE);
+    return cost.mana;
+  };
+
+  /** Each opponent draws `n`: a wheel's other side, which wakes whatever watches them draw. */
+  const oppDraws = (n: number, turn: number): number => {
+    if (anyOppDraw) {
+      for (let o = 0; o < opponents; o++) for (let i = 0; i < n; i++) fireOpp('oppdraw', turn, 0);
+    }
+    return n * opponents;
   };
 
   /** Your life total moves. A gain is an event (lifelink, a Food, a rule); a loss is only the number. */
@@ -3729,6 +3966,14 @@ export function simulate(
           addPoison(n);
           if (sink) bits.push(`gives ${n} poison counter${n === 1 ? '' : 's'}`);
           break;
+        case 'oppsac':
+          did = oppSacrifice(n, turn);
+          if (sink) bits.push(did > 0 ? `makes the table sacrifice ${did} creature${did === 1 ? '' : 's'}` : 'finds no creature across the table to sacrifice');
+          break;
+        case 'oppdraws':
+          did = oppDraws(n, turn);
+          if (sink && did > 0) bits.push(`has each opponent draw ${n}`);
+          break;
       }
       lastAmount = did;
     }
@@ -3847,6 +4092,11 @@ export function simulate(
    */
   const dealDamage = (n: number, combat: boolean): void => {
     if (n <= 0) return;
+    // Another seat's drain (rebuild plan E4) is theirs, not the clock's.
+    if (actingSeat > 0) {
+      seatDamage[actingSeat]! += n;
+      return;
+    }
     gameDamage += n;
     if (combat) gameCombat += n;
   };
@@ -3904,6 +4154,7 @@ export function simulate(
       graveyard: zone(graveyard, gyLen),
       // Suspended cards are in exile too, waiting, and so are the foretold, plotted and impulse-exiled ones.
       exile: suspLen > 0 || exCastLen > 0 ? [...zone(exiled, exLen), ...zone(suspCard, suspLen), ...zone(exCastCard, exCastLen)].sort(byName) : zone(exiled, exLen),
+      opponents: Array.from(oppBoard.subarray(0, opponents)),
     };
   };
 
@@ -4238,6 +4489,13 @@ export function simulate(
     // Only the roles that did not already go through addSource above: a
     // rock and a dork are filed there, with their mana.
     if (card.permanent && card.role !== 'rock' && card.role !== 'dork') addPermanent(index, card, turn);
+    // Printed removal (rebuild plan E4): one creature off the fullest board
+    // across the table, if there is one. Beside whatever rule the card has,
+    // since the kill is printed and the rule is the rest of the card.
+    if (opts.effects && card.removal && anyRemoval && killOppCreature(turn)) {
+      gameAnswers++;
+      if (sink) say(sink, 'effect', `${card.name} removes a creature across the table`);
+    }
     if (opts.effects) {
       added += enters(index, card, turn, true);
       if (sink && resolves(card)) {
@@ -4249,7 +4507,16 @@ export function simulate(
         // not fire on a clock, it fires on the next thing you do, and
         // telling someone their Tatyova triggers at upkeep is the trace
         // contradicting the rule they just wrote.
-        const watching = !!b && (b.cast.length > 0 || b.enters.length > 0 || b.dies.length > 0 || b.sacrifice.length > 0);
+        const watching =
+          !!b &&
+          (b.cast.length > 0 ||
+            b.enters.length > 0 ||
+            b.dies.length > 0 ||
+            b.sacrifice.length > 0 ||
+            b.oppcast.length > 0 ||
+            b.oppdraw.length > 0 ||
+            b.oppenters.length > 0 ||
+            b.oppdies.length > 0);
         const when =
           b && b.upkeep.length === 0 && b.endstep.length > 0
             ? 'will fire at every end step'
@@ -5528,6 +5795,12 @@ export function simulate(
     causeAmount = 0;
     gamePoison = 0;
     gameLethal = false;
+    oppBoard.fill(0);
+    oppTotal = 0;
+    seatDamage.fill(0);
+    actingSeat = -1;
+    gameOppSpells = 0;
+    gameAnswers = 0;
     gameCasts.fill(0);
     goalDone.fill(0);
     inCombat = false;
@@ -5949,6 +6222,9 @@ export function simulate(
             continue;
           }
           if (!card.spell || !card.cost) continue;
+          // Answers wait for what they answer (rebuild plan E4): a
+          // counterspell for an opponent's turn, removal for a creature to hit.
+          if (answering && (card.counter > 0 || (card.removal && oppTotal === 0))) continue;
           // The commander pays two more for every time it has been cast, and
           // the discounts on the battlefield take generic off (§6 step 8).
           const cost = priced(index, turn);
@@ -6049,12 +6325,15 @@ export function simulate(
             spent += setupSpent;
             continue;
           }
-          if (holding) {
+          if (holding || answering) {
             // Only the ones it could actually have cast. "Holding up a
             // Cryptic Command on turn two" is not a decision anybody made.
+            // Under `answer` it is the answers waiting: counterspells, and
+            // removal with nothing yet to hit.
             for (let i = 0; i < handLen; i++) {
               const card = cards[hand[i]!]!;
-              if (card.instant && card.cost && card.cost.mana <= left) held++;
+              if (!card.cost || card.cost.mana > left) continue;
+              if (holding ? card.instant : card.counter > 0 || (card.removal && oppTotal === 0)) held++;
             }
           }
           if (sink && left > 0) {
@@ -6064,7 +6343,7 @@ export function simulate(
               sink,
               'note',
               held > 0
-                ? `Keeps ${left} mana up, holding ${held} instant${held === 1 ? '' : 's'}`
+                ? `Keeps ${left} mana up, holding ${held} ${answering ? 'answer' : 'instant'}${held === 1 ? '' : 's'}`
                 : inHand > 0
                   ? `Stops with ${left} mana up: nothing left in hand costs ${left} or less`
                   : `Stops with ${left} mana up and no spell in hand`,
@@ -6328,6 +6607,68 @@ export function simulate(
       if (exCastLen > 0) expireExileCasts(turn);
       perms.clearEot(cards);
 
+      // --- The table's turns (rebuild plan E4) ------------------------------
+      // Each opponent in turn: a draw, then a spell or two, about half of
+      // them creatures that land on their board, each costing somewhere up
+      // to the lands they would have. A thin model, on its own dice. What it
+      // is for: the rules that watch an opponent fire, a counterspell held
+      // up has something to hit, and removal next turn has something to
+      // kill. Nothing of theirs attacks, blocks or dies on its own: the floor
+      // side of every one of those.
+      if (opponents > 0 && opts.effects) {
+        const spare = treasures - cracked;
+        const damageBeforeRound = gameDamage;
+        for (let o = 0; o < opponents; o++) {
+          actingSeat = o;
+          // The spell count: the whole part, and the fraction as a coin. Turn
+          // one is one spell at most, whatever the tempo.
+          let k = Math.floor(tableSpells) + (tableRng.next() < tableSpells - Math.floor(tableSpells) ? 1 : 0);
+          if (turn === 1) k = Math.min(k, 1);
+          // Decided before anything fires, so the trace can say the turn
+          // first and the triggers under it.
+          let creatureBits = 0;
+          const mvs: number[] = [];
+          for (let s = 0; s < k; s++) {
+            if (tableRng.next() < 0.5) creatureBits |= 1 << s;
+            mvs.push(1 + tableRng.int(Math.min(turn, 7)));
+          }
+          if (sink) {
+            const spells = mvs.map((mv, s) => `a ${creatureBits & (1 << s) ? 'creature' : 'spell'} (mana value ${mv})`);
+            say(sink, 'note', `Opponent ${o + 1} draws${spells.length ? ` and casts ${spells.join(' and ')}` : ''}`);
+          }
+          if (anyOppDraw) fireOpp('oppdraw', turn, 0);
+          for (let s = 0; s < k; s++) {
+            const creature = (creatureBits & (1 << s)) !== 0;
+            const mv = mvs[s]!;
+            gameOppSpells++;
+            // Cast triggers first, then the counter: a Study draws off a
+            // spell that is then countered, which is the rule.
+            if (anyOppCast) fireOppCast(creature, mv, turn);
+            let countered = false;
+            if (answering && anyCounters && mv >= 3) {
+              const left = available - spent;
+              const paidFor = left > 0 ? answerSpell(creature, mv, turn, left, left - spare, spare, o) : 0;
+              if (paidFor > 0) {
+                spent += paidFor;
+                countered = true;
+              }
+            }
+            if (!countered && creature) {
+              oppBoard[o]!++;
+              oppTotal++;
+              if (anyOppEnters) fireOpp('oppenters', turn, mv);
+            }
+          }
+        }
+        actingSeat = -1;
+        // A drain during their turns can be the kill, on any seat.
+        if (!gameLethal && (gameDamage >= oppLife || seatDamage[1]! >= oppLife || seatDamage[2]! >= oppLife)) {
+          gameLethal = true;
+          lethalFirst[turn]!++;
+          if (sink) say(sink, 'note', `An opponent would be dead: ${gameDamage > damageBeforeRound ? `${gameDamage} damage so far` : 'drained out on their own turn'}`);
+        }
+      }
+
       if (sink && sink.turn) {
         // Life and poison, said only when they moved: most decks never do.
         if (life !== lifeBefore) say(sink, 'note', `Life total ${life} (${life > lifeBefore ? '+' : ''}${life - lifeBefore} this turn)`);
@@ -6393,6 +6734,8 @@ export function simulate(
       const t = firstHeld[i]!;
       if (t > 0) heldAt[i * stride + t] = heldAt[i * stride + t]! + 1;
     }
+    oppSpellSum += gameOppSpells;
+    answerSum += gameAnswers;
     if (onProgress && (game + 1) % PROGRESS_EVERY === 0) onProgress(game + 1);
   }
 
@@ -6436,6 +6779,8 @@ export function simulate(
     drawStepSeen,
     handSizeSum,
     mulliganed,
+    oppSpellSum,
+    answerSum,
   });
   return { ...summary, fires };
 }
@@ -6644,6 +6989,9 @@ interface Tallies {
   drawStepSeen: Float64Array;
   handSizeSum: number;
   mulliganed: number;
+  /** The table (rebuild plan E4): spells the opponents cast, and the answers this deck had for them, summed over the games. */
+  oppSpellSum: number;
+  answerSum: number;
 }
 
 function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): Omit<SimResult, 'fires'> {
@@ -6883,6 +7231,8 @@ function summarise(deck: SimDeck, opts: SimOptions, games: number, t: Tallies): 
     pMulligan: t.mulliganed * per,
     meanHandSize: t.handSizeSum * per,
     deckOnCurve: weight > 0 ? weighted / weight : 0,
+    oppSpells: t.oppSpellSum * per,
+    answers: t.answerSum * per,
   };
 }
 

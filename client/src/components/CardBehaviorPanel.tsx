@@ -67,6 +67,8 @@ import {
   type EffectProfile,
   GRANT_CASTS,
   grantCastInfo,
+  isOppTrigger,
+  MAX_TAX,
   type OracleCard,
 } from '@mtg/shared';
 import { Icon } from './icons.js';
@@ -80,17 +82,39 @@ import { PolicySpread } from './PolicySpread.js';
 import type { QueueCard, QueueReason } from '@mtg/sim';
 import { templatesFor, type Template } from '@mtg/sim';
 import { gapWords, type ShippedDefaults } from '@mtg/sim';
-import { KW_HASTE, describeAttach, describeCastWays, describeCombatKeywords, printedAdditionalSacrifice, printedAttach, printedCastOptions, printedDredge, printedKeywords, printedToxic } from '@mtg/sim';
+import {
+  KW_HASTE,
+  describeAttach,
+  describeCastWays,
+  describeCombatKeywords,
+  printedAdditionalSacrifice,
+  printedAttach,
+  printedCastOptions,
+  printedCounter,
+  printedDredge,
+  printedKeywords,
+  printedRemoval,
+  printedToxic,
+} from '@mtg/sim';
 import { oracleTagClosure } from '../cardDb/oracleTags.js';
 import {
   COMBAT_POLICIES,
   INTERACTION_POLICIES,
+  OPPONENT_OPTIONS,
+  PAY_POLICIES,
   SPEND_POLICIES,
+  TEMPO_POLICIES,
   type PolicyOption,
   type SpendRun,
   type SimPolicy,
   type SimRuleFires,
 } from '@mtg/sim';
+
+/** The table's numbers from the last run (rebuild plan E4), for the line under the pickers. */
+export interface TableSummary {
+  oppSpells: number;
+  answers: number;
+}
 
 // "What does this card actually do?", answered by the person holding it.
 //
@@ -135,6 +159,11 @@ interface BehaviorCard {
   attach: string | null;
   /** Printed lifelink, infect, toxic and double strike, as a phrase, or null. Keywords, so a rule adds to them. */
   combat: string | null;
+  /**
+   * A printed counterspell or creature removal (rebuild plan E4), as a phrase,
+   * or null. Read off the first sentence; what it answers is the table.
+   */
+  answer: string | null;
   /**
    * The other ways the card prints to cast it (rebuild plan §6 step 4), as a
    * phrase, or null: evoke, foretell, convoke, a printed "as an additional
@@ -212,7 +241,21 @@ const castWaysPhrase = (o: OracleCard, behavior: CardBehavior | null): string | 
 };
 
 /** Every derived reading, not some of them. A fetchland and an Exploration were both missing from this test once. */
-const isRead = (c: BehaviorCard) => !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source || c.dredge || c.attach || c.combat || c.castWays);
+const isRead = (c: BehaviorCard) =>
+  !!(c.derived || c.ramp || c.fetch || c.ritual || c.extraLand || c.source || c.dredge || c.attach || c.combat || c.castWays || c.answer);
+
+/** What a card answers across the table, read off its first sentence (rebuild plan E4). */
+function answerPhrase(o: OracleCard): string | null {
+  const front = (o.typeLine ?? '').split(' // ')[0] ?? '';
+  if (/\bInstant\b/i.test(front)) {
+    const c = printedCounter(o.oracleText);
+    if (c === 1) return "Counters an opponent's spell";
+    if (c === 2) return "Counters an opponent's creature spell";
+    if (c === 3) return "Counters an opponent's noncreature spell";
+  }
+  if (/\b(Instant|Sorcery)\b/i.test(front) && printedRemoval(o.oracleText)) return 'Removes a creature an opponent controls';
+  return null;
+}
 
 /**
  * What a hand-reviewed card still waits on. The review listed "equipment and
@@ -261,6 +304,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
       attach: attachPhrase(o),
       // Only on a creature: an Equipment's "has lifelink" is the attach line's.
       combat: isCreature(o.typeLine) ? describeCombatKeywords(printedKeywords(o.oracleText), printedToxic(o.oracleText)) : null,
+      answer: answerPhrase(o),
       castWays: castWaysPhrase(o, behaviors.get(o.oracleId) ?? defaults.behaviors.get(o.name) ?? null),
       // Sick is a creature without haste, off the type line: a Dryad Arbor too.
       source: describeManaSource(decodeManaProfile(o.mana), o.produces, isCreature(o.typeLine) && !(printedKeywords(o.oracleText) & KW_HASTE)),
@@ -293,6 +337,7 @@ function summaryOf(card: BehaviorCard): string {
   if (card.source) return card.source;
   if (card.dredge) return `Dredge ${card.dredge}`;
   if (card.combat) return card.combat;
+  if (card.answer) return card.answer;
   if (card.castWays) return card.castWays;
   return 'Do nothing';
 }
@@ -312,6 +357,7 @@ function playsOutAs(card: BehaviorCard, preview: readonly BehaviorRule[], cast: 
   if (card.dredge) return `Dredge ${card.dredge}, printed on the card.`;
   if (card.attach) return `${card.attach}, read from the card.`;
   if (card.combat) return `${card.combat}, printed on the card.`;
+  if (card.answer) return `${card.answer}, read from the card.`;
   if (card.castWays) return `${card.castWays}, printed on the card.`;
   // A Forest is not a blank, it is a Forest. The line under this one says so.
   if (card.source) return 'Nothing beyond what it is.';
@@ -349,6 +395,7 @@ export function CardBehaviorPanel({
   queue,
   onSaved,
   fires,
+  table,
   onWatch,
   spread,
   spreadStale,
@@ -370,6 +417,8 @@ export function CardBehaviorPanel({
   onSaved: (oracleId: string, name: string, before: CardBehavior | null, cleared: boolean) => void;
   /** How often each saved trigger ran in the last run, or undefined before one. */
   fires: readonly SimRuleFires[] | undefined;
+  /** The table's numbers from the last run, or undefined before one. */
+  table: TableSummary | undefined;
   /** Open one game with this card's lines picked out. */
   onWatch: (oracleId: string) => void;
   /** Every spend order's short run (rebuild plan C6), or undefined before one. */
@@ -466,6 +515,7 @@ export function CardBehaviorPanel({
           borrowable={borrowable}
           spread={spread}
           spreadStale={spreadStale}
+          table={table}
         />
       )}
     </div>
@@ -500,6 +550,7 @@ function BehaviorList({
   borrowable,
   spread,
   spreadStale,
+  table,
 }: {
   cards: BehaviorCard[];
   queue: readonly QueueCard[] | null;
@@ -510,6 +561,7 @@ function BehaviorList({
   borrowable: ReadonlyMap<string, BorrowableBehavior[]>;
   spread: readonly SpendRun[] | undefined;
   spreadStale: boolean;
+  table: TableSummary | undefined;
 }) {
   const authored = cards.filter((c) => c.authored);
   const shipped = cards.filter((c) => !c.authored && c.shipped);
@@ -541,7 +593,7 @@ function BehaviorList({
 
   return (
     <>
-      <PolicyPicker policy={policy} onPolicy={onPolicy} />
+      <PolicyPicker policy={policy} onPolicy={onPolicy} table={table} />
       <PolicySpread runs={spread} current={policy.spend} stale={spreadStale} onSpend={(spend) => onPolicy({ ...policy, spend })} />
       <h4 className="deck-stats-head">What each card does</h4>
       <p className="fine-print">
@@ -609,12 +661,17 @@ function BehaviorList({
  * cards. A deck whose every card is written out perfectly and is then played
  * back-to-front is still not your deck.
  *
- * Three controls and no more. Every one of them changes a number somebody is
- * going to quote, so each has to be a sentence you could defend at a table —
- * which is also why the chosen one says what it means underneath rather than
- * hiding the explanation in a tooltip nobody on a phone can reach.
+ * Every one of them changes a number somebody is going to quote, so each has
+ * to be a sentence you could defend at a table — which is also why the chosen
+ * one says what it means underneath rather than hiding the explanation in a
+ * tooltip nobody on a phone can reach.
+ *
+ * The table (rebuild plan E4) sits under the same heading: who is across from
+ * you and what they do is the other half of how a game goes, and the
+ * interaction picker only means anything with somebody there.
  */
-function PolicyPicker({ policy, onPolicy }: { policy: SimPolicy; onPolicy: (policy: SimPolicy) => void }) {
+function PolicyPicker({ policy, onPolicy, table }: { policy: SimPolicy; onPolicy: (policy: SimPolicy) => void; table: TableSummary | undefined }) {
+  const seated = policy.opponents > 0;
   return (
     <>
       <h4 className="deck-stats-head">How it plays the deck</h4>
@@ -638,15 +695,32 @@ function PolicyPicker({ policy, onPolicy }: { policy: SimPolicy; onPolicy: (poli
           onChange={(interaction) => onPolicy({ ...policy, interaction })}
         />
       </div>
+      <h4 className="deck-stats-head">The table</h4>
+      <div className="behavior-policy">
+        <PolicyField
+          label="Opponents"
+          value={policy.opponents}
+          options={OPPONENT_OPTIONS}
+          onChange={(opponents) => onPolicy({ ...policy, opponents })}
+        />
+        {seated && (
+          <PolicyField label="Their pace" value={policy.tempo} options={TEMPO_POLICIES} onChange={(tempo) => onPolicy({ ...policy, tempo })} />
+        )}
+        {seated && <PolicyField label="Taxes" value={policy.pay} options={PAY_POLICIES} onChange={(pay) => onPolicy({ ...policy, pay })} />}
+      </div>
       <p className="fine-print">
-        Nobody is across the table, so these are about your own sequencing. Every simulated number follows them: pick the way you
-        would actually play.
+        {seated
+          ? `A thin table: each opponent draws and casts after your turn, about half their spells are creatures, and nothing of theirs attacks, blocks or dies on its own. It is there so Rhystic Study has something to draw off, a counterspell something to hit and removal something to kill.${
+              table ? ` Over a game they cast ${table.oppSpells.toFixed(1)} spells between them and this deck answered ${table.answers.toFixed(1)}.` : ''
+            }`
+          : 'Nobody is across the table, so these are about your own sequencing, and every card that watches an opponent reads as nothing.'}{' '}
+        Every simulated number follows these: pick the way you would actually play.
       </p>
     </>
   );
 }
 
-function PolicyField<T extends string>({
+function PolicyField<T extends string | number>({
   label,
   value,
   options,
@@ -661,7 +735,7 @@ function PolicyField<T extends string>({
   return (
     <label className="field">
       <span>{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+      <select value={String(value)} onChange={(e) => onChange((options.find((o) => String(o.id) === e.target.value) ?? options[0]!).id)}>
         {options.map((o) => (
           <option key={o.id} value={o.id}>
             {o.label}
@@ -881,9 +955,9 @@ function BehaviorEditor({
         <p className="fine-print">
           {gaps.length > 0
             ? `Read by hand: ${card.attach ? 'the rest of ' : ''}what this card does needs ${gapWords(gaps)}, which the simulator does not model yet${card.attach ? '' : ', so it plays as nothing'}.`
-            : card.combat
-              ? 'Read by hand: beyond what is printed below, nothing on this card changes a game with nobody across the table.'
-              : 'Read by hand: nothing on this card changes a game with nobody across the table, so it is right as nothing.'}
+            : card.combat || card.answer
+              ? 'Read by hand: beyond what is read off the card below, nothing on this card changes a simulated game.'
+              : 'Read by hand: nothing on this card changes a simulated game, so it is right as nothing.'}
         </p>
       )}
       {card.derived && !active && (
@@ -945,6 +1019,14 @@ function BehaviorEditor({
           Printed on the card: <em>{card.combat}</em>. Lifelink's life wakes any "When you gain life" rule in the deck, once per
           creature that connects. Poison is the opponent's counter: ten of them is the game, and the trajectory tab counts them
           beside the damage.
+        </p>
+      )}
+      {card.answer && (
+        <p className="fine-print">
+          Read from the card: <em>{card.answer}</em>. With opponents at the table (set under "How it plays the deck"), a counterspell
+          held under the answers policy is cast on an opponent's turn at the first spell costing three or more it can hit, and
+          removal waits in hand until an opponent has a creature, then takes one off the fullest board. With nobody there it is
+          cast as a blank, as before. Rules written here add to that; nothing replaces it.
         </p>
       )}
       {card.castWays && (
@@ -1495,15 +1577,41 @@ function GuardEditor({
   onChange: (next: BehaviorRule) => void;
 }) {
   const cond = rule.cond;
-  const drop = (key: 'cond' | 'once' | 'oneshot') => {
+  const drop = (key: 'cond' | 'once' | 'oneshot' | 'tax') => {
     const next = { ...rule };
     delete next[key];
     onChange(next);
   };
   /** A mana ability is read every turn and a static is a standing fact, so a limit on either says nothing. */
   const limited = kind === 'trigger' || kind === 'activate';
+  /** "Unless they pay" only has a payer on an opponent's moment (rebuild plan E4). */
+  const taxable = isOppTrigger(rule.on);
   return (
     <div className="behavior-guard">
+      {taxable && (
+        <div className="behavior-obj-row">
+          <label className="behavior-check">
+            <input type="checkbox" checked={!!rule.tax} onChange={(e) => (e.target.checked ? onChange({ ...rule, tax: 1 }) : drop('tax'))} />
+            <span>Unless they pay</span>
+          </label>
+          {rule.tax ? (
+            <label className="field behavior-tax">
+              <input
+                type="number"
+                min={1}
+                max={MAX_TAX}
+                value={rule.tax}
+                aria-label="How much they have to pay"
+                onChange={(e) => {
+                  const n = Math.round(Number(e.target.value));
+                  if (Number.isFinite(n) && n >= 1) onChange({ ...rule, tax: Math.min(MAX_TAX, n) });
+                }}
+              />
+              <span>mana</span>
+            </label>
+          ) : null}
+        </div>
+      )}
       <div className="behavior-obj-row">
         <label className="behavior-check">
           <input
@@ -1594,7 +1702,7 @@ function RuleEditor({
   /** And the kick count, while it is being cast or arriving from that cast. */
   const kickAvailable = kicker && (rule.on === 'play' || rule.on === 'etb');
   /** "What woke it" is a number only on a rule something wakes. */
-  const causeAvailable = !!trigger?.watches || rule.on === 'lifegain';
+  const causeAvailable = !!trigger?.watches || rule.on === 'lifegain' || rule.on === 'oppenters';
   /** The amounts that read a moment make no sense in a standing effect. An ability is a moment. */
   const momentary = kind === 'trigger' || kind === 'activate';
 
@@ -1778,6 +1886,8 @@ function RuleEditor({
                   ? 'All of them, or t:creature, t:elf, …'
                   : rule.on === 'cast'
                     ? 'Any spell, or t:instant or t:sorcery, …'
+                    : rule.on === 'oppcast'
+                      ? 'Any spell, or t:creature, or -t:creature'
                     : rule.on === 'dies'
                       ? 'Any creature, or -t:token, t:zombie, …'
                       : rule.on === 'sacrifice'
@@ -1794,7 +1904,9 @@ function RuleEditor({
           <p className="fine-print">
             {kind === 'static'
               ? 'Card search syntax, matched against this deck. Types a rule adds count here too: with Ashaya out, t:land finds your creatures.'
-              : 'Card search syntax, matched against this deck, same as a move step\'s. Leave it empty and anything wakes it. Triggers chain two deep, so an engine that feeds itself stops rather than spinning.'}
+              : rule.on === 'oppcast'
+                ? "An opponent's spell is not a card of this deck, so all the simulator knows about it is whether it is a creature: t:creature narrows to those, -t:creature (or t:instant, t:artifact and the like) to the rest, anything else is any spell."
+                : 'Card search syntax, matched against this deck, same as a move step\'s. Leave it empty and anything wakes it. Triggers chain two deep, so an engine that feeds itself stops rather than spinning.'}
           </p>
         </div>
       )}
@@ -2636,6 +2748,36 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
       text: 'Poison counters on the opponent, the same counter your life is the other way: ten is the game. Printed infect and toxic are read off the card; this step is for the cards that say it in a sentence, Fynn and Triumph of the Hordes.',
     });
   }
+  if (isOppTrigger(rule.on)) {
+    notes.push({
+      key: 'opp',
+      text: 'Fires off the table set under "How it plays the deck": each opponent draws once and casts a spell or two after your turn, about half of them creatures, and nothing else of theirs is known. With nobody at the table the rule never fires. "Once each turn" is once per round of the table.',
+    });
+  }
+  if (rule.tax) {
+    notes.push({
+      key: 'tax',
+      text: `"Unless they pay" is the table's call: at the Taxes setting a one-mana tax is paid that share of the time, and a bigger one that much less often (a {${rule.tax}} tax is paid ${rule.tax === 1 ? 'at the setting' : `one ${rule.tax === 2 ? 'half' : rule.tax === 3 ? 'third' : rule.tax === 4 ? 'quarter' : `${rule.tax}th`} as often`}). A paid tax is a rule that did not fire.`,
+    });
+  }
+  if (has('oppsac')) {
+    notes.push({
+      key: 'oppsac',
+      text: 'An edict: each opponent loses that many creatures from their board, fewest first when they have fewer, and every rule watching their creatures die fires per creature. The opponents only ever have creatures here, so "sacrifices a permanent" and "sacrifices a creature" are the same step.',
+    });
+  }
+  if (has('oppdraws')) {
+    notes.push({
+      key: 'oppdraws',
+      text: 'Each opponent draws that many, which wakes every rule watching them draw: a wheel under a Sheoldred, a Prosperity under a Smothering Tithe. Their hands are not tracked, so the draws are only the events.',
+    });
+  }
+  if (amounts.some((x) => x.kind === 'opponents' || x.kind === 'oppcreatures')) {
+    notes.push({
+      key: 'oppamount',
+      text: '"Your opponents" is the number at the table, zero when nobody is set. "Opponents\' creatures" counts what has landed on their boards and not been removed: a creature per two spells they cast, less what this deck killed.',
+    });
+  }
   if (rule.on === 'lifegain') {
     notes.push({
       key: 'lifegain',
@@ -2645,7 +2787,7 @@ function StepNotes({ rule, kind }: { rule: BehaviorRule; kind: RuleKind }) {
   if (amounts.some((x) => x.kind === 'cause')) {
     notes.push({
       key: 'cause',
-      text: '"What woke it" is the number behind the event: on a life-gain rule the life gained, on an enters, dies or sacrifice rule the power of the permanent (as it was, counters and anthems included while it was out), on a cast rule the spell\'s mana value. On a rule nothing woke it reads zero.',
+      text: '"What woke it" is the number behind the event: on a life-gain rule the life gained, on an enters, dies or sacrifice rule the power of the permanent (as it was, counters and anthems included while it was out), on a cast rule the spell\'s mana value, on an opponent\'s spell or creature its mana value. On a rule nothing woke it reads zero.',
     });
   }
   if (rule.oneshot) {

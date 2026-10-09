@@ -8663,6 +8663,22 @@ a.seg {
 .behavior-guard .behavior-obj-row .field {
   flex: 1 1 8rem;
 }
+/* "Unless they pay [N] mana" (rebuild plan E4): a short number beside its checkbox. */
+.behavior-guard .behavior-obj-row .field.behavior-tax {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+}
+.behavior-guard .behavior-tax input {
+  width: 3.5rem;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.45rem;
+}
+.behavior-guard .behavior-tax span {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
 .behavior-guard .fine-print,
 .behavior-cost .fine-print {
   margin: 0;

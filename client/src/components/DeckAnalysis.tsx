@@ -31,9 +31,12 @@ import { getOracleCardsRaw } from '../db/queries.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import {
   COMBAT_POLICIES,
-  DEFAULT_POLICY,
   INTERACTION_POLICIES,
+  OPPONENT_OPTIONS,
+  PAY_POLICIES,
   SPEND_POLICIES,
+  TEMPO_POLICIES,
+  defaultPolicy,
   defaultSimOptions,
   type SimContribution,
   type SimPolicy,
@@ -94,21 +97,27 @@ const EMPTY_BEHAVIORS: ReadonlyMap<string, CardBehavior> = new Map();
  */
 const policyKey = (deckId: string) => `sim-policy:${deckId}`;
 
-function loadPolicy(deckId: string): SimPolicy {
+function loadPolicy(deckId: string, format: DeckFormat | undefined): SimPolicy {
+  const fallback = defaultPolicy(format);
   try {
     const raw = localStorage.getItem(policyKey(deckId));
-    if (!raw) return DEFAULT_POLICY;
+    if (!raw) return fallback;
     const saved = JSON.parse(raw) as Partial<SimPolicy>;
     // Merged over the default rather than trusted: a policy saved by a later
     // release may name a spend order this build has never heard of, and the
     // simulator would then quietly fall through to "ramp" without saying so.
+    // A policy saved before the table (rebuild plan E4) has no opponents in
+    // it and gets the format's default, which is how every deck met them.
     return {
-      spend: SPEND_POLICIES.some((o) => o.id === saved.spend) ? saved.spend! : DEFAULT_POLICY.spend,
-      combat: COMBAT_POLICIES.some((o) => o.id === saved.combat) ? saved.combat! : DEFAULT_POLICY.combat,
-      interaction: INTERACTION_POLICIES.some((o) => o.id === saved.interaction) ? saved.interaction! : DEFAULT_POLICY.interaction,
+      spend: SPEND_POLICIES.some((o) => o.id === saved.spend) ? saved.spend! : fallback.spend,
+      combat: COMBAT_POLICIES.some((o) => o.id === saved.combat) ? saved.combat! : fallback.combat,
+      interaction: INTERACTION_POLICIES.some((o) => o.id === saved.interaction) ? saved.interaction! : fallback.interaction,
+      opponents: OPPONENT_OPTIONS.some((o) => o.id === saved.opponents) ? saved.opponents! : fallback.opponents,
+      tempo: TEMPO_POLICIES.some((o) => o.id === saved.tempo) ? saved.tempo! : fallback.tempo,
+      pay: PAY_POLICIES.some((o) => o.id === saved.pay) ? saved.pay! : fallback.pay,
     };
   } catch {
-    return DEFAULT_POLICY;
+    return fallback;
   }
 }
 
@@ -259,13 +268,17 @@ export const ANALYSIS_TABS = [
 ] as const;
 export type AnalysisTab = (typeof ANALYSIS_TABS)[number]['id'];
 
-/** The policy chip's text: the spend order always, the other two only when they are not the default. */
-function policyLabel(policy: SimPolicy): string {
+/** The policy chip's text: the spend order always, the rest only when they are not the format's default. */
+function policyLabel(policy: SimPolicy, format: DeckFormat | undefined): string {
+  const base = defaultPolicy(format);
   const bits = [SPEND_POLICIES.find((o) => o.id === policy.spend)?.short ?? policy.spend];
-  if (policy.combat !== DEFAULT_POLICY.combat) bits.push(COMBAT_POLICIES.find((o) => o.id === policy.combat)?.short ?? policy.combat);
-  if (policy.interaction !== DEFAULT_POLICY.interaction) {
+  if (policy.combat !== base.combat) bits.push(COMBAT_POLICIES.find((o) => o.id === policy.combat)?.short ?? policy.combat);
+  if (policy.interaction !== base.interaction) {
     bits.push(INTERACTION_POLICIES.find((o) => o.id === policy.interaction)?.short ?? policy.interaction);
   }
+  if (policy.opponents !== base.opponents) bits.push(OPPONENT_OPTIONS.find((o) => o.id === policy.opponents)?.short ?? `${policy.opponents} opponents`);
+  if (policy.opponents > 0 && policy.tempo !== base.tempo) bits.push(TEMPO_POLICIES.find((o) => o.id === policy.tempo)?.short ?? policy.tempo);
+  if (policy.opponents > 0 && policy.pay !== base.pay) bits.push(PAY_POLICIES.find((o) => o.id === policy.pay)?.short ?? policy.pay);
   return bits.join(' · ');
 }
 
@@ -334,7 +347,7 @@ export function DeckAnalysis({
   // How the sequencer plays this deck. Set on the Model tab, where the rest of
   // "what happens in a simulated game" is decided, and named in the bar above
   // every tab because it moves every simulated number.
-  const [policy, setPolicy] = useState<SimPolicy>(() => loadPolicy(deckId));
+  const [policy, setPolicy] = useState<SimPolicy>(() => loadPolicy(deckId, format));
   const savePolicy = (next: SimPolicy) => {
     setPolicy(next);
     try {
@@ -508,8 +521,8 @@ export function DeckAnalysis({
         </div>
         {/* Both chips go to the Model tab: the policy is set there, and so is
             what the model reads a card as. */}
-        <button type="button" className="analysis-chip" onClick={() => onTab('model')} title="Play style: change it on the Model tab">
-          {policyLabel(policy)}
+        <button type="button" className="analysis-chip" onClick={() => onTab('model')} title="Play style and the table: change them on the Model tab">
+          {policyLabel(policy, format)}
         </button>
         <button
           type="button"
@@ -710,6 +723,7 @@ export function DeckAnalysis({
                 queue={queue}
                 onSaved={onModelSaved}
                 fires={simResult?.fires}
+                table={simResult ? { oppSpells: simResult.oppSpells, answers: simResult.answers } : undefined}
                 onWatch={(oracleId) => setTracing({ focus: oracleId })}
                 spread={freshSpread ?? lastSpread.current}
                 spreadStale={!freshSpread}
@@ -719,7 +733,9 @@ export function DeckAnalysis({
         )}
 
         <p className="fine-print deck-stats-note">
-          Goldfish numbers: they assume a land drop every turn and nobody on the other side of the table.
+          {policy.opponents > 0
+            ? `Nearly goldfish numbers: a land drop every turn, and ${policy.opponents === 1 ? 'one opponent' : `${policy.opponents} opponents`} who only draw and cast, never attack or block.`
+            : 'Goldfish numbers: they assume a land drop every turn and nobody on the other side of the table.'}
           {format === 'commander' && ' Your commander counts as a card you cast.'}
           {stats.unknown > 0 &&
             ` ${stats.unknown} card${plural(stats.unknown)} here produce${stats.unknown === 1 ? 's' : ''} mana in a way we can't put a number on.`}

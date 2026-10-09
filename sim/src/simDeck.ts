@@ -361,6 +361,22 @@ export interface SimCard {
    * the deck's own curve comes out faster than it is.
    */
   stax: string | null;
+  /**
+   * A printed counterspell (rebuild plan E4): 0 for none, else which of the
+   * table's spells it can hit: 1 any, 2 creature spells, 3 noncreature spells.
+   * Read off the first sentence ("Counter target noncreature spell"), so a
+   * modal or conditional counter stays 0, the floor side. Under the `answer`
+   * policy it waits in hand for an opponent's spell.
+   */
+  counter: 0 | 1 | 2 | 3;
+  /**
+   * Printed creature removal (rebuild plan E4): "destroy target creature",
+   * "exile target permanent", "target creature gets -N/-N". It kills one
+   * creature on the opponent with the most when it resolves, and under the
+   * `answer` policy waits in hand until there is one. Burn is not read as
+   * removal (it keeps going face), nor is a wrath (it would hit your board).
+   */
+  removal: boolean;
 }
 
 /**
@@ -760,6 +776,8 @@ function simCardOf(o: OracleCard, behavior: CompiledBehavior | null, copies: num
     toxic: printedToxic(o.oracleText),
     affinity: printedAffinity(o.oracleText),
     stax: printedSymmetricTax(o.oracleText),
+    counter: isInstantFace(parts[0] ?? '') ? printedCounter(o.oracleText) : 0,
+    removal: !landFront && !isPermanentFace(parts[0] ?? '') ? printedRemoval(o.oracleText) : false,
   };
   // The other ways the card prints to cast it (rebuild plan §6 step 4), before
   // an authored option replaces any of them in applyAuthoredObject.
@@ -1150,6 +1168,67 @@ const SYMMETRIC_TAX: readonly RegExp[] = [
 ];
 
 /**
+ * A printed counterspell (rebuild plan E4), off the card's first sentence:
+ * "Counter target spell" is 1, "counter target creature spell" 2, "counter
+ * target noncreature spell" (and instant, sorcery, artifact, enchantment,
+ * planeswalker) 3. Anything that leads with a choice ("Choose one"), a
+ * condition ("if") or a different sentence (Mana Leak's "unless its
+ * controller pays" is kept: the table pays a tax the way it pays Rhystic
+ * Study's, so that one is read as "unless they pay" too) stays 0. Abilities,
+ * "target spell that targets" and "with mana value" clauses are 0: the
+ * table's spells carry no such facts.
+ */
+export function printedCounter(text: string | null | undefined): 0 | 1 | 2 | 3 {
+  if (!text) return 0;
+  const clean = text.replace(/\([^)]*\)/g, '');
+  const first = clean.split(/\n|(?<=\.)\s+/)[0]?.trim() ?? '';
+  const m = /^counter target ((?:[a-z]+ )*)spell\b([^.]*)/i.exec(first);
+  if (!m) return 0;
+  const words = m[1]!.trim().toLowerCase();
+  const rest = m[2]!.toLowerCase();
+  // "that targets", "with mana value 4 or less", "if": facts about the spell
+  // the table model does not have, so the card cannot be sure of a target.
+  if (/\bthat\b|\bwith\b|\bif\b/.test(rest) || /\bthat\b|\bwith\b/.test(words)) return 0;
+  // "unless its controller pays {N}" is read as the counter it is; how often
+  // the table pays is the same knob as every other tax.
+  if (words === '') return 1;
+  if (words === 'creature') return 2;
+  if (/^(?:noncreature|instant|sorcery|artifact|enchantment|planeswalker|instant or sorcery|artifact or enchantment|noncreature, nonland)$/.test(words)) return 3;
+  return 0;
+}
+
+/**
+ * Printed creature removal (rebuild plan E4), off the first sentence of an
+ * instant or sorcery: "destroy target creature", "exile target creature",
+ * "destroy target permanent", "exile target nonland permanent", "destroy
+ * target artifact, creature or enchantment", "target creature gets -N/-N",
+ * "destroy target creature or planeswalker". Anything conditional ("if it has
+ * mana value 2 or less", "with power 4 or greater", "an opponent controls" is
+ * fine) stays false, as does a wrath ("all creatures"), a bounce, and burn.
+ */
+export function printedRemoval(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const clean = text.replace(/\([^)]*\)/g, '');
+  const first = clean.split(/\n|(?<=\.)\s+/)[0]?.trim() ?? '';
+  // The target list runs to the end of the sentence, or to a clause that
+  // qualifies it (with mana value, if, that, unless), which makes it a
+  // conditional and so unread.
+  const m = /^(?:destroy|exile) target ([a-z][a-z, -]*?)(?: an opponent controls| you don't control)?(?:\.|$| (with|if|that|unless)\b)/i.exec(first);
+  if (m) {
+    if (m[2]) return false;
+    const types = m[1]!.toLowerCase().split(/, (?:or )?| or /);
+    // Any list naming creatures or permanents, with one adjective allowed
+    // (nonblack, nontoken, attacking, nonland); "target artifact or
+    // enchantment" is not creature removal, and neither is a noncreature
+    // permanent.
+    return types.some((t) => /^(?!noncreature )(?:[a-z-]+ )?(?:creature|permanent)$/.test(t.trim()));
+  }
+  const shrink = /^target creature(?: an opponent controls)? gets -(\d+)\/-(\d+) until end of turn\.?$/i.exec(first);
+  if (shrink) return Number(shrink[2]) >= 3;
+  return false;
+}
+
+/**
  * A mana source whose color is chosen as it enters, or is a card's colors
  * (Chrome Mox's imprint): the database says every color, and the deck says
  * which it would be. See buildSimDeck.
@@ -1495,6 +1574,8 @@ function tokenCard(key: string, spec: TokenOption): { card: SimCard; oracle: Ora
     toxic: 0,
     affinity: null,
     stax: null,
+    counter: 0,
+    removal: false,
   };
   return { card, oracle };
 }

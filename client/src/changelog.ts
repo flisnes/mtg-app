@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.197.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The deck simulator seats opponents at the table: they draw and cast after your turn, so Rhystic Study, Smothering Tithe, Sheoldred, Grave Pact and the like finally do something. Set how many, their pace and how often they pay a tax on the Model tab.',
+      },
+      {
+        kind: 'added',
+        text: 'A new interaction setting holds counterspells for an opponent\'s spell and removal for an opponent\'s creature, and card rules get four "an opponent..." triggers with an "unless they pay" switch.',
+      },
+    ],
+  },
+  {
     version: '0.196.0',
     changes: [
       {
@@ -194,15 +207,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Agent tools support filtering with the app\'s search syntax (e.g., "t:creature pow<=1"), showing creature P/T in rows, deck folders, and a brief option to drop oracle text on large results. Responses are compact JSON now instead of pretty-printed.',
-      },
-    ],
-  },
-  {
-    version: '0.185.1',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Agent collection tool now returns market prices per copy, in both EUR and USD for each card\'s exact printing and finish. Sort by "price" to rank cards by value.',
       },
     ],
   },

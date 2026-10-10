@@ -71,6 +71,12 @@ export class Permanents {
    * own SimCard with `token` set and never need this.
    */
   readonly token: Uint8Array;
+  /**
+   * The oid of the creature an Equipment or Aura is on, or 0 when it is on
+   * nothing. An oid rather than a slot, because slots move under a swap-remove
+   * and the host is exactly the thing that may have just been removed.
+   */
+  readonly host: Int32Array;
   private nextOid = 1;
 
   constructor(readonly capacity: number) {
@@ -99,6 +105,7 @@ export class Permanents {
     this.extraMask = new Uint8Array(capacity);
     this.extraBy = new Int32Array(capacity);
     this.token = new Uint8Array(capacity);
+    this.host = new Int32Array(capacity);
   }
 
   /** A new game. */
@@ -137,6 +144,7 @@ export class Permanents {
     this.extraMask[p] = 0;
     this.extraBy[p] = -1;
     this.token[p] = 0;
+    this.host[p] = 0;
     this.refresh(p, card);
     return p;
   }
@@ -176,6 +184,7 @@ export class Permanents {
     this.extraMask[at] = this.extraMask[last]!;
     this.extraBy[at] = this.extraBy[last]!;
     this.token[at] = this.token[last]!;
+    this.host[at] = this.host[last]!;
   }
 
   /** The first slot holding this card, or -1. */

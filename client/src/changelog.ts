@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.197.1',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Simulator Auras now wait for a creature of yours, go on it as they resolve and are lost with it. Equipment stays behind and moves on. The trace says which creature each one is on.',
+      },
+    ],
+  },
+  {
     version: '0.197.0',
     changes: [
       {

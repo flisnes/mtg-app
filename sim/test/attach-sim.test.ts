@@ -7,6 +7,7 @@ import { expect, test } from 'vitest';
 //
 //   npx vitest run sim/test/attach-sim.test.ts
 import { MANA_TAPPED, type OracleCard } from '../../shared/src/card.js';
+import type { CardBehavior } from '../../shared/src/behavior.js';
 import { KW_DOUBLE, KW_HASTE, KW_LIFELINK, KW_VIGILANCE, buildSimDeck, describeAttach, printedAttach, type DeckRow } from '../src/simDeck.js';
 import { defaultSimOptions, simulate, traceGame, type SimOptions } from '../src/simulate.js';
 
@@ -34,7 +35,20 @@ const AURA = (name: string, text: string, cost = '{1}{G}', cmc = 2) => card({ na
 const base: SimOptions = { ...defaultSimOptions('commander', true), games: 2000, mulligan: false, combat: 'all' };
 const main = (quantity: number, oracle: OracleCard): DeckRow => ({ quantity, board: 'main', oracle });
 const cmd = (oracle: OracleCard): DeckRow => ({ quantity: 1, board: 'commander', oracle });
-const run = (rows: DeckRow[], opts: Partial<SimOptions> = {}) => simulate(buildSimDeck(rows), { ...base, ...opts });
+const run = (rows: DeckRow[], opts: Partial<SimOptions> = {}, behaviors?: Map<string, CardBehavior>) => simulate(buildSimDeck(rows, behaviors), { ...base, ...opts });
+const rules = (...pairs: [OracleCard, CardBehavior][]) => new Map<string, CardBehavior>(pairs.map(([o, b]) => [o.oracleId, b]));
+/** Every trace line of one game, with its turn and the end-of-turn board. */
+const gameLines = (rows: DeckRow[], behaviors: Map<string, CardBehavior> | undefined, seed: number) => {
+  const deck = buildSimDeck(rows, behaviors);
+  const g = traceGame(deck, { ...base, trace: true }, seed);
+  const name = (p: { card: number }) => deck.cards[p.card]!.name;
+  return g.turns.map((t) => ({
+    turn: t.turn,
+    lines: t.lines.map((l) => l.text),
+    permanents: t.board.permanents.map(name),
+    graveyard: t.board.graveyard.map(name),
+  }));
+};
 interface Swing {
   turn: number;
   /** The turn the attachment under test was cast, or 0 when it has not been. */
@@ -44,8 +58,8 @@ interface Swing {
   board: Map<string, number>;
 }
 /** Every "Attacks with" line over `games` traced games, with when `name` was cast and the board. */
-const attacks = (rows: DeckRow[], name: string, games: number): Swing[] => {
-  const deck = buildSimDeck(rows);
+const attacks = (rows: DeckRow[], name: string, games: number, behaviors?: Map<string, CardBehavior>): Swing[] => {
+  const deck = buildSimDeck(rows, behaviors);
   const out: Swing[] = [];
   for (let seed = 1; seed <= games; seed++) {
     const g = traceGame(deck, { ...base, trace: true }, seed);
@@ -180,6 +194,103 @@ console.log('\n=== nothing else moves ===');
   const plain = run([main(50, FOREST), main(49, BEAR)]);
   const sword = run([main(50, FOREST), main(49, BEAR), cmd(EQUIP('Sword', 'Equipped creature gets +2/+2.\nEquip {2}'))]);
   check(Math.abs(plain.manaByTurn[6]! - sword.manaByTurn[6]!) < 0.5, `mana on turn 6 ${plain.manaByTurn[6]!.toFixed(2)} vs ${sword.manaByTurn[6]!.toFixed(2)}`);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n=== an Aura targets a creature as it is cast ===');
+{
+  // Forests, bricks nobody can cast, and the Aura in the command zone: with no
+  // creature ever out it is never cast, and no mana is ever spent.
+  const ARMOR = AURA('Armor', 'Enchanted creature gets +2/+0 and has trample.');
+  const BRICK = card({ name: 'Brick', manaCost: '{20}', cmc: 20 });
+  let casts = 0;
+  for (let seed = 1; seed <= 20; seed++) for (const t of gameLines([main(50, FOREST), main(49, BRICK), cmd(ARMOR)], undefined, seed)) casts += t.lines.filter((l) => l.startsWith('Casts Armor')).length;
+  check(casts === 0, 'with no creature in the deck the Aura is never cast');
+  const none = run([main(50, FOREST), main(49, BRICK), cmd(ARMOR)]);
+  check(none.manaSpentByTurn[8]! === 0, `and no mana is spent on it (${none.manaSpentByTurn[8]!.toFixed(2)})`);
+  // With bears, every cast lands on one: the "Puts" line follows the cast and
+  // the board at the end of that turn has a bear under it.
+  let seen = 0;
+  let onto = 0;
+  let withBear = 0;
+  for (let seed = 1; seed <= 20; seed++) {
+    for (const t of gameLines([main(50, FOREST), main(49, BEAR), cmd(ARMOR)], undefined, seed)) {
+      const at = t.lines.findIndex((l) => l.startsWith('Casts Armor'));
+      if (at < 0) continue;
+      seen++;
+      if (t.lines[at + 1] === 'Puts Armor on Grizzly Bears') onto++;
+      if (t.permanents.includes('Grizzly Bears')) withBear++;
+    }
+  }
+  check(seen > 0 && onto === seen, `every cast is followed by "Puts Armor on Grizzly Bears" (${onto} of ${seen})`);
+  check(withBear === seen, `and a bear is on the board at the end of that turn (${withBear} of ${seen})`);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n=== an Aura goes to the graveyard with its creature; an Equipment stays ===');
+{
+  // Eat, a {G} sorcery whose rule sends every creature you control to the
+  // graveyard. The Aura on a bear goes with it; the Sword does not.
+  const EAT = card({ name: 'Eat', typeLine: 'Sorcery', manaCost: '{G}', cmc: 1 });
+  const eatAll: CardBehavior = { v: 1, rules: [{ on: 'play', steps: [{ op: 'move', x: { kind: 'fixed', n: 20 }, from: 'battlefield', to: 'graveyard', q: 't:creature' }] }] };
+  const ARMOR = AURA('Armor', 'Enchanted creature gets +2/+0 and has trample.');
+  const SWORD = EQUIP('Sword', 'Equipped creature gets +2/+2.\nEquip {2}');
+  const auraDeck = [main(45, FOREST), main(44, BEAR), main(10, EAT), cmd(ARMOR)];
+  const swordDeck = [main(45, FOREST), main(44, BEAR), main(10, EAT), cmd(SWORD)];
+  // The invariant, line by line through every game: an attack wears +2 exactly
+  // while the Aura is on a creature, and the Aura leaves on the "goes to the
+  // graveyard with" line that follows an Eat.
+  let shed = 0;
+  let eats = 0;
+  let attacksChecked = 0;
+  let wrong = 0;
+  let backToZone = 0;
+  let boardWrong = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    let on = false;
+    for (const t of gameLines(auraDeck, rules([EAT, eatAll]), seed)) {
+      for (const l of t.lines) {
+        if (l === 'Puts Armor on Grizzly Bears') on = true;
+        if (l.startsWith('Eat moves')) eats++;
+        if (l === 'Armor goes to the graveyard with Grizzly Bears') {
+          if (on) shed++;
+          else wrong++;
+          on = false;
+        }
+        if (l === 'Armor goes back to the command zone') backToZone++;
+        if (l.startsWith('Attacks with')) {
+          attacksChecked++;
+          if (worn(l) !== (on ? 2 : 0)) wrong++;
+        }
+      }
+      // Never on the board without a bear under it.
+      if (t.permanents.includes('Armor') && !t.permanents.includes('Grizzly Bears')) boardWrong++;
+      if (on !== t.permanents.includes('Armor')) boardWrong++;
+    }
+  }
+  check(eats > 0 && shed > 0, `the Aura is lost with its bear (${shed} times over ${eats} Eats in 40 games)`);
+  check(shed === backToZone, `and, being the commander, goes back to the command zone each time (${backToZone})`);
+  check(wrong === 0, `every attack wears +2 while the Aura is on a creature and 0 otherwise (${attacksChecked} attacks)`);
+  check(boardWrong === 0, 'the end-of-turn board never holds the Aura without a bear');
+  // The Sword: never shed, still on the board after every Eat, and every
+  // attack after the turn it landed still wears +2.
+  const swings = attacks(swordDeck, 'Sword', 40, rules([EAT, eatAll])).filter((s) => s.cast > 0 && s.turn > s.cast);
+  check(swings.length > 0 && swings.every((s) => worn(s.text) === 2), `every attack after the Sword lands wears +2, Eats and all (${swings.length} lines)`);
+  let swordShed = 0;
+  let swordStays = 0;
+  let swordEats = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    let out = false;
+    for (const t of gameLines(swordDeck, rules([EAT, eatAll]), seed)) {
+      if (t.lines.some((l) => l.startsWith('Casts Sword'))) out = true;
+      if (t.lines.some((l) => l.startsWith('Sword goes to the graveyard'))) swordShed++;
+      if (out && t.lines.some((l) => l.startsWith('Eat moves'))) {
+        swordEats++;
+        if (t.permanents.includes('Sword')) swordStays++;
+      }
+    }
+  }
+  check(swordEats > 0 && swordShed === 0 && swordStays === swordEats, `the Sword stays on the board through every Eat (${swordStays} of ${swordEats})`);
 }
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} check(s) FAILED`);

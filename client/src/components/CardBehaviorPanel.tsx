@@ -1009,9 +1009,10 @@ function BehaviorEditor({
       )}
       {card.attach && (
         <p className="fine-print">
-          Read off the card: <em>{card.attach}</em>. There is no targeting yet, so the simulator puts it on whichever creature would
-          swing hardest with it, free of its equip cost: an Aura as it resolves, an Equipment from the turn after it lands. Rules
-          written here add to that; nothing replaces it.
+          Read off the card: <em>{card.attach}</em>. An Aura waits in hand for a creature of yours, goes on the one that would swing
+          hardest with it as it resolves, and goes to the graveyard with it. An Equipment sits on whichever creature would swing
+          hardest from the turn after it lands, free of its equip cost, and stays behind when that creature dies. Rules written
+          here add to that; nothing replaces it.
         </p>
       )}
       {card.combat && (

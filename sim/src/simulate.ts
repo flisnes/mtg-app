@@ -53,6 +53,7 @@ import {
   T_TOKEN,
   TYPE_BIT,
   UNIT_BY_MASK,
+  type SimAttach,
   type SimCard,
   type SimDeck,
   type SimFilter,
@@ -1272,7 +1273,123 @@ export function simulate(
   /** The same, for a caller that already knows which slot it picked. */
   const dropPermanent = (at: number): void => {
     dirty = true;
+    const oid = perms.oid[at]!;
+    const wasCreature = (perms.types[at]! & T_CREATURE) !== 0;
+    const name = cards[perms.card[at]!]!.name;
     perms.drop(at);
+    // The Auras on it go with it (rebuild plan §6 step 2, second slice): an
+    // Aura whose creature left is put into the graveyard as a state-based
+    // action. An Equipment stays, unattached, for the next recompute to
+    // re-equip. Only a creature can have hosted anything, so a land leaving
+    // skips the scan.
+    if (wasCreature && anyAuras) shedAuras(oid, name);
+  };
+
+  /**
+   * Every Aura attached to the permanent with this oid goes to the graveyard,
+   * and its own "put into a graveyard from the battlefield" rule fires (Rancor
+   * comes back). Not a creature dying, so `diedTurn` and the `dies` watchers
+   * stay quiet: `afterLeaving` already gates on the card's types.
+   *
+   * Walks backwards because the drop is a swap-remove, and an Aura hosts
+   * nothing, so the recursion through dropPermanent ends at once.
+   */
+  const shedAuras = (oid: number, hostName: string): void => {
+    for (let p = perms.len - 1; p >= 0; p--) {
+      if (perms.host[p] !== oid) continue;
+      const index = perms.card[p]!;
+      const a = cards[index]!.attach;
+      if (!a || a.equipment) {
+        perms.host[p] = 0;
+        continue;
+      }
+      perms.drop(p);
+      unrecur(index);
+      bury(index);
+      if (sink) say(sink, 'effect', `${cards[index]!.name} goes to the graveyard with ${hostName}`);
+      fireDeath(index, cards[index]!, turnNow);
+      afterLeaving(index, turnNow, false);
+    }
+  };
+
+  /**
+   * The creature an attachment would do the most with (rebuild plan §6 step
+   * 2): one that can attack this turn (or could, with the haste it brings),
+   * then the biggest. They pile onto the same creature, which is what a
+   * voltron deck does with them. -1 with no creature out. `skip` is a slot
+   * that is not a candidate: the attachment itself, once Sim 2d lets a
+   * creature be one.
+   */
+  const bestHostFor = (a: SimAttach, turn: number, skip: number): number => {
+    let best = -1;
+    let bestScore = -1;
+    for (let t = 0; t < perms.len; t++) {
+      if (t === skip || !(perms.types[t]! & T_CREATURE) || !stillOut(t, turn) || perms.kw[t]! & KW_DEFENDER) continue;
+      const swings = perms.ready(t, turn) || (a.kw & KW_HASTE) !== 0;
+      const score = perms.power[t]! + (swings ? 1000 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        best = t;
+      }
+    }
+    return best;
+  };
+
+  /** An Aura the model reads: it targets as it is cast and leaves with its creature. */
+  const auraCard = (c: SimCard): boolean => !!c.attach && !c.attach.equipment;
+
+  /** Any creature of yours an Aura could go on right now. */
+  const auraHasTarget = (turn: number): boolean => {
+    for (let t = 0; t < perms.len; t++) {
+      if (perms.types[t]! & T_CREATURE && stillOut(t, turn)) return true;
+    }
+    return false;
+  };
+
+  /**
+   * An Aura has just been put onto the battlefield in slot `slot`: it goes on
+   * the creature it would do the most with and stays there. With no creature
+   * to enchant it cannot be there at all (rule 303.4), so it goes to the
+   * graveyard instead; the spend loop never casts one into that, but a rule
+   * can put one onto the battlefield from anywhere.
+   */
+  const attachAura = (slot: number, turn: number): boolean => {
+    const index = perms.card[slot]!;
+    const card = cards[index]!;
+    const host = bestHostFor(card.attach!, turn, slot);
+    if (host < 0) {
+      perms.drop(slot);
+      bury(index);
+      if (sink) say(sink, 'effect', `${card.name} has no creature to enchant and goes to the graveyard`);
+      return false;
+    }
+    perms.host[slot] = perms.oid[host]!;
+    dirty = true;
+    if (sink) say(sink, 'effect', `Puts ${card.name} on ${cards[perms.card[host]!]!.name}`);
+    return true;
+  };
+
+  /**
+   * Start of turn: an Aura whose creature expired rather than left (a token
+   * that was only ever around for the turn it was made) has nothing under it.
+   * Everything that leaves through `dropPermanent` is handled there; this is
+   * the one way a host can be gone with its slot still on the list.
+   */
+  const shedOrphanAuras = (turn: number): void => {
+    for (let p = perms.len - 1; p >= 0; p--) {
+      const a = cards[perms.card[p]!]!.attach;
+      if (!a || a.equipment || perms.host[p] === 0) continue;
+      const h = perms.slotOf(perms.host[p]!);
+      if (h >= 0 && stillOut(h, turn)) continue;
+      const index = perms.card[p]!;
+      perms.drop(p);
+      dirty = true;
+      unrecur(index);
+      bury(index);
+      if (sink) say(sink, 'effect', `${cards[index]!.name} goes to the graveyard: the creature it was on is gone`);
+      fireDeath(index, cards[index]!, turn);
+      afterLeaving(index, turn, false);
+    }
   };
 
   /**
@@ -2665,7 +2782,12 @@ export function simulate(
       // It makes no mana and it is still on the battlefield. A reanimated
       // creature used to arrive nowhere at all — "a body this model has no room
       // for" — which is exactly the room the permanent list is.
-      if (card.permanent) addPermanent(index, card, turn);
+      if (card.permanent) {
+        const slot = addPermanent(index, card, turn);
+        // An Aura put onto the battlefield goes on a creature as it enters,
+        // or it cannot enter at all.
+        if (slot >= 0 && auraCard(card) && !attachAura(slot, turn)) return;
+      }
       fireEntry(index, card, turn);
       fireArrival(index, card, turn);
       return;
@@ -4488,7 +4610,13 @@ export function simulate(
     //
     // Only the roles that did not already go through addSource above: a
     // rock and a dork are filed there, with their mana.
-    if (card.permanent && card.role !== 'rock' && card.role !== 'dork') addPermanent(index, card, turn);
+    if (card.permanent && card.role !== 'rock' && card.role !== 'dork') {
+      const slot = addPermanent(index, card, turn);
+      // An Aura goes on the creature it was cast on as it resolves (rebuild
+      // plan §6 step 2, second slice). The spend loop only casts one with a
+      // creature out; if a cast trigger took the last one, it is in the yard.
+      if (slot >= 0 && auraCard(card) && !attachAura(slot, turn)) return added;
+    }
     // Printed removal (rebuild plan E4): one creature off the fullest board
     // across the table, if there is one. Beside whatever rule the card has,
     // since the kill is printed and the rule is the rest of the card.
@@ -4569,6 +4697,8 @@ export function simulate(
   const V = deck.variants;
   /** Any Equipment or Aura with a printed bonus the model reads (rebuild plan §6 step 2). */
   const anyAttach = cards.some((c) => c.permanent && !!c.attach);
+  /** Any Aura among them: the ones that target as they are cast and leave with their creature. */
+  const anyAuras = cards.some((c) => c.permanent && auraCard(c));
   /** Any card with a static rule, or an attachment. Without one, nothing below ever recomputes. */
   const anyStatics = anyAttach || cards.some((c) => c.permanent && !!c.behavior && c.behavior.statics.length > 0);
   /** A static behind a condition (Serra Ascendant): re-read whenever the thing it reads could have moved. */
@@ -5027,25 +5157,28 @@ export function simulate(
     }
     for (let p = 0; p < len; p++) perms.refresh(p, cards[perms.card[p]!]!);
     // Pass three: Equipment and Auras (rebuild plan §6 step 2), on top of what
-    // the statics made of everyone. Each goes on the creature that would swing
-    // hardest with it: one that can attack this turn (or could, with the haste
-    // it brings), then the biggest. They pile onto the same creature, which is
-    // what a voltron deck does with them. An Equipment waits a turn: the equip
-    // cost is mana the spend loop has already committed the turn it lands.
+    // the statics made of everyone. An Aura is on the creature it was cast on
+    // (`host`) and nowhere else. An Equipment goes on the creature that would
+    // swing hardest with it (`bestHostFor`), moving whenever a better one
+    // appears: that is sorcery-speed play, free of the equip cost, and it waits
+    // a turn after landing because that cost is mana the spend loop has
+    // already committed. They pile onto the same creature, which is what a
+    // voltron deck does with them.
     if (anyAttach) {
       for (let p = 0; p < len; p++) {
         const a = cards[perms.card[p]!]!.attach;
         if (!a || !stillOut(p, turn) || (a.equipment && perms.since[p]! >= turn)) continue;
-        let best = -1;
-        let bestScore = -1;
-        for (let t = 0; t < len; t++) {
-          if (!(perms.types[t]! & T_CREATURE) || !stillOut(t, turn) || perms.kw[t]! & KW_DEFENDER) continue;
-          const swings = perms.ready(t, turn) || (a.kw & KW_HASTE) !== 0;
-          const score = perms.power[t]! + (swings ? 1000 : 0);
-          if (score > bestScore) {
-            bestScore = score;
-            best = t;
+        let best: number;
+        if (a.equipment) {
+          best = bestHostFor(a, turn, p);
+          const oid = best < 0 ? 0 : perms.oid[best]!;
+          if (oid !== perms.host[p]) {
+            perms.host[p] = oid;
+            if (sink && best >= 0) say(sink, 'effect', `Equips ${cards[perms.card[best]!]!.name} with ${cards[perms.card[p]!]!.name}`);
           }
+        } else {
+          best = perms.host[p] === 0 ? -1 : perms.slotOf(perms.host[p]!);
+          if (best >= 0 && !stillOut(best, turn)) best = -1;
         }
         if (best < 0) continue;
         const units = a.per.kind === 'fixed' ? (a.per.n ?? 1) : behaviorAmount(a.per, turn);
@@ -5618,6 +5751,10 @@ export function simulate(
       if (burst && !ritualNeeded(spendRitualGoal)) return;
       // Held up, which in a goldfish means never cast. See InteractionPolicy.
       if (holding && card.instant) return;
+      // An Aura targets a creature as it is cast (rebuild plan §6 step 2,
+      // second slice): with none of yours out it waits, whichever zone it
+      // would be cast from.
+      if (anyAuras && auraCard(card) && !auraHasTarget(turnNow)) return;
       // What the policy came for, ahead of ramp, because a deck that wants
       // its two-drop on turn two wants it more than it wants a Signet.
       const index = zone === ZONE_HAND ? hand[at]! : zone === ZONE_GRAVEYARD ? graveyard[at]! : zone === ZONE_EXILE ? exCastCard[at]! : library[at]!;
@@ -5877,6 +6014,9 @@ export function simulate(
       // on at all, both turn on the turn number, so a new turn is a change. So
       // can a static's condition (the turn number, your life).
       if ((anyAttach || anyCondStatics) && perms.len > 0) dirty = true;
+      // An Aura whose creature expired at the end of last turn has nothing
+      // under it (rebuild plan §6 step 2, second slice).
+      if (anyAuras && perms.len > 0) shedOrphanAuras(turn);
       lifeGainedTurn = 0;
       diedTurn = 0;
       if (sink) {

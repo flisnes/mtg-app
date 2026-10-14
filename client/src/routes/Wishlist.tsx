@@ -6,6 +6,7 @@ import { db } from '../db/schema.js';
 import { joinWishlistEntries, type JoinedWish } from '../db/queries.js';
 import { addToWishlistBulk, removeFromWishlist, wishKey } from '../db/dataAccess.js';
 import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
+import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
 import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
@@ -48,6 +49,9 @@ export function Wishlist() {
   const { confirm, sheet: confirmSheet } = useConfirm();
   const { open: review, sheet: intakeSheet } = useIntakeReview();
   const rows = useLiveQuery(async () => joinWishlistEntries(await db.wishlist.toArray()), []);
+  // An "any printing" wish wears your preferred printing, same as a search result.
+  const anyWishes = useMemo(() => rows?.filter((r) => !r.entry.scryfallId).map((r) => r.entry), [rows]);
+  const shown = useDisplayPrintings(anyWishes);
   // Header search scoped to the wishlist narrows these rows in place, so sort,
   // Select and the bulk remove all act on the search result.
   const query = useListFilter('wishlist');
@@ -63,9 +67,9 @@ export function Wishlist() {
   const value = useMemo(() => {
     if (!rows) return undefined;
     const total: PriceTotal = { eur: 0, usd: 0 };
-    for (const r of rows) addToTotal(total, r.entry.quantity, r.printing, r.oracle);
+    for (const r of rows) addToTotal(total, r.entry.quantity, r.printing ?? shown.get(r.entry.oracleId), r.oracle);
     return formatTotal(total);
-  }, [rows]);
+  }, [rows, shown]);
 
   const selectedRows = filtered.filter((r) => sel.selected.has(r.entry.id));
   const allKeys = filtered.map((r) => r.entry.id);
@@ -176,6 +180,7 @@ export function Wishlist() {
                   ownership,
                   moverFlags,
                   showYear: sort.key === 'released',
+                  shown: shown.get(r.entry.oracleId),
                   onClick: r.oracle ? () => setEditing(r) : undefined,
                 }),
               )}

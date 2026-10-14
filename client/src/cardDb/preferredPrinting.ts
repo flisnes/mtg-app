@@ -48,15 +48,20 @@ function wantsOrdinary(pref: PrintingPref): boolean {
 /**
  * The printings a "normal printing" rule should choose between: no promos, and
  * none of the cosmetic variants a modern set stacks on top of a card
- * (borderless, showcase, extended art, retro frames, chase foils, serialized).
+ * (borderless, showcase, extended art, retro frames, chase foils, serialized),
+ * and with `plainNumbers`, none numbered off the main sheet (hasPlainNumber).
  *
  * Gives up one criterion at a time rather than all at once, so a card that only
  * ever appeared as a showcase still avoids the prerelease stamp, and a Secret
  * Lair exclusive still resolves to something instead of nothing.
  */
-function ordinaryPrintings(pool: Printing[], setTypes: SetTypeMap | null): Printing[] {
+function ordinaryPrintings(pool: Printing[], setTypes: SetTypeMap | null, plainNumbers: boolean): Printing[] {
   const nonPromo = pool.filter((p) => !isPromoPrinting(p, setTypes));
   const plain = nonPromo.filter(isPlainVersion);
+  if (plainNumbers) {
+    const numbered = plain.filter(hasPlainNumber);
+    if (numbered.length) return numbered;
+  }
   if (plain.length) return plain;
   if (nonPromo.length) return nonPromo;
   return pool;
@@ -71,6 +76,16 @@ function ordinaryPrintings(pool: Printing[], setTypes: SetTypeMap | null): Print
 function isPlainVersion(p: Printing): boolean {
   if (!isVariantPrinting(p)) return true;
   return p.variants!.every((v) => v === 'specialfoil') && p.finishes.includes('nonfoil');
+}
+
+/**
+ * A collector number that is just digits. Letters mark something off the main
+ * sheet: The List's "XLN-161", a set's own promo "187p", the foil-only "281★".
+ * Only the newest-printing rule uses it: Fallen Empires and Homelands number
+ * their ordinary art variants "30a", "30b", so a first printing can be lettered.
+ */
+function hasPlainNumber(p: Printing): boolean {
+  return /^\d+$/.test(p.collectorNumber);
 }
 
 /** Lower collector number first ("87" before "177" before "475"). */
@@ -127,9 +142,9 @@ function pickOne(candidates: Printing[], opts: ResolveOptions): Printing | undef
     // a UUID comparison between the prerelease foil, the showcase and the plain
     // one, all of which share a release date.
     case 'first':
-      return pickBySet(ordinaryPrintings(pool, opts.setTypes), false);
+      return pickBySet(ordinaryPrintings(pool, opts.setTypes, false), false);
     case 'latestNonPromo':
-      return pickBySet(ordinaryPrintings(pool, opts.setTypes), true);
+      return pickBySet(ordinaryPrintings(pool, opts.setTypes, true), true);
     case 'cheapest': {
       const priced = pool
         .map((p) => ({ p, price: opts.priceOf?.(p.scryfallId) ?? null }))

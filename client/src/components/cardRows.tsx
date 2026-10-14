@@ -1,4 +1,4 @@
-import type { ContainerKind, DeckBoard } from '@mtg/shared';
+import type { ContainerKind, DeckBoard, Priced, Printing } from '@mtg/shared';
 import { specialLabel } from '@mtg/shared';
 import type { JoinedEntry, JoinedWish, JoinedDeckCard } from '../db/queries.js';
 import type { CardItem } from './CardViews.js';
@@ -163,12 +163,21 @@ export function stackCardItem(
 /** A wishlist row: a specific printing or "any printing", with an owned badge. */
 export function wishCardItem(
   r: JoinedWish,
-  opts: { ownership?: Ownership; moverFlags?: MoverFlags; showYear?: boolean; onClick?: () => void },
+  opts: {
+    ownership?: Ownership;
+    moverFlags?: MoverFlags;
+    showYear?: boolean;
+    /** What an "any printing" wish looks like: the printing preference's pick
+     *  (useDisplayPrintings), else the card DB's newest printing. */
+    shown?: Priced<Printing>;
+    onClick?: () => void;
+  },
 ): CardItem {
-  // A wish shows a specific printing, or the oracle's default for "any printing".
+  // A wish shows a specific printing, or the preferred one for "any printing".
   // The wishlist star is zeroed out here: every row on this list is a wish, so
   // the star would say nothing — same reason the collection doesn't checkmark
   // itself. What's worth knowing is whether you've since picked the card up.
+  const shownAny = r.entry.scryfallId ? undefined : opts.shown;
   const own = opts.ownership?.lookup(r.entry.oracleId, r.entry.scryfallId ?? r.oracle?.defaultScryfallId);
   const ownBadge = ownedBadge(own && { ...own, wished: 0 });
   // A wish that pins a language you don't collect in flies its flag; one still
@@ -200,7 +209,7 @@ export function wishCardItem(
   return {
     key: r.entry.id,
     name: r.oracle?.name ?? '(unknown card)',
-    image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
+    image: r.printing?.imageSmall ?? shownAny?.imageSmall ?? r.oracle?.imageSmall ?? null,
     foil: !!r.entry.finish && r.entry.finish !== 'nonfoil',
     count: r.entry.quantity,
     ...(lang ? { lang } : {}),
@@ -215,8 +224,8 @@ export function wishCardItem(
     ) : (
       printingSub
     ),
-    // "Any printing" wishes are tracked via the oracle's default printing.
-    trend: opts.moverFlags?.get(r.entry.scryfallId ?? r.oracle?.defaultScryfallId ?? ''),
+    // "Any printing" wishes are tracked via the printing they show.
+    trend: opts.moverFlags?.get(r.entry.scryfallId ?? shownAny?.scryfallId ?? r.oracle?.defaultScryfallId ?? ''),
     onClick: opts.onClick,
   };
 }

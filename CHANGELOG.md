@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.197.3
+
+- **Fixed: "Any printing" ignored your printing preference.** A wish or deck slot set to "Any printing" showed the card's newest printing, whatever your preferred printing setting said. That put set promos (Roiling Canopy PFRA #187p) and Secret Lair drops (Grim Hireling SLD #2493) on your wishlist tiles, in the card sheet, and in the wishlist's total value. They now wear your preferred printing, same as search results: FRA #187 and CLB #755 on "Newest normal printing".
+- **Fixed: "Newest normal printing" picked The List.** A collector number with letters in it is almost never the ordinary card: The List's "AFC-25", a set promo's "187p", a foil-only "281★". "Newest normal printing" now skips them when the card has a plain-numbered printing, which moves about 2,300 cards off The List and onto the set they came from. "First printing" keeps lettered numbers, since Fallen Empires and Homelands number their ordinary art variants "30a" and "30b".
+
 ## 0.197.2
 
 - **Fixed: "Newest normal printing" picked chase variants.** Locke, Treasure Hunter showed as its borderless FIC #475 instead of the plain #87. Two reasons. Scryfall tags a printing "surge foil" when only its foil copies are, which made the plain #87 look like a variant; a printing that also comes nonfoil now counts as plain. And when every copy in a set is a variant, the lowest collector number wins, instead of whichever one Scryfall dated last. "First printing" follows the same rules. Over a thousand cards change, mostly toward the plain number (9ED #281 instead of #281★) or a newer set instead of a late-dated reprint in an older one.

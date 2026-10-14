@@ -378,21 +378,27 @@ export function CardSheet(props: CardSheetProps) {
   // settle flashes the wrong edition for a frame, so the frame stays empty
   // until they do.
   const [printingsLoaded, setPrintingsLoaded] = useState(false);
-  const [preferredSettled, setPreferredSettled] = useState(!!recordedId || wishMode || mode === 'deck');
-  const editionResolved = printingsLoaded && preferredSettled;
   // In wish mode (and for a lands-box basic) the empty string means "any
   // printing" — no specific edition.
-  const [scryfallId, setScryfallId] = useState(
-    wishMode
-      ? wishEntry?.scryfallId ?? wishView?.scryfallId ?? ANY_PRINTING
-      : basicAnyDefault
-        ? ANY_PRINTING
-        : // A slot that pins no edition means it: "any printing" is a real answer
-          // here, not a gap to fill with the card's default.
-          mode === 'deck'
-          ? deckCard!.scryfallId ?? ANY_PRINTING
-          : recordedId ?? oracleCard.defaultScryfallId,
+  const startId = wishMode
+    ? wishEntry?.scryfallId ?? wishView?.scryfallId ?? ANY_PRINTING
+    : basicAnyDefault
+      ? ANY_PRINTING
+      : // A slot that pins no edition means it: "any printing" is a real answer
+        // here, not a gap to fill with the card's default.
+        mode === 'deck'
+        ? deckCard!.scryfallId ?? ANY_PRINTING
+        : recordedId ?? oracleCard.defaultScryfallId;
+  // "Any printing" still has to look like something: it waits on the preferred
+  // printing too, so the art doesn't flash the card DB's default first.
+  const [preferredSettled, setPreferredSettled] = useState(
+    startId !== ANY_PRINTING && (!!recordedId || wishMode || mode === 'deck'),
   );
+  const editionResolved = printingsLoaded && preferredSettled;
+  const [scryfallId, setScryfallId] = useState(startId);
+  // The printing an "any printing" wish or slot shows: the printing
+  // preference's pick, the same edition a search result for it wears.
+  const [anyFaceId, setAnyFaceId] = useState<string | null>(null);
   /** The edition picker is sitting on "any printing" — a basic from the lands box. */
   const anyBasicPicked = basicAny && scryfallId === ANY_PRINTING;
   // Empty string is the "Any" sentinel, used only in wish mode (mirrors
@@ -527,6 +533,24 @@ export function CardSheet(props: CardSheetProps) {
   // silently landing on the card DB's representative one. Skipped in wish mode,
   // where "any printing" is the point (a lands-box basic sits on the same empty
   // sentinel, which the setter below leaves alone).
+  // Looked up for any wish or slot, not only one that starts on "any": picking
+  // "Any printing" in the edition picker should land on the same face.
+  useEffect(() => {
+    if (!anyPrefs) return;
+    let live = true;
+    void preferredScryfallId(oracleCard)
+      .then((id) => {
+        if (live) setAnyFaceId(id);
+      })
+      .finally(() => {
+        if (live) setPreferredSettled(true);
+      });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oracleCard.oracleId]);
+
   useEffect(() => {
     if (recordedId || wishMode || mode === 'deck') return;
     let live = true;
@@ -550,7 +574,7 @@ export function CardSheet(props: CardSheetProps) {
   // tracked automatically); "any printing" falls back to the default one.
   // The local row paints immediately; signed-in users then get the server
   // archive merged in (a longer window than any single device recorded).
-  const shownId = scryfallId || oracleCard.defaultScryfallId;
+  const shownId = scryfallId || anyFaceId || oracleCard.defaultScryfallId;
   useEffect(() => {
     let live = true;
     let merged = false;
@@ -574,6 +598,12 @@ export function CardSheet(props: CardSheetProps) {
     () => printings.find((p) => p.scryfallId === scryfallId),
     [printings, scryfallId],
   );
+  // What the art and price read: the chosen edition, or for "any printing" the
+  // preferred one. Everything that says *which* edition keeps reading `printing`.
+  const facePrinting = useMemo(
+    () => printing ?? (scryfallId === ANY_PRINTING ? printings.find((p) => p.scryfallId === anyFaceId) : undefined),
+    [printing, printings, scryfallId, anyFaceId],
+  );
 
   // What the copies cost, so the trend can say how the card has done for *you*
   // rather than how our archive has done. The history goes in because a copy
@@ -588,8 +618,8 @@ export function CardSheet(props: CardSheetProps) {
   const shownFinish: Finish = finish || 'nonfoil';
   const basis = useCostBasis(oracleCard.oracleId, shownId, priceHistory, shownFinish);
   const nowQuote = useMemo(
-    () => pickPrice([pricedForFinish(printing, shownFinish), oracleCard]),
-    [printing, shownFinish, oracleCard],
+    () => pickPrice([pricedForFinish(facePrinting, shownFinish), oracleCard]),
+    [facePrinting, shownFinish, oracleCard],
   );
   const gain = trend ? acquisitionGain(trend, basis, nowQuote) : null;
   // "Do I own this card (any printing)?" — live so it reflects edits made from
@@ -758,11 +788,16 @@ export function CardSheet(props: CardSheetProps) {
   const openField = traitFields.find((f) => f.key === openTrait);
 
   // Full-size image + price for the currently-selected printing (falls back to the oracle default).
-  const cardImage = printing?.imageNormal ?? oracleCard.imageNormal ?? printing?.imageSmall ?? oracleCard.imageSmall ?? null;
+  const cardImage =
+    facePrinting?.imageNormal ?? oracleCard.imageNormal ?? facePrinting?.imageSmall ?? oracleCard.imageSmall ?? null;
   // Back face for double-faced cards (transform / modal DFC / …); absent for single-faced ones.
   const cardBackImage =
-    printing?.imageBackNormal ?? oracleCard.imageBackNormal ?? printing?.imageBackSmall ?? oracleCard.imageBackSmall ?? null;
-  const cardPrice = formatPrice(pricedForFinish(printing, shownFinish), oracleCard) ?? '—';
+    facePrinting?.imageBackNormal ??
+    oracleCard.imageBackNormal ??
+    facePrinting?.imageBackSmall ??
+    oracleCard.imageBackSmall ??
+    null;
+  const cardPrice = formatPrice(pricedForFinish(facePrinting, shownFinish), oracleCard) ?? '—';
   // Flip state for the shown card art; reset when switching editions (a
   // different printing may not be double-faced at all).
   const [flipped, setFlipped] = useState(false);

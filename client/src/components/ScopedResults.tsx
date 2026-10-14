@@ -18,6 +18,7 @@ import { stackCardItem } from './cardRows.js';
 import { stackEntries, stackSortFields } from './stackPrintings.js';
 import { useSetTypes } from '../cardDb/useSetTypes.js';
 import { usePrefs } from '../usePrefs.js';
+import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
 
 export type Scope = 'collection' | 'wishlist' | 'tradelist';
 
@@ -61,6 +62,8 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
 
   const collMatches = useEntryMatcher(collRows, query);
   const wishMatches = useEntryMatcher(wishRows, query);
+  const anyWishes = useMemo(() => wishRows?.filter((r) => !r.entry.scryfallId).map((r) => r.entry), [wishRows]);
+  const shownWish = useDisplayPrintings(anyWishes);
 
   const items = useMemo(() => {
     if (needWishlist) {
@@ -71,6 +74,7 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
             ownership,
             moverFlags,
             showYear: sort.key === 'released',
+            shown: shownWish.get(r.entry.oracleId),
             onClick: r.oracle ? () => setEditWish(r) : undefined,
           }),
           key: `w:${r.entry.id}`,
@@ -94,7 +98,7 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
         key: `c:${s.key}`,
       }),
     );
-  }, [collRows, wishRows, collMatches, wishMatches, scope, needWishlist, sort, sortData, moverFlags, ownership, placements, stacking, prefs, setTypes]);
+  }, [collRows, wishRows, collMatches, wishMatches, scope, needWishlist, sort, sortData, moverFlags, ownership, placements, stacking, prefs, setTypes, shownWish]);
 
   const loading = (needCollection && collRows === undefined) || (needWishlist && wishRows === undefined);
 

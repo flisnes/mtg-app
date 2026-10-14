@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.197.3',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Wishes and deck slots on "Any printing" now show your preferred printing, not the newest one, so a Secret Lair or set promo no longer stands in for the card. "Newest normal printing" also skips The List and other copies with letters in the collector number.',
+      },
+    ],
+  },
+  {
     version: '0.197.2',
     changes: [
       {
@@ -198,15 +207,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Commander decks no longer have a sideboard. Cards in one move to Companion or Considering.',
-      },
-    ],
-  },
-  {
-    version: '0.187.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'The card data download no longer flickers between "Downloading" and "Installing".',
       },
     ],
   },

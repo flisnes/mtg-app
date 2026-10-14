@@ -90,6 +90,17 @@ describe('pickOwnedPrinting', () => {
     const v87 = { ...locke87, variants: ['showcase' as const] };
     expect(pickOwnedPrinting([locke475, locke177, v87], { ...prefs, printing: 'latestNonPromo' }, null)?.scryfallId).toBe('fic87');
   });
+  // Grim Hireling: The List reprinted it in 2024 as "AFC-25", after CLB #755.
+  it('latestNonPromo: a lettered collector number (The List) loses to a plain-numbered printing', () => {
+    const clb = printing('clb', '2022-06-10', 1, { collectorNumber: '755' });
+    const plst = printing('plst', '2024-08-02', 1, { collectorNumber: 'AFC-25' });
+    expect(pickOwnedPrinting([plst, clb], { ...prefs, printing: 'latestNonPromo' }, null)?.scryfallId).toBe('clb');
+  });
+  it('first: a lettered original (Homelands #30a) still counts as the first printing', () => {
+    const hml = printing('hml', '1995-10-01', 1, { collectorNumber: '30a' });
+    const ed5 = printing('5ed', '1997-03-24', 1, { collectorNumber: '97' });
+    expect(pickOwnedPrinting([ed5, hml], { ...prefs, printing: 'first' }, null)?.scryfallId).toBe('hml');
+  });
   it('falls back to a non-English copy rather than nothing', () => {
     const jp = printing('jp', '2021-01-01', 1, { lang: 'ja' });
     expect(pickOwnedPrinting([jp], prefs, null)?.scryfallId).toBe('jp');

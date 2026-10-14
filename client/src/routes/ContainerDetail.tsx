@@ -73,6 +73,7 @@ import { useToast } from '../components/Toast.js';
 import { CardSheet, FINISH_LABELS } from '../components/CardSheet.js';
 import { CardItems, StackToggle, ViewToggle, useStackPrintings, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import { pickOwnedPrinting } from '../cardDb/preferredPrinting.js';
+import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
 import { useSetTypes } from '../cardDb/useSetTypes.js';
 import { usePrefs } from '../usePrefs.js';
 import type { Prefs } from '../prefs.js';
@@ -1461,6 +1462,11 @@ function Board({
   const [stacking] = useStackPrintings();
   const prefs = usePrefs();
   const setTypes = useSetTypes(stacking);
+  // A slot on "any printing" wears your preferred printing, as a search result would.
+  const anySlots = useMemo(() => rows.filter((r) => !r.scryfallId), [rows]);
+  const shownAny = useDisplayPrintings(anySlots);
+  const imageOf = (r: Row) =>
+    r.printing?.imageSmall ?? (r.scryfallId ? undefined : shownAny.get(r.oracleId)?.imageSmall) ?? r.oracle?.imageSmall ?? null;
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
   const stacks = groupSlots(rows, stacking ? { prefs, setTypes } : null);
@@ -1480,7 +1486,7 @@ function Board({
       key: r.id,
       ...(year ? { year } : {}),
       name: r.oracle ? (r.board === 'token' ? tokenLabel(r.oracle) : r.oracle.name) : '(unknown card)',
-      image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
+      image: imageOf(r),
       mana: r.oracle?.manaCost,
       foil: g.rows.some((x) => !!x.finish && x.finish !== 'nonfoil'),
       count: g.quantity,
@@ -1551,7 +1557,7 @@ function Board({
       ...(year ? { year } : {}),
       ...(colorPips ? { sideStrip: colorPips } : {}),
       name: r.oracle ? (r.board === 'token' ? tokenLabel(r.oracle) : r.oracle.name) : '(unknown card)',
-      image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
+      image: imageOf(r),
       mana: r.oracle?.manaCost,
       // A slot asking for a foil or etched copy gets the sheen; one still on
       // "any finish" hasn't picked a shiny card yet, so it stays matte.

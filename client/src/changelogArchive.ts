@@ -1,4 +1,4 @@
-// The older half of the changelog (0.185.1 down to 0.98.0), split out of
+// The older half of the changelog (0.187.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,24 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.187.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Four more deck formats: Premodern, Cube, Dan-dan Variant and Judge\'s Tower. Premodern checks card legality like the other sanctioned formats; the other three are kitchen-table formats with no checks, same as Casual. Commander now sits at the top of the format list.',
+      },
+    ],
+  },
+  {
+    version: '0.186.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Agent tools support filtering with the app\'s search syntax (e.g., "t:creature pow<=1"), showing creature P/T in rows, deck folders, and a brief option to drop oracle text on large results. Responses are compact JSON now instead of pretty-printed.',
+      },
+    ],
+  },
   {
     version: '0.185.1',
     changes: [

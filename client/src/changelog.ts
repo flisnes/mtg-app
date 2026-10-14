@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.197.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: '"Newest normal printing" shows the plain card again for sets that print several versions of it, instead of the borderless chase copy. When a set only has variants, the lowest collector number wins.',
+      },
+    ],
+  },
+  {
     version: '0.197.1',
     changes: [
       {
@@ -198,24 +207,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'The card data download no longer flickers between "Downloading" and "Installing".',
-      },
-    ],
-  },
-  {
-    version: '0.187.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Four more deck formats: Premodern, Cube, Dan-dan Variant and Judge\'s Tower. Premodern checks card legality like the other sanctioned formats; the other three are kitchen-table formats with no checks, same as Casual. Commander now sits at the top of the format list.',
-      },
-    ],
-  },
-  {
-    version: '0.186.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Agent tools support filtering with the app\'s search syntax (e.g., "t:creature pow<=1"), showing creature P/T in rows, deck folders, and a brief option to drop oracle text on large results. Responses are compact JSON now instead of pretty-printed.',
       },
     ],
   },

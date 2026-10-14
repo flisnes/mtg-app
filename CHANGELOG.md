@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.197.2
+
+- **Fixed: "Newest normal printing" picked chase variants.** Locke, Treasure Hunter showed as its borderless FIC #475 instead of the plain #87. Two reasons. Scryfall tags a printing "surge foil" when only its foil copies are, which made the plain #87 look like a variant; a printing that also comes nonfoil now counts as plain. And when every copy in a set is a variant, the lowest collector number wins, instead of whichever one Scryfall dated last. "First printing" follows the same rules. Over a thousand cards change, mostly toward the plain number (9ED #281 instead of #281★) or a newer set instead of a late-dated reprint in an older one.
+
 ## 0.197.1
 
 - **Changed: Auras in the deck simulator behave like Auras.** An Aura now waits in hand until you control a creature, goes on the creature that would swing hardest with it as it resolves, and stays there. When that creature leaves the battlefield the Aura goes to the graveyard with it (and its own "when this is put into a graveyard" rule fires, so Rancor still comes back). Until now an Aura could be cast onto an empty board and sat there forever, hopping to whichever creature was biggest. Equipment is unchanged: it stays on the battlefield when its creature dies and goes on the next one. The goldfish trace says which creature each Aura and Equipment is on ("Puts Rancor on Grizzly Bears", "Equips Grizzly Bears with Sword") and when an Aura is lost.

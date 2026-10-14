@@ -35,11 +35,6 @@ function byNewest(a: Printing, b: Printing): number {
   return a.scryfallId <= b.scryfallId ? -1 : 1;
 }
 
-function byOldest(a: Printing, b: Printing): number {
-  if (a.releasedAt !== b.releasedAt) return a.releasedAt < b.releasedAt ? -1 : 1;
-  return a.scryfallId <= b.scryfallId ? -1 : 1;
-}
-
 /** True when this preference needs the printings table at all. */
 export function needsPrintingLookup(pref: PrintingPref, preferOwned: boolean): boolean {
   return pref !== 'latest' || preferOwned;
@@ -61,10 +56,48 @@ function wantsOrdinary(pref: PrintingPref): boolean {
  */
 function ordinaryPrintings(pool: Printing[], setTypes: SetTypeMap | null): Printing[] {
   const nonPromo = pool.filter((p) => !isPromoPrinting(p, setTypes));
-  const plain = nonPromo.filter((p) => !isVariantPrinting(p));
+  const plain = nonPromo.filter(isPlainVersion);
   if (plain.length) return plain;
   if (nonPromo.length) return nonPromo;
   return pool;
+}
+
+/**
+ * isVariantPrinting, minus one false alarm: Scryfall tags a printing
+ * `surgefoil` (or galaxy, …) when only its *foil* copies get the chase foiling.
+ * FIC's plain Locke #87 is one. If the printing also comes nonfoil, the nonfoil
+ * copy is the set's ordinary card.
+ */
+function isPlainVersion(p: Printing): boolean {
+  if (!isVariantPrinting(p)) return true;
+  return p.variants!.every((v) => v === 'specialfoil') && p.finishes.includes('nonfoil');
+}
+
+/** Lower collector number first ("87" before "177" before "475"). */
+function byCollectorNumber(a: Printing, b: Printing): number {
+  return a.collectorNumber.localeCompare(b.collectorNumber, 'en', { numeric: true });
+}
+
+/**
+ * The newest (or oldest) set's lowest-numbered printing. A set dates from its
+ * earliest printing in the pool, so a chase variant Scryfall dates months after
+ * its set (FIC #475, December vs June) doesn't jump the queue. Within a set the
+ * plain card is almost always numbered before the borderless, showcase and
+ * extended-art copies stacked on top of it.
+ */
+function pickBySet(pool: Printing[], newest: boolean): Printing | undefined {
+  const setDate = new Map<string, string>();
+  for (const p of pool) {
+    const d = setDate.get(p.set);
+    if (!d || p.releasedAt < d) setDate.set(p.set, p.releasedAt);
+  }
+  return [...pool].sort((a, b) => {
+    const da = setDate.get(a.set)!;
+    const db = setDate.get(b.set)!;
+    if (da !== db) return (da > db) === newest ? -1 : 1;
+    if (a.set !== b.set) return a.set < b.set ? -1 : 1;
+    return byCollectorNumber(a, b) || (a.scryfallId <= b.scryfallId ? -1 : 1);
+  })[0];
 }
 
 interface ResolveOptions {
@@ -94,9 +127,9 @@ function pickOne(candidates: Printing[], opts: ResolveOptions): Printing | undef
     // a UUID comparison between the prerelease foil, the showcase and the plain
     // one, all of which share a release date.
     case 'first':
-      return [...ordinaryPrintings(pool, opts.setTypes)].sort(byOldest)[0];
+      return pickBySet(ordinaryPrintings(pool, opts.setTypes), false);
     case 'latestNonPromo':
-      return [...ordinaryPrintings(pool, opts.setTypes)].sort(byNewest)[0];
+      return pickBySet(ordinaryPrintings(pool, opts.setTypes), true);
     case 'cheapest': {
       const priced = pool
         .map((p) => ({ p, price: opts.priceOf?.(p.scryfallId) ?? null }))

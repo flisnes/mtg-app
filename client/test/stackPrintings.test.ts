@@ -76,6 +76,20 @@ describe('pickOwnedPrinting', () => {
   it('latestNonPromo skips the promo even when it is newest', () => {
     expect(pickOwnedPrinting([promo, mm2], { ...prefs, printing: 'latestNonPromo' }, null)?.scryfallId).toBe('mm2');
   });
+  // Locke, Treasure Hunter in FIC, as Scryfall has it: the plain #87 is tagged
+  // surgefoil (its foils are), #475 is a borderless chase card dated months later.
+  const fic = (num: string, releasedAt: string, extra: Partial<Printing>) =>
+    printing(`fic${num}`, releasedAt, 1, { set: 'fic', collectorNumber: num, ...extra });
+  const locke87 = fic('87', '2025-06-13', { variants: ['specialfoil'] });
+  const locke177 = fic('177', '2025-06-13', { variants: ['extendedart', 'boosterfun'] });
+  const locke475 = fic('475', '2025-12-05', { variants: ['borderless', 'inverted', 'specialfoil'], finishes: ['foil'] });
+  it('latestNonPromo: a printing that comes nonfoil is plain even when its foils are surge foils', () => {
+    expect(pickOwnedPrinting([locke475, locke177, locke87], { ...prefs, printing: 'latestNonPromo' }, null)?.scryfallId).toBe('fic87');
+  });
+  it('latestNonPromo: among variants of one set, the lowest collector number wins over a later date', () => {
+    const v87 = { ...locke87, variants: ['showcase' as const] };
+    expect(pickOwnedPrinting([locke475, locke177, v87], { ...prefs, printing: 'latestNonPromo' }, null)?.scryfallId).toBe('fic87');
+  });
   it('falls back to a non-English copy rather than nothing', () => {
     const jp = printing('jp', '2021-01-01', 1, { lang: 'ja' });
     expect(pickOwnedPrinting([jp], prefs, null)?.scryfallId).toBe('jp');

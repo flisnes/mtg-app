@@ -7,6 +7,7 @@ dist/
 
 # pipeline generated artifacts
 pipeline/out/
+pipeline/out-monthly/
 *.json.gz
 
 # scanjob local state / output (runs on the VM)

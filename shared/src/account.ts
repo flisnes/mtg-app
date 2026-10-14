@@ -9,7 +9,7 @@
 // trade), so browsing them needs no card-DB lookups on the server.
 
 import type { ProfileAvatar } from './profile.js';
-import type { TradeLine, WishLine } from './user.js';
+import type { MonthlyReadings, TradeLine, WishLine } from './user.js';
 
 /** Usernames are case-insensitively unique; shown as typed. */
 export const USERNAME_RE = /^[A-Za-z0-9_]{3,20}$/;
@@ -122,6 +122,19 @@ export interface PricesResponse {
   /** Integer cents per day; null = no reading that day. Same length as `usd`. */
   eur: (number | null)[];
   usd: (number | null)[];
+  /**
+   * Foil lanes, same day indexing. Absent from servers older than v0.198.0 and
+   * on printings with no foil reading on record; may be shorter than `eur`
+   * (missing tail days have no reading).
+   */
+  eurFoil?: (number | null)[];
+  usdFoil?: (number | null)[];
+  /**
+   * Deep history at one reading per month, reaching back before the daily
+   * window, from the few old MTGJSON price snapshots that survive (late 2021,
+   * spring 2023, July 2025). Absent when nothing older is on record.
+   */
+  monthly?: MonthlyReadings;
 }
 
 /**

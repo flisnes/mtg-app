@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Foil prices are tracked day by day. A foil card\'s price chart and trend now follow the foil price instead of the plain one, and the collection value chart uses it too.',
+      },
+      {
+        kind: 'added',
+        text: 'Signed in, price charts can reach back years: "Since 2021" puts monthly prices from late 2021, spring 2023 and July 2025 in front of the daily line, where we have them.',
+      },
+    ],
+  },
+  {
     version: '0.197.3',
     changes: [
       {
@@ -181,32 +194,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'New zones, formats and card rules no longer make every device re-download the whole account after an update.',
-      },
-    ],
-  },
-  {
-    version: '0.189.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'The deck simulator reads Equipment and Auras: the printed bonus goes on your best attacker. Swords, Colossus Hammer and Rancor count in combat now.',
-      },
-    ],
-  },
-  {
-    version: '0.188.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Decks have a Considering section for cards you might play. They never count toward the deck.',
-      },
-      {
-        kind: 'added',
-        text: 'Commander decks get a Companion zone. Tap "Set as companion" on a companion card.',
-      },
-      {
-        kind: 'changed',
-        text: 'Commander decks no longer have a sideboard. Cards in one move to Companion or Considering.',
       },
     ],
   },

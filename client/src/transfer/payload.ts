@@ -754,12 +754,19 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
     const len = Math.max(eurRaw.length, usdRaw.length);
     if (!len) continue;
     histIds.add(scryfallId);
-    priceHistories.push({
+    const h: PriceHistory = {
       scryfallId,
       startDay,
       eur: Array.from({ length: len }, (_, i) => cents(eurRaw[i])),
       usd: Array.from({ length: len }, (_, i) => cents(usdRaw[i])),
-    });
+    };
+    // Foil lanes (v0.198.0) ride along, never longer than the nonfoil window.
+    // The monthly deep history doesn't: it's the server's, and refetched.
+    for (const key of ['eurFoil', 'usdFoil'] as const) {
+      const raw = r[key];
+      if (Array.isArray(raw) && raw.length) h[key] = raw.slice(0, len).map(cents);
+    }
+    priceHistories.push(h);
   }
 
   // The same, for the sealed shelf — keyed by product id instead of printing.

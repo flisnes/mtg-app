@@ -67,6 +67,8 @@ type Cur = 'eur' | 'usd';
 interface Reader {
   cur: Cur;
   readings: readonly (number | null)[];
+  /** The foil lane in the same currency, when the row has one. */
+  foil?: readonly (number | null)[];
   /** Day number of readings[0]. */
   startDay: number;
 }
@@ -83,9 +85,11 @@ export function valueKeyOf(scryfallId: string, finish: Finish): string {
 
 /**
  * How much more (or less) a finish costs than the nonfoil the history tracks.
- * Only nonfoil prices are recorded per day, so a foil's line is the nonfoil
- * line scaled by today's foil premium — an approximation, but one that keeps a
- * foil-heavy collection's chart ending where the header total says it should.
+ * Used on the days a foil copy has no foil reading of its own (everything
+ * before v0.198.0, and etched, which isn't archived): the nonfoil line scaled
+ * by today's foil premium. An approximation, but one that keeps a foil-heavy
+ * collection's chart ending where the header total says it should, and that
+ * hands over to the real foil line from the first day there is one.
  */
 function finishFactor(p: CardPrice | undefined, finish: Finish, cur: Cur): number {
   if (!p || finish === 'nonfoil') return 1;
@@ -119,7 +123,8 @@ export function buildCollectionValueSeries(
     const other: Cur = base === 'eur' ? 'usd' : 'eur';
     const cur: Cur = h[base].some((v) => v != null) ? base : other;
     if (!h[cur].some((v) => v != null)) continue;
-    readers.set(h.scryfallId, { cur, readings: h[cur], startDay });
+    const foil = cur === 'eur' ? h.eurFoil : h.usdFoil;
+    readers.set(h.scryfallId, { cur, readings: h[cur], foil: foil?.some((v) => v != null) ? foil : undefined, startDay });
     if (startDay < first) first = startDay;
     const end = startDay + h[cur].length - 1;
     if (end > last) last = end;
@@ -197,14 +202,17 @@ export function buildCollectionValueSeries(
       continue;
     }
     const factor = finishFactor(prices.get(scryfallId), finish, reader.cur);
+    const foilLane = finish === 'foil' ? reader.foil : undefined;
+    /** A copy's worth on reading index i: its own foil reading, else the scaled nonfoil one. */
+    const worthAt = (i: number): number => {
+      const f = foilLane?.[i];
+      if (f != null) return (f / 100) * scale[reader.cur];
+      const c = reader.readings[i];
+      return c != null ? (c / 100) * scale[reader.cur] * factor : NaN;
+    };
     /** Earliest recorded price — the stand-in when a copy's own is unknown. */
     let firstPrice = NaN;
-    for (const c of reader.readings) {
-      if (c != null) {
-        firstPrice = (c / 100) * scale[reader.cur] * factor;
-        break;
-      }
-    }
+    for (let i = 0; i < reader.readings.length && !Number.isFinite(firstPrice); i++) firstPrice = worthAt(i);
 
     let qty = Math.max(0, now - (netIn.get(key) ?? 0));
     const pre = older.get(key);
@@ -223,10 +231,10 @@ export function buildCollectionValueSeries(
     for (let d = 0; d < N; d++) {
       const idx = first + d - reader.startDay;
       if (idx >= 0 && idx < reader.readings.length) {
-        const c = reader.readings[idx];
         // Gaps hold the last reading: a day the app wasn't opened is not a day
         // the card was worth nothing.
-        if (c != null) price = (c / 100) * scale[reader.cur] * factor;
+        const w = worthAt(idx);
+        if (Number.isFinite(w)) price = w;
       }
       while (mi < list.length && list[mi]!.d <= d) {
         const { e } = list[mi]!;

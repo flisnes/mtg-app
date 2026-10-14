@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/slim.ts",
+    "monthly-prices": "tsx src/monthlyPrices.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

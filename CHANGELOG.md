@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.0
+
+- **Added: foil prices, day by day.** Until now only the plain price of each card was recorded over time, so a foil's chart and trend showed how the nonfoil version moved. The server now archives foil prices too, and backfills the last three months of them. Open a foil copy and the sparkline, the price chart and the "since you paid" change follow the foil price, with the paid line back on the chart. The collection value chart uses a foil's own price on the days we have one, and the plain price scaled by today's foil premium before that. Your device also records foil prices for the cards you hold in foil, so this works signed out too, from today on. Until a card has foil readings the chart keeps saying it is showing the plain price.
+- **Added: older price history.** Signed in, a card's price chart can reach back years. A "Since 2021" (or later) button puts monthly prices in front of the daily line: the median price of each month, for the months an old MTGJSON price snapshot survives (late 2021, spring 2023 and July 2025). There is nothing public to fill the gaps between them, so those stretches are a straight line and the chart says so.
+
 ## 0.197.3
 
 - **Fixed: "Any printing" ignored your printing preference.** A wish or deck slot set to "Any printing" showed the card's newest printing, whatever your preferred printing setting said. That put set promos (Roiling Canopy PFRA #187p) and Secret Lair drops (Grim Hireling SLD #2493) on your wishlist tiles, in the card sheet, and in the wishlist's total value. They now wear your preferred printing, same as search results: FRA #187 and CLB #755 on "Newest normal printing".

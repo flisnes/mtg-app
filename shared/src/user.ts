@@ -583,6 +583,22 @@ export interface UserEvent {
 }
 
 /**
+ * Deep price history at one reading per calendar month, for the years before
+ * the daily archive. Index i is the month `startMonth` + i (UTC); each cell is
+ * integer cents, the median of that month's daily readings, null where the
+ * month has none. Same four lanes as a daily row; a lane with no reading at
+ * all is left off.
+ */
+export interface MonthlyReadings {
+  /** YYYY-MM of index 0. */
+  startMonth: string;
+  eur?: (number | null)[];
+  usd?: (number | null)[];
+  eurFoil?: (number | null)[];
+  usdFoil?: (number | null)[];
+}
+
+/**
  * A run of daily price readings, whatever they're readings of. `eur[i]`/`usd[i]`
  * are integer cents for the day `startDay + i` (UTC); days with no reading (app
  * not opened, no price) are null, and the two arrays are the same length. The
@@ -593,6 +609,16 @@ export interface DayReadings {
   startDay: string; // YYYY-MM-DD (UTC) of index 0
   eur: (number | null)[]; // integer cents per day
   usd: (number | null)[]; // integer cents per day; same length as eur
+  /**
+   * Foil prices, same day indexing as eur/usd. Only present on card rows that
+   * have a foil reading on record (a foil copy is tracked, or the server
+   * archive sent one). May be shorter than eur: a missing tail is no reading.
+   * Read them through `readingsFor(h, finish)`, never directly.
+   */
+  eurFoil?: (number | null)[];
+  usdFoil?: (number | null)[];
+  /** Monthly deep history from the server (see PricesResponse.monthly). */
+  monthly?: MonthlyReadings;
 }
 
 /**

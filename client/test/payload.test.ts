@@ -498,6 +498,18 @@ describe('sanitizeTransferPayload', () => {
     expect(h.usd).toEqual([50, null, null]);
   });
 
+  test('price histories: foil lanes survive, capped to the nonfoil window', () => {
+    const p = {
+      ...emptyPayload(),
+      priceHistories: [
+        { scryfallId: 's1', startDay: '2026-01-01', eur: [100, 110], usd: [1, 2], eurFoil: [300, 'x', 999], usdFoil: 'nope' },
+      ],
+    };
+    const h = sanitizeTransferPayload(p)!.priceHistories[0]!;
+    expect(h.eurFoil).toEqual([300, null]);
+    expect(h.usdFoil).toBeUndefined();
+  });
+
   test('legacy row-per-day priceSnapshots fold into compact histories', () => {
     const p = {
       ...emptyPayload(),

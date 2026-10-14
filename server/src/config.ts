@@ -62,4 +62,10 @@ export const config = {
   priceBackfill: (process.env.PRICE_BACKFILL ?? '1') !== '0',
   priceBackfillForce: process.env.PRICE_BACKFILL_FORCE === '1',
   priceBackfillDelayMs: num('PRICE_BACKFILL_DELAY_MS', 60 * 1000),
+  /**
+   * Monthly deep price history, built off the VM by the "Monthly price history"
+   * workflow and copied here (see priceMonthly.ts). Re-imported whenever the
+   * file changes; absent is fine.
+   */
+  monthlyPricesFile: process.env.MONTHLY_PRICES_FILE ?? `${process.env.DATA_DIR ?? './data'}/monthly-prices.tsv.gz`,
 } as const;

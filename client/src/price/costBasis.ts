@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import type { DayReadings, Finish, UserEvent } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
-import { centsNearest, dayKeyOf, type HistoryChange } from './history.js';
+import { centsNearest, dayKeyOf, readingsFor, type HistoryChange } from './history.js';
 import { convertToDisplay } from './rates.js';
 
 // What a card cost you, and how it has done since. "Up 87% since we started
@@ -29,12 +29,11 @@ import { convertToDisplay } from './rates.js';
 // Rung 3 is an estimate off the archive rather than a fact about your money, so
 // it's flagged (`estimated`) and the sheet says so.
 //
-// Foils get a second flag. The daily archive is nonfoil-only (see
-// notes/foil-price-tracking.md), so rung 3 on a foil copy prices it off the
-// plain version, which for a chase foil is not even the right order of
-// magnitude. Same for anything acquired before v0.53.0, when every finish was
-// stamped with the nonfoil price. Neither is fixable after the fact — we have
-// no historical foil prices to go back for — so both are flagged
+// Foils get a second flag. Rung 3 on a foil copy reads the foil line when the
+// row has one (v0.198.0, see notes/foil-price-tracking.md); without it, it
+// prices the copy off the plain version, which for a chase foil is not even
+// the right order of magnitude. Same for anything acquired before v0.53.0,
+// when every finish was stamped with the nonfoil price. Both are flagged
 // (`crossFinish`) and the sheet says which number it couldn't stand behind.
 
 /**
@@ -95,11 +94,13 @@ export function costBasisOf(
     let cents = e.priceEurCents ?? null;
     if (cents == null) {
       if (!history) continue;
-      const near = centsNearest(history, dayKeyOf(e.ts));
+      // A foil copy is estimated off the foil line when there is one.
+      const lane = readingsFor(history, copyFinish);
+      const near = centsNearest(lane.readings, dayKeyOf(e.ts));
       if (!near) continue;
       cents = near.cents;
       estimated = true;
-      if (copyFinish !== 'nonfoil') crossFinish = true;
+      if (copyFinish !== 'nonfoil' && !lane.foil) crossFinish = true;
     } else if (copyFinish !== 'nonfoil' && e.ts < FOIL_PRICING_SINCE) {
       crossFinish = true;
     }

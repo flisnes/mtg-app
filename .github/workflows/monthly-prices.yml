@@ -1,0 +1,60 @@
+name: Monthly price history
+
+# Builds the monthly deep price history (pipeline/src/monthlyPrices.ts) from
+# the old MTGJSON snapshots on the Wayback Machine and copies it into the
+# server's DATA_DIR, where server/src/priceMonthly.ts imports it within the
+# hour. Manual only: the snapshots don't change, so this runs when the source
+# list or the file format does.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monthly-prices
+  cancel-in-progress: false
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the monthly file
+        run: npm run monthly-prices --workspace pipeline
+        env:
+          MONTHLY_OUT: ${{ runner.temp }}/monthly-prices.tsv.gz
+          MONTHLY_CACHE_DIR: ${{ runner.temp }}/monthly-cache
+          NODE_OPTIONS: --max-old-space-size=6144
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+
+      # The server reads DATA_DIR from its systemd unit (default ./data under
+      # its working directory). Ask the unit rather than hardcoding a path, and
+      # upload beside the target before renaming so the importer never sees a
+      # half-written file.
+      - name: Upload to the server's data dir
+        run: |
+          dir=$(ssh ubuntu@79.76.41.163 '
+            wd=$(systemctl show mtg-server -p WorkingDirectory --value)
+            d=$(systemctl show mtg-server -p Environment --value | tr " " "\n" | sed -n "s/^DATA_DIR=//p")
+            d=${d:-./data}
+            case "$d" in /*) echo "$d" ;; *) echo "${wd:-$HOME/mtg-server}/${d#./}" ;; esac
+          ')
+          echo "data dir: $dir"
+          scp "${{ runner.temp }}/monthly-prices.tsv.gz" "ubuntu@79.76.41.163:$dir/monthly-prices.tsv.gz.part"
+          ssh ubuntu@79.76.41.163 "mv -f '$dir/monthly-prices.tsv.gz.part' '$dir/monthly-prices.tsv.gz' && ls -la '$dir/monthly-prices.tsv.gz'"

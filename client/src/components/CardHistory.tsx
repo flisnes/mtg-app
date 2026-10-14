@@ -4,7 +4,8 @@ import type { OracleCard, Priced, PriceHistory, Printing, RemovalReason, UserEve
 import { REMOVAL_REASONS } from '@mtg/shared';
 import { editUserEvent } from '../db/dataAccess.js';
 import { db } from '../db/schema.js';
-import { centsAround, centsNearest, dayKeyOf } from '../price/history.js';
+import { centsAround, centsNearest, dayKeyOf, readingsFor } from '../price/history.js';
+import { pricedForFinish } from './cardSort.js';
 import { currencySymbol, moneyInput } from '../price/rates.js';
 import { describeEvent, qtyBadge, REASON_LABELS } from '../history/eventRegistry.js';
 import { fmtCents, fmtDate } from '../util/format.js';
@@ -119,14 +120,13 @@ export function CardHistory({
    */
   const centsThen = (e: UserEvent): number | null => {
     if (!priceHistory || e.scryfallId !== priceHistory.scryfallId) return null;
-    return centsAround(priceHistory, new Date(e.ts).toISOString().slice(0, 10));
+    return centsAround(readingsFor(priceHistory, e.finish).readings, new Date(e.ts).toISOString().slice(0, 10));
   };
 
   /** Current EUR cents for the printing an event names (oracle default as fallback). */
-  const centsNow = (scryfallId: string | null | undefined): number | null => {
-    const eur = scryfallId
-      ? (printings.find((p) => p.scryfallId === scryfallId)?.priceEur ?? oracleCard.priceEur)
-      : oracleCard.priceEur;
+  const centsNow = (scryfallId: string | null | undefined, finish?: UserEvent['finish']): number | null => {
+    const row = (scryfallId && printings.find((p) => p.scryfallId === scryfallId)) || oracleCard;
+    const eur = pricedForFinish(row, finish ?? 'nonfoil')?.priceEur ?? oracleCard.priceEur;
     return eur == null ? null : Math.round(eur * 100);
   };
 
@@ -147,9 +147,11 @@ export function CardHistory({
     let delta = 0;
     let priced = false;
     for (const e of adds) {
-      const then = e.priceEurCents ?? (priceHistory ? centsNearest(priceHistory, dayKeyOf(e.ts))?.cents ?? null : null);
+      const then =
+        e.priceEurCents ??
+        (priceHistory ? centsNearest(readingsFor(priceHistory, e.finish).readings, dayKeyOf(e.ts))?.cents ?? null : null);
       if (then == null) continue;
-      const now = centsNow(e.scryfallId);
+      const now = centsNow(e.scryfallId, e.finish);
       if (now == null) continue;
       delta += (now - then) * (e.qty ?? 1);
       priced = true;
@@ -217,7 +219,7 @@ function HistoryRow({
   onEventClick,
 }: {
   event: UserEvent;
-  centsNow: (scryfallId: string | null | undefined) => number | null;
+  centsNow: (scryfallId: string | null | undefined, finish?: UserEvent['finish']) => number | null;
   centsThen: (e: UserEvent) => number | null;
   editMode: boolean;
   onEventClick?: (e: UserEvent) => void;
@@ -236,7 +238,7 @@ function HistoryRow({
   const [reason, setReason] = useState<RemovalReason>(e.reason ?? 'sold');
 
   const badge = qtyBadge(e);
-  const now = hasInlineEdit ? centsNow(e.scryfallId) : null;
+  const now = hasInlineEdit ? centsNow(e.scryfallId, e.finish) : null;
   const then = e.priceEurCents ?? null;
   const perCopyDelta = then != null && now != null ? now - then : null;
   // Recorded market price around the event's day — a hint where the user never

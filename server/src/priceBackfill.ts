@@ -7,7 +7,8 @@ import type { HistoricalReading, PriceStore } from './priceStore.js';
 
 // One-shot history backfill from MTGJSON. Our own archive only knows the days
 // since the archiver went live; MTGJSON's AllPrices carries a rolling 90-day
-// window of the same two series we store (Cardmarket EUR, TCGplayer USD), so
+// window of the same series we store (Cardmarket EUR, TCGplayer USD, nonfoil
+// and foil), so
 // one pass buys every printing roughly two extra months of chart before the
 // archive's own first day. Nothing else public goes back further for EUR, so
 // this runs once and then the daily appender takes over for good.
@@ -36,8 +37,11 @@ interface PriceEntry {
 const BATCH = 500;
 const LOG_EVERY = 25_000;
 
-const DONE_KEY = 'backfill_mtgjson';
-const ATTEMPTS_KEY = 'backfill_mtgjson_attempts';
+// v2 (v0.198.0) adds the foil lanes. The v1 key is already set on the VM, so
+// a fresh key buys one more pass; splicing never overwrites a filled day, so
+// the nonfoil lanes it re-reads only fill holes.
+const DONE_KEY = 'backfill_mtgjson_v2';
+const ATTEMPTS_KEY = 'backfill_mtgjson_v2_attempts';
 
 /**
  * Give up after this many starts. The attempt is banked *before* the work, so
@@ -117,21 +121,24 @@ export async function backfillFromMtgjson(
 }
 
 /**
- * Pull the Cardmarket EUR and TCGplayer USD retail series for a printing and
- * zip them into one reading per day. Nonfoil only, matching what the daily
- * append stores (the archive keeps a single pair per printing).
+ * Pull the Cardmarket EUR and TCGplayer USD retail series for a printing, plain
+ * and foil, and zip them into one reading per day in the store's lane order.
  */
 function toReadings(entry: PriceEntry): HistoricalReading[] {
   const paper = entry.paper ?? {};
   // Guard the currency: the store's two columns are EUR and USD by definition,
   // so a provider that ever changed denomination must be skipped, not trusted.
-  const eur = paper.cardmarket?.currency === 'EUR' ? (paper.cardmarket.retail?.normal ?? {}) : {};
-  const usd = paper.tcgplayer?.currency === 'USD' ? (paper.tcgplayer.retail?.normal ?? {}) : {};
-  const days = new Set([...Object.keys(eur), ...Object.keys(usd)]);
+  const cm = paper.cardmarket?.currency === 'EUR' ? paper.cardmarket.retail : undefined;
+  const tcg = paper.tcgplayer?.currency === 'USD' ? paper.tcgplayer.retail : undefined;
+  const lanes: DaySeries[] = [cm?.normal ?? {}, tcg?.normal ?? {}, cm?.foil ?? {}, tcg?.foil ?? {}];
+  const days = new Set(lanes.flatMap((l) => Object.keys(l)));
   const out: HistoricalReading[] = [];
   for (const day of days) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
-    out.push([day, eur[day] ?? null, usd[day] ?? null]);
+    const [eur, usd, eurFoil, usdFoil] = lanes.map((l) => l[day] ?? null) as [
+      number | null, number | null, number | null, number | null,
+    ];
+    out.push([day, eur, usd, eurFoil, usdFoil]);
   }
   return out;
 }

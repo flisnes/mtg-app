@@ -33,7 +33,7 @@ import { db } from '../db/schema.js';
 import { getPriceHistory } from '../price/tracking.js';
 import { getMergedPriceHistory } from '../price/serverHistory.js';
 import { acquisitionGain, useCostBasis } from '../price/costBasis.js';
-import { historyChange, type HistoryChange } from '../price/history.js';
+import { historyChange, readingsFor } from '../price/history.js';
 import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { cycleSlugsOf } from '../cardDb/oracleTags.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
@@ -474,7 +474,6 @@ export function CardSheet(props: CardSheetProps) {
     }
   }
   const [busy, setBusy] = useState(false);
-  const [trend, setTrend] = useState<HistoryChange | null>(null);
   const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(null);
   // The card's own collection history, from the ⋯ menu, as a sheet over this one.
   const [historyOpen, setHistoryOpen] = useState(!!openHistory);
@@ -581,13 +580,11 @@ export function CardSheet(props: CardSheetProps) {
     void getPriceHistory(shownId).then((h) => {
       if (!live || merged) return;
       setPriceHistory(h ?? null);
-      setTrend(h ? historyChange(h) : null);
     });
     void getMergedPriceHistory(shownId).then((h) => {
       if (!live) return;
       merged = true;
       setPriceHistory(h ?? null);
-      setTrend(h ? historyChange(h) : null);
     });
     return () => {
       live = false;
@@ -616,6 +613,10 @@ export function CardSheet(props: CardSheetProps) {
   // same quote the header prints, not the tracked line's last reading, which is
   // the nonfoil price and would show a loss on every foil you own.
   const shownFinish: Finish = finish || 'nonfoil';
+  // A foil copy reads the foil line once one is on record (v0.198.0); until
+  // then it falls back to the nonfoil line and the trend says so.
+  const lane = useMemo(() => (priceHistory ? readingsFor(priceHistory, shownFinish) : null), [priceHistory, shownFinish]);
+  const trend = useMemo(() => (lane ? historyChange(lane.readings) : null), [lane]);
   const basis = useCostBasis(oracleCard.oracleId, shownId, priceHistory, shownFinish);
   const nowQuote = useMemo(
     () => pickPrice([pricedForFinish(facePrinting, shownFinish), oracleCard]),
@@ -1197,7 +1198,7 @@ export function CardSheet(props: CardSheetProps) {
             <PriceTrend
               trend={trend}
               gain={gain}
-              nonfoilLine={shownFinish !== 'nonfoil'}
+              nonfoilLine={shownFinish !== 'nonfoil' && !lane?.foil}
               onOpen={() => setChartOpen(true)}
             />
           )}

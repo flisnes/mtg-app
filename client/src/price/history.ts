@@ -1,4 +1,4 @@
-import { dayOffset, type DayReadings, type PriceHistory } from '@mtg/shared';
+import { dayOffset, type DayReadings, type Finish, type MonthlyReadings, type PriceHistory } from '@mtg/shared';
 
 // Pure helpers for the compact daily-readings format (see shared/src/user.ts).
 // Everything that doesn't need the row's identity takes a bare DayReadings, so
@@ -22,9 +22,17 @@ export function toCents(v: number | null | undefined): number | null {
 /**
  * Append one day's reading (integer cents) to a history, null-padding any gap
  * days. No-op (returns false) if that day is already covered or precedes
- * startDay.
+ * startDay. Pass `foil` to record the foil lanes too; a lane the row doesn't
+ * have yet is created (null-padded back to startDay) on its first non-null
+ * reading, and an existing foil lane is padded to match on days without one.
  */
-export function recordDay(h: DayReadings, day: string, eur: number | null, usd: number | null): boolean {
+export function recordDay(
+  h: DayReadings,
+  day: string,
+  eur: number | null,
+  usd: number | null,
+  foil?: { eur: number | null; usd: number | null },
+): boolean {
   const idx = dayOffset(h.startDay, day);
   if (idx < 0 || idx < h.eur.length) return false;
   while (h.eur.length < idx) {
@@ -33,7 +41,48 @@ export function recordDay(h: DayReadings, day: string, eur: number | null, usd: 
   }
   h.eur.push(eur);
   h.usd.push(usd);
+  const put = (lane: 'eurFoil' | 'usdFoil', v: number | null) => {
+    if (!h[lane] && v == null) return;
+    const arr = h[lane] ?? (h[lane] = []);
+    while (arr.length < idx) arr.push(null);
+    arr.length = idx; // a foil lane never runs past the nonfoil ones
+    arr.push(v);
+  };
+  put('eurFoil', foil?.eur ?? null);
+  put('usdFoil', foil?.usd ?? null);
   return true;
+}
+
+/** Days on which the row holds a foil reading, in either currency. */
+function foilDays(h: DayReadings): number {
+  const len = Math.max(h.eurFoil?.length ?? 0, h.usdFoil?.length ?? 0);
+  let n = 0;
+  for (let i = 0; i < len; i++) if (h.eurFoil?.[i] != null || h.usdFoil?.[i] != null) n++;
+  return n;
+}
+
+/** What `readingsFor` hands back: the series to read, and which finish it is. */
+export interface FinishReadings {
+  readings: DayReadings;
+  /** True when `readings` is the foil price, false when it's the nonfoil line. */
+  foil: boolean;
+}
+
+/**
+ * The daily series to read for a finish. A foil copy reads the foil lanes once
+ * they hold two days of readings, enough to draw a line; until then (and for
+ * nonfoil, and for etched, which isn't archived) it reads the nonfoil line,
+ * and `foil: false` tells the caller to say so. Without the two-day floor every
+ * foil's sparkline would vanish on the first day its foil lane is recorded.
+ * Never a mix of the two: a line that switches finish part way along would
+ * draw a jump that never happened.
+ */
+export function readingsFor(h: DayReadings, finish?: Finish | null): FinishReadings {
+  if (finish !== 'foil' || foilDays(h) < 2) return { readings: h, foil: false };
+  const len = Math.max(h.eurFoil?.length ?? 0, h.usdFoil?.length ?? 0);
+  const lane = (a?: (number | null)[]) => Array.from({ length: len }, (_, i) => a?.[i] ?? null);
+  const monthly = h.monthly && { startMonth: h.monthly.startMonth, eur: h.monthly.eurFoil, usd: h.monthly.usdFoil };
+  return { readings: { startDay: h.startDay, eur: lane(h.eurFoil), usd: lane(h.usdFoil), monthly }, foil: true };
 }
 
 /**
@@ -46,21 +95,64 @@ export function mergeHistories(a: PriceHistory, b: PriceHistory): PriceHistory {
   // An unparseable startDay can't be aligned; the other row wins outright.
   if (dayOffset(a.startDay, a.startDay) !== 0) return b;
   if (dayOffset(b.startDay, b.startDay) !== 0) return a;
-  const startDay = a.startDay <= b.startDay ? a.startDay : b.startDay;
+  // A row with an empty daily window (a printing the server only knows by the
+  // month) mustn't drag startDay back to its placeholder.
+  const days = [a, b].filter((h) => h.eur.length > 0);
+  const startDay = days.length ? days.map((h) => h.startDay).sort()[0]! : b.startDay;
   const offA = dayOffset(startDay, a.startDay);
   const offB = dayOffset(startDay, b.startDay);
-  const len = Math.max(offA + a.eur.length, offB + b.eur.length);
-  const eur: (number | null)[] = new Array(len).fill(null);
-  const usd: (number | null)[] = new Array(len).fill(null);
-  for (let i = 0; i < a.eur.length; i++) {
-    eur[offA + i] = a.eur[i] ?? null;
-    usd[offA + i] = a.usd[i] ?? null;
+  const len = Math.max(0, ...days.map((h) => dayOffset(startDay, h.startDay) + h.eur.length));
+  const lane = (key: 'eur' | 'usd' | 'eurFoil' | 'usdFoil') => {
+    const out: (number | null)[] = new Array(len).fill(null);
+    let any = false;
+    // Later wins, so b (the device's own readings) lands on top of a.
+    for (const [h, off] of [[a, offA], [b, offB]] as const) {
+      const src = h[key];
+      if (!src) continue;
+      for (let i = 0; i < src.length; i++) {
+        if (src[i] == null || off + i < 0 || off + i >= len) continue;
+        out[off + i] = src[i]!;
+        any = true;
+      }
+    }
+    return { out, any };
+  };
+  const merged: PriceHistory = { scryfallId: b.scryfallId, startDay, eur: lane('eur').out, usd: lane('usd').out };
+  for (const key of ['eurFoil', 'usdFoil'] as const) {
+    if (!a[key] && !b[key]) continue;
+    const { out, any } = lane(key);
+    if (any) merged[key] = out;
   }
-  for (let i = 0; i < b.eur.length; i++) {
-    if (b.eur[i] != null) eur[offB + i] = b.eur[i]!;
-    if (b.usd[i] != null) usd[offB + i] = b.usd[i]!;
+  // Only the server sends monthly history, and its copy is the newer one.
+  const monthly = a.monthly ?? b.monthly;
+  if (monthly) merged.monthly = monthly;
+  return merged;
+}
+
+/** One deep-history reading: mid-month (UTC ms) and the month's cents. */
+export interface MonthPoint {
+  ts: number;
+  cents: number;
+}
+
+/**
+ * One currency's monthly deep-history points from months entirely before
+ * `beforeDay` (the daily series' first reading), oldest first. A month that
+ * overlaps the daily window is left to the daily readings, which are finer.
+ */
+export function monthlyBefore(m: MonthlyReadings | undefined, cur: 'eur' | 'usd', beforeDay: string): MonthPoint[] {
+  const cells = m?.[cur];
+  if (!m || !/^\d{4}-\d{2}$/.test(m.startMonth) || !Array.isArray(cells)) return [];
+  const cutoff = beforeDay.slice(0, 7);
+  const [y0, m0] = m.startMonth.split('-').map(Number) as [number, number];
+  const out: MonthPoint[] = [];
+  for (let i = 0; i < cells.length; i++) {
+    const at = new Date(Date.UTC(y0, m0 - 1 + i, 15));
+    if (at.toISOString().slice(0, 7) >= cutoff) break;
+    const v = cells[i];
+    if (v != null) out.push({ ts: at.getTime(), cents: v });
   }
-  return { scryfallId: b.scryfallId, startDay, eur, usd };
+  return out;
 }
 
 /**

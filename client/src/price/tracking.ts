@@ -22,6 +22,10 @@ export async function recordCollectionPrices(): Promise<number> {
   const [entries, wishes] = await Promise.all([db.collection.toArray(), db.wishlist.toArray()]);
   const tracked = new Set(entries.map((e) => e.scryfallId));
   for (const w of wishes) if (w.scryfallId) tracked.add(w.scryfallId);
+  // Foil lanes are recorded only for printings held (or wanted) in foil: most
+  // of a collection is plain, and an empty lane costs nothing.
+  const foil = new Set(entries.filter((e) => e.finish === 'foil').map((e) => e.scryfallId));
+  for (const w of wishes) if (w.scryfallId && w.finish === 'foil') foil.add(w.scryfallId);
   const anyWishOracles = [...new Set(wishes.filter((w) => !w.scryfallId).map((w) => w.oracleId))];
   for (const o of await db.oracleCards.bulkGet(anyWishOracles)) {
     if (o) tracked.add(o.defaultScryfallId);
@@ -50,12 +54,12 @@ export async function recordCollectionPrices(): Promise<number> {
     if (!p) return;
     const eur = toCents(p.priceEur);
     const usd = toCents(p.priceUsd);
-    const h = histories[i];
-    if (!h) {
-      toPut.push({ scryfallId, startDay: day, eur: [eur], usd: [usd] });
-    } else if (recordDay(h, day, eur, usd)) {
-      toPut.push(h);
-    }
+    // priceHasFoil false means the price artifact predates foil slots, where a
+    // missing foil price is "unknown", not "none": record nothing then.
+    const foilCents =
+      foil.has(scryfallId) && p.priceHasFoil ? { eur: toCents(p.priceEurFoil), usd: toCents(p.priceUsdFoil) } : undefined;
+    const h = histories[i] ?? { scryfallId, startDay: day, eur: [], usd: [] };
+    if (recordDay(h, day, eur, usd, foilCents)) toPut.push(h);
   });
   if (toPut.length) await db.priceHistories.bulkPut(toPut);
   return toPut.length;

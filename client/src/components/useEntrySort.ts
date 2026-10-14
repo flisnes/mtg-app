@@ -5,7 +5,7 @@ import { useCollectionEntries } from '../db/collectionSnapshot.js';
 import { getPricesByIds, priceForFinish } from '../cardDb/prices.js';
 import type { JoinedEntry, JoinedWish } from '../db/queries.js';
 import { acquisitionGain, costBasisOf } from '../price/costBasis.js';
-import { historyChange } from '../price/history.js';
+import { historyChange, readingsFor } from '../price/history.js';
 import { valueKeyOf } from '../price/collectionValue.js';
 import { pickPrice, priceValue, pricedForFinish, releaseFields, type CardSortPrefs, type SortFields } from './cardSort.js';
 
@@ -52,8 +52,9 @@ export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortDat
       db.events.where('kind').equals('collection.add').toArray(),
     ]);
     // Today's price per finish, because that's what the change measures *to*.
-    // The tracked readings are nonfoil, so a foil row weighed against its own
-    // last reading would show a loss it never took (see costBasis.ts).
+    // A foil row with no foil line on record reads the nonfoil one, and measured
+    // against that line's last reading would show a loss it never took (see
+    // costBasis.ts).
     const prices = await getPricesByIds(entries.map((e) => e.scryfallId));
     const historyById = new Map(histories.map((h) => [h.scryfallId, h]));
     // Grouped by oracle because a printing-agnostic add (an "any printing" wish
@@ -74,7 +75,7 @@ export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortDat
       if (m.has(key)) continue;
       const h = historyById.get(entry.scryfallId);
       if (!h) continue;
-      const trend = historyChange(h);
+      const trend = historyChange(readingsFor(h, entry.finish).readings);
       if (!trend) continue;
       const basis = costBasisOf(eventsByOracle.get(entry.oracleId) ?? [], entry.scryfallId, h, entry.finish);
       const { eur, usd } = priceForFinish(prices.get(entry.scryfallId), entry.finish);

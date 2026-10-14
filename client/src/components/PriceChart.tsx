@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { DAY_MS, type DayReadings, type Finish, type UserEvent, type UserEventKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
 import { costBasisOf } from '../price/costBasis.js';
+import { monthlyBefore, readingsFor } from '../price/history.js';
 import { convertToDisplay, fmtMoney } from '../price/rates.js';
 import { describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { fmtDate } from '../util/format.js';
@@ -21,12 +22,17 @@ import { LinePlot, PLOT_H, useValueChart, ZoomHint, type ChartPt } from './Value
 // that's the number about your money. Only a card with no recorded acquisition
 // price falls back to "since tracking began", which is a fact about our archive.
 //
-// The line itself is the *nonfoil* price: that's the only series we archive
-// daily (see notes/foil-price-tracking.md). So for a foil the hero figure is
-// the card's real current price, passed in by the sheet, while the line below
-// it charts the plain version's movement — and a footnote says so, because a
-// foil's line and a foil's price are two different things and passing one off
-// as the other is how you end up trusting a number you shouldn't.
+// A foil copy charts the foil line once one is on record (v0.198.0, see
+// notes/foil-price-tracking.md). Until then the line is the *nonfoil* price:
+// the hero figure is still the card's real current price, passed in by the
+// sheet, and a footnote says the line is the plain version's, because a foil's
+// line and a foil's price are two different things and passing one off as the
+// other is how you end up trusting a number you shouldn't.
+//
+// When the server sent monthly deep history, a "Since YYYY" view puts those
+// months in front of the daily line, in the same currency (so the same market:
+// Cardmarket for EUR, TCGplayer for USD). The old months come from the few
+// MTGJSON snapshots that survive, so they arrive in clumps with years between.
 //
 // Everything is drawn in the display currency: readings are stored per day in
 // EUR/USD cents (price/history.ts) and acquisition prices in EUR cents, so both
@@ -76,8 +82,8 @@ export function PriceChartSheet({
   /** Finish on show, which decides which acquisitions the basis counts. */
   finish?: Finish;
   /**
-   * What a copy of that finish is worth right now. The tracked line is nonfoil,
-   * so this is what the headline change measures to; omit it (the sealed shelf)
+   * What a copy of that finish is worth right now. The line may be the nonfoil
+   * one, so this is what the headline change measures to; omit it (the sealed shelf)
    * and the line's last reading stands in.
    */
   now?: { amount: number; currency: BaseCurrency } | null;
@@ -90,32 +96,54 @@ export function PriceChartSheet({
     [oracleId],
   );
 
-  // The series, in display-currency units. Whichever currency the *latest*
-  // reading has wins the whole line (same rule as the sparkline's).
-  const series = useMemo(() => {
-    let cur: 'eur' | 'usd' | null = null;
-    for (let i = history.eur.length - 1; i >= 0 && !cur; i--) {
-      if (history.eur[i] != null) cur = 'eur';
-      else if (history.usd[i] != null) cur = 'usd';
+  // The finish's own line when there is one, else the nonfoil line.
+  const lane = useMemo(() => readingsFor(history, finish), [history, finish]);
+  const readings = lane.readings;
+
+  // Whichever currency the *latest* reading has wins the whole line (same rule
+  // as the sparkline's), monthly points included.
+  const cur = useMemo(() => {
+    for (let i = readings.eur.length - 1; i >= 0; i--) {
+      if (readings.eur[i] != null) return 'eur' as const;
+      if (readings.usd[i] != null) return 'usd' as const;
     }
+    return null;
+  }, [readings]);
+
+  // Monthly deep history from before the daily readings start, when the server
+  // has any. Offered as its own view so the daily one keeps its detail.
+  const months = useMemo(() => {
+    if (!cur) return [];
+    const first = readings[cur].findIndex((v) => v != null);
+    const firstDay = new Date(Date.parse(readings.startDay) + Math.max(first, 0) * DAY_MS).toISOString().slice(0, 10);
+    return monthlyBefore(readings.monthly, cur, firstDay);
+  }, [readings, cur]);
+  const [span, setSpan] = useState<'daily' | 'all'>('daily');
+  const longView = span === 'all' && months.length > 0;
+
+  // The series, in display-currency units.
+  const series = useMemo(() => {
     if (!cur) return null;
     const from: BaseCurrency = cur === 'eur' ? 'EUR' : 'USD';
     // One rate for the whole chart: null means we're offline of the rates, so
     // the axis stays in the currency the readings were quoted in.
     const rate = convertToDisplay(1, from);
     const unit = rate == null ? from : getPrefs().displayCurrency;
-    const startMs = Date.parse(history.startDay);
-    const readings = history[cur];
+    const startMs = Date.parse(readings.startDay);
     const pts: ChartPt[] = [];
-    for (let i = 0; i < readings.length; i++) {
-      const cents = readings[i];
+    if (longView) {
+      for (const m of months) pts.push({ ts: m.ts, v: (m.cents / 100) * (rate ?? 1), day: Math.floor(m.ts / DAY_MS) });
+    }
+    const daily = readings[cur];
+    for (let i = 0; i < daily.length; i++) {
+      const cents = daily[i];
       if (cents == null) continue;
       const ts = startMs + i * DAY_MS;
       pts.push({ ts, v: (cents / 100) * (rate ?? 1), day: Math.round(ts / DAY_MS) });
     }
     if (pts.length < 2) return null;
     return { pts, unit, eurRate: rate == null ? null : convertToDisplay(1, 'EUR') };
-  }, [history]);
+  }, [readings, cur, longView, months]);
 
   // What happened to this printing, split into line markers and rug ticks.
   const marks = useMemo(() => {
@@ -179,12 +207,13 @@ export function PriceChartSheet({
       // What you paid for a foil doesn't belong on a nonfoil axis: the gap
       // between the two is a difference of finish, not a gain, and drawing it
       // squashes the line it's supposed to be compared against. The figure
-      // still leads the sheet, with the footnote to explain it.
-      basisLine: !finish || finish === 'nonfoil' ? costBasis : null,
+      // still leads the sheet, with the footnote to explain it. On the foil
+      // line itself it belongs again.
+      basisLine: !finish || finish === 'nonfoil' || lane.foil ? costBasis : null,
       basisEstimated: !!basis?.estimated,
       basisCrossFinish: !!basis?.crossFinish,
     };
-  }, [series, events, scryfallId, history, finish]);
+  }, [series, events, scryfallId, history, finish, lane]);
 
   const money = (v: number) => fmtMoney(v, series?.unit ?? 'EUR');
   const isFoil = !!finish && finish !== 'nonfoil';
@@ -263,6 +292,17 @@ export function PriceChartSheet({
                   : `since ${fmtDate(firstPt!.ts)}`}
               </span>
             </div>
+          </div>
+        )}
+
+        {months.length > 0 && (
+          <div className="seg-row sheet-tabs" role="tablist" aria-label="Chart span">
+            <button role="tab" aria-selected={!longView} className={!longView ? 'seg seg-active' : 'seg'} onClick={() => setSpan('daily')}>
+              Daily
+            </button>
+            <button role="tab" aria-selected={longView} className={longView ? 'seg seg-active' : 'seg'} onClick={() => setSpan('all')}>
+              Since {new Date(months[0]!.ts).getUTCFullYear()}
+            </button>
           </div>
         )}
 
@@ -404,10 +444,17 @@ export function PriceChartSheet({
 
         {/* Say which price the line is. A foil owner reading a nonfoil line as
             their card's history is the whole reason this footnote exists. */}
-        {isFoil && (
+        {isFoil && !lane.foil && (
           <p className="fine-print">
-            The line is the nonfoil price. We don't record {finishWord} prices day by day yet, so the figure above the
-            chart is today's {finishWord} price and the line shows how the plain version has moved.
+            The line is the nonfoil price. We don't have enough {finishWord} prices on record for this printing yet, so the figure
+            above the chart is today's {finishWord} price and the line shows how the plain version has moved.
+          </p>
+        )}
+        {longView && (
+          <p className="fine-print">
+            The older part of the line has one reading a month, the median of that month, and only for the months an
+            old price snapshot survives ({[...new Set(months.map((m) => new Date(m.ts).getUTCFullYear()))].join(', ')}).
+            The stretches in between are a straight line, not a record.
           </p>
         )}
         {gain && (marks.basisCrossFinish || marks.basisEstimated) && (

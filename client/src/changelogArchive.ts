@@ -1,4 +1,4 @@
-// The older half of the changelog (0.187.1 down to 0.98.0), split out of
+// The older half of the changelog (0.189.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,32 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.189.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The deck simulator reads Equipment and Auras: the printed bonus goes on your best attacker. Swords, Colossus Hammer and Rancor count in combat now.',
+      },
+    ],
+  },
+  {
+    version: '0.188.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Decks have a Considering section for cards you might play. They never count toward the deck.',
+      },
+      {
+        kind: 'added',
+        text: 'Commander decks get a Companion zone. Tap "Set as companion" on a companion card.',
+      },
+      {
+        kind: 'changed',
+        text: 'Commander decks no longer have a sideboard. Cards in one move to Companion or Considering.',
+      },
+    ],
+  },
   {
     version: '0.187.1',
     changes: [

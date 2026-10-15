@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.4
+
+- **Internal: the card-edit code, tidied.** Nothing changes on screen. Every write to your collection, wishlist, decks and trades now goes through one shared path instead of thirty hand-written copies of it, about 360 lines lighter. Two small speedups fall out of it: committing a scan or an import no longer reads your whole collection and wishlist to add a single card, and moving many cards between zones of a deck stamps the deck once instead of once per card. Last release's test net caught nothing, which is the point.
+
 ## 0.200.3
 
 - **Internal: a safety net under every card edit.** Nothing changes on screen. Every function that writes your collection, wishlist, decks, binders, boxes, trades and history now has an automated test pinning what it does today, including undo and redo. The next releases rework that code to make it faster and smaller, and these tests catch it if anything you rely on shifts on the way. Counterspell held up, just in case.

@@ -18,13 +18,13 @@ import type { UserEvent } from '@mtg/shared';
 // and the "can this be undone?" the UI paints read from here, so they agree.
 
 /**
- * The rows `reverseEvent` would write for this event, as opaque keys. Two
+ * The rows `applyEventSigned` would write for this event, as opaque keys. Two
  * events collide when they share one.
  *
  * These MUST mirror how the raw helpers in dataAccess find their row. If one of
  * those changes how it matches, the matching key here changes with it:
  *   - collection + tradelist: the (scryfallId, condition, finish, lang)
- *     compound key that removeCopiesRaw / addCopiesRaw / tradeMarkAdjustRaw
+ *     compound key that copiesAdjustRaw / tradeMarkAdjustRaw
  *     look the entry up by, defaults included.
  *   - deck slots: (deckId, board, oracleId), what deckAdjustRaw matches on.
  *     The deck row's own updatedAt bump is not a key — a touched timestamp

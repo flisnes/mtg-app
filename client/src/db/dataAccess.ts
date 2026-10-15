@@ -171,32 +171,201 @@ function clamp(n: number, lo: number, hi: number): number {
 // (priceEurCents, reason) — updatedAt is bumped only by editUserEvent.
 // ---------------------------------------------------------------------------
 
-async function emit(e: Omit<UserEvent, 'id' | 'updatedAt'>, id = newId()): Promise<void> {
-  const ev: UserEvent = { id, updatedAt: e.ts, ...e };
-  await putSynced('events', ev);
+type NewEvent = Omit<UserEvent, 'id' | 'updatedAt'>;
+
+/** What an event says about how and why, beyond the card and the count. */
+type EventExtra = Partial<
+  Pick<UserEvent, 'source' | 'batchId' | 'batchLabel' | 'tradeId' | 'reason' | 'priceEurCents' | 'reconcile'>
+>;
+
+/** The one copy a collection-shaped event is about. */
+type CopyFields = Pick<CollectionEntry, 'oracleId' | 'scryfallId' | 'condition' | 'finish' | 'lang' | 'special'>;
+
+/** A collection.add / collection.remove / tradelist.mark event for one copy. */
+function copyEvent(
+  kind: 'collection.add' | 'collection.remove' | 'tradelist.mark',
+  c: CopyFields,
+  qty: number,
+  ts: number,
+  extra: EventExtra = {},
+): NewEvent {
+  return {
+    ts,
+    kind,
+    oracleId: c.oracleId,
+    scryfallId: c.scryfallId,
+    qty,
+    condition: c.condition,
+    finish: c.finish,
+    lang: c.lang,
+    ...(c.special ? { special: c.special } : {}),
+    ...extra,
+  };
 }
 
-/** Emit many events in two bulk writes instead of two per event (bulk imports). */
-async function emitMany(events: Omit<UserEvent, 'id' | 'updatedAt'>[]): Promise<void> {
-  if (events.length === 0) return;
-  const full: UserEvent[] = events.map((e) => ({ id: newId(), updatedAt: e.ts, ...e }));
-  await putSyncedMany('events', full);
+/** A wish.add / wish.remove event. Wants left as "any" are left off. */
+function wishEvent(
+  kind: 'wish.add' | 'wish.remove',
+  w: Pick<WishlistEntry, 'oracleId' | 'scryfallId' | 'condition' | 'finish' | 'lang'>,
+  qty: number,
+  ts: number,
+  extra: EventExtra = {},
+): NewEvent {
+  return {
+    ts,
+    kind,
+    oracleId: w.oracleId,
+    scryfallId: w.scryfallId,
+    ...(w.condition ? { condition: w.condition } : {}),
+    ...(w.finish ? { finish: w.finish } : {}),
+    ...(w.lang ? { lang: w.lang } : {}),
+    qty,
+    ...extra,
+  };
 }
 
-function groupByOracle(wishes: WishlistEntry[]): Map<string, WishlistEntry[]> {
-  const m = new Map<string, WishlistEntry[]>();
-  for (const w of wishes) {
-    const arr = m.get(w.oracleId);
-    if (arr) arr.push(w);
-    else m.set(w.oracleId, [w]);
+/** A deck.add / deck.remove event for one slot of `deck`. */
+function slotEvent(
+  kind: 'deck.add' | 'deck.remove',
+  s: { oracleId: string; scryfallId?: string; deckId: string; board: DeckBoard },
+  qty: number,
+  ts: number,
+  deck: Deck | undefined,
+  extra: EventExtra = {},
+): NewEvent {
+  return {
+    ts,
+    kind,
+    oracleId: s.oracleId,
+    ...(s.scryfallId ? { scryfallId: s.scryfallId } : {}),
+    qty,
+    deckId: s.deckId,
+    ...containerRef(deck),
+    board: s.board,
+    ...extra,
+  };
+}
+
+/** The source/batch fields every line of one bulk operation shares. */
+function batchFields(source: EventSource, batchId: string, label?: string): EventExtra {
+  return { source, batchId, ...(label ? { batchLabel: label } : {}) };
+}
+
+/**
+ * One write transaction and the bookkeeping every writer used to spell out by
+ * hand: one `now`, one batchId, events collected and flushed in one bulk write,
+ * each touched deck stamped once, and the copies filing touched stamped once.
+ * Raw helpers that run inside a writer take the ctx instead of `(now, events)`.
+ */
+interface WriteCtx {
+  now: number;
+  batchId: string;
+  emit(e: NewEvent, id?: string): void;
+  /** The deck, read once per transaction (and not stamped). */
+  getDeck(id: string): Promise<Deck | undefined>;
+  /** The deck, stamped as edited when the transaction ends. */
+  touchDeck(id: string): Promise<Deck | undefined>;
+  /** Stamp the copies these slots name (see touchNamedCopies) when it ends. */
+  touchCopies(slots: Iterable<SlotCopyFields>): void;
+}
+
+async function write<R>(
+  tables: Table[],
+  fn: (ctx: WriteCtx) => Promise<R>,
+  meta: BatchMeta = {},
+): Promise<R> {
+  return db.transaction('rw', tables, async () => {
+    const now = Date.now();
+    const events: UserEvent[] = [];
+    const decks = new Map<string, Deck | undefined>();
+    const touched = new Set<string>();
+    const copies: SlotCopyFields[] = [];
+    const getDeck = async (id: string) => {
+      if (!decks.has(id)) decks.set(id, await db.decks.get(id));
+      return decks.get(id);
+    };
+    const ctx: WriteCtx = {
+      now,
+      batchId: meta.batchId ?? newId(),
+      emit: (e, id = newId()) => void events.push({ id, updatedAt: e.ts, ...e }),
+      getDeck,
+      touchDeck: async (id) => {
+        const deck = await getDeck(id);
+        if (deck) touched.add(id);
+        return deck;
+      },
+      touchCopies: (slots) => void copies.push(...slots),
+    };
+    const result = await fn(ctx);
+    for (const id of touched) {
+      const deck = decks.get(id)!;
+      deck.updatedAt = now;
+      await putSynced('decks', deck);
+    }
+    await putSyncedMany('events', events);
+    await touchNamedCopies(copies, now);
+    return result;
+  });
+}
+
+/**
+ * Read a row, change it, stamp it and stage it. `mutate` returns false to say
+ * there was nothing to change, and nothing is written.
+ */
+async function patchSynced<T extends 'decks' | 'deckFolders' | 'deckCards'>(
+  tbl: T,
+  id: string,
+  mutate: (row: SyncRow[T]) => boolean | void,
+  now = Date.now(),
+): Promise<SyncRow[T] | undefined> {
+  const row = await syncedTable(tbl).get(id);
+  if (!row || mutate(row) === false) return undefined;
+  row.updatedAt = now;
+  await putSynced(tbl, row);
+  return row;
+}
+
+/**
+ * Change a row's quantity by `delta`: grow it, shrink it, delete it at zero,
+ * or (when there is no row and the delta is positive) create one with `make`.
+ * A row with a tradelist count keeps it within [0, quantity]. Returns the row
+ * as written, or undefined when it was deleted or never existed.
+ */
+async function adjustRow<T extends 'collection' | 'wishlist' | 'deckCards'>(
+  tbl: T,
+  existing: SyncRow[T] | undefined,
+  delta: number,
+  now: number,
+  make?: (qty: number) => SyncRow[T],
+): Promise<SyncRow[T] | undefined> {
+  if (!existing) {
+    if (delta <= 0 || !make) return undefined;
+    const row = make(delta);
+    await putSynced(tbl, row);
+    return row;
   }
+  const quantity = existing.quantity + delta;
+  if (quantity <= 0) {
+    await deleteSynced(tbl, existing.id);
+    return undefined;
+  }
+  const next = { ...existing, quantity, updatedAt: now };
+  if ('quantityForTrade' in next) next.quantityForTrade = clamp(next.quantityForTrade, 0, quantity);
+  await putSynced(tbl, next);
+  return next;
+}
+
+function groupByOracle<T extends { oracleId: string }>(rows: T[]): Map<string, T[]> {
+  const m = new Map<string, T[]>();
+  for (const r of rows) push(m, r.oracleId, r);
   return m;
 }
 
 /**
- * Bulk equivalent of emitWishFulfilled: given a preloaded wishlist grouped by
- * oracleId, return the wish.fulfilled event for one add (or null). Keeps bulk
- * imports off the per-line wishlist query that emitWishFulfilled does.
+ * Given a preloaded wishlist grouped by oracleId, the wish.fulfilled event for
+ * one add (or null). If an added printing matches a wishlist line (null
+ * scryfallId = any printing), the wish is recorded as fulfilled. The wishlist
+ * itself is not changed; only trades prune it.
  */
 function wishFulfilledEvent(
   wishesByOracle: Map<string, WishlistEntry[]>,
@@ -204,8 +373,8 @@ function wishFulfilledEvent(
   scryfallId: string,
   qty: number,
   ts: number,
-  extra: Partial<Pick<UserEvent, 'source' | 'batchId' | 'tradeId'>>,
-): Omit<UserEvent, 'id' | 'updatedAt'> | null {
+  extra: EventExtra,
+): NewEvent | null {
   const match = wishesByOracle.get(oracleId)?.find((w) => w.scryfallId === null || w.scryfallId === scryfallId);
   if (!match) return null;
   return { ts, kind: 'wish.fulfilled', oracleId, scryfallId, qty: Math.min(qty, match.quantity), ...extra };
@@ -221,29 +390,17 @@ async function priceCents(scryfallId: string, finish: Finish): Promise<number | 
   return acquisitionCents(prices.get(scryfallId), finish);
 }
 
-/**
- * If an added printing matches a wishlist line (null scryfallId = any
- * printing), record the wish as fulfilled. The wishlist itself is not
- * changed — only trades prune it (existing behavior).
- */
+/** wishFulfilledEvent for a single add, reading just that card's wishes. */
 async function emitWishFulfilled(
+  ctx: WriteCtx,
   oracleId: string,
   scryfallId: string,
   qty: number,
-  ts: number,
-  extra: Partial<Pick<UserEvent, 'source' | 'batchId' | 'tradeId'>> = {},
+  extra: EventExtra,
 ): Promise<void> {
-  const wishes = await db.wishlist.where('oracleId').equals(oracleId).toArray();
-  const match = wishes.find((w) => w.scryfallId === null || w.scryfallId === scryfallId);
-  if (!match) return;
-  await emit({
-    ts,
-    kind: 'wish.fulfilled',
-    oracleId,
-    scryfallId,
-    qty: Math.min(qty, match.quantity),
-    ...extra,
-  });
+  const wishes = groupByOracle(await db.wishlist.where('oracleId').equals(oracleId).toArray());
+  const ev = wishFulfilledEvent(wishes, oracleId, scryfallId, qty, ctx.now, extra);
+  if (ev) ctx.emit(ev);
 }
 
 /** Edit the user-editable fields of a history event (History tab). */
@@ -297,56 +454,44 @@ export async function addToCollection(input: AddToCollectionInput): Promise<stri
   const lang = input.lang || 'en';
   const special = normalizeSpecialConditions(input.special);
 
-  return db.transaction('rw', COLLECTION_TABLES, async () => {
-    const existing = await findCollectionRow({ ...input, lang, special });
-
-    const now = Date.now();
-    let entry: CollectionEntry;
-    if (existing) {
-      const quantity = existing.quantity + qty;
-      const quantityForTrade = Math.max(
-        existing.quantityForTrade,
-        input.quantityForTrade ?? 0,
-      );
-      entry = {
-        ...existing,
-        quantity,
-        quantityForTrade: clamp(quantityForTrade, 0, quantity),
-        updatedAt: now,
-      };
-    } else {
-      entry = {
-        id: newId(),
-        oracleId: input.oracleId,
-        scryfallId: input.scryfallId,
-        condition: input.condition,
-        finish: input.finish,
-        lang,
-        quantity: qty,
-        quantityForTrade: clamp(input.quantityForTrade ?? 0, 0, qty),
-        ...(special ? { special } : {}),
-        createdAt: now,
-        updatedAt: now,
-      };
-    }
+  return write(COLLECTION_TABLES, async (ctx) => {
+    const copy = { ...input, lang, special };
+    const existing = await findCollectionRow(copy);
+    const forTrade = Math.max(existing?.quantityForTrade ?? 0, input.quantityForTrade ?? 0);
+    const entry = existing
+      ? { ...existing, quantity: existing.quantity + qty, updatedAt: ctx.now }
+      : newEntry(copy, qty, forTrade, ctx.now);
+    // An add only ever raises the tradelist count, to at least what it asked for.
+    entry.quantityForTrade = clamp(forTrade, 0, entry.quantity);
     await putSynced('collection', entry);
     const source = input.source ?? 'manual';
-    await emit({
-      ts: now,
-      kind: 'collection.add',
-      oracleId: input.oracleId,
-      scryfallId: input.scryfallId,
-      qty,
-      condition: input.condition,
-      finish: input.finish,
-      lang,
-      ...(special ? { special } : {}),
-      priceEurCents: await priceCents(input.scryfallId, input.finish),
-      source,
-    }, input.eventId);
-    await emitWishFulfilled(input.oracleId, input.scryfallId, qty, now, { source });
+    ctx.emit(
+      copyEvent('collection.add', copy, qty, ctx.now, {
+        priceEurCents: await priceCents(input.scryfallId, input.finish),
+        source,
+      }),
+      input.eventId,
+    );
+    await emitWishFulfilled(ctx, input.oracleId, input.scryfallId, qty, { source });
     return entry.id;
   });
+}
+
+/** A fresh collection row for `qty` copies of `c`, `forTrade` of them on the tradelist. */
+function newEntry(c: CopyFields, qty: number, forTrade: number, now: number): CollectionEntry {
+  return {
+    id: newId(),
+    oracleId: c.oracleId,
+    scryfallId: c.scryfallId,
+    condition: c.condition,
+    finish: c.finish,
+    lang: c.lang,
+    quantity: qty,
+    quantityForTrade: clamp(forTrade, 0, qty),
+    ...(c.special ? { special: c.special } : {}),
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 /** Everything a slot says about the copy it names — what it takes to find that
@@ -506,10 +651,10 @@ export async function updateCollectionEntry(
 ): Promise<void> {
   // deckCards is in scope because a re-keying edit takes the copy's filing with
   // it (refileEditedCopy).
-  await db.transaction('rw', [...COLLECTION_TABLES, db.deckCards], async () => {
+  await write([...COLLECTION_TABLES, db.deckCards], async (ctx) => {
     const entry = await db.collection.get(id);
     if (!entry) return;
-    const now = Date.now();
+    const { now } = ctx;
     const quantity = patch.quantity ?? entry.quantity;
     const rawForTrade = patch.quantityForTrade ?? entry.quantityForTrade;
     const special = 'special' in patch ? normalizeSpecialConditions(patch.special) : entry.special;
@@ -559,21 +704,14 @@ export async function updateCollectionEntry(
     // default to 'sold' (interview decision); the History tab can re-label.
     const delta = quantity - entry.quantity;
     if (delta !== 0) {
-      await emit({
-        ts: now,
-        kind: delta > 0 ? 'collection.add' : 'collection.remove',
-        oracleId: next.oracleId,
-        scryfallId: next.scryfallId,
-        qty: Math.abs(delta),
-        condition: next.condition,
-        finish: next.finish,
-        lang: next.lang,
-        ...(next.special ? { special: next.special } : {}),
-        priceEurCents: await priceCents(next.scryfallId, next.finish),
-        source: 'manual',
-        ...(delta < 0 ? { reason: 'sold' as RemovalReason } : {}),
-      });
-      if (delta > 0) await emitWishFulfilled(next.oracleId, next.scryfallId, delta, now, { source: 'manual' });
+      ctx.emit(
+        copyEvent(delta > 0 ? 'collection.add' : 'collection.remove', next, Math.abs(delta), now, {
+          priceEurCents: await priceCents(next.scryfallId, next.finish),
+          source: 'manual',
+          ...(delta < 0 ? { reason: 'sold' as RemovalReason } : {}),
+        }),
+      );
+      if (delta > 0) await emitWishFulfilled(ctx, next.oracleId, next.scryfallId, delta, { source: 'manual' });
     }
   });
 }
@@ -584,37 +722,18 @@ export async function removeFromCollection(
   quantity = Infinity,
   reason: RemovalReason = 'sold',
 ): Promise<void> {
-  await db.transaction('rw', COLLECTION_TABLES, async () => {
+  await write(COLLECTION_TABLES, async (ctx) => {
     const entry = await db.collection.get(id);
     if (!entry) return;
-    const now = Date.now();
     const removed = Math.min(entry.quantity, quantity);
-    const remaining = entry.quantity - removed;
-    if (remaining <= 0) {
-      await deleteSynced('collection', id);
-    } else {
-      const next: CollectionEntry = {
-        ...entry,
-        quantity: remaining,
-        quantityForTrade: clamp(entry.quantityForTrade, 0, remaining),
-        updatedAt: now,
-      };
-      await putSynced('collection', next);
-    }
-    await emit({
-      ts: now,
-      kind: 'collection.remove',
-      oracleId: entry.oracleId,
-      scryfallId: entry.scryfallId,
-      qty: removed,
-      condition: entry.condition,
-      finish: entry.finish,
-      lang: entry.lang,
-      ...(entry.special ? { special: entry.special } : {}),
-      priceEurCents: await priceCents(entry.scryfallId, entry.finish),
-      source: 'manual',
-      reason,
-    });
+    await adjustRow('collection', entry, -removed, ctx.now);
+    ctx.emit(
+      copyEvent('collection.remove', entry, removed, ctx.now, {
+        priceEurCents: await priceCents(entry.scryfallId, entry.finish),
+        source: 'manual',
+        reason,
+      }),
+    );
   });
 }
 
@@ -668,17 +787,9 @@ export async function markOwnedForTrade(
 ): Promise<number> {
   if (requests.length === 0) return 0;
   let flagged = 0;
-  const batchId = meta.batchId ?? newId();
-  await db.transaction('rw', [db.collection, db.events, db.outbox], async () => {
-    const now = Date.now();
-    const oracleIds = [...new Set(requests.map((r) => r.oracleId))];
-    const owned = await db.collection.where('oracleId').anyOf(oracleIds).toArray();
-    const byOracle = new Map<string, CollectionEntry[]>();
-    for (const e of owned) {
-      const arr = byOracle.get(e.oracleId);
-      if (arr) arr.push(e);
-      else byOracle.set(e.oracleId, [e]);
-    }
+  await write([db.collection, db.events, db.outbox], async (ctx) => {
+    const { now } = ctx;
+    const byOracle = await ownedByOracle(requests);
     // How many copies each entry gained (accumulated across requests so a
     // second request touching the same entry adds one event line, not two).
     const gained = new Map<CollectionEntry, number>();
@@ -708,53 +819,35 @@ export async function markOwnedForTrade(
       }
     }
     const writes = [...gained.keys()];
-    if (writes.length > 0) {
-      await putSyncedMany('collection', writes);
-      await emitMany(
-        writes.map((e) => ({
-          ts: now,
-          kind: 'tradelist.mark' as const,
-          oracleId: e.oracleId,
-          scryfallId: e.scryfallId,
-          qty: gained.get(e)!,
-          condition: e.condition,
-          finish: e.finish,
-          lang: e.lang,
-          ...(e.special ? { special: e.special } : {}),
-          source: meta.source ?? 'manual',
-          batchId,
-          ...(meta.batchLabel ? { batchLabel: meta.batchLabel } : {}),
-        })),
-      );
-    }
-  });
+    await putSyncedMany('collection', writes);
+    const extra = batchFields(meta.source ?? 'manual', ctx.batchId, meta.batchLabel);
+    for (const e of writes) ctx.emit(copyEvent('tradelist.mark', e, gained.get(e)!, now, extra));
+  }, meta);
   return flagged;
+}
+
+/** The owned rows of every card the requests name, grouped by oracleId. */
+async function ownedByOracle(requests: { oracleId: string }[]): Promise<Map<string, CollectionEntry[]>> {
+  const oracleIds = [...new Set(requests.map((r) => r.oracleId))];
+  return groupByOracle(await db.collection.where('oracleId').anyOf(oracleIds).toArray());
 }
 
 /** Delete many collection entries outright in one transaction (bulk delete). */
 export async function removeCollectionEntriesBulk(ids: string[], reason: RemovalReason = 'sold'): Promise<void> {
   if (ids.length === 0) return;
-  const now = Date.now();
-  await db.transaction('rw', COLLECTION_TABLES, async () => {
+  await write(COLLECTION_TABLES, async (ctx) => {
     const entries = (await db.collection.bulkGet(ids)).filter((e): e is CollectionEntry => !!e);
     const prices = await getPricesByIds(entries.map((e) => e.scryfallId));
     await deleteSyncedMany('collection', entries.map((e) => e.id));
-    await emitMany(
-      entries.map((e) => ({
-        ts: now,
-        kind: 'collection.remove' as const,
-        oracleId: e.oracleId,
-        scryfallId: e.scryfallId,
-        qty: e.quantity,
-        condition: e.condition,
-        finish: e.finish,
-        lang: e.lang,
-        ...(e.special ? { special: e.special } : {}),
-        priceEurCents: acquisitionCents(prices.get(e.scryfallId), e.finish),
-        source: 'manual' as const,
-        reason,
-      })),
-    );
+    for (const e of entries) {
+      ctx.emit(
+        copyEvent('collection.remove', e, e.quantity, ctx.now, {
+          priceEurCents: acquisitionCents(prices.get(e.scryfallId), e.finish),
+          source: 'manual',
+          reason,
+        }),
+      );
+    }
   });
 }
 
@@ -787,21 +880,34 @@ export async function addToWishlist(input: AddToWishlistInput): Promise<string> 
   const scryfallId = input.scryfallId ?? null;
   const { condition, finish, lang } = input;
 
-  return db.transaction('rw', WISHLIST_TABLES, async () => {
-    const now = Date.now();
-    const key = wishKey({ scryfallId, condition, finish, lang });
+  return write(WISHLIST_TABLES, async (ctx) => {
+    const wish = { oracleId: input.oracleId, scryfallId, condition, finish, lang };
+    const key = wishKey(wish);
     const candidates = await db.wishlist.where('oracleId').equals(input.oracleId).toArray();
     const existing = candidates.find((w) => wishKey(w) === key);
-    let entry: WishlistEntry;
-    if (existing) {
-      entry = { ...existing, quantity: existing.quantity + qty, updatedAt: now };
-    } else {
-      entry = { id: newId(), oracleId: input.oracleId, scryfallId, condition, finish, lang, quantity: qty, createdAt: now, updatedAt: now };
-    }
-    await putSynced('wishlist', entry);
-    await emit({ ts: now, kind: 'wish.add', oracleId: input.oracleId, scryfallId, condition, finish, lang, qty, source: input.source ?? 'manual' }, input.eventId);
-    return entry.id;
+    const entry = await adjustRow('wishlist', existing, qty, ctx.now, (q) => newWish(wish, q, ctx.now));
+    ctx.emit(wishEvent('wish.add', wish, qty, ctx.now, { source: input.source ?? 'manual' }), input.eventId);
+    return entry!.id;
   });
+}
+
+/** A fresh wishlist line for `qty` copies. Wants left as "any" are left off. */
+function newWish(
+  w: Pick<WishlistEntry, 'oracleId' | 'scryfallId' | 'condition' | 'finish' | 'lang'>,
+  qty: number,
+  now: number,
+): WishlistEntry {
+  return {
+    id: newId(),
+    oracleId: w.oracleId,
+    scryfallId: w.scryfallId,
+    ...(w.condition ? { condition: w.condition } : {}),
+    ...(w.finish ? { finish: w.finish } : {}),
+    ...(w.lang ? { lang: w.lang } : {}),
+    quantity: qty,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 export interface WishlistBulkLine {
@@ -825,16 +931,15 @@ export async function addToWishlistBulk(
   meta: { label?: string; source?: EventSource } & BatchMeta = {},
 ): Promise<{ entries: number; cards: number }> {
   let cards = 0;
-  const batchId = meta.batchId ?? newId();
-  const batchExtra = { source: meta.source ?? 'import', batchId, ...(meta.label ? { batchLabel: meta.label } : {}) };
-  await db.transaction('rw', WISHLIST_TABLES, async () => {
-    const now = Date.now();
-    const existing = await db.wishlist.toArray();
+  await write(WISHLIST_TABLES, async (ctx) => {
+    const { now } = ctx;
+    const extra = batchFields(meta.source ?? 'import', ctx.batchId, meta.label);
+    const oracleIds = [...new Set(lines.map((l) => l.oracleId))];
+    const existing = await db.wishlist.where('oracleId').anyOf(oracleIds).toArray();
     const keyOf = (l: { oracleId: string; scryfallId: string | null; condition?: Condition; finish?: Finish; lang?: string }) =>
       `${l.oracleId}|${wishKey(l)}`;
     const map = new Map(existing.map((e) => [keyOf(e), e]));
     const touched = new Set<WishlistEntry>();
-    const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
     for (const l of lines) {
       cards += l.quantity;
       const ex = map.get(keyOf(l));
@@ -843,36 +948,14 @@ export async function addToWishlistBulk(
         ex.updatedAt = now;
         touched.add(ex);
       } else {
-        const entry: WishlistEntry = {
-          id: newId(),
-          oracleId: l.oracleId,
-          scryfallId: l.scryfallId,
-          ...(l.condition ? { condition: l.condition } : {}),
-          ...(l.finish ? { finish: l.finish } : {}),
-          ...(l.lang ? { lang: l.lang } : {}),
-          quantity: l.quantity,
-          createdAt: now,
-          updatedAt: now,
-        };
+        const entry = newWish(l, l.quantity, now);
         map.set(keyOf(l), entry);
         touched.add(entry);
       }
-      events.push({
-        ts: now,
-        kind: 'wish.add',
-        oracleId: l.oracleId,
-        scryfallId: l.scryfallId,
-        ...(l.condition ? { condition: l.condition } : {}),
-        ...(l.finish ? { finish: l.finish } : {}),
-        ...(l.lang ? { lang: l.lang } : {}),
-        qty: l.quantity,
-        ...batchExtra,
-      });
+      ctx.emit(wishEvent('wish.add', l, l.quantity, now, extra));
     }
-    const writes = [...touched];
-    await putSyncedMany('wishlist', writes);
-    await emitMany(events);
-  });
+    await putSyncedMany('wishlist', [...touched]);
+  }, meta);
   return { entries: lines.length, cards };
 }
 
@@ -884,10 +967,10 @@ export async function updateWishlistEntry(
   id: string,
   patch: { scryfallId?: string | null; condition?: Condition; finish?: Finish; lang?: string; quantity?: number },
 ): Promise<void> {
-  await db.transaction('rw', WISHLIST_TABLES, async () => {
+  await write(WISHLIST_TABLES, async (ctx) => {
     const entry = await db.wishlist.get(id);
     if (!entry) return;
-    const now = Date.now();
+    const { now } = ctx;
     // The card sheet is a full editor: an omitted key means "leave as is", but a
     // key present with undefined means "any" (and must overwrite the old value).
     const scryfallId = 'scryfallId' in patch ? patch.scryfallId ?? null : entry.scryfallId;
@@ -910,46 +993,20 @@ export async function updateWishlistEntry(
     // collection's. Named for the line it lands on (the edited printing).
     const delta = quantity - entry.quantity;
     if (delta !== 0) {
-      await emit({
-        ts: now,
-        kind: delta > 0 ? 'wish.add' : 'wish.remove',
-        oracleId: entry.oracleId,
-        scryfallId,
-        condition,
-        finish,
-        lang,
-        qty: Math.abs(delta),
-        source: 'manual',
-      });
+      const wish = { oracleId: entry.oracleId, scryfallId, condition, finish, lang };
+      ctx.emit(wishEvent(delta > 0 ? 'wish.add' : 'wish.remove', wish, Math.abs(delta), now, { source: 'manual' }));
     }
   });
 }
 
 /** Decrement a wishlist entry by quantity; deletes it at zero. */
 export async function removeFromWishlist(id: string, quantity = Infinity): Promise<void> {
-  await db.transaction('rw', WISHLIST_TABLES, async () => {
+  await write(WISHLIST_TABLES, async (ctx) => {
     const entry = await db.wishlist.get(id);
     if (!entry) return;
-    const now = Date.now();
     const removed = Math.min(entry.quantity, quantity);
-    const remaining = entry.quantity - removed;
-    if (remaining <= 0) {
-      await deleteSynced('wishlist', id);
-    } else {
-      const next: WishlistEntry = { ...entry, quantity: remaining, updatedAt: now };
-      await putSynced('wishlist', next);
-    }
-    await emit({
-      ts: now,
-      kind: 'wish.remove',
-      oracleId: entry.oracleId,
-      scryfallId: entry.scryfallId,
-      condition: entry.condition,
-      finish: entry.finish,
-      lang: entry.lang,
-      qty: removed,
-      source: 'manual',
-    });
+    await adjustRow('wishlist', entry, -removed, ctx.now);
+    ctx.emit(wishEvent('wish.remove', entry, removed, ctx.now, { source: 'manual' }));
   });
 }
 
@@ -992,41 +1049,42 @@ export async function applyImport(
   // Every line of one import/sealed add shares a batchId, so the edit-history
   // view can collapse the whole operation into a single entry.
   const source = meta.source ?? 'import';
-  const batchId = meta.batchId ?? newId();
-  const label = meta.batchLabel ?? meta.label;
-  const batchExtra = { source, batchId, ...(label ? { batchLabel: label } : {}) };
-  // One bulk price lookup for the acquisition price on every line's event.
-  const prices = await getPricesByIds(lines.map((l) => l.scryfallId));
   const removals = meta.removals ?? [];
-  await db.transaction('rw', [...COLLECTION_TABLES, db.decks, db.deckCards], async () => {
-    const existing = await db.collection.toArray();
-    const map = new Map(existing.map((e) => [entryKey(e), e]));
-    const now = Date.now();
+  await write([...COLLECTION_TABLES, db.decks, db.deckCards], async (ctx) => {
+    const { now } = ctx;
+    const extra = batchFields(source, ctx.batchId, meta.batchLabel ?? meta.label);
+    // Only the rows these lines can land on (same card) and the rows the
+    // removals name, read once so a row both removed from and merged into is
+    // one object. Not the whole collection: a one-card scan commit was reading
+    // every row you own.
+    const oracleIds = [...new Set(lines.map((l) => l.oracleId))];
+    const byId = new Map<string, CollectionEntry>();
+    for (const e of await db.collection.where('oracleId').anyOf(oracleIds).toArray()) byId.set(e.id, e);
+    for (const e of await db.collection.bulkGet(removals.map((r) => r.id))) if (e && !byId.has(e.id)) byId.set(e.id, e);
+    const map = new Map([...byId.values()].map((e) => [entryKey(e), e]));
     // A Set (not `writes.includes`) so re-touching an entry is O(1), not O(n);
     // events are accumulated and flushed once instead of two IDB ops per line.
     const touched = new Set<CollectionEntry>();
-    const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
-    const wishesByOracle = groupByOracle(await db.wishlist.toArray());
+    const wishesByOracle = groupByOracle(await db.wishlist.where('oracleId').anyOf(oracleIds).toArray());
+    // One bulk price lookup for the price on every line's and removal's event.
+    const prices = await getPricesByIds([
+      ...lines.map((l) => l.scryfallId),
+      ...removals.map((r) => byId.get(r.id)?.scryfallId).filter((s): s is string => !!s),
+    ]);
 
     if (removals.length > 0) {
-      const byId = new Map(existing.map((e) => [e.id, e]));
-      const exitPrices = await getPricesByIds(
-        removals.map((r) => byId.get(r.id)?.scryfallId).filter((s): s is string => !!s),
-      );
       for (const r of removals) {
         const e = byId.get(r.id);
         if (!e) continue;
         const take = Math.min(r.qty, e.quantity);
         if (take <= 0) continue;
         const remaining = e.quantity - take;
-        if (remaining <= 0) {
-          map.delete(entryKey(e));
-          await deleteSynced('collection', e.id);
+        const next = await adjustRow('collection', e, -take, now);
+        if (next) {
+          // Later lines merging onto this row see what the removal left.
+          Object.assign(e, next);
         } else {
-          e.quantity = remaining;
-          e.quantityForTrade = clamp(e.quantityForTrade, 0, remaining);
-          e.updatedAt = now;
-          await putSynced('collection', e);
+          map.delete(entryKey(e));
         }
         if (r.to) {
           // Only the slots the remaining copies can no longer back move along;
@@ -1037,26 +1095,19 @@ export async function applyImport(
             .reduce((n, s) => n + s.quantity, 0);
           await refileSlots(e.oracleId, from, r.to, Math.min(take, Math.max(0, claimed - remaining)), now);
         }
-        events.push({
-          ts: now,
-          kind: 'collection.remove',
-          oracleId: e.oracleId,
-          scryfallId: e.scryfallId,
-          qty: take,
-          condition: e.condition,
-          finish: e.finish,
-          lang: e.lang,
-          ...(e.special ? { special: e.special } : {}),
-          priceEurCents: acquisitionCents(exitPrices.get(e.scryfallId), e.finish),
-          reason: 'other',
-          ...batchExtra,
-        });
+        ctx.emit(
+          copyEvent('collection.remove', e, take, now, {
+            priceEurCents: acquisitionCents(prices.get(e.scryfallId), e.finish),
+            reason: 'other',
+            ...extra,
+          }),
+        );
       }
     }
 
     for (const l of lines) {
-      const lang = l.lang || 'en';
-      const k = entryKey({ ...l, lang });
+      const copy = { ...l, lang: l.lang || 'en', special: undefined };
+      const k = entryKey(copy);
       cards += l.quantity;
       const ex = map.get(k);
       if (ex) {
@@ -1065,40 +1116,24 @@ export async function applyImport(
         ex.updatedAt = now;
         touched.add(ex);
       } else {
-        const entry: CollectionEntry = {
-          id: newId(),
-          oracleId: l.oracleId,
-          scryfallId: l.scryfallId,
-          condition: l.condition,
-          finish: l.finish,
-          lang,
-          quantity: l.quantity,
-          quantityForTrade: clamp(l.quantityForTrade, 0, l.quantity),
-          createdAt: now,
-          updatedAt: now,
-        };
+        const entry = newEntry(copy, l.quantity, l.quantityForTrade, now);
         map.set(k, entry);
         touched.add(entry);
       }
-      events.push({
-        ts: now,
-        kind: 'collection.add',
-        oracleId: l.oracleId,
-        scryfallId: l.scryfallId,
-        qty: l.quantity,
-        condition: l.condition,
-        finish: l.finish,
-        lang,
-        priceEurCents: acquisitionCents(prices.get(l.scryfallId), l.finish),
-        ...batchExtra,
+      ctx.emit(
+        copyEvent('collection.add', copy, l.quantity, now, {
+          priceEurCents: acquisitionCents(prices.get(l.scryfallId), l.finish),
+          ...extra,
+        }),
+      );
+      const wf = wishFulfilledEvent(wishesByOracle, l.oracleId, l.scryfallId, l.quantity, now, {
+        source,
+        batchId: ctx.batchId,
       });
-      const wf = wishFulfilledEvent(wishesByOracle, l.oracleId, l.scryfallId, l.quantity, now, { source, batchId });
-      if (wf) events.push(wf);
+      if (wf) ctx.emit(wf);
     }
-    const writes = [...touched];
-    await putSyncedMany('collection', writes);
-    await emitMany(events);
-  });
+    await putSyncedMany('collection', [...touched]);
+  }, meta);
   return { entries: lines.length, cards };
 }
 
@@ -1143,15 +1178,6 @@ const UNTITLED: Record<ContainerKind, string> = {
   box: 'Untitled box',
 };
 
-/** Bump the deck's updatedAt and stage it; returns the deck (for its name). */
-async function touchDeck(deckId: string, now: number): Promise<Deck | undefined> {
-  const deck = await db.decks.get(deckId);
-  if (!deck) return undefined;
-  deck.updatedAt = now;
-  await putSynced('decks', deck);
-  return deck;
-}
-
 /** Create a deck, binder or box. Only decks carry a format or a folder. */
 export async function createContainer(
   name: string,
@@ -1175,23 +1201,19 @@ export async function createContainer(
 }
 
 export async function renameDeck(id: string, name: string): Promise<void> {
-  await db.transaction('rw', [db.decks, db.outbox], async () => {
-    const deck = await db.decks.get(id);
-    if (!deck) return;
-    deck.name = name.trim() || UNTITLED[deck.kind ?? 'deck'];
-    deck.updatedAt = Date.now();
-    await putSynced('decks', deck);
-  });
+  await db.transaction('rw', [db.decks, db.outbox], () =>
+    patchSynced('decks', id, (deck) => {
+      deck.name = name.trim() || UNTITLED[deck.kind ?? 'deck'];
+    }),
+  );
 }
 
 export async function setDeckFormat(id: string, format: DeckFormat): Promise<void> {
-  await db.transaction('rw', [...DECK_TABLES, db.oracleCards], async () => {
-    const deck = await db.decks.get(id);
+  await write([...DECK_TABLES, db.oracleCards], async (ctx) => {
+    const deck = await ctx.touchDeck(id);
     if (!deck) return;
     deck.format = format;
-    deck.updatedAt = Date.now();
-    await putSynced('decks', deck);
-    await tidyBoardsRaw(id, format === 'commander', deck.updatedAt);
+    await tidyBoardsRaw(ctx, id, format === 'commander');
   });
 }
 
@@ -1201,7 +1223,7 @@ export async function setDeckFormat(id: string, format: DeckFormat): Promise<voi
  * a companion leaving Commander goes back to the sideboard. No history: this
  * is the app keeping its own shape, not something you did.
  */
-async function tidyBoardsRaw(deckId: string, commanderDeck: boolean, now: number): Promise<number> {
+async function tidyBoardsRaw(ctx: WriteCtx, deckId: string, commanderDeck: boolean): Promise<number> {
   const slots = await db.deckCards.where('deckId').equals(deckId).toArray();
   const strays = slots.filter((s) => s.board === (commanderDeck ? 'side' : 'companion'));
   if (strays.length === 0) return 0;
@@ -1218,7 +1240,7 @@ async function tidyBoardsRaw(deckId: string, commanderDeck: boolean, now: number
       await deleteSynced('deckCards', s.id);
       continue;
     }
-    moved += await moveSlotRaw(s.id, board, now, []);
+    moved += await moveSlotRaw(ctx, s.id, board, null);
   }
   return moved;
 }
@@ -1227,10 +1249,10 @@ async function tidyBoardsRaw(deckId: string, commanderDeck: boolean, now: number
  *  catches decks from before the Companion zone and edits from older builds). */
 export async function tidyDeckBoards(deckId: string): Promise<number> {
   let moved = 0;
-  await db.transaction('rw', [...DECK_TABLES, db.oracleCards], async () => {
-    const deck = await db.decks.get(deckId);
+  await write([...DECK_TABLES, db.oracleCards], async (ctx) => {
+    const deck = await ctx.getDeck(deckId);
     if (!deck || (deck.kind ?? 'deck') !== 'deck') return;
-    moved = await tidyBoardsRaw(deckId, (deck.format ?? 'casual') === 'commander', Date.now());
+    moved = await tidyBoardsRaw(ctx, deckId, (deck.format ?? 'casual') === 'commander');
   });
   return moved;
 }
@@ -1242,33 +1264,19 @@ export async function tidyDeckBoards(deckId: string): Promise<number> {
  */
 export async function setDeckEmblem(id: string, emblem: ContainerEmblem | undefined): Promise<void> {
   const clean = emblem && sanitizeContainerEmblem(emblem);
-  await db.transaction('rw', [db.decks, db.outbox], async () => {
-    const deck = await db.decks.get(id);
-    if (!deck) return;
-    if (clean) deck.emblem = clean;
-    else delete deck.emblem;
-    deck.updatedAt = Date.now();
-    await putSynced('decks', deck);
-  });
+  await db.transaction('rw', [db.decks, db.outbox], () =>
+    patchSynced('decks', id, (deck) => {
+      if (clean) deck.emblem = clean;
+      else delete deck.emblem;
+    }),
+  );
 }
 
 export async function deleteDeck(id: string): Promise<void> {
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const deck = await db.decks.get(id);
+  await write(DECK_TABLES, async (ctx) => {
+    const deck = await ctx.getDeck(id);
     const cards = await db.deckCards.where('deckId').equals(id).toArray();
-    const now = Date.now();
-    for (const c of cards) {
-      await emit({
-        ts: now,
-        kind: 'deck.remove',
-        oracleId: c.oracleId,
-        ...(c.scryfallId ? { scryfallId: c.scryfallId } : {}),
-        qty: c.quantity,
-        deckId: id,
-        ...containerRef(deck),
-        board: c.board,
-      });
-    }
+    for (const c of cards) ctx.emit(slotEvent('deck.remove', c, c.quantity, ctx.now, deck));
     await deleteSyncedMany('deckCards', cards.map((c) => c.id));
     // Authored behavior belongs to the deck, so it goes with it. Tombstoned one
     // by one rather than dropped locally: a row nobody deletes on the server is
@@ -1277,7 +1285,7 @@ export async function deleteDeck(id: string): Promise<void> {
     await deleteSyncedMany('deckBehaviors', behaviors.map((b) => b.id));
     await deleteSynced('decks', id);
     // Deleting the container unfiles everything that was in it.
-    await touchNamedCopies(cards, now);
+    ctx.touchCopies(cards);
   });
 }
 
@@ -1336,13 +1344,11 @@ export async function createDeckFolder(name: string): Promise<string> {
 }
 
 export async function renameDeckFolder(id: string, name: string): Promise<void> {
-  await db.transaction('rw', [db.deckFolders, db.outbox], async () => {
-    const folder = await db.deckFolders.get(id);
-    if (!folder) return;
-    folder.name = name.trim() || UNTITLED_FOLDER;
-    folder.updatedAt = Date.now();
-    await putSynced('deckFolders', folder);
-  });
+  await db.transaction('rw', [db.deckFolders, db.outbox], () =>
+    patchSynced('deckFolders', id, (folder) => {
+      folder.name = name.trim() || UNTITLED_FOLDER;
+    }),
+  );
 }
 
 /** Delete a folder; the decks inside it become unorganized, not deleted. */
@@ -1361,14 +1367,12 @@ export async function deleteDeckFolder(id: string): Promise<void> {
 
 /** Move a deck into a folder, or out of any folder when folderId is undefined. */
 export async function setDeckFolder(deckId: string, folderId: string | undefined): Promise<void> {
-  await db.transaction('rw', [db.decks, db.outbox], async () => {
-    const deck = await db.decks.get(deckId);
-    if (!deck) return;
-    if (folderId) deck.folderId = folderId;
-    else delete deck.folderId;
-    deck.updatedAt = Date.now();
-    await putSynced('decks', deck);
-  });
+  await db.transaction('rw', [db.decks, db.outbox], () =>
+    patchSynced('decks', deckId, (deck) => {
+      if (folderId) deck.folderId = folderId;
+      else delete deck.folderId;
+    }),
+  );
 }
 
 /**
@@ -1382,15 +1386,13 @@ export async function setDeckFolder(deckId: string, folderId: string | undefined
  * still assembled in its box.
  */
 export async function setDeckArchived(deckId: string, archived: boolean): Promise<void> {
-  await db.transaction('rw', [db.decks, db.outbox], async () => {
-    const deck = await db.decks.get(deckId);
-    if (!deck) return;
-    if (!!deck.archivedAt === archived) return;
-    if (archived) deck.archivedAt = Date.now();
-    else delete deck.archivedAt;
-    deck.updatedAt = Date.now();
-    await putSynced('decks', deck);
-  });
+  await db.transaction('rw', [db.decks, db.outbox], () =>
+    patchSynced('decks', deckId, (deck) => {
+      if (!!deck.archivedAt === archived) return false;
+      if (archived) deck.archivedAt = Date.now();
+      else delete deck.archivedAt;
+    }),
+  );
 }
 
 /**
@@ -1401,8 +1403,9 @@ export async function setDeckArchived(deckId: string, archived: boolean): Promis
  * Returns the copies freed.
  */
 export async function unfileWholeContainer(deckId: string): Promise<number> {
-  const slots = await db.deckCards.where('deckId').equals(deckId).toArray();
-  return setDeckCardsUnfiled(slots.map((s) => s.id), true);
+  return write(DECK_TABLES, async (ctx) =>
+    setSlotsUnfiled(ctx, await db.deckCards.where('deckId').equals(deckId).toArray(), true),
+  );
 }
 
 /** Copies a container is holding right now — what unfiling it would free. */
@@ -1509,16 +1512,14 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
   // "Any printing" basics are their own slot: four Islands from the lands box
   // shouldn't fold into the four foil Islands you actually own.
   const key = exactSlotKey({ oracleId: input.oracleId, board, anyBasic, scryfallId: input.scryfallId || undefined }, wants);
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const now = Date.now();
+  await write(DECK_TABLES, async (ctx) => {
+    const { now } = ctx;
     if (board === 'companion') {
       // One companion a deck: setting a new one moves the old one to Considering,
       // and setting the same one again is not a second copy of it.
       const seated = await db.deckCards.where('[deckId+board]').equals([input.deckId, 'companion']).toArray();
       if (seated.some((s) => s.oracleId === input.oracleId)) return;
-      const events: Array<Omit<UserEvent, 'id' | 'updatedAt'>> = [];
-      for (const s of seated) await moveSlotRaw(s.id, 'maybe', now, events, { source: 'manual' });
-      await emitMany(events);
+      for (const s of seated) await moveSlotRaw(ctx, s.id, 'maybe', { source: 'manual' });
     }
     const candidates = await db.deckCards
       .where('[deckId+board]')
@@ -1542,18 +1543,10 @@ export async function addDeckCard(input: AddDeckCardInput): Promise<void> {
       };
     }
     await putSynced('deckCards', slot);
-    const deck = await touchDeck(input.deckId, now);
-    await emit({
-      ts: now,
-      kind: 'deck.add',
-      oracleId: input.oracleId,
-      ...(!anyBasic && input.scryfallId ? { scryfallId: input.scryfallId } : {}),
-      qty: quantity,
-      deckId: input.deckId,
-      ...containerRef(deck),
-      board,
-    });
-    await touchNamedCopies([slot], now);
+    const deck = await ctx.touchDeck(input.deckId);
+    const named = { ...input, scryfallId: anyBasic ? undefined : input.scryfallId, board };
+    ctx.emit(slotEvent('deck.add', named, quantity, now, deck));
+    ctx.touchCopies([slot]);
   });
 }
 
@@ -1576,27 +1569,20 @@ export async function addDeckCardsBulk(
   }>,
   meta: { source?: EventSource; exact?: boolean } & BatchMeta = {},
 ): Promise<void> {
-  const batchId = meta.batchId ?? newId();
   const keyOf = meta.exact
     ? (c: { oracleId: string; board: DeckBoard; anyBasic?: boolean; scryfallId?: string }, w?: SlotWants) =>
         exactSlotKey(c, w)
     : (c: { oracleId: string; board: DeckBoard; anyBasic?: boolean }) => slotKey(c);
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const now = Date.now();
+  await write(DECK_TABLES, async (ctx) => {
+    const { now } = ctx;
     const existing = await db.deckCards.where('deckId').equals(deckId).toArray();
     // A stored slot carries its wants as plain fields, so it is its own wants.
     const map = new Map(existing.map((c) => [keyOf(c, c), c]));
     const touched = new Set<DeckCard>();
-    const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
-    const deck = await touchDeck(deckId, now);
+    const deck = await ctx.touchDeck(deckId);
     // Default 'manual' (not 'import') so deck adds don't land in the collection
     // "Imports" filter; the batchId still collapses them into one history entry.
-    const label = meta.batchLabel ?? deck?.name;
-    const batchExtra = {
-      source: meta.source ?? 'manual',
-      batchId,
-      ...(label ? { batchLabel: label } : {}),
-    };
+    const extra = batchFields(meta.source ?? 'manual', ctx.batchId, meta.batchLabel ?? deck?.name);
     for (const c of cards) {
       const ex = map.get(keyOf(c, c.wants));
       if (ex) {
@@ -1622,23 +1608,13 @@ export async function addDeckCardsBulk(
         map.set(keyOf(c, c.wants), dc);
         touched.add(dc);
       }
-      events.push({
-        ts: now,
-        kind: 'deck.add',
-        oracleId: c.oracleId,
-        ...(!c.anyBasic && c.scryfallId ? { scryfallId: c.scryfallId } : {}),
-        qty: c.quantity,
-        deckId,
-        ...containerRef(deck),
-        board: c.board,
-        ...batchExtra,
-      });
+      const named = { ...c, scryfallId: c.anyBasic ? undefined : c.scryfallId, deckId };
+      ctx.emit(slotEvent('deck.add', named, c.quantity, now, deck, extra));
     }
     const writes = [...touched];
     await putSyncedMany('deckCards', writes);
-    await emitMany(events);
-    await touchNamedCopies(writes, now);
-  });
+    ctx.touchCopies(writes);
+  }, meta);
 }
 
 /**
@@ -1664,12 +1640,11 @@ export async function reconcileDeck(
   target: Array<{ oracleId: string; board: DeckBoard; quantity: number; scryfallId?: string; wants?: SlotWants }>,
   meta: { source?: EventSource } & BatchMeta = {},
 ): Promise<{ added: number; removed: number; changed: number }> {
-  const batchId = meta.batchId ?? newId();
   let added = 0;
   let removed = 0;
   let changed = 0;
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const now = Date.now();
+  await write(DECK_TABLES, async (ctx) => {
+    const { now } = ctx;
     const existing = await db.deckCards.where('deckId').equals(deckId).toArray();
     // An "any printing" basic isn't a piece of cardboard the camera could have
     // seen, so a re-scan neither matches nor sweeps it away.
@@ -1704,15 +1679,8 @@ export async function reconcileDeck(
     const deletes: string[] = [];
     // Slots the re-scan swept away, kept so the copies they held get stamped.
     const swept: DeckCard[] = [];
-    const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
-    const deck = await touchDeck(deckId, now);
-    const label = meta.batchLabel ?? deck?.name;
-    const batchExtra = {
-      source: meta.source ?? 'manual',
-      batchId,
-      ...(label ? { batchLabel: label } : {}),
-    };
-    const nameExtra = containerRef(deck);
+    const deck = await ctx.touchDeck(deckId);
+    const extra = batchFields(meta.source ?? 'manual', ctx.batchId, meta.batchLabel ?? deck?.name);
 
     for (const { t, cur } of pairs) {
       if (!cur) {
@@ -1727,17 +1695,7 @@ export async function reconcileDeck(
           updatedAt: now,
         });
         added++;
-        events.push({
-          ts: now,
-          kind: 'deck.add',
-          oracleId: t.oracleId,
-          ...(t.scryfallId ? { scryfallId: t.scryfallId } : {}),
-          qty: t.quantity,
-          deckId,
-          ...nameExtra,
-          board: t.board,
-          ...batchExtra,
-        });
+        ctx.emit(slotEvent('deck.add', { ...t, deckId }, t.quantity, now, deck, extra));
         continue;
       }
       const delta = t.quantity - cur.quantity;
@@ -1769,17 +1727,7 @@ export async function reconcileDeck(
       }
       if (delta !== 0) {
         changed++;
-        events.push({
-          ts: now,
-          kind: delta > 0 ? 'deck.add' : 'deck.remove',
-          oracleId: cur.oracleId,
-          ...(cur.scryfallId ? { scryfallId: cur.scryfallId } : {}),
-          qty: Math.abs(delta),
-          deckId,
-          ...nameExtra,
-          board: cur.board,
-          ...batchExtra,
-        });
+        ctx.emit(slotEvent(delta > 0 ? 'deck.add' : 'deck.remove', cur, Math.abs(delta), now, deck, extra));
       }
     }
 
@@ -1788,44 +1736,25 @@ export async function reconcileDeck(
       deletes.push(cur.id);
       swept.push(cur);
       removed++;
-      events.push({
-        ts: now,
-        kind: 'deck.remove',
-        oracleId: cur.oracleId,
-        ...(cur.scryfallId ? { scryfallId: cur.scryfallId } : {}),
-        qty: cur.quantity,
-        deckId,
-        ...nameExtra,
-        board: cur.board,
-        ...batchExtra,
-      });
+      ctx.emit(slotEvent('deck.remove', cur, cur.quantity, now, deck, extra));
     }
 
-    if (puts.length) {
-      await putSyncedMany('deckCards', puts);
-    }
-    if (deletes.length) {
-      await deleteSyncedMany('deckCards', deletes);
-    }
-    await emitMany(events);
-    await touchNamedCopies([...puts, ...swept], now);
-  });
+    await putSyncedMany('deckCards', puts);
+    await deleteSyncedMany('deckCards', deletes);
+    ctx.touchCopies([...puts, ...swept]);
+  }, meta);
   return { added, removed, changed };
 }
 
 /**
  * Move one slot to another board inside an already-open transaction, merging
  * into the slot that card already has there. Returns the copies moved (0 when
- * the slot is gone or already on that board). Events are pushed onto `events`
- * rather than emitted, so a bulk move can stamp them all with one batchId.
+ * the slot is gone or already on that board). Events carry `extra`, so a bulk
+ * move can stamp them all with one batchId; a null `extra` records no history
+ * (the app tidying its own zones).
  */
-async function moveSlotRaw(
-  id: string,
-  board: DeckBoard,
-  now: number,
-  events: Array<Omit<UserEvent, 'id' | 'updatedAt'>>,
-  extra: Partial<Pick<UserEvent, 'source' | 'batchId' | 'batchLabel'>> = {},
-): Promise<number> {
+async function moveSlotRaw(ctx: WriteCtx, id: string, board: DeckBoard, extra: EventExtra | null): Promise<number> {
+  const { now } = ctx;
   const card = await db.deckCards.get(id);
   if (!card || card.board === board) return 0;
   // A deck has one companion: setting a new one sends the old one to
@@ -1833,54 +1762,50 @@ async function moveSlotRaw(
   if (board === 'companion') {
     const seated = await db.deckCards.where('[deckId+board]').equals([card.deckId, 'companion']).toArray();
     for (const s of seated) {
-      if (s.oracleId !== card.oracleId) await moveSlotRaw(s.id, 'maybe', now, events, extra);
+      if (s.oracleId !== card.oracleId) await moveSlotRaw(ctx, s.id, 'maybe', extra);
     }
   }
-  const existing = await db.deckCards
-    .where('[deckId+board]')
-    .equals([card.deckId, board])
-    .and((c) => c.oracleId === card.oracleId && !!c.anyBasic === !!card.anyBasic)
-    .first();
-  if (existing) {
-    // Two slots becoming one: the tags of both come along, or moving a tagged
-    // card to the sideboard would quietly strip what you labelled it.
-    const merged: DeckCard = {
-      ...existing,
-      quantity: existing.quantity + card.quantity,
-      tags: normalizeCardTags([...(existing.tags ?? []), ...(card.tags ?? [])]),
-      updatedAt: now,
-    };
-    await putSynced('deckCards', merged);
-    await deleteSynced('deckCards', id);
-  } else {
-    const moved: DeckCard = { ...card, board, updatedAt: now };
-    await putSynced('deckCards', moved);
-  }
-  const deck = await touchDeck(card.deckId, now);
-  const base = {
-    oracleId: card.oracleId,
-    ...(card.scryfallId ? { scryfallId: card.scryfallId } : {}),
-    qty: card.quantity,
-    deckId: card.deckId,
-    ...containerRef(deck),
-    ...extra,
-  };
+  if (await mergeIntoSlot(card, card.deckId, board, now)) await deleteSynced('deckCards', id);
+  else await putSynced('deckCards', { ...card, board, updatedAt: now });
+  const deck = await ctx.touchDeck(card.deckId);
   // A move is a leave and an arrival: the pair is what the history reads, and
   // what undo replays backwards to put the card back where it was.
-  events.push({ ts: now, kind: 'deck.remove', ...base, board: card.board });
-  events.push({ ts: now, kind: 'deck.add', ...base, board });
-  await touchNamedCopies([card], now);
+  if (extra) {
+    ctx.emit(slotEvent('deck.remove', card, card.quantity, now, deck, extra));
+    ctx.emit(slotEvent('deck.add', { ...card, board }, card.quantity, now, deck, extra));
+  }
+  ctx.touchCopies([card]);
   return card.quantity;
+}
+
+/**
+ * Fold `card` into the slot that card already has on `board` of `deckId`, when
+ * there is one. Two slots becoming one: the tags of both come along, or moving
+ * a tagged card to the sideboard would quietly strip what you labelled it.
+ * Returns whether it merged; the caller deletes or re-homes `card` either way.
+ */
+async function mergeIntoSlot(card: DeckCard, deckId: string, board: DeckBoard, now: number): Promise<boolean> {
+  const existing = await db.deckCards
+    .where('[deckId+board]')
+    .equals([deckId, board])
+    .and((c) => c.oracleId === card.oracleId && !!c.anyBasic === !!card.anyBasic)
+    .first();
+  if (!existing) return false;
+  await putSynced('deckCards', {
+    ...existing,
+    quantity: existing.quantity + card.quantity,
+    tags: normalizeCardTags([...(existing.tags ?? []), ...(card.tags ?? [])]),
+    updatedAt: now,
+  });
+  return true;
 }
 
 /** Move a slot to another board, merging into an existing slot for the same card there. */
 export async function moveDeckCard(id: string, board: DeckBoard): Promise<void> {
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const events: Array<Omit<UserEvent, 'id' | 'updatedAt'>> = [];
-    // The leave/arrive pair is one thing the user did, so it shares a batchId
-    // and reads as a single "Moved to …" entry (which undoes in one tap).
-    await moveSlotRaw(id, board, Date.now(), events, { source: 'manual', batchId: newId() });
-    await emitMany(events);
+  // The leave/arrive pair is one thing the user did, so it shares a batchId
+  // and reads as a single "Moved to …" entry (which undoes in one tap).
+  await write(DECK_TABLES, async (ctx) => {
+    await moveSlotRaw(ctx, id, board, { source: 'manual', batchId: ctx.batchId });
   });
 }
 
@@ -1904,14 +1829,11 @@ export async function moveDeckCardsToContainer(
 ): Promise<number> {
   if (ids.length === 0) return 0;
   let moved = 0;
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const target = await db.decks.get(targetDeckId);
+  await write(DECK_TABLES, async (ctx) => {
+    const target = await ctx.touchDeck(targetDeckId);
     if (!target) return;
-    const now = Date.now();
-    const batchId = newId();
-    const events: Array<Omit<UserEvent, 'id' | 'updatedAt'>> = [];
-    const extra = { source: 'manual' as const, batchId, batchLabel: target.name };
-    const sources = new Map<string, Deck | undefined>();
+    const { now } = ctx;
+    const extra = batchFields('manual', ctx.batchId, target.name);
     for (const id of ids) {
       const card = await db.deckCards.get(id);
       if (!card) continue;
@@ -1919,53 +1841,23 @@ export async function moveDeckCardsToContainer(
       // Same container and same zone: nothing to do. Same container, different
       // zone: that's an ordinary board move, and moveSlotRaw already knows how.
       if (card.deckId === targetDeckId) {
-        moved += await moveSlotRaw(id, board, now, events, extra);
+        moved += await moveSlotRaw(ctx, id, board, extra);
         continue;
       }
       // Merge into whatever is already sitting on that zone over here, exactly
       // as a board move merges, so pasting a second copy doesn't split the slot.
-      const existing = await db.deckCards
-        .where('[deckId+board]')
-        .equals([targetDeckId, board])
-        .and((c) => c.oracleId === card.oracleId && !!c.anyBasic === !!card.anyBasic)
-        .first();
-      if (existing) {
-        const merged: DeckCard = {
-          ...existing,
-          quantity: existing.quantity + card.quantity,
-          tags: normalizeCardTags([...(existing.tags ?? []), ...(card.tags ?? [])]),
-          updatedAt: now,
-        };
-        await putSynced('deckCards', merged);
-      } else {
-        const arrived: DeckCard = { ...card, id: newId(), deckId: targetDeckId, board, updatedAt: now };
-        await putSynced('deckCards', arrived);
+      if (!(await mergeIntoSlot(card, targetDeckId, board, now))) {
+        await putSynced('deckCards', { ...card, id: newId(), deckId: targetDeckId, board, updatedAt: now });
       }
       await deleteSynced('deckCards', id);
-      await touchNamedCopies([card], now);
-
-      if (!sources.has(card.deckId)) sources.set(card.deckId, await touchDeck(card.deckId, now));
-      const base = {
-        oracleId: card.oracleId,
-        ...(card.scryfallId ? { scryfallId: card.scryfallId } : {}),
-        qty: card.quantity,
-        ...extra,
-      };
+      ctx.touchCopies([card]);
       // A leave from over there and an arrival over here. Same pair a board
       // move writes, so isMoveBatch reads it as a move and undo replays it back.
-      events.push({
-        ts: now,
-        kind: 'deck.remove',
-        ...base,
-        deckId: card.deckId,
-        ...containerRef(sources.get(card.deckId)),
-        board: card.board,
-      });
-      events.push({ ts: now, kind: 'deck.add', ...base, deckId: targetDeckId, ...containerRef(target), board });
+      const source = await ctx.touchDeck(card.deckId);
+      ctx.emit(slotEvent('deck.remove', card, card.quantity, now, source, extra));
+      ctx.emit(slotEvent('deck.add', { ...card, deckId: targetDeckId, board }, card.quantity, now, target, extra));
       moved += card.quantity;
     }
-    await touchDeck(targetDeckId, now);
-    await emitMany(events);
   });
   return moved;
 }
@@ -1979,17 +1871,14 @@ export async function moveDeckCardsToContainer(
 export async function moveDeckCardsBulk(ids: string[], board: DeckBoard): Promise<number> {
   if (ids.length === 0) return 0;
   let moved = 0;
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const now = Date.now();
-    const batchId = newId();
-    const events: Array<Omit<UserEvent, 'id' | 'updatedAt'>> = [];
+  await write(DECK_TABLES, async (ctx) => {
     const first = await db.deckCards.get(ids[0]!);
-    const deck = first ? await db.decks.get(first.deckId) : undefined;
-    const extra = { source: 'manual' as const, batchId, ...(deck ? { batchLabel: deck.name } : {}) };
+    const deck = first ? await ctx.getDeck(first.deckId) : undefined;
+    const extra = batchFields('manual', ctx.batchId, deck?.name);
     // One at a time on purpose: two selected slots can target the same slot on
     // the far side, and each move has to see what the one before it merged.
-    for (const id of ids) moved += await moveSlotRaw(id, board, now, events, extra);
-    await emitMany(events);
+    // The deck is stamped once at the end, not once per slot.
+    for (const id of ids) moved += await moveSlotRaw(ctx, id, board, extra);
   });
   return moved;
 }
@@ -2022,15 +1911,8 @@ const SLOT_COALESCE_MS = 30_000;
  * between. Only ungrouped hand edits fold: an import, a scan or a trade already
  * has a batch of its own and is nobody's idea of clutter.
  */
-async function emitSlotDelta(card: DeckCard, kind: 'deck.add' | 'deck.remove', qty: number, now: number): Promise<void> {
-  const deck = await db.decks.get(card.deckId);
-  const base = {
-    oracleId: card.oracleId,
-    ...(card.scryfallId ? { scryfallId: card.scryfallId } : {}),
-    deckId: card.deckId,
-    ...containerRef(deck),
-    board: card.board,
-  };
+async function emitSlotDelta(ctx: WriteCtx, card: DeckCard, kind: 'deck.add' | 'deck.remove', qty: number): Promise<void> {
+  const { now } = ctx;
 
   const recent = await db.events.where('ts').above(now - SLOT_COALESCE_MS).toArray();
   // The newest ungrouped hand edit to this exact slot. Anything of the other
@@ -2054,17 +1936,17 @@ async function emitSlotDelta(card: DeckCard, kind: 'deck.add' | 'deck.remove', q
     await putSynced('events', grown);
     return;
   }
-  await emit({ ts: now, kind, qty, ...base });
+  ctx.emit(slotEvent(kind, card, qty, now, await ctx.getDeck(card.deckId)));
 }
 
 async function patchDeckCard(
   id: string,
   patch: { quantity?: number; scryfallId?: string; anyBasic?: boolean; wants?: SlotWants; tags?: string[] },
 ): Promise<void> {
-  await db.transaction('rw', DECK_TABLES, async () => {
+  await write(DECK_TABLES, async (ctx) => {
     const card = await db.deckCards.get(id);
     if (!card) return;
-    const now = Date.now();
+    const { now } = ctx;
     const quantity = patch.quantity ?? card.quantity;
     const delta = quantity - card.quantity;
     const anyBasic = patch.anyBasic ?? !!card.anyBasic;
@@ -2109,14 +1991,14 @@ async function patchDeckCard(
     const removedAll = quantity <= 0;
     if (delta !== 0 || removedAll) {
       await emitSlotDelta(
+        ctx,
         card,
         removedAll || delta < 0 ? 'deck.remove' : 'deck.add',
         removedAll ? card.quantity : Math.abs(delta),
-        now,
       );
     }
-    await touchNamedCopies(next ? [card, next] : [card], now);
-    await touchDeck(card.deckId, now);
+    ctx.touchCopies(next ? [card, next] : [card]);
+    await ctx.touchDeck(card.deckId);
   });
 }
 
@@ -2131,13 +2013,12 @@ export async function setDeckCardQuantity(id: string, quantity: number): Promise
  * there is no history event to emit — just the slot rewrite and the sync stage.
  */
 export async function setDeckCardChosenColor(id: string, color: Color | undefined): Promise<void> {
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const card = await db.deckCards.get(id);
-    if (!card || card.chosenColor === color) return;
-    const now = Date.now();
-    const next: DeckCard = { ...card, chosenColor: color, updatedAt: now };
-    await putSynced('deckCards', next);
-    await touchDeck(card.deckId, now);
+  await write(DECK_TABLES, async (ctx) => {
+    const card = await patchSynced('deckCards', id, (c) => {
+      if (c.chosenColor === color) return false;
+      c.chosenColor = color;
+    }, ctx.now);
+    if (card) await ctx.touchDeck(card.deckId);
   });
 }
 
@@ -2167,24 +2048,25 @@ export async function updateDeckCard(
  */
 export async function setDeckCardsUnfiled(ids: string[], unfiled: boolean): Promise<number> {
   if (ids.length === 0) return 0;
+  return write(DECK_TABLES, async (ctx) =>
+    setSlotsUnfiled(ctx, (await db.deckCards.bulkGet(ids)).filter((c): c is DeckCard => !!c), unfiled),
+  );
+}
+
+async function setSlotsUnfiled(ctx: WriteCtx, slots: DeckCard[], unfiled: boolean): Promise<number> {
   let copies = 0;
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const now = Date.now();
-    const slots = (await db.deckCards.bulkGet(ids)).filter((c): c is DeckCard => !!c);
-    const writes: DeckCard[] = [];
-    for (const s of slots) {
-      if (s.anyBasic || !s.scryfallId || !s.condition || !s.finish || !s.lang) continue;
-      if (!!s.unfiled === unfiled) continue;
-      writes.push({ ...s, unfiled: unfiled ? true : undefined, updatedAt: now });
-      copies += s.quantity;
-    }
-    if (writes.length === 0) return;
-    await putSyncedMany('deckCards', writes);
-    for (const deckId of new Set(writes.map((w) => w.deckId))) await touchDeck(deckId, now);
-    // Taking a copy out of a container by hand, or putting it back, is the
-    // plainest filing change there is.
-    await touchNamedCopies(writes, now);
-  });
+  const writes: DeckCard[] = [];
+  for (const s of slots) {
+    if (!namedCopy(s)) continue;
+    if (!!s.unfiled === unfiled) continue;
+    writes.push({ ...s, unfiled: unfiled ? true : undefined, updatedAt: ctx.now });
+    copies += s.quantity;
+  }
+  await putSyncedMany('deckCards', writes);
+  for (const w of writes) await ctx.touchDeck(w.deckId);
+  // Taking a copy out of a container by hand, or putting it back, is the
+  // plainest filing change there is.
+  ctx.touchCopies(writes);
   return copies;
 }
 
@@ -2204,26 +2086,30 @@ export async function tagDeckCards(ids: string[], change: { add?: string[]; remo
   const add = normalizeCardTags(change.add ?? []) ?? [];
   const remove = new Set((normalizeCardTags(change.remove ?? []) ?? []).map((t) => t.toLocaleLowerCase()));
   if (ids.length === 0 || (add.length === 0 && remove.size === 0)) return 0;
-  let changed = 0;
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const now = Date.now();
-    const slots = (await db.deckCards.bulkGet(ids)).filter((c): c is DeckCard => !!c);
-    const writes: DeckCard[] = [];
-    for (const s of slots) {
-      const kept = (s.tags ?? []).filter((t) => !remove.has(t.toLocaleLowerCase()));
-      const next = normalizeCardTags([...kept, ...add]);
-      if (sameCardTags(s.tags, next)) continue;
-      writes.push({ ...s, tags: next, updatedAt: now });
-    }
-    if (writes.length === 0) return;
-    changed = writes.length;
-    await putSyncedMany('deckCards', writes);
-    // Selection lives on one screen, but touch each named container anyway.
-    for (const deckId of new Set(writes.map((w) => w.deckId))) await touchDeck(deckId, now);
-  });
-  return changed;
+  return retagSlots(
+    async () => (await db.deckCards.bulkGet(ids)).filter((c): c is DeckCard => !!c),
+    (tags) => [...tags.filter((t) => !remove.has(t.toLocaleLowerCase())), ...add],
+  );
 }
 
+/**
+ * Rewrite the tags of the slots `load` returns, in one transaction. Slots whose
+ * tags come out the same aren't rewritten, so re-applying a tag doesn't churn
+ * the sync outbox. Every container a rewritten slot sits in is touched.
+ */
+async function retagSlots(load: () => Promise<DeckCard[]>, retag: (tags: string[]) => string[]): Promise<number> {
+  return write(DECK_TABLES, async (ctx) => {
+    const writes: DeckCard[] = [];
+    for (const s of await load()) {
+      const next = normalizeCardTags(retag(s.tags ?? []));
+      if (sameCardTags(s.tags, next)) continue;
+      writes.push({ ...s, tags: next, updatedAt: ctx.now });
+    }
+    await putSyncedMany('deckCards', writes);
+    for (const w of writes) await ctx.touchDeck(w.deckId);
+    return writes.length;
+  });
+}
 
 /**
  * Rename a tag everywhere it appears in one container. Because tags are derived
@@ -2234,31 +2120,20 @@ export async function renameDeckCardTag(deckId: string, from: string, to: string
   const target = normalizeCardTags([to])?.[0];
   const key = from.toLocaleLowerCase();
   if (!target || key === target.toLocaleLowerCase()) return 0;
-  let changed = 0;
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const now = Date.now();
-    const slots = await db.deckCards.where('deckId').equals(deckId).toArray();
-    const writes: DeckCard[] = [];
-    for (const s of slots) {
-      if (!s.tags?.some((t) => t.toLocaleLowerCase() === key)) continue;
-      const next = normalizeCardTags(s.tags.map((t) => (t.toLocaleLowerCase() === key ? target : t)));
-      if (sameCardTags(s.tags, next)) continue;
-      writes.push({ ...s, tags: next, updatedAt: now });
-    }
-    if (writes.length === 0) return;
-    changed = writes.length;
-    await putSyncedMany('deckCards', writes);
-    await touchDeck(deckId, now);
-  });
-  return changed;
+  return retagSlots(
+    () => db.deckCards.where('deckId').equals(deckId).toArray(),
+    (tags) => tags.map((t) => (t.toLocaleLowerCase() === key ? target : t)),
+  );
 }
 
 /** Drop a tag from every slot in one container — the tag then stops existing. */
 export async function deleteDeckCardTag(deckId: string, tag: string): Promise<number> {
-  const key = tag.toLocaleLowerCase();
-  const slots = await db.deckCards.where('deckId').equals(deckId).toArray();
-  const ids = slots.filter((s) => s.tags?.some((t) => t.toLocaleLowerCase() === key)).map((s) => s.id);
-  return tagDeckCards(ids, { remove: [tag] });
+  const key = normalizeCardTags([tag])?.[0]?.toLocaleLowerCase();
+  if (!key) return 0;
+  return retagSlots(
+    () => db.deckCards.where('deckId').equals(deckId).toArray(),
+    (tags) => tags.filter((t) => t.toLocaleLowerCase() !== key),
+  );
 }
 
 export async function removeDeckCard(id: string): Promise<void> {
@@ -2274,38 +2149,17 @@ export async function removeDeckCard(id: string): Promise<void> {
 export async function removeDeckCardsBulk(ids: string[]): Promise<number> {
   if (ids.length === 0) return 0;
   let removed = 0;
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const now = Date.now();
-    const batchId = newId();
+  await write(DECK_TABLES, async (ctx) => {
     const slots = (await db.deckCards.bulkGet(ids)).filter((c): c is DeckCard => !!c);
-    if (slots.length === 0) return;
-    // Selection lives on one screen, so these are all one container's slots —
-    // but touch each named deck anyway rather than assume it.
-    const decks = new Map<string, Deck | undefined>();
-    for (const deckId of new Set(slots.map((s) => s.deckId))) {
-      decks.set(deckId, await touchDeck(deckId, now));
-    }
     await deleteSyncedMany('deckCards', slots.map((s) => s.id));
-    for (const s of slots) removed += s.quantity;
-    await touchNamedCopies(slots, now);
-    await emitMany(
-      slots.map((s) => {
-        const deck = decks.get(s.deckId);
-        return {
-          ts: now,
-          kind: 'deck.remove' as const,
-          oracleId: s.oracleId,
-          ...(s.scryfallId ? { scryfallId: s.scryfallId } : {}),
-          qty: s.quantity,
-          deckId: s.deckId,
-          ...containerRef(deck),
-          board: s.board,
-          source: 'manual' as const,
-          batchId,
-          ...(deck ? { batchLabel: deck.name } : {}),
-        };
-      }),
-    );
+    ctx.touchCopies(slots);
+    // Selection lives on one screen, so these are all one container's slots,
+    // but touch each named deck anyway rather than assume it.
+    for (const s of slots) {
+      const deck = await ctx.touchDeck(s.deckId);
+      ctx.emit(slotEvent('deck.remove', s, s.quantity, ctx.now, deck, batchFields('manual', ctx.batchId, deck?.name)));
+      removed += s.quantity;
+    }
   });
   return removed;
 }
@@ -2326,16 +2180,9 @@ export async function removeDeckCardsMatching(
 ): Promise<number> {
   if (cards.length === 0) return 0;
   let removed = 0;
-  await db.transaction('rw', DECK_TABLES, async () => {
-    const now = Date.now();
-    const batchId = meta.batchId ?? newId();
-    const slots = await db.deckCards.where('deckId').equals(containerId).toArray();
-    const byOracle = new Map<string, DeckCard[]>();
-    for (const s of slots) {
-      const arr = byOracle.get(s.oracleId);
-      if (arr) arr.push(s);
-      else byOracle.set(s.oracleId, [s]);
-    }
+  await write(DECK_TABLES, async (ctx) => {
+    const { now } = ctx;
+    const byOracle = groupByOracle(await db.deckCards.where('deckId').equals(containerId).toArray());
     // Copies taken off each slot, accumulated so two selected printings of one
     // card don't each write their own event line for the same slot.
     const taken = new Map<DeckCard, number>();
@@ -2364,37 +2211,14 @@ export async function removeDeckCardsMatching(
       }
     }
     if (taken.size === 0) return;
-    const deck = await touchDeck(containerId, now);
-    const label = meta.batchLabel ?? deck?.name;
-    const puts: DeckCard[] = [];
-    const deletes: string[] = [];
-    const events: Omit<UserEvent, 'id' | 'updatedAt'>[] = [];
-    taken.forEach((qty, slot) => {
-      if (qty >= slot.quantity) deletes.push(slot.id);
-      else puts.push({ ...slot, quantity: slot.quantity - qty, updatedAt: now });
-      events.push({
-        ts: now,
-        kind: 'deck.remove',
-        oracleId: slot.oracleId,
-        ...(slot.scryfallId ? { scryfallId: slot.scryfallId } : {}),
-        qty,
-        deckId: containerId,
-        ...containerRef(deck),
-        board: slot.board,
-        source: meta.source ?? 'manual',
-        batchId,
-        ...(label ? { batchLabel: label } : {}),
-      });
-    });
-    if (puts.length > 0) {
-      await putSyncedMany('deckCards', puts);
+    const deck = await ctx.touchDeck(containerId);
+    const extra = batchFields(meta.source ?? 'manual', ctx.batchId, meta.batchLabel ?? deck?.name);
+    for (const [slot, qty] of taken) {
+      await adjustRow('deckCards', slot, -qty, now);
+      ctx.emit(slotEvent('deck.remove', slot, qty, now, deck, extra));
     }
-    if (deletes.length > 0) {
-      await deleteSyncedMany('deckCards', deletes);
-    }
-    await emitMany(events);
-    await touchNamedCopies([...taken.keys()], now);
-  });
+    ctx.touchCopies(taken.keys());
+  }, meta);
   return removed;
 }
 
@@ -2449,14 +2273,7 @@ async function unmarkOwnedForTrade(requests: MarkForTradeRequest[]): Promise<num
   let unflagged = 0;
   await db.transaction('rw', [db.collection, db.outbox], async () => {
     const now = Date.now();
-    const oracleIds = [...new Set(requests.map((r) => r.oracleId))];
-    const owned = await db.collection.where('oracleId').anyOf(oracleIds).toArray();
-    const byOracle = new Map<string, CollectionEntry[]>();
-    for (const e of owned) {
-      const arr = byOracle.get(e.oracleId);
-      if (arr) arr.push(e);
-      else byOracle.set(e.oracleId, [e]);
-    }
+    const byOracle = await ownedByOracle(requests);
     const touched = new Set<CollectionEntry>();
     for (const req of requests) {
       const entries = byOracle.get(req.oracleId);
@@ -2476,10 +2293,7 @@ async function unmarkOwnedForTrade(requests: MarkForTradeRequest[]): Promise<num
         touched.add(e);
       }
     }
-    const writes = [...touched];
-    if (writes.length > 0) {
-      await putSyncedMany('collection', writes);
-    }
+    await putSyncedMany('collection', [...touched]);
   });
   return unflagged;
 }
@@ -2545,8 +2359,9 @@ export async function applyCompletedTrade(
   // opens a nested DECK_TABLES transaction, and Dexie aborts the whole trade if
   // that names a table this one doesn't (v0.158.0 added deckBehaviors and every
   // trade giving away a filed card silently rolled back).
-  return db.transaction('rw', [...DECK_TABLES, db.wishlist, db.trades], async () => {
+  return write([...DECK_TABLES, db.wishlist, db.trades], async (ctx) => {
     if (await db.trades.get(sessionId)) return { applied: false }; // already applied
+    const tradeExtra = { source: 'trade' as const, tradeId: sessionId };
 
     const entries = await db.collection.toArray();
     // Two indexes, because a trade line says what a card IS and nothing about
@@ -2558,14 +2373,9 @@ export async function applyCompletedTrade(
     //    is only touched when it's the only copy of that card you have.
     const byKey = new Map(entries.map((e) => [entryKey(e), e]));
     const byCopy = new Map<string, CollectionEntry[]>();
-    for (const e of entries) {
-      const k = collectionKey(e);
-      const list = byCopy.get(k);
-      if (list) list.push(e);
-      else byCopy.set(k, [e]);
-    }
+    for (const e of entries) push(byCopy, collectionKey(e), e);
     byCopy.forEach((list) => list.sort((a, b) => (a.special?.length ? 1 : 0) - (b.special?.length ? 1 : 0)));
-    const now = Date.now();
+    const { now } = ctx;
 
     // Remove given cards (decrement matching entries; reduce trade qty with them).
     for (const line of given) {
@@ -2574,15 +2384,12 @@ export async function applyCompletedTrade(
       const ownedQty = ex?.quantity ?? 0;
       const finalOwned = ex ? Math.max(0, ex.quantity - line.quantity) : 0;
       if (ex) {
-        if (finalOwned <= 0) {
-          await deleteSynced('collection', ex.id);
+        const next = await adjustRow('collection', ex, finalOwned - ex.quantity, now);
+        if (next) {
+          Object.assign(ex, next);
+        } else {
           byKey.delete(entryKey(ex));
           copies.shift();
-        } else {
-          ex.quantity = finalOwned;
-          ex.quantityForTrade = clamp(ex.quantityForTrade, 0, finalOwned);
-          ex.updatedAt = now;
-          await putSynced('collection', ex);
         }
       }
       await reconcileFilingAfterTrade(line, finalOwned);
@@ -2593,78 +2400,31 @@ export async function applyCompletedTrade(
       // away" instead of a lone, dangling "traded away". ts is a hair earlier so
       // it sorts before the removal in the timeline.
       const missing = line.quantity - ownedQty;
+      const copy = { ...line, special: undefined };
+      const priceEurCents = centsOf(line.scryfallId, line.finish);
       if (missing > 0) {
-        await emit({
-          ts: now,
-          kind: 'collection.add',
-          oracleId: line.oracleId,
-          scryfallId: line.scryfallId,
-          qty: missing,
-          condition: line.condition,
-          finish: line.finish,
-          lang: line.lang,
-          priceEurCents: centsOf(line.scryfallId, line.finish),
-          source: 'trade',
-          tradeId: sessionId,
-          reconcile: true,
-        });
+        ctx.emit(copyEvent('collection.add', copy, missing, now, { priceEurCents, ...tradeExtra, reconcile: true }));
       }
       // The event records the full traded quantity even when the card was
       // never registered (or under-registered) in the collection — the trade
       // happened either way, and the card history should say so.
-      await emit({
-        ts: missing > 0 ? now + 1 : now,
-        kind: 'collection.remove',
-        oracleId: line.oracleId,
-        scryfallId: line.scryfallId,
-        qty: line.quantity,
-        condition: line.condition,
-        finish: line.finish,
-        lang: line.lang,
-        priceEurCents: centsOf(line.scryfallId, line.finish),
-        reason: 'traded',
-        source: 'trade',
-        tradeId: sessionId,
-      });
+      const ts = missing > 0 ? now + 1 : now;
+      ctx.emit(copyEvent('collection.remove', copy, line.quantity, ts, { priceEurCents, reason: 'traded', ...tradeExtra }));
     }
 
     // Add received cards (merge on the same compound key).
     for (const line of received) {
-      const lang = line.lang || 'en';
+      const copy = { ...line, lang: line.lang || 'en', special: undefined };
       const ex = byKey.get(entryKey(line));
-      if (ex) {
-        ex.quantity += line.quantity;
-        ex.updatedAt = now;
-        await putSynced('collection', ex);
-      } else {
-        const entry: CollectionEntry = {
-          id: newId(),
-          oracleId: line.oracleId,
-          scryfallId: line.scryfallId,
-          condition: line.condition,
-          finish: line.finish,
-          lang,
-          quantity: line.quantity,
-          quantityForTrade: 0,
-          createdAt: now,
-          updatedAt: now,
-        };
-        byKey.set(entryKey(entry), entry);
-        await putSynced('collection', entry);
-      }
-      await emit({
-        ts: now,
-        kind: 'collection.add',
-        oracleId: line.oracleId,
-        scryfallId: line.scryfallId,
-        qty: line.quantity,
-        condition: line.condition,
-        finish: line.finish,
-        lang,
-        priceEurCents: centsOf(line.scryfallId, line.finish),
-        source: 'trade',
-        tradeId: sessionId,
-      });
+      const next = await adjustRow('collection', ex, line.quantity, now, (q) => newEntry(copy, q, 0, now));
+      if (ex) Object.assign(ex, next);
+      else byKey.set(entryKey(next!), next!);
+      ctx.emit(
+        copyEvent('collection.add', copy, line.quantity, now, {
+          priceEurCents: centsOf(line.scryfallId, line.finish),
+          ...tradeExtra,
+        }),
+      );
     }
 
     // Prune wishlist by received cards (any printing of the oracle card).
@@ -2675,21 +2435,8 @@ export async function applyCompletedTrade(
         if (toRemove <= 0) break;
         const dec = Math.min(w.quantity, toRemove);
         toRemove -= dec;
-        if (w.quantity - dec <= 0) {
-          await deleteSynced('wishlist', w.id);
-        } else {
-          const next: WishlistEntry = { ...w, quantity: w.quantity - dec, updatedAt: now };
-          await putSynced('wishlist', next);
-        }
-        await emit({
-          ts: now,
-          kind: 'wish.fulfilled',
-          oracleId: line.oracleId,
-          scryfallId: line.scryfallId,
-          qty: dec,
-          source: 'trade',
-          tradeId: sessionId,
-        });
+        await adjustRow('wishlist', w, -dec, now);
+        ctx.emit({ ts: now, kind: 'wish.fulfilled', oracleId: line.oracleId, scryfallId: line.scryfallId, qty: dec, ...tradeExtra });
       }
     }
 
@@ -2740,49 +2487,13 @@ function eventCopy(e: UserEvent & { scryfallId: string }) {
   };
 }
 
-/** Add e.qty copies back to the collection (reverse of a removal). */
-async function addCopiesRaw(e: UserEvent, now: number): Promise<void> {
+/** Change the collection by e.qty copies of the event's copy: positive adds
+ *  them back (reverse of a removal), negative takes them out (reverse of an add). */
+async function copiesAdjustRaw(e: UserEvent, sign: 1 | -1, now: number): Promise<void> {
   if (!e.scryfallId || !e.qty) return;
-  const { condition, finish, lang, special } = eventCopy({ ...e, scryfallId: e.scryfallId });
-  const existing = await findCollectionRow({ scryfallId: e.scryfallId, condition, finish, lang, special });
-  if (existing) {
-    const next: CollectionEntry = { ...existing, quantity: existing.quantity + e.qty, updatedAt: now };
-    await putSynced('collection', next);
-  } else {
-    const entry: CollectionEntry = {
-      id: newId(),
-      oracleId: e.oracleId,
-      scryfallId: e.scryfallId,
-      condition,
-      finish,
-      lang,
-      quantity: e.qty,
-      quantityForTrade: 0,
-      ...(special ? { special } : {}),
-      createdAt: now,
-      updatedAt: now,
-    };
-    await putSynced('collection', entry);
-  }
-}
-
-/** Remove e.qty copies from the collection (reverse of an add). */
-async function removeCopiesRaw(e: UserEvent, now: number): Promise<void> {
-  if (!e.scryfallId || !e.qty) return;
-  const existing = await findCollectionRow(eventCopy({ ...e, scryfallId: e.scryfallId }));
-  if (!existing) return;
-  const remaining = existing.quantity - e.qty;
-  if (remaining <= 0) {
-    await deleteSynced('collection', existing.id);
-  } else {
-    const next: CollectionEntry = {
-      ...existing,
-      quantity: remaining,
-      quantityForTrade: clamp(existing.quantityForTrade, 0, remaining),
-      updatedAt: now,
-    };
-    await putSynced('collection', next);
-  }
+  const copy = { ...eventCopy({ ...e, scryfallId: e.scryfallId }), oracleId: e.oracleId };
+  const existing = await findCollectionRow(copy);
+  await adjustRow('collection', existing, sign * e.qty, now, (q) => newEntry(copy, q, 0, now));
 }
 
 /** Change an entry's quantityForTrade by delta (reverse of a tradelist mark). */
@@ -2805,32 +2516,7 @@ async function wishlistAdjustRaw(e: UserEvent, delta: number, now: number): Prom
   const key = wishKey({ scryfallId: e.scryfallId ?? null, condition: e.condition, finish: e.finish, lang: e.lang });
   const match =
     list.find((w) => wishKey(w) === key) ?? list.find((w) => w.scryfallId === (e.scryfallId ?? null)) ?? list[0];
-  if (delta < 0) {
-    if (!match) return;
-    const remaining = match.quantity + delta;
-    if (remaining <= 0) {
-      await deleteSynced('wishlist', match.id);
-    } else {
-      const next: WishlistEntry = { ...match, quantity: remaining, updatedAt: now };
-      await putSynced('wishlist', next);
-    }
-  } else if (match) {
-    const next: WishlistEntry = { ...match, quantity: match.quantity + delta, updatedAt: now };
-    await putSynced('wishlist', next);
-  } else {
-    const entry: WishlistEntry = {
-      id: newId(),
-      oracleId: e.oracleId,
-      scryfallId: e.scryfallId ?? null,
-      condition: e.condition,
-      finish: e.finish,
-      lang: e.lang,
-      quantity: delta,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await putSynced('wishlist', entry);
-  }
+  await adjustRow('wishlist', match, delta, now, (q) => newWish({ ...e, scryfallId: e.scryfallId ?? null }, q, now));
 }
 
 /** Change a deck slot by delta (negative removes, positive re-adds). No-op if the deck is gone. */
@@ -2841,63 +2527,51 @@ async function deckAdjustRaw(e: UserEvent, delta: number, now: number): Promise<
   const board = e.board ?? 'main';
   const cards = await db.deckCards.where('[deckId+board]').equals([e.deckId, board]).toArray();
   const dc = cards.find((c) => c.oracleId === e.oracleId);
-  if (delta < 0) {
-    if (!dc) return;
-    const remaining = dc.quantity + delta;
-    if (remaining <= 0) {
-      await deleteSynced('deckCards', dc.id);
-    } else {
-      const next: DeckCard = { ...dc, quantity: remaining, updatedAt: now };
-      await putSynced('deckCards', next);
-    }
-  } else if (dc) {
-    const next: DeckCard = { ...dc, quantity: dc.quantity + delta, updatedAt: now };
-    await putSynced('deckCards', next);
-  } else {
-    const slot: DeckCard = {
-      id: newId(),
-      deckId: e.deckId,
-      oracleId: e.oracleId,
-      ...(e.scryfallId ? { scryfallId: e.scryfallId } : {}),
-      quantity: delta,
-      board,
-      updatedAt: now,
-    };
-    await putSynced('deckCards', slot);
-  }
+  await adjustRow('deckCards', dc, delta, now, (q) => ({
+    id: newId(),
+    deckId: e.deckId!,
+    oracleId: e.oracleId,
+    ...(e.scryfallId ? { scryfallId: e.scryfallId } : {}),
+    quantity: q,
+    board,
+    updatedAt: now,
+  }));
   const touched: Deck = { ...deck, updatedAt: now };
   await putSynced('decks', touched);
 }
 
-/** Reverse the effect of a single event (used only by undoEntry). */
-async function reverseEvent(e: UserEvent, now: number): Promise<void> {
-  const fromTrade = e.source === 'trade' || e.tradeId != null;
+/**
+ * Apply one event's effect forward (sign 1, redo) or backward (sign -1, undo).
+ * Undo and redo are the same table with the sign flipped, so they can't drift.
+ */
+async function applyEventSigned(e: UserEvent, sign: 1 | -1, now: number): Promise<void> {
+  const qty = e.qty ?? 1;
   switch (e.kind) {
     case 'collection.add':
-      await removeCopiesRaw(e, now);
+      await copiesAdjustRaw(e, sign, now);
       break;
     case 'collection.remove':
-      await addCopiesRaw(e, now);
+      await copiesAdjustRaw(e, -sign as 1 | -1, now);
       break;
     case 'wish.add':
-      await wishlistAdjustRaw(e, -(e.qty ?? 1), now);
+      await wishlistAdjustRaw(e, sign * qty, now);
       break;
     case 'wish.remove':
-      await wishlistAdjustRaw(e, e.qty ?? 1, now);
+      await wishlistAdjustRaw(e, -sign * qty, now);
       break;
     case 'wish.fulfilled':
-      // A trade prunes the wishlist; restore it. A manual add's wish.fulfilled
-      // never touched the wishlist, so there's nothing to reverse.
-      if (fromTrade) await wishlistAdjustRaw(e, e.qty ?? 1, now);
+      // Only a trade's wish.fulfilled pruned the wishlist. A manual add's never
+      // touched it, so there's nothing to reverse or re-do.
+      if (e.source === 'trade' || e.tradeId != null) await wishlistAdjustRaw(e, -sign * qty, now);
       break;
     case 'deck.add':
-      await deckAdjustRaw(e, -(e.qty ?? 1), now);
+      await deckAdjustRaw(e, sign * qty, now);
       break;
     case 'deck.remove':
-      await deckAdjustRaw(e, e.qty ?? 1, now);
+      await deckAdjustRaw(e, -sign * qty, now);
       break;
     case 'tradelist.mark':
-      await tradeMarkAdjustRaw(e, -(e.qty ?? 1), now);
+      await tradeMarkAdjustRaw(e, sign * qty, now);
       break;
   }
 }
@@ -2958,7 +2632,7 @@ export async function undoEntry(ref: UndoRef): Promise<UndoResult> {
     const ordered = [...events].sort(
       (a, b) => (a.kind === 'collection.remove' ? 0 : 1) - (b.kind === 'collection.remove' ? 0 : 1),
     );
-    for (const e of ordered) await reverseEvent(e, now);
+    for (const e of ordered) await applyEventSigned(e, -1, now);
     await deleteSyncedMany('events', events.map((e) => e.id));
     // Handed back so a redo can put the session row back where it was; the
     // events alone don't describe the trade itself.
@@ -2986,40 +2660,6 @@ export async function undoEntry(ref: UndoRef): Promise<UndoResult> {
 // its entry, redo writes one fresh entry, and no amount of pressing either key
 // leaves a pile of "added, removed, added" behind.
 // ---------------------------------------------------------------------------
-
-/** Re-apply the effect of a single event. The exact mirror of reverseEvent:
- *  every case here is that case with its sign flipped. Change one, change both. */
-async function applyEvent(e: UserEvent, now: number): Promise<void> {
-  const fromTrade = e.source === 'trade' || e.tradeId != null;
-  switch (e.kind) {
-    case 'collection.add':
-      await addCopiesRaw(e, now);
-      break;
-    case 'collection.remove':
-      await removeCopiesRaw(e, now);
-      break;
-    case 'wish.add':
-      await wishlistAdjustRaw(e, e.qty ?? 1, now);
-      break;
-    case 'wish.remove':
-      await wishlistAdjustRaw(e, -(e.qty ?? 1), now);
-      break;
-    case 'wish.fulfilled':
-      // Mirrors reverseEvent: only a trade's wish.fulfilled ever pruned the
-      // wishlist, so only that one has anything to re-do.
-      if (fromTrade) await wishlistAdjustRaw(e, -(e.qty ?? 1), now);
-      break;
-    case 'deck.add':
-      await deckAdjustRaw(e, e.qty ?? 1, now);
-      break;
-    case 'deck.remove':
-      await deckAdjustRaw(e, -(e.qty ?? 1), now);
-      break;
-    case 'tradelist.mark':
-      await tradeMarkAdjustRaw(e, e.qty ?? 1, now);
-      break;
-  }
-}
 
 export interface RedoInput {
   /** The events undoEntry reversed, exactly as it handed them back. */
@@ -3060,7 +2700,7 @@ export async function redoEntry(input: RedoInput): Promise<RedoResult> {
     const ordered = [...events].sort(
       (a, b) => (a.kind === 'collection.add' ? 0 : 1) - (b.kind === 'collection.add' ? 0 : 1),
     );
-    for (const e of ordered) await applyEvent(e, now);
+    for (const e of ordered) await applyEventSigned(e, 1, now);
 
     if (trade) {
       await putSynced('trades', trade);

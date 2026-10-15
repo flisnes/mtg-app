@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.4',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Restoring a backup keeps a foil and a nonfoil wish for the same card apart, a deck you edit moves to the top of Decks, and wish quantity changes show in History and can be undone.',
+      },
+    ],
+  },
+  {
     version: '0.198.3',
     changes: [
       {

@@ -439,6 +439,22 @@ describe('sanitizeTransferPayload', () => {
     expect(clean.sealedItems[0]!.quantity).toBe(3);
   });
 
+  test('wishes for one printing that differ on finish, condition or lang stay distinct', () => {
+    const wish = { id: 'w1', oracleId: 'o1', scryfallId: 's1', quantity: 1, createdAt: 1, updatedAt: 1 };
+    const p = {
+      ...emptyPayload(),
+      wishlist: [
+        wish,
+        { ...wish, id: 'w2', finish: 'foil' },
+        { ...wish, id: 'w3', condition: 'NM' },
+        { ...wish, id: 'w4', lang: 'ja' },
+      ],
+    };
+    const clean = sanitizeTransferPayload(p)!;
+    expect(clean.wishlist.map((w) => w.id).sort()).toEqual(['w1', 'w2', 'w3', 'w4']);
+    expect(clean.wishlist.find((w) => w.id === 'w2')!.finish).toBe('foil');
+  });
+
   test('cross-table: dangling folder refs cleared, orphan slots and behaviors dropped', () => {
     const behavior = {
       v: CARD_BEHAVIOR_VERSION,

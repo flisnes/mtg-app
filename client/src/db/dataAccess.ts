@@ -901,6 +901,22 @@ export async function updateWishlistEntry(
       const next: WishlistEntry = { ...entry, scryfallId, condition, finish, lang, quantity, updatedAt: now };
       await putSynced('wishlist', next);
     }
+    // A quantity edit is a wish add/remove for history and undo, same as the
+    // collection's. Named for the line it lands on (the edited printing).
+    const delta = quantity - entry.quantity;
+    if (delta !== 0) {
+      await emit({
+        ts: now,
+        kind: delta > 0 ? 'wish.add' : 'wish.remove',
+        oracleId: entry.oracleId,
+        scryfallId,
+        condition,
+        finish,
+        lang,
+        qty: Math.abs(delta),
+        source: 'manual',
+      });
+    }
   });
 }
 
@@ -2155,6 +2171,7 @@ async function patchDeckCard(
       );
     }
     await touchNamedCopies(next ? [card, next] : [card], now);
+    await touchDeck(card.deckId, now);
   });
 }
 
@@ -2960,10 +2977,11 @@ export async function undoEntry(ref: UndoRef): Promise<UndoResult> {
       // A manual add can also have emitted a paired wish.fulfilled at the same
       // instant; fold it in so it's cleaned up too.
       const paired = await db.events
+        .where('ts')
+        .equals(one.ts)
         .filter(
           (e) =>
             e.kind === 'wish.fulfilled' &&
-            e.ts === one.ts &&
             e.oracleId === one.oracleId &&
             (e.scryfallId ?? null) === (one.scryfallId ?? null) &&
             e.batchId == null &&

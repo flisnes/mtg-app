@@ -98,7 +98,7 @@ export function TagSheet({
                       autoFocus
                       onChange={(e) => setRenameDraft(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') void commitRename(tag);
+                        if (e.key === 'Enter') action.run('rename the tag', () => commitRename(tag));
                         else if (e.key === 'Escape') setRenaming(null);
                       }}
                       aria-label={`Rename tag ${tag}`}
@@ -162,7 +162,7 @@ export function TagSheet({
           value={draft}
           maxLength={MAX_CARD_TAG_LENGTH}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && void addDraft()}
+          onKeyDown={(e) => e.key === 'Enter' && action.run('add the tag', addDraft)}
           aria-label="New tag"
         />
         <button className="primary" disabled={!draft.trim()} onClick={() => action.run('add the tag', addDraft)}>

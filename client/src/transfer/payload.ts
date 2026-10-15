@@ -38,7 +38,7 @@ import {
   type UserEventKind,
   type WishlistEntry,
 } from '@mtg/shared';
-import { entryKey } from '../db/dataAccess.js';
+import { entryKey, wishKey } from '../db/dataAccess.js';
 import { db, USER_DATA_TABLES } from '../db/schema.js';
 import { recordDay, toCents } from '../price/history.js';
 import { sanitizeOffer } from '../trade/validate.js';
@@ -665,7 +665,7 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
   }
   const sealedItems = [...sealedByProduct.values()];
 
-  // Wishlist: unique on id and (oracleId, scryfallId); key collisions merge
+  // Wishlist: unique on id and (oracleId, wishKey); key collisions merge
   // quantities, same policy as the collection above (previously they were
   // silently dropped, losing copies).
   const wishIds = new Set<string>();
@@ -674,7 +674,7 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
     const entry = sanitizeWishlistRow(r);
     if (!entry || wishIds.has(entry.id)) continue;
     wishIds.add(entry.id);
-    const key = `${entry.oracleId}|${entry.scryfallId ?? ''}`;
+    const key = `${entry.oracleId}|${wishKey(entry)}`;
     const ex = wishByKey.get(key);
     if (ex) ex.quantity = Math.min(MAX_QTY, ex.quantity + entry.quantity);
     else wishByKey.set(key, entry);

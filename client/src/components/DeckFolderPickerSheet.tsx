@@ -72,7 +72,7 @@ export function DeckFolderPickerSheet({
           placeholder="New folder name…"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && void createAndPick()}
+          onKeyDown={(e) => e.key === 'Enter' && action.run('create the folder', createAndPick)}
           aria-label="New folder name"
         />
         <button className="primary" onClick={() => action.run('create the folder', createAndPick)}>

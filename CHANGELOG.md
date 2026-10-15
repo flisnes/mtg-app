@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.4
+
+- **Fixed: restoring a backup merged wishes it shouldn't.** A foil and a nonfoil wish for the same printing (or two that differ on condition or language) came back as one line, losing the second one's preferences. They stay separate now.
+- **Fixed: editing a deck's cards moves it up.** Changing a card's count or removing it now counts as editing the deck, so it rises to the top of Decks like every other edit does.
+- **Fixed: wish quantity changes go in History.** Raising or lowering a wish's count is logged and can be undone, same as the collection.
+- **Fixed: pressing Enter** to create a folder or add or rename a tag now gets the same error message and double-tap guard as the button.
+
 ## 0.198.3
 
 - **Changed: price bookkeeping does its work once a day.** Every launch used to re-read your whole collection and all its price histories just to find out today's prices were already recorded. Now a second launch the same day skips that, and the cleanup of old histories runs weekly. A card added since the morning still gets today's price on the next launch.

@@ -14,7 +14,7 @@ import { sealedPriceOf } from '../sealed/product.js';
 // beside a page's options menu, so it costs no extra vertical room.
 
 export function HeaderValue({
-  label = 'Total value',
+  label = 'Value',
   value,
   note,
   onClick,

@@ -335,7 +335,7 @@ function RecentTrades() {
       <div className="trade-home-recent-head">
         <h3>Recent trades</h3>
         <Link className="chip" to="/history">
-          Trade history ›
+          Trade history <Icon name="chevronRight" size={16} className="chev" />
         </Link>
       </div>
       {trades === undefined ? (
@@ -550,6 +550,8 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   const myTotal = totalOf(myOffer);
   const theirTotal = totalOf(theirOffer);
   const diff = myTotal - theirTotal;
+  // Nothing on the table yet: a green "balanced" would be a verdict on nothing.
+  const emptyTable = myOffer.length === 0 && theirOffer.length === 0;
 
   // Cards this device can't put a number on: a printing missing from an
   // out-of-date card DB, or one with no EUR price. They count as zero in the
@@ -589,7 +591,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             <Link to="/conflicts" state={{ tradedKeys: tradeConflicts.map((c) => collectionKey(c)) }}>
               Sort out {tradeConflicts.length} filing {tradeConflicts.length === 1 ? 'conflict' : 'conflicts'}
             </Link>
-            {' — looks like a copy was filed in two places.'}
+            {'. Looks like a copy was filed in two places.'}
           </p>
         )}
         <div className="trade-actions">
@@ -709,7 +711,11 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           title="You get"
           total={theirTotal}
           lines={theirOffer}
-          empty="No cards yet. Pick from their tradelist or scan their binder."
+          empty={
+            solo
+              ? 'No cards yet. Search for them or scan their binder.'
+              : 'No cards yet. Pick from their tradelist or scan their binder.'
+          }
           editable={editable}
           onQty={setQty}
           onAdd={() => setSheet('get')}
@@ -741,14 +747,22 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
         )}
         <div className="trade-bar">
           <button
-            className={`trade-diff ${Math.abs(diff) < BALANCE_EPSILON ? 'diff-even' : 'diff-off'}`}
+            className={`trade-diff ${emptyTable ? '' : Math.abs(diff) < BALANCE_EPSILON ? 'diff-even' : 'diff-off'}`}
             title="Balance the trade"
             aria-label="Value difference. Tap to balance the trade"
             onClick={() => setSheet('balance')}
             disabled={!editable}
           >
             <strong>{fmtEur(Math.abs(diff))}</strong>
-            <span>{Math.abs(diff) < BALANCE_EPSILON ? 'balanced' : diff > 0 ? 'you give more' : 'you get more'}</span>
+            <span>
+              {emptyTable
+                ? 'nothing added yet'
+                : Math.abs(diff) < BALANCE_EPSILON
+                  ? 'balanced'
+                  : diff > 0
+                    ? 'you give more'
+                    : 'you get more'}
+            </span>
           </button>
           <div className="trade-bar-status">{barStatus}</div>
           {snap.state === 'agreed' ? (

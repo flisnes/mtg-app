@@ -71,7 +71,7 @@ export function ImportDefaultsRow({
         </label>
       </div>
       <p className="fine-print">
-        Lines that name their own condition, finish or language keep it — this only fills in the rest.
+        Lines that name their own condition, finish or language keep it. This only fills in the rest.
       </p>
     </>
   );

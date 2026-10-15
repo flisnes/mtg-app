@@ -466,7 +466,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   async function wishlistMissing() {
     const candidates = ownership ? deckWishlistCandidates(data!.rows, ownership) : [];
     if (candidates.length) openWishSheet(candidates, false);
-    else toast(`Nothing missing — this ${meta.noun} is covered by your collection and wishlist`);
+    else toast(`Nothing missing: this ${meta.noun} is covered by your collection and wishlist`);
   }
 
   /** Storage action: put every card filed here on the tradelist, or take it off. */
@@ -929,7 +929,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         <div className="deck-head-aside">
           {ownedWorth && (
             <HeaderValue
-              label={isDeck ? 'Owned value' : 'Total value'}
+              label={missingWorth ? 'Owned value' : 'Value'}
               value={ownedWorth}
               onClick={() => setValueChartOpen(true)}
               title={`Open the ${meta.noun} value chart`}
@@ -1550,7 +1550,7 @@ function Board({
     const pinned = !!r.scryfallId && !!r.finish && !!r.condition && !!r.lang;
     const filedHere = !r.anyBasic && (placements?.allocated(r.id) ?? 0) >= r.quantity;
     const own = r.anyBasic
-      ? { icon: <Icon name="check" size={13} />, cls: 'own-yes', title: 'Any printing — from your lands box' }
+      ? { icon: <Icon name="check" size={13} />, cls: 'own-yes', title: 'Any printing, from your lands box' }
       : ownedBadge(
           ownership?.lookupWanted(r.oracleId, {
             scryfallId: r.scryfallId,

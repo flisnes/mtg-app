@@ -30,6 +30,7 @@ import { ListSearchButton, useListFilter, useOpenSearch } from './GlobalSearch.j
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
 import { usePageMeta } from '../routes/Page.js';
+import { fmtCardCount } from '../util/format.js';
 
 // Both the joined rows and the raw entries come from the shared collection
 // snapshot (one query, one join, shared with the header value and every badge).
@@ -155,12 +156,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // The count belongs in the page header, right under the title, so the cards
   // start as high up the screen as they can. Standing outside a Page (never
   // today, but the view doesn't require one) it falls back to its own line.
-  // Stacked, the first number is cards (distinct names), so it says so.
-  const countLine = counted
-    ? stacking
-      ? `${counted.rows} card${counted.rows === 1 ? '' : 's'} · ${counted.qty} cop${counted.qty === 1 ? 'y' : 'ies'}`
-      : `${counted.rows} ${counted.rows === 1 ? 'entry' : 'entries'} · ${counted.qty} card${counted.qty === 1 ? '' : 's'}`
-    : '';
+  const countLine = counted ? fmtCardCount(counted.qty, counted.rows) : '';
   const hoistedCount = usePageMeta(countLine);
 
   // The heap's cards. Memoized because PileView recomputes every copy's spot
@@ -401,7 +397,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           it. Tapping Select lays the pile out as a list for as long as you're
           picking, and Cancel drops you back into the mess. */}
       {sel.active && pileMode && (
-        <p className="search-meta">Picking cards — the pile comes back when you're done.</p>
+        <p className="search-meta">Picking cards. The pile comes back when you're done.</p>
       )}
 
       {rows === undefined ? (

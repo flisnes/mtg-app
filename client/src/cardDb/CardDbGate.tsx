@@ -74,7 +74,7 @@ export function CardDbGate({ children }: { children: ReactNode }) {
             </p>
             <p className="gate-note">
               {state.resuming
-                ? 'Only the pieces that didn’t make it last time — what you already have stays put.'
+                ? 'Only the pieces that didn’t make it last time. What you already have stays put.'
                 : 'It’s stored on your device and works offline afterwards.'}
             </p>
             <button onClick={startDownload}>{state.resuming ? 'Continue' : 'Download'}</button>

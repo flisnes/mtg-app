@@ -40,7 +40,7 @@ export function History() {
                   <div className="result-sub">{new Date(t.completedAt).toLocaleString()}</div>
                 </span>
                 <span className="menu-chevron" aria-hidden>
-                  ›
+                  <Icon name="chevronRight" size={18} />
                 </span>
               </button>
             </li>

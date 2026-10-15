@@ -208,7 +208,7 @@ export function SearchSuggestDropdown({
               aria-selected={i === active}
               onClick={() => onPick(item.value)}
               onMouseEnter={() => onHover(i)}
-              title={item.hint ? `${item.value} — ${item.hint}` : item.value}
+              title={item.hint ? `${item.value}: ${item.hint}` : item.value}
             >
               <Icon name={icon} size={14} />
               <span className="search-history-q">{item.value}</span>

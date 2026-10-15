@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Icon } from './icons.js';
+import { Icon, type IconName } from './icons.js';
 import { ManaCost } from './ManaCost.js';
 import { useCardCursorCtx } from './useCardCursor.js';
 
@@ -101,10 +101,10 @@ export function StackToggle({ on, onChange }: { on: boolean; onChange: (v: boole
   );
 }
 
-const VIEW_LABELS: Record<ViewMode, { glyph: string; title: string }> = {
-  list: { glyph: '☰', title: 'List view' },
-  grid: { glyph: '▦', title: 'Grid view' },
-  stack: { glyph: '▤', title: 'Visual stacks' },
+const VIEW_LABELS: Record<ViewMode, { icon: IconName; title: string }> = {
+  list: { icon: 'list', title: 'List view' },
+  grid: { icon: 'grid', title: 'Grid view' },
+  stack: { icon: 'piles', title: 'Visual stacks' },
 };
 
 export function ViewToggle({
@@ -126,8 +126,9 @@ export function ViewToggle({
           onClick={() => onChange(opt)}
           aria-pressed={mode === opt}
           title={VIEW_LABELS[opt].title}
+          aria-label={VIEW_LABELS[opt].title}
         >
-          {VIEW_LABELS[opt].glyph}
+          <Icon name={VIEW_LABELS[opt].icon} size={16} />
         </button>
       ))}
     </div>

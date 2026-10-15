@@ -119,7 +119,7 @@ export function NotificationBell({ signedIn }: { signedIn: boolean }) {
                     </span>
                     <span className="notif-line">
                       <span className="notif-tag notif-tag-have">Where is it?</span>
-                      {conflicts === 1 ? 'A card is' : 'Cards are'} filed in more places than you own copies —
+                      {conflicts === 1 ? 'A card is' : 'Cards are'} filed in more places than you own copies:
                       sort {conflicts === 1 ? 'it' : 'them'} out
                     </span>
                   </button>

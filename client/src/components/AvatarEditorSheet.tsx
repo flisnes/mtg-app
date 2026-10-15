@@ -4,6 +4,7 @@ import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { getPrintingsForOracle } from '../db/queries.js';
 import { artCropUrl, clampCropCenter, cropLayout } from './Avatar.js';
 import { Sheet } from './Sheet.js';
+import { Icon } from './icons.js';
 
 // Profile-picture editor: search any card, pick a printing, then pan (drag),
 // pinch or slide to zoom the art inside a circular frame — the usual
@@ -235,7 +236,10 @@ export function CropStage({
       )}
 
       <div className="sheet-actions">
-        <button onClick={onBack}>‹ Different card</button>
+        <button onClick={onBack}>
+          <Icon name="chevronLeft" size={16} className="chev" />
+          Different card
+        </button>
         <button onClick={onCancel}>Cancel</button>
         <button
           className="primary"

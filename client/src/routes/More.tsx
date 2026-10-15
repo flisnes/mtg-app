@@ -12,8 +12,8 @@ const LINKS: { to: string; label: string; icon: IconName }[] = [
   { to: '/movers', label: 'Price movers', icon: 'prices' },
   { to: '/spoilers', label: 'Spoilers & reprints', icon: 'spoilers' },
   { to: '/community', label: 'Community', icon: 'community' },
-  { to: '/edit-history', label: 'Collection history', icon: 'edit' },
-  { to: '/history', label: 'Trade history', icon: 'history' },
+  { to: '/edit-history', label: 'Collection history', icon: 'history' },
+  { to: '/history', label: 'Trade history', icon: 'receipt' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
   { to: '/about', label: 'About', icon: 'about' },
 ];
@@ -55,7 +55,7 @@ export function More() {
                 )}
               </span>
               <span className="menu-chevron" aria-hidden>
-                ›
+                <Icon name="chevronRight" size={18} />
               </span>
             </Link>
           </li>
@@ -70,7 +70,7 @@ export function More() {
               <span>Keyboard shortcuts</span>
             </span>
             <span className="menu-chevron" aria-hidden>
-              ›
+              <Icon name="chevronRight" size={18} />
             </span>
           </button>
         </li>

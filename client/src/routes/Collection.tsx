@@ -30,7 +30,7 @@ export function Collection() {
       aside={
         <HeaderValue
           value={headerValue(withSealed)}
-          note={sealed && sealed.boxes > 0 ? `incl. ${sealed.boxes} sealed` : undefined}
+          note={sealed && sealed.boxes > sealed.unpriced ? `incl. ${sealed.boxes - sealed.unpriced} sealed` : undefined}
           onClick={() => setChartOpen(true)}
           title="Open the collection value chart"
         />

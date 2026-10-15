@@ -8,6 +8,7 @@ import { createContainer } from '../db/dataAccess.js';
 import { Emblem } from './Emblem.js';
 import { Sheet } from './Sheet.js';
 import { useAsyncAction } from './useAsyncAction.js';
+import { Icon } from './icons.js';
 
 /**
  * Bottom-sheet that lists the user's decks, binders and boxes and reports the
@@ -144,7 +145,7 @@ export function ContainerPickerBody({ onPick, excludeId, only, noteFor, emptyTex
                       )}
                     </span>
                     <span className="menu-chevron" aria-hidden>
-                      ›
+                      <Icon name="chevronRight" size={18} />
                     </span>
                   </button>
                 </li>

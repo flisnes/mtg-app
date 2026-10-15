@@ -251,7 +251,7 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
                         >
                           {inner}
                           <span className="menu-chevron" aria-hidden>
-                            ›
+                            <Icon name="chevronRight" size={18} />
                           </span>
                         </button>
                       ) : (
@@ -264,7 +264,7 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
             )}
             {isMe && (
               <p className="fine-print">
-                Favoriting a deck shares its decklist — anyone signed in can browse it here. Your other decks stay
+                Favoriting a deck shares its decklist: anyone signed in can browse it here. Your other decks stay
                 private.
               </p>
             )}

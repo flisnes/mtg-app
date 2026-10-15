@@ -69,7 +69,7 @@ export function FilingChoiceBody({
     <>
       <p className="search-meta">
         {n === 1 ? 'This card is' : `${n} of these cards are`} filed elsewhere already, and you own no spare
-        copy. A card can only be in one place at a time — did {n === 1 ? 'it' : 'they'} move into {targetName}?
+        copy. A card can only be in one place at a time. Did {n === 1 ? 'it' : 'they'} move into {targetName}?
       </p>
 
       <ul className="filing-clash-list">

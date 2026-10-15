@@ -72,7 +72,7 @@ function PresetTile({
   const src = artCropUrl(printing?.imageNormal);
   return (
     <div className="lab-tile">
-      <button className="lab-tile-art" onClick={onEdit} title={`${preset.name} — tap to retune`}>
+      <button className="lab-tile-art" onClick={onEdit} title={`${preset.name}: tap to retune`}>
         <span className="avatar" style={{ width: TILE, height: TILE }}>
           {src ? <CroppedArt src={src} crop={preset} size={TILE} /> : <span className="lab-tile-missing">?</span>}
         </span>
@@ -148,7 +148,7 @@ export function AvatarLab() {
       await navigator.clipboard.writeText(text);
       toast(`${what} copied.`);
     } catch {
-      toast('Clipboard refused — select the text below instead.');
+      toast('Clipboard refused. Select the text below instead.');
     }
   }
 

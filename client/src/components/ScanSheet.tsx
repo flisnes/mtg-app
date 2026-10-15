@@ -1300,7 +1300,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       const label = targetLabel(target);
       const changes = await buildRescanReview(target.deckId);
       if (changes.changes.length === 0 && !changes.refiles) {
-        toast(`No changes — this ${targetNoun(target)} already matches your scan`);
+        toast(`No changes: this ${targetNoun(target)} already matches your scan`);
         finishScan();
         return;
       }
@@ -1567,8 +1567,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
                     ? 'Released: show the next card'
                     : 'Nothing locked yet'
                 : holdLeft === 0
-                  ? 'Ready for the next card — tap to scan this one again'
-                  : 'Locked on this card — tap to release'
+                  ? 'Ready for the next card. Tap to scan this one again'
+                  : 'Locked on this card. Tap to release'
             }
           >
             <svg className="scan-lock-ring" viewBox="0 0 36 36" aria-hidden>

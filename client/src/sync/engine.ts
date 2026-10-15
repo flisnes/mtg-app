@@ -382,7 +382,7 @@ export async function syncNow(): Promise<void> {
       // A revoked/expired token (401) will fail forever; stop retrying and wait
       // for a real sign-in to restart sync (mirrors the WS socketAuthFailed latch).
       if (err instanceof api.ApiError && err.status === 401) {
-        setStatus({ phase: 'error', lastSyncAt: status.lastSyncAt, message: 'Signed out — sign in again to sync.' });
+        setStatus({ phase: 'error', lastSyncAt: status.lastSyncAt, message: 'Signed out. Sign in again to sync.' });
         return;
       }
       failures += 1;

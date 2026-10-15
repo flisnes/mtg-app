@@ -394,7 +394,7 @@ function CurrencySection() {
         <select value={displayCurrency} onChange={(e) => change({ displayCurrency: e.target.value })}>
           {CURRENCIES.map((c) => (
             <option key={c.code} value={c.code}>
-              {c.code} — {c.name}
+              {c.code} · {c.name}
             </option>
           ))}
         </select>
@@ -485,7 +485,7 @@ const PRINTING_OPTIONS: { value: PrintingPref; label: string; hint: string }[] =
   {
     value: 'first',
     label: 'First printing',
-    hint: 'The oldest plain version — the card as it originally appeared, skipping the same promos and variants.',
+    hint: 'The oldest plain version: the card as it originally appeared, skipping the same promos and variants.',
   },
   { value: 'cheapest', label: 'Cheapest printing', hint: 'The least expensive edition with a known price.' },
 ];
@@ -543,7 +543,7 @@ const FILING_OPTIONS: { value: FilingPolicy; label: string; hint: string }[] = [
   {
     value: 'copy',
     label: 'File it in both places',
-    hint: 'Keeps every filing. Useful for brewing two decks around one card — the card will show up as double-filed until you sort it out.',
+    hint: 'Keeps every filing. Useful for brewing two decks around one card. The card will show up as double-filed until you sort it out.',
   },
 ];
 
@@ -666,7 +666,7 @@ function DownloadsSection() {
       key: 'cardDb',
       title: 'Card database',
       blurb:
-        'New sets, corrected card text and the sealed-product list. Only the parts that changed download, so it is usually small — but a big change (or a first install) runs to about 14 MB.',
+        'New sets, corrected card text and the sealed-product list. Only the parts that changed download, so it is usually small, but a big change (or a first install) runs to about 14 MB.',
       policy: prefs.cardDbPolicy,
       set: (cardDbPolicy) => setPrefs({ cardDbPolicy }),
       check: checkCardDataNow,
@@ -687,7 +687,7 @@ function DownloadsSection() {
       <h2>Automatic downloads</h2>
       <p className="fine-print">
         Nothing downloads without your say-so. Each of these asks the first time it has something new, and “don’t ask
-        again” on that prompt lands here — where you can change your mind, or fetch an update on demand.
+        again” on that prompt lands here, where you can change your mind, or fetch an update on demand.
       </p>
 
       {feeds.map((f) => (

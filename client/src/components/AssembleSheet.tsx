@@ -127,7 +127,7 @@ export function AssembleSheet({
           {skipped > 0 && ` ${skipped} skipped.`}
         </p>
         <p className="fine-print">
-          Cards you skipped keep their slot — pick a copy any time from the card’s own sheet.
+          Cards you skipped keep their slot. Pick a copy any time from the card’s own sheet.
         </p>
         <div className="sheet-actions">
           <button className="primary" onClick={onClose}>

@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.14',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'One way of counting everywhere: "176 cards · 70 unique" on Collection, Tradelist, Wishlist and Sealed, and "60 cards · 15 side" on the deck list. Headers say "Value", with "Owned value" only where some cards are missing. List, grid and stack toggles and the back arrows are proper icons now.',
+      },
+    ],
+  },
+  {
     version: '0.198.13',
     changes: [
       {
@@ -162,15 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'Signed in, price charts can reach back years: "Since 2021" puts monthly prices from late 2021, spring 2023 and July 2025 in front of the daily line, where we have them.',
-      },
-    ],
-  },
-  {
-    version: '0.197.3',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Wishes and deck slots on "Any printing" now show your preferred printing, not the newest one, so a Secret Lair or set promo no longer stands in for the card. "Newest normal printing" also skips The List and other copies with letters in the collector number.',
       },
     ],
   },

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.14
+
+- **Changed: one vocabulary for counts, values and icons.** Every list now counts the same way: "176 cards · 70 unique" on Collection, Tradelist, Wishlist and Sealed (the second half drops out when every line is a single copy), and the deck list says "60 cards · 15 side" instead of "60 / 15". Value headers just say "Value", and "Owned value" only shows up where the deck is missing cards. The collection's "incl. N sealed" only counts boxes that actually have a price. Dates and big numbers on About and in history follow the same region as your currency, so no more "02/10/2026" beside "0,00 €". A solo trade no longer asks you to pick from a tradelist that doesn't exist, and an empty trade no longer glows green as "balanced". The list/grid/stacks toggle, back links and menu arrows are drawn icons instead of text symbols, Stack printings has its own layers icon instead of the copy glyph filed cards wear, Trade history has a receipt, and Collection history is a clock everywhere. Em dashes have been exiled from the UI text like a Swords to Plowshares to the face.
+
 ## 0.198.13
 
 - **Fixed: six layout bugs.** Recent searches now sit under the Collection / Tradelist / Wishlist chips instead of on top of them. Spoilers opens on the newest set that actually has cards, not an upcoming one with nothing in it, and set symbols no longer flash a hollow box while they load. The deck card sheet leaves room under Tags, an empty deck's sort and view buttons share one line, the sealed product +/- buttons have their glyphs centred, and Delete deck sits below a divider instead of right under Archive. Fewer misclicks, fewer accidental Armageddons.

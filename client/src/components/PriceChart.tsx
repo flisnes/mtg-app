@@ -438,7 +438,7 @@ export function PriceChartSheet({
 
         {marks.earlier > 0 && (
           <p className="fine-print">
-            {marks.earlier} earlier event{marks.earlier === 1 ? '' : 's'} happened before price tracking began — the History tab has them.
+            {marks.earlier} earlier event{marks.earlier === 1 ? '' : 's'} happened before price tracking began. The History tab has them.
           </p>
         )}
 

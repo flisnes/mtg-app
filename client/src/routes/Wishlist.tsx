@@ -32,6 +32,7 @@ import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
 import { ImportDefaultsRow, IMPORT_DEFAULTS, OverlapChoice, applyOverlap, type OverlapMode } from '../import/ImportExtras.js';
 import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/types.js';
+import { fmtCardCount } from '../util/format.js';
 
 export function Wishlist() {
   const [view, setView] = useViewMode();
@@ -134,7 +135,11 @@ export function Wishlist() {
   return (
     <Page
       title="Wishlist"
-      meta={rows && rows.length > 0 ? `${filtered.length} card${filtered.length === 1 ? '' : 's'}` : undefined}
+      meta={
+        rows && rows.length > 0
+          ? fmtCardCount(filtered.reduce((s, r) => s + r.entry.quantity, 0), filtered.length)
+          : undefined
+      }
       aside={<HeaderValue value={value} />}
       menu={
         <OptionsMenu

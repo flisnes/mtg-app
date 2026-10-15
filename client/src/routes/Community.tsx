@@ -209,7 +209,7 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
                   {fmtDate(u.updatedAt)}
                 </span>
                 <span className="menu-chevron" aria-hidden>
-                  ›
+                  <Icon name="chevronRight" size={18} />
                 </span>
               </button>
             </li>
@@ -322,7 +322,8 @@ function UserLists({
   const menu = (
     <>
       <button className="ghost" onClick={onBack}>
-        ‹ All users
+        <Icon name="chevronLeft" size={16} className="chev" />
+        All users
       </button>
       <button className="ghost" onClick={() => navigate(`/profile/${encodeURIComponent(username)}`)}>
         Profile
@@ -594,7 +595,8 @@ function UserListAll<
     <>
       <div className="list-toolbar">
         <button className="ghost see-all" onClick={onClose}>
-          ‹ Back
+          <Icon name="chevronLeft" size={16} className="chev" />
+          Back
         </button>
         {!hoisted && <p className="search-meta">{label}</p>}
         <SortControls prefs={sort} onChange={setSort} withRelease />

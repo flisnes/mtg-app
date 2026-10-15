@@ -9,6 +9,15 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.197.3',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Wishes and deck slots on "Any printing" now show your preferred printing, not the newest one, so a Secret Lair or set promo no longer stands in for the card. "Newest normal printing" also skips The List and other copies with letters in the collector number.',
+      },
+    ],
+  },
+  {
     version: '0.197.2',
     changes: [
       {

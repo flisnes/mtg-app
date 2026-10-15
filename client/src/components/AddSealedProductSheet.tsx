@@ -5,6 +5,7 @@ import { loadSealedProducts } from '../sealed/store.js';
 import { loadContents, openedLines, perCopyCount, type OpenContents } from '../sealed/open.js';
 import { SealedContentsList } from '../sealed/SealedContents.js';
 import { SealedImage } from '../sealed/SealedImage.js';
+import { Icon } from './icons.js';
 import {
   cardCount,
   fmtSealedPrice,
@@ -136,7 +137,9 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
         <h2>{selected ? 'Add product' : 'Add sealed product'}</h2>
         {selected && (
           <button className="sealed-back" onClick={() => setSelected(null)} aria-label="Back to search">
-            ‹ Back
+            <Icon name="chevronLeft" size={16} className="chev" />
+
+            Back
           </button>
         )}
         <button className="scan-close" onClick={onClose} aria-label="Close">

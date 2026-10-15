@@ -28,7 +28,7 @@ export async function shareDeckLink(deck: {
     try {
       await navigator.share({
         title: deck.name,
-        text: `${deck.name} — ${formatLabel((deck.format ?? 'casual') as DeckFormat)} deck`,
+        text: `${deck.name}, ${formatLabel((deck.format ?? 'casual') as DeckFormat)} deck`,
         url,
       });
       return 'shared';

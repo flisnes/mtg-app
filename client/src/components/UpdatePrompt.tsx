@@ -55,7 +55,7 @@ export function UpdatePrompt({
       <label className="banner-remember">
         <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
         <span>
-          Don’t ask again — remember whichever button I pick. You can change this any time in Settings under
+          Don’t ask again; remember whichever button I pick. You can change this any time in Settings under
           “Automatic downloads”.
         </span>
       </label>

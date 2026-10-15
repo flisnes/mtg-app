@@ -448,7 +448,7 @@ export function checkDeckLegality(format: DeckFormat | undefined, allCards: Lega
       const c = commanders[0]!;
       if (c.oracle && isBackground(c.oracle)) {
         // A Background is halfway there: it just needs the other half.
-        problems.push(`${c.oracle.name} is a Background — it needs a commander that says "Choose a Background".`);
+        problems.push(`${c.oracle.name} is a Background. It needs a commander that says "Choose a Background".`);
         issues.set(c.oracleId, 'needs a partner');
       } else if (c.oracle && !canBeCommander(c.oracle)) {
         problems.push(`${c.oracle.name} can't be your commander (not a legendary creature, Vehicle, or Spacecraft, and nothing lets it be your commander).`);

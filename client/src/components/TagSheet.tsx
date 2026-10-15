@@ -80,7 +80,7 @@ export function TagSheet({
       </p>
 
       {tags.length === 0 ? (
-        <p className="search-meta">No tags here yet. Name one below — “Ramp”, “Removal”, “Turn-3 play”.</p>
+        <p className="search-meta">No tags here yet. Name one below: “Ramp”, “Removal”, “Turn-3 play”.</p>
       ) : (
         <ul className="menu-list">
           {tags.map((tag) => {

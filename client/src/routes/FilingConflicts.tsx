@@ -257,13 +257,13 @@ export function FilingConflicts() {
                   <span className="deck-name">{place.name}</span>
                   <span className="deck-meta">
                     <span className="search-meta">
-                      It’s here — take it out of the other {conflict.places.length === 2 ? 'one' : 'places'}
+                      It’s here. Take it out of the other {conflict.places.length === 2 ? 'one' : 'places'}
                       {place.quantity > 1 ? ` (keeps all ${place.quantity})` : ''}
                     </span>
                   </span>
                 </span>
                 <span className="menu-chevron" aria-hidden>
-                  ›
+                  <Icon name="chevronRight" size={18} />
                 </span>
               </button>
             </li>

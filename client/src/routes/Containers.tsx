@@ -299,7 +299,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
       }
       aside={
         <HeaderValue
-          label="Owned value"
+          label={missingTotal ? 'Owned value' : 'Value'}
           value={ownedTotal}
           note={missingTotal && `+${missingTotal} not owned`}
         />
@@ -307,7 +307,8 @@ export function Containers({ kind }: { kind: ContainerKind }) {
     >
       {(openFolder || archiveOpen) && (
         <button className="linklike folder-crumb" onClick={() => setOpenFolderId(null)}>
-          ‹ Up a level
+          <Icon name="chevronLeft" size={16} className="chev" />
+          Up a level
         </button>
       )}
 
@@ -443,7 +444,8 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                         />
                         {isDeck ? (
                           <span className="badge" title={`${main} mainboard · ${side} sideboard`}>
-                            {main} / {side}
+                            {main} card{main === 1 ? '' : 's'}
+                            {side > 0 && ` · ${side} side`}
                           </span>
                         ) : (
                           <span className="badge" title={`${main} card${main === 1 ? '' : 's'} filed here`}>
@@ -461,7 +463,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                           title={
                             missText
                               ? `${ownText} owned · ${missText} more in cards you don't own`
-                              : `${ownText} owned — everything here is in your collection`
+                              : `${ownText} owned, all of it in your collection`
                           }
                         >
                           {ownText}

@@ -71,7 +71,7 @@ export function SealedItemSheet({
               {priceText} <span className="sealed-price-src">each · {sealedPriceSourceLabel(price)} market</span>
             </span>
           ) : (
-            <span className="sealed-result-sub">Neither market quotes this product.</span>
+            <span className="sealed-result-sub">Neither TCGplayer nor Cardmarket lists a price for this.</span>
           )}
         </div>
       </div>

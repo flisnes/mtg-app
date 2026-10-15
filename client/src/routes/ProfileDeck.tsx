@@ -182,7 +182,8 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
             <Icon name="share" size={18} />
           </button>
           <button className="ghost" onClick={() => navigate(`/profile/${encodeURIComponent(username)}`)}>
-            ‹ {username}’s profile
+            <Icon name="chevronLeft" size={16} className="chev" />
+            {username}’s profile
           </button>
         </>
       }

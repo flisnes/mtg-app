@@ -27,6 +27,7 @@ import { historyChange } from '../price/history.js';
 import { useSealedHistories } from '../price/sealedValue.js';
 import { EmptyState, Page } from './Page.js';
 import { useAsyncAction } from '../components/useAsyncAction.js';
+import { fmtCardCount } from '../util/format.js';
 
 // The sealed shelf: unopened boxes, displays, packs and precons. Deliberately
 // its own view rather than a section of the collection — these rows have no
@@ -255,8 +256,8 @@ export function SealedProducts() {
 
           <div className="meta-row">
             <p className="search-meta">
-              {boxes} product{boxes === 1 ? '' : 's'} across {filtering ? `${sorted.length} of ${items.length}` : sorted.length}{' '}
-              line{(filtering ? items.length : sorted.length) === 1 ? '' : 's'}
+              {fmtCardCount(boxes, sorted.length, ['product', 'products'])}
+              {filtering && ` (filtered from ${items.length})`}
             </p>
             <div className="meta-actions">
               <ListSortControls prefs={sort} onChange={setSort} options={SORT_OPTIONS} />

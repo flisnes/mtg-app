@@ -58,7 +58,9 @@ export type IconName =
   | 'archive'
   | 'stack'
   | 'sliders'
-  | 'keyboard';
+  | 'keyboard'
+  | 'piles'
+  | 'receipt';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -112,12 +114,13 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M8.5 8.5 12 12l3.5-3.5" />
     </>
   ),
-  // Three cards fanned into a pile — every printing of a card stacked as one.
+  // Three layers on top of each other: every printing of a card stacked as one.
+  // Not overlapping rectangles, which is the decks glyph a filed tile wears.
   stack: (
     <>
-      <rect x="7" y="8" width="11" height="13" rx="1.5" />
-      <path d="M5 17V6.5A1.5 1.5 0 0 1 6.5 5H15" />
-      <path d="M3 14V3.5A1.5 1.5 0 0 1 4.5 2H12" />
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
     </>
   ),
   // Folder with a tab — a group of decks.
@@ -407,6 +410,24 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <rect x="2" y="6" width="20" height="12" rx="2" />
       <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
+    </>
+  ),
+  // Two columns of overlapping card tops: the visual-stacks view, cards piled
+  // by type the way they sit on a table.
+  piles: (
+    <>
+      <path d="M3 4h7M3 8h7M3 12h7" />
+      <rect x="3" y="12" width="7" height="8" rx="1" />
+      <path d="M14 4h7M14 8h7" />
+      <rect x="14" y="8" width="7" height="8" rx="1" />
+    </>
+  ),
+  // Receipt with a torn foot: the record of trades you've completed. Kept apart
+  // from the clock, which is your own collection's history.
+  receipt: (
+    <>
+      <path d="M5 2h14v20l-3-2-2 2-2-2-2 2-2-2-3 2z" />
+      <path d="M9 7h6M9 11h6M9 15h4" />
     </>
   ),
   // Left chevron — scroll / page backwards.

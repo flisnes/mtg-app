@@ -6,11 +6,12 @@ import { getSetting } from '../db/settings.js';
 import { CHANGELOG_RECENT, loadChangelog, type ChangelogEntry } from '../changelog.js';
 import { ChangelogList } from '../components/WhatsNewModal.js';
 import { Sheet } from '../components/Sheet.js';
+import { fmtCount, fmtDate } from '../util/format.js';
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString();
+  return Number.isNaN(d.getTime()) ? iso : fmtDate(d.getTime());
 }
 
 export function About() {
@@ -53,7 +54,7 @@ export function About() {
         <dt>Card database</dt>
         <dd>{cardDbVersion ? formatDate(cardDbVersion) : 'not loaded'}</dd>
         <dt>Cards</dt>
-        <dd>{counts ? `${counts.oracle.toLocaleString()} cards · ${counts.printings.toLocaleString()} printings` : '—'}</dd>
+        <dd>{counts ? `${fmtCount(counts.oracle)} cards · ${fmtCount(counts.printings)} printings` : '—'}</dd>
         <dt>Prices updated</dt>
         <dd>{formatDate(pricesUpdatedAt)}</dd>
       </dl>

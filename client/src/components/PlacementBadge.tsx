@@ -85,7 +85,7 @@ export function PlacementPills({ info, onNavigate }: { info: PlacementInfo; onNa
         <button
           type="button"
           className="place-pill place-pill-warn"
-          title={`The same copy is filed in ${info.claimed} places and you own ${info.owned} — a card can only be in one of them. Tap to sort it out.`}
+          title={`The same copy is filed in ${info.claimed} places and you own ${info.owned}. A card can only be in one of them. Tap to sort it out.`}
           onClick={() => {
             onNavigate?.();
             navigate('/conflicts');

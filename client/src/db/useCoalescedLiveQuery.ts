@@ -13,18 +13,24 @@ const HOLD_MAX_MS = 4000;
  * write land at once; a burst of writes (a sync's pages, a bulk import, a batch
  * undo) lands as one update after it goes quiet, or every MAX_WAIT_MS while it
  * keeps going. `hold` keeps changes back while it's true (capped at
- * HOLD_MAX_MS) and lets the latest through the moment it drops.
+ * HOLD_MAX_MS) and lets the latest through the moment it drops. With
+ * `enabled` false nothing is read and the value drops back to undefined, so a
+ * big table is only held in memory while something asks for it.
  *
  * Dexie still re-reads per write; what's saved is everything downstream of the
  * value: the collection join, the index builds and every consumer's render.
  */
-export function useCoalescedLiveQuery<T>(querier: () => Promise<T>, hold = false): T | undefined {
+export function useCoalescedLiveQuery<T>(querier: () => Promise<T>, hold = false, enabled = true): T | undefined {
   const [value, setValue] = useState<T | undefined>(undefined);
   const holdRef = useRef(hold);
   holdRef.current = hold;
   const flushRef = useRef<() => void>(() => {});
 
   useEffect(() => {
+    if (!enabled) {
+      setValue(undefined);
+      return;
+    }
     let seeded = false;
     let pending: { v: T } | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -71,7 +77,7 @@ export function useCoalescedLiveQuery<T>(querier: () => Promise<T>, hold = false
     };
     // The querier is fixed for the provider's lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     if (!hold) flushRef.current();

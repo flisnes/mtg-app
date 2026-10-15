@@ -1,7 +1,5 @@
 import { useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/schema.js';
-import { useCollectionEntries } from '../db/collectionSnapshot.js';
+import { useCollectionEntries, usePriceHistories } from '../db/collectionSnapshot.js';
 import { moverFlag } from './movers.js';
 import { useMoverTuning } from './moverTuning.js';
 
@@ -14,7 +12,7 @@ import { useMoverTuning } from './moverTuning.js';
 export function useMoverFlags(): Map<string, 'up' | 'down'> | undefined {
   const tuning = useMoverTuning();
   const entries = useCollectionEntries();
-  const histories = useLiveQuery(() => db.priceHistories.toArray(), []);
+  const histories = usePriceHistories();
   return useMemo(() => {
     if (!histories || !entries) return undefined;
     // Copies held decide whether a cheap card's move is pocket change or a

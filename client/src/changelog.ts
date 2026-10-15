@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.10',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Mover arrows, value-change sorting, the value chart and Price movers share one read of your price history, so big collections stay quick.',
+      },
+    ],
+  },
+  {
     version: '0.198.9',
     changes: [
       {
@@ -166,15 +175,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'A new interaction setting holds counterspells for an opponent\'s spell and removal for an opponent\'s creature, and card rules get four "an opponent..." triggers with an "unless they pay" switch.',
-      },
-    ],
-  },
-  {
-    version: '0.196.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'On a computer, drag a card image from Scryfall or Gatherer (or image files from your disk) onto your collection, a deck, binder or box, or your trade or wish list. The app works out which card it is and lists it for you to check before it is added.',
       },
     ],
   },

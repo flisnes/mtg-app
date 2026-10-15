@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.10
+
+- **Fixed: price history is read once, not three times.** Mover arrows on your cards, sorting by value change, the collection value chart and Price movers each used to load every card's full price history on their own, and again after every price update. They now share one copy, loaded only while one of them is on screen. Same arrows, same order, same chart, less waiting on big collections.
+
 ## 0.198.9
 
 - **Fixed: less busywork behind the deck list.** The Decks page used to look up every deck's cards one deck at a time to show its size and colors; it now does one lookup for the whole list. The wishlist, trade screen, price movers, tag picker and "where do these live?" picker read the same shared copy of your cards instead of each fetching their own. Nothing looks different, it just has less to do.

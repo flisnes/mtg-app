@@ -2,9 +2,8 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { OracleCard, Priced, Printing } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
-import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
-import { useCollectionEntries } from '../db/collectionSnapshot.js';
+import { useCollectionEntries, usePriceHistories } from '../db/collectionSnapshot.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { moverStats, swingStats, type MoverStats, type SwingStats } from '../price/movers.js';
 import { isTuned, useMoverTuning } from '../price/moverTuning.js';
@@ -96,15 +95,16 @@ export function PriceMovers() {
   const tuning = useMoverTuning();
   const [tuningOpen, setTuningOpen] = useState(false);
 
-  // Price histories are read once (and again only when they change); the
+  // Price histories come off the shared read (again only when they change); the
   // collection and wishlist come off the shared snapshot. The window and tuning
   // dropdowns just recompute over the rows already in hand.
+  const histories = usePriceHistories();
   const rows = useLiveQuery(async () => {
-    const histories = await db.priceHistories.toArray();
+    if (!histories) return undefined;
     const printMap = await getPrintingsByIds(histories.map((h) => h.scryfallId));
     const oracleMap = await getOracleCardsByIds([...printMap.values()].map((p) => p.oracleId));
     return { histories, printMap, oracleMap };
-  }, []);
+  }, [histories]);
   const entries = useCollectionEntries();
   const ownership = useOwnershipIndex();
 

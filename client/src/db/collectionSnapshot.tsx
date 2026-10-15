@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { CollectionEntry, Deck, DeckCard, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Deck, DeckCard, PriceHistory, WishlistEntry } from '@mtg/shared';
 import { db } from './schema.js';
 import { getSyncStatusSnapshot, subscribeSyncStatus } from '../sync/engine.js';
 import { useCoalescedLiveQuery } from './useCoalescedLiveQuery.js';
@@ -58,6 +58,16 @@ interface WishJoin {
 }
 const WishCtx = createContext<WishJoin>({ rows: undefined, subscribe: () => () => {} });
 
+// Price histories work the same way: the biggest user table (one row per
+// printing, a reading per day), read whole by mover flags, change sorts, the
+// value chart and Price movers. One shared read while any of them is mounted,
+// none while none is.
+interface HistoryRead {
+  rows: PriceHistory[] | undefined;
+  subscribe: () => () => void;
+}
+const HistoryCtx = createContext<HistoryRead>({ rows: undefined, subscribe: () => () => {} });
+
 export function CollectionSnapshotProvider({ children }: { children: ReactNode }) {
   // Coalesced: a burst of writes (a sync's pages, a bulk import, a batch undo)
   // re-runs the join and the indexes once, not once per write. A sync holds
@@ -90,6 +100,17 @@ export function CollectionSnapshotProvider({ children }: { children: ReactNode }
     [wanted, joinedWishes, subscribe],
   );
 
+  const [historySubs, setHistorySubs] = useState(0);
+  const histories = useCoalescedLiveQuery(() => db.priceHistories.toArray(), syncing, historySubs > 0);
+  const subscribeHistories = useCallback(() => {
+    setHistorySubs((n) => n + 1);
+    return () => setHistorySubs((n) => n - 1);
+  }, []);
+  const historyRead = useMemo<HistoryRead>(
+    () => ({ rows: histories, subscribe: subscribeHistories }),
+    [histories, subscribeHistories],
+  );
+
   const ownership = useMemo(
     () => (entries && wishes ? buildOwnershipIndex(entries, wishes) : undefined),
     [entries, wishes],
@@ -114,7 +135,9 @@ export function CollectionSnapshotProvider({ children }: { children: ReactNode }
   );
   return (
     <Ctx.Provider value={value}>
-      <WishCtx.Provider value={wishJoin}>{children}</WishCtx.Provider>
+      <WishCtx.Provider value={wishJoin}>
+        <HistoryCtx.Provider value={historyRead}>{children}</HistoryCtx.Provider>
+      </WishCtx.Provider>
     </Ctx.Provider>
   );
 }
@@ -150,6 +173,16 @@ export function useContainers(): { containers: Deck[] | undefined; slots: DeckCa
  */
 export function useJoinedWishes(enabled = true): JoinedWish[] | undefined {
   const { rows, subscribe } = useContext(WishCtx);
+  useEffect(() => (enabled ? subscribe() : undefined), [enabled, subscribe]);
+  return enabled ? rows : undefined;
+}
+
+/**
+ * Every priceHistories row. One live read shared by every caller, held only
+ * while at least one enabled caller is mounted.
+ */
+export function usePriceHistories(enabled = true): PriceHistory[] | undefined {
+  const { rows, subscribe } = useContext(HistoryCtx);
   useEffect(() => (enabled ? subscribe() : undefined), [enabled, subscribe]);
   return enabled ? rows : undefined;
 }

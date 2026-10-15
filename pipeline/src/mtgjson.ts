@@ -86,6 +86,16 @@ export interface MtgjsonSet {
   cards?: MtgjsonCard[];
   decks?: MtgjsonDeck[];
   sealedProduct?: MtgjsonSealedProduct[];
+  /**
+   * Booster type code ('draft', 'set', 'collector', ...) → how it's made. We
+   * only read which cards each sheet can show, not the slot weights.
+   */
+  booster?: Record<string, MtgjsonBooster>;
+}
+
+export interface MtgjsonBooster {
+  name?: string;
+  sheets?: Record<string, { cards?: Record<string, number> }>;
 }
 
 /** Open AllPrintings as a decompressed byte stream. */

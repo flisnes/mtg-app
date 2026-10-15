@@ -1,4 +1,4 @@
-import type { CardDbArtifactMeta, CardDbManifest, SealedPriceMap, SealedProduct } from '@mtg/shared';
+import type { CardDbArtifactMeta, CardDbManifest, SealedBoosterMap, SealedPriceMap, SealedProduct } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { CARD_DB_BASE } from '../cardDb/config.js';
 import { getPrefs } from '../prefs.js';
@@ -11,7 +11,8 @@ import { sha256Hex } from '../util/sha256.js';
 // doesn't re-download the catalog. Unlike the card DB neither is part of the
 // startup sync — they're fetched lazily the first time the user opens a sealed
 // screen, then cached in IndexedDB and refreshed only when the served hash
-// moves. Two cached blob rows in one table, like scan data.
+// moves. Cached blob rows in one table, like scan data; a third artifact,
+// what each booster type can contain, rides along with the catalog.
 
 export interface SealedStoreRow {
   key: 'current';
@@ -29,7 +30,15 @@ export interface SealedPricesRow {
   prices: SealedPriceMap;
 }
 
-export type SealedRow = SealedStoreRow | SealedPricesRow;
+/** Cached booster contents, refreshed alongside the catalog. */
+export interface SealedBoostersRow {
+  key: 'boosters';
+  sha256: string;
+  count: number;
+  boosters: SealedBoosterMap;
+}
+
+export type SealedRow = SealedStoreRow | SealedPricesRow | SealedBoostersRow;
 
 export type SealedLoad =
   | {
@@ -37,6 +46,8 @@ export type SealedLoad =
       products: SealedProduct[];
       /** TCGplayer product id → USD market price. Empty when prices are unavailable. */
       prices: SealedPriceMap;
+      /** What each booster type can contain. Empty on builds that don't ship it. */
+      boosters: SealedBoosterMap;
     }
   /** No endpoint, the build has no sealed artifact, or we're offline with nothing cached. */
   | { kind: 'unavailable' };
@@ -67,6 +78,23 @@ async function getCatalog(): Promise<SealedStoreRow | undefined> {
 
 async function getPricesRow(): Promise<SealedPricesRow | undefined> {
   return (await db.sealed.get('prices')) as SealedPricesRow | undefined;
+}
+
+async function getBoostersRow(): Promise<SealedBoostersRow | undefined> {
+  return (await db.sealed.get('boosters')) as SealedBoostersRow | undefined;
+}
+
+/** Bring the cached booster contents up to the manifest's hash. Never throws, like prices. */
+async function syncBoosters(v2: CardDbManifest['v2']): Promise<void> {
+  try {
+    const meta = v2?.sealedBoosters;
+    if (meta && (await getBoostersRow())?.sha256 !== meta.sha256) {
+      const parsed = JSON.parse(await fetchVerified(meta)) as SealedBoosterMap;
+      await db.sealed.put({ key: 'boosters', sha256: meta.sha256, count: Object.keys(parsed).length, boosters: parsed });
+    }
+  } catch {
+    /* keep whatever is cached */
+  }
 }
 
 /**
@@ -136,13 +164,14 @@ export async function loadSealedProducts(): Promise<SealedLoad> {
       }
       if (!meta && !installed) return { kind: 'unavailable' };
 
-      // Prices swallow their own failures, so they can't take the catalog down.
-      await syncPrices(v2);
+      // Prices and boosters swallow their own failures, so they can't take the catalog down.
+      await Promise.all([syncPrices(v2), syncBoosters(v2)]);
     } catch {
       // Offline / manifest or download failure → fall through to cached copy.
     }
   }
 
   if (!products) return { kind: 'unavailable' };
-  return { kind: 'ready', products, prices: (await getPricesRow())?.prices ?? {} };
+  const [pricesRow, boostersRow] = await Promise.all([getPricesRow(), getBoostersRow()]);
+  return { kind: 'ready', products, prices: pricesRow?.prices ?? {}, boosters: boostersRow?.boosters ?? {} };
 }

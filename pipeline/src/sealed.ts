@@ -12,8 +12,22 @@
 // whole point of the sealed collection. They arrive with `cards: []` and a
 // non-zero `omittedRandom`, which is exactly how the client tells the two
 // kinds apart.
+//
+// A pack's contents are random, but not unknowable: MTGJSON lists every card
+// each booster type's sheets can show. Products record which booster types
+// they open into (`packs`), and a second artifact maps those to the printings
+// they can contain, so "which booster has this card?" has an answer. That's
+// how you learn a Wilds of Eldraine card is in Set Boosters but not Draft.
 
-import type { Finish, Printing, SealedCardRef, SealedIdentifiers, SealedProduct } from '@mtg/shared';
+import {
+  encodeCollectorRanges,
+  type Finish,
+  type Printing,
+  type SealedBoosterMap,
+  type SealedCardRef,
+  type SealedIdentifiers,
+  type SealedProduct,
+} from '@mtg/shared';
 import {
   streamSets,
   type MtgjsonDeck,
@@ -22,6 +36,7 @@ import {
 } from './mtgjson.js';
 
 const deckKey = (set: string, name: string) => `${set.toLowerCase()}::${name.toLowerCase()}`;
+const boosterKey = (set: string, code: string) => `${set.toLowerCase()}:${code}`;
 
 /** Pick the closest available finish for a printing given MTGJSON's foil flag. */
 function resolveFinish(wantFoil: boolean, finishes: Finish[]): Finish {
@@ -39,6 +54,8 @@ interface Accumulated {
   deckByKey: Map<string, MtgjsonDeck>;
   /** Per-product set name, keyed by product uuid (MTGJSON doesn't repeat it inside the product). */
   setNameByProduct: Map<string, string>;
+  /** Booster key → MTGJSON uuids on any of its sheets (resolved once every set is read). */
+  boosterUuids: Map<string, string[]>;
 }
 
 export interface SealedStats {
@@ -48,6 +65,8 @@ export interface SealedStats {
   /** Of those emitted, how many are pure-random (unopened-only). */
   productsRandomOnly: number;
   cardsUnavailable: number;
+  /** Booster types some product opens into, with their card lists shipped. */
+  boosterTypes: number;
 }
 
 /**
@@ -58,13 +77,14 @@ export interface SealedStats {
  */
 export async function buildSealedProducts(
   printingsById: Map<string, Printing>,
-): Promise<{ products: SealedProduct[]; stats: SealedStats }> {
+): Promise<{ products: SealedProduct[]; boosters: SealedBoosterMap; stats: SealedStats }> {
   const acc: Accumulated = {
     uuidToScry: new Map(),
     products: [],
     productByUuid: new Map(),
     deckByKey: new Map(),
     setNameByProduct: new Map(),
+    boosterUuids: new Map(),
   };
   const stats: SealedStats = {
     setsSeen: 0,
@@ -72,6 +92,7 @@ export async function buildSealedProducts(
     productsEmitted: 0,
     productsRandomOnly: 0,
     cardsUnavailable: 0,
+    boosterTypes: 0,
   };
 
   await streamSets((code, set) => {
@@ -89,6 +110,11 @@ export async function buildSealedProducts(
       acc.productByUuid.set(product.uuid, product);
       if (set.name) acc.setNameByProduct.set(product.uuid, set.name);
     }
+    for (const [type, booster] of Object.entries(set.booster ?? {})) {
+      const uuids = new Set<string>();
+      for (const sheet of Object.values(booster.sheets ?? {})) for (const u of Object.keys(sheet.cards ?? {})) uuids.add(u);
+      if (uuids.size) acc.boosterUuids.set(boosterKey(set.code ?? code, type), [...uuids]);
+    }
   });
 
   const products: SealedProduct[] = [];
@@ -105,7 +131,34 @@ export async function buildSealedProducts(
   }
 
   products.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  return { products, stats };
+
+  // Only booster types a product opens into are worth shipping. Sheets reach
+  // across sets (The List, Special Guests), so each printing is keyed by its
+  // own set, not the booster's.
+  const wanted = new Set(products.flatMap((p) => p.packs ?? []));
+  const boosters: SealedBoosterMap = {};
+  for (const key of [...wanted].sort()) {
+    const bySet = new Map<string, string[]>();
+    for (const uuid of acc.boosterUuids.get(key) ?? []) {
+      const scry = acc.uuidToScry.get(uuid);
+      const printing = scry ? printingsById.get(scry) : undefined;
+      if (!printing) continue;
+      const list = bySet.get(printing.set);
+      if (list) list.push(printing.collectorNumber);
+      else bySet.set(printing.set, [printing.collectorNumber]);
+    }
+    if (!bySet.size) continue;
+    boosters[key] = Object.fromEntries([...bySet].sort(([a], [b]) => (a < b ? -1 : 1)).map(([set, nums]) => [set, encodeCollectorRanges(nums)]));
+    stats.boosterTypes++;
+  }
+  // A product whose packs MTGJSON can't describe gains nothing from naming them.
+  for (const p of products) {
+    if (!p.packs) continue;
+    const known = p.packs.filter((k) => boosters[k]);
+    if (known.length) p.packs = known;
+    else delete p.packs;
+  }
+  return { products, boosters, stats };
 }
 
 function expandProduct(
@@ -117,6 +170,7 @@ function expandProduct(
   const slots = new Map<string, SealedCardRef>();
   let omittedRandom = 0;
   let unresolved = 0;
+  const packs = new Set<string>();
 
   const addCard = (uuid: string | undefined, count: number, foil: boolean) => {
     if (!uuid) {
@@ -168,6 +222,7 @@ function expandProduct(
 
     // Randomised components: not expandable, but flagged for the UI.
     if (c.pack?.length) omittedRandom += c.pack.length * multiplier;
+    for (const pack of c.pack ?? []) if (pack.set && pack.code) packs.add(boosterKey(pack.set, pack.code));
     if (c.variable) omittedRandom += multiplier;
     // `other` = free-text descriptions (life wheels, "10 Double Sided Tokens"): ignored.
   };
@@ -191,6 +246,7 @@ function expandProduct(
   if (raw.releaseDate) product.releaseDate = raw.releaseDate;
   if (omittedRandom > 0) product.omittedRandom = omittedRandom;
   if (unresolved > 0) product.unresolved = unresolved;
+  if (packs.size) product.packs = [...packs].sort();
   const identifiers = pickIdentifiers(raw);
   if (identifiers) product.identifiers = identifiers;
   return product;

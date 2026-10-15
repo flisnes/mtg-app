@@ -223,6 +223,7 @@ function referenced(m: CardDbManifest | null): Set<string> {
     m.v2?.prices,
     m.v2?.sealed,
     m.v2?.sealedPrices,
+    m.v2?.sealedBoosters,
     m.v2?.sets,
     m.v2?.tags,
   ]) {
@@ -420,16 +421,19 @@ async function main(): Promise<void> {
   // can't resolve cards, so skip it there. Set SKIP_SEALED=1 to opt out.
   let sealedArtifact: Artifact | undefined;
   let sealedPricesArtifact: Artifact | undefined;
+  let sealedBoostersArtifact: Artifact | undefined;
   const wantSealed =
     !process.env.SKIP_SEALED && (process.env.ALLPRINTINGS_FILE || (BULK_TYPE === 'default_cards' && MAX_CARDS === Infinity));
   if (wantSealed) {
     try {
       const printingsById = new Map(printings.map((p) => [p.scryfallId, p]));
-      const { products, stats } = await buildSealedProducts(printingsById);
+      const { products, boosters, stats } = await buildSealedProducts(printingsById);
       sealedArtifact = emitHashed('sealed', products, products.length);
+      if (stats.boosterTypes > 0) sealedBoostersArtifact = emitHashed('sealed-boosters', boosters, stats.boosterTypes);
       console.log(
         `[pipeline]   sealed: ${stats.productsEmitted}/${stats.productsSeen} products from ${stats.setsSeen} sets ` +
-          `(${stats.productsRandomOnly} unopened-only, ${stats.cardsUnavailable} card refs unavailable)`,
+          `(${stats.productsRandomOnly} unopened-only, ${stats.cardsUnavailable} card refs unavailable), ` +
+          `${stats.boosterTypes} booster types (${sealedBoostersArtifact?.bytes ?? 0} B)`,
       );
 
       // Prices for those products, from two sources because no single one
@@ -525,6 +529,7 @@ async function main(): Promise<void> {
       prices: meta(pricesArtifact),
       ...(sealedArtifact ? { sealed: meta(sealedArtifact) } : {}),
       ...(sealedPricesArtifact ? { sealedPrices: meta(sealedPricesArtifact) } : {}),
+      ...(sealedBoostersArtifact ? { sealedBoosters: meta(sealedBoostersArtifact) } : {}),
       ...(setsArtifact ? { sets: meta(setsArtifact) } : {}),
       ...(tagsArtifact ? { tags: meta(tagsArtifact) } : {}),
     },

@@ -702,6 +702,12 @@ export interface CardDbManifest {
      */
     sealedPrices?: CardDbArtifactMeta;
     /**
+     * What each booster type can contain (SealedBoosterMap), for "which
+     * booster can I open this card from?". Fetched lazily with `sealed`.
+     * Absent on builds made before that lookup existed.
+     */
+    sealedBoosters?: CardDbArtifactMeta;
+    /**
      * Set code → Scryfall set type, for telling a normal set apart from a promo
      * product, Secret Lair, token sheet or memorabilia set. Tiny (~4 KB gzipped
      * for every set ever printed) and fetched lazily like `sealed`. Absent on
@@ -830,6 +836,58 @@ export interface SealedProduct {
   unresolved?: number;
   /** Marketplace ids; absent when MTGJSON lists none. */
   identifiers?: SealedIdentifiers;
+  /**
+   * Booster types this product opens into, directly or through the boxes and
+   * packs inside it, as `set:code` keys into SealedBoosterMap ('woe:set').
+   * Absent when it holds no packs MTGJSON can describe.
+   */
+  packs?: string[];
+}
+
+/**
+ * Booster type (`set:code`, e.g. 'woe:collector') → set code → the collector
+ * numbers that can turn up in it, as a CollectorRanges string. Answers "which
+ * booster can I open this card from?". Keyed by printing rather than
+ * scryfallId because ~900 booster types × a few hundred cards each would be
+ * megabytes of uuids, while a set's numbers collapse to a handful of runs.
+ */
+export type SealedBoosterMap = Record<string, Record<string, string>>;
+
+/**
+ * Collector numbers as a compact list: integer runs collapse to `a-b`, anything
+ * else ('12a', '★5') is listed as is, comma-separated. '1-261,263,300a'.
+ */
+export function encodeCollectorRanges(numbers: Iterable<string>): string {
+  const ints: number[] = [];
+  const other: string[] = [];
+  for (const n of new Set(numbers)) {
+    if (/^(0|[1-9]\d*)$/.test(n)) ints.push(Number(n));
+    else other.push(n);
+  }
+  ints.sort((a, b) => a - b);
+  const parts: string[] = [];
+  for (let i = 0; i < ints.length; ) {
+    let j = i;
+    while (j + 1 < ints.length && ints[j + 1] === ints[j]! + 1) j++;
+    parts.push(j > i ? `${ints[i]}-${ints[j]}` : String(ints[i]));
+    i = j + 1;
+  }
+  other.sort();
+  return [...parts, ...other].join(',');
+}
+
+/** Whether a CollectorRanges string includes `number`. */
+export function collectorRangesHave(ranges: string, number: string): boolean {
+  const n = /^(0|[1-9]\d*)$/.test(number) ? Number(number) : null;
+  for (const part of ranges.split(',')) {
+    if (part === number) return true;
+    if (n === null) continue;
+    const dash = part.indexOf('-');
+    if (dash > 0 && /^\d+-\d+$/.test(part)) {
+      if (n >= Number(part.slice(0, dash)) && n <= Number(part.slice(dash + 1))) return true;
+    }
+  }
+  return false;
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { SealedItem, SealedPriceMap, SealedProduct } from '@mtg/shared';
+import { collectorRangesHave, type SealedBoosterMap, type SealedItem, type SealedPriceMap, type SealedProduct } from '@mtg/shared';
 import { formatPrice } from '../components/CardSorting.js';
 import { getPrefs } from '../prefs.js';
 
@@ -116,7 +116,7 @@ export interface ProductWithCard {
  * card and the set booster reprint are different printings, and a player
  * looking for "the deck this came in" wants both.
  *
- * Random-only products never match: nobody knows what's in an unopened pack.
+ * Only fixed contents count here; packsContaining answers for boosters.
  */
 export function productsContaining(products: SealedProduct[], scryfallIds: Set<string>): ProductWithCard[] {
   const out: ProductWithCard[] = [];
@@ -128,5 +128,43 @@ export function productsContaining(products: SealedProduct[], scryfallIds: Set<s
   // Newest first: a card reprinted for years is most useful as "the latest one
   // you can still buy", and undated products sort last rather than first.
   out.sort((a, b) => (b.product.releaseDate ?? '').localeCompare(a.product.releaseDate ?? ''));
+  return out;
+}
+
+/** Where a printing sits in its set: all a booster's card list keys on. */
+export interface PrintingPlace {
+  set: string;
+  collectorNumber: string;
+}
+
+/** Booster types (`set:code` keys) that can contain any of `printings`. */
+export function boostersContaining(boosters: SealedBoosterMap, printings: PrintingPlace[]): Set<string> {
+  const out = new Set<string>();
+  for (const [key, bySet] of Object.entries(boosters)) {
+    for (const p of printings) {
+      const ranges = bySet[p.set];
+      if (ranges && collectorRangesHave(ranges, p.collectorNumber)) {
+        out.add(key);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Products you could open the card from: anything whose packs (direct, or via
+ * the boxes and bundles inside it) are one of `boosterKeys`. Products in
+ * `exclude` are skipped, so one already listing the card as fixed contents
+ * isn't named twice. Newest first, like productsContaining.
+ */
+export function packsContaining(
+  products: SealedProduct[],
+  boosterKeys: Set<string>,
+  exclude: Set<string> = new Set(),
+): SealedProduct[] {
+  if (boosterKeys.size === 0) return [];
+  const out = products.filter((p) => !exclude.has(p.id) && p.packs?.some((k) => boosterKeys.has(k)));
+  out.sort((a, b) => (b.releaseDate ?? '').localeCompare(a.releaseDate ?? '') || a.name.localeCompare(b.name));
   return out;
 }

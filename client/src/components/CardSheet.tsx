@@ -1540,7 +1540,7 @@ export function CardSheet(props: CardSheetProps) {
       {sealedOpen && (
         <SealedWithCardSheet
           cardName={oracleCard.name}
-          scryfallIds={printings.map((p) => p.scryfallId)}
+          printings={printings}
           onClose={() => setSealedOpen(false)}
         />
       )}

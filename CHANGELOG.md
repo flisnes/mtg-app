@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.1
+
+- **Changed: sealed lookup names boosters too.** "Find sealed products with this card" used to list only products with fixed contents, like precons and Secret Lairs. It now also lists every product you could open the card from: booster packs whose sheets can show it, plus the boxes, cases, bundles and prerelease kits holding those packs. That answers the question that matters for cards outside the main set: Experimental Confectioner (WOE #314) only turns up in Wilds of Eldraine Set Boosters, so Set Booster packs, boxes and bundles are listed and Draft Boosters are not. Booster contents come from MTGJSON's booster sheets, so sets it has no sheets for still only show fixed-content products.
+
 ## 0.198.0
 
 - **Added: foil prices, day by day.** Until now only the plain price of each card was recorded over time, so a foil's chart and trend showed how the nonfoil version moved. The server now archives foil prices too, and backfills the last three months of them. Open a foil copy and the sparkline, the price chart and the "since you paid" change follow the foil price, with the paid line back on the chart. The collection value chart uses a foil's own price on the days we have one, and the plain price scaled by today's foil premium before that. Your device also records foil prices for the cards you hold in foil, so this works signed out too, from today on. Until a card has foil readings the chart keeps saying it is showing the plain price.

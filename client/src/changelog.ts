@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.1',
+    changes: [
+      {
+        kind: 'changed',
+        text: '"Find sealed products with this card" now lists the boosters you can open it from, and the boxes and bundles that hold them. A Wilds of Eldraine card in Set Boosters but not Draft says so.',
+      },
+    ],
+  },
+  {
     version: '0.198.0',
     changes: [
       {

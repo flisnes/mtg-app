@@ -6949,6 +6949,12 @@ a.seg {
   gap: 0.35rem;
   overflow-y: auto;
 }
+/* Two lists in one sheet (the reverse lookup): let the sheet scroll instead of
+   each list, or the flex column squashes the first one to a sliver. */
+.sealed-results-flow {
+  flex-shrink: 0;
+  overflow-y: visible;
+}
 .sealed-result {
   width: 100%;
   text-align: left;

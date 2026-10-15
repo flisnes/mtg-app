@@ -73,3 +73,11 @@ describe('companion and considering', () => {
     expect(boardForFormat('main', plains, true, false)).toBeUndefined();
   });
 });
+
+describe('deck size', () => {
+  it('reports the size only when it is off', () => {
+    expect(checkDeckLegality('commander', hundred()).size).toBeUndefined();
+    const short = checkDeckLegality('commander', [slot(commander, 'commander'), slot(plains, 'main', 64)]);
+    expect(short.size).toEqual({ count: 65, need: 100 });
+  });
+});

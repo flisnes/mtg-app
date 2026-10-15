@@ -353,6 +353,9 @@ export interface LegalityReport {
   problems: string[];
   /** oracleId → short reason, for per-card markers. */
   issues: Map<string, string>;
+  /** The deck's size against the format's when it's off, e.g. 65 of 100: the
+   *  deck page's summary row says it without opening the problem list. */
+  size?: { count: number; need: number };
 }
 
 export function checkDeckLegality(format: DeckFormat | undefined, allCards: LegalityCard[]): LegalityReport {
@@ -520,10 +523,13 @@ export function checkDeckLegality(format: DeckFormat | undefined, allCards: Lega
   // Only main + command zone count toward the deck: the companion, Considering
   // and the tokens all sit outside it.
   const deckTotal = mainCount + commanderCount;
+  let size: LegalityReport['size'];
   if (rule.exactTotal != null) {
+    if (deckTotal !== rule.exactTotal) size = { count: deckTotal, need: rule.exactTotal };
     if (deckTotal < rule.exactTotal) problems.push(`Deck has ${deckTotal} cards; ${rule.label} needs ${rule.exactTotal}.`);
     else if (deckTotal > rule.exactTotal) problems.push(`Deck has ${deckTotal} cards; ${rule.label} allows ${rule.exactTotal}.`);
   } else if (rule.minMain != null && mainCount < rule.minMain) {
+    size = { count: mainCount, need: rule.minMain };
     problems.push(`Mainboard has ${mainCount} cards; ${rule.label} needs at least ${rule.minMain}.`);
   }
   if (rule.maxSideboard != null && sideCount > rule.maxSideboard) {
@@ -531,5 +537,5 @@ export function checkDeckLegality(format: DeckFormat | undefined, allCards: Lega
   }
   if (missingData) problems.push('Some cards have no legality data yet. Refresh the card database from About.');
 
-  return { checked: true, legal: problems.length === 0, problems, issues };
+  return { checked: true, legal: problems.length === 0, problems, issues, ...(size ? { size } : {}) };
 }

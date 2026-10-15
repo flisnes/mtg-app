@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.200.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Deck pages start with your cards. Format, owned count and legality fold into one row you can tap open, and an "Add cards" button sits above the list.',
+      },
+    ],
+  },
+  {
     version: '0.199.0',
     changes: [
       {
@@ -154,19 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Price tracking does its work once a day instead of on every launch, and reopening a card while signed in no longer refetches its price history.',
-      },
-    ],
-  },
-  {
-    version: '0.198.2',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'The app opens faster and downloads less on each open. Card search loads its data when you first search, and the daily price update no longer rebuilds it.',
-      },
-      {
-        kind: 'fixed',
-        text: 'otag: on your lists kept working only until the first card data update. Now it survives one, and a search made offline tries again once you are back.',
       },
     ],
   },

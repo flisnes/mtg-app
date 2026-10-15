@@ -1,4 +1,4 @@
-// The older half of the changelog (0.198.0 down to 0.98.0), split out of
+// The older half of the changelog (0.198.2 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,19 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.198.2',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The app opens faster and downloads less on each open. Card search loads its data when you first search, and the daily price update no longer rebuilds it.',
+      },
+      {
+        kind: 'fixed',
+        text: 'otag: on your lists kept working only until the first card data update. Now it survives one, and a search made offline tries again once you are back.',
+      },
+    ],
+  },
   {
     version: '0.198.1',
     changes: [

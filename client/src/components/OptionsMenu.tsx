@@ -8,6 +8,8 @@ export interface MenuAction {
   label: string;
   icon?: IconName;
   danger?: boolean;
+  /** Draw a rule above this item: it starts a new group. */
+  divider?: boolean;
   onClick: () => void;
 }
 
@@ -58,7 +60,7 @@ export function OptionsMenu({
             <button
               key={a.label}
               role="menuitem"
-              className={a.danger ? 'options-item options-item-danger' : 'options-item'}
+              className={`options-item${a.danger ? ' options-item-danger' : ''}${a.divider ? ' options-item-divided' : ''}`}
               onClick={() => {
                 setOpen(false);
                 a.onClick();

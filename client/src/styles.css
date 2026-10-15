@@ -4480,9 +4480,6 @@ button.primary {
   flex: 1;
   min-width: 140px;
 }
-.list-toolbar .toolbar-hint-row {
-  flex-basis: 100%;
-}
 .badge {
   display: inline-block;
   font-size: 0.7rem;
@@ -4758,11 +4755,13 @@ button.primary {
 }
 /* A rule above the first destructive item, so Delete never sits flush under
    Archive where a thumb aimed at one lands on the other. */
-.options-item:not(.options-item-danger) + .options-item-danger {
+.options-item:not(.options-item-danger) + .options-item-danger,
+.options-item-divided:not(:first-child) {
   position: relative;
   margin-top: 0.5rem;
 }
-.options-item:not(.options-item-danger) + .options-item-danger::before {
+.options-item:not(.options-item-danger) + .options-item-danger::before,
+.options-item-divided:not(:first-child)::before {
   content: '';
   position: absolute;
   left: 0.4rem;
@@ -4867,15 +4866,88 @@ button.primary {
   gap: 1rem;
   margin-bottom: 0.5rem;
 }
+/* The deck page's summary row (components/ContainerSummary): format, owned
+   and legality in one tap target that folds the detail open, and the land
+   count beside it as the way into the mana analysis. */
+.container-summary {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+.container-summary-toggle,
+.container-summary-lands {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: var(--tap-sm);
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  text-align: left;
+}
+.container-summary-toggle {
+  flex: 1;
+  min-width: 0;
+  justify-content: space-between;
+}
+.container-summary-toggle > svg,
+.container-summary-lands > svg {
+  flex: none;
+  color: var(--text-dim);
+}
+.container-summary-toggle > svg {
+  transition: transform 0.15s;
+}
+.container-summary-toggle[aria-expanded='true'] > svg {
+  transform: rotate(180deg);
+}
+.container-summary-lands {
+  flex: none;
+  white-space: nowrap;
+}
+.container-summary-bits {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.4rem;
+  min-width: 0;
+}
+.container-summary-bits > span {
+  white-space: nowrap;
+}
+.container-summary-bits > span:not(.summary-chip) + span:not(.summary-chip)::before {
+  content: '· ';
+  color: var(--text-dim);
+}
+.summary-chip {
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.summary-chip-ok {
+  background: rgba(78, 201, 123, 0.15);
+  color: var(--ok);
+}
+.summary-chip-bad {
+  background: rgba(255, 92, 92, 0.14);
+  color: var(--danger);
+}
+.container-summary-detail {
+  margin-bottom: 0.25rem;
+}
+.container-summary-static {
+  margin: 0 0 0.5rem;
+}
 .legality {
   border-radius: 10px;
   padding: 0.6rem 0.8rem;
   font-size: 0.9rem;
   margin-bottom: 0.5rem;
-}
-.legality-ok {
-  background: rgba(78, 201, 123, 0.15);
-  color: var(--ok);
 }
 .legality-bad {
   background: rgba(255, 92, 92, 0.12);

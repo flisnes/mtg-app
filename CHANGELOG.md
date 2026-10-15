@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.0
+
+- **Changed: deck pages get to the cards faster.** The top of a deck used to stack the format picker, the owned count, a full legality box and the lands row before the first card, so on a phone you saw the commander and little else. Now it is one row: "Commander · 55/65 owned · Not legal 65/100". Tap it to open the format picker, the full list of legality problems and what the missing cards cost. A legal deck gets a small green "Legal" chip instead of a full-width bar. The land count beside it opens deck analysis straight on the Mana tab. An "Add cards" button replaces the "Search above to add cards" hint and opens search ready to add to this deck. The deck's options menu is grouped (the deck, its cards, then archive and delete) with Deck analysis at the top. Binders and boxes get the same short header. No more scrying past the header to find your cards.
+
 ## 0.199.0
 
 - **Changed: labelled add buttons and Undo after adding.** The card sheet you open from search used to offer two bare icons next to "+Collection". It now reads "+ Trade", "+ Wish" and "Add to collection", all on one row on a phone. Cancel is gone from that row since the X at the top already closes the sheet, and when you step into adding from a card you were only reading, Back sits beside the card name. After an add, the sheet still flashes "Added to collection" and closes, and then a toast says "Lightning Bolt added to collection" with an Undo button for four seconds. Undo takes the card back out and removes the entry from your history, same as undoing it there. The quick-add buttons on search result rows get the same Undo toast. Mulligans to a better seven are now free.

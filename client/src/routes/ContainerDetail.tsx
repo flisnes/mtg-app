@@ -3,13 +3,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   COLORS,
-  DECK_FORMATS,
   MAX_DECK_NAME_LENGTH,
   isMarkerCard,
   type Color,
   type ContainerKind,
   type DeckBoard,
-  type DeckFormat,
   type OracleCard,
   type Priced,
   type Printing,
@@ -47,14 +45,14 @@ import {
 import { addToWishlistBulk, applyImport } from '../db/dataAccess.js';
 import {
   checkDeckLegality,
-  formatLabel,
   isBasicLand,
   isNonDeckCard,
   needsColorChoice,
   pairButtonLabel,
   type LegalityReport,
 } from '../deck/legality.js';
-import { useOpenPairSearch } from '../components/GlobalSearch.js';
+import { useOpenPairSearch, useOpenSearch } from '../components/GlobalSearch.js';
+import { DeckSummary, StorageSummary } from '../components/ContainerSummary.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { useFiling } from '../deck/useFiling.js';
 import { buildDeckText } from '../deck/deckText.js';
@@ -82,7 +80,6 @@ import { yearMark } from '../components/cardRows.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { containerValue, HeaderValue, missingValue, valueText } from '../components/ValueSummary.js';
 import { ContainerValueChartSheet } from '../components/CollectionValueChart.js';
-import { DeckStatsLine } from '../components/DeckStatsLine.js';
 import { deckManaStats } from '../deck/manaStats.js';
 import {
   SortControls,
@@ -283,6 +280,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const { confirm, sheet: confirmSheet } = useConfirm();
   const action = useAsyncAction();
   const openPairSearch = useOpenPairSearch();
+  const openSearch = useOpenSearch();
 
   const ownership = useOwnershipIndex();
   const slotData = useLiveQuery(async () => {
@@ -938,6 +936,11 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           <OptionsMenu
           label={`${meta.Noun} options`}
           actions={[
+            // Three groups: the deck itself, bulk moves on the cards in it, and
+            // the two ways out. Analysis leads; it's the one people come back for.
+            ...(isDeck
+              ? [{ label: 'Deck analysis', icon: 'chart' as const, onClick: () => navigate(`/decks/${id}/analysis`) }]
+              : []),
             // Go and find the cardboard: the list card by card, each showing the
             // copies you own, so the slots end up pointing at real cards.
             {
@@ -945,32 +948,31 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
               icon: 'collection',
               onClick: startAssemble,
             },
+            { label: 'Scan cards', icon: 'camera', onClick: () => setScanning('add') },
+            { label: `Re-scan ${meta.noun}`, icon: 'refresh', onClick: () => setScanning('rescan') },
+            { label: 'Import list', icon: 'import', onClick: () => setShowImport((v) => !v) },
+            { label: 'Export', icon: 'export', onClick: exportDeck },
+            ...(isDeck && account.enabled && account.session
+              ? [{ label: 'Share deck', icon: 'share' as const, onClick: () => void shareDeck() }]
+              : []),
             {
               label: deck.emblem ? 'Change emblem' : 'Choose an emblem',
               icon: 'emblem',
               onClick: () => setEmblemOpen(true),
             },
-            { label: 'Scan cards', icon: 'camera', onClick: () => setScanning('add') },
-            { label: `Re-scan ${meta.noun}`, icon: 'refresh', onClick: () => setScanning('rescan') },
-            { label: 'Import list', icon: 'import', onClick: () => setShowImport((v) => !v) },
-            { label: 'Export', icon: 'export', onClick: exportDeck },
-            ...(isDeck ? [{ label: 'Deck analysis', icon: 'chart' as const, onClick: () => navigate(`/decks/${id}/analysis`) }] : []),
             // The panel lives at the very bottom, under however many cards are
             // filed here, so the menu opens it *and* takes you to it.
             { label: 'History', icon: 'history', onClick: showHistory },
             // Only a brewed deck has cards you don't have yet; a binder or box is
             // a record of what's already on your shelf.
             ...(isDeck
-              ? [{ label: 'Add missing cards to wishlist', icon: 'wishlist' as const, onClick: () => void wishlistMissing() }]
+              ? [{ label: 'Add missing cards to wishlist', icon: 'wishlist' as const, divider: true, onClick: () => void wishlistMissing() }]
               : []),
             // Whether it's a box you're emptying or a deck you're breaking up,
             // "everything in here is up for grabs" is one tap — it only ever
             // touches copies you actually own.
-            { label: 'Add all owned cards to tradelist', icon: 'tradelist', onClick: () => void markAllForTrade(true) },
+            { label: 'Add all owned cards to tradelist', icon: 'tradelist', divider: !isDeck, onClick: () => void markAllForTrade(true) },
             { label: 'Remove all owned cards from tradelist', icon: 'close', onClick: () => void markAllForTrade(false) },
-            ...(isDeck && account.enabled && account.session
-              ? [{ label: 'Share deck', icon: 'share' as const, onClick: () => void shareDeck() }]
-              : []),
             // Deck-only, and deliberately right above Delete: the two answers to
             // "I'm done with this deck", one of which keeps the list.
             ...(isDeck
@@ -979,12 +981,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
                     ? {
                         label: 'Restore from archive',
                         icon: 'refresh' as const,
+                        divider: true,
                         onClick: async () => {
                           await setDeckArchived(id, false);
                           toast('Restored to the deck list');
                         },
                       }
-                    : { label: 'Archive deck', icon: 'archive' as const, onClick: () => setArchiveOpen(true) },
+                    : { label: 'Archive deck', icon: 'archive' as const, divider: true, onClick: () => setArchiveOpen(true) },
                 ]
               : []),
             {
@@ -1049,54 +1052,35 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         />
       )}
 
-      <div className="deck-detail-meta">
-        {isDeck && (
-          <label className="field" style={{ maxWidth: 160 }}>
-            <span>Format</span>
-            <select value={deck.format ?? 'casual'} onChange={(e) => void setDeckFormat(id, e.target.value as DeckFormat)}>
-              {DECK_FORMATS.map((f) => (
-                <option key={f} value={f}>
-                  {formatLabel(f)}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <p className="search-meta">
-          {isDeck ? (
-            <>
-              You own <strong>{summary.have}</strong> of <strong>{summary.need}</strong> cards
-            </>
-          ) : (
-            <>
-              <strong>{summary.need}</strong> card{summary.need === 1 ? '' : 's'} filed here
-              {/* Filed but not in the collection: the app's records and the real
-                  shelf disagree, which is worth saying out loud. */}
-              {summary.need > summary.have && (
-                <> · <strong>{summary.need - summary.have}</strong> not in your collection</>
-              )}
-            </>
-          )}
-          {missingWorth && <> · <strong>{missingWorth}</strong> missing</>}
-        </p>
-      </div>
-
-      {isDeck && <LegalityPanel report={legality} format={deck.format ?? 'casual'} />}
-      {isDeck && stats.total > 0 && <DeckStatsLine stats={stats} onOpen={() => navigate(`/decks/${id}/analysis`)} />}
+      {isDeck ? (
+        <DeckSummary
+          format={deck.format ?? 'casual'}
+          onFormat={(f) => void setDeckFormat(id, f)}
+          legality={legality}
+          counts={summary}
+          missingWorth={missingWorth}
+          stats={stats}
+          onOpenMana={() => navigate(`/decks/${id}/analysis?tab=mana`)}
+        />
+      ) : (
+        <StorageSummary counts={summary} missingWorth={missingWorth} />
+      )}
 
       <div className="list-toolbar">
-        {/* An empty deck has no Select button, so the hint squeezed in beside
-            Sort and stacking and the view toggle dropped onto a line of its
-            own. On its own row the hint leaves the controls one line to share. */}
-        <p className={`search-meta grow${data.rows.length === 0 ? ' toolbar-hint-row' : ''}`}>
-          Search above to add cards to this {meta.noun}.
-        </p>
-        {!sel.active && data.rows.length > 0 && (
-          <SelectToggle onEnter={sel.enter} />
+        {/* Search adds to whatever page it's opened on, so this is the header
+            search box with a name on it: the only way in used to be a hint. */}
+        <button className="select-toggle add-cards-btn" onClick={openSearch}>
+          <Icon name="plus" size={15} /> Add cards
+        </button>
+        {/* Nothing to select, sort or lay out until the first card lands. */}
+        {data.rows.length > 0 && (
+          <>
+            {!sel.active && <SelectToggle onEnter={sel.enter} />}
+            <SortControls prefs={sort} onChange={setSort} groups tagGroups withRelease />
+            <StackToggle on={stacking} onChange={setStacking} />
+            <ViewToggle mode={view} onChange={setView} />
+          </>
         )}
-        <SortControls prefs={sort} onChange={setSort} groups tagGroups withRelease />
-        <StackToggle on={stacking} onChange={setStacking} />
-        <ViewToggle mode={view} onChange={setView} />
       </div>
 
       <ClipboardKeys handlers={clipboard} onSelectAll={selectAll} cardKeys={cardKeys} />
@@ -1190,7 +1174,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           placements={placements}
           sel={sel}
           showYear={sort.key === 'released'}
-          emptyHint={`Nothing filed here yet. Search above, scan a stack, or select cards in your collection and file them into this ${meta.noun}.`}
+          emptyHint={`Nothing filed here yet. Tap Add cards, scan a stack, or select cards in your collection and file them into this ${meta.noun}.`}
         />
       )}
 
@@ -1381,21 +1365,6 @@ function sortRows(rows: Row[], prefs: CardSortPrefs): Row[] {
       ...releaseFields(r.printing),
     }),
     prefs,
-  );
-}
-
-function LegalityPanel({ report, format }: { report: LegalityReport; format: DeckFormat }) {
-  if (!report.checked) return <p className="fine-print">{formatLabel(format)} (no legality checks).</p>;
-  if (report.legal) return <div className="legality legality-ok">✓ Legal in {formatLabel(format)}</div>;
-  return (
-    <div className="legality legality-bad">
-      <strong>⚠ Not legal in {formatLabel(format)}</strong>
-      <ul>
-        {report.problems.map((p, i) => (
-          <li key={i}>{p}</li>
-        ))}
-      </ul>
-    </div>
   );
 }
 

@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.200.2',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The app starts a little faster again: the deck behavior editor now loads with deck analysis instead of at launch.',
+      },
+    ],
+  },
+  {
     version: '0.200.1',
     changes: [
       {
@@ -154,15 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Trade: starting or joining a trade shows what it is doing and has a Cancel. If the server can’t be reached you get Retry or Trade solo, a wrong code says so, and a dropped connection mid-trade keeps your board up while it reconnects.',
-      },
-    ],
-  },
-  {
-    version: '0.198.4',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Restoring a backup keeps a foil and a nonfoil wish for the same card apart, a deck you edit moves to the top of Decks, and wish quantity changes show in History and can be undone.',
       },
     ],
   },

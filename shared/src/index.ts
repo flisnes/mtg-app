@@ -1,6 +1,7 @@
 export * from './card.js';
 export * from './user.js';
 export * from './behavior.js';
+export * from './behaviorId.js';
 export * from './trade.js';
 export * from './agent.js';
 export * from './transfer.js';

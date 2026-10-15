@@ -3,6 +3,7 @@ import {
   MAX_TRANSFER_CHUNKS,
   PROTOCOL_VERSION,
   TRANSFER_CHUNK_CHARS,
+  sanitizeCardBehavior,
   type TradeErrorCode,
   type TransferClientMessage,
   type TransferServerMessage,
@@ -213,7 +214,7 @@ export function useTransfer(): TransferSession {
                 fail('The transfer arrived corrupted. Please try again.');
                 return;
               }
-              const payload = sanitizeTransferPayload(JSON.parse(json));
+              const payload = sanitizeTransferPayload(JSON.parse(json), sanitizeCardBehavior);
               if (!payload) {
                 fail('The received data is not a valid transfer.');
                 return;

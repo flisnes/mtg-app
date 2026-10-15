@@ -13,7 +13,6 @@ import {
   USER_EVENT_KINDS,
   normalizeCardTags,
   normalizeSpecialConditions,
-  sanitizeCardBehavior,
   sanitizeContainerEmblem,
   type CollectionEntry,
   type Color,
@@ -21,6 +20,7 @@ import {
   type ContainerKind,
   type Deck,
   SYNC_MAX_ROW_ID,
+  type CardBehavior,
   type DeckBehavior,
   type DeckBoard,
   type DeckCard,
@@ -311,8 +311,15 @@ export function sanitizeDeckFolderRow(raw: unknown): DeckFolder | null {
  * A row whose behavior does not survive is dropped whole. An empty behavior is
  * how "no behavior" is stored anyway (the row is deleted), so keeping the row
  * with nothing in it would only make a deck look authored when it is not.
+ *
+ * The sanitizer is passed in, not imported: it pulls the whole behavior
+ * vocabulary (40 kB) into whatever chunk imports it, and this file is in the
+ * boot chunk for the sync path, which never needs it. Without one the row is
+ * kept unparsed (the sync path's mode, see below).
  */
-export function sanitizeDeckBehaviorRow(raw: unknown, keepUnparsed = false): DeckBehavior | null {
+export type BehaviorSanitizer = (raw: unknown) => CardBehavior | null;
+
+export function sanitizeDeckBehaviorRow(raw: unknown, cleanBehavior?: BehaviorSanitizer): DeckBehavior | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const rowId = id(r.id);
@@ -324,12 +331,12 @@ export function sanitizeDeckBehaviorRow(raw: unknown, keepUnparsed = false): Dec
   // so a rule this build cannot read plays as nothing here and as itself once
   // the build catches up. Rebuilding it here is how five repair releases
   // (behaviorGrammarF through behaviorGrammarDevotion) came to be.
-  if (keepUnparsed) {
+  if (!cleanBehavior) {
     const b = r.behavior;
     if (!isPlainObject(b) || !Array.isArray(b.rules)) return null;
     return { id: rowId, deckId, oracleId, behavior: b as unknown as DeckBehavior['behavior'], updatedAt: ts(r.updatedAt) };
   }
-  const behavior = sanitizeCardBehavior(r.behavior);
+  const behavior = cleanBehavior(r.behavior);
   if (!behavior) return null;
   return { id: rowId, deckId, oracleId, behavior, updatedAt: ts(r.updatedAt) };
 }
@@ -602,7 +609,7 @@ const SYNC_SANITIZERS: Record<SyncTable, (raw: unknown) => { id: string } | null
   decks: sanitizeDeckRow,
   deckCards: sanitizeDeckCardRow,
   deckFolders: sanitizeDeckFolderRow,
-  deckBehaviors: (raw) => sanitizeDeckBehaviorRow(raw, true),
+  deckBehaviors: (raw) => sanitizeDeckBehaviorRow(raw),
   trades: sanitizeTradeRow,
   events: (raw) => sanitizeEventRow(raw, true),
 };
@@ -623,9 +630,10 @@ export function sanitizeSyncedRow(tbl: SyncTable, raw: unknown): { id: string } 
 
 /**
  * Validate a received payload. Returns null only if the envelope itself is not
- * a payload; individually bad rows are dropped, duplicates merged.
+ * a payload; individually bad rows are dropped, duplicates merged. Behaviors
+ * go through cleanBehavior (sanitizeCardBehavior; see sanitizeDeckBehaviorRow).
  */
-export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
+export function sanitizeTransferPayload(raw: unknown, cleanBehavior: BehaviorSanitizer): TransferPayload | null {
   if (!raw || typeof raw !== 'object') return null;
   const p = raw as Record<string, unknown>;
   if (p.version !== PAYLOAD_VERSION) return null;
@@ -725,7 +733,7 @@ export function sanitizeTransferPayload(raw: unknown): TransferPayload | null {
   const deckBehaviors: DeckBehavior[] = [];
   const behaviorIds = new Set<string>();
   for (const r of rows(p.deckBehaviors, CAPS.deckBehaviors)) {
-    const row = sanitizeDeckBehaviorRow(r);
+    const row = sanitizeDeckBehaviorRow(r, cleanBehavior);
     if (!row || behaviorIds.has(row.id) || !deckIds.has(row.deckId)) continue;
     behaviorIds.add(row.id);
     deckBehaviors.push(row);

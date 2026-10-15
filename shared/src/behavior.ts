@@ -1103,8 +1103,6 @@ export interface DeckBehavior {
   updatedAt: number;
 }
 
-export const deckBehaviorId = (deckId: string, oracleId: string): string => `${deckId}:${oracleId}`;
-
 // ---------------------------------------------------------------------------
 // The catalogs: one source of truth for the editor, the renderer and the sim
 // ---------------------------------------------------------------------------

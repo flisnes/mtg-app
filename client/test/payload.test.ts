@@ -6,6 +6,7 @@ import {
   FINISHES,
   REMOVAL_REASONS,
   SYNC_MAX_ROW_ID,
+  sanitizeCardBehavior,
   type CollectionEntry,
   type Deck,
   type DeckCard,
@@ -192,14 +193,14 @@ describe('sanitizeDeckBehaviorRow', () => {
   };
 
   test('keeps a row whose behavior parses', () => {
-    const clean = sanitizeDeckBehaviorRow({ id: 'd1:o1', deckId: 'd1', oracleId: 'o1', behavior, updatedAt: 1 });
+    const clean = sanitizeDeckBehaviorRow({ id: 'd1:o1', deckId: 'd1', oracleId: 'o1', behavior, updatedAt: 1 }, sanitizeCardBehavior);
     expect(clean).not.toBeNull();
     expect(clean!.behavior.rules).toHaveLength(1);
   });
 
   test('drops the whole row when the behavior does not survive', () => {
-    expect(sanitizeDeckBehaviorRow({ id: 'd1:o1', deckId: 'd1', oracleId: 'o1', behavior: { v: 999, rules: [] }, updatedAt: 1 })).toBeNull();
-    expect(sanitizeDeckBehaviorRow({ id: 'd1:o1', deckId: 'd1', oracleId: 'o1', behavior: 'draw a card', updatedAt: 1 })).toBeNull();
+    expect(sanitizeDeckBehaviorRow({ id: 'd1:o1', deckId: 'd1', oracleId: 'o1', behavior: { v: 999, rules: [] }, updatedAt: 1 }, sanitizeCardBehavior)).toBeNull();
+    expect(sanitizeDeckBehaviorRow({ id: 'd1:o1', deckId: 'd1', oracleId: 'o1', behavior: 'draw a card', updatedAt: 1 }, sanitizeCardBehavior)).toBeNull();
   });
 });
 
@@ -372,7 +373,7 @@ describe('sanitizeSyncedRow (variants of known enums)', () => {
     const clean = sanitizeSyncedRow('deckBehaviors', row) as unknown as { behavior: unknown };
     expect(clean.behavior).toEqual(future);
     // The transfer path stays strict all the way down.
-    expect(sanitizeDeckBehaviorRow(row)).toBeNull();
+    expect(sanitizeDeckBehaviorRow(row, sanitizeCardBehavior)).toBeNull();
     // Something that is not a behavior at all is still refused on both paths.
     expect(sanitizeSyncedRow('deckBehaviors', { ...row, behavior: 'draw a card' })).toBeNull();
     expect(sanitizeSyncedRow('deckBehaviors', { ...row, behavior: { v: 1 } })).toBeNull();
@@ -400,9 +401,9 @@ const emptyPayload = (): TransferPayload => ({
 
 describe('sanitizeTransferPayload', () => {
   test('rejects anything that is not a v1 envelope', () => {
-    expect(sanitizeTransferPayload(null)).toBeNull();
-    expect(sanitizeTransferPayload({ version: 2 })).toBeNull();
-    expect(sanitizeTransferPayload(emptyPayload())).toEqual(emptyPayload());
+    expect(sanitizeTransferPayload(null, sanitizeCardBehavior)).toBeNull();
+    expect(sanitizeTransferPayload({ version: 2 }, sanitizeCardBehavior)).toBeNull();
+    expect(sanitizeTransferPayload(emptyPayload(), sanitizeCardBehavior)).toEqual(emptyPayload());
   });
 
   test('collection: duplicate ids dropped, identical copies merged by full identity', () => {
@@ -415,7 +416,7 @@ describe('sanitizeTransferPayload', () => {
         collectionRow({ id: 'c', finish: 'foil', quantity: 1 }), // different identity → own row
       ],
     };
-    const clean = sanitizeTransferPayload(p)!;
+    const clean = sanitizeTransferPayload(p, sanitizeCardBehavior)!;
     expect(clean.collection).toHaveLength(2);
     const merged = clean.collection.find((e) => e.id === 'a')!;
     expect(merged.quantity).toBe(5);
@@ -432,7 +433,7 @@ describe('sanitizeTransferPayload', () => {
         { id: 'i2', productId: 'p1', name: 'Box', set: 'blb', quantity: 2, createdAt: 1, updatedAt: 1 },
       ],
     };
-    const clean = sanitizeTransferPayload(p)!;
+    const clean = sanitizeTransferPayload(p, sanitizeCardBehavior)!;
     expect(clean.wishlist).toHaveLength(1);
     expect(clean.wishlist[0]!.quantity).toBe(3);
     expect(clean.sealedItems).toHaveLength(1);
@@ -450,7 +451,7 @@ describe('sanitizeTransferPayload', () => {
         { ...wish, id: 'w4', lang: 'ja' },
       ],
     };
-    const clean = sanitizeTransferPayload(p)!;
+    const clean = sanitizeTransferPayload(p, sanitizeCardBehavior)!;
     expect(clean.wishlist.map((w) => w.id).sort()).toEqual(['w1', 'w2', 'w3', 'w4']);
     expect(clean.wishlist.find((w) => w.id === 'w2')!.finish).toBe('foil');
   });
@@ -476,7 +477,7 @@ describe('sanitizeTransferPayload', () => {
         { id: 'dx:o1', deckId: 'dx', oracleId: 'o1', behavior, updatedAt: 1 },
       ],
     };
-    const clean = sanitizeTransferPayload(p)!;
+    const clean = sanitizeTransferPayload(p, sanitizeCardBehavior)!;
     expect(clean.decks.find((d) => d.id === 'd1')!.folderId).toBe('f1');
     expect(clean.decks.find((d) => d.id === 'd2')).not.toHaveProperty('folderId');
     expect(clean.deckCards.map((c) => c.id)).toEqual(['c1']);
@@ -493,7 +494,7 @@ describe('sanitizeTransferPayload', () => {
         { id: 'c3', deckId: 'd1', oracleId: 'o1', quantity: 1, board: 'side', updatedAt: 1 },
       ],
     };
-    const clean = sanitizeTransferPayload(p)!;
+    const clean = sanitizeTransferPayload(p, sanitizeCardBehavior)!;
     expect(clean.deckCards).toHaveLength(2);
     expect(clean.deckCards.find((c) => c.board === 'main')!.quantity).toBe(4);
   });
@@ -507,7 +508,7 @@ describe('sanitizeTransferPayload', () => {
         { scryfallId: 's3', startDay: '2026-01-01', eur: [], usd: [] }, // empty → dropped
       ],
     };
-    const clean = sanitizeTransferPayload(p)!;
+    const clean = sanitizeTransferPayload(p, sanitizeCardBehavior)!;
     expect(clean.priceHistories).toHaveLength(1);
     const h = clean.priceHistories[0]!;
     expect(h.eur).toEqual([100, null, 0]);
@@ -521,7 +522,7 @@ describe('sanitizeTransferPayload', () => {
         { scryfallId: 's1', startDay: '2026-01-01', eur: [100, 110], usd: [1, 2], eurFoil: [300, 'x', 999], usdFoil: 'nope' },
       ],
     };
-    const h = sanitizeTransferPayload(p)!.priceHistories[0]!;
+    const h = sanitizeTransferPayload(p, sanitizeCardBehavior)!.priceHistories[0]!;
     expect(h.eurFoil).toEqual([300, null]);
     expect(h.usdFoil).toBeUndefined();
   });
@@ -535,7 +536,7 @@ describe('sanitizeTransferPayload', () => {
         { scryfallId: 's1', day: '2026-01-01', eur: 1.5, usd: 2.0 },
       ],
     };
-    const clean = sanitizeTransferPayload(p as unknown)!;
+    const clean = sanitizeTransferPayload(p as unknown, sanitizeCardBehavior)!;
     expect(clean.priceHistories).toHaveLength(1);
     const h = clean.priceHistories[0]!;
     expect(h.startDay).toBe('2026-01-01');
@@ -546,7 +547,7 @@ describe('sanitizeTransferPayload', () => {
   test('events: bad kinds and duplicate ids dropped', () => {
     const ev: UserEvent = { id: 'ev1', ts: 1, updatedAt: 1, kind: 'collection.add', oracleId: 'o1' };
     const p = { ...emptyPayload(), events: [ev, { ...ev }, { ...ev, id: 'ev2', kind: 'nope' }] };
-    const clean = sanitizeTransferPayload(p)!;
+    const clean = sanitizeTransferPayload(p, sanitizeCardBehavior)!;
     expect(clean.events.map((e) => e.id)).toEqual(['ev1']);
   });
 });

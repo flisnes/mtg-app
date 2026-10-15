@@ -73,7 +73,8 @@ import {
 } from '@mtg/shared';
 import { Icon } from './icons.js';
 import { ManaCost } from './ManaCost.js';
-import { otherDeckBehaviors, setCardBehavior, type BorrowableBehavior } from '../db/dataAccess.js';
+import { setCardBehavior } from '../db/dataAccess.js';
+import { otherDeckBehaviors, type BorrowableBehavior } from '../db/behaviors.js';
 import { getOracleCardsRaw, searchTokenCards } from '../db/queries.js';
 import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '@mtg/shared';
 import type { GroupRow } from '@mtg/sim';

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.2
+
+- **Changed: a bit less to download at launch.** The words and tables behind the deck behavior editor (what a card does in your deck) used to ride along with every start, even if you never open deck analysis. They now load with deck analysis, which takes about another 13 kB off the first download. Your written rules sync and transfer exactly as before.
+
 ## 0.200.1
 
 - **Changed: faster start.** The app downloads about a sixth less before the first screen shows (roughly 58 kB less over the wire). Settings, Sealed products, Price movers, Spoilers, Community, profiles, the history pages, Import and Export, the price and value charts and the agent connection code now load the first time you open them instead of on every launch. After the app is installed they come from the offline cache, so nothing waits on the network. Lighter than a Mox, and almost as fast.

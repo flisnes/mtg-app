@@ -26,7 +26,7 @@ import { effectiveBehaviors } from '@mtg/sim';
 import { useDefaults } from '../analysis/useDefaults.js';
 import { idleEngines, missedDrawCopies, modelQueue, type IdleEngines } from '@mtg/sim';
 import { oracleTagClosure } from '../cardDb/oracleTags.js';
-import { deckBehaviorMap } from '../db/dataAccess.js';
+import { deckBehaviorMap } from '../db/behaviors.js';
 import { getOracleCardsRaw } from '../db/queries.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import {

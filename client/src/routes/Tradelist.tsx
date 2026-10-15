@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import type { OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
 import { CollectionListView } from '../components/CollectionListView.js';
 import { HeaderValue, headerValue, useCollectionValue } from '../components/ValueSummary.js';
@@ -11,11 +10,9 @@ import { useToast } from '../components/Toast.js';
 import { useUndoShortcut } from '../history/useUndoShortcut.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
 import { buildTradelistCsv, downloadText } from '../import/export.js';
-import { useImportAnalysis } from '../import/useImportAnalysis.js';
-import { ImportReview } from '../import/ImportReview.js';
-import { ImportDefaultsRow, IMPORT_DEFAULTS } from '../import/ImportExtras.js';
+import { ImportPanel } from '../import/ImportPanel.js';
 import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
-import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/types.js';
+import type { ResolvedLine } from '../import/types.js';
 import { plural } from '../util/format.js';
 
 export function Tradelist() {
@@ -67,7 +64,7 @@ export function Tradelist() {
         />
       }
     >
-      {importing && <ImportPanel onDone={() => setImporting(false)} />}
+      {importing && <TradelistImport onDone={() => setImporting(false)} />}
       <CollectionListView onlyTrade />
       {scanning && <ScanSheet target={{ kind: 'tradelist' }} onClose={() => setScanning(false)} />}
       <CardDropZone target={scanning ? null : { kind: 'tradelist' }} />
@@ -76,35 +73,11 @@ export function Tradelist() {
   );
 }
 
-function ImportPanel({ onDone }: { onDone: () => void }) {
-  const [text, setText] = useState('');
-  const [defaults, setDefaults] = useState<ImportDefaults>(IMPORT_DEFAULTS);
-  const { status, analyze, reset } = useImportAnalysis();
+function TradelistImport({ onDone }: { onDone: () => void }) {
   // The same three choices the tradelist *scan* offers, then where the new
   // copies live: one questionnaire, before anything is written.
   const { open: review, sheet: intakeSheet } = useIntakeReview();
   const toast = useToast();
-
-  // Importing to the tradelist means "offer these for trade", so every copy is
-  // marked for trade (tradelistMode 'all'), whatever the file's own counts say.
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const content = await file.text();
-    setText(content);
-    analyze(content, { tradelistMode: 'all', defaults });
-  }
-
-  const makeResolved = (u: UnmatchedLine, card: OracleCard, scryfallId: string): ResolvedLine => ({
-    oracleId: card.oracleId,
-    scryfallId,
-    name: card.name,
-    quantity: u.quantity,
-    quantityForTrade: u.quantity,
-    condition: defaults.condition,
-    finish: u.finish ?? defaults.finish,
-    lang: defaults.lang,
-  });
 
   async function confirmImport(lines: ResolvedLine[]) {
     const res = await review({ flow: 'tradelist', lines, source: 'import', label: 'Tradelist import', incomingLabel: 'Import' });
@@ -119,52 +92,17 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
     onDone();
   }
 
-  if (status.kind === 'working') {
-    return (
-      <div className="about-section">
-        <p className="gate-msg">{status.label}</p>
-        <div className="progress">
-          <div className="progress-bar" style={{ width: `${Math.round(status.fraction * 100)}%` }} />
-        </div>
-      </div>
-    );
-  }
-
-  if (status.kind === 'review') {
-    return (
-      <div className="about-section">
-        <ImportReview
-          result={status.result}
-          makeResolved={makeResolved}
-          onConfirm={confirmImport}
-          onCancel={reset}
-          confirmLabel={(n) => `Add ${n} to tradelist`}
-        />
-        {intakeSheet}
-      </div>
-    );
-  }
-
+  // Importing to the tradelist means "offer these for trade", so every copy is
+  // marked for trade (tradelistMode 'all'), whatever the file's own counts say.
   return (
-    <div className="about-section">
-      {status.kind === 'error' && <p className="gate-error">Error: {status.message}</p>}
-      <p className="fine-print">
-        Paste a list or upload a file. Every card is added to your collection and marked for trade.
-      </p>
-      <textarea
-        className="search-input"
-        style={{ minHeight: 140, fontFamily: 'ui-monospace, monospace' }}
-        placeholder={'4 Lightning Bolt\n1 Sol Ring (C21) 263\n…or paste a Moxfield/Archidekt list'}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
+    <>
+      <ImportPanel
+        intro="Paste a list or upload a file. Every card is added to your collection and marked for trade."
+        tradelistMode="all"
+        onConfirm={confirmImport}
+        confirmLabel={(n) => `Add ${n} to tradelist`}
       />
-      <ImportDefaultsRow value={defaults} onChange={setDefaults} />
-      <div className="list-toolbar">
-        <button className="primary" onClick={() => analyze(text, { tradelistMode: 'all', defaults })} disabled={!text.trim()}>
-          Analyze
-        </button>
-        <input type="file" accept=".csv,.txt,text/*" onChange={onFile} />
-      </div>
-    </div>
+      {intakeSheet}
+    </>
   );
 }

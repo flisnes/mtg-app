@@ -64,12 +64,11 @@ import { shareDeckLink } from '../deck/share.js';
 import { getUserProfile } from '../account/api.js';
 import { useAccount } from '../account/useAccount.js';
 import { downloadText } from '../import/export.js';
-import { useImportAnalysis } from '../import/useImportAnalysis.js';
-import { ImportReview } from '../import/ImportReview.js';
-import { ImportDefaultsRow, IMPORT_DEFAULTS, OverlapChoice, applyOverlap, type OverlapMode } from '../import/ImportExtras.js';
+import { ImportPanel } from '../import/ImportPanel.js';
+import { OverlapChoice, applyOverlap, type OverlapMode } from '../import/ImportExtras.js';
 import { UnownedPromptSheet, type UnownedCard } from '../components/UnownedPromptSheet.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
-import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/types.js';
+import type { ResolvedLine } from '../import/types.js';
 import { useToast } from '../components/Toast.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { FINISH_LABELS } from '../components/copyTraits.js';
@@ -241,7 +240,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const account = useAccount();
   const [favDeckIds, setFavDeckIds] = useState<Set<string> | null>(null);
   const [showImport, setShowImport] = useState(false);
-  // A pasted decklist: hands ImportPanel its text so it can go straight to the
+  // A pasted decklist: hands ContainerImport its text so it can go straight to the
   // review rather than making you paste again into its own box.
   const [pastedText, setPastedText] = useState<string | null>(null);
   const [scanning, setScanning] = useState<'add' | 'rescan' | null>(null);
@@ -1085,7 +1084,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       <ClipboardKeys handlers={clipboard} onSelectAll={selectAll} cardKeys={cardKeys} />
 
       {showImport && (
-        <ImportPanel
+        <ContainerImport
           key={pastedText ?? 'manual'}
           deckId={id}
           slots={data.rows}
@@ -1763,7 +1762,7 @@ function TokenSuggestions({ deckId, view, tokens }: { deckId: string; view: View
   );
 }
 
-function ImportPanel({
+function ContainerImport({
   deckId,
   slots,
   noun,
@@ -1784,30 +1783,12 @@ function ImportPanel({
   initialText?: string;
   onDone: (added: number) => void;
 }) {
-  const [text, setText] = useState(initialText ?? '');
-  const [defaults, setDefaults] = useState<ImportDefaults>(IMPORT_DEFAULTS);
   const [overlap, setOverlap] = useState<OverlapMode>('add');
-  const { status, analyze, reset } = useImportAnalysis();
   // The written lines, waiting on the "you don't own these" tick-list.
   const [unowned, setUnowned] = useState<{ cards: UnownedCard[]; lines: ResolvedLine[]; added: number } | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const toast = useToast();
-
-  // Mounted with pasted text: straight to the review. The panel is keyed on
-  // that text upstream, so a second paste remounts and runs again.
-  //
-  // Deliberately not guarded by a "did this already" ref. StrictMode mounts,
-  // unmounts and remounts in development, and useImportAnalysis kills its
-  // worker on unmount — a guard would let the first run be terminated and stop
-  // the second from ever starting, leaving the panel stuck on "Starting…".
-  // Running again is harmless: analyze() terminates the previous worker itself.
-  useEffect(() => {
-    if (!initialText?.trim()) return;
-    analyze(initialText, { defaults });
-    // `defaults` is read once, at the moment the paste lands.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialText]);
 
   const ownership = useOwnershipIndex();
   // Card + board only: a pasted line overlaps any slot of that card on that board.
@@ -1817,20 +1798,6 @@ function ImportPanel({
     for (const s of slots) map.set(overlapKey(s), (map.get(overlapKey(s)) ?? 0) + s.quantity);
     return map;
   }, [slots]);
-
-  // A deck slot keys on oracle + board; keep the resolved printing so the deck
-  // remembers which edition the list used (like a hand-picked printing).
-  const makeResolved = (u: UnmatchedLine, card: OracleCard, scryfallId: string): ResolvedLine => ({
-    oracleId: card.oracleId,
-    scryfallId,
-    name: card.name,
-    quantity: u.quantity,
-    quantityForTrade: 0,
-    condition: defaults.condition,
-    finish: u.finish ?? defaults.finish,
-    lang: defaults.lang,
-    board: u.board ?? 'main',
-  });
 
   async function confirm(lines: ResolvedLine[]) {
     const wanted = applyOverlap(lines, overlap, have, overlapKey);
@@ -1941,47 +1908,19 @@ function ImportPanel({
     );
   }
 
-  if (status.kind === 'review') {
-    const already = status.result.resolved.filter((l) => (have.get(overlapKey(l)) ?? 0) > 0).length;
-    return (
-      <div className="about-section">
-        {already > 0 && <OverlapChoice count={already} where={`in this ${noun}`} value={overlap} onChange={setOverlap} />}
-        <ImportReview
-          result={status.result}
-          makeResolved={makeResolved}
-          onConfirm={confirm}
-          onCancel={reset}
-          confirmLabel={(n) => `Add ${n} entries to ${noun}`}
-        />
-      </div>
-    );
-  }
-
-  if (status.kind === 'working') {
-    return (
-      <div className="about-section">
-        <p className="gate-msg">{status.label}</p>
-        <div className="progress">
-          <div className="progress-bar" style={{ width: `${Math.round(status.fraction * 100)}%` }} />
-        </div>
-      </div>
-    );
-  }
-
+  // A deck slot keys on oracle + board; the panel keeps each line's board and
+  // resolved printing so the deck remembers which edition the list used.
   return (
-    <div className="about-section">
-      {status.kind === 'error' && <p className="gate-error">Error: {status.message}</p>}
-      <textarea
-        className="search-input"
-        style={{ minHeight: 140, fontFamily: 'ui-monospace, monospace' }}
-        placeholder={'4 Lightning Bolt\n2 Counterspell\n\nSideboard\n3 Duress'}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-      <ImportDefaultsRow value={defaults} onChange={setDefaults} />
-      <button className="primary" onClick={() => analyze(text, { defaults })} disabled={!text.trim()}>
-        Analyze
-      </button>
-    </div>
+    <ImportPanel
+      board
+      placeholder={'4 Lightning Bolt\n2 Counterspell\n\nSideboard\n3 Duress'}
+      {...(initialText ? { initialText } : {})}
+      onConfirm={confirm}
+      confirmLabel={(n) => `Add ${n} entries to ${noun}`}
+      aboveReview={(resolved) => {
+        const already = resolved.filter((l) => (have.get(overlapKey(l)) ?? 0) > 0).length;
+        return already > 0 && <OverlapChoice count={already} where={`in this ${noun}`} value={overlap} onChange={setOverlap} />;
+      }}
+    />
   );
 }

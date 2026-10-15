@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.8
+
+- **Changed: one import panel everywhere.** Pasting a list into your collection, tradelist, wishlist or a deck now uses the same panel. Condition, finish and language are proper labelled pickers instead of tiny browser dropdowns, the grey "Choose file" button is an Upload file button, and Analyze sits on the right where your thumb expects it. Under the hood, four copy-pasted import panels became one.
+
 ## 0.200.6
 
 - **Fixed: device transfer keeps every deck line.** Moving your data to a new phone merged deck lines that only shared a card and a zone, so a deck holding two printings of the same card came out with one line, and your own Islands folded into the "any printing" ones from the lands box. Each line now arrives as its own line. Under the hood, a sweep of small shared helpers (counting, plurals, color names, menu rows) replaced dozens of copy-pasted versions; the trade history list now shows dates in the same format as the rest of the app.

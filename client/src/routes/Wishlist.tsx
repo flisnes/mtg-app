@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import type { OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
 import { type JoinedWish } from '../db/queries.js';
 import { useJoinedWishes, useWishes } from '../db/collectionSnapshot.js';
@@ -28,10 +27,9 @@ import { useToast } from '../components/Toast.js';
 import { useUndoShortcut } from '../history/useUndoShortcut.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { buildWishlistText, downloadText } from '../import/export.js';
-import { useImportAnalysis } from '../import/useImportAnalysis.js';
-import { ImportReview } from '../import/ImportReview.js';
-import { ImportDefaultsRow, IMPORT_DEFAULTS, OverlapChoice, applyOverlap, type OverlapMode } from '../import/ImportExtras.js';
-import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/types.js';
+import { ImportPanel } from '../import/ImportPanel.js';
+import { OverlapChoice, applyOverlap, type OverlapMode } from '../import/ImportExtras.js';
+import type { ResolvedLine } from '../import/types.js';
 import { fmtCardCount, plural } from '../util/format.js';
 import { Loading } from '../components/Loading.js';
 
@@ -153,7 +151,7 @@ export function Wishlist() {
         />
       }
     >
-      {importing && <ImportPanel onDone={() => setImporting(false)} />}
+      {importing && <WishlistImport onDone={() => setImporting(false)} />}
       {rows === undefined ? (
         <Loading />
       ) : rows.length === 0 ? (
@@ -219,25 +217,14 @@ export function Wishlist() {
   );
 }
 
-function ImportPanel({ onDone }: { onDone: () => void }) {
-  const [text, setText] = useState('');
-  const [defaults, setDefaults] = useState<ImportDefaults>(IMPORT_DEFAULTS);
+function WishlistImport({ onDone }: { onDone: () => void }) {
   const [overlap, setOverlap] = useState<OverlapMode>('add');
-  const { status, analyze, reset } = useImportAnalysis();
   const toast = useToast();
   // What's already wished for, so the import can say so instead of silently
   // stacking a second copy of every line onto the first.
   const wishes = useWishes();
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const content = await file.text();
-    setText(content);
-    analyze(content, { defaults });
-  }
-
-  // A wish that names no edition means "any printing" — but a line that *did*
+  // A wish that names no edition means "any printing", but a line that *did*
   // name one asked for that edition, and throwing it away made the list say
   // something it didn't. Same for finish and language: the defaults mean "any",
   // anything else is a stated preference and is kept.
@@ -260,17 +247,6 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wishes]);
 
-  const makeResolved = (u: UnmatchedLine, card: OracleCard, scryfallId: string): ResolvedLine => ({
-    oracleId: card.oracleId,
-    scryfallId,
-    name: card.name,
-    quantity: u.quantity,
-    quantityForTrade: 0,
-    condition: defaults.condition,
-    finish: u.finish ?? defaults.finish,
-    lang: defaults.lang,
-  });
-
   async function confirm(lines: ResolvedLine[]) {
     const wanted = applyOverlap(lines.map(wishLine), overlap, have, keyOf);
     if (wanted.length === 0) {
@@ -283,56 +259,16 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
     onDone();
   }
 
-  if (status.kind === 'review') {
-    const already = status.result.resolved.filter((l) => (have.get(keyOf(wishLine(l))) ?? 0) > 0).length;
-    return (
-      <div className="about-section">
-        {already > 0 && (
-          <OverlapChoice count={already} where="on your wishlist" value={overlap} onChange={setOverlap} />
-        )}
-        <ImportReview
-          result={status.result}
-          makeResolved={makeResolved}
-          onConfirm={confirm}
-          onCancel={reset}
-          confirmLabel={(n) => `Add ${n} to wishlist`}
-        />
-      </div>
-    );
-  }
-
-  if (status.kind === 'working') {
-    return (
-      <div className="about-section">
-        <p className="gate-msg">{status.label}</p>
-        <div className="progress">
-          <div className="progress-bar" style={{ width: `${Math.round(status.fraction * 100)}%` }} />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="about-section">
-      {status.kind === 'error' && <p className="gate-error">Error: {status.message}</p>}
-      <p className="fine-print">
-        Paste a list or upload a file. A line that names an edition wishes for that edition; the rest import as “any
-        printing”.
-      </p>
-      <textarea
-        className="search-input"
-        style={{ minHeight: 140, fontFamily: 'ui-monospace, monospace' }}
-        placeholder={'4 Lightning Bolt\n1 Sol Ring (C21) 263\n…or paste a Moxfield/Archidekt list'}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-      <ImportDefaultsRow value={defaults} onChange={setDefaults} showCondition={false} />
-      <div className="list-toolbar">
-        <button className="primary" onClick={() => analyze(text, { defaults })} disabled={!text.trim()}>
-          Analyze
-        </button>
-        <input type="file" accept=".csv,.txt,text/*" onChange={onFile} />
-      </div>
-    </div>
+    <ImportPanel
+      intro="Paste a list or upload a file. A line that names an edition wishes for that edition; the rest import as “any printing”."
+      showCondition={false}
+      onConfirm={confirm}
+      confirmLabel={(n) => `Add ${n} to wishlist`}
+      aboveReview={(resolved) => {
+        const already = resolved.filter((l) => (have.get(keyOf(wishLine(l))) ?? 0) > 0).length;
+        return already > 0 && <OverlapChoice count={already} where="on your wishlist" value={overlap} onChange={setOverlap} />;
+      }}
+    />
   );
 }

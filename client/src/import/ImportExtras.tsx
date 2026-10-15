@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { CONDITIONS, FINISHES, type Condition, type Finish } from '@mtg/shared';
 import { FINISH_LABELS, LANGS } from '../components/copyTraits.js';
 import type { ImportDefaults } from './types.js';
@@ -18,17 +19,21 @@ export function ImportDefaultsRow({
   onChange,
   /** Wishes are for a printing, not a graded copy, so the wishlist hides condition. */
   showCondition = true,
+  before,
 }: {
   value: ImportDefaults;
   onChange: (v: ImportDefaults) => void;
   showCondition?: boolean;
+  /** A caller's own field, first in the row (the collection Import's tradelist choice). */
+  before?: ReactNode;
 }) {
   return (
     <>
-      <div className="chips" role="group" aria-label="Details for the whole list">
+      <div className="import-fields" role="group" aria-label="Details for the whole list">
+        {before}
         {showCondition && (
-          <label className="chip">
-            Condition:{' '}
+          <label className="import-field">
+            <span>Condition</span>
             <select
               value={value.condition}
               onChange={(e) => onChange({ ...value, condition: e.target.value as Condition })}
@@ -42,8 +47,8 @@ export function ImportDefaultsRow({
             </select>
           </label>
         )}
-        <label className="chip">
-          Finish:{' '}
+        <label className="import-field">
+          <span>Finish</span>
           <select
             value={value.finish}
             onChange={(e) => onChange({ ...value, finish: e.target.value as Finish })}
@@ -56,8 +61,8 @@ export function ImportDefaultsRow({
             ))}
           </select>
         </label>
-        <label className="chip">
-          Language:{' '}
+        <label className="import-field">
+          <span>Language</span>
           <select
             value={value.lang}
             onChange={(e) => onChange({ ...value, lang: e.target.value })}

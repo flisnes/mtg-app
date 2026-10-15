@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.200.8',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Importing a list looks the same everywhere: labelled condition, finish and language pickers, an Upload file button, and Analyze on the right.',
+      },
+    ],
+  },
+  {
     version: '0.200.6',
     changes: [
       {
@@ -154,15 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Select mode shows its two main actions as soon as you pick a card, with the rest under More. The check circle moved off the card name.',
-      },
-    ],
-  },
-  {
-    version: '0.198.6',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Every screen now lights up its tab, and screens off More have a "‹ More" link back.',
       },
     ],
   },

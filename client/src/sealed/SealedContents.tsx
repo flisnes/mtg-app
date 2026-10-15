@@ -10,6 +10,7 @@ import { Sheet } from '../components/Sheet.js';
 import { SealedImage } from './SealedImage.js';
 import { loadContents, perCopyCount, type OpenContents, type OpenRow } from './open.js';
 import { productImage, subtitle } from './product.js';
+import { plural } from '../util/format.js';
 
 // What's actually inside a sealed product, as cards rather than as a list of
 // names. A precon's contents are known down to the printing — the Wilds of
@@ -131,7 +132,7 @@ export function SealedContentsSheet({
 
       {product.omittedRandom ? (
         <p className="sealed-note">
-          ⚠ Also contains {product.omittedRandom} random pack{product.omittedRandom === 1 ? '' : 's'}, whose contents nobody
+          ⚠ Also contains {product.omittedRandom} random {plural(product.omittedRandom, 'pack')}, whose contents nobody
           can list.
         </p>
       ) : null}
@@ -146,7 +147,7 @@ export function SealedContentsSheet({
           rows={contents.rows}
           pageKey={product.id}
           {...(highlightIds ? { highlightIds } : {})}
-          status={`${total} card${total === 1 ? '' : 's'} in this product.`}
+          status={`${total} ${plural(total, 'card')} in this product.`}
         />
       ) : (
         <p className="sealed-msg">Loading contents…</p>

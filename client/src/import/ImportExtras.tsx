@@ -1,6 +1,7 @@
 import { CONDITIONS, FINISHES, type Condition, type Finish } from '@mtg/shared';
 import { FINISH_LABELS, LANGS } from '../components/CardSheet.js';
 import type { ImportDefaults } from './types.js';
+import { plural } from '../util/format.js';
 
 // Two controls the import screens were missing, both borrowed from things the
 // scanner already does well.
@@ -108,7 +109,7 @@ export function OverlapChoice({
     <div className="about-section">
       <h2>Already {where}</h2>
       <p className="fine-print">
-        {count} card{count === 1 ? '' : 's'} in this list {count === 1 ? 'is' : 'are'} already {where}.{' '}
+        {count} {plural(count, 'card')} in this list {count === 1 ? 'is' : 'are'} already {where}.{' '}
         <strong>Add on top</strong> stacks the list onto what's there, <strong>Skip those</strong> imports only the rest,
         and <strong>Top up</strong> adds just enough to reach the count the list asks for.
       </p>

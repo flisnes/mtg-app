@@ -14,6 +14,7 @@ import {
   type FilingMode,
   type PinTarget,
 } from './filing.js';
+import { sumQty } from '../util/groupBy.js';
 
 /** What a filing did: how it settled the question, and how many copies of real
  *  cardboard actually went in (0 = the target already held every copy you own,
@@ -87,7 +88,7 @@ export function useFiling() {
     ): Promise<FilingResult | null> => {
       const decided = await decide(targetId, copies, { cap: true });
       if (!decided) return null;
-      const filed = decided.copies.reduce((n, c) => n + c.quantity, 0);
+      const filed = sumQty(decided.copies);
       // Nothing to put away (and so nothing to move out of the way either):
       // don't touch the container just to write the same slots back.
       if (decided.copies.length === 0) return { mode: decided.mode, filed: 0 };

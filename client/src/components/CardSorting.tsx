@@ -10,6 +10,7 @@ import {
   type SortDir,
   type SortKey,
 } from './cardSort.js';
+import { sumQty } from '../util/groupBy.js';
 
 // Sort/group controls, and the per-view persistence behind them. Every card
 // list in the app (decks, collection, tradelist, wishlist, card search) renders
@@ -289,7 +290,7 @@ export function ListSortControls<K extends string>({
 export function GroupCountBadge({ quantity, extras }: { quantity: number; extras?: ExtraLand[] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement | null>(null);
-  const extraQty = (extras ?? []).reduce((s, e) => s + e.quantity, 0);
+  const extraQty = sumQty(extras ?? []);
 
   useEffect(() => {
     if (!open) return;

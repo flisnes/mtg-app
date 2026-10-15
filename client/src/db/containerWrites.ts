@@ -1,12 +1,13 @@
-import { sanitizeContainerEmblem } from '@mtg/shared';
+import { holdsCopy, sanitizeContainerEmblem } from '@mtg/shared';
 import type { ContainerEmblem, ContainerKind, Deck, DeckFolder, DeckFormat } from '@mtg/shared';
 import { db } from './schema.js';
 import { boardForFormat } from '../deck/boards.js';
 import { slotEvent } from './events.js';
-import { filedCopy, newId } from './keys.js';
+import { newId } from './keys.js';
 import { moveSlotRaw, setSlotsUnfiled } from './slotWrites.js';
 import { DECK_FOLDER_TABLES, DECK_TABLES, deleteSynced, deleteSyncedMany, patchSynced, putSynced, write } from './write.js';
 import type { WriteCtx } from './write.js';
+import { sumQty } from '../util/groupBy.js';
 
 // ---------------------------------------------------------------------------
 // Decks (beta plan §4). Deck slots reference oracle cards ("4x Lightning Bolt");
@@ -220,5 +221,5 @@ export async function unfileWholeContainer(deckId: string): Promise<number> {
 /** Copies a container is holding right now — what unfiling it would free. */
 export async function countFiledCopies(deckId: string): Promise<number> {
   const slots = await db.deckCards.where('deckId').equals(deckId).toArray();
-  return slots.reduce((n, s) => n + (filedCopy(s) ? s.quantity : 0), 0);
+  return sumQty(slots.filter(holdsCopy));
 }

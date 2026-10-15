@@ -15,6 +15,7 @@ import {
   type PrintingPlace,
   type ProductWithCard,
 } from './product.js';
+import { plural } from '../util/format.js';
 
 // "Which sealed product can I find this card in?" — the question you ask when a
 // card turns up and you want to know which Commander precon it came in. Answered
@@ -80,7 +81,7 @@ export function SealedWithCardSheet({
       {load.kind === 'ready' && load.hits.length > 0 && (
         <>
           <p className="search-meta">
-            Always in {load.hits.length} product{load.hits.length === 1 ? '' : 's'}.
+            Always in {load.hits.length} {plural(load.hits.length, 'product')}.
           </p>
           <ul className="sealed-results sealed-results-flow">
             {load.hits.map(({ product, qty }) => (
@@ -104,7 +105,7 @@ export function SealedWithCardSheet({
       {load.kind === 'ready' && load.packHits.length > 0 && (
         <>
           <p className="search-meta">
-            Can be opened from {load.packHits.length} product{load.packHits.length === 1 ? '' : 's'} with random boosters.
+            Can be opened from {load.packHits.length} {plural(load.packHits.length, 'product')} with random boosters.
           </p>
           <ul className="sealed-results sealed-results-flow">
             {load.packHits.map((product) => (

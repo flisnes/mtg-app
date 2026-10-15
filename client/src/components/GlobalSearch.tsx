@@ -46,6 +46,7 @@ import { NotificationBell } from './NotificationBell.js';
 import { useAccount } from '../account/useAccount.js';
 import { useOwnAvatar } from '../account/ownProfile.js';
 import { useDismiss } from './useDismiss.js';
+import { plural } from '../util/format.js';
 
 // Card search is the front door to the hobby, so it lives in a persistent
 // header instead of a tab: the input is reachable from every screen, and
@@ -554,7 +555,7 @@ function SearchOverlay({ history }: { history: ReactNode }) {
       ids.map((key) => ({ ...splitResultKey(key), quantity: 1 })),
       { source: 'manual', label: 'From search' },
     );
-    toast(`Added ${res.cards} card${res.cards === 1 ? '' : 's'} to wishlist`);
+    toast(`Added ${res.cards} ${plural(res.cards, 'card')} to wishlist`);
     sel.exit();
   }
 

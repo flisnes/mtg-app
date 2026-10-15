@@ -6,6 +6,7 @@ import { dismissMatch, fetchMatchesNow, markAllSeen } from '../account/notificat
 import { useFilingConflictCount } from '../db/usePlacements.js';
 import { Icon } from './icons.js';
 import { useAsyncAction } from './useAsyncAction.js';
+import { plural } from '../util/format.js';
 
 // Bell in the header, next to the account icon. A red dot appears when there's
 // something waiting. Two kinds of thing land here:
@@ -115,7 +116,7 @@ export function NotificationBell({ signedIn }: { signedIn: boolean }) {
                   >
                     <span className="notif-user">
                       <span className="notif-new-dot" aria-hidden />
-                      {conflicts} filing conflict{conflicts === 1 ? '' : 's'}
+                      {conflicts} filing {plural(conflicts, 'conflict')}
                     </span>
                     <span className="notif-line">
                       <span className="notif-tag notif-tag-have">Where is it?</span>

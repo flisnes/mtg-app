@@ -49,6 +49,7 @@ import { librarySize, type GroupRow } from '@mtg/sim';
 import { manaReport } from '@mtg/sim';
 import type { ManaFix } from '../deck/manaFixes.js';
 import type { PlacementIndex } from '../db/usePlacements.js';
+import { plural } from '../util/format.js';
 
 // What the deck's mana looks like before a single card is drawn: the curve, the
 // tempo the tapped lands cost you, and whether there are enough lands for what
@@ -60,7 +61,6 @@ import type { PlacementIndex } from '../db/usePlacements.js';
 // the sheet became a page with tabs.
 
 const one = (n: number) => n.toFixed(1);
-const plural = (n: number) => (n === 1 ? '' : 's');
 
 /**
  * A rule just saved, and the run it is measured against (rebuild plan C2).
@@ -171,9 +171,9 @@ function loadGoals(deckId: string): SimGoal[] {
  * actually costing the numbers anything, and the only part worth a tap.
  */
 function behaviorNote(coverage: { blanks: number; authored: number; defaults: number }, queued: number): string {
-  if (queued > 0) return `${queued} card${plural(queued)} worth writing first: the tags say they do something, the simulator plays them as nothing`;
-  if (coverage.authored > 0) return `${coverage.authored} card${plural(coverage.authored)} play out the way you wrote them`;
-  if (coverage.defaults > 0) return `${coverage.defaults} card${plural(coverage.defaults)} play out from rules written for them`;
+  if (queued > 0) return `${queued} ${plural(queued, 'card')} worth writing first: the tags say they do something, the simulator plays them as nothing`;
+  if (coverage.authored > 0) return `${coverage.authored} ${plural(coverage.authored, 'card')} play out the way you wrote them`;
+  if (coverage.defaults > 0) return `${coverage.defaults} ${plural(coverage.defaults, 'card')} play out from rules written for them`;
   if (coverage.blanks > 0) return `${coverage.blanks} cards do nothing in the simulator, which is right for removal`;
   return 'The simulator plays out every card';
 }
@@ -601,7 +601,7 @@ export function DeckAnalysis({
             <h3 className="deck-stats-head">Land count</h3>
             <p className={`deck-stats-verdict tone-${stats.land.tone}`}>
               <strong>
-                {stats.lands} land{plural(stats.lands)}.
+                {stats.lands} {plural(stats.lands, 'land')}.
               </strong>{' '}
               {stats.land.text}
             </p>
@@ -616,7 +616,7 @@ export function DeckAnalysis({
               )}
               {stats.sacrificedLands > 0 && (
                 <p className="fine-print">
-                  Something here eats {stats.sacrificedLands} land{plural(stats.sacrificedLands)} as it enters, so the verdict is judged
+                  Something here eats {stats.sacrificedLands} {plural(stats.sacrificedLands, 'land')} as it enters, so the verdict is judged
                   against {stats.effectiveLands}. A Lotus Field is three permanents becoming one.
                 </p>
               )}
@@ -738,7 +738,7 @@ export function DeckAnalysis({
             : 'Goldfish numbers: they assume a land drop every turn and nobody on the other side of the table.'}
           {format === 'commander' && ' Your commander counts as a card you cast.'}
           {stats.unknown > 0 &&
-            ` ${stats.unknown} card${plural(stats.unknown)} here produce${stats.unknown === 1 ? 's' : ''} mana in a way we can't put a number on.`}
+            ` ${stats.unknown} ${plural(stats.unknown, 'card')} here produce${stats.unknown === 1 ? 's' : ''} mana in a way we can't put a number on.`}
         </p>
       </div>
 

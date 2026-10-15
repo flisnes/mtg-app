@@ -5,7 +5,7 @@
 // (names, colors, counts travel with the profile) and viewers resolve images
 // from their own local card DB by id.
 
-import type { Color } from './card.js';
+import { COLORS, type Color } from './card.js';
 import { clampStr, UNKNOWN_CARD_NAME } from './strings.js';
 import { DECK_BOARDS } from './user.js';
 
@@ -82,8 +82,6 @@ export interface ProfilePutResponse {
 // same trust model as trade shares: another user's profile is untrusted input).
 // ---------------------------------------------------------------------------
 
-const COLOR_ORDER: readonly Color[] = ['W', 'U', 'B', 'R', 'G'];
-
 function clamp(v: unknown, min: number, max: number): number | null {
   const n = Number(v);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null;
@@ -123,7 +121,7 @@ export function sanitizeProfile(v: unknown): UserProfile {
       const name = clampStr(d.name, 80);
       if (!name) continue;
       const colors = Array.isArray(d.colors)
-        ? COLOR_ORDER.filter((c) => (d.colors as unknown[]).includes(c))
+        ? COLORS.filter((c) => (d.colors as unknown[]).includes(c))
         : [];
       const deckId = clampStr(d.deckId, 64);
       favoriteDecks.push({

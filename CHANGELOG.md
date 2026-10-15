@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.6
+
+- **Fixed: device transfer keeps every deck line.** Moving your data to a new phone merged deck lines that only shared a card and a zone, so a deck holding two printings of the same card came out with one line, and your own Islands folded into the "any printing" ones from the lands box. Each line now arrives as its own line. Under the hood, a sweep of small shared helpers (counting, plurals, color names, menu rows) replaced dozens of copy-pasted versions; the trade history list now shows dates in the same format as the rest of the app.
+
 ## 0.200.5
 
 - **Internal: the card-edit code, sorted into drawers.** Nothing changes on screen. The one 2,800-line file that every collection, wishlist, deck, trade and undo edit went through is now a dozen smaller files, one per kind of thing you edit, so the next fixes touch less and break less. The test net from 0.200.3 stayed green and a full two-phone trade still completes. Like sorting bulk into binders: same cards, easier to find.

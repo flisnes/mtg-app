@@ -9,6 +9,7 @@ import { CONTAINER_META } from '../deck/containers.js';
 import { fixCandidates, manaNeeds, planFixes, type FixPlan, type ManaFix, type ManaNeed } from '../deck/manaFixes.js';
 import { useOwnedSources } from '../db/useOwnedSources.js';
 import type { PlacementIndex } from '../db/usePlacements.js';
+import { plural } from '../util/format.js';
 
 // The answer to the question the panel above it asks. "Two white sources short"
 // is a diagnosis; "you have three Plains in a bulk box, tap to file them" is a
@@ -71,7 +72,7 @@ export function ManaFixPanel({
           {plan.fixes.length > 0 && (
             <p className="fine-print">
               Tapping a row files those copies into the mainboard, out of the pile they're in now. It takes nothing out, so the odds above
-              only move all the way once you cut {plan.added} card{plural(plan.added)} to make room: a bigger deck draws its lands later,
+              only move all the way once you cut {plan.added} {plural(plan.added, 'card')} to make room: a bigger deck draws its lands later,
               which is the whole reason the count matters. Which {plan.added === 1 ? 'spell' : 'spells'} to cut isn't a question
               arithmetic answers.
             </p>
@@ -93,7 +94,6 @@ export function ManaFixPanel({
   );
 }
 
-const plural = (n: number) => (n === 1 ? '' : 's');
 
 /** "1 spare · Binder: Duals", or where it is when it isn't filed anywhere. */
 function whereText(fix: ManaFix): string {
@@ -110,7 +110,7 @@ function listNames(names: readonly string[]): string {
 
 /** "2 white sources", or "1 white-or-blue source" for a hybrid requirement. */
 function needText(need: ManaNeed): string {
-  return `${need.short} ${colorName(need.colors)} source${plural(need.short)}`;
+  return `${need.short} ${colorName(need.colors)} ${plural(need.short, 'source')}`;
 }
 
 function verdict(plan: FixPlan) {
@@ -125,7 +125,7 @@ function verdict(plan: FixPlan) {
   if (plan.remaining.length === 0) {
     return (
       <>
-        <strong className="tone-ok">Your collection covers it.</strong> {plan.added} card{plural(plan.added)} you own and aren't using,
+        <strong className="tone-ok">Your collection covers it.</strong> {plan.added} {plural(plan.added, 'card')} you own and aren't using,
         swapped in for {plan.added} you can spare.
       </>
     );

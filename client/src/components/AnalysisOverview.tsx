@@ -5,6 +5,7 @@ import type { BracketReport, SimLimits, SimResult } from '@mtg/sim';
 import { heldBackBy } from './OnCurvePanel.js';
 import type { SimCoverage } from '@mtg/sim';
 import { FLOW_TURN } from './FlowTurnsPanel.js';
+import { plural } from '../util/format.js';
 
 // The Overview tab (rebuild plan A5): one row per question, each a status, a
 // sentence and the next thing to do, and each a way into the tab with the
@@ -25,7 +26,6 @@ const pct = (p: number) => `${Math.round(p * 100)}%`;
 /** Below the bar never rounds onto it: "90%" on a row flagged for missing 90% reads as a bug. */
 const pctShort = (p: number) => (p >= THRESHOLD ? pct(p) : `${Math.min(Math.round(p * 100), Math.round(THRESHOLD * 100) - 1)}%`);
 const one = (n: number) => n.toFixed(1);
-const plural = (n: number) => (n === 1 ? '' : 's');
 
 type Tone = 'ok' | 'warn' | 'wait';
 
@@ -135,7 +135,7 @@ function manaAnswer(
   } else {
     const worst = late[0]!;
     bits.push(
-      `${late.length} cost${plural(late.length)} miss${late.length === 1 ? 'es' : ''} 90% on ${late.length === 1 ? 'its' : 'their'} own turn, worst ${worst.names[0]} at ${pctShort(worst.onCurvePay)} on turn ${worst.curveTurn}${becauseOf(worst.limits)}.`,
+      `${late.length} ${plural(late.length, 'cost')} miss${late.length === 1 ? 'es' : ''} 90% on ${late.length === 1 ? 'its' : 'their'} own turn, worst ${worst.names[0]} at ${pctShort(worst.onCurvePay)} on turn ${worst.curveTurn}${becauseOf(worst.limits)}.`,
     );
   }
   if (stats.land.tone !== 'ok') bits.push(`${stats.lands} lands, ${stats.land.short}.`);
@@ -149,9 +149,9 @@ function manaAnswer(
   const landsSpeak = !leadWhy || leadWhy.kind === 'mana';
   const next =
     landsSpeak && stats.land.tone === 'light'
-      ? `Add ${-stats.land.diff} land${plural(-stats.land.diff)}, or cheap ramp.`
+      ? `Add ${-stats.land.diff} ${plural(-stats.land.diff, 'land')}, or cheap ramp.`
       : landsSpeak && stats.land.tone === 'heavy'
-        ? `Cut ${stats.land.diff} land${plural(stats.land.diff)} for spells.`
+        ? `Cut ${stats.land.diff} ${plural(stats.land.diff, 'land')} for spells.`
         : ok || !lead
           ? undefined
           : fixFor(lead.limits);
@@ -240,7 +240,7 @@ function planAnswer(goals: readonly SimGoal[], result: SimResult | undefined, ha
   const worst = Math.min(...ps);
   const first = goals[0]!;
   const lead = `${pct(ps[0]!)} of games: ${describeGoal(first)}.`;
-  const rest = goals.length > 1 ? ` ${goals.length - 1} more goal${plural(goals.length - 1)}, the shakiest at ${pct(worst)}.` : '';
+  const rest = goals.length > 1 ? ` ${goals.length - 1} more ${plural(goals.length - 1, 'goal')}, the shakiest at ${pct(worst)}.` : '';
   return {
     tone: worst < SHAKY ? 'warn' : 'ok',
     status: goals.length === 1 ? pct(ps[0]!) : `${goals.length} goals, worst ${pct(worst)}`,
@@ -256,10 +256,10 @@ function planAnswer(goals: readonly SimGoal[], result: SimResult | undefined, ha
  */
 function bracketAnswer(b: BracketReport): Answer {
   const counts = [
-    `${b.gameChangers.length} Game Changer${plural(b.gameChangers.length)}`,
+    `${b.gameChangers.length} Game ${plural(b.gameChangers.length, 'Changer')}`,
     b.massLandDenial.length > 0 ? `${b.massLandDenial.length} mass land denial` : '',
-    b.extraTurns.length > 0 ? `${b.extraTurns.length} extra turn${plural(b.extraTurns.length)}` : '',
-    b.tutors ? `${b.tutors.length} tutor${plural(b.tutors.length)}` : '',
+    b.extraTurns.length > 0 ? `${b.extraTurns.length} extra ${plural(b.extraTurns.length, 'turn')}` : '',
+    b.tutors ? `${b.tutors.length} ${plural(b.tutors.length, 'tutor')}` : '',
   ].filter(Boolean);
   const s = b.speed;
   const clock = !s
@@ -291,7 +291,7 @@ function modelAnswer(c: SimCoverage, toCheck: number): Answer {
     return {
       tone: 'warn',
       status: `${toCheck} to check`,
-      text: `${head} ${toCheck} card${plural(toCheck)} that should draw, ramp or build ${toCheck === 1 ? 'does' : 'do'} nothing yet, so the numbers are a floor.`,
+      text: `${head} ${toCheck} ${plural(toCheck, 'card')} that should draw, ramp or build ${toCheck === 1 ? 'does' : 'do'} nothing yet, so the numbers are a floor.`,
       next: 'Write what they do, top of the list first.',
     };
   }

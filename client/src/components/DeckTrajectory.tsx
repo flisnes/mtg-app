@@ -2,6 +2,7 @@ import { HowWorked } from './HowWorked.js';
 import { useEffect, useRef, useState } from 'react';
 import type { SimCoverage } from '@mtg/sim';
 import type { SimResult } from '@mtg/sim';
+import { plural } from '../util/format.js';
 
 // How the game unfolds, turn by turn — phase 7, and the first thing in this
 // sheet that is about the *deck* rather than about a card in it.
@@ -157,12 +158,12 @@ function coverageNote(c: SimCoverage, missedDraw: number | null): string {
   // deck they stop being a pure floor, and only the reader can price that in.
   if (c.authored > 0) {
     rest.push(
-      `${c.authored} card${c.authored === 1 ? '' : 's'} play out the way you told them to rather than the way we read them, so the lines above are only as good as your own reading of those.`,
+      `${c.authored} ${plural(c.authored, 'card')} play out the way you told them to rather than the way we read them, so the lines above are only as good as your own reading of those.`,
     );
   }
   if (c.defaults > 0) {
     rest.push(
-      `${c.defaults} card${c.defaults === 1 ? '' : 's'} play out from rules written for ${c.defaults === 1 ? 'it' : 'them'} by hand. Those err low, but they are still more than the card database reads.`,
+      `${c.defaults} ${plural(c.defaults, 'card')} play out from rules written for ${c.defaults === 1 ? 'it' : 'them'} by hand. Those err low, but they are still more than the card database reads.`,
     );
   }
   return [head, ...rest].join(' ');

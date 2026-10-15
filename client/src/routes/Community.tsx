@@ -37,8 +37,9 @@ import {
   type CardMaps,
   type InfoTarget,
 } from '../community/userLists.js';
-import { fmtDate } from '../util/format.js';
+import { fmtDate, plural } from '../util/format.js';
 import { EmptyState, Page, usePageMeta } from './Page.js';
+import { Loading } from '../components/Loading.js';
 
 const PAGE_SIZE = 60;
 
@@ -180,7 +181,7 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
       {error ? (
         <EmptyState>{error}</EmptyState>
       ) : users === null ? (
-        <p className="fine-print">Loading…</p>
+        <Loading fine />
       ) : users.length === 0 ? (
         <EmptyState hint="Lists appear after the first backup.">No one has published lists yet.</EmptyState>
       ) : (
@@ -396,7 +397,7 @@ function UserLists({
       {error ? (
         <EmptyState>{error}</EmptyState>
       ) : !lists ? (
-        <p className="fine-print">Loading…</p>
+        <Loading fine />
       ) : (
         <>
           <div className="meta-row">
@@ -588,7 +589,7 @@ function UserListAll<
   // Which of their lists this is, and how big, reads as the page's own header
   // line under their name. Searching it is the header bar's job — scoped to
   // their lists the moment you land on their page.
-  const label = `${heading} · ${rows.length} card${rows.length === 1 ? '' : 's'}`;
+  const label = `${heading} · ${rows.length} ${plural(rows.length, 'card')}`;
   const hoisted = usePageMeta(label);
 
   return (

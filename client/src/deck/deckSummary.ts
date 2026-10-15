@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { COLORS, countsTowardDeck, normalizeColors, type Color, type Deck, type DeckCard, type OracleCard } from '@mtg/shared';
+import { COLORS, holdsCopy, normalizeColors, type Color, type Deck, type DeckCard, type OracleCard } from '@mtg/shared';
 import { getOracleCardsByIds } from '../db/queries.js';
 import { useContainers } from '../db/collectionSnapshot.js';
 import { needsColorChoice } from './legality.js';
 import { containerKind } from './containers.js';
+import { deckSize } from './boards.js';
+import { sumQty } from '../util/groupBy.js';
 
 // The one-line summary a deck list shows per row: how big it is, what colours
 // it is, how many copies it holds. The Decks page and the profile's favorite
@@ -13,14 +15,9 @@ import { containerKind } from './containers.js';
 
 type SummaryOracle = Pick<OracleCard, 'colors' | 'colorIdentity'> & Parameters<typeof needsColorChoice>[0];
 
-/** Mainboard size. The commander counts; tokens, the companion and Considering never do. */
-export function deckSize(cards: DeckCard[]): number {
-  return cards.filter((c) => countsTowardDeck(c.board)).reduce((s, c) => s + c.quantity, 0);
-}
-
 /** Sideboard size. */
-export function sideSize(cards: DeckCard[]): number {
-  return cards.filter((c) => c.board === 'side').reduce((s, c) => s + c.quantity, 0);
+function sideSize(cards: DeckCard[]): number {
+  return sumQty(cards.filter((c) => c.board === 'side'));
 }
 
 /**
@@ -72,10 +69,7 @@ export function dominantColors(
 
 /** Copies the container is actually holding (fully specified, not unfiled). */
 export function filedCount(cards: DeckCard[]): number {
-  return cards.reduce(
-    (n, c) => n + (!c.anyBasic && c.scryfallId && c.condition && c.finish && c.lang && !c.unfiled ? c.quantity : 0),
-    0,
-  );
+  return sumQty(cards.filter(holdsCopy));
 }
 
 export interface DeckSummary {

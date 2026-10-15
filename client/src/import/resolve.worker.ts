@@ -6,6 +6,7 @@ import { resolveDisplayPrintings } from '../cardDb/preferredPrinting.js';
 import { db } from '../db/schema.js';
 import { parseImport } from './parse.js';
 import type { ParsedLine, ResolveRequest, ResolveResponse, ResolvedLine, UnmatchedLine } from './types.js';
+import { sumQty } from '../util/groupBy.js';
 
 function post(msg: ResolveResponse): void {
   (self as DedicatedWorkerGlobalScope).postMessage(msg);
@@ -214,7 +215,7 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
         format,
         resolved,
         unmatched,
-        resolvedQuantity: resolved.reduce((s, r) => s + r.quantity, 0),
+        resolvedQuantity: sumQty(resolved),
       },
     });
   } catch (err) {

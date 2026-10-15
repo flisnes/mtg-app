@@ -8,6 +8,7 @@ import { useOwnershipIndex } from '../db/useOwnership.js';
 import { db } from '../db/schema.js';
 import { CopyGrid, copyDetail } from './CopyPicker.js';
 import { Sheet } from './Sheet.js';
+import { plural } from '../util/format.js';
 
 // "Assemble from my collection": the deck exists on screen, now go and find the
 // cardboard. One card at a time, each showing the copies you own so a slot stops
@@ -123,7 +124,7 @@ export function AssembleSheet({
         <p className="search-meta">
           {placed === 0
             ? 'Nothing pointed at a copy this time.'
-            : `${placed} card${placed === 1 ? '' : 's'} now point at a copy you own.`}
+            : `${placed} ${plural(placed, 'card')} now point at a copy you own.`}
           {skipped > 0 && ` ${skipped} skipped.`}
         </p>
         <p className="fine-print">

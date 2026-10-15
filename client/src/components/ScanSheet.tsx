@@ -46,6 +46,8 @@ import { useAsyncAction } from './useAsyncAction.js';
 import { CardStacks, ViewToggle, useScanViewMode, type CardItem } from './CardViews.js';
 import { addToTotal, formatPrice, formatTotal, pricedForFinish, type PriceTotal } from './cardSort.js';
 import { useCardMaps } from '../db/useCardMaps.js';
+import { plural } from '../util/format.js';
+import { BOARD_NOUN, scanBoards } from '../deck/boards.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
 // camera fills the top of the screen and never pauses; each lock (S3 consensus
@@ -299,22 +301,6 @@ function onePrinting(candidates: Candidate[]): Candidate | null {
   return same ? first : null;
 }
 
-const BOARD_LABELS: Record<DeckBoard, string> = {
-  main: 'mainboard',
-  side: 'sideboard',
-  commander: 'command zone',
-  companion: 'companion',
-  maybe: 'considering',
-  token: 'tokens',
-};
-
-/** Which boards a scan can target: storage has one pile, decks have boards
- *  (the command zone only in Commander, which has no sideboard). */
-function deckBoards(target: { containerKind?: ContainerKind; format?: DeckFormat }): DeckBoard[] {
-  if ((target.containerKind ?? 'deck') !== 'deck') return ['main'];
-  return target.format === 'commander' ? ['main', 'maybe', 'commander'] : ['main', 'side', 'maybe'];
-}
-
 /** "deck" / "binder" / "box" for a container target; the target's own name otherwise. */
 function targetNoun(target: ScanTarget): string {
   if (target.kind === 'deck') return CONTAINER_META[target.containerKind ?? 'deck'].noun;
@@ -418,7 +404,7 @@ export async function commitSession(
       target: { id: target.deckId, name: label, kind: target.containerKind ?? 'deck' },
     });
     if (!res) return null;
-    return `Added ${total} card${total === 1 ? '' : 's'} to ${label}${res.added ? ` · ${res.added} added to collection` : ''}`;
+    return `Added ${total} ${plural(total, 'card')} to ${label}${res.added ? ` · ${res.added} added to collection` : ''}`;
   }
   // Collection & tradelist route through the import pipeline: the batch
   // becomes one history entry, any card already owned gets its Skip / Add /
@@ -427,7 +413,7 @@ export async function commitSession(
     const res = await review({ flow: target.kind, lines, source: 'scan', incomingLabel });
     if (!res) return null;
     const n = res.added + res.flagged;
-    return n === 0 ? 'Nothing added: every card was skipped' : `Added ${n} card${n === 1 ? '' : 's'} to ${label}${describeFiling(res)}`;
+    return n === 0 ? 'Nothing added: every card was skipped' : `Added ${n} ${plural(n, 'card')} to ${label}${describeFiling(res)}`;
   }
   if (target.kind === 'wishlist') {
     // A scanned card is a specific printing, so the wish is for that
@@ -459,7 +445,7 @@ export async function commitSession(
       })),
     );
   }
-  return `Added ${total} card${total === 1 ? '' : 's'} to ${label}`;
+  return `Added ${total} ${plural(total, 'card')} to ${label}`;
 }
 
 /**
@@ -849,7 +835,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     if (restoredRef.current) return;
     restoredRef.current = true;
     const restored = session.reduce((n, e) => n + e.qty, 0);
-    if (restored > 0) toast(`Restored ${restored} card${restored === 1 ? '' : 's'} from your last scan`);
+    if (restored > 0) toast(`Restored ${restored} ${plural(restored, 'card')} from your last scan`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1312,9 +1298,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         target: { id: target.deckId, name: label, kind: target.containerKind ?? 'deck' },
         preface: {
           title: 'Re-scan changes',
-          body: <RescanChangesList changes={changes.changes} deckName={label} showBoards={deckBoards(target).length > 1} />,
+          body: <RescanChangesList changes={changes.changes} deckName={label} showBoards={scanBoards(target.containerKind, target.format).length > 1} />,
           nextLabel: changes.changes.length
-            ? `Apply ${changes.changes.length} change${changes.changes.length === 1 ? '' : 's'}`
+            ? `Apply ${changes.changes.length} ${plural(changes.changes.length, 'change')}`
             : 'File the copies you scanned',
         },
       });
@@ -1341,7 +1327,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     void (async () => {
       if (total > 0) {
         const ok = await confirm({
-          title: `Discard ${total} scanned card${total === 1 ? '' : 's'}?`,
+          title: `Discard ${total} scanned ${plural(total, 'card')}?`,
           body: 'Nothing has been written yet, so the whole scan goes.',
           confirmLabel: 'Discard the scan',
           cancelLabel: 'Keep scanning',
@@ -1538,9 +1524,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           )}
         </div>
 
-        {target.kind === 'deck' && deckBoards(target).length > 1 && stage.kind === 'scanning' && (
+        {target.kind === 'deck' && scanBoards(target.containerKind, target.format).length > 1 && stage.kind === 'scanning' && (
           <div className="seg-row scan-cam-board" role="radiogroup" aria-label="Add to board">
-            {deckBoards(target).map((b) => (
+            {scanBoards(target.containerKind, target.format).map((b) => (
               <button key={b} role="radio" aria-checked={board === b} className={board === b ? 'seg seg-active' : 'seg'} onClick={() => setBoard(b)}>
                 {b === 'main' ? 'Main' : b === 'side' ? 'Side' : b === 'maybe' ? 'Maybe' : 'Commander'}
               </button>
@@ -1774,7 +1760,7 @@ function RescanChangesList({
                 {c.image ? <img className="scan-list-thumb" src={c.image} alt="" /> : <span className="scan-list-thumb" />}
                 <span className="scan-list-info">
                   <strong>{c.name}</strong>
-                  {showBoards && <span className="scan-printing">{BOARD_LABELS[c.board]}</span>}
+                  {showBoards && <span className="scan-printing">{BOARD_NOUN[c.board]}</span>}
                 </span>
               </span>
               {c.kind === 'add' && <span className="rescan-tag rescan-add">Added ×{c.quantity}</span>}
@@ -1881,7 +1867,7 @@ export function SessionSheet({
   // condition, finish, language, quantity); Apply rewrites the line in place.
   const [editing, setEditing] = useState<{ index: number; oracle: Priced<OracleCard> } | null>(null);
   const [view, setView] = useScanViewMode();
-  const showBoards = target.kind === 'deck' && deckBoards(target).length > 1;
+  const showBoards = target.kind === 'deck' && scanBoards(target.containerKind, target.format).length > 1;
   // Both views show set names and prices, which a session entry doesn't
   // carry, and the footer sums them — so the lookup runs either way.
   const { printMap, oracleMap } = useCardMaps(entries.map((e) => ({ scryfallId: e.scryfallId, oracleId: e.oracleId })));
@@ -1901,7 +1887,7 @@ export function SessionSheet({
 
   const cycleBoard = (i: number) => {
     if (target.kind !== 'deck') return;
-    const boards = deckBoards(target);
+    const boards = scanBoards(target.containerKind, target.format);
     onChange(
       mergeSession(
         entries.map((e, j) => (j === i ? { ...e, board: boards[(boards.indexOf(e.board) + 1) % boards.length]! } : e)),
@@ -1967,7 +1953,7 @@ export function SessionSheet({
                 image: printing?.imageNormal ?? e.image ?? null,
                 foil: e.finish !== 'nonfoil',
                 count: e.qty,
-                badge: showBoards ? BOARD_LABELS[e.board] : undefined,
+                badge: showBoards ? BOARD_NOUN[e.board] : undefined,
                 sub: (
                   <>
                     <SetSymbol set={e.set} title={printing?.setName ?? e.set.toUpperCase()} />
@@ -1989,7 +1975,7 @@ export function SessionSheet({
                     </button>
                     {showBoards && (
                       <button className="scan-chip" onClick={() => cycleBoard(i)}>
-                        {BOARD_LABELS[e.board]}
+                        {BOARD_NOUN[e.board]}
                       </button>
                     )}
                   </>
@@ -2015,7 +2001,7 @@ export function SessionSheet({
                 </button>
                 {showBoards && (
                   <button className="scan-chip" onClick={() => cycleBoard(i)}>
-                    {BOARD_LABELS[e.board]}
+                    {BOARD_NOUN[e.board]}
                   </button>
                 )}
                 <div className="scan-list-qty">
@@ -2045,7 +2031,7 @@ export function SessionSheet({
               ? 'Adding…'
               : target.kind === 'deck' && target.rescan
                 ? `Review changes to ${targetLabel(target)}`
-                : `Add ${total} card${total === 1 ? '' : 's'} to ${targetLabel(target)}`}
+                : `Add ${total} ${plural(total, 'card')} to ${targetLabel(target)}`}
           </button>
           <button onClick={onClose} disabled={busy}>{closeLabel}</button>
         </div>

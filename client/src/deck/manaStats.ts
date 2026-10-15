@@ -1,4 +1,5 @@
 import { decodeFetchProfile, decodeManaProfile, type DeckBoard, type DeckFormat, type OracleCard } from '@mtg/shared';
+import { isNonDeckCard } from './legality.js';
 
 // Deck mana statistics: the curve, what the lands cost you in tempo, and
 // whether there are enough of them. Pure arithmetic over the deck's rows and
@@ -77,11 +78,6 @@ export interface StatsRow {
 
 const faces = (typeLine: string) => typeLine.split('//').map((f) => f.trim());
 const isLandFace = (face: string) => /\bLand\b/.test(face);
-/** Tokens, emblems and art cards are in the list but aren't deck cards. */
-const isNotACard = (o: OracleCard) => {
-  const t = o.typeLine.toLowerCase();
-  return t.startsWith('token') || t.includes('emblem') || t === 'card';
-};
 
 /**
  * How many lands Frank Karsten's regressions suggest for a deck of this shape:
@@ -140,7 +136,7 @@ export function deckManaStats(rows: readonly StatsRow[], format: DeckFormat | un
     const o = r.oracle;
     if (!o || r.quantity <= 0) continue;
     if (r.board !== 'main' && r.board !== 'commander') continue;
-    if (isNotACard(o)) continue;
+    if (isNonDeckCard(o)) continue;
     const qty = r.quantity;
     total += qty;
 

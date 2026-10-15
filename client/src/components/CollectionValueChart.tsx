@@ -10,13 +10,14 @@ import { CONTAINER_META } from '../deck/containers.js';
 import { groupEntries, type HistoryEntry } from '../history/useHistoryEntries.js';
 import { batchCount, describeBatch, describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { useCardMaps } from '../db/useCardMaps.js';
-import { fmtDate } from '../util/format.js';
+import { fmtDate, plural } from '../util/format.js';
 import { CardList, StackedThumb, type CardItem } from './CardViews.js';
 import { CardSheet } from './CardSheet.js';
 import { EventSheet } from './EventSheet.js';
 import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
 import { LinePlot, useValueChart, ZoomHint, type ChartPt } from './ValueLineChart.js';
+import { Loading } from './Loading.js';
 
 // What a pile has been worth over time, opened from a header total. Two ways to
 // read the same pile:
@@ -183,7 +184,7 @@ function ValueChartSheet({
       </div>
 
       {series === undefined ? (
-        <p className="fine-print">Loading…</p>
+        <Loading fine />
       ) : !series || !latest ? (
         <p className="fine-print">
           Not enough price history yet. Prices are recorded once a day when you open the app, so come back tomorrow.
@@ -281,7 +282,7 @@ function ValueChartSheet({
             <div>
               <span className="fine-print">{zoom.zoomed ? 'Shown' : 'Tracked'}</span>
               <strong>{(geom?.days ?? 0) + 1} days</strong>
-              <span className="fine-print">{markers.length} move{markers.length === 1 ? '' : 's'}</span>
+              <span className="fine-print">{markers.length} {plural(markers.length, 'move')}</span>
             </div>
           </div>
 
@@ -382,7 +383,7 @@ function DayEvents({
         thumb: <StackedThumb images={imgs} />,
         badge: <Icon name={display.icon} size={14} />,
         badgeTitle: display.verb,
-        sub: `${count} card${count === 1 ? '' : 's'}`,
+        sub: `${count} ${plural(count, 'card')}`,
         onClick: () => onOpenEntry(entry),
       };
     }

@@ -1,4 +1,5 @@
 import { Sheet } from './Sheet.js';
+import { plural } from '../util/format.js';
 
 /**
  * "Archive this deck?" — and the one question archiving always raises: is the
@@ -36,7 +37,7 @@ export function ArchiveDeckSheet({
       {filedCopies > 0 ? (
         <>
           <p className="search-meta">
-            {filedCopies} card{filedCopies === 1 ? '' : 's'} {filedCopies === 1 ? 'is' : 'are'} filed in it. Take
+            {filedCopies} {plural(filedCopies, 'card')} {filedCopies === 1 ? 'is' : 'are'} filed in it. Take
             them out too? The list stays either way; unfiling just frees the copies for your other decks.
           </p>
           <div className="sheet-actions sheet-actions-stack">

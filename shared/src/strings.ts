@@ -8,3 +8,8 @@ export const UNKNOWN_CARD_NAME = '(unknown card)';
 export function clampStr(v: unknown, max: number): string | null {
   return typeof v === 'string' && v.length > 0 ? v.slice(0, max) : null;
 }
+
+/** `word` or its plural for a count, e.g. plural(2, 'card') -> "cards". */
+export function plural(n: number, word: string, many = `${word}s`): string {
+  return n === 1 ? word : many;
+}

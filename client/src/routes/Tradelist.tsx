@@ -16,6 +16,7 @@ import { ImportReview } from '../import/ImportReview.js';
 import { ImportDefaultsRow, IMPORT_DEFAULTS } from '../import/ImportExtras.js';
 import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/types.js';
+import { plural } from '../util/format.js';
 
 export function Tradelist() {
   const toast = useToast();
@@ -114,7 +115,7 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
       return;
     }
     const forTrade = res.added + res.flagged;
-    toast(`Added ${forTrade} card${forTrade === 1 ? '' : 's'} to the tradelist${describeFiling(res)}`);
+    toast(`Added ${forTrade} ${plural(forTrade, 'card')} to the tradelist${describeFiling(res)}`);
     onDone();
   }
 

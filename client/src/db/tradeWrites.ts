@@ -1,12 +1,13 @@
-import type { CollectionEntry, Finish, Trade, TradeLine } from '@mtg/shared';
+import type { Finish, Trade, TradeLine } from '@mtg/shared';
 import { db } from './schema.js';
 import { getPricesByIds } from '../cardDb/prices.js';
 import { acquisitionCents } from '../price/acquisition.js';
 import { newEntry } from './collectionWrites.js';
 import { copyEvent } from './events.js';
-import { collectionKey, entryKey, push } from './keys.js';
+import { collectionKey, entryKey } from './keys.js';
 import { removeDeckCardsMatching } from './slotWrites.js';
 import { adjustRow, DECK_TABLES, putSynced, write } from './write.js';
+import { groupBy, sumQty } from '../util/groupBy.js';
 
 // ---------------------------------------------------------------------------
 // Trade completion (beta plan §7). The heart of the app: on `completed`, each
@@ -33,7 +34,7 @@ async function reconcileFilingAfterTrade(line: TradeLine, ownedAfter: number): P
       s.lang === line.lang,
   );
   if (claiming.length === 0) return;
-  const claimed = claiming.reduce((n, s) => n + s.quantity, 0);
+  const claimed = sumQty(claiming);
   const deficit = claimed - ownedAfter;
   if (deficit <= 0) return; // still enough filed copies to back every claim
   const containerIds = new Set(claiming.map((s) => s.deckId));
@@ -82,8 +83,7 @@ export async function applyCompletedTrade(
     //    comes out of — the plain one goes across the table, and an annotated row
     //    is only touched when it's the only copy of that card you have.
     const byKey = new Map(entries.map((e) => [entryKey(e), e]));
-    const byCopy = new Map<string, CollectionEntry[]>();
-    for (const e of entries) push(byCopy, collectionKey(e), e);
+    const byCopy = groupBy(entries, collectionKey);
     byCopy.forEach((list) => list.sort((a, b) => (a.special?.length ? 1 : 0) - (b.special?.length ? 1 : 0)));
     const { now } = ctx;
 

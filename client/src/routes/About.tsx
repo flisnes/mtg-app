@@ -6,13 +6,7 @@ import { getSetting } from '../db/settings.js';
 import { CHANGELOG_RECENT, loadChangelog, type ChangelogEntry } from '../changelog.js';
 import { ChangelogList } from '../components/WhatsNewModal.js';
 import { Sheet } from '../components/Sheet.js';
-import { fmtCount, fmtDate } from '../util/format.js';
-
-function formatDate(iso: string | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : fmtDate(d.getTime());
-}
+import { fmtCount, fmtIsoDate } from '../util/format.js';
 
 export function About() {
   const [cardDbVersion, setCardDbVersion] = useState<string>();
@@ -52,11 +46,11 @@ export function About() {
           </button>
         </dd>
         <dt>Card database</dt>
-        <dd>{cardDbVersion ? formatDate(cardDbVersion) : 'not loaded'}</dd>
+        <dd>{cardDbVersion ? fmtIsoDate(cardDbVersion) : 'not loaded'}</dd>
         <dt>Cards</dt>
         <dd>{counts ? `${fmtCount(counts.oracle)} cards · ${fmtCount(counts.printings)} printings` : '—'}</dd>
         <dt>Prices updated</dt>
-        <dd>{formatDate(pricesUpdatedAt)}</dd>
+        <dd>{pricesUpdatedAt ? fmtIsoDate(pricesUpdatedAt) : '—'}</dd>
       </dl>
 
       <section className="about-section">

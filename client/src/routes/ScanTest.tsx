@@ -18,6 +18,7 @@ import {
   installScanBlob,
   type ScanDataRow,
 } from '../scan/store.js';
+import { plural } from '../util/format.js';
 
 // Dev test harness for the scanning pipeline (handover §S2) — the regression
 // suite for the whole feature. Not linked from the nav; open #/scan-test.
@@ -440,7 +441,7 @@ export function ScanTest() {
                 `OCR: ${ocr}`
               ) : (
                 <>
-                  OCR ({ocr.attempts} attempt{ocr.attempts === 1 ? '' : 's'}):{' '}
+                  OCR ({ocr.attempts} {plural(ocr.attempts, 'attempt')}):{' '}
                   {ocr.parsed
                     ? `#${ocr.parsed.collectorNumber ?? '?'} · ${ocr.parsed.setCode?.toUpperCase() ?? '?'} · ${ocr.parsed.lang ?? '?'}`
                     : 'nothing readable'}

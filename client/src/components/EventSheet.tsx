@@ -5,7 +5,7 @@ import { useCardMaps } from '../db/useCardMaps.js';
 import { Sheet } from './Sheet.js';
 import { batchCount, describeBatch, describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { entryEvents, type HistoryEntry } from '../history/useHistoryEntries.js';
-import { fmtCents, fmtDateTime } from '../util/format.js';
+import { fmtCents, fmtDateTime, plural } from '../util/format.js';
 
 // Info modal for one edit-history entry: the action, when it happened, and the
 // card(s) involved. Clicking a card opens its card sheet on the History tab.
@@ -60,7 +60,7 @@ export function EventSheet({
         <div className="event-sheet-titles">
           <div className="sheet-name">
             {display.verb}
-            {entry.kind === 'batch' && ` · ${totalCards} card${totalCards === 1 ? '' : 's'}`}
+            {entry.kind === 'batch' && ` · ${totalCards} ${plural(totalCards, 'card')}`}
           </div>
           <div className="result-sub">{fmtDateTime(entry.ts)}</div>
           {single?.priceEurCents != null && (

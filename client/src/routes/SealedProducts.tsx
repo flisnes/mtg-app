@@ -28,6 +28,8 @@ import { useSealedHistories } from '../price/sealedValue.js';
 import { EmptyState, Page } from './Page.js';
 import { useAsyncAction } from '../components/useAsyncAction.js';
 import { fmtCardCount } from '../util/format.js';
+import { sumQty } from '../util/groupBy.js';
+import { Loading } from '../components/Loading.js';
 
 // The sealed shelf: unopened boxes, displays, packs and precons. Deliberately
 // its own view rather than a section of the collection — these rows have no
@@ -150,7 +152,7 @@ export function SealedProducts() {
     return sortSealed(kept, sort, prices, catalog, changes);
   }, [items, nameFilter, setFilter, categoryFilter, priceFilter, sort, prices, catalog, changes]);
 
-  const boxes = (sorted ?? []).reduce((s, i) => s + i.quantity, 0);
+  const boxes = sumQty(sorted ?? []);
   const filtering = !!nameFilter.trim() || setFilter !== 'all' || categoryFilter !== 'all' || priceFilter !== 'all';
   // From the unfiltered rows on purpose: narrowing the list while a product's
   // sheet is open shouldn't yank it out from under the reader.
@@ -191,7 +193,7 @@ export function SealedProducts() {
       }
     >
       {sorted === undefined || items === undefined ? (
-        <p className="search-meta">Loading…</p>
+        <Loading />
       ) : items.length === 0 ? (
         <EmptyState hint="Booster boxes, displays, bundles and precons still in shrink live here.">
           Nothing sealed yet.{' '}

@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema.js';
 import { entryEvents, groupEntries, type HistoryEntry } from './useHistoryEntries.js';
 import { isMoveBatch } from './eventRegistry.js';
+import { sumQty } from '../util/groupBy.js';
 
 // One container's slice of the event log, for the history panel on the deck /
 // binder / box page. Same rows and the same batch grouping as the global edit
@@ -62,7 +63,7 @@ export function useDeckHistory(deckId: string, limit: number): DeckHistory {
 
   // What the container holds now — the anchor the walk backwards starts from.
   const held = useLiveQuery(
-    async () => (await db.deckCards.where('deckId').equals(deckId).toArray()).reduce((n, c) => n + c.quantity, 0),
+    async () => sumQty(await db.deckCards.where('deckId').equals(deckId).toArray()),
     [deckId],
   );
 

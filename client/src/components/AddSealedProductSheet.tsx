@@ -19,6 +19,7 @@ import { describeFiling, useIntakeReview } from '../import/intake/useIntakeRevie
 import { LANGS } from './CardSheet.js';
 import { Sheet } from './Sheet.js';
 import { useToast } from './Toast.js';
+import { plural } from '../util/format.js';
 
 // "Add sealed product" (see sealed-products feature). Search any sealed product
 // MTGJSON knows, then choose what owning it means: keep the box sealed, or open
@@ -108,7 +109,7 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
     const res = await review({ flow: 'sealed', lines: openedLines(d.rows, { copies, condition, lang }), source: 'sealed', label: product.name });
     setAdding(false);
     if (!res) return; // backed out: nothing added, the product is still on screen
-    toast(`Added ${res.added} card${res.added === 1 ? '' : 's'} from ${product.name}${describeFiling(res)}`);
+    toast(`Added ${res.added} ${plural(res.added, 'card')} from ${product.name}${describeFiling(res)}`);
     onClose();
   };
 
@@ -217,7 +218,7 @@ function SearchView({
                     <span className="sealed-result-sub">
                       {subtitle(p)}
                       {count > 0 ? ` · ${count} cards` : ''}
-                      {p.omittedRandom ? ` · ${p.omittedRandom} random pack${p.omittedRandom === 1 ? '' : 's'}` : ''}
+                      {p.omittedRandom ? ` · ${p.omittedRandom} random ${plural(p.omittedRandom, 'pack')}` : ''}
                     </span>
                   </span>
                 </button>
@@ -316,7 +317,7 @@ function DetailView({
             {randomOnly
               ? 'Contents are random, so there’s no card list to add.'
               : detail
-                ? `${perCopy} card${perCopy === 1 ? '' : 's'}${foils > 0 ? ` (${foils} foil/etched)` : ''}`
+                ? `${perCopy} ${plural(perCopy, 'card')}${foils > 0 ? ` (${foils} foil/etched)` : ''}`
                 : 'Loading contents…'}
           </span>
         </label>
@@ -324,7 +325,7 @@ function DetailView({
 
       {product.omittedRandom && showCards ? (
         <p className="sealed-note">
-          ⚠ Also contains {product.omittedRandom} random pack{product.omittedRandom === 1 ? '' : 's'}, not added (contents unknown).
+          ⚠ Also contains {product.omittedRandom} random {plural(product.omittedRandom, 'pack')}, not added (contents unknown).
         </p>
       ) : null}
       {product.unresolved && showCards ? (
@@ -381,7 +382,7 @@ function DetailView({
                 rows={detail.rows}
                 pageKey={product.id}
                 copies={copies}
-                status={`${perCopy * copies} card${perCopy * copies === 1 ? '' : 's'} going in.`}
+                status={`${perCopy * copies} ${plural(perCopy * copies, 'card')} going in.`}
               />
             </div>
           ) : (

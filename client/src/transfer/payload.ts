@@ -1,11 +1,13 @@
 import {
+  clampQty,
+  clampStr,
   COLORS,
-  CONDITIONS,
+  CONDS,
+  FINS,
   CONTAINER_KINDS,
   DECK_BOARDS,
   DECK_FORMATS,
   EVENT_SOURCES,
-  FINISHES,
   MAX_DECK_DESCRIPTION_LENGTH,
   MAX_DECK_NAME_LENGTH,
   REMOVAL_REASONS,
@@ -18,6 +20,7 @@ import {
   type Color,
   type Condition,
   type ContainerKind,
+  type DayReadings,
   type Deck,
   SYNC_MAX_ROW_ID,
   type CardBehavior,
@@ -38,10 +41,11 @@ import {
   type UserEventKind,
   type WishlistEntry,
 } from '@mtg/shared';
-import { entryKey, wishKey } from '../db/dataAccess.js';
+import { entryKey, exactSlotKey, wishKey } from '../db/dataAccess.js';
 import { db, USER_DATA_TABLES } from '../db/schema.js';
 import { recordDay, toCents } from '../price/history.js';
 import { sanitizeOffer } from '../trade/validate.js';
+import { sumQty } from '../util/groupBy.js';
 
 // Device-transfer payload: every user-data table, serialized on the sending
 // device and re-validated on the receiving one. The card DB is NOT included —
@@ -106,7 +110,7 @@ export async function exportUserData(): Promise<TransferPayload> {
 
 export function countsOf(p: TransferPayload): TransferCounts {
   return {
-    cards: p.collection.reduce((sum, e) => sum + e.quantity, 0),
+    cards: sumQty(p.collection),
     collectionEntries: p.collection.length,
     wishlist: p.wishlist.length,
     decks: p.decks.length,
@@ -118,8 +122,6 @@ export function countsOf(p: TransferPayload): TransferCounts {
 // Sanitization
 // ---------------------------------------------------------------------------
 
-const CONDS = new Set<string>(CONDITIONS);
-const FINS = new Set<string>(FINISHES);
 const COLOR_SET = new Set<string>(COLORS);
 const FORMATS = new Set<string>(DECK_FORMATS);
 const BOARDS = new Set<string>(DECK_BOARDS);
@@ -156,14 +158,9 @@ function cents(v: unknown): number | null {
   return Number.isFinite(n) ? Math.min(10_000_000, Math.max(0, Math.round(n))) : null;
 }
 
-function id(v: unknown): string | null {
-  return typeof v === 'string' && v ? v.slice(0, MAX_ID) : null;
-}
+const id = (v: unknown): string | null => clampStr(v, MAX_ID);
 
-function qty(v: unknown, min = 1): number {
-  const n = Math.floor(Number(v));
-  return Number.isFinite(n) ? Math.min(MAX_QTY, Math.max(min, n)) : min;
-}
+const qty = (v: unknown, min = 1): number => clampQty(v, MAX_QTY, min);
 
 function ts(v: unknown): number {
   const n = Number(v);
@@ -173,6 +170,45 @@ function ts(v: unknown): number {
 function rows(v: unknown, cap: number): Record<string, unknown>[] {
   if (!Array.isArray(v)) return [];
   return v.slice(0, cap).filter((r): r is Record<string, unknown> => !!r && typeof r === 'object');
+}
+
+/**
+ * Day-reading rows unique on `idKey`. Arrays are length-capped, forced to equal
+ * length, and every element re-bounded. Foil lanes (v0.198.0) ride along when
+ * `foil` is set, never longer than the nonfoil window. The monthly deep history
+ * doesn't: it's the server's, and refetched.
+ */
+function sanitizeHistoryRows<K extends 'scryfallId' | 'productId'>(
+  raw: unknown,
+  cap: number,
+  idKey: K,
+  foil: boolean,
+): (DayReadings & Record<K, string>)[] {
+  const out: (DayReadings & Record<K, string>)[] = [];
+  const seen = new Set<string>();
+  for (const r of rows(raw, cap)) {
+    const key = id(r[idKey]);
+    const startDay = typeof r.startDay === 'string' && DAY_RE.test(r.startDay) ? r.startDay : null;
+    if (!key || !startDay || seen.has(key)) continue;
+    const eurRaw = Array.isArray(r.eur) ? r.eur.slice(0, MAX_HISTORY_DAYS) : [];
+    const usdRaw = Array.isArray(r.usd) ? r.usd.slice(0, MAX_HISTORY_DAYS) : [];
+    const len = Math.max(eurRaw.length, usdRaw.length);
+    if (!len) continue;
+    seen.add(key);
+    const h: DayReadings = {
+      startDay,
+      eur: Array.from({ length: len }, (_, i) => cents(eurRaw[i])),
+      usd: Array.from({ length: len }, (_, i) => cents(usdRaw[i])),
+    };
+    if (foil) {
+      for (const lane of ['eurFoil', 'usdFoil'] as const) {
+        const vals = r[lane];
+        if (Array.isArray(vals) && vals.length) h[lane] = vals.slice(0, len).map(cents);
+      }
+    }
+    out.push(Object.assign({ [idKey]: key } as Record<K, string>, h));
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -717,7 +753,9 @@ export function sanitizeTransferPayload(raw: unknown, cleanBehavior: BehaviorSan
     const slot = sanitizeDeckCardRow(r);
     if (!slot || slotIds.has(slot.id) || !deckIds.has(slot.deckId)) continue;
     slotIds.add(slot.id);
-    const key = `${slot.deckId}|${slot.oracleId}|${slot.board}`;
+    // The write layer's own slot identity: two printings of a card, or an owned
+    // Island beside the lands-box ones, are separate slots and stay that way.
+    const key = `${slot.deckId}|${exactSlotKey(slot, slot)}`;
     const ex = slotKeys.get(key);
     if (ex) {
       ex.quantity = Math.min(MAX_QTY, ex.quantity + slot.quantity);
@@ -749,53 +787,15 @@ export function sanitizeTransferPayload(raw: unknown, cleanBehavior: BehaviorSan
     trades.push(trade);
   }
 
-  // Price history: one compact row per card, unique on scryfallId. Arrays are
-  // length-capped, forced to equal length, and every element re-bounded.
-  const priceHistories: PriceHistory[] = [];
-  const histIds = new Set<string>();
-  for (const r of rows(p.priceHistories, CAPS.priceHistories)) {
-    const scryfallId = id(r.scryfallId);
-    const startDay = typeof r.startDay === 'string' && DAY_RE.test(r.startDay) ? r.startDay : null;
-    if (!scryfallId || !startDay || histIds.has(scryfallId)) continue;
-    const eurRaw = Array.isArray(r.eur) ? r.eur.slice(0, MAX_HISTORY_DAYS) : [];
-    const usdRaw = Array.isArray(r.usd) ? r.usd.slice(0, MAX_HISTORY_DAYS) : [];
-    const len = Math.max(eurRaw.length, usdRaw.length);
-    if (!len) continue;
-    histIds.add(scryfallId);
-    const h: PriceHistory = {
-      scryfallId,
-      startDay,
-      eur: Array.from({ length: len }, (_, i) => cents(eurRaw[i])),
-      usd: Array.from({ length: len }, (_, i) => cents(usdRaw[i])),
-    };
-    // Foil lanes (v0.198.0) ride along, never longer than the nonfoil window.
-    // The monthly deep history doesn't: it's the server's, and refetched.
-    for (const key of ['eurFoil', 'usdFoil'] as const) {
-      const raw = r[key];
-      if (Array.isArray(raw) && raw.length) h[key] = raw.slice(0, len).map(cents);
-    }
-    priceHistories.push(h);
-  }
-
-  // The same, for the sealed shelf — keyed by product id instead of printing.
-  const sealedPriceHistories: SealedPriceHistory[] = [];
-  const sealedHistIds = new Set<string>();
-  for (const r of rows(p.sealedPriceHistories, CAPS.sealedPriceHistories)) {
-    const productId = id(r.productId);
-    const startDay = typeof r.startDay === 'string' && DAY_RE.test(r.startDay) ? r.startDay : null;
-    if (!productId || !startDay || sealedHistIds.has(productId)) continue;
-    const eurRaw = Array.isArray(r.eur) ? r.eur.slice(0, MAX_HISTORY_DAYS) : [];
-    const usdRaw = Array.isArray(r.usd) ? r.usd.slice(0, MAX_HISTORY_DAYS) : [];
-    const len = Math.max(eurRaw.length, usdRaw.length);
-    if (!len) continue;
-    sealedHistIds.add(productId);
-    sealedPriceHistories.push({
-      productId,
-      startDay,
-      eur: Array.from({ length: len }, (_, i) => cents(eurRaw[i])),
-      usd: Array.from({ length: len }, (_, i) => cents(usdRaw[i])),
-    });
-  }
+  // Price history: one compact row per card, unique on scryfallId; the same
+  // for the sealed shelf, keyed by product id instead of printing.
+  const priceHistories: PriceHistory[] = sanitizeHistoryRows(p.priceHistories, CAPS.priceHistories, 'scryfallId', true);
+  const sealedPriceHistories: SealedPriceHistory[] = sanitizeHistoryRows(
+    p.sealedPriceHistories,
+    CAPS.sealedPriceHistories,
+    'productId',
+    false,
+  );
 
   // Legacy senders (pre-compact history) ship row-per-day priceSnapshots
   // instead; fold them into histories so upgrading via transfer loses nothing.

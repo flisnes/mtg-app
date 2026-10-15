@@ -7,7 +7,7 @@ import { costBasisOf } from '../price/costBasis.js';
 import { monthlyBefore, readingsFor } from '../price/history.js';
 import { convertToDisplay, fmtMoney } from '../price/rates.js';
 import { describeEvent, qtyBadge } from '../history/eventRegistry.js';
-import { fmtDate } from '../util/format.js';
+import { fmtDate, plural } from '../util/format.js';
 import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
 import { LinePlot, PLOT_H, useValueChart, ZoomHint, type ChartPt } from './ValueLineChart.js';
@@ -438,7 +438,7 @@ export function PriceChartSheet({
 
         {marks.earlier > 0 && (
           <p className="fine-print">
-            {marks.earlier} earlier event{marks.earlier === 1 ? '' : 's'} happened before price tracking began. The History tab has them.
+            {marks.earlier} earlier {plural(marks.earlier, 'event')} happened before price tracking began. The History tab has them.
           </p>
         )}
 

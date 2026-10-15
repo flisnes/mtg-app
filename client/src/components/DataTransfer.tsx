@@ -3,6 +3,7 @@ import { useAccount } from '../account/useAccount.js';
 import { TRADE_ENABLED } from '../trade/config.js';
 import { useTransfer } from '../transfer/useTransfer.js';
 import { CodeJoinForm } from './CodeJoinForm.js';
+import { plural } from '../util/format.js';
 
 // "Your data" section of About & settings: move everything (collection, lists,
 // decks, history) to another device with a one-time code, trade-style. The
@@ -101,10 +102,10 @@ export function DataTransfer() {
     return (
       <div className="transfer-panel">
         <p role="status">
-          Received {c.cards.toLocaleString()} card{c.cards === 1 ? '' : 's'} (
+          Received {c.cards.toLocaleString()} {plural(c.cards, 'card')} (
           {c.collectionEntries.toLocaleString()} collection entries), {c.wishlist.toLocaleString()} wishlist{' '}
-          {c.wishlist === 1 ? 'entry' : 'entries'}, {c.decks.toLocaleString()} deck{c.decks === 1 ? '' : 's'},{' '}
-          {c.trades.toLocaleString()} recorded trade{c.trades === 1 ? '' : 's'} and the collection's price history.
+          {c.wishlist === 1 ? 'entry' : 'entries'}, {c.decks.toLocaleString()} {plural(c.decks, 'deck')},{' '}
+          {c.trades.toLocaleString()} recorded {plural(c.trades, 'trade')} and the collection's price history.
         </p>
         <p className="fine-print">
           Applying will <strong>replace</strong> the collection, lists and decks currently on this device.

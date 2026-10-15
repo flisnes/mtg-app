@@ -10,8 +10,9 @@ import type { Finish } from './card.js';
 import { clampStr, UNKNOWN_CARD_NAME } from './strings.js';
 import { CONDITIONS, FINISHES, type Condition, type TradeLine, type WishLine } from './user.js';
 
-const CONDS = new Set<string>(CONDITIONS);
-const FINS = new Set<string>(FINISHES);
+/** The known conditions and finishes, for membership tests on untrusted input. */
+export const CONDS: ReadonlySet<string> = new Set<string>(CONDITIONS);
+export const FINS: ReadonlySet<string> = new Set<string>(FINISHES);
 
 const MAX_ID_CHARS = 64;
 const MAX_NAME_CHARS = 200;
@@ -23,9 +24,10 @@ export interface LineLimits {
   maxLines: number;
 }
 
-function clampQty(v: unknown, maxQty: number): number {
+/** A whole quantity in [min, maxQty]; anything unparseable is `min`. */
+export function clampQty(v: unknown, maxQty: number, min = 1): number {
   const n = Math.floor(Number(v));
-  return Number.isFinite(n) ? Math.min(maxQty, Math.max(1, n)) : 1;
+  return Number.isFinite(n) ? Math.min(maxQty, Math.max(min, n)) : min;
 }
 
 export function sanitizeTradeLine(raw: unknown, maxQty: number): TradeLine | null {

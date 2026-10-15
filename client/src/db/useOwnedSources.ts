@@ -4,6 +4,7 @@ import type { CollectionEntry, OracleCard } from '@mtg/shared';
 import type { OwnedSource } from '../deck/manaFixes.js';
 import type { PlacementIndex } from './usePlacements.js';
 import { db } from './schema.js';
+import { sumQty } from '../util/groupBy.js';
 
 // The collection half of the mana-fix panel: every card you own that makes
 // mana, with where its copies are and how many of them no deck is using.
@@ -74,8 +75,8 @@ export function useOwnedSources(
         }));
       return {
         oracle,
-        owned: entries.reduce((n, e) => n + e.quantity, 0),
-        inDecks: elsewhere.reduce((n, p) => n + p.quantity, 0),
+        owned: sumQty(entries),
+        inDecks: sumQty(elsewhere),
         inDeckNames: [...elsewhere].sort((a, b) => b.quantity - a.quantity).map((p) => p.name),
         where: places
           .filter((p) => p.kind !== 'deck')

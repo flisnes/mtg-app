@@ -11,6 +11,9 @@ import { CONTAINER_META } from '../deck/containers.js';
 import { Icon } from '../components/icons.js';
 import { useToast } from '../components/Toast.js';
 import { SetSymbol } from '../components/SetSymbol.js';
+import { REASON_ANSWERS } from '../history/eventRegistry.js';
+import { Loading } from '../components/Loading.js';
+import { MenuRow } from '../components/MenuRow.js';
 
 // "Where is this card, actually?" — one conflict at a time.
 //
@@ -25,14 +28,6 @@ import { SetSymbol } from '../components/SetSymbol.js';
 //   - you own more copies than the app knew about     → add them
 //   - you don't have it any more                      → remove it and unfile it
 // Plus Skip, for "not now" — skipping is per session, nothing is written.
-
-const REASON_LABELS: Record<RemovalReason, string> = {
-  sold: 'Sold it',
-  traded: 'Traded it away',
-  lost: 'Lost it',
-  corrected: 'Fixed incorrect card information',
-  other: 'Something else',
-};
 
 /** A conflict with the card-DB bits needed to show it. */
 interface Joined {
@@ -163,7 +158,7 @@ export function FilingConflicts() {
   if (!placements || !cards) {
     return (
       <Page title="Filing conflicts">
-        <p className="search-meta">Loading…</p>
+        <Loading />
       </Page>
     );
   }
@@ -245,27 +240,15 @@ export function FilingConflicts() {
           const meta = CONTAINER_META[place.kind];
           return (
             <li key={place.containerId}>
-              <button
-                className="menu-item menu-item-btn"
+              <MenuRow
                 disabled={busy}
                 onClick={() => void keepOnlyIn(current, place.containerId, place.name)}
-              >
-                <span className="menu-icon" aria-hidden>
-                  <Icon name={meta.icon} />
-                </span>
-                <span className="deck-line">
-                  <span className="deck-name">{place.name}</span>
-                  <span className="deck-meta">
-                    <span className="search-meta">
-                      It’s here. Take it out of the other {conflict.places.length === 2 ? 'one' : 'places'}
-                      {place.quantity > 1 ? ` (keeps all ${place.quantity})` : ''}
-                    </span>
-                  </span>
-                </span>
-                <span className="menu-chevron" aria-hidden>
-                  <Icon name="chevronRight" size={18} />
-                </span>
-              </button>
+                icon={meta.icon}
+                label={place.name}
+                note={`It’s here. Take it out of the other ${conflict.places.length === 2 ? 'one' : 'places'}${
+                  place.quantity > 1 ? ` (keeps all ${place.quantity})` : ''
+                }`}
+              />
             </li>
           );
         })}
@@ -296,7 +279,7 @@ export function FilingConflicts() {
             <select value={reason} onChange={(e) => setReason(e.target.value as RemovalReason)}>
               {REMOVAL_REASONS.map((r) => (
                 <option key={r} value={r}>
-                  {REASON_LABELS[r]}
+                  {REASON_ANSWERS[r]}
                 </option>
               ))}
             </select>

@@ -383,6 +383,27 @@ export interface DeckCard {
  */
 export type SlotShape = Omit<DeckCard, 'id' | 'deckId' | 'oracleId' | 'quantity' | 'board' | 'updatedAt'>;
 
+/** The fields a slot names its copy with. */
+export type SlotCopyFields = Pick<DeckCard, 'scryfallId' | 'condition' | 'finish' | 'lang' | 'anyBasic'>;
+
+/**
+ * Does this slot name one physical copy? Only when it spells out all four of
+ * printing, condition, finish and language (which is what filing an owned copy
+ * writes) and isn't an "any printing" basic; anything vaguer is a brew line that
+ * claims no cardboard. Ignores `unfiled`: an emptied slot still names its copy,
+ * it just isn't holding it (see holdsCopy).
+ */
+export function namesCopy<T extends SlotCopyFields>(
+  s: T,
+): s is T & { scryfallId: string; condition: Condition; finish: Finish; lang: string } {
+  return !s.anyBasic && !!s.scryfallId && !!s.condition && !!s.finish && !!s.lang;
+}
+
+/** Names a copy and is holding it right now (not emptied out by hand). */
+export function holdsCopy(s: SlotCopyFields & Pick<DeckCard, 'unfiled'>): boolean {
+  return !s.unfiled && namesCopy(s);
+}
+
 /**
  * Longest a deck/binder/box name (deck folders share it). Enforced in three
  * places that used to disagree: the name input, the row sanitizer on receive,

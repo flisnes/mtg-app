@@ -9,6 +9,7 @@ import { clamp, collectionKey, entryKey, exactSlotKey, findCollectionRow, newId,
 import type { CopyRef, SlotWants } from './keys.js';
 import { adjustRow, COLLECTION_TABLES, deleteSynced, deleteSyncedMany, putSynced, putSyncedMany, write } from './write.js';
 import type { BatchMeta } from './write.js';
+import { sumQty } from '../util/groupBy.js';
 
 export interface AddToCollectionInput {
   oracleId: string;
@@ -445,9 +446,9 @@ export async function applyImport(
           // Only the slots the remaining copies can no longer back move along;
           // a copy that stays on the shelf keeps its filing.
           const from = collectionKey(e);
-          const claimed = (await db.deckCards.where('oracleId').equals(e.oracleId).toArray())
-            .filter((s) => slotClaimKey(s) === from)
-            .reduce((n, s) => n + s.quantity, 0);
+          const claimed = sumQty(
+            (await db.deckCards.where('oracleId').equals(e.oracleId).toArray()).filter((s) => slotClaimKey(s) === from),
+          );
           await refileSlots(e.oracleId, from, r.to, Math.min(take, Math.max(0, claimed - remaining)), now);
         }
         ctx.emit(

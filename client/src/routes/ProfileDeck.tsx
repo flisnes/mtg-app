@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
-  countsTowardDeck,
   sanitizeDeckLines,
   type DeckFormat,
   type OracleCard,
@@ -14,6 +13,7 @@ import { ApiError, getUserDeck } from '../account/api.js';
 import { useAccount } from '../account/useAccount.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { formatLabel } from '../deck/legality.js';
+import { deckSize } from '../deck/boards.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
 import { extraLands, formatPrice, GroupCountBadge, NO_PRICE, SortControls, groupCards, priceValue, releaseFields, sortCards, useCardSort } from '../components/CardSorting.js';
@@ -23,6 +23,8 @@ import { Icon } from '../components/icons.js';
 import { useToast } from '../components/Toast.js';
 import { shareDeckLink } from '../deck/share.js';
 import { EmptyState, Page } from './Page.js';
+import { sumQty } from '../util/groupBy.js';
+import { Loading } from '../components/Loading.js';
 
 // Read-only view of someone's favorited deck (/profile/:username/deck/:deckId).
 // The server reads the list live from the owner's synced rows, so this is
@@ -159,13 +161,11 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
         }),
         sort,
       );
-      return { board, title, entries: sorted, count: lines.reduce((s, l) => s + l.quantity, 0) };
+      return { board, title, entries: sorted, count: sumQty(lines) };
     }).filter((b) => b.entries.length > 0);
   }, [deck, cards, sort]);
 
-  const total = deck
-    ? deck.lines.filter((l) => countsTowardDeck(l.board)).reduce((s, l) => s + l.quantity, 0)
-    : 0;
+  const total = deck ? deckSize(deck.lines) : 0;
 
   async function share() {
     // We're viewing this deck, so it's favorited and the link resolves for any
@@ -194,7 +194,7 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
       {error ? (
         <EmptyState>{error}</EmptyState>
       ) : !deck ? (
-        <p className="fine-print">Loading…</p>
+        <Loading fine />
       ) : (
         <>
           {deck.description && <p className="fine-print">{deck.description}</p>}
@@ -221,7 +221,7 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
                         <h3 className="card-group-title">
                           {g.label}{' '}
                           <GroupCountBadge
-                            quantity={g.items.reduce((s, e) => s + e.quantity, 0)}
+                            quantity={sumQty(g.items)}
                             extras={
                               g.label === 'Land' && sort.group === 'type'
                                 ? extraLands(entries, (e) => e.oracle, (e) => e.quantity)

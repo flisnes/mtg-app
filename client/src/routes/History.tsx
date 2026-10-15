@@ -6,12 +6,11 @@ import { db } from '../db/schema.js';
 import { useCardMaps } from '../db/useCardMaps.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
-import { Icon } from '../components/icons.js';
 import { Sheet } from '../components/Sheet.js';
-
-function summarize(lines: { quantity: number }[]): number {
-  return lines.reduce((s, l) => s + l.quantity, 0);
-}
+import { sumQty } from '../util/groupBy.js';
+import { Loading } from '../components/Loading.js';
+import { MenuRow } from '../components/MenuRow.js';
+import { fmtDateTime } from '../util/format.js';
 
 export function History() {
   const trades = useLiveQuery(() => db.trades.orderBy('completedAt').reverse().toArray(), []);
@@ -21,28 +20,28 @@ export function History() {
   return (
     <Page title="Trade history" subtitle="Completed trades, stored only on this device.">
       {trades === undefined ? (
-        <p className="search-meta">Loading…</p>
+        <Loading />
       ) : trades.length === 0 ? (
         <EmptyState>No trades yet.</EmptyState>
       ) : (
         <ul className="menu-list">
           {trades.map((t) => (
             <li key={t.id}>
-              <button className="menu-item" style={{ width: '100%' }} onClick={() => setOpen(t)}>
-                <span className="menu-icon" aria-hidden>
-                  <Icon name="trade" />
-                </span>
-                <span>
-                  Trade with {t.partner ?? 'Other User'}
-                  <span className="badge">
-                    −{summarize(t.given)} / +{summarize(t.received)}
-                  </span>
-                  <div className="result-sub">{new Date(t.completedAt).toLocaleString()}</div>
-                </span>
-                <span className="menu-chevron" aria-hidden>
-                  <Icon name="chevronRight" size={18} />
-                </span>
-              </button>
+              <MenuRow
+                className="menu-item menu-item-btn"
+                onClick={() => setOpen(t)}
+                icon="trade"
+                label={
+                  <>
+                    Trade with {t.partner ?? 'Other User'}
+                    <span className="badge">
+                      −{sumQty(t.given)} / +{sumQty(t.received)}
+                    </span>
+                  </>
+                }
+                plain
+                note={fmtDateTime(t.completedAt)}
+              />
             </li>
           ))}
         </ul>

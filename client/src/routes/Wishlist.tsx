@@ -32,7 +32,8 @@ import { useImportAnalysis } from '../import/useImportAnalysis.js';
 import { ImportReview } from '../import/ImportReview.js';
 import { ImportDefaultsRow, IMPORT_DEFAULTS, OverlapChoice, applyOverlap, type OverlapMode } from '../import/ImportExtras.js';
 import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/types.js';
-import { fmtCardCount } from '../util/format.js';
+import { fmtCardCount, plural } from '../util/format.js';
+import { Loading } from '../components/Loading.js';
 
 export function Wishlist() {
   const [view, setView] = useViewMode();
@@ -117,7 +118,7 @@ export function Wishlist() {
     const res = await review({ flow: 'bought', lines, source: 'import', label: 'Bought from wishlist' });
     if (!res) return;
     for (const r of rows) await removeFromWishlist(r.entry.id);
-    toast(`Moved ${res.added} card${res.added === 1 ? '' : 's'} into your collection${describeFiling(res)}`);
+    toast(`Moved ${res.added} ${plural(res.added, 'card')} into your collection${describeFiling(res)}`);
     sel.exit();
   }
 
@@ -154,7 +155,7 @@ export function Wishlist() {
     >
       {importing && <ImportPanel onDone={() => setImporting(false)} />}
       {rows === undefined ? (
-        <p className="search-meta">Loading…</p>
+        <Loading />
       ) : rows.length === 0 ? (
         <div className="empty-state">
           <p>Nothing on your wishlist yet.</p>
@@ -278,7 +279,7 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
       return;
     }
     const res = await addToWishlistBulk(wanted, { label: 'Wishlist import' });
-    toast(`Added ${res.cards} card${res.cards === 1 ? '' : 's'} to wishlist`);
+    toast(`Added ${res.cards} ${plural(res.cards, 'card')} to wishlist`);
     onDone();
   }
 

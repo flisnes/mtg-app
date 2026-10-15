@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.200.6',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Moving to a new device no longer merges two printings of a card in the same deck into one line, or your own basics into the lands-box ones.',
+      },
+    ],
+  },
+  {
     version: '0.200.2',
     changes: [
       {
@@ -154,15 +163,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Every screen now lights up its tab, and screens off More have a "‹ More" link back.',
-      },
-    ],
-  },
-  {
-    version: '0.198.5',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Trade: starting or joining a trade shows what it is doing and has a Cancel. If the server can’t be reached you get Retry or Trade solo, a wrong code says so, and a dropped connection mid-trade keeps your board up while it reconnects.',
       },
     ],
   },

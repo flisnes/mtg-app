@@ -1,10 +1,10 @@
-import type { CollectionEntry, Deck, DeckBehavior, DeckCard, DeckFolder, SealedItem, SyncTable, Trade, UserEvent, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Deck, DeckBehavior, DeckCard, DeckFolder, SealedItem, SlotCopyFields, SyncTable, Trade, UserEvent, WishlistEntry } from '@mtg/shared';
 import { db } from './schema.js';
 import type { Table } from 'dexie';
 import { stageDelete, stagePut, stagePutMany } from '../sync/outbox.js';
 import type { NewEvent } from './events.js';
 import { clamp, collectionKey, namedCopy, newId } from './keys.js';
-import type { CopyRef, SlotCopyFields } from './keys.js';
+import type { CopyRef } from './keys.js';
 
 // ---------------------------------------------------------------------------
 // Synced writes. Every mutation in the write modules must pair its Dexie write with

@@ -1,4 +1,4 @@
-import { isUncheckedFormat, type Color, type DeckBoard, type DeckFormat, type Format, type OracleCard } from '@mtg/shared';
+import { COLOR_NAME, isUncheckedFormat, type Color, type DeckBoard, type DeckFormat, type Format, type OracleCard } from '@mtg/shared';
 
 // Deck legality checking. Covers per-card format legality (banned / not-legal /
 // restricted), the common construction rules (deck size, copy limits, singleton
@@ -240,7 +240,7 @@ export function commanderIdentity(
  * exactly where they do belong — see checkDeckLegality). Mirrors the collision
  * ranking in cardDb/search.ts (real cards beat these namesakes).
  */
-export const isNonDeckCard = (o: OracleCard) => {
+export const isNonDeckCard = (o: Pick<OracleCard, 'typeLine'>) => {
   const t = o.typeLine.toLowerCase();
   return t.startsWith('token') || t.includes('emblem') || t === 'card';
 };
@@ -330,11 +330,9 @@ const COMPANION_CHECKS: Record<string, (deck: StartingDeck) => string | null> = 
   },
 };
 
-const COLOR_NAMES: Record<Color, string> = { W: 'white', U: 'blue', B: 'black', R: 'red', G: 'green' };
-
 function describeIdentity(identity: ReadonlySet<Color>): string {
   if (identity.size === 0) return 'colorless';
-  return [...identity].map((c) => COLOR_NAMES[c]).join('/');
+  return [...identity].map((c) => COLOR_NAME[c].toLowerCase()).join('/');
 }
 
 export interface LegalityCard {

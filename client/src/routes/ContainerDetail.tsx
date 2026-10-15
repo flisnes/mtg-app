@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  COLOR_NAME,
+  holdsCopy,
+  namesCopy,
   COLORS,
   MAX_DECK_NAME_LENGTH,
   isMarkerCard,
@@ -39,6 +42,7 @@ import {
   setDeckCardsUnfiled,
   setDeckEmblem,
   setDeckFormat,
+  slotKey,
   tidyDeckBoards,
   unfileWholeContainer,
 } from '../db/dataAccess.js';
@@ -118,6 +122,8 @@ import { useCardClipboard, useCutSlots, type ClipboardHandlers } from '../deck/u
 import { useShortcuts } from '../components/useShortcuts.js';
 import { CardCursorProvider, useCardCursorCtx } from '../components/useCardCursor.js';
 import { BackLink } from '../components/BackLink.js';
+import { plural } from '../util/format.js';
+import { groupBy, sumQty } from '../util/groupBy.js';
 
 /** One slot of this container, joined to its card and what the collection holds.
  *  Everything the slot itself says comes from SlotShape. */
@@ -166,12 +172,7 @@ type StackCtx = { prefs: Pick<Prefs, 'printing' | 'baseCurrency'>; setTypes: Set
 
 function groupSlots(rows: Row[], stack: StackCtx): SlotStack[] {
   if (!stack) return rows.map((r) => ({ lead: r, rows: [r], quantity: r.quantity }));
-  const byOracle = new Map<string, Row[]>();
-  for (const r of rows) {
-    const list = byOracle.get(r.oracleId);
-    if (list) list.push(r);
-    else byOracle.set(r.oracleId, [r]);
-  }
+  const byOracle = groupBy(rows, (r) => r.oracleId);
   const out: SlotStack[] = [];
   byOracle.forEach((group) => {
     if (group.length === 1) {
@@ -185,7 +186,7 @@ function groupSlots(rows: Row[], stack: StackCtx): SlotStack[] {
     out.push({
       lead,
       rows: [lead, ...group.filter((r) => r !== lead)],
-      quantity: group.reduce((s, r) => s + r.quantity, 0),
+      quantity: sumQty(group),
     });
   });
   return out;
@@ -200,7 +201,6 @@ function wantsDetail(r: Row): string {
   return bits.join(' · ');
 }
 
-const COLOR_WORDS: Record<Color, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
 
 /**
  * Tokens are named tersely by Scryfall ("Plant", "Zombie") — this rebuilds the
@@ -220,7 +220,7 @@ function tokenLabel(o: {
   if (isMarkerCard(o.name, o.typeLine)) return o.name;
   if (!/\bCreature\b/i.test(o.typeLine)) return `${o.name} Token`;
   const pt = o.power != null && o.toughness != null ? `${o.power}/${o.toughness} ` : '';
-  const colorWord = o.colors.length ? `${o.colors.map((c) => COLOR_WORDS[c]).join('/')} ` : '';
+  const colorWord = o.colors.length ? `${o.colors.map((c) => COLOR_NAME[c]).join('/')} ` : '';
   return `${pt}${colorWord}${o.name} Creature Token`;
 }
 
@@ -473,7 +473,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     if (n === 0) {
       toast(forTrade ? 'Nothing here is in your collection to mark' : `Nothing in this ${meta.noun} was for trade`);
     } else {
-      toast(`${forTrade ? 'Marked' : 'Unmarked'} ${n} card${n === 1 ? '' : 's'} for trade`);
+      toast(`${forTrade ? 'Marked' : 'Unmarked'} ${n} ${plural(n, 'card')} for trade`);
     }
   }
 
@@ -519,8 +519,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   }
   const selectedRows = data.rows.filter((r) => sel.selected.has(leadIdOf.get(r.id) ?? r.id));
   const allKeys = data.rows.filter((r) => (leadIdOf.get(r.id) ?? r.id) === r.id).map((r) => r.id);
-  const selectedCopies = selectedRows.reduce((s, r) => s + r.quantity, 0);
-  const plural = (n: number) => (n === 1 ? '' : 's');
+  const selectedCopies = sumQty(selectedRows);
 
   // ---- Clipboard -------------------------------------------------------
   // Copy takes the selection, or the whole container when nothing is picked —
@@ -562,7 +561,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         toast('Those cards have already moved on');
         return;
       }
-      toast(`Moved ${moved} card${plural(moved)} into this ${meta.noun}`);
+      toast(`Moved ${moved} ${plural(moved, 'card')} into this ${meta.noun}`);
       return;
     }
     // A copied slot that names a real copy of yours is that copy being filed
@@ -584,8 +583,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       { source: 'manual' },
     );
     if (filing === null) return;
-    const n = payload.slots.reduce((sum, s) => sum + s.quantity, 0);
-    toast(`Pasted ${n} card${plural(n)} into this ${meta.noun}`);
+    const n = sumQty(payload.slots);
+    toast(`Pasted ${n} ${plural(n, 'card')} into this ${meta.noun}`);
   }
 
   // These live in a child because ContainerDetail returns early while the
@@ -594,8 +593,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     onCopy: () => {
       const rows = selectedRows.length > 0 ? selectedRows : data.rows;
       if (rows.length === 0) return null;
-      const n = rows.reduce((sum, r) => sum + r.quantity, 0);
-      toast(`Copied ${n} card${plural(n)}`);
+      const n = sumQty(rows);
+      toast(`Copied ${n} ${plural(n, 'card')}`);
       return rows.map(clipSlot);
     },
     onCut: () => {
@@ -603,7 +602,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         toast('Select some cards first, then cut.');
         return null;
       }
-      toast(`Cut ${selectedCopies} card${plural(selectedCopies)}. Paste them where they belong.`);
+      toast(`Cut ${selectedCopies} ${plural(selectedCopies, 'card')}. Paste them where they belong.`);
       sel.exit();
       return { slots: selectedRows.map(clipSlot), slotIds: selectedRows.map((r) => r.id), containerId: id };
     },
@@ -678,21 +677,20 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // been emptied of — the two directions of "the card is (not) in the box".
   // Only a slot that names one physical copy can go either way; a brew line and
   // a lands-box basic never held anything (see DeckCard.unfiled).
-  const namesACopy = (r: Row) => !r.anyBasic && !!r.scryfallId && !!r.condition && !!r.finish && !!r.lang;
-  const filedHereRows = selectedRows.filter((r) => namesACopy(r) && !r.unfiled);
+  const filedHereRows = selectedRows.filter(holdsCopy);
   const unfiledRows = selectedRows.filter((r) => r.unfiled);
 
   async function bulkRemove() {
     const n = selectedRows.length;
     const ok = await confirm({
-      title: `Remove ${n} card${plural(n)}?`,
+      title: `Remove ${n} ${plural(n, 'card')}?`,
       body: `${n === 1 ? 'It leaves' : 'They leave'} “${deck.name}”. Copies you own stay in your collection.`,
       confirmLabel: `Remove from ${meta.noun}`,
       danger: true,
     });
     if (!ok) return;
     const copies = await removeDeckCardsBulk(selectedRows.map((r) => r.id));
-    toast(`Removed ${copies} card${plural(copies)} from the ${meta.noun}`);
+    toast(`Removed ${copies} ${plural(copies, 'card')} from the ${meta.noun}`);
     sel.exit();
   }
 
@@ -702,7 +700,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     if (n === 0) {
       toast(forTrade ? 'None of those are in your collection to mark' : 'None of those were for trade');
     } else {
-      toast(`${forTrade ? 'Marked' : 'Unmarked'} ${n} card${plural(n)} for trade`);
+      toast(`${forTrade ? 'Marked' : 'Unmarked'} ${n} ${plural(n, 'card')} for trade`);
     }
     sel.exit();
   }
@@ -739,8 +737,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       n === 0
         ? `Already in that ${noun}`
         : filing.mode === 'move'
-          ? `Moved ${n} card${plural(n)} to ${noun}`
-          : `Added ${n} card${plural(n)} to ${noun}`,
+          ? `Moved ${n} ${plural(n, 'card')} to ${noun}`
+          : `Added ${n} ${plural(n, 'card')} to ${noun}`,
     );
     sel.exit();
   }
@@ -757,7 +755,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     toast(
       copies === 0
         ? `Nothing in this selection is filed here`
-        : `Took ${copies} card${plural(copies)} out of the ${meta.noun} · the list is unchanged`,
+        : `Took ${copies} ${plural(copies, 'card')} out of the ${meta.noun} · the list is unchanged`,
     );
     sel.exit();
   }
@@ -765,7 +763,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   /** Put the cardboard back in — the other half of `unfileHere`. */
   async function refileHere() {
     const copies = await setDeckCardsUnfiled(unfiledRows.map((r) => r.id), false);
-    toast(copies === 0 ? `Those are already filed here` : `Filed ${copies} card${plural(copies)} back here`);
+    toast(copies === 0 ? `Those are already filed here` : `Filed ${copies} ${plural(copies, 'card')} back here`);
     sel.exit();
   }
 
@@ -785,7 +783,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     toast(
       removed === 0
         ? `Nothing matched in that ${CONTAINER_META[targetKind].noun.toLowerCase()}`
-        : `Removed ${removed} card${plural(removed)} from that ${CONTAINER_META[targetKind].noun.toLowerCase()}`,
+        : `Removed ${removed} ${plural(removed, 'card')} from that ${CONTAINER_META[targetKind].noun.toLowerCase()}`,
     );
     sel.exit();
   }
@@ -801,7 +799,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     toast(
       copies === 0
         ? `Already in the ${BOARD_LABEL[board].toLowerCase()}`
-        : `Moved ${copies} card${plural(copies)} to the ${BOARD_LABEL[board].toLowerCase()}`,
+        : `Moved ${copies} ${plural(copies, 'card')} to the ${BOARD_LABEL[board].toLowerCase()}`,
     );
     sel.exit();
   }
@@ -861,7 +859,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         })),
         { source: 'manual', label: deck.name },
       );
-      toast(`Added ${chosen.length} card${chosen.length === 1 ? '' : 's'} to wishlist`);
+      toast(`Added ${chosen.length} ${plural(chosen.length, 'card')} to wishlist`);
     }
     if (leaving) navigate(meta.path);
     else setWishSheet(null);
@@ -899,7 +897,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     await setDeckArchived(id, true);
     toast(
       freed > 0
-        ? `Archived · ${freed} card${plural(freed)} back on the shelf`
+        ? `Archived · ${freed} ${plural(freed, 'card')} back on the shelf`
         : 'Archived · find it under Archived in the deck list',
     );
     navigate(meta.path);
@@ -1236,7 +1234,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       {archiveOpen && (
         <ArchiveDeckSheet
           deckName={deck.name}
-          filedCopies={(data?.rows ?? []).reduce((n, r) => n + (namesACopy(r) && !r.unfiled ? r.quantity : 0), 0)}
+          filedCopies={sumQty((data?.rows ?? []).filter(holdsCopy))}
           onArchive={(unfile) => void archiveDeck(unfile)}
           onClose={() => setArchiveOpen(false)}
         />
@@ -1306,7 +1304,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
             <Sheet onClose={dismiss} label="Add missing cards to wishlist">
               <h2 style={{ margin: 0 }}>Add missing cards to wishlist?</h2>
               <p className="fine-print">
-                This deck needs {cards.reduce((s, c) => s + c.addQty, 0)} card{cards.length === 1 ? '' : 's'} you don’t
+                This deck needs {cards.reduce((s, c) => s + c.addQty, 0)} {plural(cards.length, 'card')} you don’t
                 own and haven’t wishlisted. Pick which to add:
               </p>
               <div className="list-toolbar">
@@ -1462,7 +1460,7 @@ function Board({
   const imageOf = (r: Row) =>
     r.printing?.imageSmall ?? (r.scryfallId ? undefined : shownAny.get(r.oracleId)?.imageSmall) ?? r.oracle?.imageSmall ?? null;
   if (rows.length === 0 && title === 'Sideboard') return null;
-  const count = rows.reduce((s, r) => s + r.quantity, 0);
+  const count = sumQty(rows);
   const toEdit = (r: Row): DeckCardEdit => ({ ...r, deckId, commanderDeck });
   /** A stack of several slots as one tile; a stack of one is its slot's own item. */
   const toStackItem = (g: SlotStack): CardItem => {
@@ -1516,7 +1514,7 @@ function Board({
     // filing keeps the double check and shows up in the filing conflicts — and so
     // does one you emptied out by hand (DeckCard.unfiled), which claims nothing
     // and so can never be filed here.
-    const pinned = !!r.scryfallId && !!r.finish && !!r.condition && !!r.lang;
+    const pinned = namesCopy(r);
     const filedHere = !r.anyBasic && (placements?.allocated(r.id) ?? 0) >= r.quantity;
     const own = r.anyBasic
       ? { icon: <Icon name="check" size={13} />, cls: 'own-yes', title: 'Any printing, from your lands box' }
@@ -1605,7 +1603,7 @@ function Board({
       </h2>
       {multiTagged > 0 && (
         <p className="fine-print">
-          {multiTagged} card{multiTagged === 1 ? '' : 's'} carr{multiTagged === 1 ? 'ies' : 'y'} more than one tag, so
+          {multiTagged} {plural(multiTagged, 'card')} carr{multiTagged === 1 ? 'ies' : 'y'} more than one tag, so
           {multiTagged === 1 ? ' it shows' : ' they show'} up under each of them.
         </p>
       )}
@@ -1617,7 +1615,7 @@ function Board({
             <h3 className="card-group-title">
               {g.label}{' '}
               <GroupCountBadge
-                quantity={g.items.reduce((s, st) => s + st.quantity, 0)}
+                quantity={sumQty(g.items)}
                 extras={g.label === 'Land' && group === 'type' ? landSources : undefined}
               />
             </h3>
@@ -1643,7 +1641,7 @@ function ColorChoicePicker({ chosen, onPick }: { chosen?: Color; onPick: (c: Col
     return (
       <button
         className="color-pip color-pip-chosen"
-        title={`Chosen color: ${COLOR_WORDS[chosen]}. Tap to change.`}
+        title={`Chosen color: ${COLOR_NAME[chosen]}. Tap to change.`}
         onClick={() => setChanging(true)}
       >
         <i className={`ms ms-${chosen.toLowerCase()} ms-cost`} aria-hidden />
@@ -1656,7 +1654,7 @@ function ColorChoicePicker({ chosen, onPick }: { chosen?: Color; onPick: (c: Col
         <button
           key={c}
           className={`color-pip${chosen === c ? ' color-pip-chosen' : ''}`}
-          title={`Be ${COLOR_WORDS[c].toLowerCase()}`}
+          title={`Be ${COLOR_NAME[c].toLowerCase()}`}
           onClick={() => {
             setChanging(false);
             onPick(c);
@@ -1687,7 +1685,7 @@ function MoveZoneSheet({
   onClose: () => void;
 }) {
   return (
-    <Sheet onClose={onClose} title={`Move ${count} card${count === 1 ? '' : 's'} to`} className="zone-sheet">
+    <Sheet onClose={onClose} title={`Move ${count} ${plural(count, 'card')} to`} className="zone-sheet">
       <ul className="zone-list">
         {zones.map((z) => (
           <li key={z.board}>
@@ -1811,10 +1809,11 @@ function ImportPanel({
   }, [initialText]);
 
   const ownership = useOwnershipIndex();
-  const slotKey = (l: { oracleId: string; board?: DeckBoard }) => `${l.oracleId}|${l.board ?? 'main'}`;
+  // Card + board only: a pasted line overlaps any slot of that card on that board.
+  const overlapKey = (l: { oracleId: string; board?: DeckBoard }) => slotKey({ oracleId: l.oracleId, board: l.board ?? 'main' });
   const have = useMemo(() => {
     const map = new Map<string, number>();
-    for (const s of slots) map.set(slotKey(s), (map.get(slotKey(s)) ?? 0) + s.quantity);
+    for (const s of slots) map.set(overlapKey(s), (map.get(overlapKey(s)) ?? 0) + s.quantity);
     return map;
   }, [slots]);
 
@@ -1833,7 +1832,7 @@ function ImportPanel({
   });
 
   async function confirm(lines: ResolvedLine[]) {
-    const wanted = applyOverlap(lines, overlap, have, slotKey);
+    const wanted = applyOverlap(lines, overlap, have, overlapKey);
     if (wanted.length === 0) {
       toast(`Nothing added: every card was already in the ${noun}`);
       onDone(0);
@@ -1855,7 +1854,7 @@ function ImportPanel({
         ...(isAny(l) ? { anyBasic: true } : { scryfallId: l.scryfallId }),
       })),
     );
-    const added = wanted.reduce((s, l) => s + l.quantity, 0);
+    const added = sumQty(wanted);
 
     // Scanning a pile into a container has always offered to also register it
     // as owned; pasting the same list left the collection none the wiser and
@@ -1890,8 +1889,8 @@ function ImportPanel({
       const chosen = unowned.lines.filter((l) => picked.has(`${l.scryfallId}|${l.board ?? 'main'}`));
       if (chosen.length) {
         await applyImport(chosen, { source: 'import', label: `Filled ${noun}` });
-        const n = chosen.reduce((s, l) => s + l.quantity, 0);
-        toast(`Added ${n} card${n === 1 ? '' : 's'} to your collection`);
+        const n = sumQty(chosen);
+        toast(`Added ${n} ${plural(n, 'card')} to your collection`);
       }
       const added = unowned.added;
       setUnowned(null);
@@ -1910,7 +1909,7 @@ function ImportPanel({
           busy={busy}
           intro={
             <>
-              {unowned.cards.length} card{unowned.cards.length === 1 ? '' : 's'} in this list {' '}
+              {unowned.cards.length} {plural(unowned.cards.length, 'card')} in this list {' '}
               {unowned.cards.length === 1 ? "isn't" : "aren't"} in your collection. If the {noun} is real cardboard on
               your shelf, add {unowned.cards.length === 1 ? 'it' : 'them'} too:
             </>
@@ -1942,7 +1941,7 @@ function ImportPanel({
   }
 
   if (status.kind === 'review') {
-    const already = status.result.resolved.filter((l) => (have.get(slotKey(l)) ?? 0) > 0).length;
+    const already = status.result.resolved.filter((l) => (have.get(overlapKey(l)) ?? 0) > 0).length;
     return (
       <div className="about-section">
         {already > 0 && <OverlapChoice count={already} where={`in this ${noun}`} value={overlap} onChange={setOverlap} />}

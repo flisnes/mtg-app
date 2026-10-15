@@ -1,5 +1,6 @@
-import type { DeckBoard, OracleCard } from '@mtg/shared';
+import { countsTowardDeck, type ContainerKind, type DeckBoard, type DeckFormat, type OracleCard } from '@mtg/shared';
 import { canJoinCommandZone, isCompanion, isNonDeckCard } from './legality.js';
+import { sumQty } from '../util/groupBy.js';
 
 // A deck's zones, and the one set of rules for moving a slot between them.
 // Both the card sheet's zone picker and the multi-select "Move to…" read this,
@@ -15,6 +16,33 @@ export const BOARD_LABEL: Record<DeckBoard, string> = {
   maybe: 'Considering',
   token: 'Tokens',
 };
+
+/** Zone names mid-sentence: "Moved to sideboard", "· command zone". */
+export const BOARD_NOUN: Record<DeckBoard, string> = {
+  main: 'mainboard',
+  side: 'sideboard',
+  commander: 'command zone',
+  companion: 'companion',
+  maybe: 'considering',
+  token: 'tokens',
+};
+
+/** Which boards a scan can target: storage has one pile, decks have boards
+ *  (the command zone only in Commander, which has no sideboard). */
+export function scanBoards(containerKind: ContainerKind | undefined, format: DeckFormat | undefined): DeckBoard[] {
+  if ((containerKind ?? 'deck') !== 'deck') return ['main'];
+  return format === 'commander' ? ['main', 'maybe', 'commander'] : ['main', 'side', 'maybe'];
+}
+
+/**
+ * Deck size: the commander counts; tokens, the companion and Considering never
+ * do, and neither does the sideboard. (The deck page's "55/65 owned" is a
+ * different count on purpose: it tallies everything you need to own, sideboard
+ * and companion included.)
+ */
+export function deckSize(slots: readonly { board: string; quantity: number }[]): number {
+  return sumQty(slots.filter((s) => countsTowardDeck(s.board)));
+}
 
 /** Every zone a deck has, in the order they're shown. */
 export const BOARD_ORDER: readonly DeckBoard[] = ['main', 'side', 'commander', 'companion', 'maybe', 'token'];

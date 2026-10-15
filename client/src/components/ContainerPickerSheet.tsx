@@ -8,7 +8,8 @@ import { createContainer } from '../db/dataAccess.js';
 import { Emblem } from './Emblem.js';
 import { Sheet } from './Sheet.js';
 import { useAsyncAction } from './useAsyncAction.js';
-import { Icon } from './icons.js';
+import { Loading } from './Loading.js';
+import { MenuRow } from './MenuRow.js';
 
 /**
  * Bottom-sheet that lists the user's decks, binders and boxes and reports the
@@ -102,7 +103,7 @@ export function ContainerPickerBody({ onPick, excludeId, only, noteFor, emptyTex
           weren't on offer at all. */}
       <div className="container-picker-list">
         {shown === undefined ? (
-          <p className="search-meta">Loading…</p>
+          <Loading />
         ) : shown.length === 0 ? (
           restricted ? (
             <div className="empty-state">
@@ -126,28 +127,21 @@ export function ContainerPickerBody({ onPick, excludeId, only, noteFor, emptyTex
               const note = noteFor?.(row.id);
               return (
                 <li key={row.id}>
-                  <button
-                    className="menu-item menu-item-btn"
+                  <MenuRow
                     onClick={() => onPick(row.id, containerKind(row))}
-                  >
-                    <span className="menu-icon" aria-hidden>
-                      <Emblem emblem={row.emblem} kind={rowMeta.kind} size={28} />
-                    </span>
-                    <span className="deck-line">
-                      <span className="deck-name">{row.name}</span>
-                      {(rowMeta.kind === 'deck' || note) && (
-                        <span className="deck-meta">
+                    icon={<Emblem emblem={row.emblem} kind={rowMeta.kind} size={28} />}
+                    label={row.name}
+                    meta={
+                      (rowMeta.kind === 'deck' || note) && (
+                        <>
                           {rowMeta.kind === 'deck' && (
                             <span className="deck-format">{formatLabel(row.format ?? 'casual')}</span>
                           )}
                           {note && <span className="search-meta">{note}</span>}
-                        </span>
-                      )}
-                    </span>
-                    <span className="menu-chevron" aria-hidden>
-                      <Icon name="chevronRight" size={18} />
-                    </span>
-                  </button>
+                        </>
+                      )
+                    }
+                  />
                 </li>
               );
             })}

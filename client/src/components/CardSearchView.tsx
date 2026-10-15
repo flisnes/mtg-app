@@ -11,6 +11,7 @@ import type { MultiSelect } from './useMultiSelect.js';
 import { SelectToggle } from './SelectToggle.js';
 import { CardCursorProvider, useCardCursorCtx } from './useCardCursor.js';
 import { useShortcuts } from './useShortcuts.js';
+import { plural } from '../util/format.js';
 
 // The reusable body of the card-search experience: an optional search input,
 // the color/type/rarity filter row, a result-count + list/grid toggle, the
@@ -224,7 +225,7 @@ export function CardSearchView({
             <p className="search-meta">
               {searching
                 ? 'Searching…'
-                : `${total} result${total === 1 ? '' : 's'}${total > results.length ? ` (showing ${results.length})` : ''}`}
+                : `${total} ${plural(total, 'result')}${total > results.length ? ` (showing ${results.length})` : ''}`}
             </p>
             <div className="meta-actions">
               {selection && !selection.sel.active && results.length > 0 && (

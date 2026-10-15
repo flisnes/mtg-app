@@ -10,6 +10,7 @@ import {
 import { currencySymbol } from '../price/rates.js';
 import { getPrefs } from '../prefs.js';
 import type { MoverTuning } from '../price/movers.js';
+import { plural } from '../util/format.js';
 
 // The dials behind the Price movers page. Everything applies live: the page
 // re-runs its query on every change, so a slider drag shows its own effect.
@@ -78,9 +79,9 @@ function formatValue(field: TuningField, v: number, symbol: string): string {
     case 'fraction':
       return `${Math.round(v * 100)}%`;
     case 'days':
-      return `${v} day${v === 1 ? '' : 's'}`;
+      return `${v} ${plural(v, 'day')}`;
     case 'readings':
-      return `${v} reading${v === 1 ? '' : 's'}`;
+      return `${v} ${plural(v, 'reading')}`;
     case 'r':
       return v.toFixed(2);
   }

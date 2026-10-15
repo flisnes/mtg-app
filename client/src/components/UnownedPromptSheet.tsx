@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
+import { plural } from '../util/format.js';
 
 /**
  * "You don't own these yet — add them to your collection too?"
@@ -62,7 +63,7 @@ export function UnownedPromptSheet({
       <p className="fine-print">
         {intro ?? (
           <>
-            {cards.length} card{cards.length === 1 ? '' : 's'} here {cards.length === 1 ? "isn't" : "aren't"} in your
+            {cards.length} {plural(cards.length, 'card')} here {cards.length === 1 ? "isn't" : "aren't"} in your
             collection yet. Pick which to also add:
           </>
         )}

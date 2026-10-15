@@ -2,12 +2,13 @@ import { useMemo } from 'react';
 import { DAY_MS, type SealedItem } from '@mtg/shared';
 import { fmtMoney } from '../price/rates.js';
 import { useSealedValueSeries } from '../price/sealedValue.js';
-import { fmtDate } from '../util/format.js';
+import { fmtDate, plural } from '../util/format.js';
 import { Icon } from '../components/icons.js';
 import { Sheet } from '../components/Sheet.js';
 import { LinePlot, useValueChart, ZoomHint, type ChartPt } from '../components/ValueLineChart.js';
 import { SealedImage } from './SealedImage.js';
 import { itemImage } from './product.js';
+import { Loading } from '../components/Loading.js';
 
 // What the shelf has been worth, opened from the sealed page's total. One line,
 // because a box has no acquisition price to compare against: the app knows what
@@ -48,7 +49,7 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
       </div>
 
       {series === undefined ? (
-        <p className="fine-print">Loading…</p>
+        <Loading fine />
       ) : !series || !latest ? (
         <p className="fine-print">
           Not enough price history yet. Sealed prices are recorded once a day when you open the app, so come back tomorrow.
@@ -121,7 +122,7 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
                 <span className="fine-print">{zoom.zoomed ? 'Shown' : 'Tracked'}</span>
                 <strong>{(geom?.days ?? 0) + 1} days</strong>
                 <span className="fine-print">
-                  {adds.length} arrival{adds.length === 1 ? '' : 's'}
+                  {adds.length} {plural(adds.length, 'arrival')}
                 </span>
               </div>
             </div>

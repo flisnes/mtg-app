@@ -1,6 +1,7 @@
-import type { ContainerKind, DeckBoard, EventSource, RemovalReason, UserEvent } from '@mtg/shared';
+import type { ContainerKind, EventSource, RemovalReason, UserEvent } from '@mtg/shared';
 import type { IconName } from '../components/icons.js';
 import { CONTAINER_META } from '../deck/containers.js';
+import { BOARD_NOUN } from '../deck/boards.js';
 
 // Single source of truth for how a recorded UserEvent is presented — its label,
 // icon, and qty direction — plus the filter categories the edit-history view
@@ -28,18 +29,18 @@ export const REASON_LABELS: Record<RemovalReason, string> = {
   other: 'Removed',
 };
 
+/** The same reasons as answers to "What happened to it?". */
+export const REASON_ANSWERS: Record<RemovalReason, string> = {
+  sold: 'Sold it',
+  traded: 'Traded it away',
+  lost: 'Lost it',
+  corrected: 'Fixed incorrect card information',
+  other: 'Something else',
+};
+
 function boardSuffix(e: UserEvent): string {
-  return e.board === 'side'
-    ? ' (sideboard)'
-    : e.board === 'commander'
-      ? ' (commander)'
-      : e.board === 'token'
-        ? ' (tokens)'
-        : e.board === 'companion'
-          ? ' (companion)'
-          : e.board === 'maybe'
-            ? ' (considering)'
-            : '';
+  const noun = e.board && e.board !== 'main' ? BOARD_NOUN[e.board] : undefined;
+  return noun ? ` (${noun})` : '';
 }
 
 // Deck slot events cover binders and boxes too (same rows); `deckKind` is only
@@ -103,15 +104,6 @@ export function placeLabel(events: readonly UserEvent[]): string {
   if (events.some((e) => e.kind.startsWith('wish.'))) return 'your wishlist';
   return 'your collection';
 }
-
-const BOARD_NOUN: Record<DeckBoard, string> = {
-  main: 'mainboard',
-  side: 'sideboard',
-  commander: 'command zone',
-  companion: 'companion',
-  maybe: 'considering',
-  token: 'tokens',
-};
 
 /**
  * A batch that both takes deck slots out and puts them back in is a move

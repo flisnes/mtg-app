@@ -1,4 +1,4 @@
-import type { ContainerKind, DeckBoard, EventSource, SlotShape } from '@mtg/shared';
+import { namesCopy, type ContainerKind, type DeckBoard, type EventSource, type SlotShape } from '@mtg/shared';
 import {
   addDeckCardsBulk,
   collectionKey,
@@ -43,7 +43,7 @@ import { containerKind } from './containers.js';
  * holding it. So it claims nothing either.
  */
 export function claimKeyOf(s: SlotShape): string | undefined {
-  if (s.anyBasic || s.unfiled || !s.scryfallId || !s.condition || !s.finish || !s.lang) return undefined;
+  if (s.unfiled || !namesCopy(s)) return undefined;
   return collectionKey({ scryfallId: s.scryfallId, condition: s.condition, finish: s.finish, lang: s.lang });
 }
 

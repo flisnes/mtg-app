@@ -6,6 +6,7 @@ import type { PipColor } from '@mtg/sim';
 import { MASK_BITS } from '@mtg/sim';
 import type { SimStatus } from '../analysis/useSimulation.js';
 import { HowWorked } from './HowWorked.js';
+import { plural } from '../util/format.js';
 
 // "Do I actually cast this on turn four?" — phase 5, and the first panel in
 // this sheet whose number is simulated rather than exact.
@@ -324,14 +325,14 @@ function verdict(result: SimResult, shortfalls: readonly SimCostGroup[], command
   if (late === 0) {
     return (
       <>
-        <strong>The mana is there on time.</strong> All {total} cost{total === 1 ? '' : 's'} clear 90% on their own turn.
+        <strong>The mana is there on time.</strong> All {total} {plural(total, 'cost')} clear 90% on their own turn.
       </>
     );
   }
   return (
     <>
       <strong>
-        {late} of {total} cost{total === 1 ? '' : 's'} miss the bar.
+        {late} of {total} {plural(total, 'cost')} miss the bar.
       </strong>
       {commanderLate && ' Your commander is one of them.'}
     </>

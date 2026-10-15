@@ -1,4 +1,6 @@
 import {
+  COLOR_NAME,
+  COLORS,
   FORMATS,
   MANA_TAPPED,
   normalizeColors,
@@ -262,7 +264,7 @@ const KNOWN_FIELDS = new Set([
 ]);
 
 const COLOR_LETTERS: Record<string, Color> = { w: 'W', u: 'U', b: 'B', r: 'R', g: 'G' };
-const COLOR_WORDS: Record<string, Color> = { white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G' };
+const COLOR_WORDS: Record<string, Color> = Object.fromEntries(COLORS.map((c) => [COLOR_NAME[c].toLowerCase(), c]));
 
 // Scryfall's rarity ordering for comparisons (r>=rare etc.).
 const RARITY_RANK: Record<Rarity, number> = { common: 0, uncommon: 1, rare: 2, special: 3, mythic: 4, bonus: 5 };

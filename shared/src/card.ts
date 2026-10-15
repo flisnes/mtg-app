@@ -10,6 +10,9 @@ export type Color = 'W' | 'U' | 'B' | 'R' | 'G';
 /** The five colors in canonical WUBRG order. */
 export const COLORS: readonly Color[] = ['W', 'U', 'B', 'R', 'G'];
 
+/** Color names, capitalized; lowercase them mid-sentence. */
+export const COLOR_NAME: Record<Color, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
+
 /**
  * Valid colors only, deduplicated, in WUBRG order. Double-faced cards have no
  * top-level `colors`, so we union their faces — and a mono-green werewolf then

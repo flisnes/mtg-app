@@ -499,6 +499,27 @@ describe('sanitizeTransferPayload', () => {
     expect(clean.deckCards.find((c) => c.board === 'main')!.quantity).toBe(4);
   });
 
+  test('deck slots for different printings or an any-printing basic stay apart', () => {
+    const filed = { condition: 'NM', finish: 'nonfoil', lang: 'en' };
+    const p = {
+      ...emptyPayload(),
+      decks: [{ id: 'd1', name: 'A', kind: 'deck', format: 'casual', createdAt: 1, updatedAt: 1 }],
+      deckCards: [
+        { id: 'c1', deckId: 'd1', oracleId: 'o1', scryfallId: 's1', ...filed, quantity: 1, board: 'main', updatedAt: 1 },
+        { id: 'c2', deckId: 'd1', oracleId: 'o1', scryfallId: 's2', ...filed, quantity: 1, board: 'main', updatedAt: 1 },
+        { id: 'c3', deckId: 'd1', oracleId: 'o2', anyBasic: true, quantity: 10, board: 'main', updatedAt: 1 },
+        { id: 'c4', deckId: 'd1', oracleId: 'o2', scryfallId: 's3', ...filed, quantity: 2, board: 'main', updatedAt: 1 },
+      ],
+    };
+    const clean = sanitizeTransferPayload(p, sanitizeCardBehavior)!;
+    expect(clean.deckCards.map((c) => [c.id, c.quantity])).toEqual([
+      ['c1', 1],
+      ['c2', 1],
+      ['c3', 10],
+      ['c4', 2],
+    ]);
+  });
+
   test('price histories: arrays forced to equal length, values re-bounded', () => {
     const p = {
       ...emptyPayload(),

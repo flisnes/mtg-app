@@ -3,6 +3,7 @@ import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
 import type { SimCard, SimDeck, SimOptions } from '@mtg/sim';
 import type { BoardPile, BoardState, GameTrace, TraceKind } from '@mtg/sim';
+import { plural } from '../util/format.js';
 
 /**
  * The engine, loaded when the sheet first opens. Everything else on the
@@ -256,7 +257,7 @@ function LoadedTraceSheet({
 
       <div className="trace-opener">
         <div className="trace-opener-head">
-          Opening hand{trace.mulligans > 0 ? ` after ${trace.mulligans} mulligan${trace.mulligans === 1 ? '' : 's'}` : ''}
+          Opening hand{trace.mulligans > 0 ? ` after ${trace.mulligans} ${plural(trace.mulligans, 'mulligan')}` : ''}
         </div>
         <div className="trace-cards">{trace.opener.join(', ')}</div>
         {trace.bottomed.length > 0 && <div className="trace-bottomed">Bottomed: {trace.bottomed.join(', ')}</div>}

@@ -18,6 +18,7 @@ import {
 } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
 import { Step } from './MulliganPanel.js';
+import { plural } from '../util/format.js';
 
 // The Plan tab (rebuild plan E1): the deck's game plan as goals, each a
 // sentence ("four lands and a creature on the battlefield by turn 4") and a
@@ -30,7 +31,6 @@ import { Step } from './MulliganPanel.js';
 // tutors fetch.
 
 const pct = (p: number) => `${Math.round(p * 100)}%`;
-const plural = (n: number) => (n === 1 ? '' : 's');
 
 /** Below this at its turn, a goal reads as a problem rather than a plan. */
 const SHAKY = 0.5;
@@ -287,7 +287,7 @@ function GoalEditor({
         </button>
       </div>
       <p className="fine-print">
-        Up to {MAX_GOAL_TERMS} part{plural(MAX_GOAL_TERMS)} per goal, all of them at once.
+        Up to {MAX_GOAL_TERMS} {plural(MAX_GOAL_TERMS, 'part')} per goal, all of them at once.
       </p>
     </div>
   );

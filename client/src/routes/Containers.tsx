@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  COLOR_NAME,
   COLORS,
   CONTAINER_KINDS,
   DECK_FORMATS,
@@ -39,7 +40,9 @@ import { ArchiveDeckSheet } from '../components/ArchiveDeckSheet.js';
 import { useToast } from '../components/Toast.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
 import { convertToDisplay } from '../price/rates.js';
-import { COLOR_NAMES } from '../components/CardSorting.js';
+import { plural } from '../util/format.js';
+import { Loading } from '../components/Loading.js';
+import { MenuRow } from '../components/MenuRow.js';
 
 /**
  * The Archived folder isn't a DeckFolder row — there is nothing to name, rename
@@ -252,7 +255,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
     await setDeckArchived(deck.id, true);
     toast(
       freed > 0
-        ? `Archived “${deck.name}” · ${freed} card${freed === 1 ? '' : 's'} back on the shelf`
+        ? `Archived “${deck.name}” · ${freed} ${plural(freed, 'card')} back on the shelf`
         : `Archived “${deck.name}”`,
     );
   }
@@ -355,7 +358,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
             <option value="">Any color</option>
             {COLORS.map((c) => (
               <option key={c} value={c}>
-                {COLOR_NAMES[c]}
+                {COLOR_NAME[c]}
               </option>
             ))}
           </select>
@@ -397,7 +400,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
       <div className={hasFolders ? 'deck-board deck-board-split' : 'deck-board'}>
         <div className="deck-col-list">
           {visibleRows === undefined ? (
-            <p className="search-meta">Loading…</p>
+            <Loading />
           ) : visibleRows.length === 0 ? (
             <div className="empty-state">
               {rows && rows.length > 0 ? (
@@ -430,13 +433,13 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                 const folderName = showAllDecks && deck.folderId ? folderNameById.get(deck.folderId) : undefined;
                 return (
                 <li key={deck.id}>
-                  <Link className="menu-item" to={`${meta.path}/${deck.id}`}>
-                    <span className="menu-icon" aria-hidden>
-                      <Emblem emblem={deck.emblem} kind={kind} size={28} />
-                    </span>
-                    <span className="deck-line">
-                      <span className="deck-name">{deck.name}</span>
-                      <span className="deck-meta">
+                  <MenuRow
+                    to={`${meta.path}/${deck.id}`}
+                    icon={<Emblem emblem={deck.emblem} kind={kind} size={28} />}
+                    label={deck.name}
+                    chevron={false}
+                    meta={
+                      <>
                         {isDeck && <span className="deck-format">{formatLabel(deck.format ?? 'casual')}</span>}
                         <ManaCost
                           cost={colors.length > 0 ? colors.map((c) => `{${c}}`).join('') : '{C}'}
@@ -444,71 +447,73 @@ export function Containers({ kind }: { kind: ContainerKind }) {
                         />
                         {isDeck ? (
                           <span className="badge" title={`${main} mainboard · ${side} sideboard`}>
-                            {main} card{main === 1 ? '' : 's'}
+                            {main} {plural(main, 'card')}
                             {side > 0 && ` · ${side} side`}
                           </span>
                         ) : (
-                          <span className="badge" title={`${main} card${main === 1 ? '' : 's'} filed here`}>
-                            {main} card{main === 1 ? '' : 's'}
+                          <span className="badge" title={`${main} ${plural(main, 'card')} filed here`}>
+                            {main} {plural(main, 'card')}
                           </span>
                         )}
                         {folderName && <span className="badge deck-folder-badge">{folderName}</span>}
-                      </span>
-                    </span>
-                    <span className="deck-row-end">
-                      {/* What you own in here, not what the list would cost to build. */}
-                      {ownText && (
-                        <span
-                          className="badge badge-value"
-                          title={
-                            missText
-                              ? `${ownText} owned · ${missText} more in cards you don't own`
-                              : `${ownText} owned, all of it in your collection`
-                          }
-                        >
-                          {ownText}
+                      </>
+                    }
+                    end={
+                      <span className="deck-row-end">
+                        {/* What you own in here, not what the list would cost to build. */}
+                        {ownText && (
+                          <span
+                            className="badge badge-value"
+                            title={
+                              missText
+                                ? `${ownText} owned · ${missText} more in cards you don't own`
+                                : `${ownText} owned, all of it in your collection`
+                            }
+                          >
+                            {ownText}
+                          </span>
+                        )}
+                        <span onClick={swallow}>
+                          <OptionsMenu
+                            label={`${deck.name} options`}
+                            actions={[
+                              {
+                                label: deck.emblem ? 'Change emblem' : 'Choose an emblem',
+                                icon: 'emblem' as const,
+                                onClick: () => setEmblemDeck(deck),
+                              },
+                              ...(isDeck
+                                ? [
+                                    {
+                                      label: 'Move to folder',
+                                      icon: 'folder' as const,
+                                      onClick: () => setMovingDeck({ id: deck.id, name: deck.name, folderId: deck.folderId }),
+                                    },
+                                    deck.archivedAt
+                                      ? {
+                                          label: 'Restore from archive',
+                                          icon: 'refresh' as const,
+                                          onClick: () => void restoreDeck(deck),
+                                        }
+                                      : {
+                                          label: 'Archive deck',
+                                          icon: 'archive' as const,
+                                          onClick: () => setArchivingDeck({ id: deck.id, name: deck.name, filed }),
+                                        },
+                                  ]
+                                : []),
+                              {
+                                label: `Delete ${meta.noun}`,
+                                icon: 'trash',
+                                danger: true,
+                                onClick: () => void removeDeck(deck),
+                              },
+                            ]}
+                          />
                         </span>
-                      )}
-                      <span onClick={swallow}>
-                        <OptionsMenu
-                          label={`${deck.name} options`}
-                          actions={[
-                            {
-                              label: deck.emblem ? 'Change emblem' : 'Choose an emblem',
-                              icon: 'emblem' as const,
-                              onClick: () => setEmblemDeck(deck),
-                            },
-                            ...(isDeck
-                              ? [
-                                  {
-                                    label: 'Move to folder',
-                                    icon: 'folder' as const,
-                                    onClick: () => setMovingDeck({ id: deck.id, name: deck.name, folderId: deck.folderId }),
-                                  },
-                                  deck.archivedAt
-                                    ? {
-                                        label: 'Restore from archive',
-                                        icon: 'refresh' as const,
-                                        onClick: () => void restoreDeck(deck),
-                                      }
-                                    : {
-                                        label: 'Archive deck',
-                                        icon: 'archive' as const,
-                                        onClick: () => setArchivingDeck({ id: deck.id, name: deck.name, filed }),
-                                      },
-                                ]
-                              : []),
-                            {
-                              label: `Delete ${meta.noun}`,
-                              icon: 'trash',
-                              danger: true,
-                              onClick: () => void removeDeck(deck),
-                            },
-                          ]}
-                        />
                       </span>
-                    </span>
-                  </Link>
+                    }
+                  />
                 </li>
                 );
               })}

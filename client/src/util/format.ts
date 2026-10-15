@@ -1,6 +1,8 @@
 import { getPrefs } from '../prefs.js';
 import { fmtEur, localeFor } from '../price/rates.js';
 
+export { plural } from '@mtg/shared';
+
 // Shared display formatters. Keep the date/money formatting identical
 // everywhere it appears (history, event sheet, community, account…).
 // Dates and counts follow the display currency's region, the same one the
@@ -15,6 +17,12 @@ function locale(): string | undefined {
 /** Medium date, e.g. "18 Jul 2026". */
 export function fmtDate(ts: number): string {
   return new Date(ts).toLocaleDateString(locale(), { dateStyle: 'medium' });
+}
+
+/** An ISO date string as a medium date, or the string itself when it doesn't parse. */
+export function fmtIsoDate(iso: string): string {
+  const ts = Date.parse(iso);
+  return Number.isNaN(ts) ? iso : fmtDate(ts);
 }
 
 /** Medium date + short time, e.g. "18 Jul 2026, 14:32". */

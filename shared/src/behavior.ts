@@ -1,4 +1,5 @@
-import { BASIC_LAND_TYPES, MANA_LETTERS, sourceColors, type EffectProfile, type FetchProfile, type ManaProfile } from './card.js';
+import { BASIC_LAND_TYPES, COLOR_NAME, MANA_LETTERS, type Color, sourceColors, type EffectProfile, type FetchProfile, type ManaProfile } from './card.js';
+import { plural } from './strings.js';
 
 // Card behavior: what the *user* says a card does, when the pipeline's oracle
 // reading says nothing useful.
@@ -866,13 +867,13 @@ export function describeCastOption(o: CastOption): string {
     case 'retrace':
       return 'Retrace: cast from the graveyard for its mana cost and a land from hand';
     case 'escape':
-      return `Escape ${cost}, exiling ${o.n ?? 0} other card${o.n === 1 ? '' : 's'}: cast from the graveyard`;
+      return `Escape ${cost}, exiling ${o.n ?? 0} other ${plural(o.n ?? 0, 'card')}: cast from the graveyard`;
     case 'mayhem':
       return `Mayhem ${cost}: cast from the graveyard the turn it was discarded`;
     case 'madness':
       return `Madness ${cost}: cast as it is discarded, when the mana is there`;
     case 'suspend':
-      return `Suspend ${o.n ?? 0} for ${cost}: cast for free ${o.n ?? 0} upkeep${o.n === 1 ? '' : 's'} later`;
+      return `Suspend ${o.n ?? 0} for ${cost}: cast for free ${o.n ?? 0} ${plural(o.n ?? 0, 'upkeep')} later`;
     case 'evoke':
       return `Evoke ${cost}: cast for that and sacrificed on arrival when its mana cost is out of reach`;
     case 'foretell':
@@ -938,7 +939,7 @@ function describeGrant(step: BehaviorStep): string {
       return `${cards} have flashback equal to their mana cost`;
     case 'escape': {
       const n = step.x.n ?? 0;
-      return `${cards} have escape: their mana cost, exiling ${n} other card${n === 1 ? '' : 's'}`;
+      return `${cards} have escape: their mana cost, exiling ${n} other ${plural(n, 'card')}`;
     }
     default:
       return `you may cast ${cards}`;
@@ -1535,12 +1536,10 @@ export const devotionColors = (x: BehaviorAmount): string => {
   return out || 'B';
 };
 
-const COLOR_WORDS: Record<string, string> = { W: 'white', U: 'blue', B: 'black', R: 'red', G: 'green' };
-
 function amountBase(x: BehaviorAmount): string {
   const phrase = x.kind === 'fixed' ? String(x.n ?? 0) : (AMOUNT_BY_ID.get(x.kind)?.phrase ?? '?');
   if (x.kind === 'devotion') {
-    const words = [...devotionColors(x)].map((c) => COLOR_WORDS[c]!);
+    const words = [...devotionColors(x)].map((c) => COLOR_NAME[c as Color].toLowerCase());
     const list = words.length <= 2 ? words.join(' and ') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
     return `${phrase} ${list}`;
   }
@@ -1594,7 +1593,7 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
     // A look at the top N reads as its own clause: where the cards come
     // from is the window, and where the rest go is part of the step.
     const look = step.from === 'library' && step.win ? step.win : 0;
-    const from = look ? `the top ${look} card${look === 1 ? '' : 's'} of your library` : (ZONE_BY_ID.get(step.from ?? '')?.phrase ?? 'somewhere');
+    const from = look ? `the top ${look} ${plural(look, 'card')} of your library` : (ZONE_BY_ID.get(step.from ?? '')?.phrase ?? 'somewhere');
     const to = intoPhrase(step.to) + tappedPhrase(step);
     const filter = step.q ? ` matching ${step.q}` : '';
     const rest = look ? (step.rest === 'graveyard' ? ', the rest into your graveyard' : ', the rest on the bottom') : '';
@@ -1607,7 +1606,7 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
     // trailer explaining a number nobody asked for.
     if (step.x.kind === 'all') return `move everything${filter}${where}${plug}`;
     const n = step.x.n ?? 0;
-    const cards = computed ? 'X cards' : `${n} card${n === 1 ? '' : 's'}`;
+    const cards = computed ? 'X cards' : `${n} ${plural(n, 'card')}`;
     const pick = step.pick ? `, ${BEHAVIOR_PICKS.find((p) => p.id === step.pick)?.phrase ?? ''}` : '';
     return `move ${cards}${filter}${pick}${where}${tail}${plug}`;
   }
@@ -1616,7 +1615,7 @@ export function describeStep(step: BehaviorStep, kind: RuleKind = 'trigger'): st
     const plug = step.q && queryHasX(step.q) ? `, with [X] = ${describeAmount(step.qx ?? { kind: 'fixed', n: 0 })}` : '';
     if (step.x.kind === 'all') return `flicker every permanent you control${filter}${plug}`;
     const n = step.x.n ?? 0;
-    const what = computed ? 'X permanents' : `${n} permanent${n === 1 ? '' : 's'}`;
+    const what = computed ? 'X permanents' : `${n} ${plural(n, 'permanent')}`;
     return `flicker ${what} you control${filter}${tail}${plug}`;
   }
   if (step.op === 'treasure') {
@@ -1767,9 +1766,9 @@ export function describeCost(cost: ActivationCost | undefined): string {
   if (cost.self) bits.push('sacrifice it');
   if (cost.sac) {
     const what = cost.sacq ? ` matching ${cost.sacq}` : '';
-    bits.push(`sacrifice ${cost.sac} other permanent${cost.sac === 1 ? '' : 's'}${what}`);
+    bits.push(`sacrifice ${cost.sac} other ${plural(cost.sac, 'permanent')}${what}`);
   }
-  if (cost.discard) bits.push(`discard ${cost.discard} card${cost.discard === 1 ? '' : 's'}`);
+  if (cost.discard) bits.push(`discard ${cost.discard} ${plural(cost.discard, 'card')}`);
   if (cost.life) bits.push(`pay ${cost.life} life`);
   if (bits.length === 0) return 'Free';
   const out = bits.join(', ');
@@ -1862,7 +1861,7 @@ export function describeLandRamp(mana: ManaProfile | null | undefined): string |
   const n = Math.max(1, mana.adds);
   // Always tapped, whatever the flag says: that is what the sequencer does with
   // one, and this has to describe the model rather than the card.
-  return `put ${n} land${n === 1 ? '' : 's'} from your library onto the battlefield, tapped`;
+  return `put ${n} ${plural(n, 'land')} from your library onto the battlefield, tapped`;
 }
 
 /**
@@ -1934,7 +1933,7 @@ export function describeExtraLand(mana: ManaProfile | null | undefined): string 
   const n = Math.max(1, mana.adds);
   // From the turn after it lands, which is what the sequencer does with one:
   // this turn's land drop has already happened by the time it resolves.
-  return `play ${n} additional land${n === 1 ? '' : 's'} on each of your turns, from next turn`;
+  return `play ${n} additional ${plural(n, 'land')} on each of your turns, from next turn`;
 }
 
 /**

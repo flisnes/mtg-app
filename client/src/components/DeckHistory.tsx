@@ -5,7 +5,7 @@ import { CONTAINER_META } from '../deck/containers.js';
 import { describeDeckBatch, describeDeckEvent, signedQty, type EventDisplay } from '../history/eventRegistry.js';
 import { entryEvents, type HistoryEntry } from '../history/useHistoryEntries.js';
 import { useDeckHistory } from '../history/useDeckHistory.js';
-import { fmtDate } from '../util/format.js';
+import { fmtDate, plural } from '../util/format.js';
 import { CardSheet } from './CardSheet.js';
 import { EventSheet } from './EventSheet.js';
 import { Icon } from './icons.js';
@@ -88,7 +88,7 @@ export function DeckHistory({
             </p>
           ) : (
             <p className="history-summary">
-              {total} change{total === 1 ? '' : 's'} to this {meta.noun} since {fmtDate(since)}.
+              {total} {plural(total, 'change')} to this {meta.noun} since {fmtDate(since)}.
             </p>
           )}
           {days.map((day) => (
@@ -97,7 +97,7 @@ export function DeckHistory({
                 {fmtDate(day.ts)}
                 {day.size != null && (
                   <span className="badge">
-                    {day.size} card{day.size === 1 ? '' : 's'}
+                    {day.size} {plural(day.size, 'card')}
                   </span>
                 )}
               </h3>
@@ -160,7 +160,7 @@ function Row({
   const label =
     entry.kind === 'single'
       ? (name ?? '(unknown card)')
-      : `${entry.events.length} card${entry.events.length === 1 ? '' : 's'}`;
+      : `${entry.events.length} ${plural(entry.events.length, 'card')}`;
 
   return (
     <li className="history-item">

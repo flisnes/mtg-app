@@ -4,13 +4,13 @@ import { formatLabel, type LegalityReport } from '../deck/legality.js';
 import type { DeckManaStats } from '../deck/manaStats.js';
 import { DeckStatsLine } from './DeckStatsLine.js';
 import { Icon } from './icons.js';
+import { plural } from '../util/format.js';
 
 // The deck page's header under the name: one summary row, and the detail it
 // folds away. Before this the format select, the owned line, a full-width
 // legality box and the lands row stacked up to ~480px above the first card on
 // a phone. Its own file so the ContainerDetail split can take it as it is.
 
-const plural = (n: number) => (n === 1 ? '' : 's');
 
 interface Counts {
   /** Cards the list asks for (tokens and Considering left out). */
@@ -69,11 +69,11 @@ export function DeckSummary({
             type="button"
             className="container-summary-lands"
             onClick={onOpenMana}
-            aria-label={`${stats.lands} land${plural(stats.lands)}, ${stats.land.short}. Open the mana analysis`}
+            aria-label={`${stats.lands} ${plural(stats.lands, 'land')}, ${stats.land.short}. Open the mana analysis`}
             title={stats.land.short}
           >
             <strong>{stats.lands}</strong>{' '}
-            land{plural(stats.lands)}
+            {plural(stats.lands, 'land')}
             <Icon name="chevronRight" size={16} />
           </button>
         )}
@@ -110,7 +110,7 @@ export function DeckSummary({
 export function StorageSummary({ counts, missingWorth }: { counts: Counts; missingWorth?: string | undefined }) {
   return (
     <p className="search-meta container-summary-static">
-      <strong>{counts.need}</strong> card{plural(counts.need)} filed here
+      <strong>{counts.need}</strong> {plural(counts.need, 'card')} filed here
       {/* Filed but not in the collection: the app's records and the real
           shelf disagree, which is worth saying out loud. */}
       {counts.need > counts.have && (

@@ -11,7 +11,8 @@ import { Icon } from '../components/icons.js';
 import { useToast } from '../components/Toast.js';
 import { batchCount, describeBatch, describeEvent, qtyBadge, FILTER_CATEGORIES } from '../history/eventRegistry.js';
 import { entryEvents, undoRefOf, useHistoryEntries, type HistoryEntry } from '../history/useHistoryEntries.js';
-import { fmtDate } from '../util/format.js';
+import { fmtDate, plural } from '../util/format.js';
+import { Loading } from '../components/Loading.js';
 
 const PAGE_SIZE = 100;
 
@@ -92,7 +93,7 @@ export function EditHistory() {
         thumb: <StackedThumb images={imgs} />,
         badge: <Icon name={display.icon} size={14} />,
         badgeTitle: display.verb,
-        sub: `${count} card${count === 1 ? '' : 's'} · ${fmtDate(entry.ts)}`,
+        sub: `${count} ${plural(count, 'card')} · ${fmtDate(entry.ts)}`,
         onClick: () => setOpenEntry(entry),
       };
     }
@@ -164,7 +165,7 @@ export function EditHistory() {
       )}
 
       {loading ? (
-        <p className="search-meta">Loading…</p>
+        <Loading />
       ) : entries.length === 0 ? (
         <EmptyState>{noFilters ? 'No changes recorded yet.' : 'No changes match your filters.'}</EmptyState>
       ) : (

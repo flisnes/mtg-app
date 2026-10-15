@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Page } from './Page.js';
 import { useFilingConflictCount } from '../db/usePlacements.js';
-import { Icon, type IconName } from '../components/icons.js';
+import type { IconName } from '../components/icons.js';
 import { ShortcutsSheet } from '../components/ShortcutsSheet.js';
+import { plural } from '../util/format.js';
+import { MenuRow } from '../components/MenuRow.js';
 
 const LINKS: { to: string; label: string; icon: IconName }[] = [
   { to: '/wishlist', label: 'Wishlist', icon: 'wishlist' },
@@ -31,7 +32,7 @@ export function More() {
           to: '/conflicts',
           label: 'Filing conflicts',
           icon: 'balance',
-          note: `${conflicts} card${conflicts === 1 ? '' : 's'} filed in more places than you own`,
+          note: `${conflicts} ${plural(conflicts, 'card')} filed in more places than you own`,
         },
         ...LINKS,
       ]
@@ -42,37 +43,12 @@ export function More() {
       <ul className="menu-list">
         {links.map((l) => (
           <li key={l.to}>
-            <Link className="menu-item" to={l.to}>
-              <span className="menu-icon" aria-hidden>
-                <Icon name={l.icon} />
-              </span>
-              <span className="deck-line">
-                <span>{l.label}</span>
-                {l.note && (
-                  <span className="deck-meta">
-                    <span className="search-meta">{l.note}</span>
-                  </span>
-                )}
-              </span>
-              <span className="menu-chevron" aria-hidden>
-                <Icon name="chevronRight" size={18} />
-              </span>
-            </Link>
+            <MenuRow to={l.to} icon={l.icon} label={l.label} note={l.note} plain />
           </li>
         ))}
         {/* Only where there's a keyboard to press them on. */}
         <li className="menu-shortcuts">
-          <button className="menu-item" onClick={() => setShortcuts(true)}>
-            <span className="menu-icon" aria-hidden>
-              <Icon name="keyboard" />
-            </span>
-            <span className="deck-line">
-              <span>Keyboard shortcuts</span>
-            </span>
-            <span className="menu-chevron" aria-hidden>
-              <Icon name="chevronRight" size={18} />
-            </span>
-          </button>
+          <MenuRow className="menu-item" onClick={() => setShortcuts(true)} icon="keyboard" label="Keyboard shortcuts" plain />
         </li>
       </ul>
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}

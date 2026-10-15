@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast.js';
 import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import { SealedContentsList } from './SealedContents.js';
 import { loadContents, openedLines, perCopyCount, type OpenContents } from './open.js';
+import { plural } from '../util/format.js';
 
 // Cracking a box you already own. The add sheet has always been able to open a
 // product on the way in; a box that sat on the shelf for a year had no way out
@@ -57,7 +58,7 @@ export function OpenSealedSheet({
       // Only after the cards are safely in: a failed decrement would otherwise
       // lose the box without adding anything.
       await setSealedItemQuantity(item.id, item.quantity - copies);
-      toast(`Opened ${copies} ${product.name}, added ${res.added} card${res.added === 1 ? '' : 's'}${describeFiling(res)}`);
+      toast(`Opened ${copies} ${product.name}, added ${res.added} ${plural(res.added, 'card')}${describeFiling(res)}`);
       setOpening(false);
       onClose();
     } catch (e) {
@@ -71,13 +72,13 @@ export function OpenSealedSheet({
       <Sheet onClose={onClose} title={`Open ${product.name}`} className="sealed-sheet">
         <p className="search-meta">
           {perCopy > 0
-            ? `${perCopy} card${perCopy === 1 ? '' : 's'} per copy go into your collection, and the shelf drops by what you crack.`
+            ? `${perCopy} ${plural(perCopy, 'card')} per copy go into your collection, and the shelf drops by what you crack.`
             : 'Loading contents…'}
         </p>
 
         {product.omittedRandom ? (
           <p className="sealed-note">
-            ⚠ Also contains {product.omittedRandom} random pack{product.omittedRandom === 1 ? '' : 's'}, not added (contents
+            ⚠ Also contains {product.omittedRandom} random {plural(product.omittedRandom, 'pack')}, not added (contents
             unknown).
           </p>
         ) : null}
@@ -137,7 +138,7 @@ export function OpenSealedSheet({
               rows={contents.rows}
               pageKey={product.id}
               copies={copies}
-              status={`${perCopy * copies} card${perCopy * copies === 1 ? '' : 's'} going in.`}
+              status={`${perCopy * copies} ${plural(perCopy * copies, 'card')} going in.`}
             />
           </div>
         ) : (

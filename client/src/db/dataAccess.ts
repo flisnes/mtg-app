@@ -28,7 +28,7 @@
 //   sealedWrites.ts     sealed products
 //   userData.ts         wipe and replace everything
 
-export { newId, collectionKey, entryKey, wishKey } from './keys.js';
+export { newId, collectionKey, entryKey, exactSlotKey, slotKey, wishKey } from './keys.js';
 export type { CopyRef, SlotWants } from './keys.js';
 export type { BatchMeta } from './write.js';
 export { editUserEvent } from './events.js';

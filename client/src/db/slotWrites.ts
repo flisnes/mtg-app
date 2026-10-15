@@ -5,10 +5,11 @@ import { markOwnedForTrade, ownedByOracle } from './collectionWrites.js';
 import type { MarkForTradeRequest } from './collectionWrites.js';
 import { batchFields, groupByOracle, slotEvent } from './events.js';
 import type { EventExtra } from './events.js';
-import { exactSlotKey, namedCopy, newId, push, slotKey } from './keys.js';
+import { exactSlotKey, namedCopy, newId, slotKey } from './keys.js';
 import type { SlotWants } from './keys.js';
 import { adjustRow, DECK_TABLES, deleteSynced, deleteSyncedMany, patchSynced, putSynced, putSyncedMany, write } from './write.js';
 import type { BatchMeta, WriteCtx } from './write.js';
+import { groupBy } from '../util/groupBy.js';
 
 /**
  * How little a slot says about the copy filling it: 2 = no printing, no traits
@@ -199,14 +200,10 @@ export async function reconcileDeck(
     // An "any printing" basic isn't a piece of cardboard the camera could have
     // seen, so a re-scan neither matches nor sweeps it away.
     const slots = existing.filter((c) => !c.anyBasic);
-    const byCopy = new Map<string, DeckCard[]>();
-    const byCard = new Map<string, DeckCard[]>();
-    for (const s of slots) {
-      // Match an emptied-out slot (DeckCard.unfiled) as if it were filed: the
-      // camera just saw the card, so it's holding its copy again.
-      push(byCopy, exactSlotKey({ ...s, unfiled: false }, s), s);
-      push(byCard, slotKey(s), s);
-    }
+    // Match an emptied-out slot (DeckCard.unfiled) as if it were filed: the
+    // camera just saw the card, so it's holding its copy again.
+    const byCopy = groupBy(slots, (s) => exactSlotKey({ ...s, unfiled: false }, s));
+    const byCard = groupBy(slots, slotKey);
     // Which slot each scanned copy lands on: exact first, then a re-point.
     const taken = new Set<string>();
     const pairs: Array<{ t: (typeof target)[number]; cur?: DeckCard }> = [];

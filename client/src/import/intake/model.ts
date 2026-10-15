@@ -4,6 +4,7 @@ import { db } from '../../db/schema.js';
 import { FINISH_LABELS } from '../../components/CardSheet.js';
 import type { FilingClash, FilingCopy } from '../../deck/filing.js';
 import type { ResolvedLine } from '../types.js';
+import { sumQty } from '../../util/groupBy.js';
 
 // The one intake questionnaire. Every bulk way cards can arrive (a scan, a
 // pasted list, a CSV, a wishlist purchase, a cracked box) used to end in two
@@ -158,7 +159,7 @@ export async function buildIntakeLines(lines: ResolvedLine[]): Promise<IntakeLin
       key,
       line,
       board: line.board ?? 'main',
-      exactOwned: mine.filter((e) => collectionKey(e) === exact).reduce((n, e) => n + e.quantity, 0),
+      exactOwned: sumQty(mine.filter((e) => collectionKey(e) === exact)),
       owned: mine,
       candidates: mine.filter((e) => e.quantity > 0 && collectionKey(e) !== exact),
     });
@@ -219,7 +220,7 @@ function swapRemovals(l: IntakeLine, need: number, chosenId?: string): LinePlan[
 
 /** Copies a swap would move: what the candidates hold, at most the line's count. */
 export function swapNeed(l: IntakeLine, d: IntakeDecision): number {
-  const candidateQty = l.candidates.reduce((n, e) => n + e.quantity, 0);
+  const candidateQty = sumQty(l.candidates);
   if (d.collect === 'correct') return Math.min(l.line.quantity, candidateQty);
   // "Already mine" of a copy you don't have in exactly this description: the
   // shelf has the card in another version, so it's a correction of the record,

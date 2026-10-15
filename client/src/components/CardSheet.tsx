@@ -62,6 +62,7 @@ import { SetSymbol } from './SetSymbol.js';
 import { Sheet } from './Sheet.js';
 import { TagField } from './TagField.js';
 import { useDismiss } from './useDismiss.js';
+import { sumQty } from '../util/groupBy.js';
 
 // Bottom-sheet for a card's details, in six modes the caller names outright
 // (see CardSheetProps, which carries what each one needs and nothing else):
@@ -644,7 +645,7 @@ export function CardSheet(props: CardSheetProps) {
       ? { condition: condition || undefined, finish: finish || undefined, lang: lang || undefined }
       : undefined;
   const placement = placements?.lookup(oracleCard.oracleId, shownId, copyPrefs);
-  const ownedQty = ownedEntries?.reduce((s, e) => s + e.quantity, 0) ?? 0;
+  const ownedQty = sumQty(ownedEntries ?? []);
   const ownedForTrade = ownedEntries?.reduce((s, e) => s + e.quantityForTrade, 0) ?? 0;
   // Do we own the exact printing currently shown? (Not just some other edition.)
   const ownsExact = !!scryfallId && (ownedEntries?.some((e) => e.scryfallId === scryfallId) ?? false);

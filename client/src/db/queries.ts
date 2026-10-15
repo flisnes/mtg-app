@@ -11,6 +11,7 @@ import type {
 import { db } from './schema.js';
 import { withPrices } from '../cardDb/prices.js';
 import type { OwnershipIndex } from './useOwnership.js';
+import { groupBy } from '../util/groupBy.js';
 
 // Read queries against the card DB, for joining user data (which stores only
 // ids) with display data (names, images, sets, prices). Card rows don't carry
@@ -177,18 +178,15 @@ export function deckWishlistCandidates(
   slots: readonly WishSlot[],
   ownership: Pick<OwnershipIndex, 'lookup'>,
 ): MissingCard[] {
+  // Tokens aren't shopping list material, nor are cards you're only
+  // considering, and "any basic" is already covered by the lands box.
+  const wanted = slots.filter((dc) => !dc.anyBasic && dc.board !== 'token' && dc.board !== 'maybe');
+  const slotsFor = groupBy(wanted, (dc) => dc.oracleId);
   const needed = new Map<string, number>();
-  const slotsFor = new Map<string, WishSlot[]>();
   const names = new Map<string, string>();
-  for (const dc of slots) {
-    // Tokens aren't shopping list material, nor are cards you're only
-    // considering, and "any basic" is already covered by the lands box.
-    if (dc.anyBasic || dc.board === 'token' || dc.board === 'maybe') continue;
+  for (const dc of wanted) {
     needed.set(dc.oracleId, (needed.get(dc.oracleId) ?? 0) + dc.quantity);
     if (dc.oracle) names.set(dc.oracleId, dc.oracle.name);
-    const list = slotsFor.get(dc.oracleId);
-    if (list) list.push(dc);
-    else slotsFor.set(dc.oracleId, [dc]);
   }
 
   const out: MissingCard[] = [];

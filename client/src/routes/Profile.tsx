@@ -30,6 +30,9 @@ import { useCardArtist } from '../components/useCardArtist.js';
 import { Sheet } from '../components/Sheet.js';
 import { useToast } from '../components/Toast.js';
 import { EmptyState, Page } from './Page.js';
+import { Loading } from '../components/Loading.js';
+import { MenuRow } from '../components/MenuRow.js';
+import { plural } from '../util/format.js';
 
 // Public profile page (/profile/:username): profile picture plus up to three
 // favorite cards and decks. Your own profile is edited right here; everyone
@@ -143,7 +146,7 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
       {error ? (
         <EmptyState>{error}</EmptyState>
       ) : !profile ? (
-        <p className="fine-print">Loading…</p>
+        <Loading fine />
       ) : (
         <>
           <div className="profile-head">
@@ -209,53 +212,35 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
               <ul className="menu-list">
                 {Array.from({ length: deckSlots }, (_, i) => {
                   const fav = favDecks[i];
-                  const inner = fav ? (
-                    <>
-                      <span className="menu-icon" aria-hidden>
-                        <Icon name="decks" />
-                      </span>
-                      <span className="deck-line">
-                        <span className="deck-name">{fav.name}</span>
-                        <span className="deck-meta">
-                          <span className="deck-format">{formatLabel(fav.format as DeckFormat)}</span>
-                          <ManaCost
-                            cost={fav.colors.length > 0 ? fav.colors.map((c) => `{${c}}`).join('') : '{C}'}
-                            className="deck-colors"
-                          />
-                          <span className="badge">{fav.cards} cards</span>
+                  const row = {
+                    icon: fav ? ('decks' as const) : ('plus' as const),
+                    label: fav ? fav.name : <span className="fine-print">Add a favorite deck</span>,
+                    meta: fav && (
+                      <>
+                        <span className="deck-format">{formatLabel(fav.format as DeckFormat)}</span>
+                        <ManaCost
+                          cost={fav.colors.length > 0 ? fav.colors.map((c) => `{${c}}`).join('') : '{C}'}
+                          className="deck-colors"
+                        />
+                        <span className="badge">
+                          {fav.cards} {plural(fav.cards, 'card')}
                         </span>
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="menu-icon" aria-hidden>
-                        <Icon name="plus" />
-                      </span>
-                      <span className="deck-line">
-                        <span className="deck-name fine-print">Add a favorite deck</span>
-                      </span>
-                    </>
-                  );
+                      </>
+                    ),
+                  };
                   return (
                     <li key={i}>
                       {isMe ? (
-                        <button className="menu-item menu-item-btn" onClick={() => setDeckSlot(i)}>
-                          {inner}
-                        </button>
+                        <MenuRow {...row} chevron={false} onClick={() => setDeckSlot(i)} />
                       ) : fav?.deckId ? (
-                        <button
-                          className="menu-item menu-item-btn"
+                        <MenuRow
+                          {...row}
                           onClick={() =>
                             navigate(`/profile/${encodeURIComponent(username)}/deck/${encodeURIComponent(fav.deckId!)}`)
                           }
-                        >
-                          {inner}
-                          <span className="menu-chevron" aria-hidden>
-                            <Icon name="chevronRight" size={18} />
-                          </span>
-                        </button>
+                        />
                       ) : (
-                        <span className="menu-item">{inner}</span>
+                        <MenuRow {...row} chevron={false} />
                       )}
                     </li>
                   );
@@ -403,7 +388,7 @@ function FavoriteDeckPickerSheet({
   return (
     <Sheet onClose={onClose} title="Pick a favorite deck">
       {decks === undefined ? (
-        <p className="search-meta">Loading…</p>
+        <Loading />
       ) : decks.length === 0 ? (
         <div className="empty-state">
           <p>No decks yet.</p>

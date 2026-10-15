@@ -11,6 +11,7 @@ import {
 } from '../../deck/filing.js';
 import { getPrefs } from '../../prefs.js';
 import { filingCopies, importLines, plansOf, tradeRequests, type IntakeState } from './model.js';
+import { sumQty } from '../../util/groupBy.js';
 
 // The one write at the end of the questionnaire. Everything the answers imply
 // lands under a single batch id: trade flags, the collection rows (with the
@@ -72,7 +73,7 @@ export async function commitIntake(
   let mode: FilingMode | null = null;
   if (st.target) {
     const copies = filingCopies(st);
-    listed = copies.filter((c) => !c.wants).reduce((n, c) => n + c.quantity, 0);
+    listed = sumQty(copies.filter((c) => !c.wants));
     // The answer covers the clashes the user was shown; the rest were never a
     // question, so they stay put. A policy that never asks applies to all.
     const settle = (clashes: FilingClash[]): { mode: FilingMode; unfile: FilingClash[] } => {
@@ -99,7 +100,7 @@ export async function commitIntake(
         })),
         shared,
       );
-      filed = copies.filter((c) => c.wants).reduce((n, c) => n + c.quantity, 0);
+      filed = sumQty(copies.filter((c) => c.wants));
     } else {
       // Real data now: the collection write above is in, so the cap and the
       // clash check see exactly the cardboard that exists.
@@ -110,7 +111,7 @@ export async function commitIntake(
         mode = s.mode;
         await applyFiling(st.target.id, going, s.mode, s.unfile, shared);
       }
-      filed = going.filter((c) => c.wants).reduce((n, c) => n + c.quantity, 0);
+      filed = sumQty(going.filter((c) => c.wants));
     }
   }
 

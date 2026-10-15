@@ -4,6 +4,7 @@ import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { librarySize, resolveGroup, type GroupRow } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
 import { KEEP_ANYTHING_AT, mulliganOutlook, type HandRow, type MulliganOutlook } from '@mtg/sim';
+import { plural } from '../util/format.js';
 
 // "How often does this deck give me a hand worth keeping?" — phase 4.
 //
@@ -146,7 +147,7 @@ export function MulliganPanel({
             {out.handSizes.map((r) => (
               <li key={r.cards} className="mull-size">
                 <span className="mull-size-n">
-                  {r.cards} card{r.cards === 1 ? '' : 's'}
+                  {r.cards} {plural(r.cards, 'card')}
                   {r.cards === KEEP_ANYTHING_AT && ' or fewer'}
                 </span>
                 <span className="mull-size-track">

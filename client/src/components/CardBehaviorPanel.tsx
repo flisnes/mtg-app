@@ -80,6 +80,7 @@ import { compileCardQuery, toSearchableEntry, type SearchableEntry } from '@mtg/
 import type { GroupRow } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
 import { PolicySpread } from './PolicySpread.js';
+import { isNonDeckCard } from '../deck/legality.js';
 import type { QueueCard, QueueReason } from '@mtg/sim';
 import { templatesFor, type Template } from '@mtg/sim';
 import { gapWords, type ShippedDefaults } from '@mtg/sim';
@@ -218,11 +219,6 @@ const isPermanent = (typeLine: string) =>
   /\b(Creature|Artifact|Enchantment|Planeswalker|Battle|Land)\b/i.test(typeLine.split('//')[0] ?? '');
 const isCreature = (typeLine: string) => /\bCreature\b/i.test(typeLine.split('//')[0] ?? '');
 
-const isNotACard = (typeLine: string) => {
-  const t = typeLine.toLowerCase();
-  return t.startsWith('token') || t.includes('emblem') || t === 'card';
-};
-
 /** What an Equipment or Aura is read as giving your best attacker, or null. */
 const attachPhrase = (o: OracleCard): string | null => {
   const a = printedAttach(o.typeLine, o.oracleText);
@@ -283,7 +279,7 @@ function behaviorCards(rows: readonly GroupRow[], behaviors: ReadonlyMap<string,
     const o = r.oracle;
     if (!o || r.quantity <= 0) continue;
     if (r.board !== 'main' && r.board !== 'commander') continue;
-    if (isNotACard(o.typeLine)) continue;
+    if (isNonDeckCard(o)) continue;
     const existing = byOracle.get(o.oracleId);
     if (existing) {
       existing.copies += r.quantity;
@@ -445,7 +441,7 @@ export function CardBehaviorPanel({
       const o = r.oracle;
       if (!o || r.quantity <= 0) continue;
       if (r.board !== 'main' && r.board !== 'commander') continue;
-      if (seen.has(o.oracleId) || isNotACard(o.typeLine)) continue;
+      if (seen.has(o.oracleId) || isNonDeckCard(o)) continue;
       seen.add(o.oracleId);
       entries.push(toSearchableEntry(o));
     }

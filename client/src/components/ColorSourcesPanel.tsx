@@ -5,6 +5,7 @@ import type { PipColor } from '@mtg/sim';
 import { MASK_BITS } from '@mtg/sim';
 import type { SimResult } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
+import { plural } from '../util/format.js';
 
 // The colored sources, printed and in play. Evidence, not a verdict: since
 // rebuild plan B1 "can I cast it on time" is answered once, by Cast on time
@@ -67,7 +68,7 @@ export function ColorSourcesPanel({ report, sim }: { report: ManaReport; sim: Si
           <HowWorked>
             {report.fetches > 0 && (
               <p className="fine-print">
-                {report.fetches} fetchland{report.fetches === 1 ? '' : 's'} counted as {report.fetches === 1 ? 'a source' : 'sources'}{' '}
+                {report.fetches} {plural(report.fetches, 'fetchland')} counted as {report.fetches === 1 ? 'a source' : 'sources'}{' '}
                 of everything {report.fetches === 1 ? 'it' : 'they'} could find in this deck. Each land can only be found once, so a
                 pile of fetches over a single Island is friendlier here than at the table.
               </p>
@@ -82,7 +83,7 @@ export function ColorSourcesPanel({ report, sim }: { report: ManaReport; sim: Si
             {(report.genericOnly > 0 || report.restricted > 0 || report.expiring > 0) && (
               <p className="fine-print">
                 {report.genericOnly > 0 &&
-                  `${report.genericOnly} source${report.genericOnly === 1 ? '' : 's'} here read an opponent's lands for their colors, so they count toward generic mana and no colored pip. `}
+                  `${report.genericOnly} ${plural(report.genericOnly, 'source')} here read an opponent's lands for their colors, so they count toward generic mana and no colored pip. `}
                 {report.restricted > 0 && `${report.restricted} can only be spent on part of your deck, and are counted in full anyway. `}
                 {report.expiring > 0 && `${report.expiring} run out after a turn or two and are counted as if they didn't.`}
               </p>

@@ -1,5 +1,5 @@
-import { specialKey } from '@mtg/shared';
-import type { CollectionEntry, Condition, DeckBoard, DeckCard, Finish, SpecialCondition } from '@mtg/shared';
+import { namesCopy, specialKey } from '@mtg/shared';
+import type { CollectionEntry, Condition, DeckBoard, DeckCard, Finish, SlotCopyFields, SpecialCondition } from '@mtg/shared';
 import { db } from './schema.js';
 
 // What identifies a row: ids, the collection and wishlist keys, the slot keys,
@@ -71,11 +71,9 @@ export function clamp(n: number, lo: number, hi: number): number {
  *  emptied slot still names its copy, and flipping that flag is precisely the
  *  filing change worth stamping on it. */
 export function namedCopy(s: SlotCopyFields): CopyRef | undefined {
-  if (s.anyBasic || !s.scryfallId || !s.condition || !s.finish || !s.lang) return undefined;
+  if (!namesCopy(s)) return undefined;
   return { scryfallId: s.scryfallId, condition: s.condition, finish: s.finish, lang: s.lang };
 }
-
-export type SlotCopyFields = Pick<DeckCard, 'scryfallId' | 'condition' | 'finish' | 'lang' | 'anyBasic'>;
 
 export type CopyRef = { scryfallId: string; condition: Condition; finish: Finish; lang: string };
 
@@ -92,12 +90,6 @@ export function slotClaimKey(s: DeckCard): string | undefined {
  *  as collection entries are unique on (scryfallId, condition, finish, lang). */
 export function wishKey(w: { scryfallId: string | null; condition?: Condition; finish?: Finish; lang?: string }): string {
   return `${w.scryfallId ?? ''}|${w.condition ?? ''}|${w.finish ?? ''}|${w.lang ?? ''}`;
-}
-
-/** Does this slot hold one of your copies? The test setDeckCardsUnfiled applies:
- *  a brew line or an "any printing" basic never held cardboard. */
-export function filedCopy(s: DeckCard): boolean {
-  return !s.anyBasic && !!s.scryfallId && !!s.condition && !!s.finish && !!s.lang && !s.unfiled;
 }
 
 /**
@@ -133,9 +125,3 @@ export const exactSlotKey = (
       // the line that says the deck is missing it.
       `${c.oracleId}|${c.board}|${c.scryfallId ?? ''}|${wants?.condition ?? ''}|${wants?.finish ?? ''}|${wants?.lang ?? ''}|${c.unfiled ? 'out' : ''}`;
 
-/** Append to a Map of buckets, creating the bucket on first use. */
-export function push<T>(map: Map<string, T[]>, key: string, value: T): void {
-  const cur = map.get(key);
-  if (cur) cur.push(value);
-  else map.set(key, [value]);
-}

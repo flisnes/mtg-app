@@ -8,6 +8,7 @@ import { ImportReview } from '../import/ImportReview.js';
 import { ImportDefaultsRow, IMPORT_DEFAULTS } from '../import/ImportExtras.js';
 import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import type { ImportDefaults, ResolvedLine, TradelistMode, UnmatchedLine } from '../import/types.js';
+import { plural } from '../util/format.js';
 
 export function Import() {
   const [text, setText] = useState('');
@@ -39,7 +40,7 @@ export function Import() {
       return;
     }
     toast(
-      `Imported ${res.added} card${res.added === 1 ? '' : 's'} (${res.entries} entries${
+      `Imported ${res.added} ${plural(res.added, 'card')} (${res.entries} entries${
         res.skipped > 0 ? `, ${res.skipped} skipped` : ''
       })${describeFiling(res)}`,
     );

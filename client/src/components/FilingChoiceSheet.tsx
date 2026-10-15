@@ -5,6 +5,7 @@ import type { FilingClash, FilingMode } from '../deck/filing.js';
 import { setPrefs } from '../prefs.js';
 import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
+import { plural } from '../util/format.js';
 
 /**
  * "This card is already filed somewhere else." A card can only be in one place at
@@ -104,7 +105,7 @@ export function FilingChoiceBody({
           Yes, move {n === 1 ? 'it' : 'them'} to this {meta.noun}
         </button>
         <button onClick={() => choose('copy')}>
-          No, file here too and leave the other{n === 1 ? '' : 's'}
+          No, file here too and leave the {plural(n, 'other')}
         </button>
         {children}
       </div>

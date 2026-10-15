@@ -19,6 +19,8 @@ import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { Sparkline } from '../components/Sparkline.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { Icon } from '../components/icons.js';
+import { plural } from '../util/format.js';
+import { Loading } from '../components/Loading.js';
 
 // Price movers: which collection cards recently moved substantially (combined
 // absolute + percentage test, see price/movers.ts), which drift steadily, and
@@ -194,7 +196,7 @@ export function PriceMovers() {
       }
     >
       {data === undefined ? (
-        <p className="search-meta">Loading…</p>
+        <Loading />
       ) : data.movers.length === 0 ? (
         <EmptyState hint="A reading is recorded each day you open the app, so movements show up after a few days.">
           {data.tracked === 0 ? 'No prices tracked yet. Add cards to your collection first.' : 'Not enough price history yet.'}
@@ -254,7 +256,7 @@ export function PriceMovers() {
 
           <div className="meta-row">
             <p className="search-meta">
-              {count} card{count === 1 ? '' : 's'}
+              {count} {plural(count, 'card')}
               {/* Thresholds persist, so say so — otherwise a list tuned weeks
                   ago reads as the app being quiet or noisy on its own. */}
               {isTuned(tuning) && (
@@ -388,7 +390,7 @@ function MoverSub({ m }: { m: Mover }) {
         {dir === 'up' ? '▲' : '▼'} {formatMoney(s.cur, Math.abs(s.delta))}
         {s.pct != null && ` (${s.pct >= 0 ? '+' : '−'}${Math.abs(s.pct).toFixed(1)}%)`}
       </span>{' '}
-      in {s.spanDays} day{s.spanDays === 1 ? '' : 's'}
+      in {s.spanDays} {plural(s.spanDays, 'day')}
       {/* A 15-cent move on its own reads as a rounding error. Across the pile
           it's what put the card here, so the pile says its own number. */}
       <Stack qty={m.qty} cur={s.cur} total={Math.abs(s.delta) * m.qty} />

@@ -7,6 +7,7 @@ import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
 import { useConfirm } from './ConfirmSheet.js';
 import { useAsyncAction } from './useAsyncAction.js';
+import { plural } from '../util/format.js';
 
 /**
  * Tag the selected cards. Every tag this container already uses is listed with
@@ -64,7 +65,7 @@ export function TagSheet({
     const held = all.filter((r) => hasTag(r, tag)).length;
     const ok = await confirm({
       title: `Delete the tag “${tag}”?`,
-      body: `It comes off ${held} card${held === 1 ? '' : 's'} in this list. The cards themselves stay put.`,
+      body: `It comes off ${held} ${plural(held, 'card')} in this list. The cards themselves stay put.`,
       confirmLabel: 'Delete tag',
       danger: true,
     });
@@ -73,9 +74,9 @@ export function TagSheet({
   }
 
   return (
-    <Sheet onClose={onClose} title="Tags" label={`Tag ${n} card${n === 1 ? '' : 's'}`}>
+    <Sheet onClose={onClose} title="Tags" label={`Tag ${n} ${plural(n, 'card')}`}>
       <p className="fine-print">
-        Tagging <strong>{n}</strong> card{n === 1 ? '' : 's'}. Tags stay with this list and sync to your other
+        Tagging <strong>{n}</strong> {plural(n, 'card')}. Tags stay with this list and sync to your other
         devices.
       </p>
 

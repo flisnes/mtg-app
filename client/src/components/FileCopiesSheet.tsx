@@ -7,6 +7,7 @@ import { roomForCopies, type FilingCopy } from '../deck/filing.js';
 import { getPrintingsForOracle } from '../db/queries.js';
 import { CopyGrid, copyDetail } from './CopyPicker.js';
 import { Sheet } from './Sheet.js';
+import { Loading } from './Loading.js';
 
 // "Which copies?" — the step between picking a container and writing the slots.
 //
@@ -139,7 +140,7 @@ export function FileCopiesSheet({
         take it back.
       </p>
       {room === undefined ? (
-        <p className="search-meta">Loading…</p>
+        <Loading />
       ) : (
         <CopyGrid
           copies={shown}

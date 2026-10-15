@@ -8,6 +8,7 @@ import { commitSession, mergeSession, SessionSheet, type ScanTarget, type Sessio
 import { useConfirm } from './ConfirmSheet.js';
 import { useToast } from './Toast.js';
 import { useAsyncAction } from './useAsyncAction.js';
+import { plural } from '../util/format.js';
 
 // The review for card images dropped onto a page (desktop drag and drop). It is
 // the scanner's session list with the camera taken away: each dropped image is
@@ -141,7 +142,7 @@ export function DropSheet({ target, batch, onClose }: { target: ScanTarget; batc
     void (async () => {
       if (total > 0) {
         const ok = await confirm({
-          title: `Discard ${total} dropped card${total === 1 ? '' : 's'}?`,
+          title: `Discard ${total} dropped ${plural(total, 'card')}?`,
           body: 'Nothing has been added yet.',
           confirmLabel: 'Discard',
           cancelLabel: 'Keep them',
@@ -158,7 +159,7 @@ export function DropSheet({ target, batch, onClose }: { target: ScanTarget; batc
       <div className="drop-notice" role="status">
         {working > 0 && (
           <p className="drop-working">
-            Identifying {working} image{working === 1 ? '' : 's'}…
+            Identifying {working} {plural(working, 'image')}…
           </p>
         )}
         {waitingCount > 0 &&
@@ -172,7 +173,7 @@ export function DropSheet({ target, batch, onClose }: { target: ScanTarget; batc
             </p>
           ) : (
             <p className="drop-index">
-              {waitingCount} image{waitingCount === 1 ? '' : 's'} can’t be matched right now: the card-art index isn’t
+              {waitingCount} {plural(waitingCount, 'image')} can’t be matched right now: the card-art index isn’t
               available.
             </p>
           ))}

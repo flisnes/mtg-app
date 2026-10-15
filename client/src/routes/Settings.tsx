@@ -18,7 +18,7 @@ import { deleteAllUserData } from '../db/dataAccess.js';
 import { setGoblinMode, useGoblinMode } from '../components/useGoblinMode.js';
 import { formatDiagnostics } from '../errorLog.js';
 import { Page } from './Page.js';
-import { fmtDate, fmtDateTime as fmtWhen } from '../util/format.js';
+import { fmtDateTime as fmtWhen, fmtIsoDate } from '../util/format.js';
 import { setPrefs, type FilingPolicy, type PrintingPref, type UpdatePolicy } from '../prefs.js';
 import { LANGS } from '../components/CardSheet.js';
 import { LangFlag, langName } from '../components/LangFlag.js';
@@ -420,7 +420,7 @@ function CurrencySection() {
           {checking
             ? 'Fetching today’s rate…'
             : rate
-              ? `${rate.text} · European Central Bank reference rate via Frankfurter, ${fmtRateDate(rate.date)}.`
+              ? `${rate.text} · European Central Bank reference rate via Frankfurter, ${fmtIsoDate(rate.date)}.`
               : `No exchange rate available yet, so prices are showing in ${baseCurrency}. Rates are fetched once a day and need a connection.`}
         </p>
       )}
@@ -429,11 +429,6 @@ function CurrencySection() {
 }
 
 /** "2026-07-29" → "29 Jul 2026", matching the app's other dates. */
-function fmtRateDate(iso: string): string {
-  const ts = Date.parse(iso);
-  return Number.isNaN(ts) ? iso : fmtDate(ts);
-}
-
 // ---------------------------------------------------------------------------
 // Language: which one your cards are expected to be in
 // ---------------------------------------------------------------------------

@@ -2,9 +2,9 @@ import type { CollectionEntry, ContainerKind, Deck, DeckBoard, EventSource, Fini
 import { getPricesByIds } from '../cardDb/prices.js';
 import { acquisitionCents } from '../price/acquisition.js';
 import { db } from './schema.js';
-import { push } from './keys.js';
 import { putSynced } from './write.js';
 import type { WriteCtx } from './write.js';
+import { groupBy } from '../util/groupBy.js';
 
 // ---------------------------------------------------------------------------
 // Event emission. Events are immutable apart from the user-editable fields
@@ -92,9 +92,7 @@ export function batchFields(source: EventSource, batchId: string, label?: string
 }
 
 export function groupByOracle<T extends { oracleId: string }>(rows: T[]): Map<string, T[]> {
-  const m = new Map<string, T[]>();
-  for (const r of rows) push(m, r.oracleId, r);
-  return m;
+  return groupBy(rows, (r) => r.oracleId);
 }
 
 /**

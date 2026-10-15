@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { CollectionEntry, DeckBoard } from '@mtg/shared';
+import type { CollectionEntry } from '@mtg/shared';
 import { specialLabel } from '@mtg/shared';
 import { ContainerPickerBody } from '../../components/ContainerPickerSheet.js';
 import { FilingChoiceBody } from '../../components/FilingChoiceSheet.js';
@@ -23,20 +23,14 @@ import {
   type IntakeState,
   type IntakeStep,
 } from './model.js';
+import { plural } from '../../util/format.js';
+import { sumQty } from '../../util/groupBy.js';
+import { BOARD_NOUN } from '../../deck/boards.js';
 
 // One sheet for the whole questionnaire. It stays open from the first step to
 // the write, so there is never a second sheet stacked under the one you're
 // answering, and every step has the same shape: a heading with "Step k of n",
 // the question, Back on the left and one primary action on the right.
-
-const BOARD_LABELS: Record<DeckBoard, string> = {
-  main: 'mainboard',
-  side: 'sideboard',
-  commander: 'command zone',
-  companion: 'companion',
-  maybe: 'considering',
-  token: 'tokens',
-};
 
 export function IntakeSheet({
   state,
@@ -88,12 +82,12 @@ export function IntakeSheet({
       const n = containerCount(state);
       return `File ${n} in ${state.target?.name ?? 'here'}${addSuffix}`;
     }
-    const traded = tradeRequests(state).reduce((n, r) => n + r.quantity, 0);
+    const traded = sumQty(tradeRequests(state));
     if (state.flow === 'tradelist') {
       const n = added + traded;
       return n === 0 ? 'Nothing to add' : `Add ${n} to tradelist`;
     }
-    return added === 0 ? 'Skip everything' : `Import ${added} card${added === 1 ? '' : 's'}`;
+    return added === 0 ? 'Skip everything' : `Import ${added} ${plural(added, 'card')}`;
   };
 
   const primary =
@@ -263,7 +257,7 @@ function CardsStep({
                         <strong>{l.line.name}</strong>
                         <span className="scan-printing">
                           {describeCopy(state, { ...l.line, quantity: l.line.quantity > 1 ? l.line.quantity : undefined })}
-                          {showBoards ? ` · ${BOARD_LABELS[l.board]}` : ''}
+                          {showBoards ? ` · ${BOARD_NOUN[l.board]}` : ''}
                         </span>
                       </span>
                     </label>
@@ -274,7 +268,7 @@ function CardsStep({
           </section>
         ) : (
           <p className="fine-print">
-            {unowned.length} card{unowned.length === 1 ? '' : 's'} in this {incoming.toLowerCase() === 'scanned' ? 'scan' : 'list'}{' '}
+            {unowned.length} {plural(unowned.length, 'card')} in this {incoming.toLowerCase() === 'scanned' ? 'scan' : 'list'}{' '}
             {unowned.length === 1 ? "isn't" : "aren't"} in your collection yet and {unowned.length === 1 ? 'goes' : 'go'} in
             either way.
           </p>
@@ -309,7 +303,7 @@ function CardsStep({
                     <div key={l.key} className="intake-line">
                       <div className="result-sub intake-wrap">
                         {incoming}: {describeCopy(state, { ...l.line, quantity: l.line.quantity })}
-                        {showBoards ? ` · ${BOARD_LABELS[l.board]}` : ''}
+                        {showBoards ? ` · ${BOARD_NOUN[l.board]}` : ''}
                       </div>
                       <div className="chips" role="group" aria-label={`Resolve ${g.name}`}>
                         {options.map((o) => (

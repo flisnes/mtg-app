@@ -1,4 +1,4 @@
-import { compareCardTags, normalizeColors, type Color, type Finish, type OracleCard } from '@mtg/shared';
+import { COLOR_NAME, compareCardTags, normalizeColors, type Finish, type OracleCard } from '@mtg/shared';
 import { priceForFinish } from '../cardDb/prices.js';
 import { UNTAGGED } from '../deck/tags.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
@@ -240,7 +240,6 @@ type GroupableCard = Pick<OracleCard, 'colors' | 'typeLine'>;
 const TYPE_PRIORITY = ['Creature', 'Planeswalker', 'Battle', 'Land', 'Instant', 'Sorcery', 'Artifact', 'Enchantment'];
 const TYPE_GROUP_ORDER = ['Creature', 'Planeswalker', 'Battle', 'Instant', 'Sorcery', 'Artifact', 'Enchantment', 'Land', 'Other'];
 
-export const COLOR_NAMES: Record<Color, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
 const COLOR_GROUP_ORDER = ['White', 'Blue', 'Black', 'Red', 'Green', 'Multicolor', 'Colorless', 'Land', 'Other'];
 
 function typeGroup(typeLine: string | undefined): string {
@@ -256,7 +255,7 @@ function colorGroup(card: GroupableCard | undefined): string {
   // mono-colored double-faced card as e.g. ['G','G'].
   const colors = normalizeColors(card.colors);
   if (colors.length > 1) return 'Multicolor';
-  if (colors.length === 1) return COLOR_NAMES[colors[0]!];
+  if (colors.length === 1) return COLOR_NAME[colors[0]!];
   return card.typeLine.split('//')[0]!.includes('Land') ? 'Land' : 'Colorless';
 }
 

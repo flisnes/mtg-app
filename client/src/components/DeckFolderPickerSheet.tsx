@@ -5,6 +5,7 @@ import { createDeckFolder } from '../db/dataAccess.js';
 import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
 import { useAsyncAction } from './useAsyncAction.js';
+import { Loading } from './Loading.js';
 
 /**
  * Bottom-sheet that lists deck folders and reports the picked one (or
@@ -45,7 +46,7 @@ export function DeckFolderPickerSheet({
         </li>
         {folders === undefined ? (
           <li>
-            <p className="search-meta">Loading…</p>
+            <Loading />
           </li>
         ) : (
           folders.map((f) => (

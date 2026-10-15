@@ -39,6 +39,8 @@ import {
   useTradeSession,
   type ActiveTrade,
 } from '../trade/useTradeSession.js';
+import { sumQty } from '../util/groupBy.js';
+import { Loading } from '../components/Loading.js';
 
 /** Offer lines merge on the same compound key as collection entries. */
 const lineKey = collectionKey;
@@ -316,7 +318,7 @@ function ReconnectBanner({ trade }: { trade: ReturnType<typeof useTradeSession> 
 
 /** Total card count across a set of offer/history lines. */
 function countLines(lines: { quantity: number }[]): number {
-  return lines.reduce((s, l) => s + l.quantity, 0);
+  return sumQty(lines);
 }
 
 /** Both piles of a stored solo trade — what the resume prompt offers back. */
@@ -339,7 +341,7 @@ function RecentTrades() {
         </Link>
       </div>
       {trades === undefined ? (
-        <p className="fine-print">Loading…</p>
+        <Loading fine />
       ) : trades.length === 0 ? (
         <p className="fine-print">No trades yet. Completed trades will show up here.</p>
       ) : (
@@ -1165,7 +1167,7 @@ function BalancePanel({
     return { printings, oracles };
   }, [(peerTradelist ?? []).map((l) => l.scryfallId).join(',')]);
 
-  if (!data || !mine) return <p className="fine-print">Loading…</p>;
+  if (!data || !mine) return <Loading fine />;
 
   const gap = Math.abs(diff);
   if (gap < BALANCE_EPSILON) {

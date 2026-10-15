@@ -30,7 +30,8 @@ import { ListSearchButton, useListFilter, useOpenSearch } from './GlobalSearch.j
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
 import { usePageMeta } from '../routes/Page.js';
-import { fmtCardCount } from '../util/format.js';
+import { fmtCardCount, plural } from '../util/format.js';
+import { sumQty } from '../util/groupBy.js';
 
 // Both the joined rows and the raw entries come from the shared collection
 // snapshot (one query, one join, shared with the header value and every badge).
@@ -110,7 +111,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       if (placeFilter === 'conflict') return info.over;
       // Copies of this row a deck, binder or box says it's holding — the same
       // slots the row's badge counts.
-      const filed = info.places.reduce((n, p) => n + p.quantity, 0);
+      const filed = sumQty(info.places);
       return placeFilter === 'filed' ? filed > 0 : filed < r.entry.quantity;
     },
     [placeFilter, placements],
@@ -147,7 +148,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // (both need the joined data to judge a row), so the line waits rather than
   // print a total the filter is about to change.
   const counted: { rows: number; qty: number } | null = rows
-    ? { rows: filtered.length, qty: filtered.reduce((s, st) => s + st.quantity, 0) }
+    ? { rows: filtered.length, qty: sumQty(filtered) }
     : entries && !query && placeFilter === 'all' && !stacking
       ? entries
           .filter((e) => !onlyTrade || e.quantityForTrade > 0)
@@ -212,18 +213,17 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // bulk actions write: ticking a stack means every copy under it.
   const selectedRows = filtered.filter((s) => sel.selected.has(s.key)).flatMap((s) => s.members);
   const allKeys = filtered.map((s) => s.key);
-  const plural = (n: number) => (n === 1 ? '' : 's');
 
   async function bulkAddTradelist() {
     const n = selectedRows.length;
     await setQuantityForTradeBulk(selectedRows.map((r) => ({ id: r.entry.id, quantityForTrade: r.entry.quantity })));
-    toast(`Added ${n} card${plural(n)} to tradelist`);
+    toast(`Added ${n} ${plural(n, 'card')} to tradelist`);
     sel.exit();
   }
   async function bulkRemoveTradelist() {
     const n = selectedRows.filter((r) => r.entry.quantityForTrade > 0).length;
     await setQuantityForTradeBulk(selectedRows.map((r) => ({ id: r.entry.id, quantityForTrade: 0 })));
-    toast(n === 0 ? 'None were on the tradelist' : `Removed ${n} card${plural(n)} from tradelist`);
+    toast(n === 0 ? 'None were on the tradelist' : `Removed ${n} ${plural(n, 'card')} from tradelist`);
     sel.exit();
   }
   async function bulkDelete() {
@@ -261,7 +261,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     toast(
       removed === 0
         ? `Nothing matched in that ${noun}`
-        : `Took ${removed} card${plural(removed)} out of that ${noun}`,
+        : `Took ${removed} ${plural(removed, 'card')} out of that ${noun}`,
     );
     sel.exit();
   }
@@ -298,8 +298,8 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       copies === 0
         ? `Already in that ${noun}`
         : filing.mode === 'move'
-          ? `Moved ${copies} card${plural(copies)} to ${noun}`
-          : `Added ${copies} card${plural(copies)} to ${noun}`,
+          ? `Moved ${copies} ${plural(copies, 'card')} to ${noun}`
+          : `Added ${copies} ${plural(copies, 'card')} to ${noun}`,
     );
     sel.exit();
   }

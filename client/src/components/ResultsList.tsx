@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { CardItems, ViewToggle, useGridColumns, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { LoadMoreSentinel } from './LoadMoreSentinel.js';
+import { plural } from '../util/format.js';
 
 // The shell every scoped search wears: a meta row saying how many results there
 // are with the sort and view controls on the right, then the cards, then the
@@ -69,5 +70,5 @@ export function ResultsList({
 
 /** "3 results" / "1 result" — the wording all three scoped lists start from. */
 export function resultCount(n: number): string {
-  return `${n} result${n === 1 ? '' : 's'}`;
+  return `${n} ${plural(n, 'result')}`;
 }

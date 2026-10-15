@@ -21,7 +21,7 @@ type Gesture =
   | { kind: 'pan'; x: number; lo: number; hi: number }
   | { kind: 'pinch'; d: number; anchor: number; lo: number; hi: number };
 
-export interface PlotZoomOpts {
+interface PlotZoomOpts {
   /** Readings in the full domain; the view never zooms past a handful of them. */
   points: number;
   /** Plot padding and viewBox width, in SVG user units — the client-x mapping. */
@@ -36,7 +36,7 @@ export interface PlotZoomOpts {
   hoverScrub?: boolean;
 }
 
-export interface PlotZoom {
+interface PlotZoom {
   /** Visible slice of the full domain, as fractions of it. */
   lo: number;
   hi: number;

@@ -20,7 +20,7 @@ import { stripAttempts } from './pipeline.js';
 // tesseract.js's pinned-version CDN defaults apply. Init failure is normal
 // operation for callers: they fall back to art-only + manual picker.
 
-export interface ParsedStrip {
+interface ParsedStrip {
   /** Normalized: leading zeros stripped, lowercase (matches Printing.collectorNumber). */
   collectorNumber: string | null;
   /** Lowercase set code (matches Printing.set). */
@@ -33,7 +33,7 @@ export interface ParsedStrip {
 }
 
 /** What a candidate printing needs to offer for cross-checking. */
-export interface OcrCandidate {
+interface OcrCandidate {
   scryfallId: string;
   set: string;
   collectorNumber: string;
@@ -72,7 +72,7 @@ const PRINTED_SINCE = {
   setCode: '2014-07-18', // Magic 2015
 } as const;
 
-export interface PrintedSignals {
+interface PrintedSignals {
   setCode: boolean;
   collectorNumber: boolean;
   year: boolean;
@@ -250,7 +250,7 @@ function toImageLike(img: ImageData): OffscreenCanvas | Uint8Array {
 }
 
 /** Page-segmentation modes swept per strip: neither wins alone on real photos. */
-export type StripPsm = 'block' | 'sparse';
+type StripPsm = 'block' | 'sparse';
 
 export async function recognizeStrip(strip: ImageData, psm: StripPsm = 'block'): Promise<string> {
   const worker = await initOcr();

@@ -29,7 +29,7 @@ export interface DropMatch {
   lang?: string;
 }
 
-export type DropOutcome =
+type DropOutcome =
   | { kind: 'match'; match: DropMatch }
   | { kind: 'fail'; reason: string }
   /** Needs the card-art index, which isn't installed yet. */

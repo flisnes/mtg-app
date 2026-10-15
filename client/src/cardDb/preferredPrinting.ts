@@ -197,7 +197,7 @@ export function pickOwnedPrinting(
   return (picked as Priced<Printing> | undefined) ?? [...pool].sort(byNewest)[0];
 }
 
-export interface DisplayPrintingOptions {
+interface DisplayPrintingOptions {
   /**
    * An already-built ownership index, for callers that hold one. Without it the
    * collection is read directly, so one-shot callers (a quick-add handler, the

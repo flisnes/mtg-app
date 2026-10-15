@@ -38,7 +38,7 @@ interface Answer {
   next?: string;
 }
 
-export type OverviewTarget = 'mana' | 'flow' | 'plan' | 'bracket' | 'model';
+type OverviewTarget = 'mana' | 'flow' | 'plan' | 'bracket' | 'model';
 
 /** Below this at its turn, a goal is a plan the deck is not getting to. */
 const SHAKY = 0.5;

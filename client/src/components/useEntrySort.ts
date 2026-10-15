@@ -3,11 +3,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema.js';
 import { useCollectionEntries, usePriceHistories } from '../db/collectionSnapshot.js';
 import { getPricesByIds, priceForFinish } from '../cardDb/prices.js';
-import type { JoinedEntry, JoinedWish } from '../db/queries.js';
+import type { JoinedWish } from '../db/queries.js';
 import { acquisitionGain, costBasisOf } from '../price/costBasis.js';
 import { historyChange, readingsFor } from '../price/history.js';
 import { valueKeyOf } from '../price/collectionValue.js';
-import { pickPrice, priceValue, pricedForFinish, releaseFields, type CardSortPrefs, type SortFields } from './cardSort.js';
+import { pickPrice, priceValue, releaseFields, type CardSortPrefs, type SortFields } from './cardSort.js';
 
 // Sorting your own cards needs one thing the joined rows don't carry: the
 // recorded price change. It comes from priceHistories, the biggest user-data
@@ -114,20 +114,6 @@ export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortDat
 // it claims (touchClaimedCopies), so does moving a card in or out of a deck,
 // binder or box. Nothing to load, one paint, and the sort names the exact piece
 // of cardboard you touched.
-
-/** Sort fields for a collection (or tradelist) row. */
-export function collectionSortFields(r: JoinedEntry, data: EntrySortData): SortFields {
-  return {
-    name: r.oracle?.name,
-    cmc: r.oracle?.cmc,
-    price: priceValue(pricedForFinish(r.printing, r.entry.finish), r.oracle),
-    change: data.changes?.get(valueKeyOf(r.entry.scryfallId, r.entry.finish))?.delta ?? null,
-    changePct: data.changes?.get(valueKeyOf(r.entry.scryfallId, r.entry.finish))?.pct ?? null,
-    added: r.entry.createdAt,
-    updated: r.entry.updatedAt,
-    ...releaseFields(r.printing),
-  };
-}
 
 /** Sort fields for a wishlist row. The wishlist offers no price-change sorts,
  *  so unlike a collection row this needs nothing lazily loaded. */

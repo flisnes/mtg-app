@@ -41,7 +41,8 @@ import { cycleSlugsOf } from '../cardDb/oracleTags.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { CardHistorySheet } from './ChartSheetsLazy.js';
 import { ContainerPickerSheet } from './ContainerPickerSheet.js';
-import { CopyPicker, FINISH_LABELS, copyDetail } from './CopyPicker.js';
+import { CopyPicker, copyDetail } from './CopyPicker.js';
+import { FINISH_LABELS, LANGS } from './copyTraits.js';
 import { FileCopiesSheet } from './FileCopiesSheet.js';
 import { SheetSelectField, SheetSelectList, type SheetSelectOption } from './SheetSelect.js';
 import { EventSheet } from './EventSheet.js';
@@ -140,14 +141,9 @@ type TraitKey = 'condition' | 'finish' | 'lang' | 'special';
 /** Sentinel for the "any printing" edition option in wish mode. */
 const ANY_PRINTING = '';
 
-// Lives with the copy tiles that spell a finish out; re-exported here because
-// every other caller reaches for it through the card sheet.
-export { FINISH_LABELS };
-export const LANGS =['en', 'de', 'fr', 'it', 'es', 'pt', 'ja', 'ko', 'ru', 'zhs', 'zht'];
-
 /** A deck slot the sheet can edit. The slot's own fields come from SlotShape;
  *  the rest is the container context the Zone field needs. */
-export type DeckSlotEdit = SlotShape & {
+type DeckSlotEdit = SlotShape & {
   id: string;
   quantity: number;
   board?: DeckBoard;
@@ -186,7 +182,7 @@ interface CardSheetCommon {
  * and left the reader working out the precedence to know what a call site does.
  * Naming the mode costs one prop and makes all of that unrepresentable.
  */
-export type CardSheetProps = CardSheetCommon &
+type CardSheetProps = CardSheetCommon &
   (
     | {
         /** An owned copy: opens as a line with an Edit toggle. */

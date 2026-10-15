@@ -10,7 +10,7 @@ import {
   type StoredNotifications,
 } from './notifications.js';
 
-export interface NotificationsView {
+interface NotificationsView {
   enabled: boolean;
   /** Active (non-dismissed) matches, newest first, each flagged new/seen. */
   items: NotificationItem[];

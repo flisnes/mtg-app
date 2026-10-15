@@ -19,7 +19,7 @@ import { scopeMatches, scopeTokensOf, type ScopeToken, type UndoScope } from '..
 /** Cap: a session's worth of undo is plenty, and this holds whole events. */
 const LIMIT = 50;
 
-export interface RedoItem {
+interface RedoItem {
   events: UserEvent[];
   /** Present when the undone entry was a whole trade session. */
   trade?: Trade;

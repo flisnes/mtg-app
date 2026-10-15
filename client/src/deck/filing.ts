@@ -62,7 +62,7 @@ export interface FilingCopy {
 }
 
 /** Somewhere a copy is filed right now. */
-export interface FilingSource {
+interface FilingSource {
   containerId: string;
   name: string;
   kind: ContainerKind;
@@ -110,7 +110,7 @@ export type FilingMode = 'move' | 'copy';
  * intake is about to add (+) or swap out (−). Lets the move question be asked
  * before the write, against the shelf as it will be.
  */
-export type OwnedDelta = Map<string, number>;
+type OwnedDelta = Map<string, number>;
 
 /**
  * Pending changes to the collection, for a clash check that runs before the
@@ -118,7 +118,7 @@ export type OwnedDelta = Map<string, number>;
  * maps the key of a copy being swapped out to the one swapping in, since the
  * slots holding the old copy follow it (see applyImport's refile).
  */
-export interface PendingChanges {
+interface PendingChanges {
   delta?: OwnedDelta;
   rekey?: Map<string, string>;
 }

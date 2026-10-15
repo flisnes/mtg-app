@@ -12,7 +12,7 @@
 import { getPrefs } from '../prefs.js';
 
 /** Runtime cache the service worker files Scryfall imagery under. */
-export const CARD_IMAGE_CACHE = 'scryfall-images';
+const CARD_IMAGE_CACHE = 'scryfall-images';
 
 /** Ceiling for the user's budget. Keep in sync with maxEntries in vite.config.ts. */
 export const IMAGE_CACHE_CEILING = 10_000;
@@ -225,7 +225,7 @@ export async function pruneImageCache(limit: number): Promise<number> {
 // ---------------------------------------------------------------------------
 
 /** The user's budget, clamped to what the service worker can actually hold. */
-export function getImageCacheLimit(): number {
+function getImageCacheLimit(): number {
   return clampImageCacheLimit(getPrefs().imageCacheLimit);
 }
 

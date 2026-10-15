@@ -19,7 +19,7 @@ import { sumQty } from '../util/groupBy.js';
 // a curve we don't believe.
 
 /** Entries that happened on one calendar day, newest day first. */
-export interface DeckHistoryDay {
+interface DeckHistoryDay {
   /** Grouping key (local calendar day). */
   key: string;
   /** Newest entry's timestamp in this day, for the heading date. */

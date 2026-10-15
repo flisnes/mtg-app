@@ -237,7 +237,7 @@ function CastRow({
   );
 }
 
-export type LimitKind = 'mana' | 'color' | 'tapped';
+type LimitKind = 'mana' | 'color' | 'tapped';
 
 /**
  * The one reason to print in the column: whichever held the cost back in the

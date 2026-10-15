@@ -22,13 +22,13 @@ export interface ChartPt {
 }
 
 export const PLOT_H = 210;
-export const CHART_H = 14 + PLOT_H + 54; // PAD.t + plot + PAD.b
+const CHART_H = 14 + PLOT_H + 54; // PAD.t + plot + PAD.b
 const PAD_T = 14;
 const PAD_R = 16;
 const X_LABEL_Y = CHART_H - 12;
 const MIN_W = 240;
 
-export interface LineGeom {
+interface LineGeom {
   W: number;
   x: (ts: number) => number;
   y: (v: number) => number;
@@ -53,7 +53,7 @@ export interface LineGeom {
  * data has loaded, or on mount there is nothing to observe and the chart
  * would sit at zero width forever.
  */
-export function useChartWidth(resetKey?: unknown): { plotRef: RefObject<HTMLDivElement | null>; width: number } {
+function useChartWidth(resetKey?: unknown): { plotRef: RefObject<HTMLDivElement | null>; width: number } {
   const plotRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
@@ -69,7 +69,7 @@ export function useChartWidth(resetKey?: unknown): { plotRef: RefObject<HTMLDivE
   return { plotRef, width };
 }
 
-export interface ValueChart {
+interface ValueChart {
   plotRef: RefObject<HTMLDivElement | null>;
   geom: LineGeom | null;
   zoom: ReturnType<typeof usePlotZoom>;
@@ -333,7 +333,7 @@ export function LinePlot({
 }
 
 /** Round tick values covering [min, max] — at most `count`+1 of them. */
-export function niceTicks(min: number, max: number, count: number): number[] {
+function niceTicks(min: number, max: number, count: number): number[] {
   const span = max - min;
   if (!(span > 0)) return [min];
   const mag = Math.pow(10, Math.floor(Math.log10(span / count)));

@@ -9,7 +9,7 @@
  */
 export const CANONICAL_CARD = { width: 488, height: 680 } as const;
 
-export interface CropBox {
+interface CropBox {
   x0: number;
   y0: number;
   x1: number;

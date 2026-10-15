@@ -62,7 +62,7 @@ function foilDays(h: DayReadings): number {
 }
 
 /** What `readingsFor` hands back: the series to read, and which finish it is. */
-export interface FinishReadings {
+interface FinishReadings {
   readings: DayReadings;
   /** True when `readings` is the foil price, false when it's the nonfoil line. */
   foil: boolean;
@@ -130,7 +130,7 @@ export function mergeHistories(a: PriceHistory, b: PriceHistory): PriceHistory {
 }
 
 /** One deep-history reading: mid-month (UTC ms) and the month's cents. */
-export interface MonthPoint {
+interface MonthPoint {
   ts: number;
   cents: number;
 }

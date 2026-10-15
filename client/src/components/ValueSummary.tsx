@@ -108,7 +108,7 @@ export interface ContainerValue {
 }
 
 /** One slot of a container, plus how many copies of that card the collection holds. */
-export interface ValueSlot {
+interface ValueSlot {
   oracleId: string;
   quantity: number;
   /** Copies of this oracle card owned, across every printing. */
@@ -156,7 +156,7 @@ export function missingValue({ owned, listed }: ContainerValue): PriceTotal {
   return { eur: Math.max(0, listed.eur - owned.eur), usd: Math.max(0, listed.usd - owned.usd) };
 }
 
-export interface ContainersValue {
+interface ContainersValue {
   /** Value per container, keyed by its row id. */
   byId: Map<string, ContainerValue>;
   /** Every container of the kind added up. */

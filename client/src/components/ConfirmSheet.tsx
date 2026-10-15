@@ -11,7 +11,7 @@ import { Sheet } from './Sheet.js';
 // use it — they say what happened in a toast and the opposite verb is right
 // there in the same bar.
 
-export interface ConfirmRequest {
+interface ConfirmRequest {
   title: string;
   /** The consequence, in a sentence. */
   body?: ReactNode;

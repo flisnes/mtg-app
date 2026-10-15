@@ -18,7 +18,7 @@ export interface TuningField {
   unit: 'money' | 'percent' | 'fraction' | 'days' | 'readings' | 'r';
 }
 
-export interface TuningGroup {
+interface TuningGroup {
   title: string;
   blurb: string;
   fields: TuningField[];

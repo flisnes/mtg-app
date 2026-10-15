@@ -11,7 +11,7 @@ import { isNewer } from './appUpdate.js';
 
 export type ChangeKind = 'added' | 'changed' | 'fixed' | 'removed';
 
-export interface ChangelogChange {
+interface ChangelogChange {
   kind: ChangeKind;
   text: string;
 }

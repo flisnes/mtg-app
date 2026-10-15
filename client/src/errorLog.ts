@@ -7,7 +7,7 @@ import { APP_VERSION } from './version.js';
 const KEY = 'errorLog';
 const MAX = 25;
 
-export interface LogEntry {
+interface LogEntry {
   t: number;
   kind: string;
   message: string;

@@ -294,13 +294,13 @@ const GROUPS: readonly GroupSpec[] = [
   },
 ];
 
-export interface EmblemSymbol {
+interface EmblemSymbol {
   /** Mana font class suffix: the emblem renders as `ms ms-${sym}`. */
   sym: string;
   label: string;
 }
 
-export interface EmblemSymbolGroup {
+interface EmblemSymbolGroup {
   title: string;
   symbols: EmblemSymbol[];
 }

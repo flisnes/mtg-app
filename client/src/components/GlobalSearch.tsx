@@ -84,7 +84,7 @@ function useSearchTarget(): AddTarget {
  * but price movers only exist on their own page, so 'movers' is never a scope
  * you can carry off it.
  */
-export type PageScope = Scope | 'movers';
+type PageScope = Scope | 'movers';
 
 /** The three lists a result row quick-adds to, in button order. Each name is
  *  also its icon. Row buttons stay +icon: a list row has no room for words, and
@@ -184,7 +184,7 @@ export function useOpenSearch(): () => void {
  * this — reaching for it nearly always means "find a card to add", so it starts
  * unscoped and this button is how you say "search what's in front of me".
  */
-export function useOpenListSearch(): () => void {
+function useOpenListSearch(): () => void {
   const ctx = useContext(Ctx);
   const { pathname } = useLocation();
   return () => {

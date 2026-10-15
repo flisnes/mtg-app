@@ -14,13 +14,13 @@ export interface NameLine {
   quantity: number;
 }
 
-export interface ResolvedName<L extends NameLine> {
+interface ResolvedName<L extends NameLine> {
   line: L;
   oracle: OracleCard;
   scryfallId: string;
 }
 
-export interface ResolveNamesResult<L extends NameLine> {
+interface ResolveNamesResult<L extends NameLine> {
   resolved: ResolvedName<L>[];
   /** Lines that matched no card (or no printing in the asked-for set). */
   unmatched: { name: string; reason: string }[];

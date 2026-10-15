@@ -110,7 +110,7 @@ export function scopeMatches(tokens: ReadonlySet<ScopeToken>, scope: UndoScope):
 }
 
 /** An entry as this module needs to see it: an id and the events it groups. */
-export interface UndoGroup {
+interface UndoGroup {
   id: string;
   events: readonly UserEvent[];
 }

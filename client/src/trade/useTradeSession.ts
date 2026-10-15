@@ -34,16 +34,16 @@ export interface ActiveTrade {
   sessionId: string;
 }
 
-export type TradeStatus = 'idle' | 'connecting' | 'active' | 'error';
+type TradeStatus = 'idle' | 'connecting' | 'active' | 'error';
 
 /** What the user asked for when the connection started: what the connecting screen says. */
-export interface ConnectIntent {
+interface ConnectIntent {
   kind: 'create' | 'join' | 'resume';
   /** The code being joined or resumed (none for a fresh create). */
   code?: string;
 }
 
-export interface TradeSession {
+interface TradeSession {
   status: TradeStatus;
   seat: Seat | null;
   snapshot: SessionSnapshot | null;
@@ -87,7 +87,7 @@ export interface TradeSession {
   reset: () => void;
 }
 
-export type ApplyState = 'pending' | 'applied' | 'failed';
+type ApplyState = 'pending' | 'applied' | 'failed';
 
 /** The relay caps shared lists at 500 lines (server maxOfferLines). */
 const SHARE_LINE_CAP = 500;

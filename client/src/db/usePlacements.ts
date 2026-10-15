@@ -49,7 +49,7 @@ import { useCollectionSnapshot } from './collectionSnapshot.js';
 // and both are backed, both green, no conflict. We can't tell them apart and
 // don't need to.
 
-export interface Placement {
+interface Placement {
   containerId: string;
   kind: ContainerKind;
   name: string;

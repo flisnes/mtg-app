@@ -43,7 +43,7 @@ export interface PileEntry {
 }
 
 /** Scryfall's scan of the standard Magic card back (the "Deckmaster" design). */
-export const CARD_BACK_URL = 'https://backs.scryfall.io/normal/0/a/0aeebaf5-8c7d-4636-9e82-8c27447861f7.jpg';
+const CARD_BACK_URL = 'https://backs.scryfall.io/normal/0/a/0aeebaf5-8c7d-4636-9e82-8c27447861f7.jpg';
 /** The same back at pile size: 9 KB against 80 KB, for a face 96px wide. */
 const CARD_BACK_SMALL_URL = 'https://backs.scryfall.io/small/0/a/0aeebaf5-8c7d-4636-9e82-8c27447861f7.jpg';
 

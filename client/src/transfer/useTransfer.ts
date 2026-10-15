@@ -25,9 +25,9 @@ import {
 // user confirms — replaces this device's data. Unlike trades there is no
 // resume: a dropped connection cancels the transfer and the user starts over.
 
-export type TransferRole = 'send' | 'receive';
+type TransferRole = 'send' | 'receive';
 
-export type TransferStatus =
+type TransferStatus =
   | 'idle'
   | 'connecting'
   | 'waiting' // sender: code shown, waiting for the other device to join

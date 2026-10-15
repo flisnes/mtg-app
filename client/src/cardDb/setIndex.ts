@@ -66,7 +66,7 @@ export const SET_TAIL = /(?:^|[\s(])-?(?:set|s|e|edition)[:=]([a-z0-9]*)$/i;
 /** How many sets the dropdown offers. Newest first, so the top of the list is the useful end. */
 const MAX_COMPLETIONS = 40;
 
-export interface SetCompletions {
+interface SetCompletions {
   /** Query text up to and including `set:` — prepend to a code to complete it. */
   head: string;
   sets: SetInfo[];

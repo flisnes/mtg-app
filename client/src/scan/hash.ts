@@ -14,7 +14,7 @@ export interface GrayImage {
 }
 
 /** 64-bit hash as two u32 halves (hi = bits 63..32). */
-export interface Hash64 {
+interface Hash64 {
   hi: number;
   lo: number;
 }

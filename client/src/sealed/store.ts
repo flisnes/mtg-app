@@ -15,7 +15,7 @@ import { sha256Hex } from '../util/sha256.js';
 // moves. Cached blob rows in one table, like scan data; a third artifact,
 // what each booster type can contain, rides along with the catalog.
 
-export interface SealedStoreRow {
+interface SealedStoreRow {
   key: 'current';
   /** sha256 of the uncompressed JSON — matched against the manifest to detect changes. */
   sha256: string;
@@ -24,7 +24,7 @@ export interface SealedStoreRow {
 }
 
 /** Cached price map, refreshed independently of the catalog above. */
-export interface SealedPricesRow {
+interface SealedPricesRow {
   key: 'prices';
   sha256: string;
   count: number;
@@ -32,7 +32,7 @@ export interface SealedPricesRow {
 }
 
 /** Cached booster contents, refreshed alongside the catalog. */
-export interface SealedBoostersRow {
+interface SealedBoostersRow {
   key: 'boosters';
   sha256: string;
   count: number;
@@ -41,7 +41,7 @@ export interface SealedBoostersRow {
 
 export type SealedRow = SealedStoreRow | SealedPricesRow | SealedBoostersRow;
 
-export type SealedLoad =
+type SealedLoad =
   | {
       kind: 'ready';
       products: SealedProduct[];

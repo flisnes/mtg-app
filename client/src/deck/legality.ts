@@ -46,7 +46,7 @@ export function formatLabel(format: DeckFormat | undefined): string {
  *  - a card that is a creature everywhere except the battlefield, so it's a
  *    legendary creature card in the command zone (e.g. Grist, the Hunger Tide).
  */
-export function canBeCommander(oracle: OracleCard): boolean {
+function canBeCommander(oracle: OracleCard): boolean {
   const type = oracle.typeLine;
   const body = oracle.oracleText ?? '';
   // The explicit grant works regardless of type line (it's a deckbuild rule).

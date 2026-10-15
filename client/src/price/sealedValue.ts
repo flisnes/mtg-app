@@ -19,7 +19,7 @@ import { canConvert, convertToDisplay } from './rates.js';
 // missing FX rate falls back to the raw quote.
 
 /** One day of the shelf's worth. */
-export interface SealedValuePoint {
+interface SealedValuePoint {
   /** Whole UTC days since the epoch. */
   day: number;
   ts: number;
@@ -27,7 +27,7 @@ export interface SealedValuePoint {
   total: number;
 }
 
-export interface SealedValueSeries {
+interface SealedValueSeries {
   pts: SealedValuePoint[];
   /** Currency code every value above is quoted in. */
   unit: string;

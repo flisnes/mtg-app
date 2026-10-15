@@ -36,7 +36,7 @@ const PAGE_SIZE = 60;
  * to individual printings — then the printing's own id has to be in the key or
  * the set's five Forests are one row wearing five hats.
  */
-export function resultKey(card: { oracleId: string }, printing?: { scryfallId: string }): string {
+function resultKey(card: { oracleId: string }, printing?: { scryfallId: string }): string {
   return printing ? `${card.oracleId}#${printing.scryfallId}` : card.oracleId;
 }
 

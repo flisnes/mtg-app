@@ -30,7 +30,7 @@ export interface OwnedStatus {
  * finish/condition/language preferences a wishlist line carries. Undefined —
  * or null for the edition — means "any", and condition is a minimum.
  */
-export interface OwnWants {
+interface OwnWants {
   scryfallId?: string | null;
   condition?: Condition;
   finish?: Finish;

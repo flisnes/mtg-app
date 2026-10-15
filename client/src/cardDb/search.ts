@@ -234,7 +234,7 @@ export async function resolveOracleByName(name: string): Promise<OracleCard | un
   return undefined;
 }
 
-export interface SearchResult {
+interface SearchResult {
   cards: Priced<OracleCard>[];
   /**
    * Index-aligned with `cards`: the printing that row stands for. Only present

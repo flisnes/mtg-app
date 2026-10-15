@@ -213,8 +213,9 @@ function sanitizeHistoryRows<K extends 'scryfallId' | 'productId'>(
 
 // ---------------------------------------------------------------------------
 // Per-row sanitizers. Used by the payload loop below (which adds dedup/merge
-// and cross-table checks) AND by the sync engine, which applies rows one at a
-// time (no cross-table checks possible there — rows arrive independently).
+// and cross-table checks) and, through sanitizeSyncedRow, by the sync engine,
+// which applies rows one at a time (no cross-table checks possible there: rows
+// arrive independently). Exported for the tests.
 // ---------------------------------------------------------------------------
 
 export function sanitizeCollectionRow(raw: unknown): CollectionEntry | null {
@@ -325,7 +326,7 @@ export function sanitizeDeckRow(raw: unknown): Deck | null {
   };
 }
 
-export function sanitizeDeckFolderRow(raw: unknown): DeckFolder | null {
+function sanitizeDeckFolderRow(raw: unknown): DeckFolder | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const folderId = id(r.id);
@@ -353,7 +354,7 @@ export function sanitizeDeckFolderRow(raw: unknown): DeckFolder | null {
  * boot chunk for the sync path, which never needs it. Without one the row is
  * kept unparsed (the sync path's mode, see below).
  */
-export type BehaviorSanitizer = (raw: unknown) => CardBehavior | null;
+type BehaviorSanitizer = (raw: unknown) => CardBehavior | null;
 
 export function sanitizeDeckBehaviorRow(raw: unknown, cleanBehavior?: BehaviorSanitizer): DeckBehavior | null {
   if (!raw || typeof raw !== 'object') return null;

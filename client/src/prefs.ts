@@ -33,7 +33,7 @@ export interface Prefs {
   displayCurrency: string;
   /**
    * The language you collect in (a Scryfall code, see LANGS in
-   * components/CardSheet.tsx). Copies in any other language wear a flag badge
+   * components/copyTraits.ts). Copies in any other language wear a flag badge
    * (components/LangFlag.tsx), which is built during render — same reason the
    * currency lives here.
    */

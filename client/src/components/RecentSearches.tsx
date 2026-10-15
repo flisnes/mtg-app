@@ -68,11 +68,11 @@ export function recordSearch(query: string): void {
   write([q, ...rest.slice(refines ? 1 : 0)].slice(0, MAX));
 }
 
-export function forgetSearch(query: string): void {
+function forgetSearch(query: string): void {
   write(history().filter((h) => h !== query));
 }
 
-export function clearSearchHistory(): void {
+function clearSearchHistory(): void {
   write([]);
 }
 

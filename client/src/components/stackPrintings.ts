@@ -53,7 +53,7 @@ export interface EntryStack {
   updated: number | null;
 }
 
-export interface StackOptions {
+interface StackOptions {
   /** Off: one stack per row, in the given order. */
   stack: boolean;
   prefs: Pick<Prefs, 'printing' | 'baseCurrency'>;
@@ -145,7 +145,7 @@ export function stackEntries(rows: JoinedEntry[], opts: StackOptions): EntryStac
 }
 
 /** A value total as one number in the display currency, for sorting. */
-export function totalValueNumber({ eur, usd }: PriceTotal): number | null {
+function totalValueNumber({ eur, usd }: PriceTotal): number | null {
   if (eur <= 0 && usd <= 0) return null;
   const e = eur > 0 ? convertToDisplay(eur, 'EUR') ?? eur : 0;
   const u = usd > 0 ? convertToDisplay(usd, 'USD') ?? usd : 0;

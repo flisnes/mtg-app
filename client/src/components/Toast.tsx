@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 // Minimal transient toast for add/import feedback. One with an action (Undo)
 // stays up longer, long enough to read the name and reach the button.
 
-export interface ToastAction {
+interface ToastAction {
   label: string;
   run: () => void;
 }

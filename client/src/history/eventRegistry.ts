@@ -10,7 +10,7 @@ import { BOARD_NOUN } from '../deck/boards.js';
 // the event modal, and the type filter all read from this file so they stay in
 // step. Keep it presentation-only: no DB access, no React.
 
-export type EventDirection = 'in' | 'out' | 'neutral';
+type EventDirection = 'in' | 'out' | 'neutral';
 
 export interface EventDisplay {
   /** Human label for the action ("Sold", "Received in trade", …). */
@@ -220,7 +220,7 @@ export function qtyBadge(e: UserEvent): string | null {
 // row here to change what the filter dropdown offers.
 // ---------------------------------------------------------------------------
 
-export interface FilterCategory {
+interface FilterCategory {
   value: string;
   label: string;
   match: (e: UserEvent) => boolean;

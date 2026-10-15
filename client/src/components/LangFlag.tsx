@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { getPrefs } from '../prefs.js';
+import { langName } from './copyTraits.js';
 
 // "This piece of cardboard isn't in my language." A tiny flag in the corner of a
 // card, next to the ownership checkmark and the filing badge, whenever a copy's
@@ -20,28 +21,6 @@ import { getPrefs } from '../prefs.js';
 // still the only flag in the set with that silhouette, which is all a badge has
 // to do. A language with no flag here (Phyrexian, or anything Scryfall adds
 // later) falls back to its code in the same chip.
-
-/** Language names, for the badge's tooltip. Keyed like Scryfall's codes. */
-export const LANG_NAMES: Record<string, string> = {
-  en: 'English',
-  de: 'German',
-  fr: 'French',
-  it: 'Italian',
-  es: 'Spanish',
-  pt: 'Portuguese',
-  ja: 'Japanese',
-  ko: 'Korean',
-  ru: 'Russian',
-  zhs: 'Chinese (Simplified)',
-  zht: 'Chinese (Traditional)',
-  ph: 'Phyrexian',
-  la: 'Latin',
-  grc: 'Ancient Greek',
-  ar: 'Arabic',
-  sa: 'Sanskrit',
-  he: 'Hebrew',
-  qya: 'Quenya',
-};
 
 /** A five-pointed star, points up, centred on the origin with outer radius 1. */
 const STAR =
@@ -128,11 +107,6 @@ const FLAGS: Record<string, ReactNode> = {
   ),
 };
 
-/** Is there a flag drawn for this language code? */
-export function hasFlag(lang: string): boolean {
-  return lang in FLAGS;
-}
-
 /**
  * The flag itself, sized by height (the box is 3:2). Decorative: the tooltip
  * lives on whatever chip or row wraps it.
@@ -152,11 +126,6 @@ export function LangFlag({ lang, size = 10 }: { lang: string; size?: number }) {
       {art}
     </svg>
   );
-}
-
-/** Spelled-out language name, falling back to the raw code Scryfall gave us. */
-export function langName(lang: string): string {
-  return LANG_NAMES[lang] ?? lang;
 }
 
 /**

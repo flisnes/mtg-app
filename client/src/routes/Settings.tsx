@@ -20,8 +20,8 @@ import { formatDiagnostics } from '../errorLog.js';
 import { Page } from './Page.js';
 import { fmtDateTime as fmtWhen, fmtIsoDate } from '../util/format.js';
 import { setPrefs, type FilingPolicy, type PrintingPref, type UpdatePolicy } from '../prefs.js';
-import { LANGS } from '../components/CardSheet.js';
-import { LangFlag, langName } from '../components/LangFlag.js';
+import { LANGS, langName } from '../components/copyTraits.js';
+import { LangFlag } from '../components/LangFlag.js';
 import { usePrefs } from '../usePrefs.js';
 import { CURRENCIES, ensureRates, rateSummary } from '../price/rates.js';
 import {

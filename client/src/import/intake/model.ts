@@ -1,7 +1,7 @@
 import type { CollectionEntry, ContainerKind, DeckBoard, Printing } from '@mtg/shared';
 import { collectionKey, type CopyRef, type ImportLine, type MarkForTradeRequest } from '../../db/dataAccess.js';
 import { db } from '../../db/schema.js';
-import { FINISH_LABELS } from '../../components/CardSheet.js';
+import { FINISH_LABELS } from '../../components/copyTraits.js';
 import type { FilingClash, FilingCopy } from '../../deck/filing.js';
 import type { ResolvedLine } from '../types.js';
 import { sumQty } from '../../util/groupBy.js';
@@ -180,7 +180,7 @@ export function decisionOf(st: IntakeState, l: IntakeLine): IntakeDecision {
 }
 
 /** Every write one line turns into. */
-export interface LinePlan {
+interface LinePlan {
   /** Copies to add to the collection (0 = don't). */
   write: number;
   /** Owned copies swapped out for them, oldest-chosen first. */
@@ -229,7 +229,7 @@ export function swapNeed(l: IntakeLine, d: IntakeDecision): number {
   return 0;
 }
 
-export function planLine(l: IntakeLine, d: IntakeDecision, flow: IntakeFlow): LinePlan {
+function planLine(l: IntakeLine, d: IntakeDecision, flow: IntakeFlow): LinePlan {
   const none: LinePlan = { write: 0, removals: [], trade: false, claims: false, skipped: true };
   switch (d.collect) {
     case 'new':
@@ -371,7 +371,7 @@ export function intakeRekey(st: IntakeState): Map<string, string> {
 }
 
 /** Any line will be cardboard worth filing somewhere. */
-export const anyClaims = (st: IntakeState): boolean => plansOf(st).some(({ plan }) => plan.claims);
+const anyClaims = (st: IntakeState): boolean => plansOf(st).some(({ plan }) => plan.claims);
 
 /**
  * The steps this intake walks, recomputed from the answers so a step with

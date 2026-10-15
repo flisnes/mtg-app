@@ -44,7 +44,7 @@ export function ContainerPickerSheet({
   );
 }
 
-export interface ContainerPickerProps {
+interface ContainerPickerProps {
   onPick: (containerId: string, kind: ContainerKind) => void;
   /** Container to leave out — the one you're already looking at. */
   excludeId?: string;

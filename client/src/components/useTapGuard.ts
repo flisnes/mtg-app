@@ -15,7 +15,7 @@ import { useCallback, useEffect, useRef, type MouseEvent } from 'react';
 
 /** How long a freshly opened sheet ignores clicks. Long enough to cover a
  *  double-tap, short enough that a deliberate press never feels ignored. */
-export const TAP_GUARD_MS = 400;
+const TAP_GUARD_MS = 400;
 
 /**
  * Spread the result onto a sheet's `.sheet-backdrop` element. `resetKey` is for

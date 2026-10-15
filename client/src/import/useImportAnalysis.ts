@@ -6,7 +6,7 @@ import type { ImportDefaults, ResolveRequest, ResolveResponse, ResolveResult, Tr
 // both the collection Import route and the deck ImportPanel can reuse the same
 // parse → resolve → review pipeline instead of duplicating it.
 
-export type ImportStatus =
+type ImportStatus =
   | { kind: 'idle' }
   | { kind: 'working'; label: string; fraction: number }
   | { kind: 'review'; result: ResolveResult }

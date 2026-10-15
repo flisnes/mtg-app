@@ -137,7 +137,7 @@ export async function joinDeckCards(entries: DeckCard[]): Promise<JoinedDeckCard
 }
 
 /** What deckWishlistCandidates reads off a deck slot: the slot plus its card's name. */
-export type WishSlot = Pick<DeckCard, 'oracleId' | 'quantity' | 'board' | 'anyBasic' | 'condition' | 'finish' | 'lang'> & {
+type WishSlot = Pick<DeckCard, 'oracleId' | 'quantity' | 'board' | 'anyBasic' | 'condition' | 'finish' | 'lang'> & {
   oracle?: { name: string };
 };
 

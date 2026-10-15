@@ -29,7 +29,7 @@ function normFinish(v: string | undefined): Finish | undefined {
   const s = v.trim().toLowerCase();
   if (s === 'foil') return 'foil';
   if (s === 'etched') return 'etched';
-  if (s === '' || s === 'normal' || s === 'nonfoil' || s === 'false' || s === 'no') return 'nonfoil';
+  // 'normal', 'nonfoil', 'false', blank, anything else: a plain copy.
   return 'nonfoil';
 }
 
@@ -57,7 +57,7 @@ function sectionBoard(line: string): DeckBoard | undefined {
 }
 
 /** Parse "4 Lightning Bolt (MH2) 123" style lines. */
-export function parseText(text: string): ParsedLine[] {
+function parseText(text: string): ParsedLine[] {
   const lines: ParsedLine[] = [];
   let board: DeckBoard = 'main';
   for (const raw of text.split(/\r?\n/)) {
@@ -104,7 +104,7 @@ export function parseText(text: string): ParsedLine[] {
 // ---- CSV ----
 
 /** RFC-ish CSV tokenizer that handles quoted fields, embedded commas, and newlines. */
-export function parseCsvRows(text: string): string[][] {
+function parseCsvRows(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -164,7 +164,7 @@ function mapHeader(header: string[]): Record<string, number> {
   return idx;
 }
 
-export function parseCsv(text: string): { format: ImportFormat; lines: ParsedLine[] } {
+function parseCsv(text: string): { format: ImportFormat; lines: ParsedLine[] } {
   const rows = parseCsvRows(text);
   if (rows.length < 2) return { format: 'csv', lines: [] };
   const header = rows[0]!;

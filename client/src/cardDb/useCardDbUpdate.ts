@@ -20,14 +20,14 @@ import { checkForBackgroundUpdate, type RunSync } from './sync.js';
 // exactly this case.
 
 /** Which feed a prompt is about — decides the wording and which policy it writes. */
-export type UpdateKind = 'prices' | 'card-data';
+type UpdateKind = 'prices' | 'card-data';
 
-export interface UpdatePromptState {
+interface UpdatePromptState {
   kind: UpdateKind;
   sizeBytes: number;
 }
 
-export interface CardDbUpdate {
+interface CardDbUpdate {
   /** Non-null when an update is available and awaiting the user's decision. */
   prompt: UpdatePromptState | null;
   /** A confirmed update is downloading in the background. */

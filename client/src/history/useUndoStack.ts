@@ -29,7 +29,7 @@ import { entryEvents, groupEntries, undoRefOf, type HistoryEntry } from './useHi
 /** When this tab opened. The floor of every scoped stack. */
 const SESSION_START = Date.now();
 
-export interface UndoStack {
+interface UndoStack {
   /** Newest undoable entry on this page, or null when there's nothing left. */
   next: HistoryEntry | null;
   /**

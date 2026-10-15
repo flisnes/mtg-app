@@ -29,7 +29,7 @@ import { canConvert, convertToDisplay } from './rates.js';
 // collection's acquisitions instead (`paidByKey`).
 
 /** One day of the collection's worth. */
-export interface CollectionValuePoint {
+interface CollectionValuePoint {
   /** Whole UTC days since the epoch. */
   day: number;
   ts: number;
@@ -54,7 +54,7 @@ export interface CollectionValueSeries {
 }
 
 /** Which moves to replay, and what to fall back on when they carry no price. */
-export interface ValueSeriesOpts {
+interface ValueSeriesOpts {
   addKind?: UserEventKind;
   removeKind?: UserEventKind;
   /** Average paid per copy in EUR units, by `scryfallId|finish`. */

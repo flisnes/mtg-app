@@ -39,7 +39,7 @@ export interface OwnedBadgeSpec {
 
 /** How the title spells out `ownsExact`. A deck slot asks for more than an
  *  edition (finish, condition, language), so it words the two cases its way. */
-export interface OwnedBadgeTerms {
+interface OwnedBadgeTerms {
   yes: string;
   no: string;
 }

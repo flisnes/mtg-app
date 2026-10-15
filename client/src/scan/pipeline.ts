@@ -36,7 +36,7 @@ const MAX_QUAD_CANDIDATES = 4;
  */
 export const MIN_ART_DETAIL = 2.5;
 
-export interface ScanPipelineInput {
+interface ScanPipelineInput {
   /** Full working image (cap ~1600px — hashes fine, warps fast). */
   full: ImageData;
   /** Downscaled copy for detection (~480px wide), same aspect. */

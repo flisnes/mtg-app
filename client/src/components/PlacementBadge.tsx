@@ -18,7 +18,7 @@ import { Icon } from './icons.js';
 // slots that name a copy of yours down to printing, finish, condition and
 // language can raise it (see usePlacements). A brewed decklist never does.
 
-export interface PlacementBadgeSpec {
+interface PlacementBadgeSpec {
   node: ReactNode;
   cls: string;
   title: string;

@@ -14,7 +14,8 @@ import {
 } from '../db/queries.js';
 import { describeFiling, useIntakeReview, type IntakeConfig, type IntakeResult } from '../import/intake/useIntakeReview.js';
 import type { ResolvedLine } from '../import/types.js';
-import { CardSheet, FINISH_LABELS, LANGS, type SessionCardValues } from './CardSheet.js';
+import { CardSheet, type SessionCardValues } from './CardSheet.js';
+import { FINISH_LABELS, LANGS } from './copyTraits.js';
 import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
 import { getScanExcludedIds } from '../scan/exclusions.js';
 import { TRADE_SCAN_PREFIX } from '../scan/tradeSessions.js';
@@ -67,7 +68,7 @@ import { BOARD_NOUN, scanBoards } from '../deck/boards.js';
 // in-memory trade offer).
 
 /** A locked-in scan, ready to be written wherever the target sends it. */
-export interface ScannedCard {
+interface ScannedCard {
   oracleId: string;
   scryfallId: string;
   name: string;
@@ -307,7 +308,7 @@ function targetNoun(target: ScanTarget): string {
   return target.kind === 'trade' ? 'offer' : target.kind;
 }
 
-export function targetLabel(target: ScanTarget): string {
+function targetLabel(target: ScanTarget): string {
   switch (target.kind) {
     case 'collection':
       return 'Collection';

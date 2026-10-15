@@ -113,7 +113,7 @@ import {
 } from '@mtg/sim';
 
 /** The table's numbers from the last run (rebuild plan E4), for the line under the pickers. */
-export interface TableSummary {
+interface TableSummary {
   oppSpells: number;
   answers: number;
 }
@@ -374,7 +374,7 @@ function deckNames(decks: readonly string[]): string {
 }
 
 /** How many of the deck's distinct cards a move step's criteria would find. */
-export interface DeckMatcher {
+interface DeckMatcher {
   total: number;
   /** A range rather than a number, because a `[X]` query has one answer per X. */
   count: (q: string) => { min: number; max: number; varies: boolean };

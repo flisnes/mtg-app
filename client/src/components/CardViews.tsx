@@ -196,7 +196,7 @@ export interface CardItem {
  * instead of firing its onClick, per-item actions are hidden, and selected
  * entries paint a checkmark. Callers drive this with useMultiSelect.
  */
-export interface SelectProps {
+interface SelectProps {
   selectable?: boolean;
   selectedKeys?: Set<string>;
   onToggleSelect?: (key: string) => void;
@@ -500,7 +500,7 @@ export function CardStacks({
   );
 }
 
-export function CardGrid({
+function CardGrid({
   items,
   className,
   gridRef,

@@ -35,7 +35,7 @@ export interface CardMaps {
   printings: Map<string, Priced<Printing>>;
 }
 
-export interface UserListsData {
+interface UserListsData {
   updatedAt: number;
   tradelist: TradeLine[];
   wishlist: WishLine[];
@@ -46,7 +46,7 @@ export interface UserListsData {
  *  them read-only (any printing / min condition / finish / language). */
 export type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string; wish?: WishLine };
 
-export function lineDetail(l: TradeLine): string {
+function lineDetail(l: TradeLine): string {
   const bits: string[] = [l.condition];
   if (l.finish !== 'nonfoil') bits.push(l.finish);
   if (l.lang !== 'en') bits.push(l.lang);
@@ -54,7 +54,7 @@ export function lineDetail(l: TradeLine): string {
 }
 
 /** A wish's preferences, spelled out for a trade partner (empty = no prefs). */
-export function wishDetail(l: WishLine): string {
+function wishDetail(l: WishLine): string {
   const bits: string[] = [];
   if (l.finish && l.finish !== 'nonfoil') bits.push(l.finish);
   if (l.condition) bits.push(`min ${l.condition}`);
@@ -107,7 +107,7 @@ export function useResolvedCards(lists: UserListsData | null): CardMaps | undefi
 }
 
 /** Matcher over their wishlist lines (null = any printing of the card). */
-export type HaveFn = (wish: WishLine) => boolean;
+type HaveFn = (wish: WishLine) => boolean;
 
 /** My wishlist as a matcher over their tradelist lines (respects my prefs). */
 export function useMyWants(): (line: TradeLine) => boolean {

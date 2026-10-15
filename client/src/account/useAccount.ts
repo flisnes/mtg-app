@@ -12,7 +12,7 @@ import {
 import { ACCOUNTS_ENABLED } from './config.js';
 import { KEY_SESSION, type AccountSession } from './session.js';
 
-export interface AccountState {
+interface AccountState {
   enabled: boolean;
   /** undefined while loading, null when signed out. */
   session: AccountSession | null | undefined;

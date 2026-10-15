@@ -1984,6 +1984,9 @@ body:has(.select-float) .app-main {
   gap: 0.6rem;
 }
 .card-tile {
+  /* The anchor for anything pinned to a tile's corner from outside the image
+     button, like the color pip strip on a choose-a-color commander. */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
@@ -2816,6 +2819,7 @@ body:has(.select-float) .app-main {
   border-radius: 10px;
   background: var(--surface-2);
   flex-shrink: 0;
+  transition: opacity 0.12s ease-out;
 }
 .sheet-card-wrap {
   position: relative;
@@ -2832,9 +2836,6 @@ body:has(.select-float) .app-main {
 }
 .sheet-card-loading {
   opacity: 0;
-}
-.sheet-card {
-  transition: opacity 0.12s ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
   .sheet-card {
@@ -4453,12 +4454,6 @@ button.primary {
 }
 
 /* ---- Collection / list rows ---- */
-.list-toolbar {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  align-items: center;
-}
 
 /* Container picker: the list of decks/binders/boxes is the only part that
    scrolls. A shelf of thirty decks used to make the whole sheet scroll, taking
@@ -5357,9 +5352,6 @@ button.primary {
   font-variant-numeric: tabular-nums;
   /* The same amber the legality chips use for "yes, but": short is not banned. */
   color: #e6a23c;
-}
-.source-row-bad .source-row-p {
-  color: var(--danger);
 }
 .source-row-note {
   flex-basis: 100%;
@@ -9517,9 +9509,6 @@ a.seg {
 /* ---- Choose-a-color commander (Prismatic Piper & co) ---- */
 /* Grid: the pip column hugs the card's right edge. It's a sibling of the tile
    button (pips are buttons themselves), so the tile is the anchor. */
-.card-tile {
-  position: relative;
-}
 .tile-side-strip {
   position: absolute;
   top: 6px;

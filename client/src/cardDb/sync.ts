@@ -32,7 +32,7 @@ export type SyncState =
 export type RunSync = (onState: (s: SyncState) => void) => Promise<void>;
 
 /** What the blocking first-run path needs to do (no usable local DB yet). */
-export type InitialPlan =
+type InitialPlan =
   | {
       kind: 'download';
       sizeBytes?: number;
@@ -44,7 +44,7 @@ export type InitialPlan =
   | { kind: 'error'; message: string };
 
 /** What a background refresh should do when a usable local DB already exists. */
-export type BgUpdate =
+type BgUpdate =
   | { kind: 'none' }
   | { kind: 'prices'; sizeBytes: number; run: RunSync }
   | {

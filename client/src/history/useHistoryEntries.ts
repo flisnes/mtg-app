@@ -22,7 +22,7 @@ export type HistoryEntry =
   | { kind: 'single'; id: string; ts: number; event: UserEvent }
   | { kind: 'batch'; id: string; ts: number; source: EventSource; label?: string; events: UserEvent[] };
 
-export interface HistoryFilters {
+interface HistoryFilters {
   /** Card/product name substring (case-insensitive); '' = no name filter. */
   name: string;
   /** A FILTER_CATEGORIES value, or '' for all types. */

@@ -15,7 +15,7 @@ export interface ScanCandidate {
   faceIndex: number;
 }
 
-export type MatchVerdict = 'confident' | 'ambiguous' | 'none';
+type MatchVerdict = 'confident' | 'ambiguous' | 'none';
 
 export interface MatchResult {
   verdict: MatchVerdict;

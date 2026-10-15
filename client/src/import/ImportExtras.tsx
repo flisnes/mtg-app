@@ -1,5 +1,5 @@
 import { CONDITIONS, FINISHES, type Condition, type Finish } from '@mtg/shared';
-import { FINISH_LABELS, LANGS } from '../components/CardSheet.js';
+import { FINISH_LABELS, LANGS } from '../components/copyTraits.js';
 import type { ImportDefaults } from './types.js';
 import { plural } from '../util/format.js';
 

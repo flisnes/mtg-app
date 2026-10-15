@@ -40,7 +40,7 @@ export function yearMark(
 }
 
 /** A collection/tradelist row: printing + condition + finish, with a "for trade" badge. */
-export function collectionCardItem(
+function collectionCardItem(
   r: JoinedEntry,
   opts: { moverFlags?: MoverFlags; placements?: PlacementIndex; showYear?: boolean; onClick?: () => void },
 ): CardItem {

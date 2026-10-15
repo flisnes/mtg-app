@@ -16,15 +16,15 @@ export const CURVE_MAX = 7;
 /** Turns the tapland tax is measured over — the window where a turn of mana still decides games. */
 export const TAX_TURNS = 4;
 
-export interface CurveBucket {
+interface CurveBucket {
   /** Mana value; CURVE_MAX means "this much or more". */
   mv: number;
   count: number;
 }
 
-export type LandTone = 'ok' | 'light' | 'heavy';
+type LandTone = 'ok' | 'light' | 'heavy';
 
-export interface LandVerdict {
+interface LandVerdict {
   /** Karsten's rule of thumb, rounded to whole lands. */
   recommended: number;
   /** Lands held minus lands suggested. */
@@ -70,7 +70,7 @@ export interface DeckManaStats {
   hasManaData: boolean;
 }
 
-export interface StatsRow {
+interface StatsRow {
   quantity: number;
   board: DeckBoard;
   oracle?: OracleCard;

@@ -2,6 +2,7 @@ import type { CollectionEntry, Condition, Finish, Priced, Printing } from '@mtg/
 import { specialLabel } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
+import { FINISH_LABELS } from './copyTraits.js';
 import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
 import { Sheet } from './Sheet.js';
@@ -21,8 +22,6 @@ import { Sheet } from './Sheet.js';
 // in another deck means taking it out of that deck, and you should be able to
 // see that before you tap, not after.
 
-export const FINISH_LABELS: Record<Finish, string> = { nonfoil: 'Nonfoil', foil: 'Foil', etched: 'Etched' };
-
 /** Condition · finish · language · special, leaving the unremarkable defaults unsaid. */
 export function copyDetail(e: CollectionEntry): string {
   const bits: string[] = [e.condition];
@@ -33,7 +32,7 @@ export function copyDetail(e: CollectionEntry): string {
 }
 
 /** What the caller currently asks for, so the matching tile reads as selected. */
-export interface CopySelection {
+interface CopySelection {
   scryfallId: string;
   condition: Condition | '';
   finish: Finish | '';

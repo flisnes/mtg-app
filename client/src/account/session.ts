@@ -56,7 +56,7 @@ async function clearAccountState(): Promise<void> {
 }
 
 /** How a sign-in proceeded — 'confirm_replace' means nothing happened yet. */
-export type SignInAction = 'resumed' | 'seeded' | 'pulled' | 'confirm_replace';
+type SignInAction = 'resumed' | 'seeded' | 'pulled' | 'confirm_replace';
 
 export async function signUp(username: string, password: string, inviteCode: string): Promise<void> {
   const res = await api.register(username, password, inviteCode);

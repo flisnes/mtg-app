@@ -15,7 +15,7 @@ import { useToast } from './Toast.js';
 // (OpenSealedSheet, Settings' account flows, the filing-conflict resolver all
 // catch and explain in their own words). This is the floor, not the ceiling.
 
-export interface AsyncAction {
+interface AsyncAction {
   /**
    * Run `fn`, and if it throws, say so and log it. `what` completes the sentence
    * "Couldn't …", so phrase it as the thing being attempted: 'save the price',

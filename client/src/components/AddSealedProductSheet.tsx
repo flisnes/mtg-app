@@ -16,7 +16,7 @@ import {
   subtitle,
 } from '../sealed/product.js';
 import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
-import { LANGS } from './CardSheet.js';
+import { LANGS } from './copyTraits.js';
 import { Sheet } from './Sheet.js';
 import { useToast } from './Toast.js';
 import { plural } from '../util/format.js';

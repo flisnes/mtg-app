@@ -5,7 +5,7 @@ import { getSetting, setSetting } from '../db/settings.js';
 // one scattered heap you dig through by hand. Off by default; humans get
 // sorting and filtering, goblins get shiny chaos.
 
-export const KEY_GOBLIN_MODE = 'goblinMode';
+const KEY_GOBLIN_MODE = 'goblinMode';
 
 /** Reactive goblin-mode flag (false until the setting loads or is set). */
 export function useGoblinMode(): boolean {

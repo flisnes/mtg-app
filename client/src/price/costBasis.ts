@@ -43,7 +43,7 @@ import { convertToDisplay } from './rates.js';
 export const FOIL_PRICING_SINCE = Date.parse('2026-07-25T00:00:00Z');
 
 /** What the recorded acquisitions of one printing cost, averaged per copy. */
-export interface CostBasis {
+interface CostBasis {
   /** Average paid per copy, in EUR units. */
   perCopy: number;
   /** Copies the average is over. */

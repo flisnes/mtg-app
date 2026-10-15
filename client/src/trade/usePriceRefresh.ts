@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { refreshPricesNow } from '../cardDb/priceRefresh.js';
 
-export interface TradePriceRefresh {
+interface TradePriceRefresh {
   /** A refresh is in flight — the totals on screen may still be yesterday's. */
   refreshing: boolean;
   /** Bumps when new prices landed. Feed it to price lookups so they re-read. */

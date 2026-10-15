@@ -6,7 +6,7 @@ import type { IconName } from '../components/icons.js';
 // Everything that differs between them is a label, an icon or a route, and it
 // all lives here so no screen has to spell out the three cases itself.
 
-export interface ContainerMeta {
+interface ContainerMeta {
   kind: ContainerKind;
   /** Singular, lower case ("deck"), for sentences. */
   noun: string;

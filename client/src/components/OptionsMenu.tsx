@@ -4,7 +4,7 @@ import { Icon, type IconName } from './icons.js';
 // The per-page "⋯" options menu: rarely-used actions (import/export/delete)
 // live here so toolbars stay clear for the primary flow (search → add).
 
-export interface MenuAction {
+interface MenuAction {
   label: string;
   icon?: IconName;
   danger?: boolean;

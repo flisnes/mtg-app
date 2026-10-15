@@ -21,7 +21,7 @@ const KEY_LAST_FETCH_AT = 'matchLastFetchAt';
 /** Don't auto-refetch matches more than once per this window (app-open path). */
 const FETCH_MIN_INTERVAL_MS = 10 * 60 * 1000;
 
-export interface NotificationState {
+interface NotificationState {
   /** Signature the user has looked at (no longer "new"). */
   seenSig?: string;
   /** Signature the user dismissed; resurfaces if the content changes. */
@@ -40,7 +40,7 @@ export interface NotificationItem extends MatchEntry {
   isNew: boolean;
 }
 
-export function getStoredNotifications(): Promise<StoredNotifications | undefined> {
+function getStoredNotifications(): Promise<StoredNotifications | undefined> {
   return getSetting<StoredNotifications>(KEY_NOTIFICATIONS);
 }
 

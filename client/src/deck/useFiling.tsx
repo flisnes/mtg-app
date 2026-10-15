@@ -19,7 +19,7 @@ import { sumQty } from '../util/groupBy.js';
 /** What a filing did: how it settled the question, and how many copies of real
  *  cardboard actually went in (0 = the target already held every copy you own,
  *  so there was nothing left to put away). */
-export interface FilingResult {
+interface FilingResult {
   mode: FilingMode;
   filed: number;
 }

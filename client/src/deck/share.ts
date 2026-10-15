@@ -8,12 +8,12 @@ import { formatLabel } from './legality.js';
 
 /** Build the deep link to a favorited deck. HashRouter keeps the route in the
  *  URL fragment, so preserve origin+pathname and append the hash ourselves. */
-export function deckShareUrl(username: string, deckId: string): string {
+function deckShareUrl(username: string, deckId: string): string {
   const base = `${window.location.origin}${window.location.pathname}`;
   return `${base}#/profile/${encodeURIComponent(username)}/deck/${encodeURIComponent(deckId)}`;
 }
 
-export type ShareResult = 'shared' | 'copied' | 'failed';
+type ShareResult = 'shared' | 'copied' | 'failed';
 
 /** Native share sheet where available (mobile PWA), clipboard copy elsewhere.
  *  A dismissed native sheet counts as 'shared' — nothing broke, so no toast. */

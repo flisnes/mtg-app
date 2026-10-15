@@ -8,7 +8,7 @@ import { renderSVG } from 'uqr';
  * and it keeps working under any origin the app is ever served from (dev,
  * Pages, a store-wrapped WebView/TWA), because it's derived at runtime.
  */
-export function tradeJoinUrl(code: string): string {
+function tradeJoinUrl(code: string): string {
   const base = window.location.href.split('#')[0];
   return `${base}#/trade?join=${code}`;
 }

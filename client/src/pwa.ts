@@ -5,7 +5,7 @@ import { registerSW } from 'virtual:pwa-register';
 // update exists (iOS checks for new SWs lazily); this drives the actual
 // skipWaiting + reload once the new SW is downloaded.
 
-export type UpdateHandlers = {
+type UpdateHandlers = {
   onNeedRefresh: (reload: () => void) => void;
   onOfflineReady: () => void;
 };

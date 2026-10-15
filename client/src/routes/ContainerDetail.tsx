@@ -71,7 +71,8 @@ import { UnownedPromptSheet, type UnownedCard } from '../components/UnownedPromp
 import { useConfirm } from '../components/ConfirmSheet.js';
 import type { ImportDefaults, ResolvedLine, UnmatchedLine } from '../import/types.js';
 import { useToast } from '../components/Toast.js';
-import { CardSheet, FINISH_LABELS } from '../components/CardSheet.js';
+import { CardSheet } from '../components/CardSheet.js';
+import { FINISH_LABELS } from '../components/copyTraits.js';
 import { CardItems, StackToggle, ViewToggle, useStackPrintings, useViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import { pickOwnedPrinting } from '../cardDb/preferredPrinting.js';
 import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';

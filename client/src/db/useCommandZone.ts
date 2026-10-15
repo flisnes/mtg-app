@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import type { DeckCard, OracleCard } from '@mtg/shared';
 import { db } from './schema.js';
 
-export interface CommandZoneCard {
+interface CommandZoneCard {
   slot: DeckCard;
   card: OracleCard;
 }

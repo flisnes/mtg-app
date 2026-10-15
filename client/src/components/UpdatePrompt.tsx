@@ -6,7 +6,7 @@ import { useState } from 'react';
 // here — and "don't ask again" turns that answer into the standing policy, so
 // the ribbon isn't a daily toll.
 
-export interface UpdatePromptCopy {
+interface UpdatePromptCopy {
   /** What's on offer, e.g. "Card data update available (~9 MB)." */
   message: string;
   /** Accept-button label; defaults to "Update". */

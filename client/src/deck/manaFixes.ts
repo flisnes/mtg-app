@@ -35,7 +35,7 @@ import { copiesWelcome, isBasicLand } from './legality.js';
 const MAX_FIXES = 6;
 
 /** One piece of cardboard a fix would file, in the shape a deck slot names it. */
-export interface FixCopy {
+interface FixCopy {
   scryfallId?: string;
   condition?: Condition;
   finish?: Finish;
@@ -73,7 +73,7 @@ export interface ManaNeed {
 }
 
 /** A card you own that would help, and what standing it has to be added. */
-export interface FixCandidate {
+interface FixCandidate {
   oracleId: string;
   name: string;
   colors: PipColor[];

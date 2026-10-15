@@ -12,7 +12,7 @@ const one = (n: number) => n.toFixed(1);
 /** The most lines worth reading on a toast. The card's own come first. */
 const MAX_LINES = 4;
 
-export interface ToastLine {
+interface ToastLine {
   label: string;
   before: string;
   after: string;

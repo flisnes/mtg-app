@@ -233,7 +233,7 @@ const OTAG_TAIL = /(?:^|[\s(])-?(?:otag|oracletag|function)[:=]([a-z0-9-]*)$/i;
 /** How many slugs the dropdown offers. It's a starting point, not the vocabulary. */
 const MAX_COMPLETIONS = 40;
 
-export interface OtagCompletions {
+interface OtagCompletions {
   /** Query text up to and including `otag:` — prepend to a slug to complete it. */
   head: string;
   slugs: string[];

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.3
+
+- **Internal: a safety net under every card edit.** Nothing changes on screen. Every function that writes your collection, wishlist, decks, binders, boxes, trades and history now has an automated test pinning what it does today, including undo and redo. The next releases rework that code to make it faster and smaller, and these tests catch it if anything you rely on shifts on the way. Counterspell held up, just in case.
+
 ## 0.200.2
 
 - **Changed: a bit less to download at launch.** The words and tables behind the deck behavior editor (what a card does in your deck) used to ride along with every start, even if you never open deck analysis. They now load with deck analysis, which takes about another 13 kB off the first download. Your written rules sync and transfer exactly as before.

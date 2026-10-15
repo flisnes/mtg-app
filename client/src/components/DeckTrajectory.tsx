@@ -27,7 +27,7 @@ const CHART_TURNS = 8;
  * Line style carries the same distinction, so the chart survives being printed,
  * screenshotted in greyscale, or read by someone who sees neither hue.
  */
-const SERIES_A = '#7c6cff';
+const SERIES_A = '#9d91ff';
 const SERIES_B = '#c98230';
 /** Poison, the third line on the damage chart when a deck gives any. */
 const SERIES_C = '#4caf7d';

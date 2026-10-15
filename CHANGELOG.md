@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.12
+
+- **Changed: bigger tap targets, clearer purple.** The toolbar buttons (search, Select, Sort, Stack, list/grid) are now one height so they line up, and the sheet close X, quantity steppers, chips, back links and checkbox rows are all big enough to hit with a thumb on the first try. Purple buttons are a shade deeper so their white text reads better, purple text and icons are a shade lighter so they stand out on dark panels, and red warnings got the same treatment. No more squinting at "Select all" like it's the fine print on a Chaos Orb.
+
 ## 0.198.11
 
 - **Fixed: Community pages reload in a blink.** Someone's trade and wishlists (which can run to megabytes), their profile, the member list, your trade matches and price charts are now remembered by your browser and only downloaded again when they actually changed. The server also does less work per sync and per profile visit.

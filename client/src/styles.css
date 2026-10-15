@@ -5,9 +5,17 @@
   --border: #3a3a42;
   --text: #ececf0;
   --text-dim: #a0a0ab;
-  --accent: #7c6cff;
+  /* Two purples: --accent for text, icons and borders (>=4.5:1 on every
+     surface), --accent-fill for solid fills under white text (4.85:1). */
+  --accent: #9d91ff;
+  --accent-fill: #6a5af0;
   --accent-text: #ffffff;
-  --danger: #ff5c5c;
+  /* Same split for red: text on surfaces vs a fill under white text. */
+  --danger: #ff6b6b;
+  --danger-fill: #d63a3a;
+  /* Minimum tap target. Toolbar controls use --tap-sm so a row lines up. */
+  --tap: 44px;
+  --tap-sm: 40px;
   --ok: #4ec97b;
   /* --ok, dark enough to carry white text — filled "yes" badges, not glyphs. */
   --ok-solid: #1f7a47;
@@ -77,8 +85,8 @@ button:disabled {
   cursor: not-allowed;
 }
 button.danger {
-  background: var(--danger);
-  border-color: var(--danger);
+  background: var(--danger-fill);
+  border-color: var(--danger-fill);
   color: #fff;
 }
 button.danger-outline {
@@ -477,7 +485,7 @@ button.danger-outline {
   font-size: 0.95rem;
 }
 .banner-update {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-text);
   position: sticky;
   top: calc(var(--header-h) + var(--safe-top));
@@ -1217,7 +1225,7 @@ button.danger-outline {
 }
 .progress-bar {
   height: 100%;
-  background: var(--accent);
+  background: var(--accent-fill);
   transition: width 0.2s ease;
 }
 
@@ -1695,7 +1703,7 @@ button.danger-outline {
     border-color 0.12s ease;
 }
 .tile-select.checked {
-  background: var(--accent);
+  background: var(--accent-fill);
   border-color: var(--accent);
   animation: check-pop 0.18s ease;
 }
@@ -1728,7 +1736,7 @@ button.danger-outline {
     border-color 0.12s ease;
 }
 .select-box.checked {
-  background: var(--accent);
+  background: var(--accent-fill);
   border-color: var(--accent);
   animation: check-pop 0.18s ease;
 }
@@ -2334,7 +2342,7 @@ body:has(.select-float) .app-main {
 }
 .tile-badge.badge-trade,
 .tile-badge.badge-ft {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: #fff;
 }
 .tile-badge.badge-ft {
@@ -3093,9 +3101,11 @@ body:has(.select-float) .app-main {
   color: var(--text);
   font: inherit;
 }
+/* Quantity and For trade: two steppers at most, each wide enough for two 44px
+   buttons and a readable number between them. */
 .field-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
 }
 /* Condition, finish, language and special conditions on one line, however many
@@ -3478,7 +3488,7 @@ body:has(.select-float) .app-main {
   display: inline-flex;
   align-items: center;
   gap: 0.15rem;
-  background: var(--accent);
+  background: var(--accent-fill);
 }
 .edition-tile-full {
   opacity: 0.45;
@@ -3555,7 +3565,7 @@ body:has(.select-float) .app-main {
 .assemble-bar span {
   display: block;
   height: 100%;
-  background: var(--accent);
+  background: var(--accent-fill);
   transition: width 0.2s ease;
 }
 
@@ -3710,7 +3720,7 @@ body:has(.select-float) .app-main {
 }
 .sheet-actions .primary,
 button.primary {
-  background: var(--accent);
+  background: var(--accent-fill);
   border-color: var(--accent);
   color: #fff;
 }
@@ -4379,7 +4389,7 @@ button.primary {
   display: inline-flex;
   align-items: center;
   gap: 0.15rem;
-  background: var(--accent);
+  background: var(--accent-fill);
   color: #fff;
   vertical-align: middle;
 }
@@ -4456,7 +4466,7 @@ button.primary {
 .tile-badge.badge-hit {
   display: inline-flex;
   align-items: center;
-  background: var(--accent);
+  background: var(--accent-fill);
   color: #fff;
   vertical-align: middle;
 }
@@ -4578,7 +4588,7 @@ button.primary {
 }
 .badge.badge-new,
 .tile-badge.badge-new {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-text);
 }
 
@@ -4936,7 +4946,7 @@ button.primary {
      rather than as a gap someone forgot to fill. */
   min-height: 2px;
   border-radius: 4px 4px 0 0;
-  background: linear-gradient(180deg, var(--accent), rgba(124, 108, 255, 0.45));
+  background: linear-gradient(180deg, var(--accent-fill), rgba(106, 90, 240, 0.45));
 }
 .curve-tick {
   font-size: 0.75rem;
@@ -5122,7 +5132,7 @@ button.primary {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--accent-fill);
 }
 .source-row {
   display: flex;
@@ -5301,7 +5311,7 @@ button.primary {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), rgba(124, 108, 255, 0.45));
+  background: linear-gradient(90deg, var(--accent-fill), rgba(106, 90, 240, 0.45));
 }
 .mull-size-p {
   flex: none;
@@ -5370,7 +5380,7 @@ button.primary {
 /* The one column the card is judged on. Everything else in the chart is
    context, so the reading eye needs somewhere to land. */
 .sim-bar-curve {
-  background: linear-gradient(180deg, var(--accent), rgba(124, 108, 255, 0.7));
+  background: linear-gradient(180deg, var(--accent-fill), rgba(106, 90, 240, 0.7));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .sim-tick-curve {
@@ -5428,11 +5438,11 @@ button.primary {
   color: var(--text-dim);
 }
 .tile-badge.badge-illegal {
-  background: var(--danger);
+  background: var(--danger-fill);
   color: #fff;
 }
 .badge-illegal-chip {
-  background: var(--danger);
+  background: var(--danger-fill);
   color: #fff;
 }
 
@@ -5781,12 +5791,12 @@ button.chip[aria-pressed='true'] {
 }
 /* A card a notification matched on — stronger than the plain match badge. */
 .badge.badge-match {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-text);
   font-weight: 600;
 }
 .tile-badge.badge-match {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-text);
 }
 
@@ -5802,7 +5812,7 @@ button.chip[aria-pressed='true'] {
    up in certainty the double checkmark makes for the collection. */
 .badge.own-trade.badge-exact,
 .tile-badge.own-trade.badge-exact {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-text);
 }
 .badge.badge-wish.badge-exact,
@@ -6050,7 +6060,7 @@ a.seg {
 }
 .account-form .primary,
 .confirm-row .primary {
-  background: var(--accent);
+  background: var(--accent-fill);
   border-color: var(--accent);
   color: #fff;
 }
@@ -6245,7 +6255,7 @@ a.seg {
   flex-shrink: 0;
 }
 .scan-cam-btn-on {
-  background: var(--accent);
+  background: var(--accent-fill);
 }
 .scan-cam-target {
   color: #fff;
@@ -6384,7 +6394,7 @@ a.seg {
   min-width: 18px;
   height: 18px;
   border-radius: 9px;
-  background: var(--accent);
+  background: var(--accent-fill);
   color: #fff;
   font-size: 0.7rem;
   line-height: 18px;
@@ -6399,7 +6409,7 @@ a.seg {
   font-size: 0.8rem;
 }
 .scan-cam-chip-on {
-  background: var(--accent);
+  background: var(--accent-fill);
   border-color: var(--accent);
 }
 .scan-cam-chip svg {
@@ -6627,7 +6637,7 @@ a.seg {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .scan-tray-hold-new span {
-  background: var(--accent);
+  background: var(--accent-fill);
 }
 .scan-pick-new {
   flex-shrink: 0;
@@ -6755,7 +6765,7 @@ a.seg {
   min-width: 20px;
   height: 20px;
   border-radius: 10px;
-  background: var(--accent);
+  background: var(--accent-fill);
   color: #fff;
   font-size: 0.75rem;
   font-weight: 700;
@@ -7572,7 +7582,7 @@ a.seg {
   line-height: 1.2;
 }
 .tile-place.badge-place-over {
-  background: var(--danger);
+  background: var(--danger-fill);
   color: #fff;
 }
 
@@ -8886,7 +8896,7 @@ a.seg {
 /* The two lenses take the trajectory chart's two series colours, so a bar here
    reads as a slice of the line it came from rather than as a new palette. */
 .contrib-mana {
-  background: linear-gradient(90deg, var(--accent), rgba(124, 108, 255, 0.45));
+  background: linear-gradient(90deg, var(--accent-fill), rgba(106, 90, 240, 0.45));
 }
 .contrib-cards {
   background: linear-gradient(90deg, #c98230, rgba(201, 130, 48, 0.45));
@@ -9412,4 +9422,81 @@ a.seg {
   color: var(--text);
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+/* ---- Tap targets ----
+   The floor for anything a thumb has to hit, kept here so it wins over the
+   per-component padding above. --tap (44) for sheet controls and rows; --tap-sm
+   (40) for the list toolbar and chips, so a row of mixed controls shares one
+   height and their bottoms line up. Inline text links are exempt. */
+.options-trigger,
+.select-toggle,
+.sort-btn,
+.stack-toggle {
+  min-height: var(--tap-sm);
+  min-width: var(--tap-sm);
+  justify-content: center;
+}
+/* The toggle's own border wraps the buttons, so they take the 2px back. */
+.view-toggle button {
+  min-height: calc(var(--tap-sm) - 2px);
+  min-width: calc(var(--tap-sm) - 2px);
+}
+.sheet-close,
+.header-account,
+.deck-emblem-btn,
+.qty-stepper button {
+  min-height: var(--tap);
+  min-width: var(--tap);
+}
+.qty-stepper input {
+  min-height: var(--tap);
+  min-width: 2.5rem;
+}
+button.ghost.icon-only {
+  min-height: var(--tap-sm);
+  min-width: var(--tap-sm);
+}
+button.chip,
+a.chip,
+label.chip,
+.opt-chip,
+.analysis-chip,
+.seg,
+.place-pill,
+.version-box,
+.search-history-foot button,
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-sm);
+}
+.search-input,
+.header-value-button,
+.deck-name-input,
+.page select,
+.page input[type='number'] {
+  min-height: var(--tap-sm);
+}
+label.chip select,
+.page input[type='file'] {
+  min-height: calc(var(--tap-sm) - 4px);
+}
+.sheet-edition,
+.sheet-traits-trigger,
+.history-toggle,
+.folder-item-open,
+.agree-row,
+.banner-remember,
+.deck-all-toggle,
+.deck-filter-toggle,
+.scan-cam-offer-remember {
+  min-height: var(--tap);
+}
+.seg,
+.search-history-forget {
+  justify-content: center;
+}
+.search-history-forget {
+  min-width: var(--tap);
 }

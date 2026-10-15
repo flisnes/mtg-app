@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.12',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Easier to hit and easier to read: toolbar buttons, sheet close buttons, steppers and chips are bigger, and purple and red text and buttons have more contrast.',
+      },
+    ],
+  },
+  {
     version: '0.198.11',
     changes: [
       {
@@ -162,15 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: '"Newest normal printing" shows the plain card again for sets that print several versions of it, instead of the borderless chase copy. When a set only has variants, the lowest collector number wins.',
-      },
-    ],
-  },
-  {
-    version: '0.197.1',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Simulator Auras now wait for a creature of yours, go on it as they resolve and are lost with it. Equipment stays behind and moves on. The trace says which creature each one is on.',
       },
     ],
   },

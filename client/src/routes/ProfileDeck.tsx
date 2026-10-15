@@ -16,7 +16,7 @@ import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
 import { formatLabel } from '../deck/legality.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
-import { extraLands, GroupCountBadge, SortControls, groupCards, priceValue, releaseFields, sortCards, useCardSort } from '../components/CardSorting.js';
+import { extraLands, formatPrice, GroupCountBadge, NO_PRICE, SortControls, groupCards, priceValue, releaseFields, sortCards, useCardSort } from '../components/CardSorting.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { yearMark } from '../components/cardRows.js';
 import { Icon } from '../components/icons.js';
@@ -132,6 +132,9 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
           key: `${line.oracleId}-${line.scryfallId ?? ''}-${i}`,
           name: oracle?.name ?? '(unknown card)',
           image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+          // Same row as your own deck page: pips and price, not just a name.
+          mana: oracle?.manaCost,
+          price: formatPrice(printing, oracle) ?? NO_PRICE,
           count: line.quantity,
           ...(year ? { year } : {}),
           sub: printing ? (

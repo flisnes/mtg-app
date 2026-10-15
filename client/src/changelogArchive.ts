@@ -1,4 +1,4 @@
-// The older half of the changelog (0.190.0 down to 0.98.0), split out of
+// The older half of the changelog (0.198.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,19 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.198.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Foil prices are tracked day by day. A foil card\'s price chart and trend now follow the foil price instead of the plain one, and the collection value chart uses it too.',
+      },
+      {
+        kind: 'added',
+        text: 'Signed in, price charts can reach back years: "Since 2021" puts monthly prices from late 2021, spring 2023 and July 2025 in front of the daily line, where we have them.',
+      },
+    ],
+  },
   {
     version: '0.197.3',
     changes: [

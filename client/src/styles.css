@@ -2484,11 +2484,14 @@ body:has(.select-float) .app-main {
   flex-direction: column;
   gap: 0.5rem;
 }
+/* The tappable body is .result-open, which carries the padding; rows built
+   without one (import review, intake) set their own padding inline. */
 .result-row {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.5rem;
+  padding: 0;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -2555,16 +2558,72 @@ body:has(.select-float) .app-main {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* CardList line 1: the name truncates, the badges beside it never do. */
+.result-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.result-title .result-name {
+  min-width: 0;
+}
+.result-title .badge {
+  flex-shrink: 0;
+}
+/* CardList line 2: pips first, then set and copy details, running on to a
+   third line rather than cutting the set name. The 64px thumb sets the row
+   height anyway, so the third line costs no height. */
+.result-meta {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin-top: 0.1rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+.result-meta .result-mana {
+  margin-right: 0.35rem;
+  vertical-align: -0.15em;
+}
+.result-meta .result-sub {
+  display: inline;
+  white-space: normal;
+}
 .result-price {
   font-variant-numeric: tabular-nums;
   color: var(--text);
   font-size: 0.9rem;
   white-space: nowrap;
 }
-/* Mana pips in a list row: fixed to the right of the name, before the price. */
+.result-price.price-none,
+.stack-price.price-none {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+/* Right edge of a CardList row: price on top, the copy count under it. */
+.result-end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+.result-end-price {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.result-end .qty-pill {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+/* Mana pips in a list row: start of line 2, never squeezed. */
 .result-mana {
   flex-shrink: 0;
-  font-size: 0.85rem;
+  font-size: 0.72rem;
 }
 .rarity-dot {
   display: inline-block;
@@ -2595,10 +2654,6 @@ body:has(.select-float) .app-main {
 }
 
 /* ---- Search result row: tappable body + quick actions ---- */
-.result-row {
-  padding: 0;
-  overflow: hidden;
-}
 .result-open {
   display: flex;
   align-items: center;

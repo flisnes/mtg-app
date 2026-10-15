@@ -153,9 +153,13 @@ export function addToTotal(total: PriceTotal, qty: number, ...sources: PricedSou
   else total.usd += picked.amount * qty;
 }
 
+/** What a row shows when there is no price to show. CardViews renders it as
+ *  a muted "no price". */
+export const NO_PRICE = '—';
+
 /** Format a value total: one converted figure, or the raw buckets joined by "+". */
 export function formatTotal({ eur, usd }: PriceTotal): string {
-  if (eur <= 0 && usd <= 0) return '—';
+  if (eur <= 0 && usd <= 0) return NO_PRICE;
   const convertedEur = eur > 0 ? convertToDisplay(eur, 'EUR') : 0;
   const convertedUsd = usd > 0 ? convertToDisplay(usd, 'USD') : 0;
   if (convertedEur != null && convertedUsd != null) {

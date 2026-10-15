@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from './icons.js';
 import { ManaCost } from './ManaCost.js';
+import { NO_PRICE } from './cardSort.js';
 import { useCardCursorCtx } from './useCardCursor.js';
 
 // The one way cards are displayed anywhere in the app: a list of CardItems
@@ -287,41 +288,33 @@ export function CardList({
             ) : (
               <div className="result-thumb" aria-hidden />
             )}
+            {/* The name gets line 1 to itself and is the only thing the ellipsis
+                may cut: badges sit beside it, not inside it, and the pips go
+                down to line 2 where they used to squeeze the name to "Atrax…". */}
             <div className="result-main">
-              <div className="result-name">
-                {it.name}
-                {it.badge && (
-                  <span className={`badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
-                    {it.badge}
-                  </span>
-                )}
-                {it.place && (
-                  <span className={`badge ${it.place.cls ?? ''}`} title={it.place.title}>
-                    {it.place.node}
-                  </span>
-                )}
-                {it.special && (
-                  <span className={`badge ${it.special.cls ?? ''}`} title={it.special.title}>
-                    {it.special.node}
-                  </span>
-                )}
-                {it.lang && (
-                  <span className={`badge ${it.lang.cls ?? ''}`} title={it.lang.title}>
-                    {it.lang.node}
-                  </span>
-                )}
-                {it.year && (
-                  <span className="badge badge-year" title={it.year.title}>
-                    {it.year.node}
-                  </span>
-                )}
+              <div className="result-title">
+                <span className="result-name">{it.name}</span>
+                <RowBadges it={it} />
               </div>
-              {it.sub && <div className="result-sub">{it.sub}</div>}
+              {(it.mana || it.sub) && (
+                <div className="result-meta">
+                  {it.mana && <ManaCost cost={it.mana} className="result-mana" />}
+                  {it.sub && <span className="result-sub">{it.sub}</span>}
+                </div>
+              )}
             </div>
-            {it.mana && <ManaCost cost={it.mana} className="result-mana" />}
-            {it.trend && <TrendMark dir={it.trend} />}
-            {it.price && <div className="result-price">{it.price}</div>}
-            {it.count != null && it.count !== 1 && <div className="qty-pill">×{it.count}</div>}
+            {/* Price over count, one narrow column, so the name and set get the width. */}
+            {(it.trend || it.price || (it.count != null && it.count !== 1)) && (
+              <div className="result-end">
+                {(it.trend || it.price) && (
+                  <span className="result-end-price">
+                    {it.trend && <TrendMark dir={it.trend} />}
+                    {it.price && <PriceText price={it.price} className="result-price" />}
+                  </span>
+                )}
+                {it.count != null && it.count !== 1 && <span className="qty-pill">×{it.count}</span>}
+              </div>
+            )}
           </>
         );
         return (
@@ -379,6 +372,45 @@ export function StackedThumb({ images }: { images: (string | null)[] }) {
       )}
     </span>
   );
+}
+
+/** The per-copy marks beside a row's name (list) or along a stack's side line. */
+function RowBadges({ it }: { it: CardItem }) {
+  return (
+    <>
+      {it.badge && (
+        <span className={`badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
+          {it.badge}
+        </span>
+      )}
+      {it.place && (
+        <span className={`badge ${it.place.cls ?? ''}`} title={it.place.title}>
+          {it.place.node}
+        </span>
+      )}
+      {it.special && (
+        <span className={`badge ${it.special.cls ?? ''}`} title={it.special.title}>
+          {it.special.node}
+        </span>
+      )}
+      {it.lang && (
+        <span className={`badge ${it.lang.cls ?? ''}`} title={it.lang.title}>
+          {it.lang.node}
+        </span>
+      )}
+      {it.year && (
+        <span className="badge badge-year" title={it.year.title}>
+          {it.year.node}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** A row's price, or a muted "no price" where a bare dash used to leave you guessing. */
+function PriceText({ price, className }: { price: string; className: string }) {
+  if (price === NO_PRICE) return <span className={`${className} price-none`}>no price</span>;
+  return <span className={className}>{price}</span>;
 }
 
 /** Green rising / red falling chart glyph for cards that moved in price. */
@@ -444,30 +476,11 @@ export function CardStacks({
             </button>
             <div className="stack-side">
               <div className="stack-line">
-                {it.badge && (
-                  <span className={`badge ${it.badgeClass ?? ''}`} title={it.badgeTitle}>
-                    {it.badge}
-                  </span>
-                )}
-                {it.place && (
-                  <span className={`badge ${it.place.cls ?? ''}`} title={it.place.title}>
-                    {it.place.node}
-                  </span>
-                )}
-                {it.lang && (
-                  <span className={`badge ${it.lang.cls ?? ''}`} title={it.lang.title}>
-                    {it.lang.node}
-                  </span>
-                )}
-                {it.year && (
-                  <span className="badge badge-year" title={it.year.title}>
-                    {it.year.node}
-                  </span>
-                )}
+                <RowBadges it={it} />
                 {it.sub && <span className="stack-sub">{it.sub}</span>}
                 {it.count != null && it.count !== 1 && <span className="stack-qty">×{it.count}</span>}
                 {it.trend && <TrendMark dir={it.trend} />}
-                {it.price && <span className="stack-price">{it.price}</span>}
+                {it.price && <PriceText price={it.price} className="stack-price" />}
               </div>
               {open && (
                 <div className="stack-more">

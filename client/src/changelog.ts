@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.15',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'List rows give the card name the whole top line: mana costs move down beside the set, badges never get cut off, and unpriced cards say "no price".',
+      },
+    ],
+  },
+  {
     version: '0.198.14',
     changes: [
       {
@@ -158,19 +167,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: '"Find sealed products with this card" now lists the boosters you can open it from, and the boxes and bundles that hold them. A Wilds of Eldraine card in Set Boosters but not Draft says so.',
-      },
-    ],
-  },
-  {
-    version: '0.198.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Foil prices are tracked day by day. A foil card\'s price chart and trend now follow the foil price instead of the plain one, and the collection value chart uses it too.',
-      },
-      {
-        kind: 'added',
-        text: 'Signed in, price charts can reach back years: "Since 2021" puts monthly prices from late 2021, spring 2023 and July 2025 in front of the daily line, where we have them.',
       },
     ],
   },

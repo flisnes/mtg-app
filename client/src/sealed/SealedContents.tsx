@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { OracleCard, Priced, SealedProduct } from '@mtg/shared';
 import { CardSheet } from '../components/CardSheet.js';
-import { formatPrice, pricedForFinish } from '../components/CardSorting.js';
+import { NO_PRICE, formatPrice, pricedForFinish } from '../components/CardSorting.js';
 import type { CardItem } from '../components/CardViews.js';
 import { Icon } from '../components/icons.js';
 import { ResultsList } from '../components/ResultsList.js';
@@ -42,7 +42,7 @@ function contentItem(r: OpenRow, copies: number, highlight: boolean, onOpen: () 
         {finishTag(r)}
       </>
     ),
-    price: formatPrice(pricedForFinish(r.printing, r.finish), r.oracle) ?? '—',
+    price: formatPrice(pricedForFinish(r.printing, r.finish), r.oracle) ?? NO_PRICE,
     onClick: onOpen,
   };
 }

@@ -5,7 +5,7 @@ import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
 import { CardItems, ViewToggle, useGridColumns, useViewMode, type CardItem } from './CardViews.js';
 import { usePagedLimit } from './usePagedLimit.js';
-import { SortControls, formatPrice, useCardSort } from './CardSorting.js';
+import { NO_PRICE, SortControls, formatPrice, useCardSort } from './CardSorting.js';
 import { yearMark } from './cardRows.js';
 import type { MultiSelect } from './useMultiSelect.js';
 import { SelectToggle } from './SelectToggle.js';
@@ -269,7 +269,7 @@ export function CardSearchView({
                   </>
                 ),
                 // The chosen printing's own price, not the representative one's.
-                price: formatPrice(printing, card) ?? '—',
+                price: formatPrice(printing, card) ?? NO_PRICE,
                 onClick: () => onCardClick(card, printing),
                 actions:
                   !actionsFor || (listOnlyActions && view === 'grid') ? undefined : actionsFor(card, printing),

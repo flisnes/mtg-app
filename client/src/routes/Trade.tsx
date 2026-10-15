@@ -13,7 +13,7 @@ import { useCardMaps } from '../db/useCardMaps.js';
 import type { SearchFilters } from '../cardDb/search.js';
 import { CardSheet, type SessionCardValues } from '../components/CardSheet.js';
 import { CardSearchView } from '../components/CardSearchView.js';
-import { formatPrice, pricedForFinish } from '../components/CardSorting.js';
+import { NO_PRICE, formatPrice, pricedForFinish } from '../components/CardSorting.js';
 import { fmtEur } from '../price/rates.js';
 import { CardItems, CardList, ViewToggle, useTradeViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
 import { CodeJoinForm } from '../components/CodeJoinForm.js';
@@ -1008,7 +1008,7 @@ function OfferPanel({
                     <span className="stack-setname">{printing.setName}</span>
                   </>
                 ) : undefined,
-                price: price ?? '—',
+                price: price ?? NO_PRICE,
                 onClick: oracle
                   ? () => (editable ? onEdit(side, l, oracle) : onInfo(oracle, l.scryfallId, { side }))
                   : undefined,

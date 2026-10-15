@@ -11,7 +11,7 @@ import { ownedBadge } from './OwnedBadge.js';
 import { placementBadge } from './PlacementBadge.js';
 import { langMark } from './LangFlag.js';
 import { specialMark } from './SpecialConditions.js';
-import { formatPrice, formatTotal, pricedForFinish } from './CardSorting.js';
+import { NO_PRICE, formatPrice, formatTotal, pricedForFinish } from './CardSorting.js';
 import { stackPlacement, type EntryStack } from './stackPrintings.js';
 
 // One place that turns an owned entry (collection or wishlist) into a CardItem,
@@ -94,7 +94,7 @@ export function collectionCardItem(
         {r.entry.special?.length ? ` · ${specialLabel(r.entry.special)}` : ''}
       </>
     ),
-    price: formatPrice(pricedForFinish(r.printing, r.entry.finish), r.oracle) ?? '—',
+    price: formatPrice(pricedForFinish(r.printing, r.entry.finish), r.oracle) ?? NO_PRICE,
     trend: opts.moverFlags?.get(r.entry.scryfallId),
     onClick: opts.onClick,
   };
@@ -144,13 +144,16 @@ export function stackCardItem(
       ) : undefined,
     badgeClass: 'badge-ft',
     badgeTitle: s.quantityForTrade > 0 ? `${s.quantityForTrade} for trade` : undefined,
+    // "3 editions" leads: it's what makes this row a stack, and at the end it was
+    // the part the ellipsis ate.
     sub: (
       <>
-        {s.printing && <SetSymbol set={s.printing.set} className="sub-set-symbol" title={s.printing.setName} />}
-        {s.printing ? `${s.printing.setName} · #${s.printing.collectorNumber} · ` : ''}
         <span className="stack-kinds" title={`${s.quantity} copies across ${kinds}; tap to see each`}>
           {kinds}
         </span>
+        {s.printing && ' · '}
+        {s.printing && <SetSymbol set={s.printing.set} className="sub-set-symbol" title={s.printing.setName} />}
+        {s.printing ? `${s.printing.setName} · #${s.printing.collectorNumber}` : ''}
       </>
     ),
     // The pile's worth, not one copy's: ten Bolts is a number about ten Bolts.
@@ -270,7 +273,7 @@ export function deckCardItem(
           </>
         )
       ),
-    price: formatPrice(pricedForFinish(r.printing, r.entry.finish ?? 'nonfoil'), r.oracle) ?? '—',
+    price: formatPrice(pricedForFinish(r.printing, r.entry.finish ?? 'nonfoil'), r.oracle) ?? NO_PRICE,
     onClick: opts.onClick,
   };
 }

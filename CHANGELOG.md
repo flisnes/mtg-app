@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.15
+
+- **Changed: list rows put the card name first.** In list view the name now gets the whole top line, and the mana cost moves down beside the set, so "Atraxa, Grand Unifier" is no longer "Atraxa, Gr..." next to five pips. The for-trade count, filed and language badges sit beside the name instead of inside it, so they never get cut off. Set and copy details run onto a third line instead of stopping mid-word, the copy count sits under the price, and a card with no price says "no price" instead of a lone dash. Stacked rows lead with "3 editions", and someone else's shared deck now shows mana costs and prices like your own. Reads cleaner than a Brainstorm on turn one.
+
 ## 0.198.14
 
 - **Changed: one vocabulary for counts, values and icons.** Every list now counts the same way: "176 cards · 70 unique" on Collection, Tradelist, Wishlist and Sealed (the second half drops out when every line is a single copy), and the deck list says "60 cards · 15 side" instead of "60 / 15". Value headers just say "Value", and "Owned value" only shows up where the deck is missing cards. The collection's "incl. N sealed" only counts boxes that actually have a price. Dates and big numbers on About and in history follow the same region as your currency, so no more "02/10/2026" beside "0,00 €". A solo trade no longer asks you to pick from a tradelist that doesn't exist, and an empty trade no longer glows green as "balanced". The list/grid/stacks toggle, back links and menu arrows are drawn icons instead of text symbols, Stack printings has its own layers icon instead of the copy glyph filed cards wear, Trade history has a receipt, and Collection history is a clock everywhere. Em dashes have been exiled from the UI text like a Swords to Plowshares to the face.

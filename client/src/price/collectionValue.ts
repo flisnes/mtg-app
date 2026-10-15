@@ -299,11 +299,16 @@ export function useCollectionValueSeries(): CollectionValueSeries | null | undef
  */
 export function useContainerValueSeries(deckId: string): CollectionValueSeries | null | undefined {
   return useLiveQuery(async () => {
-    const [cards, events, acquisitions] = await Promise.all([
+    const [cards, events] = await Promise.all([
       db.deckCards.where('deckId').equals(deckId).toArray(),
       db.events.where('deckId').equals(deckId).toArray(),
-      db.events.where('kind').equals('collection.add').toArray(),
     ]);
+    // Only this container's cards need a cost basis: read their oracles' logs
+    // (indexed) rather than every collection.add ever made.
+    const oracleIds = [...new Set([...cards.map((c) => c.oracleId), ...events.map((e) => e.oracleId)])];
+    const acquisitions = (await db.events.where('oracleId').anyOf(oracleIds).toArray()).filter(
+      (e) => e.kind === 'collection.add',
+    );
     const entries = cards
       .filter((c) => c.scryfallId && !c.anyBasic && c.board !== 'token')
       .map((c) => ({ scryfallId: c.scryfallId!, finish: c.finish ?? 'nonfoil', quantity: c.quantity }));

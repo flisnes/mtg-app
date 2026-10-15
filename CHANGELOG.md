@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.3
+
+- **Changed: price bookkeeping does its work once a day.** Every launch used to re-read your whole collection and all its price histories just to find out today's prices were already recorded. Now a second launch the same day skips that, and the cleanup of old histories runs weekly. A card added since the morning still gets today's price on the next launch.
+- **Changed: opening a card while signed in is lighter.** The server's price history is fetched once per card per day, and saved only when it adds something, so reopening a card no longer makes the Collection behind it recount every price flag. The collection total no longer loads the sealed product catalog just to price your boxes, Price movers no longer re-reads everything when you change the time window, and a deck's value chart reads only its own cards' history.
+
 ## 0.198.2
 
 - **Changed: launches faster, less data on every open.** Opening the app used to read the whole card database before you typed anything, and asked the server for the same update file five to seven times. Now it asks once, and an unchanged file comes back as a tiny "not modified". Search reads the card data the first time you search, and `set:` and `otag:` load their lists when you start typing one. The daily price update no longer throws away the search data it never changed.

@@ -63,16 +63,68 @@ async function fetchServerHistory(scryfallId: string): Promise<PriceHistory | nu
   }
 }
 
+// Printings whose server row was already merged in today, as the merge itself
+// (so a second sheet opening mid-request shares it). The server archive moves
+// once a day, so a second look at the same card skips the round trip, and the
+// write that would re-fire every live query over priceHistories.
+const mergedToday = new Map<string, { day: string; settled: boolean; merged: Promise<PriceHistory | undefined> }>();
+
+const sameLane = (a: (number | null)[] | undefined, b: (number | null)[] | undefined) =>
+  a === b || (!!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]));
+
+/** True when `b` holds exactly the readings `a` does. */
+function sameHistory(a: PriceHistory, b: PriceHistory): boolean {
+  return (
+    a.startDay === b.startDay &&
+    (['eur', 'usd', 'eurFoil', 'usdFoil'] as const).every((k) => sameLane(a[k], b[k])) &&
+    a.monthly?.startMonth === b.monthly?.startMonth &&
+    (['eur', 'usd', 'eurFoil', 'usdFoil'] as const).every((k) => sameLane(a.monthly?.[k], b.monthly?.[k]))
+  );
+}
+
 /**
  * Local + server history for a printing, merged (device readings win ties).
- * When server data arrives, the merged row is cached back into Dexie for
+ * When server data adds anything, the merged row is cached back into Dexie for
  * offline use — for untracked cards the next tracking sweep drops it again,
- * which is fine: it re-fetches whenever the card is viewed online.
+ * which is fine: it re-fetches whenever the card is viewed online. Pass the
+ * local row when the caller already read it.
  */
-export async function getMergedPriceHistory(scryfallId: string): Promise<PriceHistory | undefined> {
-  const [local, server] = await Promise.all([db.priceHistories.get(scryfallId), fetchServerHistory(scryfallId)]);
-  if (!server) return local;
+export async function getMergedPriceHistory(
+  scryfallId: string,
+  localRead?: Promise<PriceHistory | undefined>,
+): Promise<PriceHistory | undefined> {
+  const day = todayKey();
+  const done = mergedToday.get(scryfallId);
+  if (done?.day === day) {
+    // Still in flight: share it. Settled: the merged row is in Dexie already.
+    if (!done.settled) return done.merged;
+    return localRead ?? db.priceHistories.get(scryfallId);
+  }
+  const localP = localRead ?? db.priceHistories.get(scryfallId);
+  const entry = {
+    day,
+    settled: false,
+    merged: mergeServerHistory(scryfallId, localP).catch(() => {
+      mergedToday.delete(scryfallId);
+      return localP;
+    }),
+  };
+  mergedToday.set(scryfallId, entry);
+  void entry.merged.then(() => (entry.settled = true));
+  return entry.merged;
+}
+
+async function mergeServerHistory(
+  scryfallId: string,
+  localRead: Promise<PriceHistory | undefined>,
+): Promise<PriceHistory | undefined> {
+  const [local, server] = await Promise.all([localRead, fetchServerHistory(scryfallId)]);
+  // Nothing from the server (offline, signed out): try again on the next look.
+  if (!server) {
+    mergedToday.delete(scryfallId);
+    return local;
+  }
   const merged = local ? mergeHistories(server, local) : server;
-  await db.priceHistories.put(merged);
+  if (!local || !sameHistory(local, merged)) await db.priceHistories.put(merged);
   return merged;
 }

@@ -16,6 +16,8 @@ import { db } from './schema.js';
 //   accountLastAutoBackupAt — backup bookkeeping (account/session.ts)
 //   lastSeenAppVersion — app version the "What's changed" popup has caught the
 //     device up to (components/WhatsNewModal.tsx)
+//   lastPriceRecordDay / lastPriceSweepDay — daily price recording and the
+//     weekly stale-history sweep (price/tracking.ts)
 
 export async function getSetting<T = unknown>(key: string): Promise<T | undefined> {
   const row = await db.settings.get(key);

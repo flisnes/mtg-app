@@ -67,12 +67,28 @@ async function fetchVerified(meta: CardDbArtifactMeta): Promise<string> {
   return text;
 }
 
-async function getCatalog(): Promise<SealedStoreRow | undefined> {
-  return (await db.sealed.get('current')) as SealedStoreRow | undefined;
+// The catalog row is multi-megabyte and changes only when its hash moves, so
+// it's read from IndexedDB once per session and the copy reused until a put.
+let catalogRead: Promise<SealedStoreRow | undefined> | null = null;
+
+function getCatalog(): Promise<SealedStoreRow | undefined> {
+  catalogRead ??= (db.sealed.get('current') as Promise<SealedStoreRow | undefined>).catch((e: unknown) => {
+    catalogRead = null;
+    throw e;
+  });
+  return catalogRead;
 }
 
 async function getPricesRow(): Promise<SealedPricesRow | undefined> {
   return (await db.sealed.get('prices')) as SealedPricesRow | undefined;
+}
+
+/**
+ * The price map as cached, no network. Safe inside a live query: the startup
+ * reading (price/sealedTracking.ts) refreshes the row, and that put re-runs it.
+ */
+export async function getCachedSealedPrices(): Promise<SealedPriceMap> {
+  return (await getPricesRow())?.prices ?? {};
 }
 
 async function getBoostersRow(): Promise<SealedBoostersRow | undefined> {
@@ -155,6 +171,7 @@ export async function loadSealedProducts(): Promise<SealedLoad> {
         const text = await fetchVerified(meta);
         const parsed = JSON.parse(text) as SealedProduct[];
         await db.sealed.put({ key: 'current', sha256: meta.sha256, count: parsed.length, products: parsed });
+        catalogRead = null;
         products = parsed;
       }
       if (!meta && !installed) return { kind: 'unavailable' };

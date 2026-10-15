@@ -1,4 +1,4 @@
-// The older half of the changelog (0.189.1 down to 0.98.0), split out of
+// The older half of the changelog (0.190.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,32 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.190.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The deck simulator reads lifelink, infect and toxic off your cards, tracks your life and the opponent’s poison, and card rules get a "When you gain life" trigger and a poison step.',
+      },
+      {
+        kind: 'added',
+        text: 'Cost reduction: a standing rule can make the spells you name cost less (Medallions, Electromancer, Animar), and printed affinity is read off the card.',
+      },
+      {
+        kind: 'added',
+        text: 'Smaller rule grammar: prowess-style "this card" pumps, +X/+0, counters on each creature, "what woke it" as an amount, conditions on standing effects, a beginning-of-combat trigger, attacking tokens and "only once each game".',
+      },
+    ],
+  },
+  {
+    version: '0.189.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'You can no longer join your own trade from a second device or tab. Trade solo is still there for recording a trade with someone who isn’t on the app.',
+      },
+    ],
+  },
   {
     version: '0.189.1',
     changes: [

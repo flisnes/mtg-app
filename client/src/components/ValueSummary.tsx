@@ -6,7 +6,7 @@ import { containerKind } from '../deck/containers.js';
 import { getOracleCardsByIds, getOwnedCountsFor, getPrintingsByIds } from '../db/queries.js';
 import { useJoinedCollection } from '../db/collectionSnapshot.js';
 import { addToTotal, formatTotal, pricedForFinish, type PriceTotal } from './CardSorting.js';
-import { loadSealedProducts } from '../sealed/store.js';
+import { getCachedSealedPrices } from '../sealed/store.js';
 import { sealedPriceOf } from '../sealed/product.js';
 
 // Compact "total value" readout for page headers. It sits in the empty space
@@ -79,8 +79,7 @@ export function useSealedValue(): { total: PriceTotal; unpriced: number; boxes: 
     const total: PriceTotal = { eur: 0, usd: 0 };
     const items = await db.sealedItems.toArray();
     if (items.length === 0) return { total, unpriced: 0, boxes: 0 };
-    const load = await loadSealedProducts();
-    const prices = load.kind === 'ready' ? load.prices : {};
+    const prices = await getCachedSealedPrices();
     let unpriced = 0;
     let boxes = 0;
     for (const item of items) {

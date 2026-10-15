@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { CollectionEntry } from '@mtg/shared';
+import type { CollectionEntry, WishlistEntry } from '@mtg/shared';
 import { db } from './schema.js';
 import { joinCollectionEntries, type JoinedEntry } from './queries.js';
 import { buildOwnershipIndex, type OwnershipIndex } from './useOwnership.js';
@@ -21,6 +21,8 @@ import { buildPlacementIndex, type PlacementIndex } from './usePlacements.js';
 interface CollectionSnapshot {
   /** Every collection row, straight off the table. */
   entries: CollectionEntry[] | undefined;
+  /** Every wishlist row, straight off the table. */
+  wishes: WishlistEntry[] | undefined;
   /** The same rows joined with card + printing display data (the expensive one). */
   joined: JoinedEntry[] | undefined;
   ownership: OwnershipIndex | undefined;
@@ -31,6 +33,7 @@ interface CollectionSnapshot {
 
 const EMPTY: CollectionSnapshot = {
   entries: undefined,
+  wishes: undefined,
   joined: undefined,
   ownership: undefined,
   placements: undefined,
@@ -64,12 +67,13 @@ export function CollectionSnapshotProvider({ children }: { children: ReactNode }
   const value = useMemo<CollectionSnapshot>(
     () => ({
       entries,
+      wishes,
       joined,
       ownership,
       placements,
       conflictCount: placements?.conflicts.length ?? 0,
     }),
-    [entries, joined, ownership, placements],
+    [entries, wishes, joined, ownership, placements],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

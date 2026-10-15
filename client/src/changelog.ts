@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.3',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Price tracking does its work once a day instead of on every launch, and reopening a card while signed in no longer refetches its price history.',
+      },
+    ],
+  },
+  {
     version: '0.198.2',
     changes: [
       {
@@ -177,32 +186,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Board-scaling mana (Gaea\'s Cradle, Priest of Titania), chosen-color rocks and Mahadi\'s Treasures now read closer to the card, and cards that tax you too (Thalia, Rule of Law) are flagged on the Model tab.',
-      },
-    ],
-  },
-  {
-    version: '0.190.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'The deck simulator reads lifelink, infect and toxic off your cards, tracks your life and the opponent’s poison, and card rules get a "When you gain life" trigger and a poison step.',
-      },
-      {
-        kind: 'added',
-        text: 'Cost reduction: a standing rule can make the spells you name cost less (Medallions, Electromancer, Animar), and printed affinity is read off the card.',
-      },
-      {
-        kind: 'added',
-        text: 'Smaller rule grammar: prowess-style "this card" pumps, +X/+0, counters on each creature, "what woke it" as an amount, conditions on standing effects, a beginning-of-combat trigger, attacking tokens and "only once each game".',
-      },
-    ],
-  },
-  {
-    version: '0.189.2',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'You can no longer join your own trade from a second device or tab. Trade solo is still there for recording a trade with someone who isn’t on the app.',
       },
     ],
   },

@@ -577,11 +577,12 @@ export function CardSheet(props: CardSheetProps) {
   useEffect(() => {
     let live = true;
     let merged = false;
-    void getPriceHistory(shownId).then((h) => {
+    const local = getPriceHistory(shownId);
+    void local.then((h) => {
       if (!live || merged) return;
       setPriceHistory(h ?? null);
     });
-    void getMergedPriceHistory(shownId).then((h) => {
+    void getMergedPriceHistory(shownId, local).then((h) => {
       if (!live) return;
       merged = true;
       setPriceHistory(h ?? null);

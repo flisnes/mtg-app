@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { forceUpdate, initPwa } from './pwa.js';
 import { advertisesUpdate } from './appUpdate.js';
@@ -12,7 +12,7 @@ import { UpdatePrompt } from './components/UpdatePrompt.js';
 import { useWhatsNew, WhatsNewModal } from './components/WhatsNewModal.js';
 import { AppHotkeys } from './components/AppHotkeys.js';
 import { GlobalSearchBar, GlobalSearchProvider } from './components/GlobalSearch.js';
-import { CollectionSnapshotProvider } from './db/collectionSnapshot.js';
+import { CollectionSnapshotProvider, useCollectionSnapshot } from './db/collectionSnapshot.js';
 import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
 import { Tradelist } from './routes/Tradelist.js';
@@ -73,9 +73,8 @@ export function App() {
     // Everything below reads the same IndexedDB the first screen is querying,
     // so it waits for the browser to go idle — see util/afterPaint.ts.
     afterPaint(() => {
-      // Record today's price for every card in the collection (deduped per day),
-      // and the same for every unopened product on the sealed shelf.
-      void recordCollectionPrices();
+      // Record today's price for every unopened product on the sealed shelf
+      // (the cards' half waits on the snapshot: DailyPriceRecorder below).
       void recordSealedPrices();
       // Top up today's exchange rates if the display currency needs any (no-op
       // when prices are shown in the currency Scryfall already quotes).
@@ -118,10 +117,27 @@ export function App() {
       <GlobalSearchProvider>
         <CollectionSnapshotProvider>
           <AppShell />
+          <DailyPriceRecorder />
         </CollectionSnapshotProvider>
       </GlobalSearchProvider>
     </ToastProvider>
   );
+}
+
+/**
+ * Record today's price for every card in the collection and on the wishlist,
+ * once the snapshot has read those tables (so the recorder doesn't read them
+ * again). Once per launch; the recorder itself skips a day already done.
+ */
+function DailyPriceRecorder() {
+  const { entries, wishes } = useCollectionSnapshot();
+  const ran = useRef(false);
+  useEffect(() => {
+    if (ran.current || !entries || !wishes) return;
+    ran.current = true;
+    afterPaint(() => void recordCollectionPrices(entries, wishes));
+  }, [entries, wishes]);
+  return null;
 }
 
 function AppShell() {

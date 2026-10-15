@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { forceUpdate, initPwa } from './pwa.js';
 import { advertisesUpdate } from './appUpdate.js';
 import { onManifest } from './cardDb/manifest.js';
@@ -57,9 +57,10 @@ const DeckAnalysisPage = lazy(() =>
   import('./routes/DeckAnalysisPage.js').then((m) => ({ default: m.DeckAnalysisPage })),
 );
 import { Icon, type IconName } from './components/icons.js';
+import { tabFor, type Tab } from './nav.js';
 
-const PRIMARY_NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
-  { to: '/', label: 'Collection', icon: 'collection', end: true },
+const PRIMARY_NAV: { to: Tab; label: string; icon: IconName }[] = [
+  { to: '/', label: 'Collection', icon: 'collection' },
   { to: '/decks', label: 'Decks', icon: 'decks' },
   { to: '/trade', label: 'Trade', icon: 'trade' },
   { to: '/more', label: 'More', icon: 'more' },
@@ -146,6 +147,7 @@ function AppShell() {
   const [updating, setUpdating] = useState(false);
   const [offlineReady, setOfflineReady] = useState(false);
   const toast = useToast();
+  const activeTab = tabFor(useLocation().pathname);
   const {
     prompt: dataPrompt,
     downloading: updatingData,
@@ -285,17 +287,17 @@ function AppShell() {
 
       <nav className="tab-bar" aria-label="Primary">
         {PRIMARY_NAV.map((item) => (
-          <NavLink
+          <Link
             key={item.to}
             to={item.to}
-            end={item.end}
-            className={({ isActive }) => (isActive ? 'tab tab-active' : 'tab')}
+            className={item.to === activeTab ? 'tab tab-active' : 'tab'}
+            aria-current={item.to === activeTab ? 'page' : undefined}
           >
             <span className="tab-icon" aria-hidden>
               <Icon name={item.icon} size={22} />
             </span>
             <span className="tab-label">{item.label}</span>
-          </NavLink>
+          </Link>
         ))}
       </nav>
     </div>

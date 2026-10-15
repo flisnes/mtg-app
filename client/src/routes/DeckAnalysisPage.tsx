@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds } from '../db/queries.js';
@@ -9,7 +9,6 @@ import type { FilingCopy } from '../deck/filing.js';
 import type { ManaFix } from '../deck/manaFixes.js';
 import { deckManaStats } from '../deck/manaStats.js';
 import { useToast } from '../components/Toast.js';
-import { Icon } from '../components/icons.js';
 import { ANALYSIS_TABS, DeckAnalysis, type AnalysisTab } from '../components/DeckAnalysis.js';
 import { Page } from './Page.js';
 
@@ -79,11 +78,7 @@ export function DeckAnalysisPage() {
   }
 
   return (
-    <Page title={data.deck.name} meta="Deck analysis">
-      <Link to={`/decks/${id}`} className="behavior-back">
-        <Icon name="chevronLeft" />
-        <span>Back to the deck</span>
-      </Link>
+    <Page title={data.deck.name} meta="Deck analysis" back={{ to: `/decks/${id}`, label: 'Deck' }}>
       <DeckAnalysis
         key={id}
         stats={stats}

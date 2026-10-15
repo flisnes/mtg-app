@@ -1,4 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
+import { BackLink } from '../components/BackLink.js';
+import { backFor, type BackTarget } from '../nav.js';
 
 // Shared page scaffold and empty-state placeholder.
 
@@ -30,6 +33,7 @@ export function Page({
   aside,
   children,
   fill,
+  back,
 }: {
   title: string;
   subtitle?: string;
@@ -47,11 +51,17 @@ export function Page({
    * independently-scrolling columns).
    */
   fill?: boolean;
+  /** Back link above the title. Defaults to the route's parent (nav.ts), so
+   *  every More destination gets "‹ More" without asking; false for none. */
+  back?: BackTarget | false;
 }) {
   const [pushed, setPushed] = useState('');
   const metaLine = meta || pushed;
+  const { pathname } = useLocation();
+  const backTo = back === false ? undefined : (back ?? backFor(pathname));
   return (
     <section className={fill ? 'page page-fill' : 'page'}>
+      {backTo && <BackLink to={backTo.to} label={backTo.label} />}
       <header className="page-header">
         <div className="page-header-text">
           <h1>{title}</h1>

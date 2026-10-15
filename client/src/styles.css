@@ -909,6 +909,25 @@ button.danger-outline {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
+/* The Keyboard shortcuts row is a button: same look as the Link rows. On a
+   touch-only device it's gone, so the row above it closes the list. */
+.menu-list button.menu-item {
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  font: inherit;
+}
+@media (hover: none) {
+  .menu-list li.menu-shortcuts {
+    display: none;
+  }
+  .menu-list li:nth-last-child(2) .menu-item {
+    border-bottom: none;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+  }
+}
 /* Rounded corners used to come from `.menu-list { overflow: hidden }`, which
    also clipped anything that legitimately overflows a row — an OptionsMenu
    popup opened from the first (or only) row in a short list had nowhere to
@@ -4663,6 +4682,16 @@ button.primary {
   color: var(--accent);
   padding: 0.4rem 0;
   font-size: 1rem;
+}
+/* "‹ More", "‹ Decks": the way back up from a sub-page (components/BackLink). */
+.back-link {
+  display: inline-block;
+  align-self: flex-start;
+  text-decoration: none;
+  cursor: pointer;
+}
+.page > .back-link {
+  margin-bottom: 0.25rem;
 }
 .deck-name-input {
   width: 100%;
@@ -8437,7 +8466,6 @@ a.seg {
 .behavior-fold[open] > summary {
   margin-bottom: 0.4rem;
 }
-/* Also the analysis page's link back to its deck, which is an <a>. */
 .behavior-back {
   text-decoration: none;
   display: inline-flex;

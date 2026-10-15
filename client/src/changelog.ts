@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.6',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Every screen now lights up its tab, and screens off More have a "‹ More" link back.',
+      },
+    ],
+  },
+  {
     version: '0.198.5',
     changes: [
       {
@@ -170,23 +179,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: '"As an additional cost, sacrifice a creature" is a real cost now, and a card rule can exile cards "playable this turn" for red\'s impulse draw. Light Up the Stage and friends play that way instead of as a draw.',
-      },
-    ],
-  },
-  {
-    version: '0.192.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'A Plan tab on the deck analysis page: write goals like "four lands and a creature on the battlefield by turn 4" and the simulator counts how often its games get there. Searches in your card rules fetch what the plan is missing first.',
-      },
-      {
-        kind: 'added',
-        text: 'The Bracket tab reads the clock: how often a goldfish has one opponent dead by each turn, and the bracket that speed reads as.',
-      },
-      {
-        kind: 'added',
-        text: 'A card rule can look at the top N cards instead of searching the whole library (Muxus, Gishath), with the rest going to the bottom or the graveyard.',
       },
     ],
   },

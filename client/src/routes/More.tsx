@@ -60,10 +60,11 @@ export function More() {
             </Link>
           </li>
         ))}
-        <li>
+        {/* Only where there's a keyboard to press them on. */}
+        <li className="menu-shortcuts">
           <button className="menu-item" onClick={() => setShortcuts(true)}>
             <span className="menu-icon" aria-hidden>
-              <Icon name="edit" />
+              <Icon name="keyboard" />
             </span>
             <span className="deck-line">
               <span>Keyboard shortcuts</span>

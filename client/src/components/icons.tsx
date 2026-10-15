@@ -57,7 +57,8 @@ export type IconName =
   | 'chart'
   | 'archive'
   | 'stack'
-  | 'sliders';
+  | 'sliders'
+  | 'keyboard';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -399,6 +400,13 @@ const PATHS: Record<IconName, ReactElement> = {
       <line x1="1" y1="14" x2="7" y2="14" />
       <line x1="9" y1="8" x2="15" y2="8" />
       <line x1="17" y1="16" x2="23" y2="16" />
+    </>
+  ),
+  // Keyboard — the shortcuts list.
+  keyboard: (
+    <>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
     </>
   ),
   // Left chevron — scroll / page backwards.

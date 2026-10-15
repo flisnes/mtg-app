@@ -9,6 +9,23 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.192.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'A Plan tab on the deck analysis page: write goals like "four lands and a creature on the battlefield by turn 4" and the simulator counts how often its games get there. Searches in your card rules fetch what the plan is missing first.',
+      },
+      {
+        kind: 'added',
+        text: 'The Bracket tab reads the clock: how often a goldfish has one opponent dead by each turn, and the bracket that speed reads as.',
+      },
+      {
+        kind: 'added',
+        text: 'A card rule can look at the top N cards instead of searching the whole library (Muxus, Gishath), with the rest going to the bottom or the graveyard.',
+      },
+    ],
+  },
+  {
     version: '0.191.0',
     changes: [
       {

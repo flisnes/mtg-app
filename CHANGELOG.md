@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.6
+
+- **Fixed: the tab bar always knows where you are.** Binders, Boxes, Wishlist, Settings, Import and the rest of the screens off More used to light up no tab. Now every screen highlights the tab it belongs to.
+- **Added: a way back.** Screens reached from More have a "‹ More" link above the title, Import and Export have "‹ Collection", and the deck analysis page uses the same "‹ Deck" link as everywhere else.
+- **Changed: Keyboard shortcuts on More** is now a full-width row with its own keyboard icon, and it's hidden on phones and tablets, where there's no keyboard to press them on.
+
 ## 0.198.5
 
 - **Changed: connecting to a trade tells you what's going on.** "Start a trade" and "Join" used to show a bare "Connecting…" for up to a minute on bad wifi, with no way out. Now there's a spinner, "Joining ABC123…" with the code you typed, and a Cancel. After about eight seconds without the server it says it can't reach it and offers Retry or Trade solo instead, while it keeps trying in the background.

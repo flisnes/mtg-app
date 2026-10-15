@@ -121,6 +121,7 @@ import { clearCut, type ClipboardPayload, type ClipboardSlot } from '../deck/car
 import { useCardClipboard, useCutSlots, type ClipboardHandlers } from '../deck/useCardClipboard.js';
 import { useShortcuts } from '../components/useShortcuts.js';
 import { CardCursorProvider, useCardCursorCtx } from '../components/useCardCursor.js';
+import { BackLink } from '../components/BackLink.js';
 
 /** One slot of this container, joined to its card and what the collection holds.
  *  Everything the slot itself says comes from SlotShape. */
@@ -903,9 +904,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     <CardCursorProvider>
     <section className="page">
       <div className="deck-head">
-        <button className="linklike" onClick={goBack}>
-          ‹ {meta.Plural}
-        </button>
+        <BackLink label={meta.Plural} onClick={() => void goBack()} />
         {/* The same readout the collection header carries, in the same empty
             space beside the options menu — and the same way in to the chart. */}
         <div className="deck-head-aside">

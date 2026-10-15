@@ -36,6 +36,13 @@ export interface ActiveTrade {
 
 export type TradeStatus = 'idle' | 'connecting' | 'active' | 'error';
 
+/** What the user asked for when the connection started: what the connecting screen says. */
+export interface ConnectIntent {
+  kind: 'create' | 'join' | 'resume';
+  /** The code being joined or resumed (none for a fresh create). */
+  code?: string;
+}
+
 export interface TradeSession {
   status: TradeStatus;
   seat: Seat | null;
@@ -44,6 +51,14 @@ export interface TradeSession {
   /** No partner, no relay: we sit in seat 'a' and record both sides ourselves. */
   solo: boolean;
   error: string | null;
+  /** The create/join/resume in flight; null once a session is up or the user backs out. */
+  intent: ConnectIntent | null;
+  /** The first connect has gone SLOW_CONNECT_MS without a session. Retries keep going. */
+  slow: boolean;
+  /** Start the in-flight create/join/resume over with a fresh run of attempts. */
+  retryConnect: () => void;
+  /** Stop connecting and go back to the Trade home. Keeps any persisted trade to resume. */
+  abortConnect: () => void;
   /** Whether a completed trade made it into this device's collection. */
   applyState: ApplyState;
   /** Try writing a completed trade to the collection again after a failure. */
@@ -81,6 +96,8 @@ const SHARE_LINE_CAP = 500;
 const RECONNECT_BASE_MS = 1200;
 const RECONNECT_MAX_MS = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 6;
+/** How long a first connect may take before the screen admits it can't reach the server. */
+const SLOW_CONNECT_MS = 8000;
 
 export function otherSeat(seat: Seat): Seat {
   return seat === 'a' ? 'b' : 'a';
@@ -107,8 +124,15 @@ async function seatIdentity(): Promise<SeatIdentity> {
 }
 
 /** User-facing text for a handshake error, where the server's wording is too terse. */
-function joinErrorText(code: TradeErrorCode, message: string): string {
+function joinErrorText(code: TradeErrorCode, message: string, intent: ConnectIntent | null): string {
   if (code === 'self_join') return 'That’s your own trade code. The person you’re trading with enters it on their device.';
+  if (intent?.kind === 'join') {
+    if (code === 'unknown_session') return `No trade with the code ${intent.code}. Check it with your trade partner.`;
+    if (code === 'session_full') return `Someone already joined trade ${intent.code}.`;
+  }
+  if (intent?.kind === 'resume' && (code === 'unknown_session' || code === 'bad_resume')) {
+    return 'That trade has expired or already ended.';
+  }
   return message;
 }
 
@@ -146,6 +170,11 @@ export function useTradeSession(): TradeSession {
   const [peerWishlist, setPeerWishlist] = useState<WishLine[] | null>(null);
   const [solo, setSolo] = useState(false);
   const [applyState, setApplyState] = useState<ApplyState>('pending');
+  const [intent, setIntent] = useState<ConnectIntent | null>(null);
+  const intentRef = useRef<ConnectIntent | null>(null);
+  const [slow, setSlow] = useState(false);
+  // Bumped on every user-started connect, so the slow timer restarts on Retry.
+  const [effort, setEffort] = useState(0);
 
   const ws = useRef<WebSocket | null>(null);
   // The handshake message a fresh create/join/resume was started with, kept so
@@ -272,6 +301,8 @@ export function useTradeSession(): TradeSession {
           setSeat(msg.seat);
           setStatus('active');
           setError(null);
+          intentRef.current = null;
+          setIntent(null);
           handleSnapshot(msg.snapshot, msg.seat);
           void persist();
           break;
@@ -328,7 +359,7 @@ export function useTradeSession(): TradeSession {
           setPeerWishlist(sanitizeWishlist(msg.lines));
           break;
         case 'error':
-          setError(joinErrorText(msg.code, msg.message));
+          setError(joinErrorText(msg.code, msg.message, intentRef.current));
           if (msg.code === 'unknown_session' || msg.code === 'bad_resume' || msg.code === 'session_full' || msg.code === 'self_join') {
             setStatus('error');
             void clearPersisted();
@@ -357,7 +388,10 @@ export function useTradeSession(): TradeSession {
       // A fresh (non-retry) connect is a new effort from the user's point of
       // view — e.g. tapping "Resume" again after giving up — so it gets a
       // full new run of attempts rather than inheriting a spent counter.
-      if (!isRetry) reconnectAttempts.current = 0;
+      if (!isRetry) {
+        reconnectAttempts.current = 0;
+        setEffort((n) => n + 1);
+      }
       lastInitial.current = initial;
       intentionalClose.current = false;
       setStatus('connecting');
@@ -369,7 +403,9 @@ export function useTradeSession(): TradeSession {
         socket.send(JSON.stringify(initial));
       };
       socket.onmessage = (e) => onMessage(typeof e.data === 'string' ? e.data : '');
-      socket.onerror = () => setError('connection error');
+      // No setError here: onclose follows and owns the retry/give-up story;
+      // a bare "connection error" under the connecting screen says nothing.
+      socket.onerror = null;
       socket.onclose = () => {
         if (ws.current !== socket) return; // superseded by a newer socket
         ws.current = null;
@@ -405,6 +441,18 @@ export function useTradeSession(): TradeSession {
     [onMessage],
   );
 
+  /** Tear down the socket and any pending retry without touching persisted trades. */
+  const dropSocket = useCallback(() => {
+    intentionalClose.current = true;
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
+    }
+    reconnectAttempts.current = 0;
+    ws.current?.close();
+    ws.current = null;
+  }, []);
+
   const send = useCallback((msg: ClientMessage) => {
     const s = ws.current;
     if (s && s.readyState === WebSocket.OPEN) {
@@ -412,7 +460,7 @@ export function useTradeSession(): TradeSession {
     } else {
       // Dropped while reconnecting — tell the user rather than losing it silently
       // (the next state_sync would otherwise just revert their UI with no reason).
-      setError('Still connecting — that didn’t go through. Try again in a moment.');
+      setError('Still reconnecting, so that didn’t go through. Try again in a moment.');
     }
   }, []);
 
@@ -437,14 +485,11 @@ export function useTradeSession(): TradeSession {
   /** Drop any live socket and hand the board to a solo snapshot (fresh or restored). */
   const enterSolo = useCallback(
     (snap: SessionSnapshot) => {
-      // Tear down any live socket — a solo trade owns the UI outright.
-      intentionalClose.current = true;
-      if (reconnectTimer.current) {
-        clearTimeout(reconnectTimer.current);
-        reconnectTimer.current = null;
-      }
-      ws.current?.close();
-      ws.current = null;
+      // Tear down any live socket: a solo trade owns the UI outright.
+      dropSocket();
+      intentRef.current = null;
+      setIntent(null);
+      lastInitial.current = null;
       active.current = {};
       appliedRef.current = false;
       peerUsername.current = null;
@@ -459,7 +504,7 @@ export function useTradeSession(): TradeSession {
       setPeerWishlist([]);
       applySolo(snap);
     },
-    [applySolo],
+    [applySolo, dropSocket],
   );
 
   const startSolo = useCallback(() => {
@@ -478,38 +523,101 @@ export function useTradeSession(): TradeSession {
 
   const resumeSolo = useCallback((snap: SessionSnapshot) => enterSolo(snap), [enterSolo]);
 
+  /**
+   * A fresh create/join/resume: name it for the connecting screen and drop
+   * whatever session the hook still holds (an earlier trade that ran out of
+   * reconnect attempts keeps its snapshot, and its resume token would hijack
+   * this handshake's retries).
+   */
+  const begin = useCallback((next: ConnectIntent) => {
+    active.current = {};
+    stateRef.current = null;
+    appliedRef.current = false;
+    setSnapshot(null);
+    setSeat(null);
+    setPeerPresent(false);
+    intentRef.current = next;
+    setIntent(next);
+    setSlow(false);
+    setStatus('connecting');
+    setError(null);
+  }, []);
+
   // Both handshakes carry who we are, so the relay can refuse the creator
   // joining their own session. Show "connecting" while the identity is read
   // so the button doesn't look dead for the IndexedDB round trip.
   const create = useCallback(() => {
-    setStatus('connecting');
-    void seatIdentity().then((who) => connect({ v: PROTOCOL_VERSION, type: 'create_session', ...who }));
-  }, [connect]);
+    const mine: ConnectIntent = { kind: 'create' };
+    begin(mine);
+    void seatIdentity().then((who) => {
+      if (intentRef.current !== mine) return; // cancelled while reading
+      connect({ v: PROTOCOL_VERSION, type: 'create_session', ...who });
+    });
+  }, [begin, connect]);
   const join = useCallback(
     (c: string) => {
-      setStatus('connecting');
-      void seatIdentity().then((who) =>
+      const sessionCode = c.trim().toUpperCase();
+      const mine: ConnectIntent = { kind: 'join', code: sessionCode };
+      begin(mine);
+      void seatIdentity().then((who) => {
+        if (intentRef.current !== mine) return;
         connect({
           v: PROTOCOL_VERSION,
           type: 'join_session',
-          sessionCode: c.trim().toUpperCase(),
+          sessionCode,
           // Identifies this join attempt so a retry (lost reply) reclaims the
           // same seat instead of hitting "session full".
           joinNonce: crypto.randomUUID(),
           ...who,
-        }),
-      );
+        });
+      });
     },
-    [connect],
+    [begin, connect],
   );
   const resume = useCallback(
     (t: ActiveTrade) => {
+      begin({ kind: 'resume', code: t.code });
       active.current = t;
       setSeat(t.seat);
       connect({ v: PROTOCOL_VERSION, type: 'resume', sessionCode: t.code, resumeToken: t.resumeToken });
     },
-    [connect],
+    [begin, connect],
   );
+
+  // Retry from the "can't reach" screen: same handshake, fresh attempts, fresh
+  // 8 s window. Before the identity read finishes there is nothing to resend.
+  const retryConnect = useCallback(() => {
+    const msg = lastInitial.current;
+    if (!msg || !intentRef.current) return;
+    setSlow(false);
+    connect(msg);
+  }, [connect]);
+
+  const abortConnect = useCallback(() => {
+    dropSocket();
+    active.current = {};
+    stateRef.current = null;
+    lastInitial.current = null;
+    intentRef.current = null;
+    setIntent(null);
+    setSlow(false);
+    setStatus('idle');
+    setSeat(null);
+    setSnapshot(null);
+    setError(null);
+  }, [dropSocket]);
+
+  // The first connect gets SLOW_CONNECT_MS before the screen owns up. Only a
+  // user-started connect with no session yet counts: a mid-trade reconnect
+  // keeps the board and says so in a banner instead.
+  useEffect(() => {
+    if (status !== 'connecting' || !intent) {
+      setSlow(false);
+      return;
+    }
+    const t = setTimeout(() => setSlow(true), SLOW_CONNECT_MS);
+    return () => clearTimeout(t);
+  }, [status, intent, effort]);
 
   const sendOffer = useCallback((side: Seat, lines: TradeLine[]) => {
     if (soloRef.current) {
@@ -552,14 +660,10 @@ export function useTradeSession(): TradeSession {
   }, [send, applySolo]);
 
   const reset = useCallback(() => {
-    intentionalClose.current = true;
-    if (reconnectTimer.current) {
-      clearTimeout(reconnectTimer.current);
-      reconnectTimer.current = null;
-    }
-    reconnectAttempts.current = 0;
-    ws.current?.close();
-    ws.current = null;
+    dropSocket();
+    intentRef.current = null;
+    setIntent(null);
+    lastInitial.current = null;
     active.current = {};
     appliedRef.current = false;
     retryRef.current = null;
@@ -580,7 +684,7 @@ export function useTradeSession(): TradeSession {
     setPeerWishlist(null);
     void clearPersisted();
     void clearPersistedSoloTrade();
-  }, [clearPersisted]);
+  }, [clearPersisted, dropSocket]);
 
   // Close the socket (and cancel any pending auto-resume) if the component
   // using the hook unmounts — a stray reconnect would re-occupy the trade seat.
@@ -615,5 +719,5 @@ export function useTradeSession(): TradeSession {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [connect]);
 
-  return { status, seat, snapshot, peerPresent, solo, error, applyState, retryApply, peerTradelist, peerTradelistLoading, peerWishlist, create, startSolo, resumeSolo, join, resume, sendOffer, requestTradelist, requestWishlist, accept, unaccept, confirmComplete, cancel, reset };
+  return { status, seat, snapshot, peerPresent, solo, error, intent, slow, retryConnect, abortConnect, applyState, retryApply, peerTradelist, peerTradelistLoading, peerWishlist, create, startSolo, resumeSolo, join, resume, sendOffer, requestTradelist, requestWishlist, accept, unaccept, confirmComplete, cancel, reset };
 }

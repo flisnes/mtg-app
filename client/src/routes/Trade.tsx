@@ -129,7 +129,9 @@ export function Trade() {
       void getPersistedTrade().then((t) => setResumable(t ?? null));
       void getPersistedSoloTrade().then((s) => setSoloResumable(s ?? null));
     }
-    if (trade.status !== 'active') setStartedAhead(false);
+    // Not on 'connecting': a mid-trade reconnect keeps the board up, and
+    // dropping "Start ahead" there would flip the creator back to the invite.
+    if (trade.status === 'idle' || trade.status === 'error') setStartedAhead(false);
   }, [trade.status]);
 
   // Deep link from a scanned invite QR (#/trade?join=CODE): join right away —
@@ -233,19 +235,16 @@ export function Trade() {
     );
   }
 
-  if (trade.status === 'connecting' || !trade.snapshot || !trade.seat) {
-    return (
-      <Page title="Trade">
-        <p className="gate-msg">Connecting…</p>
-      </Page>
-    );
-  }
+  // No session yet. A session that drops and reconnects keeps its snapshot,
+  // so it skips this and stays on the board under a "Reconnecting" banner.
+  if (!trade.snapshot || !trade.seat) return <TradeConnecting trade={trade} />;
 
   // Freshly created, partner seat still empty: show the invite full-screen.
   // Pairing flips state to 'paired', which lands on the board automatically.
   if (trade.snapshot.state === 'open' && !startedAhead) {
     return (
       <Page title="Trade" subtitle="Have your trade partner scan the QR code, or type in the code.">
+        <ReconnectBanner trade={trade} />
         <TradeQr code={trade.snapshot.code} />
         <div className="trade-actions">
           <button className="primary" onClick={() => setStartedAhead(true)}>
@@ -261,6 +260,57 @@ export function Trade() {
   }
 
   return <TradeBoard trade={trade} seat={trade.seat} />;
+}
+
+/**
+ * Between "Start a trade"/"Join" and a session: say what's happening, let the
+ * user back out, and after a few seconds admit the server isn't answering
+ * (venue wifi) with Retry and the solo fallback. Retries carry on meanwhile.
+ */
+function TradeConnecting({ trade }: { trade: ReturnType<typeof useTradeSession> }) {
+  const { intent, slow } = trade;
+  const doing =
+    intent?.kind === 'join'
+      ? <>Joining <strong className="trade-code">{intent.code}</strong>…</>
+      : intent?.kind === 'resume'
+        ? <>Resuming trade <strong className="trade-code">{intent.code}</strong>…</>
+        : 'Starting a trade…';
+  return (
+    <Page title="Trade">
+      <div className="trade-connecting" role="status" aria-live="polite">
+        <span className="spinner" aria-hidden />
+        <p className="trade-connecting-doing">{doing}</p>
+        {slow ? (
+          <>
+            <p className="trade-connecting-fail">Can’t reach the trade server</p>
+            <p className="fine-print">Still trying in the background. Check your connection, or record the trade yourself.</p>
+            <div className="trade-actions">
+              <button className="primary" onClick={trade.retryConnect}>
+                Retry
+              </button>
+              <button onClick={trade.startSolo}>Trade solo instead</button>
+            </div>
+          </>
+        ) : (
+          <p className="fine-print">Connecting to the trade server…</p>
+        )}
+        <button className="trade-connecting-cancel" onClick={trade.abortConnect}>
+          Cancel
+        </button>
+      </div>
+    </Page>
+  );
+}
+
+/** A live trade whose socket dropped: the board stays, this says why edits may bounce. */
+function ReconnectBanner({ trade }: { trade: ReturnType<typeof useTradeSession> }) {
+  if (trade.status !== 'connecting') return null;
+  return (
+    <div className="trade-reconnecting" role="status" aria-live="polite">
+      <span className="spinner spinner-sm" aria-hidden />
+      <span>{trade.error ?? 'Reconnecting to the trade server…'}</span>
+    </div>
+  );
 }
 
 /** Total card count across a set of offer/history lines. */
@@ -598,6 +648,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
         />
       }
     >
+      <ReconnectBanner trade={trade} />
       <div className="trade-status">
         {solo ? (
           <div className="trade-status-code">Solo trade</div>

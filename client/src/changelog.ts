@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.5',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Trade: starting or joining a trade shows what it is doing and has a Cancel. If the server can’t be reached you get Retry or Trade solo, a wrong code says so, and a dropped connection mid-trade keeps your board up while it reconnects.',
+      },
+    ],
+  },
+  {
     version: '0.198.4',
     changes: [
       {
@@ -178,23 +187,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'added',
         text: 'A card rule can look at the top N cards instead of searching the whole library (Muxus, Gishath), with the rest going to the bottom or the graveyard.',
-      },
-    ],
-  },
-  {
-    version: '0.191.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Card rules can copy a permanent you control: token copies for Kiki-Jiki and Rite of Replication, or "this card enters as the copy" for Clone.',
-      },
-      {
-        kind: 'added',
-        text: 'A Bracket tab on the deck analysis page counts Game Changers, mass land denial, extra turns and tutors in a Commander deck and names the lowest bracket they fit.',
-      },
-      {
-        kind: 'changed',
-        text: 'Board-scaling mana (Gaea\'s Cradle, Priest of Titania), chosen-color rocks and Mahadi\'s Treasures now read closer to the card, and cards that tax you too (Thalia, Rule of Law) are flagged on the Model tab.',
       },
     ],
   },

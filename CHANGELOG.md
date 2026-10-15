@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.5
+
+- **Changed: connecting to a trade tells you what's going on.** "Start a trade" and "Join" used to show a bare "Connecting…" for up to a minute on bad wifi, with no way out. Now there's a spinner, "Joining ABC123…" with the code you typed, and a Cancel. After about eight seconds without the server it says it can't reach it and offers Retry or Trade solo instead, while it keeps trying in the background.
+- **Fixed: a wrong join code says so.** Joining with a code that doesn't match a trade now reads "No trade with the code …" instead of the server's terse error, and a full trade says someone already joined it.
+- **Fixed: a dropped connection mid-trade no longer hides the board.** The trade stays on screen with a small "Reconnecting" banner until the connection is back. Before, the whole page was replaced by "Connecting…", and a creator who had started ahead got bounced back to the invite screen.
+
 ## 0.198.4
 
 - **Fixed: restoring a backup merged wishes it shouldn't.** A foil and a nonfoil wish for the same printing (or two that differ on condition or language) came back as one line, losing the second one's preferences. They stay separate now.

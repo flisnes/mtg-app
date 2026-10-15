@@ -21,8 +21,9 @@ import type { UserEvent } from '@mtg/shared';
  * The rows `applyEventSigned` would write for this event, as opaque keys. Two
  * events collide when they share one.
  *
- * These MUST mirror how the raw helpers in dataAccess find their row. If one of
- * those changes how it matches, the matching key here changes with it:
+ * These MUST mirror how the *AdjustRaw helpers (collectionWrites.ts,
+ * wishlistWrites.ts, slotWrites.ts) find their row. If one of those changes
+ * how it matches, the matching key here changes with it:
  *   - collection + tradelist: the (scryfallId, condition, finish, lang)
  *     compound key that copiesAdjustRaw / tradeMarkAdjustRaw
  *     look the entry up by, defaults included.

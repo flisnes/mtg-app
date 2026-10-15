@@ -248,16 +248,16 @@ interface PickValues {
 // Language is part of the key (collectionKey has it too): scanning a card in
 // Japanese and later the same card in English must stay two lines, not merge
 // into whichever one landed first.
-export const entryKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'condition' | 'lang' | 'board'>) =>
+export const sessionLineKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'condition' | 'lang' | 'board'>) =>
   `${e.scryfallId}|${e.finish}|${e.condition}|${e.lang}|${e.board}`;
 
 /** Collapse duplicate (printing, finish, condition, language, board) lines after a row edit. */
 export function mergeSession(entries: SessionEntry[]): SessionEntry[] {
   const map = new Map<string, SessionEntry>();
   for (const e of entries) {
-    const prev = map.get(entryKey(e));
+    const prev = map.get(sessionLineKey(e));
     if (prev) prev.qty += e.qty;
-    else map.set(entryKey(e), { ...e });
+    else map.set(sessionLineKey(e), { ...e });
   }
   return [...map.values()];
 }
@@ -1038,13 +1038,13 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     setSession((prev) => {
       const out = prev.map((e) => ({ ...e }));
       for (const a of adds) {
-        const i = out.findIndex((e) => entryKey(e) === entryKey({ scryfallId: a.scryfallId, board: a.board, ...from }));
+        const i = out.findIndex((e) => sessionLineKey(e) === sessionLineKey({ scryfallId: a.scryfallId, board: a.board, ...from }));
         if (i < 0) continue;
         const src = out[i]!;
         const take = Math.min(a.qty, src.qty);
         if (take <= 0) continue;
         src.qty -= take;
-        const j = out.findIndex((e) => entryKey(e) === entryKey({ scryfallId: a.scryfallId, board: a.board, ...to }));
+        const j = out.findIndex((e) => sessionLineKey(e) === sessionLineKey({ scryfallId: a.scryfallId, board: a.board, ...to }));
         if (j >= 0) out[j]!.qty += take;
         else out.push({ ...src, ...to, qty: take });
       }
@@ -1071,8 +1071,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     const cond = condition;
     const l = lang;
     const b: DeckBoard = target.kind === 'deck' ? board : 'main';
-    const key = entryKey({ scryfallId: c.scryfallId, finish: f, condition: cond, lang: l, board: b });
-    let i = session.findIndex((e) => entryKey(e) === key);
+    const key = sessionLineKey({ scryfallId: c.scryfallId, finish: f, condition: cond, lang: l, board: b });
+    let i = session.findIndex((e) => sessionLineKey(e) === key);
     recordLockAdd(c.scryfallId, b, delta);
     if (delta > 0) {
       // Rising pop: pitch climbs a semitone per copy already piled up.
@@ -1218,10 +1218,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     // them, so the deck holds the cardboard the camera saw.
     const slotMap = new Map<string, RescanSlot>();
     for (const e of session) {
-      const cur = slotMap.get(entryKey(e));
+      const cur = slotMap.get(sessionLineKey(e));
       if (cur) cur.quantity += e.qty;
       else
-        slotMap.set(entryKey(e), {
+        slotMap.set(sessionLineKey(e), {
           oracleId: e.oracleId,
           board: e.board,
           quantity: e.qty,
@@ -1272,7 +1272,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     const filed = new Map<string, number>();
     for (const c of current) {
       // An emptied-out slot (DeckCard.unfiled) holds nothing, so it can never
-      // match a scanned copy. Same shape as entryKey, which keys the scan.
+      // match a scanned copy. Same shape as sessionLineKey, which keys the scan.
       if (c.unfiled) continue;
       const key = `${c.scryfallId ?? ''}|${c.finish ?? ''}|${c.condition ?? ''}|${c.lang ?? ''}|${c.board}`;
       filed.set(key, (filed.get(key) ?? 0) + c.quantity);
@@ -1962,7 +1962,7 @@ export function SessionSheet({
                 e.condition !== 'NM' ? e.condition : null,
               ].filter(Boolean);
               return {
-                key: entryKey(e),
+                key: sessionLineKey(e),
                 name: e.name,
                 image: printing?.imageNormal ?? e.image ?? null,
                 foil: e.finish !== 'nonfoil',
@@ -2000,7 +2000,7 @@ export function SessionSheet({
         ) : (
           <ul className="scan-list">
             {entries.map((e, i) => (
-              <li key={entryKey(e)} className="scan-list-row">
+              <li key={sessionLineKey(e)} className="scan-list-row">
                 <button className="scan-list-main" onClick={() => action.run('open that card', () => openEntry(i))} aria-label={`Edit ${e.name}`}>
                   {e.image ? <img className="scan-list-thumb" src={e.image} alt="" /> : <span className="scan-list-thumb" />}
                   <span className="scan-list-info">

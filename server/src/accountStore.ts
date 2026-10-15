@@ -4,18 +4,19 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
 import {
-  CONDITIONS,
-  FINISHES,
+  MAX_PUBLIC_LINES,
   SYNC_MAX_BYTES_PER_USER,
   SYNC_MAX_PULL,
   SYNC_MAX_ROWS_PER_USER,
   sanitizeAvatar,
-  type Condition,
-  type Finish,
+  sanitizeTradeLines,
+  sanitizeWishLines,
   type ProfileAvatar,
   type PublicUser,
   type SyncChange,
   type SyncTable,
+  type TradeLine,
+  type WishLine,
 } from '@mtg/shared';
 import { config } from './config.js';
 
@@ -34,6 +35,12 @@ export interface AccountUser {
 }
 
 const SCRYPT_KEYLEN = 64;
+
+/** How stale tokens.last_used_at may get before a request rewrites it. */
+const TOKEN_TOUCH_MS = 60 * 60 * 1000;
+
+/** Per-process id, so cache stamps built on in-memory counters never repeat across restarts. */
+const BOOT_ID = randomBytes(4).toString('hex');
 
 // Async scrypt so a burst of logins/registrations can't pin the single-threaded
 // event loop (each hash is ~50–100 ms of CPU) and stall every open websocket.
@@ -106,6 +113,11 @@ export class AccountStore {
       );
       CREATE INDEX IF NOT EXISTS idx_sync_rows_seq ON sync_rows(user_id, seq);
       CREATE INDEX IF NOT EXISTS idx_tokens_user ON tokens(user_id);
+      -- A deck's slots, for the profile and shared-deck routes (the one place
+      -- the server reads inside sync rows). Queries must repeat this exact
+      -- expression and the literal 'deckCards' for SQLite to use it.
+      CREATE INDEX IF NOT EXISTS idx_sync_rows_deck ON sync_rows(user_id, json_extract(row, '$.deckId'))
+        WHERE tbl = 'deckCards' AND deleted = 0;
       CREATE TABLE IF NOT EXISTS sync_seq (
         user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         max_seq INTEGER NOT NULL
@@ -311,7 +323,10 @@ export class AccountStore {
       this.db.prepare('DELETE FROM tokens WHERE token_hash = ?').run(hash);
       return null;
     }
-    this.db.prepare('UPDATE tokens SET last_used_at = ? WHERE token_hash = ?').run(now, hash);
+    // Every sync pass authenticates; an hourly stamp is plenty for a TTL in months.
+    if (row.last_used_at < now - TOKEN_TOUCH_MS) {
+      this.db.prepare('UPDATE tokens SET last_used_at = ? WHERE token_hash = ?').run(now, hash);
+    }
     return { id: row.id, username: row.username };
   }
 
@@ -322,6 +337,8 @@ export class AccountStore {
   deleteUser(userId: number): void {
     // Child rows cascade (tokens, snapshots, public_lists).
     this.db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    // Their published lists went with them; drop them from the match cache too.
+    this.publicListsVersion += 1;
   }
 
   private upsertPublicLists(
@@ -491,11 +508,14 @@ export class AccountStore {
     }
   }
 
-  /** All live synced rows of one table, parsed (same exception as getSyncRow). */
-  listSyncRows(userId: number, tbl: SyncTable): unknown[] {
+  /** One deck's live deckCards rows, parsed (same exception as getSyncRow). */
+  deckCardRows(userId: number, deckId: string): unknown[] {
     const recs = this.db
-      .prepare('SELECT row FROM sync_rows WHERE user_id = ? AND tbl = ? AND deleted = 0')
-      .all(userId, tbl) as { row: string | null }[];
+      .prepare(
+        `SELECT row FROM sync_rows
+         WHERE user_id = ? AND tbl = 'deckCards' AND deleted = 0 AND json_extract(row, '$.deckId') = ?`,
+      )
+      .all(userId, deckId) as { row: string | null }[];
     const out: unknown[] = [];
     for (const rec of recs) {
       if (rec.row === null) continue;
@@ -580,6 +600,11 @@ export class AccountStore {
     }));
   }
 
+  /** Changes whenever any published list does (or the server restarts). */
+  publicListsStamp(): string {
+    return `${BOOT_ID}-${this.publicListsVersion}`;
+  }
+
   /**
    * Parsed published lists for match computation, cached until the next publish.
    * Without this, /api/matches re-parsed every user's (up to 2 MB) lists on
@@ -589,15 +614,33 @@ export class AccountStore {
     if (this.parsedCache && this.parsedCache.version === this.publicListsVersion) {
       return this.parsedCache.lists;
     }
-    const lists = this.allPublicLists().map((r) => ({
-      userId: r.userId,
-      username: r.username,
-      updatedAt: r.updatedAt,
-      haves: parseHaveLines(r.tradelist),
-      wants: parseWantLines(r.wishlist),
-    }));
+    const lists = this.allPublicLists().map((r) => {
+      const wantsByOracle = new Map<string, WishLine[]>();
+      for (const w of sanitizeWishLines(parseLines(r.wishlist), STORED_LINE_LIMITS)) {
+        const bucket = wantsByOracle.get(w.oracleId);
+        if (bucket) bucket.push(w);
+        else wantsByOracle.set(w.oracleId, [w]);
+      }
+      return {
+        userId: r.userId,
+        username: r.username,
+        updatedAt: r.updatedAt,
+        haves: sanitizeTradeLines(parseLines(r.tradelist), STORED_LINE_LIMITS),
+        wantsByOracle,
+      };
+    });
     this.parsedCache = { version: this.publicListsVersion, lists };
     return lists;
+  }
+
+  /** The user's id and publish time, without reading the (up to 4 MB) lists. */
+  userListsStamp(username: string): { userId: number; updatedAt: number } | null {
+    const row = this.db
+      .prepare(
+        `SELECT p.user_id, p.updated_at FROM public_lists p JOIN users u ON u.id = p.user_id WHERE u.username = ?`,
+      )
+      .get(username) as { user_id: number; updated_at: number } | undefined;
+    return row ? { userId: row.user_id, updatedAt: row.updated_at } : null;
   }
 
   /** Raw published-list JSON for one user (relayed verbatim to the browser). */
@@ -723,78 +766,27 @@ export class AccountStore {
   }
 }
 
-/** A concrete tradelist card, for matching against wishlist preferences. */
-export interface HaveLine {
-  oracleId: string;
-  scryfallId: string | null;
-  name: string;
-  condition: Condition;
-  finish: Finish;
-  lang: string;
-}
-
-/** A wishlist card with its printing pin and (optional) finish/condition/language preferences. */
-export interface WantLine {
-  oracleId: string;
-  /** null = any printing of the card. */
-  scryfallId: string | null;
-  condition?: Condition;
-  finish?: Finish;
-  lang?: string;
-}
-
 export interface ParsedPublicList {
   userId: number;
   username: string;
   updatedAt: number;
   /** Tradelist lines (concrete condition/finish/lang), for pref-aware matching. */
-  haves: HaveLine[];
-  /** Wishlist lines with their preferences. */
-  wants: WantLine[];
+  haves: TradeLine[];
+  /** Wishlist lines with their preferences, bucketed by card for the match scan. */
+  wantsByOracle: Map<string, WishLine[]>;
 }
 
-const COND_SET = new Set<string>(CONDITIONS);
-const FIN_SET = new Set<string>(FINISHES);
+/** Stored lines were sanitized on publish; re-running the same rules on read
+ *  is the defensive fallback, so the bounds just need to admit them. */
+const STORED_LINE_LIMITS = { maxQty: 9999, maxLines: MAX_PUBLIC_LINES };
 
-function parseLines(json: string): Record<string, unknown>[] {
+function parseLines(json: string): unknown[] {
   try {
     const v = JSON.parse(json);
-    return Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
+    return Array.isArray(v) ? v : [];
   } catch {
     return [];
   }
-}
-
-function parseHaveLines(json: string): HaveLine[] {
-  const out: HaveLine[] = [];
-  for (const l of parseLines(json)) {
-    if (typeof l.oracleId !== 'string') continue;
-    out.push({
-      oracleId: l.oracleId,
-      scryfallId: typeof l.scryfallId === 'string' ? l.scryfallId : null,
-      name: typeof l.name === 'string' ? l.name : '(unknown card)',
-      // Stored lines are already sanitized concrete TradeLines; fall back defensively.
-      condition: COND_SET.has(l.condition as string) ? (l.condition as Condition) : 'NM',
-      finish: FIN_SET.has(l.finish as string) ? (l.finish as Finish) : 'nonfoil',
-      lang: typeof l.lang === 'string' && l.lang ? l.lang : 'en',
-    });
-  }
-  return out;
-}
-
-function parseWantLines(json: string): WantLine[] {
-  const out: WantLine[] = [];
-  for (const l of parseLines(json)) {
-    if (typeof l.oracleId !== 'string') continue;
-    out.push({
-      oracleId: l.oracleId,
-      scryfallId: typeof l.scryfallId === 'string' ? l.scryfallId : null,
-      ...(COND_SET.has(l.condition as string) ? { condition: l.condition as Condition } : {}),
-      ...(FIN_SET.has(l.finish as string) ? { finish: l.finish as Finish } : {}),
-      ...(typeof l.lang === 'string' && l.lang ? { lang: l.lang } : {}),
-    });
-  }
-  return out;
 }
 
 /** Pull just the avatar out of a stored profile blob (for the community list). */

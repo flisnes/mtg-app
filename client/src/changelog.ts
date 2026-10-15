@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.11',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Community lists, profiles, trade matches and price charts are only downloaded again when they changed, so revisits load right away.',
+      },
+    ],
+  },
+  {
     version: '0.198.10',
     changes: [
       {
@@ -162,19 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Simulator Auras now wait for a creature of yours, go on it as they resolve and are lost with it. Equipment stays behind and moves on. The trace says which creature each one is on.',
-      },
-    ],
-  },
-  {
-    version: '0.197.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'The deck simulator seats opponents at the table: they draw and cast after your turn, so Rhystic Study, Smothering Tithe, Sheoldred, Grave Pact and the like finally do something. Set how many, their pace and how often they pay a tax on the Model tab.',
-      },
-      {
-        kind: 'added',
-        text: 'A new interaction setting holds counterspells for an opponent\'s spell and removal for an opponent\'s creature, and card rules get four "an opponent..." triggers with an "unless they pay" switch.',
       },
     ],
   },

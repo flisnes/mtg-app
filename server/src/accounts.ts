@@ -11,6 +11,7 @@ import {
   SYNC_MAX_ROW_ID,
   SYNC_TABLES,
   USERNAME_RE,
+  clampStr,
   countsTowardDeck,
   sanitizeDeckLines,
   sanitizeProfile,
@@ -66,8 +67,40 @@ export function authUser(store: AccountStore, req: FastifyRequest, reply: Fastif
   return user;
 }
 
-function str(v: unknown, max: number): string | null {
-  return typeof v === 'string' && v ? v.slice(0, max) : null;
+/** private + no-cache: the browser keeps a copy but asks every time (304 if unchanged). */
+export const REVALIDATE = 'private, no-cache';
+
+/**
+ * Answer a GET through the browser's HTTP cache. With a stamp, the ETag comes
+ * from it and `build` is skipped entirely on a match; without one, the body is
+ * built and hashed (saves the transfer, not the work). Every tag includes what
+ * makes the response differ per caller, since the cache key is just the URL.
+ */
+export function sendCached<T>(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  cacheControl: string,
+  stamp: string | null,
+  build: () => T,
+): T | FastifyReply {
+  let body: T | undefined;
+  if (stamp === null) {
+    body = build();
+    stamp = createHash('sha1').update(JSON.stringify(body)).digest('base64url').slice(0, 22);
+  }
+  const etag = `W/"${stamp}"`;
+  void reply.header('ETag', etag).header('Cache-Control', cacheControl);
+  const inm = req.headers['if-none-match'];
+  if (inm && inm.split(',').some((t) => t.trim() === etag)) return reply.status(304).send();
+  return body ?? build();
+}
+
+/** The user's sanitized profile, or the empty one if they never saved it. */
+function profileOf(store: AccountStore, userId: number): { profile: UserProfile; updatedAt: number } {
+  const row = store.getProfile(userId);
+  // No profile yet is a normal state, not an error.
+  if (!row) return { profile: EMPTY_PROFILE, updatedAt: 0 };
+  return { profile: sanitizeProfile(safeParse(row.data)), updatedAt: row.updatedAt };
 }
 
 // Server-side normalization of published lines (clients re-sanitize on
@@ -197,7 +230,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     const user = requireUser(req, reply);
     if (!user) return;
     const b = (req.body ?? {}) as Record<string, unknown>;
-    const clientId = str(b.clientId, 64);
+    const clientId = clampStr(b.clientId, 64);
     const cursor = Math.max(0, Math.floor(Number(b.cursor)) || 0);
     const reseeding = b.reseeding === true;
     const rawChanges = Array.isArray(b.changes) ? b.changes : null;
@@ -209,7 +242,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     for (const raw of rawChanges) {
       const r = (raw ?? {}) as Record<string, unknown>;
       const tbl = SYNC_TABLE_SET.has(r.tbl as string) ? (r.tbl as SyncTable) : null;
-      const rowId = str(r.rowId, SYNC_MAX_ROW_ID);
+      const rowId = clampStr(r.rowId, SYNC_MAX_ROW_ID);
       const updatedAt = Number(r.updatedAt);
       if (!tbl || !rowId || !Number.isFinite(updatedAt)) {
         return fail(reply, 400, { error: 'bad_request', message: 'Malformed sync change.' });
@@ -277,8 +310,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
   app.get('/api/users', async (req, reply) => {
     const user = requireUser(req, reply);
     if (!user) return;
-    const res: UsersResponse = { users: store.listUsers() };
-    return res;
+    return sendCached(req, reply, REVALIDATE, null, (): UsersResponse => ({ users: store.listUsers() }));
   });
 
   // --- Public profiles: favorites + profile picture ----------------------------
@@ -302,16 +334,11 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     const { username } = req.params as { username: string };
     const target = store.getUserByUsername(username);
     if (!target) return fail(reply, 404, { error: 'not_found', message: 'No such user.' });
-    const row = store.getProfile(target.id);
-    // No profile yet is a normal state, not an error — hand back an empty one.
-    const profile = row ? sanitizeProfile(safeParse(row.data)) : EMPTY_PROFILE;
-    refreshFavoriteDecks(store, target.id, profile);
-    const res: ProfileResponse = {
-      username: target.username,
-      updatedAt: row?.updatedAt ?? 0,
-      profile,
-    };
-    return res;
+    return sendCached(req, reply, REVALIDATE, null, (): ProfileResponse => {
+      const { profile, updatedAt } = profileOf(store, target.id);
+      refreshFavoriteDecks(store, target.id, profile);
+      return { username: target.username, updatedAt, profile };
+    });
   });
 
   // A favorited deck is browsable: serve its current list straight from the
@@ -322,8 +349,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     const { username, deckId } = req.params as { username: string; deckId: string };
     const target = store.getUserByUsername(username);
     if (!target) return fail(reply, 404, { error: 'not_found', message: 'No such user.' });
-    const profRow = store.getProfile(target.id);
-    const profile = profRow ? sanitizeProfile(safeParse(profRow.data)) : EMPTY_PROFILE;
+    const { profile } = profileOf(store, target.id);
     if (!profile.favoriteDecks.some((f) => f.deckId === deckId)) {
       return fail(reply, 404, { error: 'not_found', message: 'That deck isn’t shared.' });
     }
@@ -332,14 +358,14 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
       return fail(reply, 404, { error: 'not_found', message: 'That deck isn’t synced to the server.' });
     }
     const d = deckRow.row as Record<string, unknown>;
-    const description = str(d.description, 1_000);
+    const description = clampStr(d.description, 1_000);
     const res: UserDeckResponse = {
       username: target.username,
-      name: str(d.name, 80) ?? '(unnamed deck)',
-      format: str(d.format, 20) ?? 'casual',
+      name: clampStr(d.name, 80) ?? '(unnamed deck)',
+      format: clampStr(d.format, 20) ?? 'casual',
       ...(description ? { description } : {}),
       updatedAt: deckRow.updatedAt,
-      lines: sanitizeDeckLines(deckCardRows(store, target.id, deckId)),
+      lines: sanitizeDeckLines(store.deckCardRows(target.id, deckId)),
     };
     return res;
   });
@@ -348,48 +374,62 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     const user = requireUser(req, reply);
     if (!user) return;
     const { username } = req.params as { username: string };
-    const row = store.getUserLists(username);
-    if (!row) return fail(reply, 404, { error: 'not_found', message: 'No such user (or nothing published yet).' });
-    const res: UserListsResponse = {
-      username: row.username,
-      updatedAt: row.updatedAt,
-      tradelist: safeLines(row.tradelist) as TradeLine[],
-      wishlist: safeLines(row.wishlist) as WishLine[],
-    };
-    return res;
+    const stamp = store.userListsStamp(username);
+    if (!stamp) return fail(reply, 404, { error: 'not_found', message: 'No such user (or nothing published yet).' });
+    // The lists run to megabytes: tag them by publish time so a revisit is a
+    // 304 without reading, parsing or sending them again.
+    return sendCached(req, reply, REVALIDATE, `${stamp.userId}-${stamp.updatedAt}`, (): UserListsResponse => {
+      const r = store.getUserLists(username)!; // the stamp just found it, and nothing awaits in between
+      return {
+        username: r.username,
+        updatedAt: r.updatedAt,
+        tradelist: safeLines(r.tradelist) as TradeLine[],
+        wishlist: safeLines(r.wishlist) as WishLine[],
+      };
+    });
   });
 
   // --- Match notifications: users whose lists overlap mine (either way) -------
   app.get('/api/matches', async (req, reply) => {
     const user = requireUser(req, reply);
     if (!user) return;
-    const lists = store.parsedPublicLists();
-    const mine = lists.find((r) => r.userId === user.id);
-    if (!mine) return { matches: [] } satisfies MatchesResponse; // nothing published yet
-
-    const matches: MatchEntry[] = [];
-    for (const other of lists) {
-      if (other.userId === user.id) continue;
-
-      // They want a card I have for trade / I want a card they have for trade —
-      // wishMatchesCopy is the same rule the Community page paints its badges
-      // with (printing pin included), so a notification never promises a match
-      // the page then refuses to show.
-      const theyWant = dedupeMatches(mine.haves.filter((h) => other.wants.some((w) => wishMatchesCopy(w, h))));
-      const iWant = dedupeMatches(other.haves.filter((h) => mine.wants.some((w) => wishMatchesCopy(w, h))));
-
-      if (theyWant.length === 0 && iWant.length === 0) continue;
-      matches.push({
-        username: other.username,
-        updatedAt: other.updatedAt,
-        theyWant,
-        iWant,
-        signature: matchSignature(theyWant, iWant),
-      });
-    }
-    matches.sort((a, b) => b.updatedAt - a.updatedAt);
-    return { matches } satisfies MatchesResponse;
+    // Matches only change when some published list does; the tag carries the
+    // caller because the answer is theirs alone.
+    const stamp = `${store.publicListsStamp()}-${user.id}`;
+    return sendCached(req, reply, REVALIDATE, stamp, () => computeMatches(store, user.id));
   });
+}
+
+/** Users whose published lists overlap the caller's, either way. */
+function computeMatches(store: AccountStore, userId: number): MatchesResponse {
+  const lists = store.parsedPublicLists();
+  const mine = lists.find((r) => r.userId === userId);
+  if (!mine) return { matches: [] }; // nothing published yet
+
+  // They want a card I have for trade / I want a card they have for trade.
+  // wishMatchesCopy is the same rule the Community page paints its badges
+  // with (printing pin included), so a notification never promises a match
+  // the page then refuses to show. Wants are bucketed by card, so a have only
+  // meets the wishes for that same card.
+  const wanted = (wants: Map<string, WishLine[]>, h: TradeLine) =>
+    wants.get(h.oracleId)?.some((w) => wishMatchesCopy(w, h)) ?? false;
+
+  const matches: MatchEntry[] = [];
+  for (const other of lists) {
+    if (other.userId === userId) continue;
+    const theyWant = dedupeMatches(mine.haves.filter((h) => wanted(other.wantsByOracle, h)));
+    const iWant = dedupeMatches(other.haves.filter((h) => wanted(mine.wantsByOracle, h)));
+    if (theyWant.length === 0 && iWant.length === 0) continue;
+    matches.push({
+      username: other.username,
+      updatedAt: other.updatedAt,
+      theyWant,
+      iWant,
+      signature: matchSignature(theyWant, iWant),
+    });
+  }
+  matches.sort((a, b) => b.updatedAt - a.updatedAt);
+  return { matches };
 }
 
 /**
@@ -408,43 +448,34 @@ function dedupeMatches(haves: { oracleId: string; name: string }[]): MatchCard[]
   return out;
 }
 
-/** The owner's synced deckCards rows for one deck (raw, pre-sanitize). */
-function deckCardRows(store: AccountStore, userId: number, deckId: string): unknown[] {
-  return store
-    .listSyncRows(userId, 'deckCards')
-    .filter((row) => !!row && typeof row === 'object' && (row as Record<string, unknown>).deckId === deckId);
-}
-
 /**
  * Overwrite favorite-deck summaries with the live synced deck where possible,
  * so a rename (or growing list) shows up on the profile without re-favoriting.
  * Colors stay as favorited — computing them needs a card DB the server lacks.
  */
 function refreshFavoriteDecks(store: AccountStore, userId: number, profile: UserProfile): void {
-  let counts: Map<string, number> | null = null;
   for (const fav of profile.favoriteDecks) {
     if (!fav.deckId) continue;
     const deckRow = store.getSyncRow(userId, 'decks', fav.deckId);
     if (!deckRow || !deckRow.row || typeof deckRow.row !== 'object') continue;
     const d = deckRow.row as Record<string, unknown>;
-    fav.name = str(d.name, 80) ?? fav.name;
-    fav.format = str(d.format, 20) ?? fav.format;
-    if (!counts) counts = deckMainCounts(store, userId);
-    fav.cards = counts.get(fav.deckId) ?? fav.cards;
+    fav.name = clampStr(d.name, 80) ?? fav.name;
+    fav.format = clampStr(d.format, 20) ?? fav.format;
+    fav.cards = deckMainCount(store, userId, fav.deckId);
   }
 }
 
-/** deckId → mainboard count (commander included, like the deck picker computes it). */
-function deckMainCounts(store: AccountStore, userId: number): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const row of store.listSyncRows(userId, 'deckCards')) {
+/** A deck's mainboard count (commander included, like the deck picker computes it). */
+function deckMainCount(store: AccountStore, userId: number, deckId: string): number {
+  let n = 0;
+  for (const row of store.deckCardRows(userId, deckId)) {
     if (!row || typeof row !== 'object') continue;
     const c = row as Record<string, unknown>;
-    if (typeof c.deckId !== 'string' || !countsTowardDeck(c.board ?? 'main')) continue;
+    if (!countsTowardDeck(c.board ?? 'main')) continue;
     const q = Math.floor(Number(c.quantity));
-    if (Number.isFinite(q) && q > 0) map.set(c.deckId, (map.get(c.deckId) ?? 0) + q);
+    if (Number.isFinite(q) && q > 0) n += q;
   }
-  return map;
+  return n;
 }
 
 /** Order-independent hash of a match's oracleIds, so the client can spot changes. */

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.11
+
+- **Fixed: Community pages reload in a blink.** Someone's trade and wishlists (which can run to megabytes), their profile, the member list, your trade matches and price charts are now remembered by your browser and only downloaded again when they actually changed. The server also does less work per sync and per profile visit.
+
 ## 0.198.10
 
 - **Fixed: price history is read once, not three times.** Mover arrows on your cards, sorting by value change, the collection value chart and Price movers each used to load every card's full price history on their own, and again after every price update. They now share one copy, loaded only while one of them is on screen. Same arrows, same order, same chart, less waiting on big collections.

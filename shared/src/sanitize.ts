@@ -7,6 +7,7 @@
 // Existence-in-card-DB is verified separately (at trade completion / on display).
 
 import type { Finish } from './card.js';
+import { clampStr, UNKNOWN_CARD_NAME } from './strings.js';
 import { CONDITIONS, FINISHES, type Condition, type TradeLine, type WishLine } from './user.js';
 
 const CONDS = new Set<string>(CONDITIONS);
@@ -15,7 +16,6 @@ const FINS = new Set<string>(FINISHES);
 const MAX_ID_CHARS = 64;
 const MAX_NAME_CHARS = 200;
 const MAX_LANG_CHARS = 10;
-const UNKNOWN_NAME = '(unknown card)';
 
 /** Bounds a given call site enforces; the field-shape rules are fixed. */
 export interface LineLimits {
@@ -26,10 +26,6 @@ export interface LineLimits {
 function clampQty(v: unknown, maxQty: number): number {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) ? Math.min(maxQty, Math.max(1, n)) : 1;
-}
-
-function clampStr(v: unknown, max: number): string {
-  return typeof v === 'string' ? v.slice(0, max) : '';
 }
 
 export function sanitizeTradeLine(raw: unknown, maxQty: number): TradeLine | null {
@@ -43,7 +39,7 @@ export function sanitizeTradeLine(raw: unknown, maxQty: number): TradeLine | nul
   return {
     oracleId,
     scryfallId,
-    name: clampStr(l.name, MAX_NAME_CHARS) || UNKNOWN_NAME,
+    name: clampStr(l.name, MAX_NAME_CHARS) || UNKNOWN_CARD_NAME,
     quantity: clampQty(l.quantity, maxQty),
     condition: (CONDS.has(l.condition as string) ? l.condition : 'NM') as Condition,
     finish: (FINS.has(l.finish as string) ? l.finish : 'nonfoil') as Finish,
@@ -65,7 +61,7 @@ export function sanitizeWishLine(raw: unknown, maxQty: number): WishLine | null 
     oracleId,
     // Empty string would match no printing at all; treat it as "any printing".
     scryfallId: clampStr(l.scryfallId, MAX_ID_CHARS) || null,
-    name: clampStr(l.name, MAX_NAME_CHARS) || UNKNOWN_NAME,
+    name: clampStr(l.name, MAX_NAME_CHARS) || UNKNOWN_CARD_NAME,
     quantity: clampQty(l.quantity, maxQty),
     ...(CONDS.has(l.condition as string) ? { condition: l.condition as Condition } : {}),
     ...(FINS.has(l.finish as string) ? { finish: l.finish as Finish } : {}),

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { PricesResponse } from '@mtg/shared';
-import { authUser, fail } from './accounts.js';
+import { authUser, fail, sendCached } from './accounts.js';
 import type { AccountStore } from './accountStore.js';
 import type { PriceStore } from './priceStore.js';
 
@@ -21,6 +21,8 @@ export function registerPriceRoutes(app: FastifyInstance, store: AccountStore, p
     if (!history) {
       return fail(reply, 404, { error: 'not_found', message: 'No price history recorded for that printing yet.' });
     }
-    return history satisfies PricesResponse;
+    // A new reading lands once a day, so an hour of staleness costs nothing;
+    // past that the body-hash ETag turns an unchanged history into a 304.
+    return sendCached(req, reply, 'private, max-age=3600', null, () => history satisfies PricesResponse);
   });
 }

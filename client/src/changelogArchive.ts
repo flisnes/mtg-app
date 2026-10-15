@@ -9,6 +9,19 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.197.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'The deck simulator seats opponents at the table: they draw and cast after your turn, so Rhystic Study, Smothering Tithe, Sheoldred, Grave Pact and the like finally do something. Set how many, their pace and how often they pay a tax on the Model tab.',
+      },
+      {
+        kind: 'added',
+        text: 'A new interaction setting holds counterspells for an opponent\'s spell and removal for an opponent\'s creature, and card rules get four "an opponent..." triggers with an "unless they pay" switch.',
+      },
+    ],
+  },
+  {
     version: '0.196.0',
     changes: [
       {

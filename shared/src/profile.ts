@@ -6,6 +6,7 @@
 // from their own local card DB by id.
 
 import type { Color } from './card.js';
+import { clampStr, UNKNOWN_CARD_NAME } from './strings.js';
 import { DECK_BOARDS } from './user.js';
 
 export const MAX_FAVORITES = 3;
@@ -83,10 +84,6 @@ export interface ProfilePutResponse {
 
 const COLOR_ORDER: readonly Color[] = ['W', 'U', 'B', 'R', 'G'];
 
-function cleanStr(v: unknown, max: number): string | null {
-  return typeof v === 'string' && v.length > 0 ? v.slice(0, max) : null;
-}
-
 function clamp(v: unknown, min: number, max: number): number | null {
   const n = Number(v);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null;
@@ -95,7 +92,7 @@ function clamp(v: unknown, min: number, max: number): number | null {
 export function sanitizeAvatar(v: unknown): ProfileAvatar | null {
   if (!v || typeof v !== 'object') return null;
   const r = v as Record<string, unknown>;
-  const scryfallId = cleanStr(r.scryfallId, 64);
+  const scryfallId = clampStr(r.scryfallId, 64);
   const x = clamp(r.x, 0, 1);
   const y = clamp(r.y, 0, 1);
   const zoom = clamp(r.zoom, 1, AVATAR_MAX_ZOOM);
@@ -111,10 +108,10 @@ export function sanitizeProfile(v: unknown): UserProfile {
     for (const raw of r.favoriteCards.slice(0, MAX_FAVORITES)) {
       if (!raw || typeof raw !== 'object') continue;
       const c = raw as Record<string, unknown>;
-      const oracleId = cleanStr(c.oracleId, 64);
-      const scryfallId = cleanStr(c.scryfallId, 64);
+      const oracleId = clampStr(c.oracleId, 64);
+      const scryfallId = clampStr(c.scryfallId, 64);
       if (!oracleId || !scryfallId) continue;
-      favoriteCards.push({ oracleId, scryfallId, name: cleanStr(c.name, 200) ?? '(unknown card)' });
+      favoriteCards.push({ oracleId, scryfallId, name: clampStr(c.name, 200) ?? UNKNOWN_CARD_NAME });
     }
   }
 
@@ -123,16 +120,16 @@ export function sanitizeProfile(v: unknown): UserProfile {
     for (const raw of r.favoriteDecks.slice(0, MAX_FAVORITES)) {
       if (!raw || typeof raw !== 'object') continue;
       const d = raw as Record<string, unknown>;
-      const name = cleanStr(d.name, 80);
+      const name = clampStr(d.name, 80);
       if (!name) continue;
       const colors = Array.isArray(d.colors)
         ? COLOR_ORDER.filter((c) => (d.colors as unknown[]).includes(c))
         : [];
-      const deckId = cleanStr(d.deckId, 64);
+      const deckId = clampStr(d.deckId, 64);
       favoriteDecks.push({
         ...(deckId ? { deckId } : {}),
         name,
-        format: cleanStr(d.format, 20) ?? 'casual',
+        format: clampStr(d.format, 20) ?? 'casual',
         colors,
         cards: Math.floor(clamp(d.cards, 0, 100_000) ?? 0),
       });
@@ -182,10 +179,10 @@ export function sanitizeDeckLines(v: unknown): PublicDeckLine[] {
   for (const raw of v.slice(0, MAX_DECK_LINES)) {
     if (!raw || typeof raw !== 'object') continue;
     const r = raw as Record<string, unknown>;
-    const oracleId = cleanStr(r.oracleId, 64);
+    const oracleId = clampStr(r.oracleId, 64);
     const quantity = Math.floor(clamp(r.quantity, 0, 9_999) ?? 0);
     if (!oracleId || quantity < 1) continue;
-    const scryfallId = cleanStr(r.scryfallId, 64);
+    const scryfallId = clampStr(r.scryfallId, 64);
     lines.push({
       oracleId,
       ...(scryfallId ? { scryfallId } : {}),

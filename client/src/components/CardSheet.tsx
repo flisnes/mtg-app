@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import type { CollectionEntry, Condition, ContainerKind, CopyPrefs, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, SlotShape, SpecialCondition, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
 import {
   CONDITIONS,
@@ -28,6 +27,8 @@ import { CONTAINER_META } from '../deck/containers.js';
 import { claimKeyOf, type FilingCopy } from '../deck/filing.js';
 import { useFiling } from '../deck/useFiling.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
+import { useOwnershipIndex } from '../db/useOwnership.js';
+import { useCommandZone } from '../db/useCommandZone.js';
 import { PlacementPills } from './PlacementBadge.js';
 import { db } from '../db/schema.js';
 import { getPriceHistory } from '../price/tracking.js';
@@ -302,16 +303,8 @@ export function CardSheet(props: CardSheetProps) {
       : deckAddIsDeck && addTo.kind === 'deck' && addTo.format === 'commander'
         ? addTo.deckId
         : undefined;
-  const commandZone = useLiveQuery(
-    async () => {
-      if (!commandZoneDeckId) return [];
-      const rows = await db.deckCards.where('[deckId+board]').equals([commandZoneDeckId, 'commander']).toArray();
-      const oracles = await db.oracleCards.bulkGet(rows.map((r) => r.oracleId));
-      return oracles.filter((o): o is OracleCard => !!o);
-    },
-    [commandZoneDeckId],
-    [] as OracleCard[],
-  );
+  const commandZoneCards = useCommandZone(commandZoneDeckId);
+  const commandZone = useMemo(() => (commandZoneCards ?? []).map((z) => z.card), [commandZoneCards]);
   // Basic lands in a container can be "any printing": whatever's on top of the
   // lands box. Offered when filing a basic into a container or editing such a
   // slot; the default when the container is a deck, since nobody sleeves 24
@@ -624,13 +617,12 @@ export function CardSheet(props: CardSheetProps) {
     [facePrinting, shownFinish, oracleCard],
   );
   const gain = trend ? acquisitionGain(trend, basis, nowQuote) : null;
-  // "Do I own this card (any printing)?" — live so it reflects edits made from
-  // this very sheet. Shown everywhere except plain edit mode, where the entry
-  // being edited already proves ownership.
-  const ownedEntries = useLiveQuery(
-    () => db.collection.where('oracleId').equals(oracleCard.oracleId).toArray(),
-    [oracleCard.oracleId],
-  );
+  // "Do I own this card (any printing)?" — read off the shared ownership index,
+  // which rebuilds on every collection write, so edits made from this very sheet
+  // show up. Shown everywhere except plain edit mode, where the entry being
+  // edited already proves ownership.
+  const ownership = useOwnershipIndex();
+  const ownedEntries = ownership?.ownedCopies(oracleCard.oracleId);
   // Where this printing is filed (deck / binder / box) — the pills under the
   // name. Follows the edition picker: switch editions and the pills follow. When
   // the sheet is about one concrete copy (a collection entry) or one slot, its

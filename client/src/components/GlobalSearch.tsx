@@ -12,6 +12,7 @@ import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { CONTAINER_KINDS, isUncheckedFormat, type Color, type DeckBoard, type DeckFormat, type OracleCard, type Priced, type Printing } from '@mtg/shared';
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
+import { useCommandZone } from '../db/useCommandZone.js';
 import { addDeckCard, addToCollection, addToWishlist, addToWishlistBulk } from '../db/dataAccess.js';
 import { formatLabel, isBackground, isBasicLand, isCompanion, isValidCommanderPair, needsColorChoice } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
@@ -619,33 +620,25 @@ function SearchOverlay() {
   // Searching from a deck filters to cards you could actually play there: legal
   // in the deck's format and, for Commander, within the commander's identity.
   const deckId = target.kind === 'deck' ? target.deckId : undefined;
-  const deckCtx = useLiveQuery(async () => {
-    if (!deckId) return null;
-    const deck = await db.decks.get(deckId);
+  const deck = useLiveQuery(async () => (deckId ? ((await db.decks.get(deckId)) ?? null) : null), [deckId]);
+  const deckFormat: DeckFormat | undefined = deck ? (deck.format ?? 'casual') : undefined;
+  const zone = useCommandZone(deckFormat === 'commander' ? deckId : undefined);
+  const deckCtx = useMemo(() => {
+    if (deck === undefined || zone === undefined) return undefined;
     if (!deck) return null;
     const format: DeckFormat = deck.format ?? 'casual';
-    let identity: Color[] | null = null;
-    let commanders: OracleCard[] = [];
-    if (format === 'commander') {
-      const rows = await db.deckCards.where('[deckId+board]').equals([deckId, 'commander']).toArray();
-      if (rows.length) {
-        const oracles = await db.oracleCards.bulkGet(rows.map((c) => c.oracleId));
-        commanders = oracles.filter((o): o is OracleCard => !!o);
-        // A choose-a-color commander's pick (Prismatic Piper & co) is part of
-        // the identity, exactly as the legality checker counts it.
-        identity = [
-          ...new Set(
-            rows.flatMap((r, i) => {
-              const o = oracles[i];
-              if (!o) return [];
-              return r.chosenColor && needsColorChoice(o) ? [...o.colorIdentity, r.chosenColor] : o.colorIdentity;
-            }),
-          ),
-        ];
-      }
-    }
-    return { format, identity, commanders };
-  }, [deckId]);
+    if (format !== 'commander' || !zone.length) return { format, identity: null as Color[] | null, commanders: [] as OracleCard[] };
+    // A choose-a-color commander's pick (Prismatic Piper & co) is part of the
+    // identity, exactly as the legality checker counts it.
+    const identity = [
+      ...new Set(
+        zone.flatMap(({ slot, card }) =>
+          slot.chosenColor && needsColorChoice(card) ? [...card.colorIdentity, slot.chosenColor] : card.colorIdentity,
+        ),
+      ),
+    ];
+    return { format, identity: identity as Color[] | null, commanders: zone.map((z) => z.card) };
+  }, [deck, zone]);
   const deckFilterActive = deckLegalOnly && !!deckCtx && !isUncheckedFormat(deckCtx.format);
 
   // One commander in the zone shouldn't hide the partner or Background that

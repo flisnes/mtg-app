@@ -10,6 +10,7 @@ import type {
 } from '@mtg/shared';
 import { db } from './schema.js';
 import { withPrices } from '../cardDb/prices.js';
+import type { OwnershipIndex } from './useOwnership.js';
 
 // Read queries against the card DB, for joining user data (which stores only
 // ids) with display data (names, images, sets, prices). Card rows don't carry
@@ -143,6 +144,11 @@ export async function getOwnedCountsFor(oracleIds: Iterable<string>): Promise<Ma
   return map;
 }
 
+/** What deckWishlistCandidates reads off a deck slot: the slot plus its card's name. */
+export type WishSlot = Pick<DeckCard, 'oracleId' | 'quantity' | 'board' | 'anyBasic' | 'condition' | 'finish' | 'lang'> & {
+  oracle?: { name: string };
+};
+
 export interface MissingCard {
   oracleId: string;
   name: string;
@@ -155,8 +161,8 @@ export interface MissingCard {
 }
 
 /** The wants shared by every slot of one card, or undefined where they differ. */
-function agreedWants(slots: DeckCard[]): Pick<MissingCard, 'condition' | 'finish' | 'lang'> {
-  const same = <T,>(pick: (s: DeckCard) => T | undefined): T | undefined => {
+function agreedWants(slots: readonly WishSlot[]): Pick<MissingCard, 'condition' | 'finish' | 'lang'> {
+  const same = <T,>(pick: (s: WishSlot) => T | undefined): T | undefined => {
     const first = pick(slots[0]!);
     return first !== undefined && slots.every((s) => pick(s) === first) ? first : undefined;
   };
@@ -176,36 +182,33 @@ function agreedWants(slots: DeckCard[]): Pick<MissingCard, 'condition' | 'finish
  * across boards. "Any printing" basics are already covered by the lands box, so
  * they never turn up here.
  */
-export async function computeDeckWishlistCandidates(deckId: string): Promise<MissingCard[]> {
-  const deckCards = await db.deckCards.where('deckId').equals(deckId).toArray();
+export function deckWishlistCandidates(
+  slots: readonly WishSlot[],
+  ownership: Pick<OwnershipIndex, 'lookup'>,
+): MissingCard[] {
   const needed = new Map<string, number>();
-  const slotsFor = new Map<string, DeckCard[]>();
-  for (const dc of deckCards) {
+  const slotsFor = new Map<string, WishSlot[]>();
+  const names = new Map<string, string>();
+  for (const dc of slots) {
     // Tokens aren't shopping list material, nor are cards you're only
     // considering, and "any basic" is already covered by the lands box.
     if (dc.anyBasic || dc.board === 'token' || dc.board === 'maybe') continue;
     needed.set(dc.oracleId, (needed.get(dc.oracleId) ?? 0) + dc.quantity);
+    if (dc.oracle) names.set(dc.oracleId, dc.oracle.name);
     const list = slotsFor.get(dc.oracleId);
     if (list) list.push(dc);
     else slotsFor.set(dc.oracleId, [dc]);
   }
 
-  const oracleIds = [...needed.keys()];
-  const [owned, wishlist, oracleMap] = await Promise.all([
-    getOwnedCountsFor(oracleIds),
-    db.wishlist.where('oracleId').anyOf(oracleIds).toArray(),
-    getOracleCardsByIds(oracleIds),
-  ]);
-  const wishlisted = new Set(wishlist.map((w) => w.oracleId));
-
   const out: MissingCard[] = [];
   for (const [oracleId, need] of needed) {
-    if (wishlisted.has(oracleId)) continue;
-    const addQty = need - (owned.get(oracleId) ?? 0);
+    const own = ownership.lookup(oracleId);
+    if (own.wished > 0) continue;
+    const addQty = need - own.qty;
     if (addQty > 0) {
       out.push({
         oracleId,
-        name: oracleMap.get(oracleId)?.name ?? '(unknown card)',
+        name: names.get(oracleId) ?? '(unknown card)',
         addQty,
         ...agreedWants(slotsFor.get(oracleId) ?? []),
       });

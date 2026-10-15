@@ -1,7 +1,9 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { CollectionEntry, WishlistEntry } from '@mtg/shared';
 import { db } from './schema.js';
+import { getSyncStatusSnapshot, subscribeSyncStatus } from '../sync/engine.js';
+import { useCoalescedLiveQuery } from './useCoalescedLiveQuery.js';
 import { joinCollectionEntries, type JoinedEntry } from './queries.js';
 import { buildOwnershipIndex, type OwnershipIndex } from './useOwnership.js';
 import { buildPlacementIndex, type PlacementIndex } from './usePlacements.js';
@@ -43,10 +45,14 @@ const EMPTY: CollectionSnapshot = {
 const Ctx = createContext<CollectionSnapshot>(EMPTY);
 
 export function CollectionSnapshotProvider({ children }: { children: ReactNode }) {
-  const entries = useLiveQuery(() => db.collection.toArray(), []);
-  const wishes = useLiveQuery(() => db.wishlist.toArray(), []);
-  const containers = useLiveQuery(() => db.decks.toArray(), []);
-  const slots = useLiveQuery(() => db.deckCards.toArray(), []);
+  // Coalesced: a burst of writes (a sync's pages, a bulk import, a batch undo)
+  // re-runs the join and the indexes once, not once per write. A sync holds
+  // changes back until it's done, so the screen doesn't redraw per page.
+  const syncing = useSyncExternalStore(subscribeSyncStatus, getSyncStatusSnapshot).phase === 'syncing';
+  const entries = useCoalescedLiveQuery(() => db.collection.toArray(), syncing);
+  const wishes = useCoalescedLiveQuery(() => db.wishlist.toArray(), syncing);
+  const containers = useCoalescedLiveQuery(() => db.decks.toArray(), syncing);
+  const slots = useCoalescedLiveQuery(() => db.deckCards.toArray(), syncing);
 
   // A live query rather than a useMemo so a card-DB update (oracleCards and
   // printings replaced wholesale) re-joins even though the entries didn't move.

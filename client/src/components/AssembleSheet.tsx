@@ -4,6 +4,7 @@ import { CONDITIONS, type CollectionEntry, type ContainerKind, type Priced, type
 import { CONTAINER_META } from '../deck/containers.js';
 import { useFiling } from '../deck/useFiling.js';
 import { getPrintingsForOracle } from '../db/queries.js';
+import { useOwnershipIndex } from '../db/useOwnership.js';
 import { db } from '../db/schema.js';
 import { CopyGrid, copyDetail } from './CopyPicker.js';
 import { Sheet } from './Sheet.js';
@@ -48,10 +49,8 @@ export function AssembleSheet({
   // The slot is read live: pinning part of it leaves a smaller slot behind, and
   // the header has to say how many copies are still looking for a home.
   const slot = useLiveQuery(async () => (item ? (await db.deckCards.get(item.slotId)) ?? null : null), [item?.slotId]);
-  const owned = useLiveQuery(
-    async () => (item ? db.collection.where('oracleId').equals(item.oracleId).toArray() : []),
-    [item?.oracleId],
-  );
+  const ownership = useOwnershipIndex();
+  const owned = item ? ownership?.ownedCopies(item.oracleId) : undefined;
   const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
   useEffect(() => {
     if (!item) return;

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.8
+
+- **Fixed: the app keeps up during a sync or a big import.** Every write used to make the collection redo its full card lookup, and the deck page and card details each re-read your whole collection on top of that. A burst of changes now lands as one update, and those screens read the shared owned counts instead. Single edits still show up instantly.
+
 ## 0.198.7
 
 - **Changed: bulk actions are in sight.** Pick a card in select mode and the bar shows its two main actions right away (File away and Add to tradelist, or Move to on a deck), with the rest under More. No more hunting for a tiny chevron. The close button and every action are now easy-to-hit 44px targets.

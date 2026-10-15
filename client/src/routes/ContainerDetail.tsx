@@ -19,9 +19,8 @@ import {
 import { db } from '../db/schema.js';
 import {
   getOracleCardsByIds,
-  getOwnedCountsFor,
   getPrintingsByIds,
-  computeDeckWishlistCandidates,
+  deckWishlistCandidates,
   type MissingCard,
 } from '../db/queries.js';
 import {
@@ -134,6 +133,8 @@ interface Row extends SlotShape {
   printing?: Priced<Printing>;
   owned: number;
 }
+/** A Row before the ownership index has counted its copies. */
+type SlotRow = Omit<Row, 'owned'>;
 
 /** What a card row hands the CardSheet to edit a deck slot (incl. commander context). */
 interface DeckCardEdit extends SlotShape {
@@ -283,22 +284,21 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const action = useAsyncAction();
   const openPairSearch = useOpenPairSearch();
 
-  const data = useLiveQuery(async () => {
+  const ownership = useOwnershipIndex();
+  const slotData = useLiveQuery(async () => {
     const deck = await db.decks.get(id);
-    if (!deck) return { deck: null, rows: [] as Row[], suggestedTokens: [] as Priced<OracleCard>[] };
+    if (!deck) return { deck: null, rows: [] as SlotRow[], suggestedTokens: [] as Priced<OracleCard>[] };
     const cards = await db.deckCards.where('deckId').equals(id).toArray();
-    const [oracleMap, printMap, owned] = await Promise.all([
+    const [oracleMap, printMap] = await Promise.all([
       getOracleCardsByIds(cards.map((c) => c.oracleId)),
       getPrintingsByIds(cards.map((c) => c.scryfallId).filter((s): s is string => !!s)),
-      getOwnedCountsFor(cards.map((c) => c.oracleId)),
     ]);
     // Spread the slot rather than copying it field by field: a field added to
     // DeckCard reaches the rows (and the card sheet behind them) on its own.
-    const rows: Row[] = cards.map((c) => ({
+    const rows: SlotRow[] = cards.map((c) => ({
       ...c,
       oracle: oracleMap.get(c.oracleId),
       printing: c.scryfallId ? printMap.get(c.scryfallId) : undefined,
-      owned: owned.get(c.oracleId) ?? 0,
     }));
     // Tokens the deck's own cards create and marker cards they reference, minus
     // whatever's already sitting in the token board — the "you'll need these"
@@ -318,6 +318,16 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
     });
     return { deck, rows, suggestedTokens };
   }, [id]);
+  // Owned counts come off the shared ownership index rather than a collection
+  // read of our own, so a collection edit doesn't re-run the slot join. Held
+  // back until the index is built, or every tile would flash "missing" first.
+  const data = useMemo(
+    () =>
+      slotData && ownership
+        ? { ...slotData, rows: slotData.rows.map((r): Row => ({ ...r, owned: ownership.lookup(r.oracleId).qty })) }
+        : undefined,
+    [slotData, ownership],
+  );
 
   // Fetch our own favorited-deck ids so the share action knows whether this
   // deck is actually browsable — only favorited decks resolve at a share link.
@@ -442,7 +452,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   async function goBack() {
     // Only a brewed deck has "cards I still need" — a binder or box holds what
     // you already own, so there's nothing to wishlist on the way out.
-    const candidates = isDeck ? await computeDeckWishlistCandidates(id) : [];
+    const candidates = isDeck && ownership ? deckWishlistCandidates(data!.rows, ownership) : [];
     if (candidates.length) openWishSheet(candidates, true);
     else navigate(meta.path);
   }
@@ -454,7 +464,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
 
   /** ⋯ menu: wishlist whatever this deck still needs, without leaving the page. */
   async function wishlistMissing() {
-    const candidates = await computeDeckWishlistCandidates(id);
+    const candidates = ownership ? deckWishlistCandidates(data!.rows, ownership) : [];
     if (candidates.length) openWishSheet(candidates, false);
     else toast(`Nothing missing — this ${meta.noun} is covered by your collection and wishlist`);
   }
@@ -494,12 +504,20 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // Stacked, a tile's key is its lead slot's id and ticking it means every
   // slot under it, so each slot answers to its lead. (Storage stacks across the
   // whole pile; a deck stacks within each board, same as the tiles are drawn.)
+  // Storage has one pile, sorted as a whole.
+  const storagePile = isDeck ? [] : sortRows([...commander, ...companion, ...main, ...side, ...maybe], sort);
+  // Each pile is grouped once per render and the same stacks feed both the
+  // selection keys here and the tiles each Board draws.
+  const stackCache = new Map<Row[], SlotStack[]>();
+  const stacksFor = (pile: Row[]) => {
+    let out = stackCache.get(pile);
+    if (!out) stackCache.set(pile, (out = groupSlots(pile, stackCtx)));
+    return out;
+  };
   const leadIdOf = new Map<string, string>();
   if (stackCtx) {
-    const piles = isDeck
-      ? [commander, companion, main, side, maybe, tokens]
-      : [[...commander, ...companion, ...main, ...side, ...maybe]];
-    for (const pile of piles) for (const g of groupSlots(pile, stackCtx)) for (const r of g.rows) leadIdOf.set(r.id, g.lead.id);
+    const piles = isDeck ? [commander, companion, main, side, maybe, tokens] : [storagePile];
+    for (const pile of piles) for (const g of stacksFor(pile)) for (const r of g.rows) leadIdOf.set(r.id, g.lead.id);
   }
   const selectedRows = data.rows.filter((r) => sel.selected.has(leadIdOf.get(r.id) ?? r.id));
   const allKeys = data.rows.filter((r) => (leadIdOf.get(r.id) ?? r.id) === r.id).map((r) => r.id);
@@ -1082,6 +1100,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         <ImportPanel
           key={pastedText ?? 'manual'}
           deckId={id}
+          slots={data.rows}
           noun={meta.noun}
           basicsAnyPrinting={isDeck}
           {...(pastedText ? { initialText: pastedText } : {})}
@@ -1098,7 +1117,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
           {(isCommander || commander.length > 0) && (
             <Board
               title="Commander"
-              rows={commander}
+              rows={commander} stacks={stacksFor(commander)}
               deckId={id}
               group="none"
               view={view}
@@ -1125,14 +1144,14 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
             />
           )}
           {companion.length > 0 && (
-            <Board title="Companion" rows={companion} deckId={id} group="none" view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
+            <Board title="Companion" rows={companion} stacks={stacksFor(companion)} deckId={id} group="none" view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
           )}
-          <Board title="Mainboard" rows={main} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
-          <Board title="Sideboard" rows={side} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
+          <Board title="Mainboard" rows={main} stacks={stacksFor(main)} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
+          <Board title="Sideboard" rows={side} stacks={stacksFor(side)} deckId={id} group={sort.group} view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
           {/* Not part of the deck: no count, no legality, nothing it "needs". */}
           <Board
             title="Considering"
-            rows={maybe}
+            rows={maybe} stacks={stacksFor(maybe)}
             deckId={id}
             group={sort.group}
             view={view}
@@ -1145,7 +1164,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
             emptyHint="Cards you might play. They don't count toward the deck. Use +Maybe in search, or move cards here from their zone."
           />
           {tokens.length > 0 && (
-            <Board title="Tokens" rows={tokens} deckId={id} group="none" view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
+            <Board title="Tokens" rows={tokens} stacks={stacksFor(tokens)} deckId={id} group="none" view={view} issues={legality.issues} onEdit={setInfo} placements={placements} sel={sel} commanderDeck={isCommander} showYear={sort.key === 'released'} />
           )}
           {data.suggestedTokens.length > 0 && (
             <TokenSuggestions deckId={id} view={view} tokens={data.suggestedTokens} />
@@ -1156,7 +1175,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         // (or by an import that guessed a sideboard) still show up here.
         <Board
           title="Cards"
-          rows={sortRows([...commander, ...companion, ...main, ...side, ...maybe], sort)}
+          rows={storagePile}
+          stacks={stacksFor(storagePile)}
           deckId={id}
           group={sort.group}
           view={view}
@@ -1422,6 +1442,7 @@ function ClipboardKeys({
 function Board({
   title,
   rows,
+  stacks,
   deckId,
   group,
   view,
@@ -1437,6 +1458,8 @@ function Board({
 }: {
   title: string;
   rows: Row[];
+  /** The rows grouped into tiles, by the page (it needs the same stacks for selection). */
+  stacks: SlotStack[];
   /** The container these rows live in, so the card sheet can read its command zone. */
   deckId: string;
   group: GroupKey;
@@ -1459,9 +1482,6 @@ function Board({
 }) {
   const ownership = useOwnershipIndex();
   const cutIds = useCutSlots(deckId);
-  const [stacking] = useStackPrintings();
-  const prefs = usePrefs();
-  const setTypes = useSetTypes(stacking);
   // A slot on "any printing" wears your preferred printing, as a search result would.
   const anySlots = useMemo(() => rows.filter((r) => !r.scryfallId), [rows]);
   const shownAny = useDisplayPrintings(anySlots);
@@ -1469,7 +1489,6 @@ function Board({
     r.printing?.imageSmall ?? (r.scryfallId ? undefined : shownAny.get(r.oracleId)?.imageSmall) ?? r.oracle?.imageSmall ?? null;
   if (rows.length === 0 && title === 'Sideboard') return null;
   const count = rows.reduce((s, r) => s + r.quantity, 0);
-  const stacks = groupSlots(rows, stacking ? { prefs, setTypes } : null);
   const toEdit = (r: Row): DeckCardEdit => ({ ...r, deckId, commanderDeck });
   /** A stack of several slots as one tile; a stack of one is its slot's own item. */
   const toStackItem = (g: SlotStack): CardItem => {
@@ -1773,12 +1792,16 @@ function TokenSuggestions({ deckId, view, tokens }: { deckId: string; view: View
 
 function ImportPanel({
   deckId,
+  slots,
   noun,
   basicsAnyPrinting,
   initialText,
   onDone,
 }: {
   deckId: string;
+  /** What's already filed here (the page's own rows), so a second paste of the
+   *  same list can say so instead of quietly doubling the deck. */
+  slots: readonly { oracleId: string; board: DeckBoard; quantity: number }[];
   /** "deck" / "binder" / "box", for the wording. */
   noun: string;
   /** Decks pull their basics from the lands box; a binder or box holds real cards. */
@@ -1813,13 +1836,11 @@ function ImportPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialText]);
 
-  // What's already filed here, so a second paste of the same list can say so
-  // instead of quietly doubling the deck.
-  const slots = useLiveQuery(async () => db.deckCards.where('deckId').equals(deckId).toArray(), [deckId]);
+  const ownership = useOwnershipIndex();
   const slotKey = (l: { oracleId: string; board?: DeckBoard }) => `${l.oracleId}|${l.board ?? 'main'}`;
   const have = useMemo(() => {
     const map = new Map<string, number>();
-    for (const s of slots ?? []) map.set(slotKey(s), (map.get(slotKey(s)) ?? 0) + s.quantity);
+    for (const s of slots) map.set(slotKey(s), (map.get(slotKey(s)) ?? 0) + s.quantity);
     return map;
   }, [slots]);
 
@@ -1866,9 +1887,7 @@ function ImportPanel({
     // as owned; pasting the same list left the collection none the wiser and
     // the container full of "you don't own this" badges. Same question now.
     const real = wanted.filter((l) => !isAny(l));
-    const owned = await db.collection.where('scryfallId').anyOf(real.map((l) => l.scryfallId)).toArray();
-    const ownedIds = new Set(owned.filter((e) => e.quantity > 0).map((e) => e.scryfallId));
-    const missing = real.filter((l) => !ownedIds.has(l.scryfallId));
+    const missing = real.filter((l) => !ownership?.lookup(l.oracleId, l.scryfallId).ownsExact);
     if (missing.length === 0) {
       onDone(added);
       return;

@@ -1,10 +1,10 @@
-import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { CollectionEntry, WishlistEntry } from '@mtg/shared';
+import type { CollectionEntry, Deck, DeckCard, WishlistEntry } from '@mtg/shared';
 import { db } from './schema.js';
 import { getSyncStatusSnapshot, subscribeSyncStatus } from '../sync/engine.js';
 import { useCoalescedLiveQuery } from './useCoalescedLiveQuery.js';
-import { joinCollectionEntries, type JoinedEntry } from './queries.js';
+import { joinCollectionEntries, joinWishlistEntries, type JoinedEntry, type JoinedWish } from './queries.js';
 import { buildOwnershipIndex, type OwnershipIndex } from './useOwnership.js';
 import { buildPlacementIndex, type PlacementIndex } from './usePlacements.js';
 
@@ -25,6 +25,10 @@ interface CollectionSnapshot {
   entries: CollectionEntry[] | undefined;
   /** Every wishlist row, straight off the table. */
   wishes: WishlistEntry[] | undefined;
+  /** Every deck, binder and box row (unsorted; sort where you need an order). */
+  containers: Deck[] | undefined;
+  /** Every deckCards row across all containers. */
+  slots: DeckCard[] | undefined;
   /** The same rows joined with card + printing display data (the expensive one). */
   joined: JoinedEntry[] | undefined;
   ownership: OwnershipIndex | undefined;
@@ -36,6 +40,8 @@ interface CollectionSnapshot {
 const EMPTY: CollectionSnapshot = {
   entries: undefined,
   wishes: undefined,
+  containers: undefined,
+  slots: undefined,
   joined: undefined,
   ownership: undefined,
   placements: undefined,
@@ -43,6 +49,14 @@ const EMPTY: CollectionSnapshot = {
 };
 
 const Ctx = createContext<CollectionSnapshot>(EMPTY);
+
+// The wishlist join is built only while something on screen asks for it: most
+// screens never show wish rows, and the join is a card-DB read per wish.
+interface WishJoin {
+  rows: JoinedWish[] | undefined;
+  subscribe: () => () => void;
+}
+const WishCtx = createContext<WishJoin>({ rows: undefined, subscribe: () => () => {} });
 
 export function CollectionSnapshotProvider({ children }: { children: ReactNode }) {
   // Coalesced: a burst of writes (a sync's pages, a bulk import, a batch undo)
@@ -61,6 +75,21 @@ export function CollectionSnapshotProvider({ children }: { children: ReactNode }
     [entries],
   );
 
+  const [wishSubs, setWishSubs] = useState(0);
+  const wanted = wishSubs > 0;
+  const joinedWishes = useLiveQuery(
+    async () => (wanted && wishes ? joinWishlistEntries(wishes) : undefined),
+    [wanted, wishes],
+  );
+  const subscribe = useCallback(() => {
+    setWishSubs((n) => n + 1);
+    return () => setWishSubs((n) => n - 1);
+  }, []);
+  const wishJoin = useMemo<WishJoin>(
+    () => ({ rows: wanted ? joinedWishes : undefined, subscribe }),
+    [wanted, joinedWishes, subscribe],
+  );
+
   const ownership = useMemo(
     () => (entries && wishes ? buildOwnershipIndex(entries, wishes) : undefined),
     [entries, wishes],
@@ -74,14 +103,20 @@ export function CollectionSnapshotProvider({ children }: { children: ReactNode }
     () => ({
       entries,
       wishes,
+      containers,
+      slots,
       joined,
       ownership,
       placements,
       conflictCount: placements?.conflicts.length ?? 0,
     }),
-    [entries, wishes, joined, ownership, placements],
+    [entries, wishes, containers, slots, joined, ownership, placements],
   );
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      <WishCtx.Provider value={wishJoin}>{children}</WishCtx.Provider>
+    </Ctx.Provider>
+  );
 }
 
 export function useCollectionSnapshot(): CollectionSnapshot {
@@ -96,4 +131,37 @@ export function useCollectionEntries(): CollectionEntry[] | undefined {
 /** Collection rows joined with their card + printing display data. */
 export function useJoinedCollection(): JoinedEntry[] | undefined {
   return useContext(Ctx).joined;
+}
+
+/** Wishlist rows on their own, no card-DB join. */
+export function useWishes(): WishlistEntry[] | undefined {
+  return useContext(Ctx).wishes;
+}
+
+/** Every deck, binder and box, plus every slot in them. */
+export function useContainers(): { containers: Deck[] | undefined; slots: DeckCard[] | undefined } {
+  const { containers, slots } = useContext(Ctx);
+  return { containers, slots };
+}
+
+/**
+ * Wishlist rows joined with card + printing display data. The join runs once,
+ * shared by every caller, and only while at least one enabled caller is mounted.
+ */
+export function useJoinedWishes(enabled = true): JoinedWish[] | undefined {
+  const { rows, subscribe } = useContext(WishCtx);
+  useEffect(() => (enabled ? subscribe() : undefined), [enabled, subscribe]);
+  return enabled ? rows : undefined;
+}
+
+/** Every container, most recently edited first (the Decks page order). */
+export function useContainersByRecent(): Deck[] | undefined {
+  const containers = useContext(Ctx).containers;
+  return useMemo(() => containers && [...containers].sort((a, b) => b.updatedAt - a.updatedAt), [containers]);
+}
+
+/** One container's slots, off the snapshot. */
+export function useDeckSlots(deckId: string): DeckCard[] | undefined {
+  const slots = useContext(Ctx).slots;
+  return useMemo(() => slots?.filter((c) => c.deckId === deckId), [slots, deckId]);
 }

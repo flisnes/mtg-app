@@ -8,14 +8,15 @@ import {
   type Printing,
   type TradeLine,
   type WishLine,
+  type WishlistEntry,
 } from '@mtg/shared';
 import { ApiError, getUserLists } from '../account/api.js';
-import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
-import { useCollectionEntries } from '../db/collectionSnapshot.js';
+import { useCollectionEntries, useWishes } from '../db/collectionSnapshot.js';
 
 /** Stable while the snapshot loads, so the matcher memo doesn't churn. */
 const EMPTY_ENTRIES: CollectionEntry[] = [];
+const EMPTY_WISHES: WishlistEntry[] = [];
 import { Icon } from '../components/icons.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { langMark } from '../components/LangFlag.js';
@@ -110,7 +111,7 @@ export type HaveFn = (wish: WishLine) => boolean;
 
 /** My wishlist as a matcher over their tradelist lines (respects my prefs). */
 export function useMyWants(): (line: TradeLine) => boolean {
-  const wishes = useLiveQuery(() => db.wishlist.toArray(), [], []);
+  const wishes = useWishes() ?? EMPTY_WISHES;
   return useMemo(() => {
     const byOracle = new Map<string, typeof wishes>();
     for (const w of wishes) {

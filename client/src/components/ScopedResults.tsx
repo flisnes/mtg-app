@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/schema.js';
-import { joinWishlistEntries, type JoinedEntry, type JoinedWish } from '../db/queries.js';
-import { useJoinedCollection } from '../db/collectionSnapshot.js';
+import { type JoinedEntry, type JoinedWish } from '../db/queries.js';
+import { useJoinedCollection, useJoinedWishes } from '../db/collectionSnapshot.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { CardSheet } from './CardSheet.js';
 import type { CardItem } from './CardViews.js';
@@ -55,10 +53,7 @@ export function ScopedResults({ scope, query }: { scope: Scope; query: string })
 
   // The same joined rows the collection page shows, off the shared snapshot.
   const collRows = useJoinedCollection();
-  const wishRows = useLiveQuery<JoinedWish[]>(
-    async () => (needWishlist ? joinWishlistEntries(await db.wishlist.toArray()) : []),
-    [needWishlist],
-  );
+  const wishRows = useJoinedWishes(needWishlist);
 
   const collMatches = useEntryMatcher(collRows, query);
   const wishMatches = useEntryMatcher(wishRows, query);

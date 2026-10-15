@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  COLORS,
   CONTAINER_KINDS,
   DECK_FORMATS,
-  countsTowardDeck,
-  normalizeColors,
   type Color,
   type ContainerKind,
   type Deck,
@@ -25,8 +24,9 @@ import {
   setDeckFolder,
   unfileWholeContainer,
 } from '../db/dataAccess.js';
-import { getOracleCardsByIds } from '../db/queries.js';
-import { formatLabel, needsColorChoice } from '../deck/legality.js';
+import { useContainers, useContainersByRecent } from '../db/collectionSnapshot.js';
+import { useDeckSummaries } from '../deck/deckSummary.js';
+import { formatLabel } from '../deck/legality.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { Icon } from '../components/icons.js';
 import { Emblem } from '../components/Emblem.js';
@@ -49,39 +49,6 @@ import { COLOR_NAMES } from '../components/CardSorting.js';
  * folder's: those are newId() output.
  */
 const ARCHIVE_ID = '__archive__';
-
-// Canonical WUBRG order for pip display.
-const COLOR_ORDER: Color[] = ['W', 'U', 'B', 'R', 'G'];
-
-/** Share of a container's coloured cards a colour needs before it earns a pip. */
-const DOMINANT_SHARE = 0.1;
-
-/**
- * Colours that actually characterise a binder or box, weighted by copies.
- *
- * Not the colour-identity union a deck gets: identity counts every mana symbol
- * on the card (Ana Battlemage is a green creature with a {U}{B} kicker), so
- * four strays in an 800-card box lit up all five pips and a shelf of sorted
- * boxes all looked the same. Printed colours, and only the ones pulling their
- * weight. Colourless cards and lands abstain rather than voting for nothing —
- * a box with no coloured cards falls back to {C}.
- */
-function dominantColors(
-  cards: { oracleId: string; quantity: number }[],
-  oracles: Map<string, { colors: Color[] }>,
-): Color[] {
-  const tally = new Map<Color, number>();
-  let colored = 0;
-  for (const card of cards) {
-    const cardColors = normalizeColors(oracles.get(card.oracleId)?.colors);
-    if (cardColors.length === 0) continue;
-    colored += card.quantity;
-    for (const c of cardColors) tally.set(c, (tally.get(c) ?? 0) + card.quantity);
-  }
-  // A multicolour card votes in every one of its colours, so the leading colour
-  // always clears 1/5 of the pile: this never comes back empty.
-  return COLOR_ORDER.filter((c) => (tally.get(c) ?? 0) >= colored * DOMINANT_SHARE);
-}
 
 // 'recent' is the default — the deck list's existing order (updatedAt desc,
 // straight off the DB query) — so adding sort/filter doesn't change what a
@@ -151,17 +118,18 @@ export function Containers({ kind }: { kind: ContainerKind }) {
   const archiveOpen = isDeck && openFolderId === ARCHIVE_ID;
 
   // How many decks sit in each folder, and how many are archived — a cheap
-  // separate query (no card lookups) so opening the sidebar doesn't pay for the
-  // detailed `rows` query below across every deck, only the ones actually in
+  // separate pass (no card lookups) so opening the sidebar doesn't pay for the
+  // detailed `rows` summary below across every deck, only the ones actually in
   // view. An archived deck keeps its folderId but no longer counts toward it:
   // it isn't in there any more, and a folder reading "3" with one deck inside
   // sends you looking for the other two.
-  const tally = useLiveQuery(async () => {
+  const { containers } = useContainers();
+  const tally = useMemo(() => {
     const counts = new Map<string, number>();
+    if (!containers) return undefined;
     if (!isDeck) return { counts, archived: 0 };
-    const decks = await db.decks.toArray();
     let archived = 0;
-    for (const d of decks) {
+    for (const d of containers) {
       if (containerKind(d) !== 'deck') continue;
       if (d.archivedAt) {
         archived++;
@@ -171,7 +139,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
       counts.set(d.folderId, (counts.get(d.folderId) ?? 0) + 1);
     }
     return { counts, archived };
-  }, [isDeck]);
+  }, [containers, isDeck]);
   const archivedCount = tally?.archived ?? 0;
 
   // Restore the last deck in the archive and the view you're looking at has
@@ -183,9 +151,10 @@ export function Containers({ kind }: { kind: ContainerKind }) {
     if (archiveOpen && tally && tally.archived === 0) setOpenFolderId(null);
   }, [archiveOpen, tally]);
 
-  const rows = useLiveQuery(async () => {
+  const recent = useContainersByRecent();
+  const listed = useMemo(() => {
     const inArchive = isDeck && openFolderId === ARCHIVE_ID;
-    const list = (await db.decks.orderBy('updatedAt').reverse().toArray()).filter((d) => {
+    return recent?.filter((d) => {
       if (containerKind(d) !== kind) return false;
       if (!isDeck) return true;
       // The archive is the only view an archived deck shows in — including
@@ -195,44 +164,10 @@ export function Containers({ kind }: { kind: ContainerKind }) {
       if (showAllDecks) return true;
       return openFolderId ? d.folderId === openFolderId : !d.folderId;
     });
-    return Promise.all(
-      list.map(async (deck) => {
-        const cards = await db.deckCards.where('deckId').equals(deck.id).toArray();
-        // Commander sits in the 100-card deck, so count it toward the mainboard.
-        // Tokens, the companion and Considering never count toward its size.
-        const main = cards.filter((c) => countsTowardDeck(c.board)).reduce((s, c) => s + c.quantity, 0);
-        const side = cards.filter((c) => c.board === 'side').reduce((s, c) => s + c.quantity, 0);
-        // A deck's colours are the union of every card's colour identity (for a
-        // legal commander deck that collapses to the commander's identity). A
-        // binder or box is hundreds of unrelated cards, where that union always
-        // saturates to WUBRG — it gets the colours it's actually made of.
-        const oracles = await getOracleCardsByIds(cards.map((c) => c.oracleId));
-        let colors: Color[];
-        if (isDeck) {
-          // Tokens don't vote: a mono-white deck making a black-and-white cleric
-          // is still mono-white.
-          const present = new Set<Color>();
-          for (const card of cards) {
-            if (card.board === 'token' || card.board === 'maybe') continue;
-            const o = oracles.get(card.oracleId);
-            for (const c of o?.colorIdentity ?? []) present.add(c);
-            // A choose-a-color commander is the color it chose.
-            if (card.board === 'commander' && card.chosenColor && o && needsColorChoice(o)) present.add(card.chosenColor);
-          }
-          colors = COLOR_ORDER.filter((c) => present.has(c));
-        } else {
-          colors = dominantColors(cards, oracles);
-        }
-        // Copies the container is holding, for the archive prompt's "take them
-        // out too?" — the cards are already loaded, so it's free here.
-        const filed = cards.reduce(
-          (n, c) => n + (!c.anyBasic && c.scryfallId && c.condition && c.finish && c.lang && !c.unfiled ? c.quantity : 0),
-          0,
-        );
-        return { deck, main, side, colors, filed };
-      }),
-    );
-  }, [kind, openFolderId, showAllDecks]);
+  }, [recent, kind, isDeck, openFolderId, showAllDecks]);
+  // Size, colours and filed copies (for the archive prompt's "take them out
+  // too?") per row: one oracle lookup for the whole view.
+  const rows = useDeckSummaries(listed);
 
   const value = useContainersValue(kind);
 
@@ -417,7 +352,7 @@ export function Containers({ kind }: { kind: ContainerKind }) {
           </select>
           <select value={filterColor} onChange={(e) => setFilterColor(e.target.value as Color | '')} aria-label="Filter by color">
             <option value="">Any color</option>
-            {COLOR_ORDER.map((c) => (
+            {COLORS.map((c) => (
               <option key={c} value={c}>
                 {COLOR_NAMES[c]}
               </option>

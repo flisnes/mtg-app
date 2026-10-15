@@ -3,8 +3,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import type { ContainerKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { containerKind } from '../deck/containers.js';
-import { getOracleCardsByIds, getOwnedCountsFor, getPrintingsByIds } from '../db/queries.js';
-import { useJoinedCollection } from '../db/collectionSnapshot.js';
+import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { useContainers, useJoinedCollection } from '../db/collectionSnapshot.js';
+import { useOwnershipIndex } from '../db/useOwnership.js';
 import { addToTotal, formatTotal, pricedForFinish, type PriceTotal } from './CardSorting.js';
 import { getCachedSealedPrices } from '../sealed/store.js';
 import { sealedPriceOf } from '../sealed/product.js';
@@ -164,14 +165,22 @@ export interface ContainersValue {
 
 /** Value of every deck, binder or box of one kind — per row and in total. */
 export function useContainersValue(kind: ContainerKind): ContainersValue | undefined {
-  return useLiveQuery(async () => {
-    const rows = (await db.decks.toArray()).filter((d) => containerKind(d) === kind);
+  const { containers, slots: allSlots } = useContainers();
+  const ownership = useOwnershipIndex();
+  const picked = useMemo(() => {
+    if (!containers || !allSlots) return undefined;
+    const rows = containers.filter((d) => containerKind(d) === kind);
     const ids = new Set(rows.map((d) => d.id));
-    const cards = (await db.deckCards.toArray()).filter((c) => ids.has(c.deckId));
-    const [oracleMap, printMap, ownedMap] = await Promise.all([
+    return { rows, cards: allSlots.filter((c) => ids.has(c.deckId)) };
+  }, [containers, allSlots, kind]);
+  // Still a live query: the slots need the card + price join, and a card-DB or
+  // price update should re-price them even though no slot moved.
+  return useLiveQuery(async () => {
+    if (!picked || !ownership) return undefined;
+    const { rows, cards } = picked;
+    const [oracleMap, printMap] = await Promise.all([
       getOracleCardsByIds(cards.map((c) => c.oracleId)),
       getPrintingsByIds(cards.map((c) => c.scryfallId).filter((s): s is string => !!s)),
-      getOwnedCountsFor(cards.map((c) => c.oracleId)),
     ]);
     const slots = new Map<string, ValueSlot[]>();
     for (const c of cards) {
@@ -179,7 +188,7 @@ export function useContainersValue(kind: ContainerKind): ContainersValue | undef
       list.push({
         oracleId: c.oracleId,
         quantity: c.quantity,
-        owned: ownedMap.get(c.oracleId) ?? 0,
+        owned: ownership.lookup(c.oracleId).qty,
         ...(c.anyBasic ? { anyBasic: true } : {}),
         // A slot asking for a foil is worth the foil price, not the nonfoil one.
         printing: c.scryfallId ? pricedForFinish(printMap.get(c.scryfallId), c.finish ?? 'nonfoil') : undefined,
@@ -197,7 +206,7 @@ export function useContainersValue(kind: ContainerKind): ContainersValue | undef
       addValue(total, value);
     }
     return { byId, total };
-  }, [kind]);
+  }, [picked, ownership]);
 }
 
 /** Format a live total for the header, or undefined while it loads. */

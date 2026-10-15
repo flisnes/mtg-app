@@ -6,7 +6,8 @@ import { CODE_LENGTH, wishPrefsMet, type CollectionEntry, type Condition, type F
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { collectionKey } from '../db/dataAccess.js';
-import { getOracleCardsByIds, getPrintingsByIds, joinCollectionEntries } from '../db/queries.js';
+import { getOracleCardsByIds, getPrintingsByIds, type JoinedEntry } from '../db/queries.js';
+import { useCollectionEntries, useJoinedCollection, useWishes } from '../db/collectionSnapshot.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { useCardMaps } from '../db/useCardMaps.js';
 import type { SearchFilters } from '../cardDb/search.js';
@@ -538,14 +539,12 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   }
 
   // Wishlist⇄tradelist matchers, both directions (for ⭐ badges and balance).
-  const lists = useLiveQuery(async () => {
-    const wish = await db.wishlist.toArray();
-    const tradelist = (await db.collection.toArray()).filter((e) => e.quantityForTrade > 0);
-    return { wish, tradelist };
-  }, []);
+  const myWishes = useWishes();
+  const entries = useCollectionEntries();
+  const myTradelist = useMemo(() => (entries ?? []).filter((e) => e.quantityForTrade > 0), [entries]);
   const theirWanted = useMemo(() => wishMatcher(trade.peerWishlist ?? []), [trade.peerWishlist]);
-  const myWanted = useMemo(() => wishMatcher(lists?.wish ?? []), [lists?.wish]);
-  const theyWantCount = (lists?.tradelist ?? []).filter((e) => theirWanted(e) > 0).length;
+  const myWanted = useMemo(() => wishMatcher(myWishes ?? []), [myWishes]);
+  const theyWantCount = myTradelist.filter((e) => theirWanted(e) > 0).length;
   const iWantCount = (trade.peerTradelist ?? []).filter((l) => myWanted(l) > 0).length;
 
   const myTotal = totalOf(myOffer);
@@ -1142,17 +1141,17 @@ function BalancePanel({
   onInfo: OpenInfo;
 }) {
   // My tradelist (with prices) plus display data for their tradelist.
+  const mine = useTradelistRows();
   const data = useLiveQuery(async () => {
-    const entries = (await db.collection.toArray()).filter((e) => e.quantityForTrade > 0);
     const peerLines = peerTradelist ?? [];
     const [printings, oracles] = await Promise.all([
-      getPrintingsByIds([...entries.map((e) => e.scryfallId), ...peerLines.map((l) => l.scryfallId)]),
-      getOracleCardsByIds([...entries.map((e) => e.oracleId), ...peerLines.map((l) => l.oracleId)]),
+      getPrintingsByIds(peerLines.map((l) => l.scryfallId)),
+      getOracleCardsByIds(peerLines.map((l) => l.oracleId)),
     ]);
-    return { entries, printings, oracles };
+    return { printings, oracles };
   }, [(peerTradelist ?? []).map((l) => l.scryfallId).join(',')]);
 
-  if (!data) return <p className="fine-print">Loading…</p>;
+  if (!data || !mine) return <p className="fine-print">Loading…</p>;
 
   const gap = Math.abs(diff);
   if (gap < BALANCE_EPSILON) {
@@ -1186,9 +1185,7 @@ function BalancePanel({
             printing,
           };
         })
-      : data.entries.map((e): BalanceCandidate => {
-          const oracle = data.oracles.get(e.oracleId);
-          const printing = data.printings.get(e.scryfallId);
+      : mine.map(({ entry: e, oracle, printing }): BalanceCandidate => {
           const line: TradeLine = {
             oracleId: e.oracleId,
             scryfallId: e.scryfallId,
@@ -1311,10 +1308,7 @@ function AddCardsPanel({
   const [q, setQ] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({});
 
-  const tradelist = useLiveQuery(async () => {
-    const entries = (await db.collection.toArray()).filter((e) => e.quantityForTrade > 0);
-    return joinCollectionEntries(entries);
-  }, []);
+  const tradelist = useTradelistRows();
 
   // Owned cards seed the sheet with the copy you have (edition/condition/
   // finish/language); anything you don't own starts from the printing the search
@@ -1482,4 +1476,10 @@ function AddTheirCardsPanel({
       onCardClick={compose}
     />
   );
+}
+
+/** Your tradelist, joined, off the shared snapshot. */
+function useTradelistRows(): JoinedEntry[] | undefined {
+  const joined = useJoinedCollection();
+  return useMemo(() => joined?.filter((r) => r.entry.quantityForTrade > 0), [joined]);
 }

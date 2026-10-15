@@ -4,6 +4,8 @@ import type { OracleCard, Priced, Printing } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { useCollectionEntries } from '../db/collectionSnapshot.js';
+import { useOwnershipIndex } from '../db/useOwnership.js';
 import { moverStats, swingStats, type MoverStats, type SwingStats } from '../price/movers.js';
 import { isTuned, useMoverTuning } from '../price/moverTuning.js';
 import { MoverTuningSheet } from '../components/MoverTuningSheet.js';
@@ -94,47 +96,36 @@ export function PriceMovers() {
   const tuning = useMoverTuning();
   const [tuningOpen, setTuningOpen] = useState(false);
 
-  // The tables are read once (and again only when they change); the window
-  // and tuning dropdowns just recompute over the rows already in hand.
+  // Price histories are read once (and again only when they change); the
+  // collection and wishlist come off the shared snapshot. The window and tuning
+  // dropdowns just recompute over the rows already in hand.
   const rows = useLiveQuery(async () => {
-    const [histories, entries, wishes] = await Promise.all([
-      db.priceHistories.toArray(),
-      db.collection.toArray(),
-      db.wishlist.toArray(),
-    ]);
-    const owned = new Set(entries.map((e) => e.scryfallId));
-    const wishedIds = new Set(wishes.map((w) => w.scryfallId).filter((id): id is string => id !== null));
-    // An "any printing" wish covers every printing of its oracle (wishMatcher rule).
-    const wishedOracles = new Set(wishes.filter((w) => !w.scryfallId).map((w) => w.oracleId));
+    const histories = await db.priceHistories.toArray();
     const printMap = await getPrintingsByIds(histories.map((h) => h.scryfallId));
     const oracleMap = await getOracleCardsByIds([...printMap.values()].map((p) => p.oracleId));
-    // Histories outlive ownership — a printing you once held keeps its recorded
-    // days so the collection value chart can still draw them. This page is about
-    // cards you hold or want, though: a mover you sold months ago is no news.
-    const relevant = histories.filter((h) => {
-      const printing = printMap.get(h.scryfallId);
-      return owned.has(h.scryfallId) || wishedIds.has(h.scryfallId) || (!!printing && wishedOracles.has(printing.oracleId));
-    });
-    return {
-      histories: relevant,
-      entries,
-      printMap,
-      oracleMap,
-      wishedIds,
-      wishedOracles,
-      tracked: histories.filter((h) => owned.has(h.scryfallId) || wishedIds.has(h.scryfallId)).length,
-    };
+    return { histories, printMap, oracleMap };
   }, []);
+  const entries = useCollectionEntries();
+  const ownership = useOwnershipIndex();
 
   const data = useMemo(() => {
-    if (!rows) return undefined;
-    const { histories, entries, printMap, oracleMap, wishedIds, wishedOracles } = rows;
+    if (!rows || !entries || !ownership) return undefined;
+    const { printMap, oracleMap } = rows;
     // Copies held per printing, summed across conditions, finishes and
     // languages: a spec pile is usually all one row, but four nonfoil plus a
     // foil is still five copies riding the same price history.
     const qtyById = new Map<string, number>();
     for (const e of entries) qtyById.set(e.scryfallId, (qtyById.get(e.scryfallId) ?? 0) + e.quantity);
-    const forTrade = new Set(entries.filter((e) => e.quantityForTrade > 0).map((e) => e.scryfallId));
+    const statusOf = (scryfallId: string) => {
+      const printing = printMap.get(scryfallId);
+      return printing ? ownership.lookup(printing.oracleId, scryfallId) : undefined;
+    };
+    // Histories outlive ownership: a printing you once held keeps its recorded
+    // days so the collection value chart can still draw them. This page is about
+    // cards you hold or want, though: a mover you sold months ago is no news.
+    // An "any printing" wish covers every printing of its oracle (wishMatcher rule).
+    const histories = rows.histories.filter((h) => qtyById.has(h.scryfallId) || !!statusOf(h.scryfallId)?.wishesExact);
+    const tracked = histories.length;
 
     const movers: Mover[] = [];
     for (const h of histories) {
@@ -143,6 +134,7 @@ export function PriceMovers() {
       const swing = swingStats(h, tuning, qty);
       if (!stats && !swing) continue;
       const printing = printMap.get(h.scryfallId);
+      const status = statusOf(h.scryfallId);
       movers.push({
         scryfallId: h.scryfallId,
         stats,
@@ -151,12 +143,12 @@ export function PriceMovers() {
         printing,
         oracle: printing && oracleMap.get(printing.oracleId),
         inCollection: qtyById.has(h.scryfallId),
-        onTradelist: forTrade.has(h.scryfallId),
-        onWishlist: wishedIds.has(h.scryfallId) || (!!printing && wishedOracles.has(printing.oracleId)),
+        onTradelist: !!status?.tradesExact,
+        onWishlist: !!status?.wishesExact,
       });
     }
-    return { tracked: rows.tracked, movers };
-  }, [rows, windowDays, tuning]);
+    return { tracked, movers };
+  }, [rows, entries, ownership, windowDays, tuning]);
 
   // Scryfall-syntax filtering over the same rows, so `t:goblin`, `c:r` or
   // `set:znr` works here exactly as it does on the collection.

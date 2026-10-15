@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useDeckSlots } from '../db/collectionSnapshot.js';
 import { MAX_CARD_TAG_LENGTH } from '@mtg/shared';
-import { db } from '../db/schema.js';
 import { deleteDeckCardTag, renameDeckCardTag, tagDeckCards } from '../db/dataAccess.js';
 import { deckTags, hasTag } from '../deck/tags.js';
 import { Icon } from './icons.js';
@@ -36,7 +35,7 @@ export function TagSheet({
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const { confirm, sheet: confirmSheet } = useConfirm();
-  const rows = useLiveQuery(() => db.deckCards.where('deckId').equals(deckId).toArray(), [deckId]);
+  const rows = useDeckSlots(deckId);
 
   const picked = useMemo(() => new Set(slotIds), [slotIds]);
   const all = rows ?? [];

@@ -135,15 +135,6 @@ export async function joinDeckCards(entries: DeckCard[]): Promise<JoinedDeckCard
   }));
 }
 
-/** Total owned copies per oracleId (summed across all printings), for deck ownership. */
-export async function getOwnedCountsFor(oracleIds: Iterable<string>): Promise<Map<string, number>> {
-  const unique = [...new Set(oracleIds)];
-  const entries = await db.collection.where('oracleId').anyOf(unique).toArray();
-  const map = new Map<string, number>();
-  for (const e of entries) map.set(e.oracleId, (map.get(e.oracleId) ?? 0) + e.quantity);
-  return map;
-}
-
 /** What deckWishlistCandidates reads off a deck slot: the slot plus its card's name. */
 export type WishSlot = Pick<DeckCard, 'oracleId' | 'quantity' | 'board' | 'anyBasic' | 'condition' | 'finish' | 'lang'> & {
   oracle?: { name: string };

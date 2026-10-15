@@ -1,11 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   MAX_FAVORITES,
-  countsTowardDeck,
   sanitizeProfile,
-  type Color,
   type DeckFormat,
   type FavoriteCard,
   type FavoriteDeck,
@@ -18,10 +16,11 @@ import {
 import { ApiError, getUserProfile, putProfile } from '../account/api.js';
 import { rememberOwnAvatar } from '../account/ownProfile.js';
 import { useAccount } from '../account/useAccount.js';
-import { db } from '../db/schema.js';
 import { getOracleCardsByIds, getPrintingsByIds, getPrintingsForOracle } from '../db/queries.js';
-import { formatLabel, needsColorChoice } from '../deck/legality.js';
+import { formatLabel } from '../deck/legality.js';
 import { containerKind } from '../deck/containers.js';
+import { useDeckSummaries } from '../deck/deckSummary.js';
+import { useContainersByRecent } from '../db/collectionSnapshot.js';
 import { Avatar } from '../components/Avatar.js';
 import { AvatarEditorSheet, CardSearch } from '../components/AvatarEditorSheet.js';
 import { CardSheet, EditionGrid } from '../components/CardSheet.js';
@@ -37,7 +36,6 @@ import { EmptyState, Page } from './Page.js';
 // else's is read-only. Reached from the Community list (tap an avatar) and
 // from Account & sync.
 
-const COLOR_ORDER: Color[] = ['W', 'U', 'B', 'R', 'G'];
 
 export function Profile() {
   const { username = '' } = useParams<{ username: string }>();
@@ -398,27 +396,9 @@ function FavoriteDeckPickerSheet({
 }) {
   // Same summary the Decks page computes: mainboard count + color identity.
   // Only actual decks — a profile shows off brews, not where you keep your bulk.
-  const decks = useLiveQuery(async () => {
-    const list = (await db.decks.orderBy('updatedAt').reverse().toArray()).filter(
-      (d) => containerKind(d) === 'deck',
-    );
-    return Promise.all(
-      list.map(async (deck) => {
-        const cards = await db.deckCards.where('deckId').equals(deck.id).toArray();
-        const main = cards.filter((c) => countsTowardDeck(c.board)).reduce((s, c) => s + c.quantity, 0);
-        const oracles = await getOracleCardsByIds(cards.map((c) => c.oracleId));
-        // Tokens and Considering don't vote toward the deck's colours.
-        const present = new Set<Color>();
-        for (const card of cards) {
-          if (card.board === 'token' || card.board === 'maybe') continue;
-          const o = oracles.get(card.oracleId);
-          for (const c of o?.colorIdentity ?? []) present.add(c);
-          if (card.board === 'commander' && card.chosenColor && o && needsColorChoice(o)) present.add(card.chosenColor);
-        }
-        return { deck, main, colors: COLOR_ORDER.filter((c) => present.has(c)) };
-      }),
-    );
-  }, []);
+  const recent = useContainersByRecent();
+  const list = useMemo(() => recent?.filter((d) => containerKind(d) === 'deck'), [recent]);
+  const decks = useDeckSummaries(list);
 
   return (
     <Sheet onClose={onClose} title="Pick a favorite deck">

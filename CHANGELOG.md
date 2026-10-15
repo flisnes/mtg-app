@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.9
+
+- **Fixed: less busywork behind the deck list.** The Decks page used to look up every deck's cards one deck at a time to show its size and colors; it now does one lookup for the whole list. The wishlist, trade screen, price movers, tag picker and "where do these live?" picker read the same shared copy of your cards instead of each fetching their own. Nothing looks different, it just has less to do.
+
 ## 0.198.8
 
 - **Fixed: the app keeps up during a sync or a big import.** Every write used to make the collection redo its full card lookup, and the deck page and card details each re-read your whole collection on top of that. A burst of changes now lands as one update, and those screens read the shared owned counts instead. Single edits still show up instantly.

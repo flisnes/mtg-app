@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.9',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Decks, binders, the wishlist, trades and price movers share one read of your cards instead of each looking them up again, so they open faster.',
+      },
+    ],
+  },
+  {
     version: '0.198.8',
     changes: [
       {

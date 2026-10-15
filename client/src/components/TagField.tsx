@@ -1,7 +1,6 @@
 import { useId, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useDeckSlots } from '../db/collectionSnapshot.js';
 import { MAX_CARD_TAG_LENGTH, normalizeCardTags } from '@mtg/shared';
-import { db } from '../db/schema.js';
 import { deckTags } from '../deck/tags.js';
 import { Icon } from './icons.js';
 
@@ -23,7 +22,7 @@ export function TagField({
 }) {
   const [draft, setDraft] = useState('');
   const listId = useId();
-  const rows = useLiveQuery(() => db.deckCards.where('deckId').equals(deckId).toArray(), [deckId]);
+  const rows = useDeckSlots(deckId);
   const used = new Set(tags.map((t) => t.toLocaleLowerCase()));
   const suggestions = deckTags(rows ?? []).filter((t) => !used.has(t.toLocaleLowerCase()));
 

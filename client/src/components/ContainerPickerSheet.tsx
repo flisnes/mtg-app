@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useContainersByRecent } from '../db/collectionSnapshot.js';
 import { useNavigate } from 'react-router-dom';
 import { CONTAINER_KINDS, type ContainerKind } from '@mtg/shared';
-import { db } from '../db/schema.js';
 import { formatLabel } from '../deck/legality.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { createContainer } from '../db/dataAccess.js';
@@ -66,7 +65,7 @@ export function ContainerPickerBody({ onPick, excludeId, only, noteFor, emptyTex
   const navigate = useNavigate();
   const [kind, setKind] = useState<ContainerKind>('deck');
   const [newName, setNewName] = useState('');
-  const rows = useLiveQuery(() => db.decks.orderBy('updatedAt').reverse().toArray(), []);
+  const rows = useContainersByRecent();
   const meta = CONTAINER_META[kind];
   const restricted = !!only;
   const shown = rows

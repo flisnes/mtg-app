@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import type { OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
-import { db } from '../db/schema.js';
-import { joinWishlistEntries, type JoinedWish } from '../db/queries.js';
+import { type JoinedWish } from '../db/queries.js';
+import { useJoinedWishes, useWishes } from '../db/collectionSnapshot.js';
 import { addToWishlistBulk, removeFromWishlist, wishKey } from '../db/dataAccess.js';
 import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
@@ -48,7 +47,7 @@ export function Wishlist() {
   const sel = useMultiSelect();
   const { confirm, sheet: confirmSheet } = useConfirm();
   const { open: review, sheet: intakeSheet } = useIntakeReview();
-  const rows = useLiveQuery(async () => joinWishlistEntries(await db.wishlist.toArray()), []);
+  const rows = useJoinedWishes();
   // An "any printing" wish wears your preferred printing, same as a search result.
   const anyWishes = useMemo(() => rows?.filter((r) => !r.entry.scryfallId).map((r) => r.entry), [rows]);
   const shown = useDisplayPrintings(anyWishes);
@@ -222,7 +221,7 @@ function ImportPanel({ onDone }: { onDone: () => void }) {
   const toast = useToast();
   // What's already wished for, so the import can say so instead of silently
   // stacking a second copy of every line onto the first.
-  const wishes = useLiveQuery(async () => db.wishlist.toArray(), []);
+  const wishes = useWishes();
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

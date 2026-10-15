@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.199.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Adding a card from search now says "+ Trade", "+ Wish" and "Add to collection" in words, and a toast after the add lets you Undo it if you grabbed the wrong printing.',
+      },
+    ],
+  },
+  {
     version: '0.198.15',
     changes: [
       {
@@ -158,15 +167,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'otag: on your lists kept working only until the first card data update. Now it survives one, and a search made offline tries again once you are back.',
-      },
-    ],
-  },
-  {
-    version: '0.198.1',
-    changes: [
-      {
-        kind: 'changed',
-        text: '"Find sealed products with this card" now lists the boosters you can open it from, and the boxes and bundles that hold them. A Wilds of Eldraine card in Set Boosters but not Draft says so.',
       },
     ],
   },

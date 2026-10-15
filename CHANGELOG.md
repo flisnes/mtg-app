@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.199.0
+
+- **Changed: labelled add buttons and Undo after adding.** The card sheet you open from search used to offer two bare icons next to "+Collection". It now reads "+ Trade", "+ Wish" and "Add to collection", all on one row on a phone. Cancel is gone from that row since the X at the top already closes the sheet, and when you step into adding from a card you were only reading, Back sits beside the card name. After an add, the sheet still flashes "Added to collection" and closes, and then a toast says "Lightning Bolt added to collection" with an Undo button for four seconds. Undo takes the card back out and removes the entry from your history, same as undoing it there. The quick-add buttons on search result rows get the same Undo toast. Mulligans to a better seven are now free.
+
 ## 0.198.15
 
 - **Changed: list rows put the card name first.** In list view the name now gets the whole top line, and the mana cost moves down beside the set, so "Atraxa, Grand Unifier" is no longer "Atraxa, Gr..." next to five pips. The for-trade count, filed and language badges sit beside the name instead of inside it, so they never get cut off. Set and copy details run onto a third line instead of stopping mid-word, the copy count sits under the price, and a card with no price says "no price" instead of a lone dash. Stacked rows lead with "3 editions", and someone else's shared deck now shows mana costs and prices like your own. Reads cleaner than a Brainstorm on turn one.

@@ -172,8 +172,8 @@ function clamp(n: number, lo: number, hi: number): number {
 // (priceEurCents, reason) — updatedAt is bumped only by editUserEvent.
 // ---------------------------------------------------------------------------
 
-async function emit(e: Omit<UserEvent, 'id' | 'updatedAt'>): Promise<void> {
-  const ev: UserEvent = { id: newId(), updatedAt: e.ts, ...e };
+async function emit(e: Omit<UserEvent, 'id' | 'updatedAt'>, id = newId()): Promise<void> {
+  const ev: UserEvent = { id, updatedAt: e.ts, ...e };
   await putSynced('events', ev);
 }
 
@@ -283,6 +283,9 @@ export interface AddToCollectionInput {
   special?: readonly SpecialCondition[];
   /** How the add was made (edit-history provenance). Defaults to 'manual'. */
   source?: EventSource;
+  /** Mint the add's event id yourself to undo exactly this add afterwards
+   *  (undoEntry with { type: 'single', id }). */
+  eventId?: string;
 }
 
 /**
@@ -341,7 +344,7 @@ export async function addToCollection(input: AddToCollectionInput): Promise<stri
       ...(special ? { special } : {}),
       priceEurCents: await priceCents(input.scryfallId, input.finish),
       source,
-    });
+    }, input.eventId);
     await emitWishFulfilled(input.oracleId, input.scryfallId, qty, now, { source });
     return entry.id;
   });
@@ -767,6 +770,9 @@ export interface AddToWishlistInput {
   quantity?: number;
   /** How the add was made (edit-history provenance). Defaults to 'manual'. */
   source?: EventSource;
+  /** Mint the add's event id yourself to undo exactly this add afterwards
+   *  (undoEntry with { type: 'single', id }). */
+  eventId?: string;
 }
 
 /** Identity of a wish line: printing + desired condition/finish/lang (undefined
@@ -794,7 +800,7 @@ export async function addToWishlist(input: AddToWishlistInput): Promise<string> 
       entry = { id: newId(), oracleId: input.oracleId, scryfallId, condition, finish, lang, quantity: qty, createdAt: now, updatedAt: now };
     }
     await putSynced('wishlist', entry);
-    await emit({ ts: now, kind: 'wish.add', oracleId: input.oracleId, scryfallId, condition, finish, lang, qty, source: input.source ?? 'manual' });
+    await emit({ ts: now, kind: 'wish.add', oracleId: input.oracleId, scryfallId, condition, finish, lang, qty, source: input.source ?? 'manual' }, input.eventId);
     return entry.id;
   });
 }

@@ -13,6 +13,7 @@ import {
   addToCollection,
   addToWishlist,
   moveDeckCard,
+  newId,
   removeDeckCard,
   removeFromCollection,
   removeFromWishlist,
@@ -53,6 +54,7 @@ import { SealedWithCardSheet } from '../sealed/SealedWithCardSheet.js';
 import { PriceChartSheet } from './PriceChart.js';
 import { PriceTrend } from './PriceTrend.js';
 import { useToast } from './Toast.js';
+import { useUndoToast } from './useUndoToast.js';
 import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice, pickPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
@@ -109,12 +111,12 @@ function addLabel(target: AddTarget): string {
 
 /** The three personal lists a card can be filed into, in button order:
  *  the sheet leads with the list it was opened from and offers the other two
- *  as compact +icon quick-adds. */
+ *  as short "+ Wish" style quick-adds. */
 type ListKind = 'collection' | 'tradelist' | 'wishlist';
-const LIST_META: Record<ListKind, { label: string; icon: IconName; title: string }> = {
-  collection: { label: 'Collection', icon: 'collection', title: 'Add to collection' },
-  tradelist: { label: 'Tradelist', icon: 'tradelist', title: 'Add to tradelist' },
-  wishlist: { label: 'Wishlist', icon: 'wishlist', title: 'Add to wishlist' },
+const LIST_META: Record<ListKind, { label: string; short: string; icon: IconName; title: string }> = {
+  collection: { label: 'Collection', short: 'Collection', icon: 'collection', title: 'Add to collection' },
+  tradelist: { label: 'Tradelist', short: 'Trade', icon: 'tradelist', title: 'Add to tradelist' },
+  wishlist: { label: 'Wishlist', short: 'Wish', icon: 'wishlist', title: 'Add to wishlist' },
 };
 const LIST_ORDER: ListKind[] = ['collection', 'tradelist', 'wishlist'];
 
@@ -274,6 +276,7 @@ export function CardSheet(props: CardSheetProps) {
     [oracleCard.tags, otagsReady],
   );
   const toast = useToast();
+  const undoToast = useUndoToast();
   // An owned collection entry opens read-only with an Edit toggle; add/wish/
   // deck/session are always a form; info is never editable.
   const [editMode, setEditMode] = useState(false);
@@ -492,7 +495,9 @@ export function CardSheet(props: CardSheetProps) {
   // The card landed on one of your lists: the sheet says so where the button
   // was, then shows itself out. A toast would fire off-screen behind the sheet,
   // and the answer belongs on the thing you just pressed.
-  const [added, setAdded] = useState<ListKind | null>(null);
+  // Once it's gone, the Undo toast takes over: the add's event id rides along
+  // so Undo reverses exactly this add.
+  const [added, setAdded] = useState<{ list: ListKind; eventId: string } | null>(null);
 
   // onClose is usually a fresh arrow from the caller, so hold it in a ref: the
   // goodbye timer must not restart every time the parent re-renders.
@@ -500,7 +505,10 @@ export function CardSheet(props: CardSheetProps) {
   closeRef.current = onClose;
   useEffect(() => {
     if (!added) return;
-    const t = window.setTimeout(() => closeRef.current(), 800);
+    const t = window.setTimeout(() => {
+      closeRef.current();
+      undoToast(`${oracleCard.name} added to ${LIST_META[added.list].label.toLowerCase()}`, added.eventId);
+    }, 800);
     return () => window.clearTimeout(t);
   }, [added]);
 
@@ -846,13 +854,14 @@ export function CardSheet(props: CardSheetProps) {
     // Add mode first: the sheet may have stepped into it from a wish, a deck
     // slot or a card it's only showing, and those props are all still set.
     if (mode === 'add') {
-      if (!(await saveAdd(board, dest))) {
+      const eventId = newId();
+      if (!(await saveAdd(board, dest, eventId))) {
         setBusy(false);
         return;
       }
       // Onto one of the three lists: flash which one, and let the timer close.
       if (addTo.kind !== 'deck') {
-        setAdded(listDest(dest));
+        setAdded({ list: listDest(dest), eventId });
         return;
       }
     } else if (sessionCard) {
@@ -888,7 +897,7 @@ export function CardSheet(props: CardSheetProps) {
 
   /** The add half of `save`. Returns false when the user backed out of the
    *  filing prompt, so the sheet stays open on the form they were filling. */
-  async function saveAdd(board: DeckBoard, dest?: ListKind): Promise<boolean> {
+  async function saveAdd(board: DeckBoard, dest?: ListKind, eventId?: string): Promise<boolean> {
     if (addTo.kind === 'deck') {
       // A slot naming a real copy of yours (edition + all three traits) is
       // cardboard being filed, so it goes through the filing flow and may offer
@@ -911,7 +920,7 @@ export function CardSheet(props: CardSheetProps) {
     }
     const where = listDest(dest);
     if (where === 'wishlist') {
-      await addToWishlist({ oracleId: oracleCard.oracleId, scryfallId: scryfallId || null, ...wishPrefs, quantity });
+      await addToWishlist({ oracleId: oracleCard.oracleId, scryfallId: scryfallId || null, ...wishPrefs, quantity, eventId });
     } else {
       // Collection and tradelist both write a collection entry (the latter
       // starts with copies marked for trade). A wishlist-origin sheet can
@@ -924,6 +933,7 @@ export function CardSheet(props: CardSheetProps) {
         quantity,
         quantityForTrade: where === 'tradelist' ? clampedForTrade || 1 : clampedForTrade,
         special,
+        eventId,
       });
       onAdded?.({ scryfallId: addedId, ...concrete });
     }
@@ -1040,6 +1050,13 @@ export function CardSheet(props: CardSheetProps) {
             art they were sharing a 168px column with a ⋯ and an ✕, which a card
             called "_____ _____ Rocketship" wins by pushing them off the edge. */}
         <div className="sheet-name-row">
+          {/* Stepped into the add form from another mode: back out to the sheet
+              they were reading, not out of the card entirely. */}
+          {addFlow && (
+            <button type="button" className="sheet-close" onClick={() => setAddFlow(null)} disabled={busy} aria-label="Back" title="Back">
+              <Icon name="chevronLeft" size={18} />
+            </button>
+          )}
           <div className="sheet-name">{oracleCard.name}</div>
           <OptionsMenu
             label="Card options"
@@ -1410,8 +1427,8 @@ export function CardSheet(props: CardSheetProps) {
           // Where the +List button was a moment ago: the same shape, answered.
           <div className="sheet-actions">
             <p className="sheet-added" role="status">
-              <Icon name="check" size={16} /> Added to {LIST_META[added].label.toLowerCase()}{' '}
-              <Icon name={LIST_META[added].icon} size={16} />
+              <Icon name="check" size={16} /> Added to {LIST_META[added.list].label.toLowerCase()}{' '}
+              <Icon name={LIST_META[added.list].icon} size={16} />
             </p>
           </div>
         ) : mode === 'info' ? (
@@ -1437,17 +1454,20 @@ export function CardSheet(props: CardSheetProps) {
             </button>
           </div>
         ) : (
-          <div className="sheet-actions">
+          <div className={listAddKind ? 'sheet-actions sheet-actions-lists' : 'sheet-actions'}>
             {mode !== 'add' && !hideRemove && (
               <button className="danger-outline" onClick={del} disabled={busy}>
                 Remove
               </button>
             )}
-            {/* Stepped into this form from another mode: back out to the sheet
-                they were reading, not out of the card entirely. */}
-            <button onClick={addFlow ? () => setAddFlow(null) : onClose} disabled={busy}>
-              {addFlow ? 'Back' : 'Cancel'}
-            </button>
+            {/* The three list adds need the whole row at 393px, so they leave
+                Cancel to the header's close button (and Back, when the add was
+                stepped into from another mode, sits beside the name). */}
+            {!listAddKind && (
+              <button onClick={onClose} disabled={busy}>
+                Cancel
+              </button>
+            )}
             {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && !cardIsToken && addTo.format === 'commander' && canJoinCommandZone(oracleCard, commandZone) && (
               <button onClick={() => save('commander')} disabled={busy}>
                 {commandZone.length === 1 ? 'Add as second commander' : 'Add as commander'}
@@ -1488,11 +1508,11 @@ export function CardSheet(props: CardSheetProps) {
                     onClick={() => save('main', k)}
                     disabled={busy}
                   >
-                    +<Icon name={LIST_META[k].icon} size={16} />
+                    + {LIST_META[k].short}
                   </button>
                 ))}
                 <button className="primary add-primary" onClick={() => save('main', listAddKind)} disabled={busy}>
-                  +{LIST_META[listAddKind].label} <Icon name={LIST_META[listAddKind].icon} size={16} />
+                  {LIST_META[listAddKind].title}
                 </button>
               </>
             ) : (

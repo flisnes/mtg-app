@@ -3809,13 +3809,23 @@ button.primary {
 .sheet-actions.sheet-actions-pair button:first-child {
   margin-right: 0;
 }
-/* Compact +icon quick-adds for the non-origin lists sit beside the primary
-   labeled "+List" button; keep the plus and glyph centered and tight. */
+/* Short "+ Wish" quick-adds for the non-origin lists sit beside the primary
+   "Add to collection"; tight padding keeps all three on one row at 393px. */
 .sheet-actions .add-alt {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding-inline: 0.7rem;
+  padding-inline: 0.6rem;
+}
+.sheet-actions-lists {
+  gap: 0.4rem;
+}
+.sheet-actions-lists .add-primary {
+  padding-inline: 0.75rem;
+}
+/* Without a Cancel ahead of it, the first quick-add stays with the others. */
+.sheet-actions .add-alt:first-child {
+  margin-right: 0;
 }
 .sheet-actions .add-primary {
   display: inline-flex;
@@ -4406,6 +4416,11 @@ button.primary {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  align-items: center;
+  /* Centered by a transform, the stack shrinks to fit and wraps each toast at
+     every word. Size it to its content, short of the screen edges. */
+  width: max-content;
+  max-width: calc(100vw - 2rem);
   z-index: var(--z-top);
   pointer-events: none;
 }
@@ -4417,6 +4432,24 @@ button.primary {
   border-radius: 999px;
   font-size: 0.85rem;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+/* The stack lets taps through to the page; a toast with a button takes them. */
+.toast-with-action {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-block: 0.15rem;
+  padding-right: 0.25rem;
+  pointer-events: auto;
+}
+.toast-action {
+  min-height: var(--tap);
+  padding: 0 0.9rem;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
 }
 
 /* ---- Collection / list rows ---- */

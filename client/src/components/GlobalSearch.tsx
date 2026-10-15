@@ -13,7 +13,7 @@ import { CONTAINER_KINDS, isUncheckedFormat, type Color, type DeckBoard, type De
 import type { SearchFilters } from '../cardDb/search.js';
 import { db } from '../db/schema.js';
 import { useCommandZone } from '../db/useCommandZone.js';
-import { addDeckCard, addToCollection, addToWishlist, addToWishlistBulk } from '../db/dataAccess.js';
+import { addDeckCard, addToCollection, addToWishlist, addToWishlistBulk, newId } from '../db/dataAccess.js';
 import { formatLabel, isBackground, isBasicLand, isCompanion, isValidCommanderPair, needsColorChoice } from '../deck/legality.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
@@ -39,6 +39,7 @@ import type { IconName } from './icons.js';
 import { ownedBadge } from './OwnedBadge.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { useToast } from './Toast.js';
+import { useUndoToast } from './useUndoToast.js';
 import { Icon } from './icons.js';
 import { AccountMenu } from './AccountMenu.js';
 import { NotificationBell } from './NotificationBell.js';
@@ -83,6 +84,12 @@ function useSearchTarget(): AddTarget {
  * you can carry off it.
  */
 export type PageScope = Scope | 'movers';
+
+/** The three lists a result row quick-adds to, in button order. Each name is
+ *  also its icon. Row buttons stay +icon: a list row has no room for words, and
+ *  the card sheet carries the labelled ones. */
+type QuickList = 'collection' | 'wishlist' | 'tradelist';
+const QUICK_LISTS: QuickList[] = ['collection', 'wishlist', 'tradelist'];
 
 const SCOPE_NOUN: Record<PageScope, string> = {
   collection: 'collection',
@@ -515,6 +522,7 @@ function SearchOverlay({ history }: { history: ReactNode }) {
   const [sheetCard, setSheetCard] = useState<{ card: Priced<OracleCard>; scryfallId?: string } | null>(null);
   const [deckLegalOnly, setDeckLegalOnly] = useState(true);
   const toast = useToast();
+  const undoToast = useUndoToast();
   const target = useSearchTarget();
   const { session } = useAccount();
   const profile = useProfileScope(session?.username);
@@ -717,18 +725,26 @@ function SearchOverlay({ history }: { history: ReactNode }) {
   // or the card DB's representative) / NM / nonfoil / en; the sheet is for detail.
   const shownId = (card: OracleCard, printing?: Printing) => printing?.scryfallId ?? card.defaultScryfallId;
 
-  async function quickCollection(card: OracleCard, printing?: Printing) {
-    await addToCollection({ oracleId: card.oracleId, scryfallId: shownId(card, printing), condition: 'NM', finish: 'nonfoil', lang: 'en' });
-    toast(`Added ${card.name} to collection`);
+  async function quickList(list: QuickList, card: OracleCard, printing?: Printing) {
+    const eventId = newId();
+    if (list === 'wishlist') await addToWishlist({ oracleId: card.oracleId, scryfallId: null, eventId });
+    else
+      await addToCollection({
+        oracleId: card.oracleId,
+        scryfallId: shownId(card, printing),
+        condition: 'NM',
+        finish: 'nonfoil',
+        lang: 'en',
+        ...(list === 'tradelist' ? { quantityForTrade: 1 } : {}),
+        eventId,
+      });
+    undoToast(`${card.name} added to ${list}`, eventId);
   }
-  async function quickWishlist(card: OracleCard) {
-    await addToWishlist({ oracleId: card.oracleId, scryfallId: null });
-    toast(`Added ${card.name} to wishlist`);
-  }
-  async function quickTradelist(card: OracleCard, printing?: Printing) {
-    await addToCollection({ oracleId: card.oracleId, scryfallId: shownId(card, printing), condition: 'NM', finish: 'nonfoil', lang: 'en', quantityForTrade: 1 });
-    toast(`Added ${card.name} to tradelist`);
-  }
+  const quickListButton = (list: QuickList, card: OracleCard, printing?: Printing) => (
+    <button key={list} title={`Add to ${list}`} aria-label={`Add to ${list}`} onClick={() => quickList(list, card, printing)}>
+      +<Icon name={list} size={16} />
+    </button>
+  );
   async function quickDeck(card: OracleCard, deckId: string, board: DeckBoard, noun = 'deck', printing?: Printing) {
     // A basic land in a deck defaults to "any printing" — whatever's on top of
     // the lands box. Binders and boxes hold real cardboard, so they don't.
@@ -752,13 +768,11 @@ function SearchOverlay({ history }: { history: ReactNode }) {
         void quickDeck(card, target.deckId, 'main', containerMeta.kind === 'deck' ? 'deck' : containerMeta.noun, printing);
         return;
       case 'wishlist':
-        void quickWishlist(card);
-        return;
       case 'tradelist':
-        void quickTradelist(card, printing);
+        void quickList(target.kind, card, printing);
         return;
       default:
-        void quickCollection(card, printing);
+        void quickList('collection', card, printing);
     }
   }
 
@@ -804,37 +818,11 @@ function SearchOverlay({ history }: { history: ReactNode }) {
         );
       }
       case 'collection':
-        return (
-          <button title="Add to collection" onClick={() => quickCollection(card, printing)}>
-            +<Icon name="collection" size={16} />
-          </button>
-        );
       case 'wishlist':
-        return (
-          <button title="Add to wishlist" onClick={() => quickWishlist(card)}>
-            +<Icon name="wishlist" size={16} />
-          </button>
-        );
       case 'tradelist':
-        return (
-          <button title="Add to tradelist" onClick={() => quickTradelist(card, printing)}>
-            +<Icon name="tradelist" size={16} />
-          </button>
-        );
+        return quickListButton(target.kind, card, printing);
       default:
-        return (
-          <>
-            <button title="Add to collection" onClick={() => quickCollection(card, printing)}>
-              +<Icon name="collection" size={16} />
-            </button>
-            <button title="Add to wishlist" onClick={() => quickWishlist(card)}>
-              +<Icon name="wishlist" size={16} />
-            </button>
-            <button title="Add to tradelist" onClick={() => quickTradelist(card, printing)}>
-              +<Icon name="tradelist" size={16} />
-            </button>
-          </>
-        );
+        return <>{QUICK_LISTS.map((list) => quickListButton(list, card, printing))}</>;
     }
   }
 

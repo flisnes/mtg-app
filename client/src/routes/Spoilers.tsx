@@ -26,6 +26,12 @@ import { Icon } from '../components/icons.js';
 // releases up top where they matter.
 const RECENT_SET_LIMIT = 30;
 
+// The page opens on the newest set that looks like a real release. An upcoming
+// set with a lone preview card, or a token/promo "set", made the page open on
+// All (0) and an empty grid. Ten printings is past either.
+const DEFAULT_SET_MIN_CARDS = 10;
+const SIDE_SET_CODE = /^[tp][a-z0-9]{3}$/;
+
 type Kind = 'all' | 'new' | 'reprints';
 
 interface SetSummary {
@@ -33,6 +39,7 @@ interface SetSummary {
   name: string;
   releasedAt: string;
   upcoming: boolean;
+  count: number;
 }
 
 interface SpoilerCard {
@@ -78,7 +85,7 @@ export function Spoilers() {
       const summaries = [...sets]
         .sort((a, b) => b.releasedAt.localeCompare(a.releasedAt) || a.name.localeCompare(b.name))
         .slice(0, RECENT_SET_LIMIT)
-        .map((s): SetSummary => ({ code: s.code, name: s.name, releasedAt: s.releasedAt, upcoming: s.releasedAt > today }));
+        .map((s): SetSummary => ({ code: s.code, name: s.name, releasedAt: s.releasedAt, upcoming: s.releasedAt > today, count: s.count }));
       if (!cancelled) setData({ summaries, debuts });
     })();
     return () => {
@@ -86,7 +93,9 @@ export function Spoilers() {
     };
   }, []);
 
-  const defaultCode = data?.summaries[0]?.code;
+  const defaultCode = (
+    data?.summaries.find((s) => s.count >= DEFAULT_SET_MIN_CARDS && !SIDE_SET_CODE.test(s.code)) ?? data?.summaries[0]
+  )?.code;
 
   // Which sets are checked. Membership only — display order follows summaries.
   const selectedSet = useMemo(
@@ -286,17 +295,17 @@ export function Spoilers() {
 
               <div className="seg-row" role="group" aria-label="Card kind">
                 <button className={`seg${kind === 'all' ? ' seg-active' : ''}`} onClick={() => setKind('all')} aria-pressed={kind === 'all'}>
-                  All ({newCount + reprintCount})
+                  All{cards && ` (${newCount + reprintCount})`}
                 </button>
                 <button className={`seg${kind === 'new' ? ' seg-active' : ''}`} onClick={() => setKind('new')} aria-pressed={kind === 'new'}>
-                  New ({newCount})
+                  New{cards && ` (${newCount})`}
                 </button>
                 <button
                   className={`seg${kind === 'reprints' ? ' seg-active' : ''}`}
                   onClick={() => setKind('reprints')}
                   aria-pressed={kind === 'reprints'}
                 >
-                  Reprints ({reprintCount})
+                  Reprints{cards && ` (${reprintCount})`}
                 </button>
               </div>
 

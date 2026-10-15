@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.13',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Layout fixes: recent searches no longer cover the scope chips, Spoilers opens on a set with cards, the sealed steppers are centred, and Delete sits apart from Archive in the deck menu.',
+      },
+    ],
+  },
+  {
     version: '0.198.12',
     changes: [
       {
@@ -162,15 +171,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Wishes and deck slots on "Any printing" now show your preferred printing, not the newest one, so a Secret Lair or set promo no longer stands in for the card. "Newest normal printing" also skips The List and other copies with letters in the collector number.',
-      },
-    ],
-  },
-  {
-    version: '0.197.2',
-    changes: [
-      {
-        kind: 'fixed',
-        text: '"Newest normal printing" shows the plain card again for sets that print several versions of it, instead of the borderless chase copy. When a set only has variants, the lowest collector number wins.',
       },
     ],
   },

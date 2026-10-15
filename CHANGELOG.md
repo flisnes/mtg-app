@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.13
+
+- **Fixed: six layout bugs.** Recent searches now sit under the Collection / Tradelist / Wishlist chips instead of on top of them. Spoilers opens on the newest set that actually has cards, not an upcoming one with nothing in it, and set symbols no longer flash a hollow box while they load. The deck card sheet leaves room under Tags, an empty deck's sort and view buttons share one line, the sealed product +/- buttons have their glyphs centred, and Delete deck sits below a divider instead of right under Archive. Fewer misclicks, fewer accidental Armageddons.
+
 ## 0.198.12
 
 - **Changed: bigger tap targets, clearer purple.** The toolbar buttons (search, Select, Sort, Stack, list/grid) are now one height so they line up, and the sheet close X, quantity steppers, chips, back links and checkbox rows are all big enough to hit with a thumb on the first try. Purple buttons are a shade deeper so their white text reads better, purple text and icons are a shade lighter so they stand out on dark panels, and red warnings got the same treatment. No more squinting at "Select all" like it's the fine print on a Chaos Orb.

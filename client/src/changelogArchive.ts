@@ -9,6 +9,15 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.197.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: '"Newest normal printing" shows the plain card again for sets that print several versions of it, instead of the borderless chase copy. When a set only has variants, the lowest collector number wins.',
+      },
+    ],
+  },
+  {
     version: '0.197.1',
     changes: [
       {

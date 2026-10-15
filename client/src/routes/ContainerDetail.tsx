@@ -1085,7 +1085,12 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       {isDeck && stats.total > 0 && <DeckStatsLine stats={stats} onOpen={() => navigate(`/decks/${id}/analysis`)} />}
 
       <div className="list-toolbar">
-        <p className="search-meta grow">Search above to add cards to this {meta.noun}.</p>
+        {/* An empty deck has no Select button, so the hint squeezed in beside
+            Sort and stacking and the view toggle dropped onto a line of its
+            own. On its own row the hint leaves the controls one line to share. */}
+        <p className={`search-meta grow${data.rows.length === 0 ? ' toolbar-hint-row' : ''}`}>
+          Search above to add cards to this {meta.noun}.
+        </p>
         {!sel.active && data.rows.length > 0 && (
           <SelectToggle onEnter={sel.enter} />
         )}

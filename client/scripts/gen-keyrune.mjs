@@ -45,7 +45,7 @@ const css = `/* Magic set symbols — the Keyrune icon font (v${version}).
   src: url('./keyrune.woff2') format('woff2');
   font-weight: normal;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 .ss {
   display: inline-block;

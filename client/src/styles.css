@@ -351,8 +351,8 @@ button.danger-outline {
   margin: 0;
 }
 
-/* Recent searches: a history panel hanging off the search bar, browser
-   address-bar style. Translucent so the cards underneath stay visible — it's a
+/* Search completions (otag:, set:): a panel hanging off the search bar, browser
+   address-bar style. Translucent so the cards underneath stay visible: it's a
    suggestion passing over the page, not a page of its own. Rows carry no boxes;
    the arrow-key/hover highlight is the only chrome they get. */
 .search-history {
@@ -371,6 +371,17 @@ button.danger-outline {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+/* Recent searches live in the overlay, under the scope chips. Hanging off the
+   bar they covered the chips and the hint read through the glass. In the flow
+   it's a plain panel: nothing underneath to show through. */
+.search-overlay-inner > .search-history {
+  position: static;
+  background: var(--surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  border-color: var(--border);
 }
 .search-history-list {
   list-style: none;
@@ -2797,6 +2808,9 @@ body:has(.select-float) .app-main {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  /* Scrolled to the end, the last field (a deck card's Tags) sat flush on the
+     add bar and read as cut in half. */
+  padding-bottom: 0.75rem;
 }
 .card-sheet .sheet-body {
   display: flex;
@@ -4370,6 +4384,9 @@ button.primary {
   flex: 1;
   min-width: 140px;
 }
+.list-toolbar .toolbar-hint-row {
+  flex-basis: 100%;
+}
 .badge {
   display: inline-block;
   font-size: 0.7rem;
@@ -4642,6 +4659,20 @@ button.primary {
 }
 .options-item-danger {
   color: var(--danger);
+}
+/* A rule above the first destructive item, so Delete never sits flush under
+   Archive where a thumb aimed at one lands on the other. */
+.options-item:not(.options-item-danger) + .options-item-danger {
+  position: relative;
+  margin-top: 0.5rem;
+}
+.options-item:not(.options-item-danger) + .options-item-danger::before {
+  content: '';
+  position: absolute;
+  left: 0.4rem;
+  right: 0.4rem;
+  top: -0.25rem;
+  border-top: 1px solid var(--border);
 }
 .options-icon {
   display: inline-flex;
@@ -7299,6 +7330,8 @@ a.seg {
   width: 2rem;
   height: 2rem;
   padding: 0;
+  display: grid;
+  place-items: center;
 }
 .sealed-owned-remove {
   font-size: 0.82rem;
@@ -7333,9 +7366,14 @@ a.seg {
   gap: 0.6rem;
   font-size: 0.9rem;
 }
+/* No padding: the global button padding left a 2rem box ~13px for an 18px
+   line, so the glyphs hung off the bottom right. */
 .sealed-copies button {
   width: 2rem;
   height: 2rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
   border-radius: 8px;
   font-size: 1.1rem;
   line-height: 1;

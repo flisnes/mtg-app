@@ -105,9 +105,8 @@ export function useSearchHistory(query: string): string[] {
 }
 
 /**
- * The history panel that hangs off the search bar. Translucent on purpose: the
- * collection stays visible underneath, so this reads as a passing suggestion
- * rather than a page that replaced your cards.
+ * The recent-searches panel. The search overlay renders it under the scope
+ * chips; the base style is still the translucent dropdown the completions use.
  *
  * `active` is the arrow-key highlight (-1 = none, the typed text stands). The
  * mousedown guard is what keeps the input focused through a click, so keyboard

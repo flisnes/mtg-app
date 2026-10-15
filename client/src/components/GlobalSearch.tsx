@@ -458,19 +458,16 @@ export function GlobalSearchBar() {
             enterKeyHint="search"
             aria-label="Search cards"
           />
-          {showHistory &&
-            (suggest ? (
-              <SearchSuggestDropdown
-                list={suggest.items}
-                active={active}
-                onPick={pickHistory}
-                onHover={setActive}
-                label={suggest.label}
-                icon={suggest.icon}
-              />
-            ) : (
-              <SearchHistoryDropdown list={matches} active={active} onPick={pickHistory} onHover={setActive} />
-            ))}
+          {showHistory && suggest && (
+            <SearchSuggestDropdown
+              list={suggest.items}
+              active={active}
+              onPick={pickHistory}
+              onHover={setActive}
+              label={suggest.label}
+              icon={suggest.icon}
+            />
+          )}
         </div>
         {open ? (
           <button className="header-close" onClick={close} aria-label="Close search">
@@ -494,12 +491,23 @@ export function GlobalSearchBar() {
           </>
         )}
       </header>
-      {open && <SearchOverlay />}
+      {/* Recent searches sit in the overlay under the scope chips, not hanging
+          off the bar: hanging there they covered the chips. Completions stay a
+          dropdown, since they finish the term being typed. */}
+      {open && (
+        <SearchOverlay
+          history={
+            showHistory && !suggest ? (
+              <SearchHistoryDropdown list={matches} active={active} onPick={pickHistory} onHover={setActive} />
+            ) : null
+          }
+        />
+      )}
     </>
   );
 }
 
-function SearchOverlay() {
+function SearchOverlay({ history }: { history: ReactNode }) {
   const { query, filters, setFilters, scope, setScope, pairWith, setPairWith } = useContext(Ctx)!;
   const { pathname } = useLocation();
   // The sheet opens on the printing the result was showing, so tapping a tile
@@ -692,7 +700,8 @@ function SearchOverlay() {
       <div className="search-scopebar">
         <div className="search-overlay-inner">
           {chips}
-          {!query && (
+          {history}
+          {!query && !history && (
             <>
               <p className="search-meta">
                 Filtering your {SCOPE_NOUN[scope]}. Turn the chip off to search every card instead.
@@ -860,7 +869,7 @@ function SearchOverlay() {
 
   // Nothing typed yet: recent searches hang off the search bar itself, so all
   // that's left down here is the hint.
-  const emptyState = (
+  const emptyState = history ? null : (
     <p className="search-meta">
       Type a card name to search the whole card database.{targetHint && ` ${targetHint}`}
     </p>
@@ -870,6 +879,7 @@ function SearchOverlay() {
     <div className="search-overlay">
       <div className="search-overlay-inner">
         {chips}
+        {history}
 
         {scoped ? (
           <>

@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { sanitizeAvatar, sanitizeProfile, type ProfileAvatar } from '@mtg/shared';
 import { getUserProfile, putProfile } from './api.js';
-import { randomAvatarPreset } from './avatarPresets.js';
 import { getSetting, setSetting } from '../db/settings.js';
 
 // The signed-in user's own profile picture, cached in settings so the header
@@ -42,6 +41,8 @@ export function useOwnAvatar(
         // A saved profile is left alone even when its avatar is null — that
         // means the user removed the picture on purpose.
         if (!existing && res.updatedAt === 0) {
+          // Dynamic: the preset list is 16 kB and this runs once per account.
+          const { randomAvatarPreset } = await import('./avatarPresets.js');
           const avatar = randomAvatarPreset();
           await putProfile(token, { ...sanitizeProfile(res.profile), avatar });
           await rememberOwnAvatar(avatar);

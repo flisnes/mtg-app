@@ -16,25 +16,11 @@ import { CollectionSnapshotProvider, useCollectionSnapshot } from './db/collecti
 import { Collection } from './routes/Collection.js';
 import { Wishlist } from './routes/Wishlist.js';
 import { Tradelist } from './routes/Tradelist.js';
-import { SealedProducts } from './routes/SealedProducts.js';
-import { Containers } from './routes/Containers.js';
 import { ContainerDetail } from './routes/ContainerDetail.js';
-import { History } from './routes/History.js';
-import { PriceMovers } from './routes/PriceMovers.js';
-import { Spoilers } from './routes/Spoilers.js';
-import { About } from './routes/About.js';
-import { Settings } from './routes/Settings.js';
-import { Community } from './routes/Community.js';
-import { Profile } from './routes/Profile.js';
-import { ProfileDeck } from './routes/ProfileDeck.js';
 import { More } from './routes/More.js';
-import { EditHistory } from './routes/EditHistory.js';
-import { FilingConflicts } from './routes/FilingConflicts.js';
-import { Import } from './routes/Import.js';
-import { Export } from './routes/Export.js';
 import { maybeFetchMatches } from './account/notifications.js';
 import { initSyncEngine } from './sync/engine.js';
-import { initAgentBridge } from './agent/bridge.js';
+import { initAgentBridge } from './agent/status.js';
 import { recordCollectionPrices } from './price/tracking.js';
 import { recordSealedPrices } from './price/sealedTracking.js';
 import { ensureRates } from './price/rates.js';
@@ -56,6 +42,22 @@ const Trade = lazy(() => import('./routes/Trade.js').then((m) => ({ default: m.T
 const DeckAnalysisPage = lazy(() =>
   import('./routes/DeckAnalysisPage.js').then((m) => ({ default: m.DeckAnalysisPage })),
 );
+// Secondary destinations: every one is a tap or two away from the first
+// screen, never the screen itself, so each loads when someone goes there.
+const SealedProducts = lazy(() => import('./routes/SealedProducts.js').then((m) => ({ default: m.SealedProducts })));
+const Containers = lazy(() => import('./routes/Containers.js').then((m) => ({ default: m.Containers })));
+const History = lazy(() => import('./routes/History.js').then((m) => ({ default: m.History })));
+const PriceMovers = lazy(() => import('./routes/PriceMovers.js').then((m) => ({ default: m.PriceMovers })));
+const Spoilers = lazy(() => import('./routes/Spoilers.js').then((m) => ({ default: m.Spoilers })));
+const About = lazy(() => import('./routes/About.js').then((m) => ({ default: m.About })));
+const Settings = lazy(() => import('./routes/Settings.js').then((m) => ({ default: m.Settings })));
+const Community = lazy(() => import('./routes/Community.js').then((m) => ({ default: m.Community })));
+const Profile = lazy(() => import('./routes/Profile.js').then((m) => ({ default: m.Profile })));
+const ProfileDeck = lazy(() => import('./routes/ProfileDeck.js').then((m) => ({ default: m.ProfileDeck })));
+const EditHistory = lazy(() => import('./routes/EditHistory.js').then((m) => ({ default: m.EditHistory })));
+const FilingConflicts = lazy(() => import('./routes/FilingConflicts.js').then((m) => ({ default: m.FilingConflicts })));
+const Import = lazy(() => import('./routes/Import.js').then((m) => ({ default: m.Import })));
+const Export = lazy(() => import('./routes/Export.js').then((m) => ({ default: m.Export })));
 import { Icon, type IconName } from './components/icons.js';
 import { tabFor, type Tab } from './nav.js';
 

@@ -12,38 +12,10 @@ import { APP_VERSION } from '../version.js';
 import { AGENT_WS_URL } from './config.js';
 import { dispatch, manifestOf } from './registry.js';
 import { AGENT_TOOLS } from './tools.js';
+import { setAgentStatus as setStatus } from './status.js';
 
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 15_000;
-
-// ---------------------------------------------------------------------------
-// Status: a tiny external store for the Settings section.
-// ---------------------------------------------------------------------------
-
-/**
- * off: pref disabled. waiting: enabled, no bridge answering (it only runs
- * while a Claude Code session has spawned it). connected: live. replaced:
- * another tab took over; this one stays quiet until re-enabled or reloaded.
- */
-export type AgentStatus = 'off' | 'waiting' | 'connected' | 'replaced';
-
-let status: AgentStatus = 'off';
-const statusListeners = new Set<() => void>();
-
-function setStatus(next: AgentStatus): void {
-  if (status === next) return;
-  status = next;
-  statusListeners.forEach((cb) => cb());
-}
-
-export function getAgentStatusSnapshot(): AgentStatus {
-  return status;
-}
-
-export function subscribeAgentStatus(cb: () => void): () => void {
-  statusListeners.add(cb);
-  return () => statusListeners.delete(cb);
-}
 
 // ---------------------------------------------------------------------------
 // The socket
@@ -161,7 +133,7 @@ function closeSocket(): void {
   setStatus(getPrefs().agentBridge ? 'waiting' : 'off');
 }
 
-/** Called once from App.tsx. Safe to call again (no-op). */
+/** Called from status.ts once the pref is on. Safe to call again (no-op). */
 export function initAgentBridge(): void {
   if (initialized) return;
   initialized = true;

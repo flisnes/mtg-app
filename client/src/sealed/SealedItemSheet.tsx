@@ -3,7 +3,7 @@ import type { SealedItem, SealedPriceHistory, SealedProduct } from '@mtg/shared'
 import { setSealedItemQuantity } from '../db/dataAccess.js';
 import { addToTotal, formatTotal, type PriceTotal } from '../components/CardSorting.js';
 import { Icon } from '../components/icons.js';
-import { PriceChartSheet } from '../components/PriceChart.js';
+import { PriceChartSheet } from '../components/ChartSheetsLazy.js';
 import { PriceTrend } from '../components/PriceTrend.js';
 import { Sheet } from '../components/Sheet.js';
 import { historyChange } from '../price/history.js';

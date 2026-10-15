@@ -7,7 +7,7 @@ import { loadSealedProducts } from '../sealed/store.js';
 import { SealedImage } from '../sealed/SealedImage.js';
 import { SealedItemSheet } from '../sealed/SealedItemSheet.js';
 import { OpenSealedSheet } from '../sealed/OpenSealedSheet.js';
-import { SealedValueChartSheet } from '../sealed/SealedValueChart.js';
+import { SealedValueChartSheet } from '../components/ChartSheetsLazy.js';
 import { categoryLabel, fmtSealedPrice, isRandomOnly, itemImage, sealedPriceOf } from '../sealed/product.js';
 import { AddSealedProductSheet } from '../components/AddSealedProductSheet.js';
 import { useConfirm } from '../components/ConfirmSheet.js';

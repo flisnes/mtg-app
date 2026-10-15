@@ -11,7 +11,7 @@ import {
 } from '../account/session.js';
 import { useAccount } from '../account/useAccount.js';
 import { syncNow } from '../sync/engine.js';
-import { getAgentStatusSnapshot, subscribeAgentStatus, type AgentStatus } from '../agent/bridge.js';
+import { getAgentStatusSnapshot, subscribeAgentStatus, type AgentStatus } from '../agent/status.js';
 import { useToast } from '../components/Toast.js';
 import { DataTransfer } from '../components/DataTransfer.js';
 import { deleteAllUserData } from '../db/dataAccess.js';

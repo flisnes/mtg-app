@@ -9,6 +9,15 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.198.3',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Price tracking does its work once a day instead of on every launch, and reopening a card while signed in no longer refetches its price history.',
+      },
+    ],
+  },
+  {
     version: '0.198.2',
     changes: [
       {

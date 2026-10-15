@@ -8,7 +8,7 @@ import { ScanSheet } from '../components/ScanSheetLazy.js';
 import { CardDropZone } from '../components/CardDropZone.js';
 import { AddSealedProductSheet } from '../components/AddSealedProductSheet.js';
 import { HeaderValue, headerValue, useCollectionValue, useSealedValue } from '../components/ValueSummary.js';
-import { CollectionValueChartSheet } from '../components/CollectionValueChart.js';
+import { CollectionValueChartSheet } from '../components/ChartSheetsLazy.js';
 
 export function Collection() {
   const navigate = useNavigate();

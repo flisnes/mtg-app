@@ -79,7 +79,7 @@ import { langMark } from '../components/LangFlag.js';
 import { yearMark } from '../components/cardRows.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { containerValue, HeaderValue, missingValue, valueText } from '../components/ValueSummary.js';
-import { ContainerValueChartSheet } from '../components/CollectionValueChart.js';
+import { ContainerValueChartSheet } from '../components/ChartSheetsLazy.js';
 import { deckManaStats } from '../deck/manaStats.js';
 import {
   SortControls,

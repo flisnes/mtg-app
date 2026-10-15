@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.1
+
+- **Changed: faster start.** The app downloads about a sixth less before the first screen shows (roughly 58 kB less over the wire). Settings, Sealed products, Price movers, Spoilers, Community, profiles, the history pages, Import and Export, the price and value charts and the agent connection code now load the first time you open them instead of on every launch. After the app is installed they come from the offline cache, so nothing waits on the network. Lighter than a Mox, and almost as fast.
+
 ## 0.200.0
 
 - **Changed: deck pages get to the cards faster.** The top of a deck used to stack the format picker, the owned count, a full legality box and the lands row before the first card, so on a phone you saw the commander and little else. Now it is one row: "Commander · 55/65 owned · Not legal 65/100". Tap it to open the format picker, the full list of legality problems and what the missing cards cost. A legal deck gets a small green "Legal" chip instead of a full-width bar. The land count beside it opens deck analysis straight on the Mana tab. An "Add cards" button replaces the "Search above to add cards" hint and opens search ready to add to this deck. The deck's options menu is grouped (the deck, its cards, then archive and delete) with Deck analysis at the top. Binders and boxes get the same short header. No more scrying past the header to find your cards.

@@ -1673,11 +1673,12 @@ button.danger-outline {
   }
 }
 
-/* Grid: circular checkmark overlaid on the tile corner. */
+/* Grid: circular checkmark in the art's top-right corner, below the name bar
+   so it covers neither the card's name nor its mana cost. */
 .tile-select {
   position: absolute;
-  top: 5px;
-  left: 5px;
+  top: 13%;
+  right: 6px;
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -1755,7 +1756,7 @@ button.danger-outline {
   gap: 0.55rem;
   animation: bulk-bar-in 0.2s ease;
 }
-/* Collapsed: just the head line, so a phone screen stays usable. */
+/* Collapsed (nothing selected yet): just the head line. */
 .bulk-bar.collapsed {
   padding: 0.45rem 0.6rem;
 }
@@ -1771,8 +1772,17 @@ body:has(.bulk-bar) .app-main {
   scroll-padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 4.5rem);
 }
 body:has(.bulk-bar:not(.collapsed)) .app-main {
-  padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 11rem);
-  scroll-padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 11rem);
+  padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 8rem);
+  scroll-padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 8rem);
+}
+body:has(.bulk-more-actions) .app-main {
+  padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 14rem);
+  scroll-padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 14rem);
+}
+/* The floating Select pill sits over the bottom-right of the list: leave room
+   under the last row so it can scroll out from beneath it. */
+body:has(.select-float) .app-main {
+  padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 4rem);
 }
 .bulk-bar-head {
   display: flex;
@@ -1791,7 +1801,10 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.35rem;
+  width: 44px;
+  height: 44px;
+  margin: -0.35rem 0 -0.35rem -0.4rem;
+  padding: 0;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -1800,43 +1813,36 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
 .bulk-selectall {
   margin-left: auto;
   font-size: 0.85rem;
-  padding: 0.35rem 0;
+  min-height: 44px;
+  padding: 0 0.25rem;
 }
-.bulk-expand {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.35rem;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-dim);
-}
-.bulk-expand svg {
-  transition: transform 0.15s ease;
-}
-.bulk-bar:not(.collapsed) .bulk-expand svg {
-  transform: rotate(180deg);
-}
-@media (prefers-reduced-motion: reduce) {
-  .bulk-expand svg {
-    transition: none;
-  }
-}
-/* Equal-width action buttons; wraps to a tidy 2-column grid when they
-   don't fit on one line. */
+/* The two most-used actions share a row with "More", which stays compact. */
 .bulk-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.bulk-actions > button:not(.bulk-more) {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.bulk-more {
+  flex: 0 0 auto;
+}
+/* The rest, behind "More": a tidy 2-column grid. */
+.bulk-more-actions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
   gap: 0.5rem;
 }
-.bulk-actions button {
+.bulk-actions button,
+.bulk-more-actions button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
   font-size: 0.8rem;
-  padding: 0.55rem 0.4rem;
+  min-height: 44px;
+  padding: 0.55rem 0.5rem;
   white-space: nowrap;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2640,6 +2646,16 @@ body:has(.bulk-bar:not(.collapsed)) .app-main {
   /* The image's own 8px corner plus the 3px the ring stands off it. */
   border-radius: 11px;
   box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+/* In select mode the accent ring means "selected", so the cursor goes neutral:
+   a white ring around the tile, against the selected tile's accent ring around
+   the shrunken art. */
+.card-tile.card-active:has(.tile-select) {
+  outline-color: var(--text);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--text) 18%, transparent);
+}
+.result-row.card-active:has(.select-box) {
+  outline-color: var(--text);
 }
 /* The cursor is on the card you're about to change, so it stops being one of
    the faded "you don't own enough of these" ones for as long as you're

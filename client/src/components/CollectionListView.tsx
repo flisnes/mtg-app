@@ -321,14 +321,15 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   // The tradelist is the collection with one prop flipped and holds the same
   // cardboard, so it gets the same verbs. Only "add to tradelist" is dropped:
   // everything here is already on it.
+  // Most-used first: the bar shows the first two inline (BulkActionBar).
   const bulkActions: BulkAction[] = [
+    { label: 'File away…', icon: 'decks', onClick: () => setPickingContainer(true) },
     ...(onlyTrade
       ? [{ label: 'Remove from tradelist', icon: 'tradelist' as const, onClick: bulkRemoveTradelist }]
       : [
           { label: 'Add to tradelist', icon: 'tradelist' as const, onClick: bulkAddTradelist },
           { label: 'Remove from tradelist', icon: 'close' as const, onClick: bulkRemoveTradelist },
         ]),
-    { label: 'File away…', icon: 'decks', onClick: () => setPickingContainer(true) },
     { label: 'Unfile…', icon: 'minus', disabled: elsewhere.size === 0, onClick: () => setUnfiling(true) },
     { label: 'Delete', icon: 'trash', danger: true, onClick: () => void bulkDelete() },
   ];

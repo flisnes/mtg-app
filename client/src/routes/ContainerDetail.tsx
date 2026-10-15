@@ -806,12 +806,13 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
       }).filter((z) => z.board !== sharedBoard)
     : [];
 
+  // Most-used first: the bar shows the first two inline (BulkActionBar).
   const bulkActions: BulkAction[] = [
     ...(isDeck ? [{ label: 'Move to…', icon: 'moveTo' as const, onClick: () => setMoving(true) }] : []),
+    { label: 'File away…', icon: 'decks', onClick: () => setPicking('file') },
     { label: 'Tag…', icon: 'tags', onClick: () => setTagging(selectedRows.map((r) => r.id)) },
     { label: 'Add to tradelist', icon: 'tradelist', onClick: () => void bulkTrade(true) },
     { label: 'Remove from tradelist', icon: 'close', onClick: () => void bulkTrade(false) },
-    { label: 'File away…', icon: 'decks', onClick: () => setPicking('file') },
     // Somewhere to take these out of: here (if this container is holding any of
     // them) or another container promised the same copies.
     {

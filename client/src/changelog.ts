@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.7',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Select mode shows its two main actions as soon as you pick a card, with the rest under More. The check circle moved off the card name.',
+      },
+    ],
+  },
+  {
     version: '0.198.6',
     changes: [
       {
@@ -157,28 +166,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'The sort and filter dropdowns above every card list are now one button that reads the current order ("Price ↓") and opens a sheet of choices. The toolbar fits on one row on a phone, so the cards start higher up.',
-      },
-    ],
-  },
-  {
-    version: '0.194.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'Stack printings: a button beside the list/grid switch (or the S key) folds every copy of a card into one tile with the total count, wearing the edition your printing preference picks from the ones you own. Tap it and step between your copies on a strip in the card sheet. Works in the collection, tradelist and your decks, binders and boxes.',
-      },
-    ],
-  },
-  {
-    version: '0.193.0',
-    changes: [
-      {
-        kind: 'added',
-        text: 'The deck simulator reads the other ways to cast a card off its text: evoke, foretell, plot, warp, madness, convoke, delve, flashback, escape and suspend. It takes the cheap way in only when the mana cost is out of reach.',
-      },
-      {
-        kind: 'added',
-        text: '"As an additional cost, sacrifice a creature" is a real cost now, and a card rule can exile cards "playable this turn" for red\'s impulse draw. Light Up the Stage and friends play that way instead of as a draw.',
       },
     ],
   },

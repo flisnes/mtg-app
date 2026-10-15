@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.7
+
+- **Changed: bulk actions are in sight.** Pick a card in select mode and the bar shows its two main actions right away (File away and Add to tradelist, or Move to on a deck), with the rest under More. No more hunting for a tiny chevron. The close button and every action are now easy-to-hit 44px targets.
+- **Fixed: the select circle no longer covers the card name.** It moved to the top-right corner of the art, clear of the name and the mana cost.
+- **Fixed: hovered and selected look different.** In select mode the keyboard/mouse cursor is a white ring, so a card under the cursor no longer looks selected when it isn't.
+- **Fixed: the floating Select button no longer hides the last card** in your collection or the bottom of a deck, binder or box page.
+
 ## 0.198.6
 
 - **Fixed: the tab bar always knows where you are.** Binders, Boxes, Wishlist, Settings, Import and the rest of the screens off More used to light up no tab. Now every screen highlights the tab it belongs to.

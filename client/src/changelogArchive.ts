@@ -1,4 +1,4 @@
-// The older half of the changelog (0.189.0 down to 0.98.0), split out of
+// The older half of the changelog (0.189.1 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,19 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.189.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'The app no longer crawls while card data downloads or the account syncs. Updates install quietly and refresh the screens once, and syncs write in bulk.',
+      },
+      {
+        kind: 'fixed',
+        text: 'New zones, formats and card rules no longer make every device re-download the whole account after an update.',
+      },
+    ],
+  },
   {
     version: '0.189.0',
     changes: [

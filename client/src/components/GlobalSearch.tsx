@@ -27,8 +27,8 @@ import {
   useSearchHistory,
   type SuggestItem,
 } from './RecentSearches.js';
-import { otagCompletions } from '../cardDb/oracleTags.js';
-import { setCompletions } from '../cardDb/setIndex.js';
+import { mentionsOtag, otagCompletions } from '../cardDb/oracleTags.js';
+import { SET_TAIL, setCompletions } from '../cardDb/setIndex.js';
 import { useSetIndex } from '../cardDb/useSetIndex.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { ScopedResults, type Scope } from './ScopedResults.js';
@@ -374,8 +374,10 @@ export function GlobalSearchBar() {
   // Mid-`otag:` or mid-`set:` the vocabulary displaces the history: four
   // thousand tag slugs and nine hundred set codes are undiscoverable otherwise,
   // and old searches are no help in choosing one.
-  const tagsVersion = useOracleTags();
-  const setsVersion = useSetIndex();
+  // Both load only once such a term is being typed: the set list costs a read
+  // of every card and printing, which a launch should not pay up front.
+  const tagsVersion = useOracleTags(mentionsOtag(query));
+  const setsVersion = useSetIndex(SET_TAIL.test(query));
   const otag = useMemo(() => otagCompletions(query), [query, tagsVersion]);
   const sets = useMemo(() => setCompletions(query), [query, setsVersion]);
   const history = useSearchHistory(query);

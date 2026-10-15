@@ -8,6 +8,7 @@ import {
   type SearchableEntry,
 } from '@mtg/shared';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
+import { mentionsOtag } from '../cardDb/oracleTags.js';
 
 /** Any joined list row: an entry with an id, plus the card and printing it resolved to. */
 interface JoinedRow {
@@ -29,8 +30,8 @@ interface JoinedRow {
  */
 export function useEntryMatcher<T extends JoinedRow>(rows: T[] | undefined, query: string): (row: T) => boolean {
   // `otag:` resolves its slug when the query is parsed, so re-parse once the
-  // tag vocabulary lands.
-  const tagsVersion = useOracleTags();
+  // tag vocabulary lands. Fetched only once the query asks for a tag.
+  const tagsVersion = useOracleTags(mentionsOtag(query));
   const index = useMemo(() => {
     const m = new Map<string, SearchableEntry>();
     rows?.forEach(

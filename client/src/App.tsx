@@ -1,7 +1,8 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { forceUpdate, initPwa } from './pwa.js';
-import { isUpdateAvailable } from './appUpdate.js';
+import { advertisesUpdate } from './appUpdate.js';
+import { onManifest } from './cardDb/manifest.js';
 import { APP_VERSION } from './version.js';
 import { useCardDbUpdate } from './cardDb/useCardDbUpdate.js';
 import { getSetting, setSetting } from './db/settings.js';
@@ -146,22 +147,19 @@ function AppShell() {
     });
   }, []);
 
-  // Version beacon: check on launch and whenever the app returns to the
-  // foreground (PWAs resume from background for days). Nudge the SW too.
-  useEffect(() => {
-    const check = () => {
-      if (document.visibilityState !== 'visible') return;
-      void isUpdateAvailable().then((available) => {
-        if (available) {
+  // Version beacon: the card-DB update check fetches the manifest on launch and
+  // whenever the app returns to the foreground (PWAs resume from background for
+  // days); it carries the latest app version. Nudge the SW too.
+  useEffect(
+    () =>
+      onManifest((manifest) => {
+        if (advertisesUpdate(manifest)) {
           setBeaconUpdate(true);
           void navigator.serviceWorker?.getRegistration().then((r) => r?.update());
         }
-      });
-    };
-    check();
-    document.addEventListener('visibilitychange', check);
-    return () => document.removeEventListener('visibilitychange', check);
-  }, []);
+      }),
+    [],
+  );
 
   // A completed background card-data update bumps epoch. Just say so — the
   // run announces one whole-database change when it finishes (cardDb/sync.ts),

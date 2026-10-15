@@ -1,6 +1,7 @@
 import type { CardDbArtifactMeta, CardDbManifest, SealedBoosterMap, SealedPriceMap, SealedProduct } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { CARD_DB_BASE } from '../cardDb/config.js';
+import { getManifest } from '../cardDb/manifest.js';
 import { getPrefs } from '../prefs.js';
 import { sha256Hex } from '../util/sha256.js';
 
@@ -51,12 +52,6 @@ export type SealedLoad =
     }
   /** No endpoint, the build has no sealed artifact, or we're offline with nothing cached. */
   | { kind: 'unavailable' };
-
-async function fetchManifest(): Promise<CardDbManifest> {
-  const res = await fetch(new URL('manifest.json', CARD_DB_BASE!).href, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`manifest HTTP ${res.status}`);
-  return (await res.json()) as CardDbManifest;
-}
 
 /** Fetch a .gz artifact and return the decompressed text (platform DecompressionStream). */
 async function downloadDecompressed(url: string): Promise<string> {
@@ -127,7 +122,7 @@ export async function refreshSealedPrices(): Promise<SealedPriceMap> {
   const cached = await getPricesRow();
   if (CARD_DB_BASE && (!cached || getPrefs().cardDbPolicy !== 'never')) {
     try {
-      return await syncPrices((await fetchManifest()).v2);
+      return await syncPrices((await getManifest()).v2);
     } catch {
       /* offline / no manifest → whatever is cached */
     }
@@ -154,7 +149,7 @@ export async function loadSealedProducts(): Promise<SealedLoad> {
 
   if (CARD_DB_BASE && mayRefresh) {
     try {
-      const v2 = (await fetchManifest()).v2;
+      const v2 = (await getManifest()).v2;
       const meta = v2?.sealed;
       if (meta && installed?.sha256 !== meta.sha256) {
         const text = await fetchVerified(meta);

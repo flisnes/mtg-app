@@ -20,7 +20,7 @@ Other scripts (`dev:client`, `dev:server`, `typecheck`) are in the root `package
 
 ## Verifying a change
 
-There is **no unit-test suite** — the user-facing surface is the PWA, driven in a real browser. Use the `/verify` skill; it covers the fixture build, the boot gates that trip every naive Playwright script, and the selectors.
+`npm test` runs the vitest suites for pure logic (`client/test`: sync engine, transfer sanitizers, legality, stacking; `sim/test`: the simulator). Run it when you touch that code, and add a case when you fix a bug there. Everything user-facing is verified in a real browser: use the `/verify` skill; it covers the fixture build, the boot gates that trip every naive Playwright script, and the selectors.
 
 **Verify in grid view first.** Grid is the default and the way the app is actually used day to day; list is the secondary pass. Cards render very differently in the two, so a change that reads fine on a flat list row can be invisible on a full-bleed card tile. And screenshot the result — a class being in the DOM is not proof anyone can see it.
 

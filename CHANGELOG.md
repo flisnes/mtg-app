@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.198.2
+
+- **Changed: launches faster, less data on every open.** Opening the app used to read the whole card database before you typed anything, and asked the server for the same update file five to seven times. Now it asks once, and an unchanged file comes back as a tiny "not modified". Search reads the card data the first time you search, and `set:` and `otag:` load their lists when you start typing one. The daily price update no longer throws away the search data it never changed.
+- **Fixed: `otag:` on your collection went dead after a card data update.** Filtering a list by oracle tag stopped matching anything once card data updated in the background, until you restarted the app. Being offline the first time you used `otag:` did the same; it now tries again a minute later.
+
 ## 0.198.1
 
 - **Changed: sealed lookup names boosters too.** "Find sealed products with this card" used to list only products with fixed contents, like precons and Secret Lairs. It now also lists every product you could open the card from: booster packs whose sheets can show it, plus the boxes, cases, bundles and prerelease kits holding those packs. That answers the question that matters for cards outside the main set: Experimental Confectioner (WOE #314) only turns up in Wilds of Eldraine Set Boosters, so Set Booster packs, boxes and bundles are listed and Draft Boosters are not. Booster contents come from MTGJSON's booster sheets, so sets it has no sheets for still only show fixed-content products.

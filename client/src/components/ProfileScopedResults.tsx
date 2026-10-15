@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Finish, OracleCard, Priced } from '@mtg/shared';
 import { compileCardQuery, rowPrintingSummary, toSearchableEntry } from '@mtg/shared';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
+import { mentionsOtag } from '../cardDb/oracleTags.js';
 import { CardSheet } from './CardSheet.js';
 import type { CardItem } from './CardViews.js';
 import { ResultsList, resultCount } from './ResultsList.js';
@@ -46,7 +47,7 @@ export function ProfileScopedResults({
   const [sort, setSort] = useCardSort('profile');
   const [info, setInfo] = useState<InfoTarget | null>(null);
   // Re-parse once the `otag:` vocabulary lands; see useEntryMatcher.
-  const tagsVersion = useOracleTags();
+  const tagsVersion = useOracleTags(mentionsOtag(query));
 
   const items = useMemo(() => {
     if (!lists) return [];

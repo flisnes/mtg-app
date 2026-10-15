@@ -1,28 +1,24 @@
-import { useEffect, useState } from 'react';
-import { loadOracleTags } from './oracleTags.js';
+import { useEffect, useSyncExternalStore } from 'react';
+import { loadOracleTags, oracleTagsGeneration, subscribeOracleTags } from './oracleTags.js';
 
 // The owned-list filters (collection, wishlist, a viewed profile's lists) parse
 // their query synchronously inside a useMemo, so unlike the full-DB search they
-// can't await the tag vocabulary. This loads it on mount and returns a counter
-// that ticks once it's there, for those memos to depend on — otherwise the
+// can't await the tag vocabulary. This loads it and returns a counter that ticks
+// whenever it lands or is dropped, for those memos to depend on — otherwise the
 // first `otag:` typed on a list would resolve to nothing and stay that way
 // until some other dependency happened to change.
+//
+// The counter lives in oracleTags.ts, not here: a card-data update drops the
+// vocabulary, and a flag kept in this module used to say "loaded" through that,
+// so `otag:` on a list went dead until the next launch.
+//
+// `enabled` keeps the fetch off screens that only might need it: the search bar
+// and the list filters pass "does the query mention otag:".
 
-let ready = false;
-const listeners = new Set<(n: number) => void>();
-
-export function useOracleTags(): number {
-  const [version, setVersion] = useState(ready ? 1 : 0);
+export function useOracleTags(enabled = true): number {
+  const generation = useSyncExternalStore(subscribeOracleTags, oracleTagsGeneration);
   useEffect(() => {
-    if (ready) return;
-    listeners.add(setVersion);
-    void loadOracleTags().then(() => {
-      ready = true;
-      for (const l of listeners) l(1);
-    });
-    return () => {
-      listeners.delete(setVersion);
-    };
-  }, []);
-  return version;
+    if (enabled) void loadOracleTags();
+  }, [enabled, generation]);
+  return generation;
 }

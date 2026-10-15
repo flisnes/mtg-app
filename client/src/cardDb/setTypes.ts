@@ -1,8 +1,9 @@
-import type { CardDbArtifactMeta, CardDbManifest, SetTypeMap } from '@mtg/shared';
+import type { CardDbArtifactMeta, SetTypeMap } from '@mtg/shared';
 import { PROMO_SET_TYPES } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { sha256Hex } from '../util/sha256.js';
 import { CARD_DB_BASE } from './config.js';
+import { getManifest } from './manifest.js';
 
 // Set code → Scryfall set_type, the signal that tells a normal release from a
 // promo product, Secret Lair, token sheet or memorabilia set. The slim card
@@ -19,12 +20,6 @@ export interface SetTypesRow {
   /** sha256 of the uncompressed JSON, matched against the manifest. */
   sha256: string;
   types: SetTypeMap;
-}
-
-async function fetchManifest(): Promise<CardDbManifest> {
-  const res = await fetch(new URL('manifest.json', CARD_DB_BASE!).href, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`manifest HTTP ${res.status}`);
-  return (await res.json()) as CardDbManifest;
 }
 
 async function download(meta: CardDbArtifactMeta): Promise<SetTypesRow> {
@@ -55,7 +50,7 @@ export async function loadSetTypes(): Promise<SetTypeMap | null> {
     const installed = await db.setTypes.get('current');
     if (CARD_DB_BASE) {
       try {
-        const meta = (await fetchManifest()).v2?.sets;
+        const meta = (await getManifest()).v2?.sets;
         if (meta && installed?.sha256 !== meta.sha256) {
           cached = (await download(meta)).types;
           return cached;
@@ -74,6 +69,10 @@ export async function loadSetTypes(): Promise<SetTypeMap | null> {
   }
 }
 
+/** Forget the map after a card-data import, so a set new in that data gets its type. */
+export function invalidateSetTypes(): void {
+  cached = null;
+}
 
 /**
  * Is this printing a promo rather than a normal-set card? Checks the per-card

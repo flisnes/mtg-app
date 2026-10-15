@@ -5,7 +5,7 @@ description: Build, launch, and drive the MTG PWA end-to-end to verify a change 
 
 # Verifying changes in this repo
 
-The user-facing surface is the PWA (`client/`). Drive it in a real browser; there is no test suite.
+The user-facing surface is the PWA (`client/`). Drive it in a real browser. `npm test` covers pure logic only (`client/test`, `sim/test`); it says nothing about what a user sees.
 
 ## Launch
 
@@ -52,7 +52,9 @@ This matters beyond "which selector do I query". The two views render cards comp
 - Ready = `.search-input` visible. The card-DB gate can take a while on first import; use a generous timeout.
 - Search result rows are `.result-row`, price is `.result-price`. Those are list-view selectors — switching to list with `addInitScript(() => localStorage.setItem('cardViewMode','list'))` is fine when an assertion needs row text, but do the grid pass too.
 - Card DB state lives in IndexedDB database `mtg` (stores: `oracleCards`, `printings`, `priceShards`, `settings`). Read counts/settings via `page.evaluate` with raw `indexedDB.open('mtg')`.
-- The app fetches `manifest.json` ~3× per load (sync + update beacon) — ignore duplicates when asserting the request log.
+- The app fetches `manifest.json` once per load and once per return to the tab (v0.198.2: every caller goes through `cardDb/manifest.ts`, which shares one fetch for 60 s). A second fetch inside a minute means a caller bypassed it. To exercise the return-to-tab path headless, override `document.visibilityState` with `Object.defineProperty` and dispatch `visibilitychange`, more than 60 s after the last fetch.
+- Cheaper than variant fixtures for update paths: tamper the installed state instead. Set the `settings` row `pricesSha256` to `'stale'` for a prices-only run, or one `cardDbChunks.value.oracle['00'].sha256` for a card-data run; with `prefs` `cardDbPolicy`/`pricesPolicy` set to `'always'` in localStorage the next check downloads it without a prompt.
+- To prove nothing reads the whole card DB, wrap `IDBObjectStore.prototype.getAll` / `openCursor` (and `IDBIndex`'s) in an `addInitScript` that counts calls per store name. `oracleCards.getAll` should stay at 0 on boot until a search or a `set:` term runs.
 - Simulate "prices-only day" / "data changed" by generating variant fixture dirs (different `MAX_CARDS`, or hand-patch the prices file + manifest v2 block, gzip + sha256 must match) and switching the static server's root between page reloads — IndexedDB persists across reloads in one browser context, so update paths are exercised realistically.
 
 ## Clean up after yourself

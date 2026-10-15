@@ -53,6 +53,8 @@ export function useCardDbUpdate(): CardDbUpdate {
   const run = useRef<RunSync | null>(null);
   const dismissed = useRef<Partial<Record<UpdateKind, boolean>>>({}); // "Not now", until next launch
   const busy = useRef(false); // a check or an import is in flight
+  // The prices-only run that came with a card-data prompt, for when it's declined.
+  const pricesAside = useRef<{ sizeBytes: number; run: RunSync } | null>(null);
 
   /** Download now, reporting progress; bumps `epoch` on a card-data success. */
   const start = useCallback((r: RunSync, kind: UpdateKind) => {
@@ -78,35 +80,39 @@ export function useCardDbUpdate(): CardDbUpdate {
       });
   }, []);
 
+  /** Offer (or run, per policy) a prices-only update. Caller must not hold `busy`. */
+  const offerPrices = useCallback(
+    async (p: { sizeBytes: number; run: RunSync }, manual: boolean) => {
+      const policy: UpdatePolicy = manual ? 'always' : getPrefs().pricesPolicy;
+      if (policy === 'never') return;
+      if (policy === 'always') {
+        await start(p.run, 'prices');
+        return;
+      }
+      if (dismissed.current.prices) return;
+      run.current = p.run;
+      setPrompt({ kind: 'prices', sizeBytes: p.sizeBytes });
+    },
+    [start],
+  );
+
   const check = useCallback(async (manual = false) => {
     if (!manual && document.visibilityState !== 'visible') return;
     if (busy.current) return;
     busy.current = true;
     try {
-      const upd = await checkForBackgroundUpdate();
+      const upd = await checkForBackgroundUpdate(manual);
       if (upd.kind === 'none') return;
 
-      const prefs = getPrefs();
-      const policyFor = (kind: UpdateKind): UpdatePolicy =>
-        manual ? 'always' : kind === 'prices' ? prefs.pricesPolicy : prefs.cardDbPolicy;
-
       if (upd.kind === 'prices') {
-        const policy = policyFor('prices');
-        if (policy === 'never') return;
-        if (policy === 'always') {
-          busy.current = false; // start() takes the lock itself
-          await start(upd.run, 'prices');
-          return;
-        }
-        if (dismissed.current.prices) return;
-        run.current = upd.run;
-        setPrompt({ kind: 'prices', sizeBytes: upd.sizeBytes });
+        busy.current = false; // start() takes the lock itself
+        await offerPrices(upd, manual);
         return;
       }
 
       // Card data. Prices are bundled into its run, so an accepted card-data
       // update covers both; a declined one may still leave prices to take.
-      const cardPolicy = policyFor('card-data');
+      const cardPolicy: UpdatePolicy = manual ? 'always' : getPrefs().cardDbPolicy;
       if (cardPolicy === 'always') {
         busy.current = false;
         await start(upd.run, 'card-data');
@@ -114,30 +120,25 @@ export function useCardDbUpdate(): CardDbUpdate {
       }
       if (cardPolicy === 'ask' && !dismissed.current['card-data']) {
         run.current = upd.run;
+        pricesAside.current = upd.prices ?? null;
         setPrompt({ kind: 'card-data', sizeBytes: upd.sizeBytes });
         return;
       }
       // Card data declined (or 'never'): fall back to the prices-only run, which
       // has its own policy and is a fraction of the size.
       if (!upd.prices) return;
-      const pricePolicy = policyFor('prices');
-      if (pricePolicy === 'never') return;
-      if (pricePolicy === 'always') {
-        busy.current = false;
-        await start(upd.prices.run, 'prices');
-        return;
-      }
-      if (dismissed.current.prices) return;
-      run.current = upd.prices.run;
-      setPrompt({ kind: 'prices', sizeBytes: upd.prices.sizeBytes });
+      busy.current = false;
+      await offerPrices(upd.prices, manual);
     } finally {
       busy.current = false;
     }
-  }, [start]);
+  }, [start, offerPrices]);
 
   useEffect(() => {
     void check();
     // Re-check when the app returns to the foreground (PWAs resume after days).
+    // The only visibility listener that fetches the manifest: the version
+    // beacon in App.tsx reads the same fetch through onManifest.
     const onVis = () => void check();
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
@@ -162,9 +163,12 @@ export function useCardDbUpdate(): CardDbUpdate {
       else dismissed.current[kind] = true;
       setPrompt(null);
       // Declining card data may still leave the small price file on the table.
-      if (kind === 'card-data') void check();
+      // It came with the card-data check, so no second trip for the manifest.
+      const prices = pricesAside.current;
+      pricesAside.current = null;
+      if (kind === 'card-data' && prices && !busy.current) void offerPrices(prices, false);
     },
-    [prompt, check],
+    [prompt, offerPrices],
   );
 
   const checkNow = useCallback(async () => {

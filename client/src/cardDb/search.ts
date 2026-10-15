@@ -1,7 +1,7 @@
 import { isUncheckedFormat, type Color, type DeckFormat, type Finish, type Format, type OracleCard, type Priced, type Printing, type PrintingVariant, type Rarity } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPricesByIds, withPrices } from './prices.js';
-import { loadOracleTags } from './oracleTags.js';
+import { loadOracleTags, mentionsOtag } from './oracleTags.js';
 import { compareCollectorNumbers, priceValue, releaseFields, sortCards, type CardSortPrefs } from '../components/cardSort.js';
 import {
   matchesQuery,
@@ -310,8 +310,9 @@ export async function searchCards(
   expandPrintings = false,
 ): Promise<SearchResult> {
   // Before parsing, not after: `otag:` resolves its slug at parse time, and an
-  // unresolved one degrades to a name search. Settles instantly once loaded.
-  const [index] = await Promise.all([getIndex(), loadOracleTags()]);
+  // unresolved one degrades to a name search. Settles instantly once loaded,
+  // and is skipped for the many searches that never mention a tag.
+  const [index] = await Promise.all([getIndex(), mentionsOtag(query) ? loadOracleTags() : undefined]);
   const parsed = parseSearchQuery(query.trim());
   const pins = expandPrintings ? pinnedSets(parsed) : null;
   const pinned = pins ? await printingsForSets(pins) : null;

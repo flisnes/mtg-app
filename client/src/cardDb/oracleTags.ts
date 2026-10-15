@@ -1,7 +1,8 @@
-import type { CardDbArtifactMeta, CardDbManifest, OracleTagDictionary } from '@mtg/shared';
+import type { CardDbArtifactMeta, OracleTagDictionary } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { sha256Hex } from '../util/sha256.js';
 import { CARD_DB_BASE } from './config.js';
+import { getManifest } from './manifest.js';
 import { setOracleTagResolver } from '@mtg/shared';
 
 // The Scryfall Tagger oracle-tag vocabulary behind `otag:` search. Each oracle
@@ -78,6 +79,33 @@ let index: TagIndex | null = null;
 /** Set once the load has run, dictionary or not — a miss must not refetch per keystroke. */
 let loaded = false;
 let inFlight: Promise<void> | null = null;
+/**
+ * When a load that came back empty-handed because the network failed may try
+ * again. Without it, being offline at the first `otag:` of a session turned the
+ * filter off until the next launch.
+ */
+let retryAt = 0;
+const RETRY_MS = 60_000;
+
+/** Bumps on every load and every invalidation; useOracleTags re-renders on it. */
+let generation = 0;
+const listeners = new Set<() => void>();
+
+function bump(): void {
+  generation++;
+  for (const l of listeners) l();
+}
+
+export function oracleTagsGeneration(): number {
+  return generation;
+}
+
+export function subscribeOracleTags(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
 
 /** Wired into the (dependency-free) query parser so `otag:` can resolve slugs. */
 function register(dictionary: OracleTagDictionary | null): void {
@@ -92,12 +120,7 @@ function register(dictionary: OracleTagDictionary | null): void {
         }
       : null,
   );
-}
-
-async function fetchManifest(): Promise<CardDbManifest> {
-  const res = await fetch(new URL('manifest.json', CARD_DB_BASE!).href, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`manifest HTTP ${res.status}`);
-  return (await res.json()) as CardDbManifest;
+  bump();
 }
 
 async function download(meta: CardDbArtifactMeta): Promise<OracleTagDictionary> {
@@ -116,22 +139,26 @@ async function download(meta: CardDbArtifactMeta): Promise<OracleTagDictionary> 
  * can await it on every search without paying for it more than once.
  */
 export async function loadOracleTags(): Promise<void> {
-  if (loaded) return;
+  if (loaded && !(retryAt && Date.now() >= retryAt)) return;
   if (inFlight) return inFlight;
 
   inFlight = (async () => {
     const installed = await db.oracleTags.get('current');
+    let failed = false;
     if (CARD_DB_BASE) {
       try {
-        const meta = (await fetchManifest()).v2?.tags;
+        const meta = (await getManifest()).v2?.tags;
         if (meta && installed?.sha256 !== meta.sha256) {
+          retryAt = 0;
           register(await download(meta));
           return;
         }
       } catch {
         // Offline, or a card DB built before `otag:` existed — use what's cached.
+        failed = true;
       }
     }
+    retryAt = failed && !installed ? Date.now() + RETRY_MS : 0;
     register(installed?.dictionary ?? null);
   })();
   const pending = inFlight;
@@ -185,12 +212,19 @@ export function cycleSlugsOf(tagIds: readonly number[] | undefined): string[] {
 export function invalidateOracleTags(): void {
   index = null;
   loaded = false;
+  retryAt = 0;
   setOracleTagResolver(null);
+  bump();
 }
 
 /** How many tags a slug stands for, itself included. Ranks the suggestions. */
 function subtreeSize(id: number): number {
   return index ? closure(index, id).size : 1;
+}
+
+/** Does this query use an `otag:` term (or one of its aliases)? Nothing else needs the vocabulary. */
+export function mentionsOtag(query: string): boolean {
+  return /(?:otag|oracletag|function)[:=]/i.test(query);
 }
 
 /** The `otag:` fragment being typed at the end of the query, if there is one. */

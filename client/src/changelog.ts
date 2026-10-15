@@ -32,6 +32,19 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.198.2',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The app opens faster and downloads less on each open. Card search loads its data when you first search, and the daily price update no longer rebuilds it.',
+      },
+      {
+        kind: 'fixed',
+        text: 'otag: on your lists kept working only until the first card data update. Now it survives one, and a search made offline tries again once you are back.',
+      },
+    ],
+  },
+  {
     version: '0.198.1',
     changes: [
       {
@@ -190,19 +203,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'You can no longer join your own trade from a second device or tab. Trade solo is still there for recording a trade with someone who isn’t on the app.',
-      },
-    ],
-  },
-  {
-    version: '0.189.1',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'The app no longer crawls while card data downloads or the account syncs. Updates install quietly and refresh the screens once, and syncs write in bulk.',
-      },
-      {
-        kind: 'fixed',
-        text: 'New zones, formats and card rules no longer make every device re-download the whole account after an update.',
       },
     ],
   },

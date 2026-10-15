@@ -9,22 +9,59 @@ import { getSetIndex, type SetInfo } from './search.js';
 // index, and the printings table is the only place a set's name lives.
 
 let index: SetInfo[] | null = null;
+let inFlight: Promise<void> | null = null;
 
-/** Load the set list so `setCompletions` can answer synchronously. */
-export async function loadSetIndex(): Promise<void> {
-  index = await getSetIndex();
+/** Bumps on every load and every invalidation; useSetIndex re-renders on it. */
+let generation = 0;
+const listeners = new Set<() => void>();
+
+function bump(): void {
+  generation++;
+  for (const l of listeners) l();
 }
 
-/** Rebuild the set list after a card-DB re-import, so a new set shows up without a reload. */
+export function setIndexGeneration(): number {
+  return generation;
+}
+
+export function subscribeSetIndex(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** Load the set list so `setCompletions` can answer synchronously. A no-op once loaded. */
+export function loadSetIndex(): Promise<void> {
+  if (index) return Promise.resolve();
+  if (!inFlight) {
+    const started = generation;
+    inFlight = getSetIndex()
+      .then((sets) => {
+        // Dropped mid-load by a card-data import: this list is already stale,
+        // and the bump below sends the hooks back for the new one.
+        if (generation !== started) return;
+        index = sets;
+        bump();
+      })
+      .finally(() => {
+        inFlight = null;
+      });
+  }
+  return inFlight;
+}
+
+/**
+ * Forget the set list after a card-DB re-import, so a new set shows up without
+ * a reload. Lazy: the next `set:` typed (or the next search) rebuilds it.
+ */
 export function invalidateSetIndex(): void {
   index = null;
-  // Rides along on the search index the import just invalidated: the next
-  // search rebuilds it anyway, and the completions come back with it.
-  void loadSetIndex();
+  bump();
 }
 
 /** The `set:` fragment being typed at the end of the query, if there is one. */
-const SET_TAIL = /(?:^|[\s(])-?(?:set|s|e|edition)[:=]([a-z0-9]*)$/i;
+export const SET_TAIL = /(?:^|[\s(])-?(?:set|s|e|edition)[:=]([a-z0-9]*)$/i;
 
 /** How many sets the dropdown offers. Newest first, so the top of the list is the useful end. */
 const MAX_COMPLETIONS = 40;

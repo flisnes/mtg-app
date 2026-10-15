@@ -9,6 +9,8 @@ import { invalidateSearchIndex } from './search.js';
 import { invalidatePriceCache } from './prices.js';
 import { invalidateOracleTags } from './oracleTags.js';
 import { invalidateSetIndex } from './setIndex.js';
+import { invalidateSetTypes } from './setTypes.js';
+import { getManifest } from './manifest.js';
 import { invalidateSetList } from '../db/queries.js';
 
 // Orchestrates card-DB freshness (beta plan §3). The manifest describes the
@@ -68,16 +70,45 @@ interface InstalledInfo {
   actualPrintings: number;
 }
 
+// Counting ~150k rows across the two card tables is the slow part of
+// readInstalled, and only an import changes the answer, so it is counted once
+// a session and dropped again when a run finishes.
+let tableCounts: Promise<[number, number]> | null = null;
+
+function countTables(): Promise<[number, number]> {
+  if (!tableCounts) {
+    const p = Promise.all([db.oracleCards.count(), db.printings.count()]);
+    tableCounts = p;
+    p.catch(() => {
+      if (tableCounts === p) tableCounts = null;
+    });
+  }
+  return tableCounts;
+}
+
 async function readInstalled(): Promise<InstalledInfo> {
-  const [version, counts, chunks, pricesSha, actualOracle, actualPrintings] = await Promise.all([
+  const [version, counts, chunks, pricesSha, [actualOracle, actualPrintings]] = await Promise.all([
     getSetting<string>('cardDbVersion'),
     getSetting<{ oracle: number; printings: number }>('cardDbCounts'),
     getSetting<InstalledChunks>('cardDbChunks'),
     getSetting<string>('pricesSha256'),
-    db.oracleCards.count(),
-    db.printings.count(),
+    countTables(),
   ]);
   return { version, counts, chunks, pricesSha, actualOracle, actualPrintings };
+}
+
+/**
+ * Drop everything cached off the card tables. Only when card chunks landed: the
+ * daily prices-only run changes no card, so the search index, tag vocabulary
+ * and set lists it used to throw away would have been rebuilt identical.
+ */
+function invalidateCardCaches(): void {
+  tableCounts = null;
+  invalidateSearchIndex();
+  invalidateOracleTags();
+  invalidateSetIndex();
+  invalidateSetTypes();
+  invalidateSetList();
 }
 
 /**
@@ -95,12 +126,6 @@ async function readInstalled(): Promise<InstalledInfo> {
  */
 function localDbUsable(info: InstalledInfo): boolean {
   return !!info.version && info.actualOracle > 0 && info.actualPrintings > 0;
-}
-
-async function fetchManifest(base: string): Promise<CardDbManifest> {
-  const res = await fetch(new URL('manifest.json', base).href, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`manifest HTTP ${res.status}`);
-  return (await res.json()) as CardDbManifest;
 }
 
 /** Chunks whose served hash differs from the installed one (all of them on a fresh/unusable DB). */
@@ -189,11 +214,8 @@ function workerRun(
     } finally {
       // Also on failure: chunk imports are atomic, so whatever landed before
       // the error is real data the screens should be reading.
-      invalidateSearchIndex();
+      if (chunks.length) invalidateCardCaches();
       invalidatePriceCache();
-      invalidateOracleTags();
-      invalidateSetIndex();
-      invalidateSetList();
       announceEverythingChanged();
     }
   };
@@ -203,11 +225,8 @@ function workerRun(
 function fallbackRun(): RunSync {
   return async (onState) => {
     await runScryfallFallback((fraction, label) => onState({ status: 'progress', fraction, label }));
-    invalidateSearchIndex();
+    invalidateCardCaches();
     invalidatePriceCache();
-    invalidateOracleTags();
-    invalidateSetIndex();
-    invalidateSetList();
   };
 }
 
@@ -237,7 +256,7 @@ export async function prepareInitialDownload(): Promise<InitialPlan> {
 
   let manifest: CardDbManifest;
   try {
-    manifest = await fetchManifest(CARD_DB_BASE);
+    manifest = await getManifest();
   } catch {
     return fallback();
   }
@@ -266,13 +285,14 @@ export async function prepareInitialDownload(): Promise<InitialPlan> {
  * silently ('none') on any error/offline — the app keeps running on current
  * data. Prices-only changes are meant to run silently; card-data changes are
  * meant to be confirmed first (prices ride along in the same download).
+ * `fresh` skips the manifest other callers fetched in the last minute.
  */
-export async function checkForBackgroundUpdate(): Promise<BgUpdate> {
+export async function checkForBackgroundUpdate(fresh = false): Promise<BgUpdate> {
   if (!CARD_DB_BASE) return { kind: 'none' };
 
   let manifest: CardDbManifest;
   try {
-    manifest = await fetchManifest(CARD_DB_BASE);
+    manifest = await getManifest(fresh);
   } catch {
     return { kind: 'none' }; // offline / VM down → stay on what we have
   }

@@ -126,3 +126,14 @@ export async function commitIntake(
     target: st.target ? { id: st.target.id, name: st.target.name } : null,
   };
 }
+
+/** ", filed 3 in Box" / ", moved 2 to Deck A" for the caller's toast; '' when nothing was filed. */
+export function describeFiling(res: IntakeResult): string {
+  if (!res.target) return '';
+  const n = res.filed;
+  if (n === 0 && res.listed === 0) return '';
+  if (n === 0) return `, listed in ${res.target.name}`;
+  return res.mode === 'move'
+    ? `, moved ${n} to ${res.target.name}`
+    : `, filed ${n} in ${res.target.name}`;
+}

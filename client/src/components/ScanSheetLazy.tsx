@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import type { ScanTarget } from './ScanSheet.js';
+import type { ScanTarget } from '../scan/session.js';
 
 // The scanner (camera plumbing, OCR, matcher, its whole import graph) is the
 // heaviest sheet in the app, and it only ever mounts when someone taps Scan.

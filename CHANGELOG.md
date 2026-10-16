@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.15
+
+- **Changed: the scanner, reshuffled.** Under the hood, the camera scanner is split into smaller pieces: the session, the tray, the re-scan diff, the settings popover, the lock ring and the session list each live on their own. The tray's cards no longer redraw ten times a second while the hold bar drains, and the scan settings stop re-reading every edition of the card in frame each time the reader reports in. Dropping card images on a page no longer downloads the camera code with it. Scanning, pins, auto-add and re-scans should all work exactly as before; if a scan acts up, tell us.
+
 ## 0.200.14
 
 - **Fixed: "bolt" finds Lightning Bolt.** Best match now ranks a card that has your word as a whole word ahead of one that only starts with it, so "bolt" puts Lightning Bolt with the other Bolts instead of behind every Boltwave and Boltfire, and cards you own come first among equals. With a Lightning Bolt in your collection, it is the first result.

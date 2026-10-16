@@ -6,7 +6,7 @@ import { containerKind } from '../../deck/containers.js';
 import { capToOwnedCopies, findFilingClashes, type FilingMode } from '../../deck/filing.js';
 import { getPrefs } from '../../prefs.js';
 import type { ResolvedLine } from '../types.js';
-import { clashKey, commitIntake, policyMode, type FilingAnswer, type IntakeResult } from './commit.js';
+import { clashKey, commitIntake, describeFiling, policyMode, type FilingAnswer, type IntakeResult } from './commit.js';
 import { IntakeSheet } from './IntakeSheet.js';
 import {
   buildIntakeLines,
@@ -236,16 +236,5 @@ export function useIntakeReview(): {
   return { open, sheet };
 }
 
-export { policyMode };
+export { describeFiling, policyMode };
 export type { IntakeResult };
-
-/** ", filed 3 in Box" / ", moved 2 to Deck A" for the caller's toast; '' when nothing was filed. */
-export function describeFiling(res: IntakeResult): string {
-  if (!res.target) return '';
-  const n = res.filed;
-  if (n === 0 && res.listed === 0) return '';
-  if (n === 0) return `, listed in ${res.target.name}`;
-  return res.mode === 'move'
-    ? `, moved ${n} to ${res.target.name}`
-    : `, filed ${n} in ${res.target.name}`;
-}

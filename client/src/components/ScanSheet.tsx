@@ -1,57 +1,49 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { readJson, readLocal, writeJson, writeLocal } from '../util/localStore.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { readLocal, writeLocal } from '../util/localStore.js';
 import { createPortal } from 'react-dom';
-import type { Condition, ContainerKind, DeckBoard, DeckCard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
+import type { Condition, DeckBoard, Finish } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
-import { addToWishlistBulk, type SlotWants } from '../db/dataAccess.js';
-import { db } from '../db/schema.js';
-import {
-  getOracleCard,
-  getOracleCardsByIds,
-  getPrinting,
-  getPrintingForSet,
-  getPrintingsByIds,
-  getPrintingsForOracle,
-} from '../db/queries.js';
-import { describeFiling, useIntakeReview, type IntakeConfig, type IntakeResult } from '../import/intake/useIntakeReview.js';
-import type { ResolvedLine } from '../import/types.js';
-import { CardSheet, type SessionCardValues } from './CardSheet.js';
+import { useIntakeReview } from '../import/intake/useIntakeReview.js';
 import { FINISH_LABELS, LANGS } from './copyTraits.js';
-import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
-import { getScanExcludedIds } from '../scan/exclusions.js';
-import { TRADE_SCAN_PREFIX } from '../scan/tradeSessions.js';
-import {
-  CameraScan,
-  CONSENSUS_FRAMES,
-  getPreferredCameraId,
-  listCameras,
-  type CameraOption,
-  type LiveScanState,
-} from '../scan/camera.js';
+import type { ScanIndex } from '../scan/blob.js';
+import { CameraScan, CONSENSUS_FRAMES, type LiveScanState } from '../scan/camera.js';
 import type { ScanPipelineResult } from '../scan/pipeline.js';
-import { CANDIDATE_MAX_DISTANCE, distancesForIds } from '../scan/match.js';
+
 import { resolveWithOcr } from '../scan/ocr.js';
 import { playPop } from '../scan/pop.js';
-import { checkScanDataUpdate, downloadScanData, getUsableScanData, type ScanDataManifest } from '../scan/store.js';
-import { getPrefs, setPrefs } from '../prefs.js';
+import { downloadScanData } from '../scan/store.js';
+import { buildRescanReview } from '../scan/rescan.js';
+import {
+  commitSession,
+  countByPrinting,
+  entryLine,
+  loadStoredSession,
+  sessionKey,
+  sessionStorageKey,
+  targetLabel,
+  targetNoun,
+  type ScanTarget,
+  type SessionEntry,
+} from '../scan/session.js';
+import { filterBySet, joinCandidates, onePrinting, orderTrayCandidates, type Candidate, type Tray } from '../scan/tray.js';
+import { setPrefs } from '../prefs.js';
 import { Icon } from './icons.js';
-import { SetSymbol } from './SetSymbol.js';
-import { EditionPicker } from './EditionPicker.js';
 import { useToast } from './Toast.js';
-import { ownedBadge, type OwnedBadgeSpec } from './OwnedBadge.js';
-import { CONTAINER_META } from '../deck/containers.js';
-import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
+import { ownedBadge } from './OwnedBadge.js';
+import { useOwnershipIndex } from '../db/useOwnership.js';
 import { useDismiss } from './useDismiss.js';
 import { useConfirm } from './ConfirmSheet.js';
-import { ScanListRow } from './ScanListRow.js';
-import { Sheet } from './Sheet.js';
 import { useAsyncAction } from './useAsyncAction.js';
-import { CardStacks, ViewToggle, useScanViewMode, type CardItem } from './CardViews.js';
-import { addToTotal, formatPrice, formatTotal, pricedForFinish, type PriceTotal } from './cardSort.js';
-import { useCardMaps } from '../db/useCardMaps.js';
 import { plural } from '../util/format.js';
-import { BOARD_NOUN, scanBoards } from '../deck/boards.js';
-import { QtyStepper } from './QtyStepper.js';
+import { scanBoards } from '../deck/boards.js';
+import { SessionSheet } from './SessionSheet.js';
+import { CyclePick } from './scan/CyclePick.js';
+import { LockBadge, useLockRing } from './scan/LockBadge.js';
+import { RescanChangesList } from './scan/RescanChangesList.js';
+import { ScanSettings, useScanLocks } from './scan/ScanSettings.js';
+import { TrayTile, type TapFx } from './scan/TrayTile.js';
+import { useScanData } from './scan/useScanData.js';
+import { useTrayHold } from './scan/useTrayHold.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
 // camera fills the top of the screen and never pauses; each lock (S3 consensus
@@ -66,379 +58,20 @@ import { QtyStepper } from './QtyStepper.js';
 //
 // The same screen feeds several destinations (a `ScanTarget`): the collection,
 // the tradelist, the wishlist, a deck, or a live trade offer. Everything up to
-// the commit is identical; only the final write differs, so `complete()`
-// dispatches through the normal data-access paths (or a callback for the
-// in-memory trade offer).
+// the commit is identical; only the final write differs (scan/session.ts).
 
-/** A locked-in scan, ready to be written wherever the target sends it. */
-interface ScannedCard {
-  oracleId: string;
-  scryfallId: string;
-  name: string;
-  /** From the picker bar (deck slots store no finish, so they ignore it). */
-  finish: Finish;
-  /** From the picker bar. A trade offer prices by condition, so it carries. */
-  condition: Condition;
-  /** From the picker bar: what OCR read, or the pinned pile language. */
-  lang: string;
-  quantity: number;
-}
-
-/** Where a scan is committed (mirrors CardSheet's context-sensitive AddTarget). */
-export type ScanTarget =
-  | { kind: 'collection' }
-  | { kind: 'tradelist' }
-  | { kind: 'wishlist' }
-  // A deck, binder or box (all the same stored row — `containerKind` only picks
-  // the wording and, for storage, drops the board picker). `rescan` reconciles
-  // it to exactly what was scanned (add/remove/change quantities) instead of
-  // only adding — see complete()'s deck branch.
-  | {
-      kind: 'deck';
-      deckId: string;
-      deckName?: string;
-      containerKind?: ContainerKind;
-      format?: DeckFormat;
-      rescan?: boolean;
-    }
-  // The whole session lands in one call: an offer is committed as a single
-  // snapshot, so adding card-by-card would have each add overwrite the last.
-  // `sessionKey` scopes the persisted scan to one trade + side, so a restored
-  // scan can never land in somebody else's offer.
-  | { kind: 'trade'; label?: string; sessionKey?: string; onAdd: (cards: ScannedCard[]) => void };
-
-interface Candidate {
-  scryfallId: string;
-  distance: number;
-  printing?: Priced<Printing>;
-  oracle?: Priced<OracleCard>;
-}
-
-type OcrState = 'pending' | 'confirmed' | 'weak' | 'none' | 'unavailable';
-
-type Stage =
-  | { kind: 'setup'; message: string; download?: ScanDataManifest }
-  | { kind: 'downloading'; progress: string }
-  | { kind: 'scanning' };
-
-/** The current lock's candidates, shown in the bottom tray until the next lock. */
-interface Tray {
-  /** Bumped once per accepted lock, so a second copy of the same card (same
-   *  topId) still counts as a new tray for anything that rewinds on one. */
-  seq: number;
-  /** Top candidate of the lock that produced this tray — dedups re-locks of the same card. */
-  topId: string;
-  candidates: Candidate[];
-  ocr: OcrState;
-  /** The candidate OCR confirmed (or weakly matched), if any. */
-  ocrHit: string | null;
-}
-
-/**
- * How long a lock holds the tray before it goes stale (time to tap, and to fix
- * the pickers). Once stale, the *next* time the card leaves the frame the lock
- * lets go, so a second copy of the same card can lock again — the padlock badge
- * shows the time left and releases it on tap.
- */
-const LOCK_HOLD_MS = 3000;
 /** Consecutive card-free frames that count as "the card left the frame". More
  *  than one, so a blurred frame mid-tap can't be mistaken for a card swap. */
 const EMPTY_FRAMES_TO_RELEASE = 5;
-/**
- * How long the tray belongs to the user after they scroll or tap it: while it's
- * held, a new lock can't swap the row out from under the finger that is reaching
- * for a printing. Every further touch refreshes it, a thin bar drains it, and
- * taking the card out of frame hands it straight back.
- */
-const TRAY_HOLD_MS = 4000;
-/** Touch this recent counts as "still browsing", so the card leaving the frame
- *  doesn't cut the hold short mid-scroll. */
-const TRAY_TOUCH_GRACE_MS = 1000;
 /** Dead time after the tray's contents do change before a tap counts: a reorder
  *  landing a frame before your finger must not add the printing that slid in. */
 const TRAY_SETTLE_MS = 200;
-
-/** One line of the scan session — what "complete" will write. */
-export interface SessionEntry {
-  scryfallId: string;
-  oracleId: string;
-  name: string;
-  set: string;
-  collectorNumber: string;
-  image?: string;
-  finish: Finish;
-  lang: string;
-  /** From the tray's Condition picker (NM unless changed or locked). */
-  condition: Condition;
-  board: DeckBoard;
-  qty: number;
-}
-
-/**
- * "I've prepared a pile" pins, set in the scan settings: every card added takes
- * that value and a new lock can't reset the picker out of it (OCR won't override
- * a pinned language either). `null` = pin off. The set pin holds a set code,
- * chosen from the editions of the card in frame — it used to arm itself from
- * whatever scanned next, which on a card with twenty reprints pinned the wrong
- * set more often than the right one.
- */
-interface ScanLocks {
-  lang: string | null;
-  finish: Finish | null;
-  set: string | null;
-}
-
-const NO_LOCKS: ScanLocks = { lang: null, finish: null, set: null };
-
-/** Locks survive a reload (a pile takes more than one sitting); every active one
- *  shows as a chip over the camera, so a stale pin can't apply unnoticed. */
-function loadLocks(): ScanLocks {
-  const p = readJson('scan-locks') as Partial<Record<keyof ScanLocks, unknown>> | undefined;
-  if (!p || typeof p !== 'object') return NO_LOCKS;
-  return {
-    lang: typeof p.lang === 'string' && LANGS.includes(p.lang) ? p.lang : null,
-    finish: FINISHES.includes(p.finish as Finish) ? (p.finish as Finish) : null,
-    // '' was the old "waiting for the next card" state; there is no such
-    // thing now, and a blank pin would filter nothing while showing a chip.
-    set: typeof p.set === 'string' && p.set ? p.set : null,
-  };
-}
-
-/** +1/−1 tap feedback on a tray tile; seq remounts the animation per tap. */
-interface TapFx {
-  id: string;
-  delta: 1 | -1;
-  seq: number;
-}
-
-/** A deck re-scan target slot: one physical copy (printing + traits + board), as filed. */
-interface RescanSlot {
-  oracleId: string;
-  board: DeckBoard;
-  quantity: number;
-  scryfallId?: string;
-  wants: SlotWants;
-  name: string;
-  image?: string;
-}
-
-/** One line of the re-scan diff shown before the deck is reconciled. */
-type DeckChange =
-  | { kind: 'add'; oracleId: string; board: DeckBoard; name: string; image?: string; quantity: number }
-  | { kind: 'remove'; oracleId: string; board: DeckBoard; name: string; image?: string; quantity: number }
-  | { kind: 'change'; oracleId: string; board: DeckBoard; name: string; image?: string; from: number; to: number };
-
-/** Everything a deck re-scan needs to review before committing. */
-interface RescanReview {
-  /** The deck's desired final slots (what reconcileDeck receives). */
-  slots: RescanSlot[];
-  /** Human-readable diff vs the deck's current contents (unchanged slots omitted). */
-  changes: DeckChange[];
-  /** The write would file copies the deck isn't holding, even where the diff is
-   *  empty: same cards, but listed rather than filed, or a different printing. */
-  refiles: boolean;
-}
 
 /** What the picker bar decides: applied to every +1, and to this lock's adds when changed. */
 interface PickValues {
   finish: Finish;
   condition: Condition;
   lang: string;
-}
-
-// Language is part of the key (collectionKey has it too): scanning a card in
-// Japanese and later the same card in English must stay two lines, not merge
-// into whichever one landed first.
-export const sessionLineKey = (e: Pick<SessionEntry, 'scryfallId' | 'finish' | 'condition' | 'lang' | 'board'>) =>
-  `${e.scryfallId}|${e.finish}|${e.condition}|${e.lang}|${e.board}`;
-
-/** Collapse duplicate (printing, finish, condition, language, board) lines after a row edit. */
-export function mergeSession(entries: SessionEntry[]): SessionEntry[] {
-  const map = new Map<string, SessionEntry>();
-  for (const e of entries) {
-    const prev = map.get(sessionLineKey(e));
-    if (prev) prev.qty += e.qty;
-    else map.set(sessionLineKey(e), { ...e });
-  }
-  return [...map.values()];
-}
-
-/**
- * A wish is for a printing, not a graded copy, so its finish/condition/language
- * are wishes too: `undefined` means "any". The picker defaults (nonfoil, NM,
- * English) are what you get when you haven't said anything, so they map back to
- * "any" — anything else is a stated preference and is stored.
- */
-function wishPreference<T extends string>(value: T, dflt: T): T | undefined {
-  return value === dflt ? undefined : value;
-}
-
-/**
- * Set lock: only that set's printings are suggested — the point of scanning a
- * sealed-set pile. If the scan matched none of them the filter steps aside
- * rather than leaving an empty tray (the picker row says so).
- */
-function filterBySet(candidates: Candidate[], set: string | null): Candidate[] {
-  if (!set) return candidates;
-  const hits = candidates.filter((c) => c.printing?.set === set);
-  return hits.length ? hits : candidates;
-}
-
-/**
- * The single printing a candidate list names, or null when it names several —
- * what a set pin usually leaves standing. Foil and nonfoil siblings are one
- * printing here (same set, same collector number): which of them you're holding
- * is the finish picker's business, not the reader's, and the OCR scores them as
- * a tie for the same reason.
- */
-function onePrinting(candidates: Candidate[]): Candidate | null {
-  const first = candidates[0];
-  if (!first?.printing) return null;
-  const same = candidates.every(
-    (c) => c.printing?.set === first.printing!.set && c.printing?.collectorNumber === first.printing!.collectorNumber,
-  );
-  return same ? first : null;
-}
-
-/** "deck" / "binder" / "box" for a container target; the target's own name otherwise. */
-function targetNoun(target: ScanTarget): string {
-  if (target.kind === 'deck') return CONTAINER_META[target.containerKind ?? 'deck'].noun;
-  return target.kind === 'trade' ? 'offer' : target.kind;
-}
-
-function targetLabel(target: ScanTarget): string {
-  switch (target.kind) {
-    case 'collection':
-      return 'Collection';
-    case 'tradelist':
-      return 'Tradelist';
-    case 'wishlist':
-      return 'Wishlist';
-    case 'deck':
-      return target.deckName ?? 'Deck';
-    case 'trade':
-      return target.label ?? 'Trade offer';
-  }
-}
-
-// A scan session survives an accidental reload: it's mirrored to localStorage
-// keyed by its destination and only cleared when the user commits or discards
-// it. Every destination gets its own key — a re-scan is *not* the same session
-// as an add (one reconciles the deck to exactly what was scanned, the other
-// appends), and a trade scan belongs to one trade and one side of it.
-// (The trade prefix and its cleanup live in scan/tradeSessions.ts so Trade.tsx
-// can call them without pulling this whole module into its chunk.)
-
-function sessionStorageKey(target: ScanTarget): string | null {
-  switch (target.kind) {
-    case 'collection':
-      return 'scan-session:collection';
-    case 'tradelist':
-      return 'scan-session:tradelist';
-    case 'wishlist':
-      return 'scan-session:wishlist';
-    case 'deck':
-      return `scan-session:${target.rescan ? 'rescan' : 'deck'}:${target.deckId}`;
-    case 'trade':
-      return target.sessionKey ? `${TRADE_SCAN_PREFIX}${target.sessionKey}` : null;
-  }
-}
-
-function loadStoredSession(key: string | null): SessionEntry[] {
-  if (!key) return [];
-  const parsed = readJson(key);
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter(
-    (e): e is SessionEntry =>
-      !!e && typeof e.scryfallId === 'string' && typeof e.oracleId === 'string' && typeof e.qty === 'number',
-  );
-}
-
-/** One session line as an import line (the collection write is the import write). */
-function entryLine(e: SessionEntry, target: ScanTarget): ResolvedLine {
-  return {
-    oracleId: e.oracleId,
-    scryfallId: e.scryfallId,
-    name: e.name,
-    quantity: e.qty,
-    // Marked for trade only when the destination is the tradelist.
-    quantityForTrade: target.kind === 'tradelist' ? e.qty : 0,
-    condition: e.condition,
-    finish: e.finish,
-    lang: e.lang,
-    board: e.board,
-  };
-}
-
-/**
- * Write a session to its destination: what "Add N cards" does in the scanner
- * and in the drop review alike (a deck re-scan reconciles instead, and stays in
- * the scanner). Resolves to the toast to show, or null when the user backed out
- * of the questionnaire and nothing was written.
- */
-export async function commitSession(
-  target: ScanTarget,
-  session: SessionEntry[],
-  review: (cfg: IntakeConfig) => Promise<IntakeResult | null>,
-  incomingLabel: string,
-): Promise<string | null> {
-  const label = targetLabel(target);
-  const total = session.reduce((n, e) => n + e.qty, 0);
-  const lines = session.map((e) => entryLine(e, target));
-  // A deck, binder or box: the pile is in your hands, so the questionnaire
-  // asks which cards are yours and what the collection should make of them,
-  // then writes the collection and the container together.
-  if (target.kind === 'deck') {
-    const res = await review({
-      flow: 'container',
-      lines,
-      source: 'scan',
-      incomingLabel,
-      target: { id: target.deckId, name: label, kind: target.containerKind ?? 'deck' },
-    });
-    if (!res) return null;
-    return `Added ${total} ${plural(total, 'card')} to ${label}${res.added ? ` · ${res.added} added to collection` : ''}`;
-  }
-  // Collection & tradelist route through the import pipeline: the batch
-  // becomes one history entry, any card already owned gets its Skip / Add /
-  // Update, and the pile is offered a home while you're holding it.
-  if (target.kind === 'collection' || target.kind === 'tradelist') {
-    const res = await review({ flow: target.kind, lines, source: 'scan', incomingLabel });
-    if (!res) return null;
-    const n = res.added + res.flagged;
-    return n === 0 ? 'Nothing added: every card was skipped' : `Added ${n} ${plural(n, 'card')} to ${label}${describeFiling(res)}`;
-  }
-  if (target.kind === 'wishlist') {
-    // A scanned card is a specific printing, so the wish is for that
-    // edition — plus whatever the pickers were moved off their defaults to.
-    await addToWishlistBulk(
-      session.map((e) => ({
-        oracleId: e.oracleId,
-        scryfallId: e.scryfallId,
-        quantity: e.qty,
-        finish: wishPreference(e.finish, 'nonfoil'),
-        condition: wishPreference(e.condition, 'NM'),
-        lang: wishPreference(e.lang, 'en'),
-      })),
-      { source: 'scan' },
-    );
-  } else {
-    target.onAdd(
-      session.map((e) => ({
-        oracleId: e.oracleId,
-        scryfallId: e.scryfallId,
-        name: e.name,
-        finish: e.finish,
-        // A trade values what's actually being handed over, and the picker bar
-        // is right there through the whole scan — so a played copy no longer
-        // enters the offer claiming to be Near Mint.
-        condition: e.condition,
-        lang: e.lang,
-        quantity: e.qty,
-      })),
-    );
-  }
-  return `Added ${total} ${plural(total, 'card')} to ${label}`;
 }
 
 /**
@@ -456,73 +89,9 @@ const AUTO_ADD_NOTES: Record<AutoAddState, string | null> = {
   stopped: 'Auto-add stopped: you added this one',
 };
 
-/**
- * Tray order: the OCR-confirmed printing stays first, then editions the user
- * already owns bubble up (so their double-check badge is the first thing in
- * view), then the scanner's own distance order. Array.sort is stable, so equal
- * items keep that distance order.
- *
- * Called once, when the tray is built, and stored in that order: deriving it on
- * every render meant a +1 (which makes you an owner of that printing) re-sorted
- * the row under the very finger that tapped it.
- */
-function orderTrayCandidates(candidates: Candidate[], ocrHit: string | null, ownership?: OwnershipIndex): Candidate[] {
-  const isHit = (c: Candidate) => (ocrHit === c.scryfallId ? 0 : 1);
-  const ownsExact = (c: Candidate) => (ownership?.lookup(c.oracle?.oracleId ?? '', c.scryfallId).ownsExact ? 0 : 1);
-  return [...candidates].sort((a, b) => isHit(a) - isHit(b) || ownsExact(a) - ownsExact(b));
-}
-
-/**
- * One of the three per-card details, as a button that cycles rather than a
- * dropdown: scanning is a one-handed job and a native select costs a tap, an
- * overlay and a second tap. Tap steps forward, shift/alt-click steps back (a
- * long language list shouldn't need eleven taps to get home).
- */
-function CyclePick<T extends string>({
-  label,
-  value,
-  options,
-  onPick,
-  render,
-  locked,
-}: {
-  label: string;
-  value: T;
-  options: readonly T[];
-  onPick: (v: T) => void;
-  render?: (v: T) => string;
-  locked?: boolean;
-}) {
-  const step = (back: boolean) => {
-    if (options.length < 2) return;
-    const at = options.indexOf(value);
-    // An unknown current value starts the walk at the front of the list.
-    const next = options[at < 0 ? 0 : (at + (back ? -1 : 1) + options.length) % options.length];
-    if (next !== undefined) onPick(next);
-  };
-  const shown = render ? render(value) : value;
-  return (
-    <button
-      type="button"
-      className={locked ? 'scan-pick scan-pick-locked' : 'scan-pick'}
-      aria-label={`${label}: ${shown}. Tap to change`}
-      onClick={(e) => step(e.shiftKey || e.altKey)}
-    >
-      <span className="scan-pick-label">
-        {locked ? <Icon name="lock" size={10} /> : null} {label}
-      </span>
-      <span className="scan-pick-value">{shown}</span>
-    </button>
-  );
-}
-
 export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target?: ScanTarget; onClose: () => void }) {
   const commitAction = useAsyncAction();
   const storageKey = sessionStorageKey(target);
-  const [stage, setStage] = useState<Stage>({ kind: 'setup', message: 'Checking scan data…' });
-  // A newer card-art index is published and the user hasn't said whether we may
-  // fetch it. Scanning carries on meanwhile with the copy already installed.
-  const [refreshOffer, setRefreshOffer] = useState<ScanDataManifest | null>(null);
   const [rememberScanChoice, setRememberScanChoice] = useState(false);
   const [live, setLive] = useState<LiveScanState | null>(null);
   const [tray, setTray] = useState<Tray | null>(null);
@@ -533,29 +102,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // Pile pins (scan settings) and the values the card in frame is recorded with.
   // Unpinned, the pickers belong to that card: finish and condition fall back to
   // Nonfoil/NM on every new lock, and the language follows what OCR reads.
-  const [locks, setLocks] = useState<ScanLocks>(loadLocks);
+  const [locks, setLocks] = useScanLocks();
   const [finish, setFinish] = useState<Finish>(locks.finish ?? 'nonfoil');
   const [condition, setCondition] = useState<Condition>('NM');
   const [lang, setLang] = useState<string>(locks.lang ?? 'en');
-  // When the current lock was taken, for the padlock badge's countdown ring
-  // (null = no lock held, or it was released).
-  const [lockAt, setLockAt] = useState<number | null>(null);
-  const [lockNow, setLockNow] = useState(0);
   const [board, setBoard] = useState<DeckBoard>('main');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // The sets the "set pile" pin can be pinned to: one printing per set of the
-  // card in frame, the sets this scan actually matched first. Picking the set
-  // from a list of the card's own editions is the whole point — arming the pin
-  // from the top candidate pinned the wrong reprint half the time.
-  const [setOptions, setSetOptions] = useState<{ matched: Priced<Printing>[]; others: Priced<Printing>[] }>({
-    matched: [],
-    others: [],
-  });
-  // The lenses this device offers, and which one is pinned ('' = let the OS
-  // choose). Only enumerated once the settings are opened: labels stay blank
-  // until camera permission has been granted anyway.
-  const [cameras, setCameras] = useState<CameraOption[]>([]);
-  const [cameraId, setCameraId] = useState(() => getPreferredCameraId() ?? '');
   // When on, pinpointing an edition (OCR confirms the printing, the green check)
   // adds +1 of it on its own. Persisted so the preference sticks between scans.
   const [autoAdd, setAutoAdd] = useState(() => readLocal('scan-autoadd') === '1');
@@ -566,40 +118,18 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const [committing, setCommitting] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraRef = useRef<CameraScan | null>(null);
-  const closedRef = useRef(false);
   // The live hash index, so a lock can re-check owned printings' scan distance.
   const indexRef = useRef<ScanIndex | null>(null);
-  const trayRef = useRef<Tray | null>(null);
-  const trayElRef = useRef<HTMLDivElement>(null);
   const traySeqRef = useRef(0);
-  // The tray is the user's while they browse it. `holdUntil` is when it goes
-  // back to the scanner (null = not held), `pendingId` is a different card that
-  // locked meanwhile and was dropped — the camera never stops, so it re-locks on
-  // its own the moment the hold drains.
-  const [holdUntil, setHoldUntil] = useState<number | null>(null);
-  const [holdNow, setHoldNow] = useState(0);
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  const holdUntilRef = useRef<number | null>(null);
-  const touchedAtRef = useRef(0);
-  /** Scrolled or tapped since this tray appeared: a late OCR result may badge
-   *  the confirmed edition but must not re-front it in a row you're reading. */
-  const touchedRef = useRef(false);
   /** When the row's contents last actually changed, for the tap dead-time. */
   const trayChangedAtRef = useRef(0);
   const fxSeq = useRef(0);
   // The last lock we auto-added for, so a confirmed edition adds itself once.
   const autoAddedRef = useRef<string | null>(null);
-  // onLocked is the mount-time closure (the camera callback is built once), so
-  // the locks it reads come through a ref, like the index and ownership do.
-  const locksRef = useRef(locks);
   // The user picked a language for the card in frame — a late OCR reading must
   // not overwrite it (they can read the card; the OCR is guessing).
   const langTouchedRef = useRef(false);
-  // Lock lifecycle (mount-time closure again, so: refs). `released` means the
-  // tray no longer blocks a re-lock of the same card; `noCard` counts the
-  // card-free frames that let a stale lock go.
-  const lockAtRef = useRef<number | null>(null);
-  const releasedRef = useRef(false);
+  // Card-free frames in a row, which let a stale lock go.
   const noCardRef = useRef(0);
   // What this lock has put in the session, so a picker change can go back and
   // re-tag it (tap +1 first, then notice the card is foil).
@@ -612,70 +142,34 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // "File away" uses.
   const { open: review, sheet: intakeSheet } = useIntakeReview();
   const { confirm, sheet: confirmSheet } = useConfirm();
+  const ownership = useOwnershipIndex();
+  const ring = useLockRing();
+  const trayHold = useTrayHold(tray?.seq);
 
   const total = session.reduce((n, e) => n + e.qty, 0);
-
-  /** Hand the row to the user for a while (any scroll or tap inside it). */
-  const holdTray = () => {
-    touchedRef.current = true;
-    touchedAtRef.current = Date.now();
-    const until = touchedAtRef.current + TRAY_HOLD_MS;
-    holdUntilRef.current = until;
-    setHoldUntil(until);
-    setHoldNow(touchedAtRef.current);
-  };
-
-  /** Give it back: the hold ran out, the row was scrolled home, or the card left. */
-  const releaseTray = () => {
-    if (holdUntilRef.current === null) return;
-    holdUntilRef.current = null;
-    setHoldUntil(null);
-    setPendingId(null);
-  };
-
-  // Drain the hold bar, and stop ticking the moment it's up.
-  useEffect(() => {
-    if (holdUntil === null) return;
-    setHoldNow(Date.now());
-    const t = setInterval(() => {
-      const now = Date.now();
-      setHoldNow(now);
-      if (now >= holdUntil) releaseTray();
-    }, 100);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [holdUntil]);
-
-  // Every new lock — a different card, or the next copy of the same one — starts
-  // the row from the left, so a printing you scrolled to on the last card isn't
-  // what's under your thumb on this one. Keyed on the lock counter rather than
-  // the card, and laid out before paint so the old offset never flashes.
-  useLayoutEffect(() => {
-    touchedRef.current = false;
-    if (trayElRef.current) trayElRef.current.scrollLeft = 0;
-  }, [tray?.seq]);
+  const counts = useMemo(() => countByPrinting(session), [session]);
+  /** Session copies of a printing across finishes/boards — the tile's badge. */
+  const countOf = (scryfallId: string) => counts.get(scryfallId) ?? 0;
 
   const updateTray = (t: Tray | null) => {
-    const before = trayRef.current?.candidates.map((c) => c.scryfallId).join() ?? '';
+    const before = latest.current.tray?.candidates.map((c) => c.scryfallId).join() ?? '';
     const after = t?.candidates.map((c) => c.scryfallId).join() ?? '';
     // Only a changed line-up starts the dead time — an OCR badge landing on a
     // row that didn't move shouldn't swallow the tap that was already coming.
     if (before !== after) trayChangedAtRef.current = Date.now();
-    trayRef.current = t;
+    // Ahead of the render: the OCR step reads it back after its await.
+    latest.current.tray = t;
     setTray(t);
   };
 
-  /** Parse the blob and drop printings the camera must never suggest. */
-  const buildIndex = async (blob: ArrayBuffer): Promise<ScanIndex> => filterScanIndex(parseHashBlob(blob), await getScanExcludedIds());
-
-  const startScanning = (index: ScanIndex) => {
-    // The sheet may have closed while a download/index-build was in flight; don't
-    // build a camera on a torn-down video element (it would acquire and leak it).
-    if (closedRef.current || !videoRef.current) return;
+  const onScanReady = (index: ScanIndex): boolean => {
+    if (!videoRef.current) return false;
     indexRef.current = index;
-    setStage({ kind: 'scanning' });
+    // Built once, so everything it reads that changes between renders comes
+    // through `latest`.
     const cam = new CameraScan(videoRef.current, index, (s) => {
       setLive(s);
+      const l = latest.current;
       if (s.status === 'scanning') {
         // The card is out of frame and the lock has had its hold: let go, so the
         // next card locks even when it's a second copy of the same one.
@@ -684,61 +178,19 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           // The card is out of frame: nobody is picking a printing off this row
           // any more (the tray sits at the bottom of the screen, so browsing it
           // never covers the card), so don't make the next card wait out a hold.
-          if (Date.now() - touchedAtRef.current > TRAY_TOUCH_GRACE_MS) releaseTray();
-          if (lockAtRef.current !== null && Date.now() - lockAtRef.current >= LOCK_HOLD_MS) releaseLock();
+          if (!l.trayHold.browsing()) l.trayHold.release();
+          if (l.ring.stale()) l.ring.release();
         }
       }
-      if (s.status === 'locked') void onLocked(s.result);
+      if (s.status === 'locked') void l.onLocked(s.result);
     });
     cameraRef.current = cam;
     void cam.start();
+    return true;
   };
+  const { stage, refreshOffer, dismissOffer, download } = useScanData(onScanReady);
 
-  // Scan data must be installed before the camera is useful.
-  useEffect(() => {
-    let cancelled = false;
-    // StrictMode runs this effect twice (mount → cleanup → mount) on the same
-    // instance, and the cleanup latches closedRef — without clearing it the
-    // second pass would refuse to build a camera and dev never scans anything.
-    closedRef.current = false;
-    void (async () => {
-      const installed = await getUsableScanData();
-      if (cancelled) return;
-      if (installed) {
-        const index = await buildIndex(installed.blob);
-        if (cancelled) return;
-        startScanning(index);
-        // Scan immediately on the installed index, but check the beacon in the
-        // background: the scanjob keeps publishing newer versions, and without
-        // this a device runs on its first download forever. The fresh blob is
-        // installed for the next scan session (no disruptive mid-scan swap) —
-        // and only with the user's say-so, since it's a few MB.
-        const policy = getPrefs().scanDataPolicy;
-        if (policy === 'never') return;
-        void checkScanDataUpdate()
-          .then((u) => {
-            if (cancelled || u.kind !== 'update') return;
-            if (policy === 'always') return void downloadScanData(u.manifest);
-            setRefreshOffer(u.manifest);
-          })
-          .catch(() => {});
-        return;
-      }
-      const update = await checkScanDataUpdate();
-      if (cancelled) return;
-      if (update.kind === 'update') {
-        setStage({ kind: 'setup', message: 'Scanning needs a one-time download of the card-art index.', download: update.manifest });
-      } else {
-        setStage({ kind: 'setup', message: 'Card scanning is not available right now (no scan data on the server).' });
-      }
-    })();
-    return () => {
-      cancelled = true;
-      closedRef.current = true;
-      cameraRef.current?.stop();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => () => cameraRef.current?.stop(), []);
 
   // Mirror the session to storage so an accidental reload doesn't lose it, and
   // clear the mirror when it empties. Best-effort: a full data-URI fixture card
@@ -752,70 +204,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     writeLocal('scan-autoadd', autoAdd ? '1' : '0');
   }, [autoAdd]);
 
-  // Fill the camera picker when the settings open, and re-read the pin: a
-  // pinned lens that has since disappeared is dropped by the camera on start,
-  // and the picker must show that rather than a device it isn't using.
-  useEffect(() => {
-    if (!settingsOpen || stage.kind !== 'scanning') return;
-    void listCameras().then((list) => {
-      setCameras(list);
-      setCameraId(getPreferredCameraId() ?? '');
-    });
-  }, [settingsOpen, stage.kind]);
-
-  // Load the set pin's options while the settings are open (and refresh them
-  // when the card in frame changes underneath). A pin held over from another
-  // card, or from last night's binder, isn't among this card's editions, so one
-  // printing of that set is fetched just to give the closed picker its name.
-  useEffect(() => {
-    if (!settingsOpen) return;
-    const cands = tray?.candidates ?? [];
-    let cancelled = false;
-    void (async () => {
-      const matched = new Map<string, Priced<Printing>>();
-      for (const c of cands) if (c.printing && !matched.has(c.printing.set)) matched.set(c.printing.set, c.printing);
-      const others = new Map<string, Priced<Printing>>();
-      for (const oracleId of new Set(cands.map((c) => c.printing?.oracleId).filter((id): id is string => !!id))) {
-        for (const p of await getPrintingsForOracle(oracleId)) {
-          if (!matched.has(p.set) && !others.has(p.set)) others.set(p.set, p);
-        }
-      }
-      if (locks.set && !matched.has(locks.set) && !others.has(locks.set)) {
-        const sample = await getPrintingForSet(locks.set);
-        if (sample) others.set(locks.set, sample);
-      }
-      if (!cancelled) setSetOptions({ matched: [...matched.values()], others: [...others.values()] });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [settingsOpen, tray?.topId, tray?.candidates, locks.set]);
-
-  useEffect(() => {
-    locksRef.current = locks;
-    writeJson('scan-locks', locks);
-  }, [locks]);
-
-  // Drive the padlock badge's countdown ring, and stop ticking the moment the
-  // hold is up — an idle scanner shouldn't re-render four times a second.
-  useEffect(() => {
-    if (lockAt === null) return;
-    setLockNow(Date.now());
-    const t = setInterval(() => {
-      const now = Date.now();
-      setLockNow(now);
-      if (now - lockAt >= LOCK_HOLD_MS) clearInterval(t);
-    }, 120);
-    return () => clearInterval(t);
-  }, [lockAt]);
-
   // Tell the user once if a previous scan was restored after a reload.
   const restoredRef = useRef(false);
   useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
-    const restored = session.reduce((n, e) => n + e.qty, 0);
-    if (restored > 0) toast(`Restored ${restored} ${plural(restored, 'card')} from your last scan`);
+    if (total > 0) toast(`Restored ${total} ${plural(total, 'card')} from your last scan`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -823,34 +217,14 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     if (storageKey) writeLocal(storageKey, null);
   };
 
-  const download = async (manifest: ScanDataManifest) => {
-    setStage({ kind: 'downloading', progress: `Downloading ${(manifest.bytes / 1e6).toFixed(1)} MB…` });
-    try {
-      const row = await downloadScanData(manifest);
-      startScanning(await buildIndex(row.blob));
-    } catch (e) {
-      setStage({ kind: 'setup', message: `Download failed: ${(e as Error).message}` });
-    }
-  };
-
-  /**
-   * Let go of the current lock: the tray stays (you can still tap it), but the
-   * very next lock is accepted even if it's the same card. Called by the padlock
-   * badge and by the stale-lock rule in the camera callback.
-   */
-  const releaseLock = () => {
-    releasedRef.current = true;
-    lockAtRef.current = null;
-    setLockAt(null);
-  };
-
   const onLocked = async (result: ScanPipelineResult) => {
+    const l = latest.current;
     // The camera never stops between cards, so it keeps re-locking whatever is
     // in frame — while the lock is held, only a *different* top candidate
     // replaces the tray (and re-runs the DB join + OCR). Once it's been released
     // the same card counts as a new one: that's the second copy in the pile.
     const topId = result.match.candidates[0]?.scryfallId;
-    if (!topId || (topId === trayRef.current?.topId && !releasedRef.current)) {
+    if (!topId || (topId === l.tray?.topId && !l.ring.released())) {
       cameraRef.current?.resume();
       return;
     }
@@ -859,8 +233,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     // point of the hold. Nothing is queued: the camera never stops locking, so
     // the next one lands the moment the row is handed back. The bar only says
     // that something is waiting for it.
-    if (holdUntilRef.current !== null && Date.now() < holdUntilRef.current) {
-      if (topId !== trayRef.current?.topId) setPendingId(topId);
+    if (l.trayHold.isHeld()) {
+      if (topId !== l.tray?.topId) l.trayHold.setPendingId(topId);
       cameraRef.current?.resume();
       return;
     }
@@ -870,53 +244,18 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     // lock is re-tagged by them any more. The auto-add guard is per lock, so it
     // clears here too — without that, coming back to a card already auto-added
     // once (A, B, A — a binder page of near-duplicates) never adds the second copy.
-    const pins = locksRef.current;
+    const pins = l.locks;
     autoAddedRef.current = null;
     setAutoState('idle');
     langTouchedRef.current = false;
     lockAddsRef.current = [];
-    releasedRef.current = false;
     noCardRef.current = 0;
-    lockAtRef.current = Date.now();
-    setLockAt(lockAtRef.current);
-    setLockNow(lockAtRef.current); // full ring on the first paint, not on the next tick
+    l.ring.start();
     setFinish(pins.finish ?? 'nonfoil');
     setCondition('NM');
     setLang(pins.lang ?? 'en');
 
-    // Join candidates with the card DB; collapse per-face duplicates.
-    const ids = [...new Set(result.match.candidates.map((c) => c.scryfallId))];
-    const printings = await getPrintingsByIds(ids);
-    const oracles = await getOracleCardsByIds([...printings.values()].map((p) => p.oracleId));
-    const candidates: Candidate[] = ids.map((id) => {
-      const printing = printings.get(id);
-      const best = result.match.candidates.find((c) => c.scryfallId === id)!;
-      return { scryfallId: id, distance: best.distance, printing, oracle: printing && oracles.get(printing.oracleId) };
-    });
-
-    // Cards with a swarm of same-art printings (Command Tower!) can push the
-    // very edition you own past the search's top-N. So re-check the printings
-    // you own of the matched card(s) directly, and splice in any whose art
-    // still matches this scan (within the candidate cutoff) — orderTrayCandidates
-    // then floats them to the front by their owned badge.
-    const idx = indexRef.current;
-    const own = ownershipRef.current;
-    if (idx && own) {
-      const have = new Set(ids);
-      const ownedIds = new Set<string>();
-      for (const oracleId of new Set([...printings.values()].map((p) => p.oracleId))) {
-        for (const sid of own.ownedPrintings(oracleId)) if (!have.has(sid)) ownedIds.add(sid);
-      }
-      const extra = [...distancesForIds(idx, result.hash, ownedIds)].filter(([, d]) => d <= CANDIDATE_MAX_DISTANCE[idx.algo]);
-      if (extra.length) {
-        const extraPrintings = await getPrintingsByIds(extra.map(([id]) => id));
-        for (const [id, distance] of extra) {
-          const printing = extraPrintings.get(id);
-          // Same oracle as a top match, so its OracleCard is already loaded.
-          candidates.push({ scryfallId: id, distance, printing, oracle: printing && oracles.get(printing.oracleId) });
-        }
-      }
-    }
+    const candidates = await joinCandidates(result, indexRef.current, latest.current.ownership);
 
     // A set pin is a promise about the pile, so the reader is only asked to tell
     // that set's printings apart: fewer candidates means a read stops being
@@ -930,7 +269,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     updateTray({
       seq: ++traySeqRef.current,
       topId,
-      candidates: orderTrayCandidates(ordered, pinpointed?.scryfallId ?? null, ownershipRef.current),
+      candidates: orderTrayCandidates(ordered, pinpointed?.scryfallId ?? null, latest.current.ownership),
       ocr: pinpointed ? 'confirmed' : 'pending',
       ocrHit: pinpointed?.scryfallId ?? null,
     });
@@ -953,10 +292,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           releasedAt: c.printing!.releasedAt,
         })),
       );
-      const current = trayRef.current;
+      const current = latest.current.tray;
       if (current?.topId !== topId) return;
       const read = resolution.parsed?.lang;
-      if (read && !locksRef.current.lang && !langTouchedRef.current) setLang(read);
+      if (read && !latest.current.locks.lang && !langTouchedRef.current) setLang(read);
       // The pin already named the printing; this read was for the language only.
       if (pinpointed) return;
       const hit = resolution.confirmed ?? resolution.weak;
@@ -965,8 +304,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       // all sideways is how you end up tapping the reprint next to the one you
       // wanted; the green check has to carry the news instead.
       let trayOrder = current.candidates;
-      const idx = hit && !touchedRef.current ? trayOrder.findIndex((c) => c.scryfallId === hit.scryfallId) : -1;
-      if (idx > 0) trayOrder = [trayOrder[idx]!, ...trayOrder.filter((_, j) => j !== idx)];
+      const at = hit && !trayHold.touchedRef.current ? trayOrder.findIndex((c) => c.scryfallId === hit.scryfallId) : -1;
+      if (at > 0) trayOrder = [trayOrder[at]!, ...trayOrder.filter((_, j) => j !== at)];
       updateTray({
         ...current,
         candidates: trayOrder,
@@ -974,7 +313,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         ocrHit: hit?.scryfallId ?? null,
       });
     } catch {
-      const current = trayRef.current;
+      const current = latest.current.tray;
       if (!pinpointed && current?.topId === topId) updateTray({ ...current, ocr: 'unavailable' });
     }
   };
@@ -999,13 +338,13 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     setSession((prev) => {
       const out = prev.map((e) => ({ ...e }));
       for (const a of adds) {
-        const i = out.findIndex((e) => sessionLineKey(e) === sessionLineKey({ scryfallId: a.scryfallId, board: a.board, ...from }));
+        const i = out.findIndex((e) => sessionKey(e) === sessionKey({ scryfallId: a.scryfallId, board: a.board, ...from }));
         if (i < 0) continue;
         const src = out[i]!;
         const take = Math.min(a.qty, src.qty);
         if (take <= 0) continue;
         src.qty -= take;
-        const j = out.findIndex((e) => sessionLineKey(e) === sessionLineKey({ scryfallId: a.scryfallId, board: a.board, ...to }));
+        const j = out.findIndex((e) => sessionKey(e) === sessionKey({ scryfallId: a.scryfallId, board: a.board, ...to }));
         if (j >= 0) out[j]!.qty += take;
         else out.push({ ...src, ...to, qty: take });
       }
@@ -1016,7 +355,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   /** +1/−1 from a tray tile, into the session list, with the picker bar's
    *  finish/condition/language (a deck slot or wish quietly ignores what it doesn't store). */
   const bump = (c: Candidate, delta: 1 | -1, auto = false) => {
-    if (!c.printing) return;
+    const printing = c.printing;
+    if (!printing) return;
     // The line-up moved a moment ago, so this tap was aimed at whatever used to
     // be here. Dropping it costs a re-tap; honouring it adds the wrong printing.
     if (!auto && Date.now() - trayChangedAtRef.current < TRAY_SETTLE_MS) return;
@@ -1024,53 +364,44 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     // for this lock instead of dropping a second one in when the OCR lands.
     // Latching the guard ref is what actually stops it (a later set pin that
     // narrows the tray to one candidate would otherwise still fire).
-    if (!auto && delta > 0 && autoAdd && trayRef.current && autoAddedRef.current !== trayRef.current.topId) {
-      autoAddedRef.current = trayRef.current.topId;
+    const current = latest.current.tray;
+    if (!auto && delta > 0 && autoAdd && current && autoAddedRef.current !== current.topId) {
+      autoAddedRef.current = current.topId;
       setAutoState('stopped');
     }
-    const f = finish;
-    const cond = condition;
-    const l = lang;
     const b: DeckBoard = target.kind === 'deck' ? board : 'main';
-    const key = sessionLineKey({ scryfallId: c.scryfallId, finish: f, condition: cond, lang: l, board: b });
-    let i = session.findIndex((e) => sessionLineKey(e) === key);
+    const line = { scryfallId: c.scryfallId, finish, condition, lang, board: b };
+    const key = sessionKey(line);
     recordLockAdd(c.scryfallId, b, delta);
     if (delta > 0) {
       // Rising pop: pitch climbs a semitone per copy already piled up.
       playPop(countOf(c.scryfallId));
-      if (i >= 0) {
-        setSession(session.map((e, j) => (j === i ? { ...e, qty: e.qty + 1 } : e)));
-      } else {
-        setSession([
-          ...session,
+      setSession((prev) => {
+        const i = prev.findIndex((e) => sessionKey(e) === key);
+        if (i >= 0) return prev.map((e, j) => (j === i ? { ...e, qty: e.qty + 1 } : e));
+        return [
+          ...prev,
           {
-            scryfallId: c.scryfallId,
-            oracleId: c.printing.oracleId,
+            ...line,
+            oracleId: printing.oracleId,
             name: c.oracle?.name ?? 'Unknown card',
-            set: c.printing.set,
-            collectorNumber: c.printing.collectorNumber,
-            image: c.printing.imageNormal ?? undefined,
-            finish: f,
-            lang: l,
-            condition: cond,
-            board: b,
+            set: printing.set,
+            collectorNumber: printing.collectorNumber,
+            image: printing.imageNormal ?? undefined,
             qty: 1,
           },
-        ]);
-      }
+        ];
+      });
     } else {
-      // Fall back to any entry of this printing (e.g. the foil toggle moved since the +1).
-      if (i < 0) {
-        for (let j = session.length - 1; j >= 0; j--) {
-          if (session[j]!.scryfallId === c.scryfallId) {
-            i = j;
-            break;
-          }
-        }
-      }
-      if (i < 0) return; // nothing to take back — no feedback either
-      const e = session[i]!;
-      setSession(e.qty <= 1 ? session.filter((_, j) => j !== i) : session.map((x, j) => (j === i ? { ...x, qty: x.qty - 1 } : x)));
+      if (!session.some((e) => e.scryfallId === c.scryfallId)) return; // nothing to take back — no feedback either
+      setSession((prev) => {
+        let i = prev.findIndex((e) => sessionKey(e) === key);
+        // Fall back to any entry of this printing (e.g. the foil toggle moved since the +1).
+        if (i < 0) i = prev.findLastIndex((e) => e.scryfallId === c.scryfallId);
+        if (i < 0) return prev;
+        const e = prev[i]!;
+        return e.qty <= 1 ? prev.filter((_, j) => j !== i) : prev.map((x, j) => (j === i ? { ...x, qty: x.qty - 1 } : x));
+      });
     }
     setFx({ id: c.scryfallId, delta, seq: ++fxSeq.current });
   };
@@ -1139,17 +470,6 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       langTouchedRef.current = false;
     }
   };
-  /** Pin the pile's set by picking one of the card's editions ('' = pin off). */
-  const pickSetLock = (scryfallId: string) => {
-    const p = [...setOptions.matched, ...setOptions.others].find((x) => x.scryfallId === scryfallId);
-    setLocks((l) => ({ ...l, set: p?.set ?? null }));
-  };
-
-  /** Swap lenses without disturbing the session — the stream is all that changes. */
-  const pickCamera = (id: string) => {
-    setCameraId(id);
-    void cameraRef.current?.switchTo(id || null);
-  };
 
   const openList = () => {
     cameraRef.current?.pause();
@@ -1161,87 +481,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     cameraRef.current?.resume();
   };
 
-  /** The session as import lines (collection/tradelist go through applyImport). */
-  const sessionLines = (): ResolvedLine[] => session.map((e) => entryLine(e, target));
-
   const finishScan = () => {
     clearStored();
     cameraRef.current?.stop();
     onClose();
-  };
-
-  /**
-   * Deck re-scan: collapse the session to deck slots (one per physical copy and
-   * board) and diff it against the deck's current contents for the preview.
-   */
-  const buildRescanReview = async (deckId: string): Promise<RescanReview> => {
-    // What gets written: one slot per physical copy, exactly as filing writes
-    // them, so the deck holds the cardboard the camera saw.
-    const slotMap = new Map<string, RescanSlot>();
-    for (const e of session) {
-      const cur = slotMap.get(sessionLineKey(e));
-      if (cur) cur.quantity += e.qty;
-      else
-        slotMap.set(sessionLineKey(e), {
-          oracleId: e.oracleId,
-          board: e.board,
-          quantity: e.qty,
-          scryfallId: e.scryfallId,
-          wants: { condition: e.condition, finish: e.finish, lang: e.lang },
-          name: e.name,
-          image: e.image,
-        });
-    }
-    // "Any printing" basics are invisible to a scan — reconcileDeck leaves them
-    // alone, so the preview mustn't offer to sweep them away either.
-    const current = (await db.deckCards.where('deckId').equals(deckId).toArray()).filter((c) => !c.anyBasic);
-    const oracleMap = await getOracleCardsByIds(current.map((c) => c.oracleId));
-
-    // What the user reads: the diff per card and board, which is how a deck
-    // lists itself. Swapping a Sol Ring for another printing of the same Sol
-    // Ring is no change to a decklist, so it stays off this list.
-    const cardKey = (c: { oracleId: string; board: DeckBoard }) => `${c.oracleId}|${c.board}`;
-    const scanned = new Map<string, { slot: RescanSlot; quantity: number }>();
-    for (const s of slotMap.values()) {
-      const cur = scanned.get(cardKey(s));
-      if (cur) cur.quantity += s.quantity;
-      else scanned.set(cardKey(s), { slot: s, quantity: s.quantity });
-    }
-    const held = new Map<string, { card: DeckCard; quantity: number }>();
-    for (const c of current) {
-      const cur = held.get(cardKey(c));
-      if (cur) cur.quantity += c.quantity;
-      else held.set(cardKey(c), { card: c, quantity: c.quantity });
-    }
-
-    const changes: DeckChange[] = [];
-    for (const [key, { slot: s, quantity }] of scanned) {
-      const cur = held.get(key);
-      if (!cur) changes.push({ kind: 'add', oracleId: s.oracleId, board: s.board, name: s.name, image: s.image, quantity });
-      else if (cur.quantity !== quantity)
-        changes.push({ kind: 'change', oracleId: s.oracleId, board: s.board, name: s.name, image: s.image, from: cur.quantity, to: quantity });
-    }
-    for (const [key, { card, quantity }] of held) {
-      if (scanned.has(key)) continue;
-      changes.push({ kind: 'remove', oracleId: card.oracleId, board: card.board, name: oracleMap.get(card.oracleId)?.name ?? 'Unknown card', quantity });
-    }
-
-    // A deck can list every card the scan saw and still be holding none of it:
-    // pasted decklist lines name no copy, so nothing in them is filed. Then the
-    // diff above is empty while the write is anything but, and the re-scan must
-    // not bow out with "already matches your scan".
-    const filed = new Map<string, number>();
-    for (const c of current) {
-      // An emptied-out slot (DeckCard.unfiled) holds nothing, so it can never
-      // match a scanned copy. Same shape as sessionLineKey, which keys the scan.
-      if (c.unfiled) continue;
-      const key = `${c.scryfallId ?? ''}|${c.finish ?? ''}|${c.condition ?? ''}|${c.lang ?? ''}|${c.board}`;
-      filed.set(key, (filed.get(key) ?? 0) + c.quantity);
-    }
-    const refiles =
-      filed.size !== slotMap.size || [...slotMap].some(([key, s]) => filed.get(key) !== s.quantity);
-
-    return { slots: [...slotMap.values()], changes, refiles };
   };
 
   /**
@@ -1259,7 +502,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     // Every other destination is the shared write, which a drop uses too.
     if (target.kind === 'deck' && target.rescan) {
       const label = targetLabel(target);
-      const changes = await buildRescanReview(target.deckId);
+      const changes = await buildRescanReview(session, target.deckId);
       if (changes.changes.length === 0 && !changes.refiles) {
         toast(`No changes: this ${targetNoun(target)} already matches your scan`);
         finishScan();
@@ -1267,7 +510,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       }
       const res = await review({
         flow: 'rescan',
-        lines: sessionLines(),
+        lines: session.map((e) => entryLine(e, target)),
         source: 'scan',
         incomingLabel: 'Scanned',
         target: { id: target.deckId, name: label, kind: target.containerKind ?? 'deck' },
@@ -1321,16 +564,12 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // inline layers need naming here. A commit in flight claims nothing.
   useDismiss(committing ? null : settingsOpen ? () => setSettingsOpen(false) : close);
 
-  /** Session copies of a printing across finishes/boards — the tile's badge. */
-  const countOf = (scryfallId: string) => session.reduce((n, e) => (e.scryfallId === scryfallId ? n + e.qty : n), 0);
-
-  const ownership = useOwnershipIndex();
-  // onLocked is captured once (mount), but ownership loads/changes later — read
-  // it through a ref so a lock always sees the current collection.
-  const ownershipRef = useRef(ownership);
-  useEffect(() => {
-    ownershipRef.current = ownership;
-  }, [ownership]);
+  // The one window onto this render for code that outlives it: the camera
+  // callback is built once, and onLocked reads the tray again after its awaits.
+  const latest = useRef({ tray, locks, ownership, ring, trayHold, onLocked, bump });
+  latest.current = { tray, locks, ownership, ring, trayHold, onLocked, bump };
+  // Stable, so a memoized tile only repaints when its own props change.
+  const onTileBump = useCallback((c: Candidate, delta: 1 | -1) => latest.current.bump(c, delta), []);
 
   // Everything pinned right now, as chips over the camera: a pin left on from
   // the last pile is exactly the sort of thing you notice one binder too late.
@@ -1339,11 +578,6 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
     locks.lang ? locks.lang.toUpperCase() : null,
     locks.set ? locks.set.toUpperCase() : null,
   ].filter((s): s is string => !!s);
-
-  /** Which row of the set picker the pin is sitting on ('' = the "off" row). */
-  const pinnedSetPrinting = locks.set
-    ? ([...setOptions.matched, ...setOptions.others].find((p) => p.set === locks.set)?.scryfallId ?? '')
-    : '';
 
   // Already ordered when the tray was built — sorting here would move tiles
   // whenever the collection changed underneath, which a +1 does every time.
@@ -1355,18 +589,14 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // "point the camera at a card", so the note clears itself.
   const autoNote =
     autoAdd && tray && live && (live.status !== 'scanning' || live.cardSeen) ? AUTO_ADD_NOTES[autoState] : null;
-  /** Countdown ring: 1 right after a lock, 0 once the hold is up or it let go. */
-  const holdLeft = lockAt === null ? 0 : Math.max(0, Math.min(1, 1 - (lockNow - lockAt) / LOCK_HOLD_MS));
   /**
-   * The same ring, before a lock: the agreeing frames banked towards one. Real
+   * The lock ring before a lock: the agreeing frames banked towards one. Real
    * progress, not a timer — a blurry or disagreeing frame drops it back to zero.
    * Only while nothing is held, so a held lock's drain isn't fighting the camera
    * re-converging on the card that is still in frame.
    */
-  const arming = lockAt === null && live?.status === 'scanning' ? Math.min(1, live.streak / CONSENSUS_FRAMES) : 0;
-  const ringFill = lockAt === null ? arming : holdLeft;
-  /** The tray's own hold: 1 right after a touch, 0 once the row is the scanner's again. */
-  const trayHoldLeft = holdUntil === null ? 0 : Math.max(0, Math.min(1, (holdUntil - holdNow) / TRAY_HOLD_MS));
+  const arming = !ring.held && live?.status === 'scanning' ? Math.min(1, live.streak / CONSENSUS_FRAMES) : 0;
+  const boards = target.kind === 'deck' ? scanBoards(target.containerKind, target.format) : [];
 
   return createPortal(
     <div className="scan-screen" role="dialog" aria-label="Scan cards">
@@ -1400,87 +630,17 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         </div>
 
         {settingsOpen && stage.kind === 'scanning' && (
-          <div className="scan-settings" role="group" aria-label="Scan settings">
-            {cameras.length > 1 && (
-              <label className="scan-setting scan-setting-stacked">
-                <span>
-                  <strong>Camera</strong>
-                  <small>Phones with several rear lenses like to swap mid-pile. Pin the one that focuses best up close.</small>
-                </span>
-                <select className="scan-lock-select scan-camera-select" value={cameraId} onChange={(e) => pickCamera(e.target.value)}>
-                  <option value="">Automatic</option>
-                  {cameras.map((c) => (
-                    <option key={c.deviceId} value={c.deviceId}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <label className="scan-setting">
-              <span>
-                <strong>Auto-add pinpointed edition</strong>
-                <small>
-                  When the edition is confirmed (green check), add +1 on its own. Adding a copy yourself first stops
-                  it for that card.
-                </small>
-              </span>
-              <input type="checkbox" checked={autoAdd} onChange={(e) => setAutoAdd(e.target.checked)} />
-            </label>
-            <label className="scan-setting">
-              <span>
-                <strong>Finish pile</strong>
-                <small>A stack of foils (or etched)? Pin it and every card you add gets that finish</small>
-              </span>
-              <select className="scan-lock-select" value={locks.finish ?? ''} onChange={(e) => lockFinish(e.target.value)}>
-                <option value="">Off</option>
-                {FINISHES.map((f) => (
-                  <option key={f} value={f}>
-                    {FINISH_LABELS[f]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="scan-setting">
-              <span>
-                <strong>Language pile</strong>
-                <small>Pin the pile&rsquo;s language; the reader can&rsquo;t overrule it (it misreads non-English cards)</small>
-              </span>
-              <select className="scan-lock-select" value={locks.lang ?? ''} onChange={(e) => lockLang(e.target.value)}>
-                <option value="">Off</option>
-                {LANGS.map((l) => (
-                  <option key={l} value={l}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {/* Not a <label>: the picker is a button until it's opened, and a
-                label wrapping a button turns its own text into a second trigger. */}
-            <div className="scan-setting scan-setting-stacked">
-              <span>
-                <strong>Set pile</strong>
-                <small>
-                  {locks.set
-                    ? `Only ${locks.set.toUpperCase()} printings are suggested (they still show if the scan matches none), and the reader has less to tell apart`
-                    : tray
-                      ? 'One set only. Pick it from the editions of the card in frame'
-                      : 'One set only. Scan a card from the pile, then pick its set here'}
-                </small>
-              </span>
-              <EditionPicker
-                printings={setOptions.others}
-                highlighted={setOptions.matched}
-                highlightLabel="Matched this scan"
-                restLabel="Other sets of this card"
-                selected={pinnedSetPrinting}
-                anyLabel="Off: suggest every set"
-                placeholder="Pick the pile’s set…"
-                hideCollector
-                onSelect={pickSetLock}
-              />
-            </div>
-          </div>
+          <ScanSettings
+            locks={locks}
+            candidates={tray?.candidates ?? null}
+            autoAdd={autoAdd}
+            onAutoAdd={setAutoAdd}
+            onPinFinish={lockFinish}
+            onPinLang={lockLang}
+            onPinSet={(set) => setLocks((l) => ({ ...l, set }))}
+            // Swap lenses without disturbing the session: the stream is all that changes.
+            onPickCamera={(id) => void cameraRef.current?.switchTo(id || null)}
+          />
         )}
 
         <div className="scan-cam-side">
@@ -1499,9 +659,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           )}
         </div>
 
-        {target.kind === 'deck' && scanBoards(target.containerKind, target.format).length > 1 && stage.kind === 'scanning' && (
+        {boards.length > 1 && stage.kind === 'scanning' && (
           <div className="seg-row scan-cam-board" role="radiogroup" aria-label="Add to board">
-            {scanBoards(target.containerKind, target.format).map((b) => (
+            {boards.map((b) => (
               <button key={b} role="radio" aria-checked={board === b} className={board === b ? 'seg seg-active' : 'seg'} onClick={() => setBoard(b)}>
                 {b === 'main' ? 'Main' : b === 'side' ? 'Side' : b === 'maybe' ? 'Maybe' : 'Commander'}
               </button>
@@ -1509,46 +669,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
           </div>
         )}
 
-        {/* Lock state, bottom-left over the camera. One ring, one meaning: how
-            committed the scanner is to the card in front of it. It fills as the
-            agreeing frames stack up, is full the instant the card locks, then
-            drains through the hold that keeps this same copy from re-locking.
-            A tap at any point after the lock lets go at once. */}
         {stage.kind === 'scanning' && (
-          <button
-            className={`scan-lock-badge${lockAt !== null ? ' scan-lock-held' : ''}${holdLeft === 0 && lockAt !== null ? ' scan-lock-stale' : ''}${lockAt === null && arming > 0 ? ' scan-lock-arming' : ''}`}
-            onClick={releaseLock}
-            disabled={lockAt === null}
-            aria-label={lockAt !== null ? 'Release the locked card' : 'No card locked'}
-            title={
-              lockAt === null
-                ? arming > 0
-                  ? 'Reading the card… hold steady to lock'
-                  : tray
-                    ? 'Released: show the next card'
-                    : 'Nothing locked yet'
-                : holdLeft === 0
-                  ? 'Ready for the next card. Tap to scan this one again'
-                  : 'Locked on this card. Tap to release'
-            }
-          >
-            <svg className="scan-lock-ring" viewBox="0 0 36 36" aria-hidden>
-              <circle className="scan-lock-ring-track" cx="18" cy="18" r="16" />
-              <circle
-                className="scan-lock-ring-fill"
-                cx="18"
-                cy="18"
-                r="16"
-                pathLength={100}
-                strokeDasharray="100"
-                strokeDashoffset={(100 - 100 * ringFill).toFixed(1)}
-                // An empty ring still renders a hairline at 12 o'clock; hide it
-                // rather than unmount, so the first step still tweens from zero.
-                style={{ opacity: ringFill > 0 ? 1 : 0 }}
-              />
-            </svg>
-            <Icon name={lockAt !== null ? 'lock' : 'unlock'} size={16} />
-          </button>
+          <LockBadge held={ring.held} holdLeft={ring.holdLeft} arming={arming} hasTray={!!tray} onRelease={ring.release} />
         )}
 
         {stage.kind === 'scanning' && live && (
@@ -1589,7 +711,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
                 onClick={() => {
                   if (rememberScanChoice) setPrefs({ scanDataPolicy: 'always' });
                   void downloadScanData(refreshOffer).catch(() => {});
-                  setRefreshOffer(null);
+                  dismissOffer();
                   toast('Downloading newer scan data in the background');
                 }}
               >
@@ -1598,7 +720,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
               <button
                 onClick={() => {
                   if (rememberScanChoice) setPrefs({ scanDataPolicy: 'never' });
-                  setRefreshOffer(null);
+                  dismissOffer();
                 }}
               >
                 Not now
@@ -1637,8 +759,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
             onPick={pickLang}
           />
           {setMissed && <span className="scan-pick-note">No {locks.set!.toUpperCase()} match</span>}
-          {pendingId && (
-            <button className="scan-pick-new" onClick={releaseTray}>
+          {trayHold.pendingId && (
+            <button className="scan-pick-new" onClick={trayHold.release}>
               <Icon name="refresh" size={12} /> New card
             </button>
           )}
@@ -1648,19 +770,19 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       {/* The row is yours while this drains. Accent means a different card has
           already locked and is waiting for the handover, so the change that
           follows is announced rather than sprung. */}
-      <div className={pendingId ? 'scan-tray-hold scan-tray-hold-new' : 'scan-tray-hold'} aria-hidden="true">
-        <span style={{ transform: `scaleX(${trayHoldLeft})` }} />
+      <div className={trayHold.pendingId ? 'scan-tray-hold scan-tray-hold-new' : 'scan-tray-hold'} aria-hidden="true">
+        <span style={{ transform: `scaleX(${trayHold.left})` }} />
       </div>
 
       <div
         className="scan-tray"
-        ref={trayElRef}
-        onPointerDown={holdTray}
+        ref={trayHold.elRef}
+        onPointerDown={trayHold.hold}
         onScroll={(e) => {
           // Scrolled back to the start: you're done browsing, so hand the row
           // over now instead of sitting out the rest of the hold.
-          if (e.currentTarget.scrollLeft <= 2) releaseTray();
-          else holdTray();
+          if (e.currentTarget.scrollLeft <= 2) trayHold.release();
+          else trayHold.hold();
         }}
       >
         {tray ? (
@@ -1672,7 +794,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
               confirmed={tray.ocrHit === c.scryfallId && (tray.ocr === 'confirmed' || tray.ocr === 'weak')}
               owned={ownedBadge(ownership?.lookup(c.oracle?.oracleId ?? '', c.scryfallId))}
               fx={fx?.id === c.scryfallId ? fx : null}
-              onBump={(delta) => bump(c, delta)}
+              onBump={onTileBump}
             />
           ))
         ) : (
@@ -1698,324 +820,5 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       {confirmSheet}
     </div>,
     document.body,
-  );
-}
-
-/** Deck re-scan step 1: the add/remove/quantity diff, before anything is written
- *  (the first step of the intake questionnaire, which supplies the sheet). */
-function RescanChangesList({
-  changes,
-  deckName,
-  showBoards,
-}: {
-  changes: DeckChange[];
-  deckName: string;
-  /** Decks split into boards; a binder or box is one pile, so the label is noise. */
-  showBoards: boolean;
-}) {
-  const added = changes.filter((c) => c.kind === 'add');
-  const changed = changes.filter((c) => c.kind === 'change');
-  const removed = changes.filter((c) => c.kind === 'remove');
-  const rows = [...added, ...changed, ...removed];
-  return (
-    <>
-      <p className="fine-print">
-        Sets “{deckName}” to exactly what you scanned, and files those copies into it. Cards left unchanged aren’t
-        listed.
-      </p>
-      {rows.length === 0 ? (
-        <p className="scan-list-empty">
-          Same cards as before. The copies you scanned get filed here, so “{deckName}” is holding them.
-        </p>
-      ) : (
-        <ul className="scan-list">
-          {rows.map((c) => (
-            <ScanListRow
-              key={`${c.kind}|${c.oracleId}|${c.board}`}
-              image={c.image}
-              name={c.name}
-              sub={showBoards && BOARD_NOUN[c.board]}
-            >
-              {c.kind === 'add' && <span className="rescan-tag rescan-add">Added ×{c.quantity}</span>}
-              {c.kind === 'remove' && <span className="rescan-tag rescan-remove">Removed ×{c.quantity}</span>}
-              {c.kind === 'change' && (
-                <span className={`rescan-tag ${c.to > c.from ? 'rescan-add' : 'rescan-remove'}`}>
-                  {c.from} → {c.to}
-                </span>
-              )}
-            </ScanListRow>
-          ))}
-        </ul>
-      )}
-    </>
-  );
-}
-
-function TrayTile({
-  candidate: c,
-  count,
-  confirmed,
-  owned,
-  fx,
-  onBump,
-}: {
-  candidate: Candidate;
-  count: number;
-  confirmed: boolean;
-  owned: OwnedBadgeSpec | null;
-  fx: TapFx | null;
-  onBump: (delta: 1 | -1) => void;
-}) {
-  const name = c.oracle?.name ?? 'Unknown card';
-  return (
-    <div className="scan-tile">
-      <span className="scan-tile-caption">
-        {c.printing ? (
-          <>
-            <SetSymbol set={c.printing.set} className="scan-tile-set" title={c.printing.setName} />
-            {c.printing.set.toUpperCase()} #{c.printing.collectorNumber}
-          </>
-        ) : (
-          '—'
-        )}
-      </span>
-      <div className="scan-tile-card">
-        {c.printing?.imageNormal ? <img src={c.printing.imageNormal} alt={name} /> : <div className="scan-tile-ph">{name}</div>}
-        {owned && (
-          <span className={`tile-badge ${owned.cls}`} title={owned.title}>
-            {owned.icon}
-          </span>
-        )}
-        <button className="scan-tile-half scan-tile-add" onClick={() => onBump(1)} aria-label={`Add ${name}`}>
-          <Icon name="plus" size={16} />
-        </button>
-        <button className="scan-tile-half scan-tile-sub" onClick={() => onBump(-1)} aria-label={`Remove ${name}`}>
-          <Icon name="minus" size={16} />
-        </button>
-        {count > 0 && <span className="scan-tile-count">{count}</span>}
-        {confirmed && (
-          <span className="scan-tile-ocr" title="Edition confirmed">
-            <Icon name="check" size={12} />
-          </span>
-        )}
-        {fx && (
-          <span key={fx.seq} className="scan-fx" aria-hidden>
-            {fx.delta > 0 ? '+1' : '−1'}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export function SessionSheet({
-  entries,
-  target,
-  total,
-  busy,
-  onChange,
-  onComplete,
-  onClose,
-  title = 'Scanned cards',
-  emptyText = 'Nothing scanned yet. Tap the top half of a match to add it.',
-  closeLabel = 'Keep scanning',
-  notice,
-}: {
-  entries: SessionEntry[];
-  target: ScanTarget;
-  total: number;
-  busy: boolean;
-  onChange: (next: SessionEntry[]) => void;
-  onComplete: () => void;
-  onClose: () => void;
-  /** Wording for the other user of this list, the drop review. */
-  title?: string;
-  emptyText?: string;
-  closeLabel?: string;
-  /** Status shown under the heading (what a drop is still identifying). */
-  notice?: ReactNode;
-}) {
-  const action = useAsyncAction();
-  // Row tap opens the card sheet on that line for full editing (edition,
-  // condition, finish, language, quantity); Apply rewrites the line in place.
-  const [editing, setEditing] = useState<{ index: number; oracle: Priced<OracleCard> } | null>(null);
-  const [view, setView] = useScanViewMode();
-  const showBoards = target.kind === 'deck' && scanBoards(target.containerKind, target.format).length > 1;
-  // Both views show set names and prices, which a session entry doesn't
-  // carry, and the footer sums them — so the lookup runs either way.
-  const { printMap, oracleMap } = useCardMaps(entries.map((e) => ({ scryfallId: e.scryfallId, oracleId: e.oracleId })));
-  const priceOf = (e: SessionEntry) => [pricedForFinish(printMap?.get(e.scryfallId), e.finish), oracleMap?.get(e.oracleId)];
-  // What the pile in your hand is worth, by the same reckoning as every other
-  // total in the app (per-card price × quantity, both currencies converted).
-  const totalValue = useMemo(() => {
-    const total: PriceTotal = { eur: 0, usd: 0 };
-    for (const e of entries) addToTotal(total, e.qty, ...priceOf(e));
-    return formatTotal(total);
-  }, [entries, printMap, oracleMap]);
-
-  const adjust = (i: number, delta: number) => {
-    const e = entries[i]!;
-    onChange(e.qty + delta <= 0 ? entries.filter((_, j) => j !== i) : entries.map((x, j) => (j === i ? { ...x, qty: x.qty + delta } : x)));
-  };
-
-  const cycleBoard = (i: number) => {
-    if (target.kind !== 'deck') return;
-    const boards = scanBoards(target.containerKind, target.format);
-    onChange(
-      mergeSession(
-        entries.map((e, j) => (j === i ? { ...e, board: boards[(boards.indexOf(e.board) + 1) % boards.length]! } : e)),
-      ),
-    );
-  };
-
-  const openEntry = async (i: number) => {
-    const oracle = await getOracleCard(entries[i]!.oracleId);
-    if (oracle) setEditing({ index: i, oracle });
-  };
-
-  /** Card-sheet Apply/Remove for one line (quantity 0 removes it). */
-  const applyEdit = async (i: number, v: SessionCardValues) => {
-    if (v.quantity <= 0) {
-      onChange(entries.filter((_, j) => j !== i));
-      return;
-    }
-    const e = entries[i]!;
-    let next: SessionEntry = {
-      ...e,
-      qty: v.quantity,
-      lang: v.lang ?? e.lang,
-      finish: v.finish ?? e.finish,
-      condition: v.condition ?? e.condition,
-    };
-    if (v.scryfallId !== e.scryfallId) {
-      const p = await getPrinting(v.scryfallId);
-      if (p) next = { ...next, scryfallId: p.scryfallId, set: p.set, collectorNumber: p.collectorNumber, image: p.imageNormal ?? undefined };
-    }
-    onChange(mergeSession(entries.map((x, j) => (j === i ? next : x))));
-  };
-
-  // The per-line card sheet stacks above this one and dismisses first.
-  return (
-    <Sheet
-      onClose={onClose}
-      dismiss={busy ? null : onClose}
-      className="scan-list-sheet"
-      title={title}
-      headerRight={
-        <>
-          <span className="scan-target">→ {targetLabel(target)}</span>
-          <ViewToggle mode={view} onChange={setView} options={['list', 'stack']} />
-        </>
-      }
-      closeButton={{ label: 'Close list' }}
-    >
-
-        {notice}
-
-        {entries.length === 0 ? (
-          <p className="scan-list-empty">{emptyText}</p>
-        ) : view === 'stack' ? (
-          <CardStacks
-            className="scan-stacks"
-            items={entries.map((e, i): CardItem => {
-              const printing = printMap?.get(e.scryfallId);
-              const extras = [
-                e.lang !== 'en' ? e.lang : null,
-                e.finish !== 'nonfoil' ? FINISH_LABELS[e.finish] : null,
-                e.condition !== 'NM' ? e.condition : null,
-              ].filter(Boolean);
-              return {
-                key: sessionLineKey(e),
-                name: e.name,
-                image: printing?.imageNormal ?? e.image ?? null,
-                foil: e.finish !== 'nonfoil',
-                count: e.qty,
-                badge: showBoards ? BOARD_NOUN[e.board] : undefined,
-                sub: (
-                  <>
-                    <SetSymbol set={e.set} title={printing?.setName ?? e.set.toUpperCase()} />
-                    <span className="stack-setname">{printing?.setName ?? e.set.toUpperCase()}</span> #
-                    {e.collectorNumber}
-                    {extras.length > 0 ? ` · ${extras.join(' · ')}` : ''}
-                  </>
-                ),
-                price: formatPrice(...priceOf(e)),
-                onClick: () => void action.run('open that card', () => openEntry(i)),
-                actions: (
-                  <>
-                    <QtyStepper compact value={e.qty} min={0} onChange={(v) => adjust(i, v - e.qty)} label={e.name} />
-                    {showBoards && (
-                      <button className="scan-chip" onClick={() => cycleBoard(i)}>
-                        {BOARD_NOUN[e.board]}
-                      </button>
-                    )}
-                  </>
-                ),
-              };
-            })}
-          />
-        ) : (
-          <ul className="scan-list">
-            {entries.map((e, i) => (
-              <ScanListRow
-                key={sessionLineKey(e)}
-                image={printMap?.get(e.scryfallId)?.imageSmall ?? e.image}
-                name={e.name}
-                sub={
-                  <>
-                    {e.set.toUpperCase()} #{e.collectorNumber} · {e.lang}
-                    {e.finish !== 'nonfoil' ? ` · ${FINISH_LABELS[e.finish]}` : ''}
-                    {e.condition !== 'NM' ? ` · ${e.condition}` : ''}
-                  </>
-                }
-                price={formatPrice(...priceOf(e))}
-                onClick={() => action.run('open that card', () => openEntry(i))}
-                ariaLabel={`Edit ${e.name}`}
-              >
-                {showBoards && (
-                  <button className="scan-chip" onClick={() => cycleBoard(i)}>
-                    {BOARD_NOUN[e.board]}
-                  </button>
-                )}
-                <QtyStepper compact value={e.qty} min={0} onChange={(v) => adjust(i, v - e.qty)} label={e.name} />
-              </ScanListRow>
-            ))}
-          </ul>
-        )}
-
-        {entries.length > 0 && (
-          <div className="scan-list-total">
-            <span>Total value</span>
-            <strong>{totalValue}</strong>
-          </div>
-        )}
-
-        <div className="scan-confirm-actions">
-          <button className="primary" disabled={total === 0 || busy} onClick={onComplete}>
-            {busy
-              ? 'Adding…'
-              : target.kind === 'deck' && target.rescan
-                ? `Review changes to ${targetLabel(target)}`
-                : `Add ${total} ${plural(total, 'card')} to ${targetLabel(target)}`}
-          </button>
-          <button onClick={onClose} disabled={busy}>{closeLabel}</button>
-        </div>
-
-        {editing && entries[editing.index] && (
-          <CardSheet
-            mode="session"
-            oracleCard={editing.oracle}
-            sessionCard={{
-              scryfallId: entries[editing.index]!.scryfallId,
-              quantity: entries[editing.index]!.qty,
-              lang: entries[editing.index]!.lang,
-              finish: entries[editing.index]!.finish,
-              condition: entries[editing.index]!.condition,
-            }}
-            onApply={(v) => void applyEdit(editing.index, v)}
-            onClose={() => setEditing(null)}
-          />
-        )}
-    </Sheet>
   );
 }

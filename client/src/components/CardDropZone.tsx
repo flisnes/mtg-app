@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { dragCarriesCards, readDrop } from '../scan/dropRead.js';
 import type { DropBatch } from './DropSheet.js';
-import type { ScanTarget } from './ScanSheet.js';
+import type { ScanTarget } from '../scan/session.js';
 import { Icon } from './icons.js';
 import { useToast } from './Toast.js';
 

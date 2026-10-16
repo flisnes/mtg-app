@@ -6,7 +6,7 @@ import { CONTAINER_META } from '../deck/containers.js';
 import type { JoinedEntry } from '../db/queries.js';
 import { useCollectionEntries, useJoinedCollection } from '../db/collectionSnapshot.js';
 import { removeCollectionEntriesBulk, removeDeckCardsMatching, setQuantityForTradeBulk } from '../db/dataAccess.js';
-import { useFiling } from '../deck/useFiling.js';
+import { describeFilingResult, useFiling } from '../deck/useFiling.js';
 import { CardSheet } from './CardSheet.js';
 import { useConfirm } from './ConfirmSheet.js';
 import { CardItems, CardItemsSkeleton, StackToggle, ViewToggle, useGridColumns, useStackPrintings, useViewMode } from './CardViews.js';
@@ -290,18 +290,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
       })),
     );
     if (filing === null) return; // backed out of the prompt — selection stays put
-    const noun = CONTAINER_META[kind].noun;
-    // The count is what went in, not what was asked for: a line whose copies are
-    // already in there adds nothing, and a toast that claims otherwise is how
-    // you end up with three copies of a card you own two of.
-    const copies = filing.filed;
-    toast(
-      copies === 0
-        ? `Already in that ${noun}`
-        : filing.mode === 'move'
-          ? `Moved ${copies} ${plural(copies, 'card')} to ${noun}`
-          : `Added ${copies} ${plural(copies, 'card')} to ${noun}`,
-    );
+    toast(describeFilingResult(filing, CONTAINER_META[kind].noun));
     sel.exit();
   }
 

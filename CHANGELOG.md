@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.17
+
+- **Changed: the deck, binder and box page, reshuffled.** Under the hood, the page is split into smaller pieces: the zones, the bulk actions and their sheets, copy and paste, the "add missing cards to wishlist" sheet and the import panel each live on their own, and only one sheet at a time opens over the page. Typing a deck's name or opening a sheet no longer redraws every card on the page. Filing a card away from its card sheet now says "Added 2 cards to deck", same as filing a selection. Selecting, moving, tagging, filing, pasting, exporting and scanning into a deck should all work exactly as before; if something on a deck page acts up, tell us.
+
 ## 0.200.16
 
 - **Changed: the card sheet, reshuffled.** Under the hood, the card sheet is split into smaller pieces: which buttons and fields each kind of sheet shows, the form, the saves, the art, the traits row, the action row and the sheets that open on top of it each live on their own. Two small things you might notice: switching to an edition that has no foil and back again keeps your copy's foil finish, and "Not here? Add a copy" on a deck card opens without reading every edition of the card a second time. Adding, editing, filing and the price chart should all work exactly as before; if a card sheet acts up, tell us.

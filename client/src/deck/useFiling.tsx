@@ -15,13 +15,28 @@ import {
   type PinTarget,
 } from './filing.js';
 import { sumQty } from '../util/groupBy.js';
+import { plural } from '../util/format.js';
 
 /** What a filing did: how it settled the question, and how many copies of real
  *  cardboard actually went in (0 = the target already held every copy you own,
  *  so there was nothing left to put away). */
-interface FilingResult {
+export interface FilingResult {
   mode: FilingMode;
   filed: number;
+}
+
+/**
+ * The toast after a filing. The count is what went in, not what was asked for:
+ * the target never takes more of a copy than you own, so a card it already
+ * holds adds nothing, and a toast that says otherwise is how you end up filing
+ * the same card twice.
+ */
+export function describeFilingResult(result: FilingResult, noun: string): string {
+  const n = result.filed;
+  if (n === 0) return `Already in that ${noun}`;
+  return result.mode === 'move'
+    ? `Moved ${n} ${plural(n, 'card')} to ${noun}`
+    : `Added ${n} ${plural(n, 'card')} to ${noun}`;
 }
 
 /**

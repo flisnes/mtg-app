@@ -15,7 +15,7 @@ import {
 import { db } from '../../db/schema.js';
 import { CONTAINER_META } from '../../deck/containers.js';
 import { claimKeyOf, type FilingCopy } from '../../deck/filing.js';
-import type { useFiling } from '../../deck/useFiling.js';
+import { describeFilingResult, type useFiling } from '../../deck/useFiling.js';
 import type { ModeFlags } from './modeFlags.js';
 import type { CardForm } from './useCardForm.js';
 import type { CopyTraits, DeckSlotEdit, ListKind, Overlay, SessionCardValues } from './types.js';
@@ -217,17 +217,7 @@ export function cardSheetActions(ctx: SaveContext) {
       ctx.setBusy(false);
       return;
     }
-    const noun = CONTAINER_META[kind].noun;
-    const n = filed.filed;
-    // Every copy you own is in there already. Saying "filed" for a write that
-    // didn't happen is how you end up filing the same card twice.
-    ctx.toast(
-      n === 0
-        ? `Already in that ${noun}`
-        : filed.mode === 'move'
-          ? `Moved ${n === 1 ? '' : `${n} copies `}to ${noun}`
-          : `Filed ${n === 1 ? '' : `${n} copies `}in ${noun}`,
-    );
+    ctx.toast(describeFilingResult(filed, CONTAINER_META[kind].noun));
     ctx.onClose();
   }
 

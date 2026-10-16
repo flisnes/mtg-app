@@ -1,37 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CollectionEntry, Condition, ContainerKind, CopyPrefs, DeckBoard, DeckFormat, Finish, OracleCard, Priced, PriceHistory, Printing, SlotShape, SpecialCondition, UserEvent, WishLine, WishlistEntry } from '@mtg/shared';
-import {
-  CONDITIONS,
-  FINISHES,
-  SPECIAL_CONDITIONS,
-  SPECIAL_CONDITION_LABELS,
-  normalizeSpecialConditions,
-  specialLabel,
-} from '@mtg/shared';
-import {
-  addDeckCard,
-  addToCollection,
-  addToWishlist,
-  moveDeckCard,
-  newId,
-  removeDeckCard,
-  removeFromCollection,
-  removeFromWishlist,
-  updateCollectionEntry,
-  updateDeckCard,
-  updateWishlistEntry,
-} from '../db/dataAccess.js';
+import type { CopyPrefs, Finish, PriceHistory } from '@mtg/shared';
+import { FINISHES } from '@mtg/shared';
 import { sortOwnedCopies, usePrintingsForOracle } from '../db/usePrintings.js';
-import { canJoinCommandZone, isBasicLand, isCompanion, isNonDeckCard } from '../deck/legality.js';
-import { BOARD_LABEL, boardOptions } from '../deck/boards.js';
-import { CONTAINER_META } from '../deck/containers.js';
-import { claimKeyOf, type FilingCopy } from '../deck/filing.js';
+import { BOARD_LABEL } from '../deck/boards.js';
 import { useFiling } from '../deck/useFiling.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { useCommandZone } from '../db/useCommandZone.js';
 import { PlacementPills } from './PlacementBadge.js';
-import { db } from '../db/schema.js';
 import { getPriceHistory } from '../price/tracking.js';
 import { getMergedPriceHistory } from '../price/serverHistory.js';
 import { acquisitionGain, useCostBasis } from '../price/costBasis.js';
@@ -39,32 +15,33 @@ import { historyChange, readingsFor } from '../price/history.js';
 import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { cycleSlugsOf } from '../cardDb/oracleTags.js';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
-import { CardHistorySheet } from './ChartSheetsLazy.js';
-import { ContainerPickerSheet } from './ContainerPickerSheet.js';
-import { CopyPicker, copyDetail } from './CopyPicker.js';
-import { FINISH_LABELS, LANGS } from './copyTraits.js';
-import { FileCopiesSheet } from './FileCopiesSheet.js';
-import { SheetSelectField, SheetSelectList, type SheetSelectOption } from './SheetSelect.js';
-import { EventSheet } from './EventSheet.js';
 import { useOpenCollectionSearch, useOpenDbSearch } from '../search/searchContext.js';
 import { Icon, type IconName } from './icons.js';
 import { OptionsMenu } from './OptionsMenu.js';
-import { CardLegalitySheet } from './CardLegalitySheet.js';
 import { OracleSearchChip, useOracleSelection } from './OracleSearchChip.js';
-import { SealedWithCardSheet } from '../sealed/SealedWithCardSheet.js';
-import { PriceChartSheet } from './ChartSheetsLazy.js';
 import { PriceTrend } from './PriceTrend.js';
 import { useToast } from './Toast.js';
 import { useUndoToast } from './useUndoToast.js';
-import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice, pickPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
-import { EditionTile } from './EditionTile.js';
 import { Sheet } from './Sheet.js';
 import { TagField } from './TagField.js';
 import { sumQty } from '../util/groupBy.js';
 import { QtyStepper } from './QtyStepper.js';
+import { CardArt } from './cardSheet/CardArt.js';
+import { CardSheetActions } from './cardSheet/CardSheetActions.js';
+import { CardSheetOverlays } from './cardSheet/CardSheetOverlays.js';
+import { CopyStrip } from './cardSheet/CopyStrip.js';
+import { orderByOwned } from './cardSheet/EditionGrid.js';
+import { commandZoneDeckId, modeFlags, type ModeInput } from './cardSheet/modeFlags.js';
+import { OwnedHere } from './cardSheet/OwnedHere.js';
+import { cardSheetActions } from './cardSheet/save.js';
+import { TraitsRow } from './cardSheet/TraitsRow.js';
+import { clampFinish, formFrom, initialForm, useCardForm } from './cardSheet/useCardForm.js';
+import { ANY_PRINTING, LIST_META, type CardSheetProps, type ListKind, type Overlay } from './cardSheet/types.js';
+
+export type { AddTarget, SessionCardValues } from './cardSheet/types.js';
 
 // Bottom-sheet for a card's details, in six modes the caller names outright
 // (see CardSheetProps, which carries what each one needs and nothing else):
@@ -82,161 +59,15 @@ import { QtyStepper } from './QtyStepper.js';
 // you're only viewing, "Got it" on a wish): `addFlow` names the list and the
 // sheet turns into the real add form for it, so nothing about the copy is
 // guessed on the user's behalf. Cancel steps back to where they were.
-
-/** Where add mode sends the card (mirrors the context-sensitive search).
- *  'default' is search from a context-free page: the collection form, with
- *  wishlist/tradelist offered as alternative buttons. */
-export type AddTarget =
-  | { kind: 'collection' }
-  | { kind: 'wishlist' }
-  | { kind: 'tradelist' }
-  /** A deck, binder or box; `containerKind` (default 'deck') picks the wording. */
-  | { kind: 'deck'; deckId: string; containerKind?: ContainerKind; format?: DeckFormat }
-  | { kind: 'default' };
-
-const ADD_LABEL: Record<AddTarget['kind'], string> = {
-  collection: 'Add to collection',
-  wishlist: 'Add to wishlist',
-  tradelist: 'Add to tradelist',
-  deck: 'Add to mainboard',
-  default: 'Add to collection',
-};
-
-/** The primary button's label. Storage has one pile, so it names the container
- *  ("Add to box") where a deck names the board it's filling. */
-function addLabel(target: AddTarget): string {
-  if (target.kind === 'deck') {
-    const meta = CONTAINER_META[target.containerKind ?? 'deck'];
-    if (meta.kind !== 'deck') return `Add to ${meta.noun}`;
-  }
-  return ADD_LABEL[target.kind];
-}
-
-/** The three personal lists a card can be filed into, in button order:
- *  the sheet leads with the list it was opened from and offers the other two
- *  as short "+ Wish" style quick-adds. */
-type ListKind = 'collection' | 'tradelist' | 'wishlist';
-const LIST_META: Record<ListKind, { label: string; short: string; icon: IconName; title: string }> = {
-  collection: { label: 'Collection', short: 'Collection', icon: 'collection', title: 'Add to collection' },
-  tradelist: { label: 'Tradelist', short: 'Trade', icon: 'tradelist', title: 'Add to tradelist' },
-  wishlist: { label: 'Wishlist', short: 'Wish', icon: 'wishlist', title: 'Add to wishlist' },
-};
-const LIST_ORDER: ListKind[] = ['collection', 'tradelist', 'wishlist'];
-
-/**
- * A scan-session line as the sheet edits it. Fields the scan target doesn't
- * track (e.g. condition for a deck) are left undefined and stay hidden;
- * quantity 0 means "remove the line".
- */
-export interface SessionCardValues {
-  scryfallId: string;
-  quantity: number;
-  lang?: string;
-  finish?: Finish;
-  condition?: Condition;
-}
-
-/** The four dropdowns on the traits row; only one is ever open. */
-type TraitKey = 'condition' | 'finish' | 'lang' | 'special';
-
-/** Sentinel for the "any printing" edition option in wish mode. */
-const ANY_PRINTING = '';
-
-/** A deck slot the sheet can edit. The slot's own fields come from SlotShape;
- *  the rest is the container context the Zone field needs. */
-type DeckSlotEdit = SlotShape & {
-  id: string;
-  quantity: number;
-  board?: DeckBoard;
-  /** The deck this slot lives in, so the sheet can read its command zone. */
-  deckId?: string;
-  commanderDeck?: boolean;
-  /** Which kind of container holds the slot; only a deck has zones to move between. */
-  containerKind?: ContainerKind;
-};
-
-/** What every mode of the sheet needs. */
-interface CardSheetCommon {
-  oracleCard: Priced<OracleCard>;
-  /** Preselect a specific printing (e.g. the one named in a trade line). */
-  initialScryfallId?: string;
-  /** Open with the Collection history sheet already up (deep-link from the
-   *  collection-wide history, where the card was named by an event). */
-  openHistory?: boolean;
-  /**
-   * Printings to group first in the Edition dropdown, each with a short note
-   * (e.g. "×2, 1 for trade") — the trade board uses this to surface the
-   * editions the relevant person actually has.
-   */
-  highlightPrintings?: { label: string; notes: Map<string, string> };
-  onClose: () => void;
-}
-
-/**
- * The six jobs this sheet does, each carrying exactly what it needs.
- *
- * The mode used to be *inferred* from which of a pile of optional props the
- * caller filled in (`wishEntry ? 'wish' : deckCard ? 'deck' : entry ? …`), which
- * is how a sheet accumulates when it gains one caller at a time. That let every
- * illegal combination through the type system — a wish entry and a deck slot at
- * once, a session card with no onApply, an addTarget on a mode that never adds —
- * and left the reader working out the precedence to know what a call site does.
- * Naming the mode costs one prop and makes all of that unrepresentable.
- */
-type CardSheetProps = CardSheetCommon &
-  (
-    | {
-        /** An owned copy: opens as a line with an Edit toggle. */
-        mode: 'edit';
-        entry: CollectionEntry;
-        /** The other copies stacked under the same tile (stack printings on):
-         *  the sheet offers a strip to step between them. Includes `entry`. */
-        copies?: CollectionEntry[];
-      }
-    | {
-        /** Edit a wishlist line (edition + quantity) instead of the collection. */
-        mode: 'wish';
-        wishEntry: WishlistEntry;
-      }
-    | {
-        /** Edit a deck slot's quantity + printing, and its zone. */
-        mode: 'deck';
-        deckCard: DeckSlotEdit;
-        /** The other slots of this card stacked under the same tile. Includes `deckCard`. */
-        slots?: DeckSlotEdit[];
-      }
-    | {
-        /** Edit a scan/trade line held in memory; Apply reports back, nothing is written. */
-        mode: 'session';
-        sessionCard: SessionCardValues;
-        onApply: (values: SessionCardValues) => void;
-        /** Label for the primary commit button (defaults to "Apply"). */
-        applyLabel?: string;
-        /** Hide the Remove button (e.g. when composing a brand-new line). */
-        hideRemove?: boolean;
-      }
-    | {
-        /** A form that puts a new copy on one of your lists. */
-        mode: 'add';
-        /** Where the add goes; defaults to the collection. */
-        addTarget?: AddTarget;
-        /** The copy that just landed, reported so the sheet that opened this one
-         *  can point a slot at it. */
-        onAdded?: (copy: { scryfallId: string; condition: Condition; finish: Finish; lang: string }) => void;
-      }
-    | {
-        /** The card and its printings, no editing. */
-        mode: 'info';
-        /** Someone else's wish (Community): their edition (incl. "any printing"),
-         *  minimum condition, finish and language, as a disabled form. */
-        wishView?: WishLine;
-      }
-  );
+//
+// The parts live in cardSheet/: which switches each mode flips (modeFlags), the
+// form and how it's filled (useCardForm), the writes (save), and the pieces of
+// the sheet itself.
 
 export function CardSheet(props: CardSheetProps) {
-  const { oracleCard, initialScryfallId, openHistory, highlightPrintings, onClose } = props;
+  const { oracleCard, initialScryfallId, highlightPrintings, loaded, onClose } = props;
   // The current mode's own props, unpacked once. Everything below reads these
-  // rather than narrowing `props` at each of the three dozen sites that ask.
+  // rather than narrowing `props` at each of the sites that ask.
   // Stacked printings: the tile the sheet opened from stood for several copies
   // (or slots), and the strip under the price steps between them. Which one is
   // up is the sheet's own business; the caller only hands the list over.
@@ -249,17 +80,29 @@ export function CardSheet(props: CardSheetProps) {
   const deckCard =
     props.mode === 'deck' ? props.slots?.find((s) => s.id === pickedCopyId) ?? props.deckCard : undefined;
   const sessionCard = props.mode === 'session' ? props.sessionCard : undefined;
-  const onApply = props.mode === 'session' ? props.onApply : undefined;
-  const applyLabel = props.mode === 'session' ? props.applyLabel : undefined;
-  const hideRemove = props.mode === 'session' ? props.hideRemove === true : false;
-  const addTarget = props.mode === 'add' ? props.addTarget : undefined;
-  const onAdded = props.mode === 'add' ? props.onAdded : undefined;
 
   // Stepping sideways into an add form from another mode (see the note above):
   // the list being added to, or null for "the sheet as its caller opened it".
   const [addFlow, setAddFlow] = useState<ListKind | null>(null);
-  const mode = addFlow ? 'add' : props.mode;
-  const editing = mode === 'edit';
+  // An owned collection entry opens read-only with an Edit toggle.
+  const [editMode, setEditMode] = useState(false);
+  const modeInput: ModeInput = {
+    propsMode: props.mode,
+    addFlow,
+    addTarget: props.mode === 'add' ? props.addTarget : undefined,
+    editMode,
+    deckCard,
+    sessionCard,
+    hasWishView: !!wishView,
+  };
+  // Who's in the command zone right now. The command-zone buttons need the
+  // actual cards, not just a count: a Background or a Partner is only offered
+  // when it pairs with whoever is already there (see canJoinCommandZone).
+  const commandZoneCards = useCommandZone(commandZoneDeckId(modeInput));
+  const commandZone = useMemo(() => (commandZoneCards ?? []).map((z) => z.card), [commandZoneCards]);
+  const flags = modeFlags(modeInput, oracleCard, commandZone);
+  const { mode, formEditable, wishMode, deckPrefs, anyPrefs, basicAny, zones } = flags;
+
   const openCollectionSearch = useOpenCollectionSearch();
   const openDbSearch = useOpenDbSearch();
   // Highlighting a phrase in the rules text offers to search the database for it.
@@ -275,220 +118,56 @@ export function CardSheet(props: CardSheetProps) {
   );
   const toast = useToast();
   const undoToast = useUndoToast();
-  // An owned collection entry opens read-only with an Edit toggle; add/wish/
-  // deck/session are always a form; info is never editable.
-  const [editMode, setEditMode] = useState(false);
-  const canToggleEdit = mode === 'edit';
-  // Every read-only shape now reads as lines rather than as dead fields, so
-  // "an owned copy you're only looking at" stopped needing a flag of its own:
-  // it is just !formEditable, same as someone else's wish.
-  const formEditable = mode === 'add' || mode === 'wish' || mode === 'deck' || mode === 'session' || (mode === 'edit' && editMode);
-  const addTo: AddTarget = addFlow ? { kind: addFlow } : (mode === 'add' && addTarget) || { kind: 'collection' };
-  // Wishlist adds default to "any printing"; deck slots don't store an edition
-  // at all, so those variants drop the collection-specific fields below.
-  const wishAdd = mode === 'add' && addTo.kind === 'wishlist';
-  const deckAdd = mode === 'add' && addTo.kind === 'deck';
-  // Adding into a real deck (not a binder or box): only then are the sideboard
-  // and command-zone buttons meaningful.
-  const deckAddIsDeck = deckAdd && (addTo.kind !== 'deck' || (addTo.containerKind ?? 'deck') === 'deck');
-  // A token, emblem, or art card can never be a real deck card (see
-  // isNonDeckCard) — offering it doesn't belong in mainboard/sideboard/command
-  // zone, only in the deck's token board.
-  const cardIsToken = isNonDeckCard(oracleCard);
-  // Who's in the command zone right now. The command-zone buttons need the
-  // actual cards, not just a count: a Background or a Partner is only offered
-  // when it pairs with whoever is already there (see canJoinCommandZone).
-  const commandZoneDeckId =
-    deckCard?.commanderDeck && deckCard.deckId
-      ? deckCard.deckId
-      : deckAddIsDeck && addTo.kind === 'deck' && addTo.format === 'commander'
-        ? addTo.deckId
-        : undefined;
-  const commandZoneCards = useCommandZone(commandZoneDeckId);
-  const commandZone = useMemo(() => (commandZoneCards ?? []).map((z) => z.card), [commandZoneCards]);
-  // Basic lands in a container can be "any printing": whatever's on top of the
-  // lands box. Offered when filing a basic into a container or editing such a
-  // slot; the default when the container is a deck, since nobody sleeves 24
-  // specific Islands. Binders and boxes hold real cardboard, so they opt in.
-  const basicAny = (deckAdd || mode === 'deck') && isBasicLand(oracleCard);
-  const basicAnyDefault = basicAny && (deckAddIsDeck || !!deckCard?.anyBasic);
-  // The zones this slot could move to. Only a deck has any (storage is one
-  // pile), and the command zone check must not count the slot being moved as
-  // someone it has to pair with — it's the card doing the moving.
-  const zones =
-    mode === 'deck' && (deckCard?.containerKind ?? 'deck') === 'deck'
-      ? boardOptions({
-          cards: [oracleCard],
-          commanderDeck: !!deckCard?.commanderDeck,
-          commandZone: commandZone.filter((o) => o.oracleId !== oracleCard.oracleId),
-          from: deckCard?.board,
-        })
-      : [];
-  // A companion card in a Commander deck, not yet the companion: one tap seats it.
-  const canSetCompanion =
-    mode === 'deck' && deckCard?.board !== 'companion' && zones.some((z) => z.board === 'companion' && !z.refusal);
-  // Viewing someone else's wish (Community): the same wish fields, but the
-  // sheet is read-only, so nothing here is editable.
-  const wishInfo = mode === 'info' && !!wishView;
-  // Editing, adding or viewing a wish: condition/finish/lang are all optional
-  // and lead with an "Any" choice (a wish isn't for one specific copy).
-  const wishMode = mode === 'wish' || wishAdd || wishInfo;
-  // A container slot works the same way: it says what the deck wants of the copy
-  // filling it, so every field can sit on "any" — until you pick a copy out of
-  // your collection, which fills them all in.
-  const deckPrefs = mode === 'deck' || deckAdd;
-  const anyPrefs = wishMode || deckPrefs;
-  // Add mode into a personal list: which list leads (the primary button). The
-  // other two ride along as compact +icon quick-adds, so a card found while
-  // searching one list can still be filed anywhere. A context-free ('default')
-  // search leads with the collection.
-  const listAddKind: ListKind | null =
-    mode !== 'add'
-      ? null
-      : addTo.kind === 'default'
-        ? 'collection'
-        : addTo.kind === 'collection' || addTo.kind === 'tradelist' || addTo.kind === 'wishlist'
-          ? addTo.kind
-          : null;
-  const collectionFields =
-    mode === 'edit' ||
-    (mode === 'add' && (addTo.kind === 'collection' || addTo.kind === 'tradelist' || addTo.kind === 'default'));
-  // The condition/finish/lang selects show for collection entries and for wishes
-  // and container slots (as "Any"-able preferences); "For trade" stays gated on
-  // collectionFields alone. A lands-box basic is detached from the collection, so
-  // there is nothing for it to prefer.
-  const showCfl = collectionFields || wishMode || deckPrefs;
-  // Session lines only edit the fields their scan target tracks.
-  const showCondition = mode === 'session' ? sessionCard!.condition !== undefined : showCfl;
-  const showFinish = mode === 'session' ? sessionCard!.finish !== undefined : showCfl;
-  const showLang = mode === 'session' ? sessionCard!.lang !== undefined : showCfl;
-  const { printings, loaded: printingsLoaded } = usePrintingsForOracle(oracleCard.oracleId);
+  const { printings, loaded: printingsLoaded } = usePrintingsForOracle(oracleCard.oracleId, loaded?.printings);
   // A printing this card is already tied to: the copy in the collection, the
   // deck's recorded edition, a scanned card, or the one the caller was showing.
   const recordedId = entry?.scryfallId ?? deckCard?.scryfallId ?? sessionCard?.scryfallId ?? initialScryfallId;
+  const { form: rawForm, setForm, patch, setCopy } = useCardForm(() =>
+    initialForm(flags, {
+      entry,
+      deckCard,
+      sessionCard,
+      wishEntry,
+      wishView,
+      recordedId,
+      defaultScryfallId: oracleCard.defaultScryfallId,
+    }),
+  );
+  const { scryfallId, quantity } = rawForm;
   // Which edition the art should show isn't known at first paint: the printings
   // are a Dexie read away, and with nothing recorded the preferred-printing
   // lookup may still move us off the card DB's default. Painting before both
   // settle flashes the wrong edition for a frame, so the frame stays empty
-  // until they do.
-  // In wish mode (and for a lands-box basic) the empty string means "any
-  // printing" — no specific edition.
-  const startId = wishMode
-    ? wishEntry?.scryfallId ?? wishView?.scryfallId ?? ANY_PRINTING
-    : basicAnyDefault
-      ? ANY_PRINTING
-      : // A slot that pins no edition means it: "any printing" is a real answer
-        // here, not a gap to fill with the card's default.
-        mode === 'deck'
-        ? deckCard!.scryfallId ?? ANY_PRINTING
-        : recordedId ?? oracleCard.defaultScryfallId;
-  // "Any printing" still has to look like something: it waits on the preferred
-  // printing too, so the art doesn't flash the card DB's default first.
+  // until they do. "Any printing" waits on the preferred printing too, so the
+  // art doesn't flash the card DB's default first.
   const [preferredSettled, setPreferredSettled] = useState(
-    startId !== ANY_PRINTING && (!!recordedId || wishMode || mode === 'deck'),
+    () => scryfallId !== ANY_PRINTING && (!!recordedId || wishMode || mode === 'deck'),
   );
   const editionResolved = printingsLoaded && preferredSettled;
-  const [scryfallId, setScryfallId] = useState(startId);
   // The printing an "any printing" wish or slot shows: the printing
   // preference's pick, the same edition a search result for it wears.
   const [anyFaceId, setAnyFaceId] = useState<string | null>(null);
   /** The edition picker is sitting on "any printing" — a basic from the lands box. */
   const anyBasicPicked = basicAny && scryfallId === ANY_PRINTING;
-  // Empty string is the "Any" sentinel, used only in wish mode (mirrors
-  // ANY_PRINTING for the edition). Collection/edit/session modes stay concrete.
-  const [condition, setCondition] = useState<Condition | ''>(
-    entry?.condition ??
-      sessionCard?.condition ??
-      (anyPrefs ? wishEntry?.condition ?? wishView?.condition ?? deckCard?.condition ?? '' : 'NM'),
-  );
-  const [finish, setFinish] = useState<Finish | ''>(
-    entry?.finish ??
-      sessionCard?.finish ??
-      (anyPrefs ? wishEntry?.finish ?? wishView?.finish ?? deckCard?.finish ?? '' : 'nonfoil'),
-  );
-  const [lang, setLang] = useState<string>(
-    entry?.lang ?? sessionCard?.lang ?? (anyPrefs ? wishEntry?.lang ?? wishView?.lang ?? deckCard?.lang ?? '' : 'en'),
-  );
-  const [quantity, setQuantity] = useState(
-    entry?.quantity ?? wishEntry?.quantity ?? wishView?.quantity ?? deckCard?.quantity ?? sessionCard?.quantity ?? 1,
-  );
-  const [forTrade, setForTrade] = useState(entry?.quantityForTrade ?? (addTo.kind === 'tradelist' ? 1 : 0));
-  // What's remarkable about this piece of cardboard (altered, signed, …).
-  // Collection-only: a wish or a deck slot asks nothing about it, because
-  // matching a card never does.
-  const [special, setSpecial] = useState<SpecialCondition[]>(entry?.special ?? []);
-  // Slot tags ride along with Save/Cancel like every other field on the sheet.
-  const [tags, setTags] = useState<string[]>(deckCard?.tags ?? []);
-  // Which zone the slot sits in. Editable like every other field on this form:
-  // picking another one and saving moves the card, rather than making the user
-  // remove it here and add it again over there. Deliberately not called `board`:
-  // save() takes a `board` parameter (the board an *add* targets), and a slot
-  // being moved must not read that.
-  const [zone, setZone] = useState<DeckBoard>(deckCard?.board ?? 'main');
-  // Condition, finish, language and special conditions read as one line until
-  // you want to change them, then unfold as four dropdowns on one row. That's
-  // the only fold left on the form: for trade, special conditions and slot tags
-  // each used to hide behind a link, which is a row of its own — no room saved
-  // and a tap spent to get at a control that was going to fit anyway.
-  const [traitsOpen, setTraitsOpen] = useState(false);
-  // Which of the four trait dropdowns is unfolded, if any. One piece of state
-  // rather than four, because they behave as one control: opening Language puts
-  // Condition away. The lists live outside the row of triggers (they need its
-  // whole width), so the row can't own this.
-  const [openTrait, setOpenTrait] = useState<TraitKey | null>(null);
-  // Stepping to another copy on the strip: the form is that copy's now. Only
-  // edit and deck mode have a strip, so only their fields are re-read. Any
+
+  // Stepping to another copy on the strip: the form is that copy's now. Any
   // half-made change to the previous copy is dropped, same as Cancel.
   function switchCopy(id: string) {
     if (id === (entry?.id ?? deckCard?.id)) return;
-    const c = props.mode === 'edit' ? props.copies?.find((x) => x.id === id) : undefined;
-    const s = props.mode === 'deck' ? props.slots?.find((x) => x.id === id) : undefined;
-    if (!c && !s) return;
+    const source =
+      props.mode === 'edit'
+        ? props.copies?.find((x) => x.id === id)
+        : props.mode === 'deck'
+          ? props.slots?.find((x) => x.id === id)
+          : undefined;
+    if (!source) return;
     setPickedCopyId(id);
     setEditMode(false);
-    setTraitsOpen(false);
-    setOpenTrait(null);
-    if (c) {
-      setScryfallId(c.scryfallId);
-      setCondition(c.condition);
-      setFinish(c.finish);
-      setLang(c.lang);
-      setQuantity(c.quantity);
-      setForTrade(c.quantityForTrade);
-      setSpecial(c.special ?? []);
-    } else if (s) {
-      setScryfallId(s.anyBasic ? ANY_PRINTING : s.scryfallId ?? ANY_PRINTING);
-      setCondition(s.condition ?? '');
-      setFinish(s.finish ?? '');
-      setLang(s.lang ?? '');
-      setQuantity(s.quantity);
-      setTags(s.tags ?? []);
-      setZone(s.board ?? 'main');
-    }
+    setForm(formFrom(source));
   }
+
   const [busy, setBusy] = useState(false);
-  const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(null);
-  // The card's own collection history, from the ⋯ menu, as a sheet over this one.
-  const [historyOpen, setHistoryOpen] = useState(!!openHistory);
-  // Visual "all printings" grid, layered over the sheet.
-  const [allEditions, setAllEditions] = useState(false);
-  // The sparkline blown up: full price chart with axes and event markers.
-  const [chartOpen, setChartOpen] = useState(false);
-  const [sealedOpen, setSealedOpen] = useState(false);
-  const [legalityOpen, setLegalityOpen] = useState(false);
-  // "Pick one from my collection" (container slots): the owned-copies overlay.
-  const [pickingCopy, setPickingCopy] = useState(false);
-  // The copy they're holding was never added: a nested add form, whose result
-  // becomes this slot's copy.
-  const [addingCopy, setAddingCopy] = useState(false);
-  // "File this copy": the deck/binder/box picker, from a card you own — then,
-  // when there's more than one copy on the shelf, which of them is going in.
-  const [pickingContainer, setPickingContainer] = useState(false);
-  const [pickingCopies, setPickingCopies] = useState<{ id: string; name: string; kind: ContainerKind } | null>(null);
-  // Event info modal opened from the collection history, plus a nested card
-  // sheet when the user drills from that event into another card.
-  const [eventEntry, setEventEntry] = useState<HistoryEntry | null>(null);
-  const [nestedCard, setNestedCard] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
+  const [overlay, setOverlay] = useState<Overlay | null>(props.openHistory ? { kind: 'history' } : null);
   // The card landed on one of your lists: the sheet says so where the button
   // was, then shows itself out. A toast would fire off-screen behind the sheet,
   // and the answer belongs on the thing you just pressed.
@@ -509,13 +188,9 @@ export function CardSheet(props: CardSheetProps) {
     return () => window.clearTimeout(t);
   }, [added]);
 
-  // Nothing tied this sheet to an edition (adding a card the caller didn't
-  // resolve a printing for), so honour the printing preference rather than
-  // silently landing on the card DB's representative one. Skipped in wish mode,
-  // where "any printing" is the point (a lands-box basic sits on the same empty
-  // sentinel, which the setter below leaves alone).
-  // Looked up for any wish or slot, not only one that starts on "any": picking
-  // "Any printing" in the edition picker should land on the same face.
+  // The face an "any printing" wish or slot wears. Looked up for any wish or
+  // slot, not only one that starts on "any": picking "Any printing" in the
+  // edition picker should land on the same face.
   useEffect(() => {
     if (!anyPrefs) return;
     let live = true;
@@ -532,6 +207,10 @@ export function CardSheet(props: CardSheetProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oracleCard.oracleId]);
 
+  // Nothing tied this sheet to an edition (adding a card the caller didn't
+  // resolve a printing for), so honour the printing preference rather than
+  // silently landing on the card DB's representative one. Skipped in wish mode,
+  // where "any printing" is the point.
   useEffect(() => {
     if (recordedId || wishMode || mode === 'deck') return;
     let live = true;
@@ -539,7 +218,7 @@ export function CardSheet(props: CardSheetProps) {
       .then((id) => {
         // Don't stomp a choice the user made in the edition picker meanwhile.
         if (live && id !== oracleCard.defaultScryfallId) {
-          setScryfallId((cur) => (cur === oracleCard.defaultScryfallId ? id : cur));
+          setForm((f) => (f.scryfallId === oracleCard.defaultScryfallId ? { ...f, scryfallId: id } : f));
         }
       })
       .finally(() => {
@@ -555,8 +234,15 @@ export function CardSheet(props: CardSheetProps) {
   // tracked automatically); "any printing" falls back to the default one.
   // The local row paints immediately; signed-in users then get the server
   // archive merged in (a longer window than any single device recorded).
+  // A sheet stacked on one for the same printing starts from what it read.
   const shownId = scryfallId || anyFaceId || oracleCard.defaultScryfallId;
+  const preloadedHistory = loaded?.priceHistory?.scryfallId === shownId ? loaded.priceHistory : undefined;
+  const [priceHistory, setPriceHistory] = useState<PriceHistory | null>(preloadedHistory?.history ?? null);
   useEffect(() => {
+    if (preloadedHistory) {
+      setPriceHistory(preloadedHistory.history);
+      return;
+    }
     let live = true;
     let merged = false;
     const local = getPriceHistory(shownId);
@@ -572,18 +258,21 @@ export function CardSheet(props: CardSheetProps) {
     return () => {
       live = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shownId]);
 
-  const printing = useMemo(
-    () => printings.find((p) => p.scryfallId === scryfallId),
-    [printings, scryfallId],
-  );
+  const printing = useMemo(() => printings.find((p) => p.scryfallId === scryfallId), [printings, scryfallId]);
   // What the art and price read: the chosen edition, or for "any printing" the
   // preferred one. Everything that says *which* edition keeps reading `printing`.
   const facePrinting = useMemo(
     () => printing ?? (scryfallId === ANY_PRINTING ? printings.find((p) => p.scryfallId === anyFaceId) : undefined),
     [printing, printings, scryfallId, anyFaceId],
   );
+  // The form as it reads: a concrete finish kept valid for the chosen printing,
+  // and no more for trade than there are copies.
+  const finish = clampFinish(rawForm.finish, printing, wishMode);
+  const form = { ...rawForm, finish, forTrade: Math.min(rawForm.forTrade, quantity) };
+  const { condition, lang, tags, zone } = form;
 
   // What the copies cost, so the trend can say how the card has done for *you*
   // rather than how our archive has done. The history goes in because a copy
@@ -633,29 +322,19 @@ export function CardSheet(props: CardSheetProps) {
   const ownedIds = useMemo(() => new Set((ownedEntries ?? []).map((e) => e.scryfallId)), [ownedEntries]);
   // The copies themselves, newest edition first, for "pick one from my collection".
   const ownedCopies = useMemo(() => sortOwnedCopies(ownedEntries ?? [], printings), [ownedEntries, printings]);
-  // The "In your collection" badge jumps to a Collection search for this card's
-  // name, never from a scan session — leaving that sheet mid-scan would throw
-  // the session away — or edit mode, which already shows the entry itself.
-  const canOpenInCollection = mode !== 'session' && mode !== 'edit';
   // Printings with copies marked for trade — their edition tile gets the purple tag.
   const ownedForTradeIds = useMemo(
     () => new Set((ownedEntries ?? []).filter((e) => e.quantityForTrade > 0).map((e) => e.scryfallId)),
     [ownedEntries],
   );
   // Editions the caller flagged (owned / on a tradelist) group first in the
-  // dropdown; within the rest, editions the user owns lead so their printing is
+  // grid; within the rest, editions the user owns lead so their printing is
   // the easy pick (and its double-check badge is the first thing they see).
   const highlighted = highlightPrintings ? printings.filter((p) => highlightPrintings.notes.has(p.scryfallId)) : [];
   const otherPrintings = orderByOwned(
     highlighted.length > 0 ? printings.filter((p) => !highlightPrintings!.notes.has(p.scryfallId)) : printings,
     ownedIds,
   );
-  // Picking an edition is not editing: in info mode it only changes which
-  // printing you're looking at (art, price, history, placement pills all
-  // follow), and info mode writes nothing. So every mode gets the picker and the
-  // visual grid — except a wish you're only reading, where the
-  // edition is that person's answer, not yours to flip through.
-  const editionPickable = formEditable || (mode === 'info' && !wishInfo);
   // A wish can want any finish (esp. an "any printing" wish, where no single
   // printing constrains the choice); a collection entry is limited to what the
   // selected printing actually comes in. A slot follows its edition where it pins
@@ -676,339 +355,34 @@ export function CardSheet(props: CardSheetProps) {
       : anyPrefs && scryfallId === ANY_PRINTING
         ? 'Any printing'
         : '';
-
-  // The copy's three traits as one line, in the same words the fields use, so
-  // the summary and the open form never disagree. A lands-box basic claims no
-  // copy of yours, so it prefers nothing and the line goes away entirely.
-  const traitWords: string[] = [];
-  if (showCondition) traitWords.push(condition ? (anyPrefs ? `${condition} or better` : condition) : 'Any condition');
-  if (showFinish) traitWords.push(finish ? FINISH_LABELS[finish as Finish] : 'Any finish');
-  if (showLang) traitWords.push(lang ? lang.toUpperCase() : 'Any language');
-  const traitsVisible = traitWords.length > 0 && !anyBasicPicked;
-  // Folded up, the line has to account for the fourth dropdown as well.
-  const traitSummary = [...traitWords, ...(special.length > 0 ? [specialLabel(special)] : [])].join(' · ');
-
-  // The traits row as data: the four dropdowns and the one list that's open.
-  // Written out once rather than four near-identical blocks of JSX, because the
-  // trigger and its list are rendered in two different places and had to agree.
-  const anyOption: SheetSelectOption[] = anyPrefs ? [{ value: '', label: 'Any' }] : [];
-  const traitFields: {
-    key: TraitKey;
-    label: string;
-    summary: string;
-    detail?: string;
-    muted: boolean;
-    options: SheetSelectOption[];
-    selected: string[];
-    multi?: boolean;
-    onPick: (value: string) => void;
-  }[] = [];
-  if (showCondition) {
-    traitFields.push({
-      key: 'condition',
-      label: anyPrefs ? 'Min. condition' : 'Condition',
-      summary: condition || 'Any',
-      muted: !condition,
-      options: [...anyOption, ...CONDITIONS.map((c) => ({ value: c, label: c }))],
-      selected: [condition],
-      onPick: (v) => setCondition(v as Condition | ''),
-    });
-  }
-  if (showFinish) {
-    traitFields.push({
-      key: 'finish',
-      label: 'Finish',
-      summary: finish ? FINISH_LABELS[finish as Finish] : 'Any',
-      muted: !finish,
-      options: [...anyOption, ...availableFinishes.map((f) => ({ value: f, label: FINISH_LABELS[f] }))],
-      selected: [finish],
-      onPick: (v) => setFinish(v as Finish | ''),
-    });
-  }
-  if (showLang) {
-    traitFields.push({
-      key: 'lang',
-      label: 'Language',
-      summary: lang ? lang.toUpperCase() : 'Any',
-      muted: !lang,
-      options: [...anyOption, ...LANGS.map((l) => ({ value: l, label: l.toUpperCase() }))],
-      selected: [lang],
-      onPick: setLang,
-    });
-  }
-  // Altered, signed, misprint …: a fact about this piece of cardboard, not about
-  // the card, so only a collection copy is asked, and the one field here that
-  // takes more than one answer. Ticking a box splits the copy onto its own line
-  // — your altered Bolt stops sharing a row with the plain one — while every
-  // match (wish, deck slot, owned count) carries on ignoring it.
-  if (collectionFields) {
-    traitFields.push({
-      key: 'special',
-      label: 'Special',
-      // The only field here that can hold more than one answer, in a quarter of
-      // a phone's width: "Altered, Signed" truncates to "Altere…", which says
-      // less than a count does. The line above the row spells them all out.
-      summary:
-        special.length === 0 ? 'None' : special.length === 1 ? specialLabel(special) : `${special.length} selected`,
-      detail: special.length > 1 ? specialLabel(special) : undefined,
-      muted: special.length === 0,
-      options: SPECIAL_CONDITIONS.map((sc) => ({ value: sc, label: SPECIAL_CONDITION_LABELS[sc] })),
-      selected: special,
-      multi: true,
-      onPick: (v) => {
-        const sc = v as SpecialCondition;
-        const next = special.includes(sc) ? special.filter((x) => x !== sc) : [...special, sc];
-        setSpecial(normalizeSpecialConditions(next) ?? []);
-      },
-    });
-  }
-  const openField = traitFields.find((f) => f.key === openTrait);
-
-  // Full-size image + price for the currently-selected printing (falls back to the oracle default).
-  const cardImage =
-    facePrinting?.imageNormal ?? oracleCard.imageNormal ?? facePrinting?.imageSmall ?? oracleCard.imageSmall ?? null;
-  // Back face for double-faced cards (transform / modal DFC / …); absent for single-faced ones.
-  const cardBackImage =
-    facePrinting?.imageBackNormal ??
-    oracleCard.imageBackNormal ??
-    facePrinting?.imageBackSmall ??
-    oracleCard.imageBackSmall ??
-    null;
   const cardPrice = formatPrice(pricedForFinish(facePrinting, shownFinish), oracleCard) ?? '—';
-  // Flip state for the shown card art; reset when switching editions (a
-  // different printing may not be double-faced at all).
-  const [flipped, setFlipped] = useState(false);
-  useEffect(() => setFlipped(false), [scryfallId]);
-  const shownImage = flipped && cardBackImage ? cardBackImage : cardImage;
-  // Tap the art to read it: the card alone, as large as the screen allows.
-  const [zoomed, setZoomed] = useState(false);
-  // The first paint of the art waits for the browser to actually decode it —
-  // the foil sheen has nothing to shimmer over until then. A latch, not a
-  // per-image flag: once the sheet has shown a card, switching editions swaps
-  // the art in place instead of blanking the frame.
-  const [artShown, setArtShown] = useState(false);
-  // The right printing's image didn't load: fall back to the card's default art
-  // rather than an empty frame (a wrong edition beats no card at all).
-  const [artFailed, setArtFailed] = useState(false);
-  useEffect(() => setArtFailed(false), [shownImage]);
-  const fallbackImage = oracleCard.imageNormal ?? oracleCard.imageSmall ?? null;
-  const artSrc = (artFailed && fallbackImage) || shownImage || cardImage;
 
-  // Keep a concrete finish valid for the chosen printing (skip the "Any"
-  // sentinel and wish mode, where the finish is a preference, not a real copy).
-  useEffect(() => {
-    if (!wishMode && printing && finish && !printing.finishes.includes(finish)) {
-      setFinish(printing.finishes[0] ?? 'nonfoil');
-    }
-  }, [printing, finish, wishMode]);
-
-  const clampedForTrade = Math.min(forTrade, quantity);
-
-  /** Session mode: the edited line as reported back, mirroring the hidden fields.
-   *  Session mode is never wish mode, so these are always concrete values. */
-  function sessionValues(qty: number): SessionCardValues {
-    return {
-      scryfallId,
-      quantity: qty,
-      lang: sessionCard?.lang !== undefined ? lang : undefined,
-      finish: sessionCard?.finish !== undefined ? (finish as Finish) : undefined,
-      condition: sessionCard?.condition !== undefined ? (condition as Condition) : undefined,
-    };
-  }
-
-  // A wish (and a container slot) stores its preferences as-is ('' → undefined =
-  // "any"); a collection entry needs a concrete condition/finish/lang, so fall
-  // back to the defaults.
-  const wishPrefs = { condition: condition || undefined, finish: finish || undefined, lang: lang || undefined };
-  const concrete = { condition: condition || 'NM', finish: finish || 'nonfoil', lang: lang || 'en' };
-
-  /** In add mode `dest` names the list a button chose; when omitted the add
-   *  follows the sheet's own scope (collection for a context-free search). */
-  async function save(board: DeckBoard = 'main', dest?: ListKind) {
-    setBusy(true);
-    // Add mode first: the sheet may have stepped into it from a wish, a deck
-    // slot or a card it's only showing, and those props are all still set.
-    if (mode === 'add') {
-      const eventId = newId();
-      if (!(await saveAdd(board, dest, eventId))) {
-        setBusy(false);
-        return;
-      }
-      // Onto one of the three lists: flash which one, and let the timer close.
-      if (addTo.kind !== 'deck') {
-        setAdded({ list: listDest(dest), eventId });
-        return;
-      }
-    } else if (sessionCard) {
-      onApply?.(sessionValues(quantity));
-    } else if (wishEntry) {
-      await updateWishlistEntry(wishEntry.id, { scryfallId: scryfallId || null, ...wishPrefs, quantity });
-    } else if (deckCard) {
-      await updateDeckCard(deckCard.id, { quantity, scryfallId, anyBasic: anyBasicPicked, wants: wishPrefs, tags });
-      // The move goes last so the slot carries this form's quantity and tags
-      // into whatever it merges with on the far side.
-      if (zone !== (deckCard.board ?? 'main')) await moveDeckCard(deckCard.id, zone);
-    } else if (editing && entry) {
-      await updateCollectionEntry(entry.id, {
-        scryfallId,
-        ...concrete,
-        quantity,
-        quantityForTrade: clampedForTrade,
-        special,
-      });
-    }
-    onClose();
-  }
-
-  /** Save the slot's form, then seat it as the deck's companion (the one
-   *  already there, if any, moves to Considering). */
-  async function saveAsCompanion() {
-    if (!deckCard) return;
-    setBusy(true);
-    await updateDeckCard(deckCard.id, { quantity: 1, scryfallId, anyBasic: anyBasicPicked, wants: wishPrefs, tags });
-    await moveDeckCard(deckCard.id, 'companion');
-    onClose();
-  }
-
-  /** The add half of `save`. Returns false when the user backed out of the
-   *  filing prompt, so the sheet stays open on the form they were filling. */
-  async function saveAdd(board: DeckBoard, dest?: ListKind, eventId?: string): Promise<boolean> {
-    if (addTo.kind === 'deck') {
-      // A slot naming a real copy of yours (edition + all three traits) is
-      // cardboard being filed, so it goes through the filing flow and may offer
-      // to take the card out of wherever it was. Anything vaguer is a brew line
-      // that claims no copy — straight in, merging by card and board as ever.
-      const claims = !anyBasicPicked && !!claimKeyOf({ ...wishPrefs, scryfallId });
-      if (claims) {
-        const filed = await file(addTo.deckId, [filingCopy(board)]);
-        if (!filed) return false;
-      } else {
-        await addDeckCard({
-          deckId: addTo.deckId,
-          oracleId: oracleCard.oracleId,
-          ...(anyBasicPicked ? { anyBasic: true } : { scryfallId, wants: wishPrefs }),
-          board,
-          quantity,
-        });
-      }
-      return true;
-    }
-    const where = listDest(dest);
-    if (where === 'wishlist') {
-      await addToWishlist({ oracleId: oracleCard.oracleId, scryfallId: scryfallId || null, ...wishPrefs, quantity, eventId });
-    } else {
-      // Collection and tradelist both write a collection entry (the latter
-      // starts with copies marked for trade). A wishlist-origin sheet can
-      // sit on "any printing", so fall back to a concrete edition here.
-      const addedId = scryfallId || oracleCard.defaultScryfallId;
-      await addToCollection({
-        oracleId: oracleCard.oracleId,
-        scryfallId: addedId,
-        ...concrete,
-        quantity,
-        quantityForTrade: where === 'tradelist' ? clampedForTrade || 1 : clampedForTrade,
-        special,
-        eventId,
-      });
-      onAdded?.({ scryfallId: addedId, ...concrete });
-    }
-    return true;
-  }
-
-  /** Which of the three personal lists an add lands on. An explicit button
-   *  (dest) wins; otherwise the sheet's own scope decides, and a context-free
-   *  ('default') search files to the collection. */
-  function listDest(dest?: ListKind): ListKind {
-    return dest ?? (addTo.kind === 'wishlist' || addTo.kind === 'tradelist' ? addTo.kind : 'collection');
-  }
-
-  /** This sheet's card as cardboard being filed somewhere, for the prompt. */
-  function filingCopy(board: DeckBoard = 'main'): FilingCopy {
-    return {
-      oracleId: oracleCard.oracleId,
-      scryfallId,
-      quantity,
-      board,
-      wants: wishPrefs,
-      label: oracleCard.name,
-      sub: [printing?.setName, condition, finish, lang !== 'en' ? lang : null].filter(Boolean).join(' · '),
-    };
-  }
+  const actions = cardSheetActions({
+    oracleCard,
+    flags,
+    form,
+    printing,
+    anyBasicPicked,
+    entry,
+    wishEntry,
+    deckCard,
+    sessionCard,
+    onApply: props.mode === 'session' ? props.onApply : undefined,
+    onAdded: props.mode === 'add' ? props.onAdded : undefined,
+    ownedQty,
+    file,
+    toast,
+    setBusy,
+    setAdded,
+    setOverlay,
+    patch,
+    setAddFlow,
+    onClose,
+  });
 
   /** Enter in a quantity field commits the sheet, like a form submit. */
   function saveOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter' && !busy) void save();
-  }
-
-  async function del() {
-    setBusy(true);
-    // A session line isn't stored anywhere yet — quantity 0 tells the scan
-    // list to drop it.
-    if (sessionCard) onApply?.(sessionValues(0));
-    else if (wishEntry) await removeFromWishlist(wishEntry.id);
-    else if (deckCard) await removeDeckCard(deckCard.id);
-    else if (entry) await removeFromCollection(entry.id);
-    onClose();
-  }
-
-  /**
-   * Add this card to one of your own lists from a sheet that isn't about them —
-   * a deck slot, a wish you just got hold of, or a card you're only viewing.
-   * It turns the sheet into that list's real add form rather than filing a
-   * guessed copy, so condition, finish, language and quantity are answered by
-   * the person who knows them. Fields carrying an "any" (a slot's or a wish's
-   * preference) land on the collection's defaults, since a copy you own is a
-   * specific piece of cardboard.
-   */
-  function startAdd(dest: ListKind) {
-    if (!scryfallId && dest !== 'wishlist') setScryfallId(oracleCard.defaultScryfallId);
-    if (dest !== 'wishlist') {
-      if (!condition) setCondition('NM');
-      if (!finish) setFinish('nonfoil');
-      if (!lang) setLang('en');
-    }
-    setForTrade(dest === 'tradelist' ? Math.max(1, forTrade) : 0);
-    setAddFlow(dest);
-  }
-
-  /** Put this copy in a deck, binder or box, straight from the entry that owns
-   *  it — the same filing flow (and move-or-both question) the collection's
-   *  bulk "File away" runs, for the one card in front of you.
-   *
-   *  Own more than one copy and *which* of them goes in is a real question (the
-   *  loose one, usually, not the one already in another deck), so it gets asked
-   *  rather than guessed: FileCopiesSheet counts them out, and its answer lands
-   *  back here as the copies to file. */
-  async function fileHere(containerId: string, kind: ContainerKind) {
-    setPickingContainer(false);
-    if (ownedQty > 1) {
-      const row = await db.decks.get(containerId);
-      setPickingCopies({ id: containerId, name: row?.name ?? CONTAINER_META[kind].noun, kind });
-      return;
-    }
-    await fileCopies(containerId, kind, [filingCopy()]);
-  }
-
-  async function fileCopies(containerId: string, kind: ContainerKind, copies: FilingCopy[]) {
-    setPickingCopies(null);
-    setBusy(true);
-    const filed = await file(containerId, copies);
-    if (filed === null) {
-      setBusy(false);
-      return;
-    }
-    const noun = CONTAINER_META[kind].noun;
-    const n = filed.filed;
-    // Every copy you own is in there already. Saying "filed" for a write that
-    // didn't happen is how you end up filing the same card twice.
-    toast(
-      n === 0
-        ? `Already in that ${noun}`
-        : filed.mode === 'move'
-          ? `Moved ${n === 1 ? '' : `${n} copies `}to ${noun}`
-          : `Filed ${n === 1 ? '' : `${n} copies `}in ${noun}`,
-    );
-    onClose();
+    if (e.key === 'Enter' && !busy) void actions.save();
   }
 
   return (
@@ -1036,17 +410,17 @@ export function CardSheet(props: CardSheetProps) {
           <OptionsMenu
             label="Card options"
             actions={[
-              { label: 'Collection history', icon: 'history', onClick: () => setHistoryOpen(true) },
+              { label: 'Collection history', icon: 'history', onClick: () => setOverlay({ kind: 'history' }) },
               // Only reachable by tapping the sparkline until now, which made
               // it invisible on a card whose trend we can't draw yet.
               ...(priceHistory
-                ? [{ label: 'Price history', icon: 'prices' as IconName, onClick: () => setChartOpen(true) }]
+                ? [{ label: 'Price history', icon: 'prices' as IconName, onClick: () => setOverlay({ kind: 'chart' }) }]
                 : []),
-              ...(editionPickable && printings.length > 0
-                ? [{ label: 'All printings', icon: 'grid' as IconName, onClick: () => setAllEditions(true) }]
+              ...(flags.editionPickable && printings.length > 0
+                ? [{ label: 'All printings', icon: 'grid' as IconName, onClick: () => setOverlay({ kind: 'editions' }) }]
                 : []),
-              { label: 'Find sealed products with this card', icon: 'sealed', onClick: () => setSealedOpen(true) },
-              { label: 'Format legality', icon: 'balance', onClick: () => setLegalityOpen(true) },
+              { label: 'Find sealed products with this card', icon: 'sealed', onClick: () => setOverlay({ kind: 'sealed' }) },
+              { label: 'Format legality', icon: 'balance', onClick: () => setOverlay({ kind: 'legality' }) },
             ]}
           />
           {/* The way out, in the same place on every mode. The action row used
@@ -1064,46 +438,16 @@ export function CardSheet(props: CardSheetProps) {
             back to being their own columns — see styles.css.) */}
         <div className="sheet-scroll">
         <div className="sheet-head">
-          {cardImage || !editionResolved ? (
-            // The wrap holds the card's space from the first frame; what goes in
-            // it waits until we know the edition and the image has decoded.
-            <div className="sheet-card-wrap">
-              {editionResolved && artSrc && (
-                <button
-                  type="button"
-                  className="sheet-card-zoom"
-                  onClick={() => artShown && setZoomed(true)}
-                  aria-label={`Enlarge ${oracleCard.name}`}
-                  title="Enlarge"
-                >
-                  <img
-                    className={artShown ? 'sheet-card' : 'sheet-card sheet-card-loading'}
-                    src={artSrc}
-                    alt={oracleCard.name}
-                    onLoad={() => setArtShown(true)}
-                    onError={() => {
-                      if (!artFailed && fallbackImage && fallbackImage !== artSrc) setArtFailed(true);
-                      else setArtShown(true);
-                    }}
-                  />
-                </button>
-              )}
-              {artShown && finish && finish !== 'nonfoil' && <span className="foil-sheen" aria-hidden />}
-              {artShown && cardBackImage && (
-                <button
-                  type="button"
-                  className="sheet-flip"
-                  onClick={() => setFlipped((f) => !f)}
-                  aria-label="Flip card"
-                  title="Flip card"
-                >
-                  <Icon name="flip" size={16} />
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="sheet-card sheet-card-ph">{oracleCard.name}</div>
-          )}
+          <CardArt
+            oracleCard={oracleCard}
+            facePrinting={facePrinting}
+            scryfallId={scryfallId}
+            editionResolved={editionResolved}
+            foil={!!finish && finish !== 'nonfoil'}
+            zoomed={overlay?.kind === 'zoom'}
+            onZoom={() => setOverlay({ kind: 'zoom' })}
+            onUnzoom={() => setOverlay(null)}
+          />
           {/* What the card *is* rides in the column beside the art: cost, type,
               which printing this is, and the rules text. What your copy is
               worth and where it's filed are answers about your collection, so
@@ -1114,11 +458,11 @@ export function CardSheet(props: CardSheetProps) {
               <span>{oracleCard.typeLine}</span>
             </div>
             {editionResolved && editionLabel !== '' && (
-              editionPickable ? (
+              flags.editionPickable ? (
                 <button
                   type="button"
                   className="sheet-edition"
-                  onClick={() => setAllEditions(true)}
+                  onClick={() => setOverlay({ kind: 'editions' })}
                   aria-label={`Printing: ${editionLabel}. Choose another`}
                   title="Choose a printing"
                 >
@@ -1184,7 +528,7 @@ export function CardSheet(props: CardSheetProps) {
               trend={trend}
               gain={gain}
               nonfoilLine={shownFinish !== 'nonfoil' && !lane?.foil}
-              onOpen={() => setChartOpen(true)}
+              onOpen={() => setOverlay({ kind: 'chart' })}
             />
           )}
           {mode !== 'edit' && ownedQty > 0 && (
@@ -1193,7 +537,7 @@ export function CardSheet(props: CardSheetProps) {
               forTrade={ownedForTrade}
               ownsExact={ownsExact}
               onOpen={
-                canOpenInCollection
+                flags.canOpenInCollection
                   ? () => {
                       onClose();
                       openCollectionSearch(oracleCard.name);
@@ -1227,81 +571,21 @@ export function CardSheet(props: CardSheetProps) {
             actually have and the edition, finish, condition and language all come
             along, so the double check means "this very card". */}
         {deckPrefs && formEditable && ownedCopies.length > 0 && (
-          <button type="button" className="linklike pick-copy-btn" onClick={() => setPickingCopy(true)}>
+          <button type="button" className="linklike pick-copy-btn" onClick={() => setOverlay({ kind: 'pickCopy' })}>
             <Icon name="collection" size={14} /> Pick one from my collection
           </button>
         )}
 
-        {/* Condition, finish and language as one line.
-            Nothing to change here (a copy you're only looking at, someone
-            else's wish): the answers as text. Three greyed-out dropdowns and a
-            dead stepper say exactly this much and cost four times the room, and
-            the reader has to work out that they're dead before believing them.
-            The quantity rides along, since there's no stepper to carry it. */}
-        {traitsVisible && !formEditable && (
-          <div className="sheet-copy-summary">
-            {wishInfo && <span className="sheet-copy-label">Wants</span>}
-            {traitWords.map((w) => (
-              <span key={w}>{w}</span>
-            ))}
-            {special.length > 0 && <span className="sheet-copy-special">{specialLabel(special)}</span>}
-            <span className="sheet-copy-qty">
-              ×{quantity}
-              {clampedForTrade > 0 ? ` · ${clampedForTrade} for trade` : ''}
-            </span>
-          </div>
-        )}
-
-        {/* The same line, tappable, when they are yours to change: the four
-            fields unfold under it rather than sitting there labelled and open
-            on a form where most of them are already right. */}
-        {traitsVisible && formEditable && (
-          <div className={traitsOpen ? 'sheet-traits open' : 'sheet-traits'}>
-            <button
-              type="button"
-              className="sheet-traits-trigger"
-              aria-expanded={traitsOpen}
-              onClick={() => {
-                setTraitsOpen((v) => !v);
-                setOpenTrait(null);
-              }}
-            >
-              <span className="sheet-traits-summary">{traitSummary}</span>
-              <Icon name="chevronDown" size={16} />
-            </button>
-            {traitsOpen && (
-              <div className="field-row">
-                {traitFields.map((f) => (
-                  <SheetSelectField
-                    key={f.key}
-                    label={f.label}
-                    summary={f.summary}
-                    detail={f.detail}
-                    muted={f.muted}
-                    open={openTrait === f.key}
-                    onToggle={() => setOpenTrait((cur) => (cur === f.key ? null : f.key))}
-                  />
-                ))}
-              </div>
-            )}
-            {/* The one open list, under the whole row. Picking a single answer
-                is the end of the question, so it closes; ticking one of several
-                isn't, so Special stays open. */}
-            {traitsOpen && openField && (
-              <SheetSelectList
-                key={openField.key}
-                label={openField.label}
-                options={openField.options}
-                selected={openField.selected}
-                multi={openField.multi}
-                onPick={(v) => {
-                  openField.onPick(v);
-                  if (!openField.multi) setOpenTrait(null);
-                }}
-              />
-            )}
-          </div>
-        )}
+        {/* Keyed on the copy, so stepping to another one folds it back up. */}
+        <TraitsRow
+          key={`${entry?.id ?? deckCard?.id ?? ''}:${formEditable}`}
+          flags={flags}
+          form={form}
+          forTrade={form.forTrade}
+          availableFinishes={availableFinishes}
+          hidden={anyBasicPicked}
+          onChange={patch}
+        />
 
         {/* Quantity and the slice of it you'd part with, side by side. "For
             trade" is 0 on most copies, but it's a stepper sitting in room the
@@ -1310,12 +594,12 @@ export function CardSheet(props: CardSheetProps) {
         <div className="field-grid">
           <label className="field">
             <span>Quantity</span>
-            <QtyStepper value={quantity} min={1} onChange={setQuantity} onEnter={saveOnEnter} />
+            <QtyStepper value={quantity} min={1} onChange={(v) => patch({ quantity: v })} onEnter={saveOnEnter} />
           </label>
-          {collectionFields && (
+          {flags.collectionFields && (
             <label className="field">
               <span>For trade</span>
-              <QtyStepper value={clampedForTrade} min={0} max={quantity} onChange={setForTrade} onEnter={saveOnEnter} />
+              <QtyStepper value={form.forTrade} min={0} max={quantity} onChange={(v) => patch({ forTrade: v })} onEnter={saveOnEnter} />
             </label>
           )}
         </div>
@@ -1337,7 +621,7 @@ export function CardSheet(props: CardSheetProps) {
                   className={zone === z.board ? 'seg seg-active' : 'seg'}
                   disabled={!!z.refusal && zone !== z.board}
                   title={z.refusal}
-                  onClick={() => setZone(z.board)}
+                  onClick={() => patch({ zone: z.board })}
                 >
                   {z.label}
                 </button>
@@ -1354,7 +638,7 @@ export function CardSheet(props: CardSheetProps) {
         {/* Slot tags: your own labels on this card in this list ("Ramp",
             "Turn-3 play"), which the group-by-tag view reads. */}
         {mode === 'deck' && deckCard?.deckId && (
-          <TagField deckId={deckCard.deckId} tags={tags} onChange={setTags} />
+          <TagField deckId={deckCard.deckId} tags={tags} onChange={(t) => patch({ tags: t })} />
         )}
 
         {/* The slot was emptied out on purpose, and saving names the copy it
@@ -1368,521 +652,48 @@ export function CardSheet(props: CardSheetProps) {
         </div>
         </div>
 
-        {/* File-into-your-lists affordance, for the modes that aren't about your
-            lists: a container slot (yours or not). Each opens that list's real
-            add form — the copy is yours to describe, not ours to guess. The
-            buttons say what they do, so the row no longer spends a label on it.
-            Info mode's pair moved into the action row: they're the only reason
-            anyone opens that sheet, and the Close button they sat above was
-            doing what the backdrop, Escape and the ✕ already do. */}
-        {(mode === 'deck' || deckAdd) && (
-          <div className="sheet-quickadd">
-            <div className="sheet-quickadd-btns">
-              <button onClick={() => startAdd('collection')} disabled={busy} title="Add to collection">
-                <Icon name="collection" size={16} /> Add to collection
-              </button>
-              <button onClick={() => startAdd('wishlist')} disabled={busy} title="Add to wishlist">
-                <Icon name="wishlist" size={16} /> Add to wishlist
-              </button>
-            </div>
-          </div>
-        )}
-        {mode === 'wish' && (
-          <div className="sheet-quickadd">
-            <span className="sheet-quickadd-label">Got it?</span>
-            <div className="sheet-quickadd-btns">
-              <button onClick={() => startAdd('collection')} disabled={busy} title="Add to collection">
-                <Icon name="collection" size={16} /> Add to collection
-              </button>
-            </div>
-          </div>
-        )}
-
-        {added ? (
-          // Where the +List button was a moment ago: the same shape, answered.
-          <div className="sheet-actions">
-            <p className="sheet-added" role="status">
-              <Icon name="check" size={16} /> Added to {LIST_META[added.list].label.toLowerCase()}{' '}
-              <Icon name={LIST_META[added.list].icon} size={16} />
-            </p>
-          </div>
-        ) : mode === 'info' ? (
-          // Nothing to save, so the row holds what someone actually came for.
-          <div className="sheet-actions sheet-actions-pair">
-            <button onClick={() => startAdd('wishlist')} disabled={busy} title="Add to wishlist">
-              <Icon name="wishlist" size={16} /> Add to wishlist
-            </button>
-            <button className="primary" onClick={() => startAdd('collection')} disabled={busy} title="Add to collection">
-              <Icon name="collection" size={16} /> Add to collection
-            </button>
-          </div>
-        ) : canToggleEdit && !editMode ? (
-          // A copy you own, not being edited: filing it somewhere is as likely
-          // as changing it, so both are buttons instead of one riding above the
-          // other in its own labelled row.
-          <div className="sheet-actions sheet-actions-pair">
-            <button onClick={() => setPickingContainer(true)} disabled={busy} title="File into a deck, binder or box">
-              <Icon name="binder" size={16} /> File away
-            </button>
-            <button className="primary" onClick={() => setEditMode(true)}>
-              <Icon name="edit" size={16} /> Edit
-            </button>
-          </div>
-        ) : (
-          <div className={listAddKind ? 'sheet-actions sheet-actions-lists' : 'sheet-actions'}>
-            {mode !== 'add' && !hideRemove && (
-              <button className="danger-outline" onClick={del} disabled={busy}>
-                Remove
-              </button>
-            )}
-            {/* The three list adds need the whole row at 393px, so they leave
-                Cancel to the header's close button (and Back, when the add was
-                stepped into from another mode, sits beside the name). */}
-            {!listAddKind && (
-              <button onClick={onClose} disabled={busy}>
-                Cancel
-              </button>
-            )}
-            {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && !cardIsToken && addTo.format === 'commander' && canJoinCommandZone(oracleCard, commandZone) && (
-              <button onClick={() => save('commander')} disabled={busy}>
-                {commandZone.length === 1 ? 'Add as second commander' : 'Add as commander'}
-              </button>
-            )}
-            {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && !cardIsToken && addTo.format === 'commander' && isCompanion(oracleCard) && (
-              <button onClick={() => save('companion')} disabled={busy}>
-                Set as companion
-              </button>
-            )}
-            {/* Commander has no sideboard: its companion has the button above. */}
-            {deckAdd && addTo.kind === 'deck' && deckAddIsDeck && !cardIsToken && addTo.format !== 'commander' && (
-              <button onClick={() => save('side')} disabled={busy}>
-                Add to sideboard
-              </button>
-            )}
-            {deckAdd && deckAddIsDeck && !cardIsToken && (
-              <button onClick={() => save('maybe')} disabled={busy}>
-                Add to considering
-              </button>
-            )}
-            {canSetCompanion && (
-              <button onClick={() => void saveAsCompanion()} disabled={busy}>
-                Set as companion
-              </button>
-            )}
-            {deckAdd && deckAddIsDeck && cardIsToken ? (
-              <button className="primary" onClick={() => save('token')} disabled={busy}>
-                Add to tokens
-              </button>
-            ) : listAddKind ? (
-              <>
-                {LIST_ORDER.filter((k) => k !== listAddKind).map((k) => (
-                  <button
-                    key={k}
-                    className="add-alt"
-                    title={LIST_META[k].title}
-                    onClick={() => save('main', k)}
-                    disabled={busy}
-                  >
-                    + {LIST_META[k].short}
-                  </button>
-                ))}
-                <button className="primary add-primary" onClick={() => save('main', listAddKind)} disabled={busy}>
-                  {LIST_META[listAddKind].title}
-                </button>
-              </>
-            ) : (
-              <button className="primary" onClick={() => save()} disabled={busy}>
-                {mode === 'add' ? addLabel(addTo) : mode === 'session' ? applyLabel ?? 'Apply' : 'Save'}
-              </button>
-            )}
-          </div>
-        )}
-
-      {zoomed && cardImage && (
-        <CardZoom
-          image={shownImage ?? cardImage}
-          backImage={cardBackImage}
-          onFlip={() => setFlipped((f) => !f)}
-          alt={oracleCard.name}
-          foil={!!finish && finish !== 'nonfoil'}
-          onClose={() => setZoomed(false)}
-        />
-      )}
-      {chartOpen && priceHistory && (
-        <PriceChartSheet
-          name={oracleCard.name}
-          subtitle={printing ? `${printing.setName} · #${printing.collectorNumber}` : undefined}
-          oracleId={oracleCard.oracleId}
-          scryfallId={shownId}
-          history={priceHistory}
-          finish={shownFinish}
-          now={nowQuote}
-          onEventClick={(e) => {
-            setChartOpen(false);
-            setEventEntry({ kind: 'single', id: e.id, ts: e.ts, event: e });
-          }}
-          onClose={() => setChartOpen(false)}
-        />
-      )}
-      {legalityOpen && <CardLegalitySheet oracleCard={oracleCard} onClose={() => setLegalityOpen(false)} />}
-      {sealedOpen && (
-        <SealedWithCardSheet
-          cardName={oracleCard.name}
-          printings={printings}
-          onClose={() => setSealedOpen(false)}
-        />
-      )}
-      {allEditions && (
-        <EditionGrid
-          printings={highlighted.length > 0 ? [...highlighted, ...otherPrintings] : otherPrintings}
-          selected={scryfallId}
-          anyOption={anyPrefs || basicAny}
-          notes={highlightPrintings?.notes}
-          ownedIds={ownedIds}
-          ownedForTradeIds={ownedForTradeIds}
-          onSelect={(id) => {
-            setScryfallId(id);
-            setAllEditions(false);
-          }}
-          onClose={() => setAllEditions(false)}
-        />
-      )}
-      {pickingCopy && (
-        <CopyPicker
-          copies={ownedCopies}
-          printings={printings}
-          selected={{ scryfallId, condition, finish, lang }}
-          onSelect={(copy) => {
-            setScryfallId(copy.scryfallId);
-            setCondition(copy.condition);
-            setFinish(copy.finish);
-            setLang(copy.lang);
-            setPickingCopy(false);
-          }}
-          onAddCopy={() => {
-            setPickingCopy(false);
-            setAddingCopy(true);
-          }}
-          onClose={() => setPickingCopy(false)}
-        />
-      )}
-      {/* Add the missing copy without losing the slot behind it: the nested
-          sheet writes the collection entry, hands it back, and this form ends up
-          exactly where picking an existing copy would have left it. */}
-      {addingCopy && (
-        <CardSheet
-          mode="add"
+        <CardSheetActions
+          flags={flags}
           oracleCard={oracleCard}
-          initialScryfallId={scryfallId || oracleCard.defaultScryfallId}
-          addTarget={{ kind: 'collection' }}
-          onAdded={(copy) => {
-            setScryfallId(copy.scryfallId);
-            setCondition(copy.condition);
-            setFinish(copy.finish);
-            setLang(copy.lang);
-          }}
-          onClose={() => setAddingCopy(false)}
+          commandZone={commandZone}
+          busy={busy}
+          added={added}
+          editMode={editMode}
+          onEdit={() => setEditMode(true)}
+          onFileAway={() => setOverlay({ kind: 'pickContainer' })}
+          hideRemove={props.mode === 'session' && props.hideRemove === true}
+          applyLabel={props.mode === 'session' ? props.applyLabel : undefined}
+          actions={actions}
+          onClose={onClose}
         />
-      )}
-      {pickingContainer && (
-        <ContainerPickerSheet
-          title={ownedQty > 1 ? 'File your copies' : 'File this copy'}
-          label={`Where does your ${oracleCard.name} live?`}
-          onPick={(id, kind) => void fileHere(id, kind)}
-          onClose={() => setPickingContainer(false)}
-        />
-      )}
-      {pickingCopies && (
-        <FileCopiesSheet
-          oracleId={oracleCard.oracleId}
-          cardName={oracleCard.name}
-          containerId={pickingCopies.id}
-          containerName={pickingCopies.name}
-          kind={pickingCopies.kind}
-          copies={ownedCopies}
-          printings={printings}
-          startWith={entry?.id}
-          onCancel={() => setPickingCopies(null)}
-          onFile={(copies) => void fileCopies(pickingCopies.id, pickingCopies.kind, copies)}
-        />
-      )}
-      {historyOpen && (
-        <CardHistorySheet
-          oracleCard={oracleCard}
-          scryfallId={shownId}
-          printings={printings}
-          priceHistory={priceHistory}
-          onEventClick={(e: UserEvent) => setEventEntry({ kind: 'single', id: e.id, ts: e.ts, event: e })}
-          onClose={() => setHistoryOpen(false)}
-        />
-      )}
-      {eventEntry && (
-        <EventSheet
-          entry={eventEntry}
-          onOpenCard={(oracle, scryfallId) => {
-            setEventEntry(null);
-            // Same card: show its history (already open if that's where this
-            // event came from, but the price chart reaches here too). Different
-            // card (a batch line): a nested sheet on that card's history.
-            if (oracle.oracleId === oracleCard.oracleId) setHistoryOpen(true);
-            else setNestedCard({ oracle, scryfallId });
-          }}
-          onClose={() => setEventEntry(null)}
-        />
-      )}
-      {nestedCard && (
-        <CardSheet
-          mode="info"
-          oracleCard={nestedCard.oracle}
-          initialScryfallId={nestedCard.scryfallId}
-          openHistory
-          onClose={() => setNestedCard(null)}
-        />
-      )}
+
+      <CardSheetOverlays
+        overlay={overlay}
+        setOverlay={setOverlay}
+        oracleCard={oracleCard}
+        printing={printing}
+        printings={printings}
+        shownId={shownId}
+        priceHistory={priceHistory}
+        shownFinish={shownFinish}
+        nowQuote={nowQuote}
+        editions={{
+          printings: highlighted.length > 0 ? [...highlighted, ...otherPrintings] : otherPrintings,
+          anyOption: anyPrefs || basicAny,
+          notes: highlightPrintings?.notes,
+          ownedIds,
+          ownedForTradeIds,
+        }}
+        form={form}
+        onPickEdition={(id) => patch({ scryfallId: id })}
+        setCopy={setCopy}
+        ownedCopies={ownedCopies}
+        ownedQty={ownedQty}
+        entry={entry}
+        fileHere={actions.fileHere}
+        fileCopies={actions.fileCopies}
+      />
       {filingSheet}
     </Sheet>
   );
 }
-
-/** Quantity field as a −/+ stepper: taps cover the common case, so the soft
- *  keyboard (which covers most of the sheet on phones) only appears when the
- *  user really wants to type — and then it's the numeric one. */
-/**
- * The "In your collection (×N)" badge under the card name. When `onOpen` is
- * given it's a button that jumps to that copy's sheet on the Collection screen
- * (chevron included, so it reads as a way out of here) — handy when the deck slot
- * you're looking at says the wrong thing and the fix belongs on the entry.
- */
-function OwnedHere({
-  qty,
-  forTrade,
-  ownsExact,
-  onOpen,
-}: {
-  qty: number;
-  forTrade: number;
-  ownsExact: boolean;
-  onOpen?: () => void;
-}) {
-  const cls = `badge sheet-owned ${forTrade > 0 ? 'own-trade' : 'own-yes'}`;
-  const detail = ownsExact ? ' · including this exact printing' : ' · other printing(s)';
-  const owned = forTrade > 0 ? `You own ${qty} (${forTrade} for trade)` : `You own ${qty}`;
-  const body = (
-    <>
-      <Icon name={forTrade > 0 ? 'tradelist' : ownsExact ? 'checkDouble' : 'check'} size={13} />
-      In your collection (×{qty}
-      {forTrade > 0 ? `, ${forTrade} for trade` : ''})
-      {onOpen && <Icon name="chevronRight" size={13} />}
-    </>
-  );
-  if (!onOpen) return <div className={cls} title={owned + detail}>{body}</div>;
-  return (
-    <button type="button" className={`${cls} sheet-owned-link`} title={`${owned}${detail} · open it in your collection`} onClick={onOpen}>
-      {body}
-    </button>
-  );
-}
-
-/**
- * One chip per copy (or slot) stacked under the tile the sheet opened from:
- * edition, what the copy is, how many. The current one is lit; tapping another
- * hands the form over to it. Scrolls sideways past a handful, since a Bolt
- * collector can hold a dozen kinds.
- */
-function CopyStrip({
-  copies,
-  printings,
-  currentId,
-  onPick,
-}: {
-  copies: readonly (CollectionEntry | DeckSlotEdit)[];
-  printings: Priced<Printing>[];
-  currentId: string;
-  onPick: (id: string) => void;
-}) {
-  const byId = new Map(printings.map((p) => [p.scryfallId, p]));
-  return (
-    <div className="copy-strip" role="tablist" aria-label="Your copies of this card">
-      {copies.map((c) => {
-        const p = c.scryfallId ? byId.get(c.scryfallId) : undefined;
-        const detail =
-          'quantityForTrade' in c
-            ? copyDetail(c)
-            : [c.condition, c.finish && c.finish !== 'nonfoil' ? FINISH_LABELS[c.finish] : null, c.lang && c.lang !== 'en' ? c.lang : null]
-                .filter(Boolean)
-                .join(' · ');
-        const current = c.id === currentId;
-        return (
-          <button
-            key={c.id}
-            type="button"
-            role="tab"
-            aria-selected={current}
-            className={current ? 'copy-chip copy-chip-current' : 'copy-chip'}
-            onClick={() => onPick(c.id)}
-            title={p ? `${p.setName} #${p.collectorNumber}` : 'Any printing'}
-          >
-            <span className="copy-chip-edition">
-              {p ? (
-                <>
-                  <SetSymbol set={p.set} title={p.setName} /> {p.set.toUpperCase()}
-                </>
-              ) : (
-                'Any'
-              )}
-            </span>
-            {detail && <span className="copy-chip-detail">{detail}</span>}
-            <span className="copy-chip-qty">×{c.quantity}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/**
- * Move editions the user owns to the front, keeping the original (newest-first)
- * order within the owned and unowned groups. Returns the input untouched when
- * nothing is owned, so the common case allocates nothing.
- */
-function orderByOwned(printings: Priced<Printing>[], ownedIds?: Set<string>): Priced<Printing>[] {
-  if (!ownedIds || ownedIds.size === 0) return printings;
-  const owned: Priced<Printing>[] = [];
-  const rest: Priced<Printing>[] = [];
-  for (const p of printings) (ownedIds.has(p.scryfallId) ? owned : rest).push(p);
-  return owned.length === 0 ? printings : [...owned, ...rest];
-}
-
-/**
- * The card, alone, as big as the screen allows — for when the oracle text on
- * the sheet's thumbnail is too small to actually read. Tap anywhere (or
- * Escape / back) to dismiss; the flip button stays, and shares the sheet's flip
- * state so the face you were looking at is the face you get.
- */
-function CardZoom({
-  image,
-  backImage,
-  onFlip,
-  alt,
-  foil,
-  onClose,
-}: {
-  image: string;
-  backImage: string | null;
-  onFlip: () => void;
-  alt: string;
-  foil: boolean;
-  onClose: () => void;
-}) {
-  // Through Sheet like every other overlay, so the tap that opened it can't
-  // also close it (the tap guard) and Escape/back peel it off first.
-  return (
-    <Sheet onClose={onClose} label={alt} className="card-zoom" backdropClassName="card-zoom-backdrop">
-      {/* Tap anywhere to dismiss, the card included. */}
-      <div className="card-zoom-tap" onClick={onClose}>
-        <div className="card-zoom-frame">
-          <img className="card-zoom-img" src={image} alt={alt} />
-          {foil && <span className="foil-sheen" aria-hidden />}
-          {backImage && (
-            <button
-              type="button"
-              className="sheet-flip card-zoom-flip"
-              onClick={(e) => {
-                e.stopPropagation();
-                onFlip();
-              }}
-              aria-label="Flip card"
-              title="Flip card"
-            >
-              <Icon name="flip" size={18} />
-            </button>
-          )}
-        </div>
-      </div>
-    </Sheet>
-  );
-}
-
-/** Every printing as an image tile — pick an edition by looking at it. */
-export function EditionGrid({
-  printings,
-  selected,
-  anyOption,
-  notes,
-  ownedIds,
-  ownedForTradeIds,
-  onSelect,
-  onClose,
-}: {
-  printings: Priced<Printing>[];
-  selected: string;
-  /** Lead with the "any printing" tile (a wish, or a lands-box basic). */
-  anyOption?: boolean;
-  /** Short annotations per printing (e.g. the trade board's "×2, 1 for trade"). */
-  notes?: Map<string, string>;
-  /** Exact printings the user owns — these tiles get a double-check ownership badge. */
-  ownedIds?: Set<string>;
-  /** Of the owned printings, the ones with copies for trade — their tile gets the purple tag instead. */
-  ownedForTradeIds?: Set<string>;
-  onSelect: (scryfallId: string) => void;
-  onClose: () => void;
-}) {
-  // A card can have forty printings, and scrolling art to find "the Modern
-  // Horizons 2 one" is slower than typing it. Set name, set code and collector
-  // number all match, since those are the three things printed on the card.
-  const [query, setQuery] = useState('');
-  const q = query.trim().toLowerCase();
-  const shown = q
-    ? printings.filter(
-        (p) =>
-          p.setName.toLowerCase().includes(q) ||
-          p.set.toLowerCase().includes(q) ||
-          p.collectorNumber.toLowerCase().includes(q),
-      )
-    : printings;
-  return (
-    <Sheet onClose={onClose} className="edition-picker-sheet" title="All printings">
-        <input
-          type="search"
-          className="edition-grid-search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by set, code or number"
-          aria-label="Search printings"
-        />
-        {q && shown.length === 0 && <p className="fine-print">No printing matches that.</p>}
-        <div className="edition-grid">
-          {/* "Any printing" has no set name to search, so it only shows unfiltered. */}
-          {anyOption && !q && (
-            <button className={selected === ANY_PRINTING ? 'edition-tile edition-tile-selected' : 'edition-tile'} onClick={() => onSelect(ANY_PRINTING)}>
-              <span className="edition-tile-ph">Any printing</span>
-              <span className="edition-tile-caption">No specific edition</span>
-            </button>
-          )}
-          {shown.map((p) => (
-            <EditionTile
-              key={p.scryfallId}
-              printing={p}
-              selected={p.scryfallId === selected}
-              year
-              onClick={() => onSelect(p.scryfallId)}
-              badges={
-                ownedIds?.has(p.scryfallId) &&
-                (ownedForTradeIds?.has(p.scryfallId) ? (
-                  <span className="tile-badge own-trade" title="You own this printing · marked for trade">
-                    <Icon name="tradelist" size={13} />
-                  </span>
-                ) : (
-                  <span className="tile-badge own-yes" title="You own this exact printing">
-                    <Icon name="checkDouble" size={13} />
-                  </span>
-                ))
-              }
-              sub={notes?.get(p.scryfallId) ?? formatPrice(p) ?? ''}
-            />
-          ))}
-        </div>
-    </Sheet>
-  );
-}
-

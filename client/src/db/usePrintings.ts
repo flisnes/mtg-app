@@ -7,14 +7,18 @@ import { getPrintingsForOracle } from './queries.js';
  * read settles, failed or not: the card sheet holds its art until then, and an
  * empty frame forever is worse than the oracle's default image.
  */
-export function usePrintingsForOracle(oracleId: string | undefined): {
+export function usePrintingsForOracle(
+  oracleId: string | undefined,
+  /** Already read by the caller (a sheet stacked on one for the same card): skip the read. */
+  preloaded?: Priced<Printing>[],
+): {
   printings: Priced<Printing>[];
   loaded: boolean;
 } {
-  const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [printings, setPrintings] = useState<Priced<Printing>[]>(preloaded ?? []);
+  const [loaded, setLoaded] = useState(!!preloaded);
   useEffect(() => {
-    if (!oracleId) return;
+    if (!oracleId || preloaded) return;
     let live = true;
     void getPrintingsForOracle(oracleId)
       .then((ps) => {
@@ -26,6 +30,7 @@ export function usePrintingsForOracle(oracleId: string | undefined): {
     return () => {
       live = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oracleId]);
   return { printings, loaded };
 }

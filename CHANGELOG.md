@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.16
+
+- **Changed: the card sheet, reshuffled.** Under the hood, the card sheet is split into smaller pieces: which buttons and fields each kind of sheet shows, the form, the saves, the art, the traits row, the action row and the sheets that open on top of it each live on their own. Two small things you might notice: switching to an edition that has no foil and back again keeps your copy's foil finish, and "Not here? Add a copy" on a deck card opens without reading every edition of the card a second time. Adding, editing, filing and the price chart should all work exactly as before; if a card sheet acts up, tell us.
+
 ## 0.200.15
 
 - **Changed: the scanner, reshuffled.** Under the hood, the camera scanner is split into smaller pieces: the session, the tray, the re-scan diff, the settings popover, the lock ring and the session list each live on their own. The tray's cards no longer redraw ten times a second while the hold bar drains, and the scan settings stop re-reading every edition of the card in frame each time the reader reports in. Dropping card images on a page no longer downloads the camera code with it. Scanning, pins, auto-add and re-scans should all work exactly as before; if a scan acts up, tell us.

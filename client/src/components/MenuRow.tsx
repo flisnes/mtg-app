@@ -6,19 +6,7 @@ import { Icon, type IconName } from './icons.js';
  * One row of a `.menu-list`: icon, label with an optional line under it, and a
  * chevron. A link with `to`, a button with `onClick`, a plain row with neither.
  */
-export function MenuRow({
-  icon,
-  label,
-  note,
-  meta,
-  end,
-  plain,
-  chevron = true,
-  to,
-  onClick,
-  disabled,
-  className,
-}: {
+export interface MenuRowProps {
   /** An icon name, or any node (an emblem). */
   icon?: IconName | ReactNode;
   label: ReactNode;
@@ -36,7 +24,21 @@ export function MenuRow({
   disabled?: boolean;
   /** Replaces the default `menu-item` (+ `menu-item-btn` on a button). */
   className?: string;
-}) {
+}
+
+export function MenuRow({
+  icon,
+  label,
+  note,
+  meta,
+  end,
+  plain,
+  chevron = true,
+  to,
+  onClick,
+  disabled,
+  className,
+}: MenuRowProps) {
   const under = meta ?? (note != null && note !== '' ? <span className="search-meta">{note}</span> : null);
   const body = (
     <>

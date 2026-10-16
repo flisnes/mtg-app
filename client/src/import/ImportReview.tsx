@@ -5,6 +5,7 @@ import { preferredScryfallId } from '../cardDb/preferredPrinting.js';
 import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
 import { useCardSearch } from '../cardDb/useCardSearch.js';
 import type { ResolveResult, ResolvedLine, UnmatchedLine } from './types.js';
+import { CardList } from '../components/CardViews.js';
 
 // Reusable import review screen (beta plan §5). Shows the resolve worker's
 // result — matched count plus every unmatched line with typo suggestions and a
@@ -155,22 +156,15 @@ function CardPicker({ onPick }: { onPick: (card: OracleCard) => void }) {
         autoFocus
       />
       {results.length > 0 && (
-        <ul className="result-list">
-          {results.map((c) => {
-            const image = shown.get(c.oracleId)?.imageSmall ?? c.imageSmall;
-            return (
-              <li key={c.oracleId} className="result-row" style={{ padding: '0.4rem 0.6rem' }}>
-                <button className="result-open" style={{ cursor: 'pointer' }} onClick={() => onPick(c)}>
-                  {image && <img className="result-thumb" src={image} alt="" loading="lazy" width={40} height={56} />}
-                  <div className="result-main">
-                    <div className="result-name">{c.name}</div>
-                    <div className="result-sub">{c.typeLine}</div>
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <CardList
+          items={results.map((c) => ({
+            key: c.oracleId,
+            name: c.name,
+            image: shown.get(c.oracleId)?.imageSmall ?? c.imageSmall,
+            sub: c.typeLine,
+            onClick: () => onPick(c),
+          }))}
+        />
       )}
     </div>
   );

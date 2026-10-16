@@ -4,7 +4,7 @@ import { CONTAINER_META } from '../deck/containers.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { FINISH_LABELS } from './copyTraits.js';
 import { Icon } from './icons.js';
-import { SetSymbol } from './SetSymbol.js';
+import { EditionTile } from './EditionTile.js';
 import { Sheet } from './Sheet.js';
 
 // "Your copies": the cards you actually hold, as tiles. Used three times: the
@@ -78,7 +78,6 @@ export function CopyGrid({
     <div className="edition-grid">
       {copies.map((e) => {
         const p = byId.get(e.scryfallId);
-        const img = p?.imageSmall ?? p?.imageNormal;
         // Narrowed all the way down to this piece of cardboard, so two copies of
         // one printing that differ only in language point at their own decks.
         const places = (
@@ -96,46 +95,33 @@ export function CopyGrid({
         });
         const took = picked?.get(e.id) ?? 0;
         const full = !!roomFor && roomFor(e) === 0 && took === 0;
-        const classes = ['edition-tile'];
-        if (isSelected(e) || took > 0) classes.push('edition-tile-selected');
-        if (full) classes.push('edition-tile-full');
         return (
-          <button
+          <EditionTile
             key={e.id}
-            className={classes.join(' ')}
+            printing={p}
+            selected={isSelected(e) || took > 0}
+            full={full}
             disabled={full}
             title={full ? 'Every copy of this one is already in there' : undefined}
+            sheen={e.finish !== 'nonfoil'}
             onClick={() => onSelect(e)}
-          >
-            <span className="edition-tile-art">
-              {img ? (
-                <img src={img} alt={p?.setName ?? ''} loading="lazy" />
-              ) : (
-                <span className="edition-tile-ph">{p?.setName ?? 'Unknown set'}</span>
-              )}
-              {e.finish !== 'nonfoil' && img && <span className="foil-sheen" aria-hidden />}
-              <span
-                className={`tile-badge ${e.quantityForTrade > 0 ? 'own-trade' : 'own-yes'}`}
-                title={`You own ${e.quantity}`}
-              >
-                ×{e.quantity}
-              </span>
-              {took > 0 && (
-                <span className="tile-badge tile-badge-took" title={`${took} of these going in`}>
-                  <Icon name="check" size={11} /> {took}
+            badges={
+              <>
+                <span
+                  className={`tile-badge ${e.quantityForTrade > 0 ? 'own-trade' : 'own-yes'}`}
+                  title={`You own ${e.quantity}`}
+                >
+                  ×{e.quantity}
                 </span>
-              )}
-            </span>
-            <span className="edition-tile-caption">
-              {p ? (
-                <>
-                  <SetSymbol set={p.set} title={p.setName} /> {p.set.toUpperCase()} #{p.collectorNumber}
-                </>
-              ) : (
-                'Unknown edition'
-              )}
-            </span>
-            <span className="edition-tile-sub">{copyDetail(e)}</span>
+                {took > 0 && (
+                  <span className="tile-badge tile-badge-took" title={`${took} of these going in`}>
+                    <Icon name="check" size={11} /> {took}
+                  </span>
+                )}
+              </>
+            }
+            sub={copyDetail(e)}
+          >
             <span className="copy-tile-where">
               {places.length === 0 ? (
                 <span className="fine-print">On the shelf</span>
@@ -157,7 +143,7 @@ export function CopyGrid({
                 ))
               )}
             </span>
-          </button>
+          </EditionTile>
         );
       })}
     </div>

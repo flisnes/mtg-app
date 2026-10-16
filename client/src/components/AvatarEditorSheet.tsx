@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { AVATAR_MAX_ZOOM, type OracleCard, type Priced, type Printing, type ProfileAvatar } from '@mtg/shared';
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { AVATAR_MAX_ZOOM, type OracleCard, type Priced, type ProfileAvatar } from '@mtg/shared';
 import { useCardSearch } from '../cardDb/useCardSearch.js';
-import { getPrintingsForOracle } from '../db/queries.js';
+import { usePrintingsForOracle } from '../db/usePrintings.js';
 import { artCropUrl, clampCropCenter, cropLayout } from './Avatar.js';
+import { ListPicker } from './ListPicker.js';
 import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
 
@@ -52,38 +53,28 @@ export function CardSearch({
   const { results } = useCardSearch(query, { limit: 24, enabled: query.trim().length >= 2 });
 
   return (
-    <>
-      <input
-        className="search-input"
-        placeholder="Search any card…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        autoFocus
-      />
-      {results.length > 0 && (
-        <ul className="menu-list avatar-results">
-          {results.map((c) => (
-            <li key={c.oracleId}>
-              <button className="menu-item menu-item-btn" onClick={() => onPick(c)}>
-                {artCropUrl(c.imageNormal) ? (
-                  <img className="avatar-result-thumb" src={artCropUrl(c.imageNormal)!} alt="" loading="lazy" />
-                ) : (
-                  <span className="avatar-result-thumb" />
-                )}
-                <span className="deck-line">
-                  <span className="deck-name">{c.name}</span>
-                  <span className="deck-meta">{c.typeLine}</span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="sheet-actions">
-        {actions}
-        <button onClick={onCancel}>Cancel</button>
-      </div>
-    </>
+    <ListPicker
+      items={results}
+      itemKey={(c) => c.oracleId}
+      onPick={onPick}
+      render={(c) => {
+        const art = artCropUrl(c.imageNormal);
+        return {
+          icon: art ? (
+            <img className="avatar-result-thumb" src={art} alt="" loading="lazy" />
+          ) : (
+            <span className="avatar-result-thumb" />
+          ),
+          label: c.name,
+          note: c.typeLine,
+          chevron: false,
+        };
+      }}
+      search={{ value: query, onChange: setQuery, placeholder: 'Search any card…', autoFocus: true }}
+      scrollClassName="avatar-results"
+      actions={actions}
+      onCancel={onCancel}
+    />
   );
 }
 
@@ -105,7 +96,8 @@ export function CropStage({
   /** Label on the commit button ("Save picture" reads wrong for a deck emblem). */
   saveLabel?: string;
 }) {
-  const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
+  const all = usePrintingsForOracle(card.oracleId).printings;
+  const printings = useMemo(() => all.filter((p) => artCropUrl(p.imageNormal)), [all]);
   const [scryfallId, setScryfallId] = useState(initial?.scryfallId ?? card.defaultScryfallId);
   const [crop, setCrop] = useState(
     initial ? { x: initial.x, y: initial.y, zoom: initial.zoom } : { x: 0.5, y: 0.5, zoom: 1 },
@@ -116,16 +108,6 @@ export function CropStage({
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
   // Active pointers, for one-finger pan and two-finger pinch.
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-
-  useEffect(() => {
-    let cancelled = false;
-    void getPrintingsForOracle(card.oracleId).then((list) => {
-      if (!cancelled) setPrintings(list.filter((p) => artCropUrl(p.imageNormal)));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [card.oracleId]);
 
   const printing = printings.find((p) => p.scryfallId === scryfallId);
   const src = artCropUrl(printing?.imageNormal ?? card.imageNormal);

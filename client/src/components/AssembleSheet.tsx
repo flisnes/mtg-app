@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { CONDITIONS, type CollectionEntry, type ContainerKind, type Priced, type Printing } from '@mtg/shared';
+import { CONDITIONS, type CollectionEntry, type ContainerKind } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
 import { useFiling } from '../deck/useFiling.js';
-import { getPrintingsForOracle } from '../db/queries.js';
+import { sortOwnedCopies, usePrintingsForOracle } from '../db/usePrintings.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { db } from '../db/schema.js';
 import { CopyGrid, copyDetail } from './CopyPicker.js';
@@ -52,17 +52,7 @@ export function AssembleSheet({
   const slot = useLiveQuery(async () => (item ? (await db.deckCards.get(item.slotId)) ?? null : null), [item?.slotId]);
   const ownership = useOwnershipIndex();
   const owned = item ? ownership?.ownedCopies(item.oracleId) : undefined;
-  const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
-  useEffect(() => {
-    if (!item) return;
-    let live = true;
-    void getPrintingsForOracle(item.oracleId).then((p) => {
-      if (live) setPrintings(p);
-    });
-    return () => {
-      live = false;
-    };
-  }, [item?.oracleId]);
+  const { printings } = usePrintingsForOracle(item?.oracleId);
 
   // What the slot asked for first, then newest edition, then best condition.
   // A slot that names a printing, a finish, a language or a minimum condition is
@@ -70,8 +60,6 @@ export function AssembleSheet({
   // front instead of somewhere down a grid of twelve Lightning Bolts. A slot
   // that names nothing scores every copy zero and the old order stands.
   const copies = useMemo(() => {
-    const order = new Map(printings.map((p, n) => [p.scryfallId, n]));
-    const rank = (e: CollectionEntry) => order.get(e.scryfallId) ?? printings.length;
     const fit = (e: CollectionEntry) => {
       if (!slot) return 0;
       let score = 0;
@@ -82,10 +70,7 @@ export function AssembleSheet({
       if (slot.lang && slot.lang === e.lang) score += 1;
       return score;
     };
-    return [...(owned ?? [])].sort(
-      (a, b) =>
-        fit(b) - fit(a) || rank(a) - rank(b) || CONDITIONS.indexOf(a.condition) - CONDITIONS.indexOf(b.condition),
-    );
+    return sortOwnedCopies(owned ?? [], printings, fit);
   }, [owned, printings, slot]);
 
   const done = i >= items.length;

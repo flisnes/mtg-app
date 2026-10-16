@@ -42,6 +42,7 @@ import { CONTAINER_META } from '../deck/containers.js';
 import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
 import { useDismiss } from './useDismiss.js';
 import { useConfirm } from './ConfirmSheet.js';
+import { ScanListRow } from './ScanListRow.js';
 import { Sheet } from './Sheet.js';
 import { useAsyncAction } from './useAsyncAction.js';
 import { CardStacks, ViewToggle, useScanViewMode, type CardItem } from './CardViews.js';
@@ -1757,14 +1758,12 @@ function RescanChangesList({
       ) : (
         <ul className="scan-list">
           {rows.map((c) => (
-            <li key={`${c.kind}|${c.oracleId}|${c.board}`} className="scan-list-row">
-              <span className="scan-list-main scan-list-static">
-                {c.image ? <img className="scan-list-thumb" src={c.image} alt="" /> : <span className="scan-list-thumb" />}
-                <span className="scan-list-info">
-                  <strong>{c.name}</strong>
-                  {showBoards && <span className="scan-printing">{BOARD_NOUN[c.board]}</span>}
-                </span>
-              </span>
+            <ScanListRow
+              key={`${c.kind}|${c.oracleId}|${c.board}`}
+              image={c.image}
+              name={c.name}
+              sub={showBoards && BOARD_NOUN[c.board]}
+            >
               {c.kind === 'add' && <span className="rescan-tag rescan-add">Added ×{c.quantity}</span>}
               {c.kind === 'remove' && <span className="rescan-tag rescan-remove">Removed ×{c.quantity}</span>}
               {c.kind === 'change' && (
@@ -1772,7 +1771,7 @@ function RescanChangesList({
                   {c.from} → {c.to}
                 </span>
               )}
-            </li>
+            </ScanListRow>
           ))}
         </ul>
       )}
@@ -1986,26 +1985,28 @@ export function SessionSheet({
         ) : (
           <ul className="scan-list">
             {entries.map((e, i) => (
-              <li key={sessionLineKey(e)} className="scan-list-row">
-                <button className="scan-list-main" onClick={() => action.run('open that card', () => openEntry(i))} aria-label={`Edit ${e.name}`}>
-                  {e.image ? <img className="scan-list-thumb" src={e.image} alt="" /> : <span className="scan-list-thumb" />}
-                  <span className="scan-list-info">
-                    <strong>{e.name}</strong>
-                    <span className="scan-printing">
-                      {e.set.toUpperCase()} #{e.collectorNumber} · {e.lang}
-                      {e.finish !== 'nonfoil' ? ` · ${FINISH_LABELS[e.finish]}` : ''}
-                      {e.condition !== 'NM' ? ` · ${e.condition}` : ''}
-                    </span>
-                    {formatPrice(...priceOf(e)) && <span className="scan-list-price">{formatPrice(...priceOf(e))}</span>}
-                  </span>
-                </button>
+              <ScanListRow
+                key={sessionLineKey(e)}
+                image={printMap?.get(e.scryfallId)?.imageSmall ?? e.image}
+                name={e.name}
+                sub={
+                  <>
+                    {e.set.toUpperCase()} #{e.collectorNumber} · {e.lang}
+                    {e.finish !== 'nonfoil' ? ` · ${FINISH_LABELS[e.finish]}` : ''}
+                    {e.condition !== 'NM' ? ` · ${e.condition}` : ''}
+                  </>
+                }
+                price={formatPrice(...priceOf(e))}
+                onClick={() => action.run('open that card', () => openEntry(i))}
+                ariaLabel={`Edit ${e.name}`}
+              >
                 {showBoards && (
                   <button className="scan-chip" onClick={() => cycleBoard(i)}>
                     {BOARD_NOUN[e.board]}
                   </button>
                 )}
                 <QtyStepper compact value={e.qty} min={0} onChange={(v) => adjust(i, v - e.qty)} label={e.name} />
-              </li>
+              </ScanListRow>
             ))}
           </ul>
         )}

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { CollectionEntry } from '@mtg/shared';
 import { specialLabel } from '@mtg/shared';
+import { ScanListRow } from '../../components/ScanListRow.js';
 import { ContainerPickerBody } from '../../components/ContainerPickerSheet.js';
 import { FilingChoiceBody } from '../../components/FilingChoiceSheet.js';
 import { Sheet } from '../../components/Sheet.js';
@@ -238,27 +239,21 @@ function CardsStep({
               {unowned.map((l) => {
                 const p = state.printings.get(l.line.scryfallId);
                 return (
-                  <li key={l.key} className="scan-list-row">
-                    <label className="scan-list-main" style={{ cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={decisionOf(state, l).collect === 'new'}
-                        onChange={(e) => onSet(l.key, { collect: e.target.checked ? 'new' : 'skip' })}
-                      />
-                      {p?.imageSmall ? (
-                        <img className="scan-list-thumb" src={p.imageSmall} alt="" />
-                      ) : (
-                        <span className="scan-list-thumb" />
-                      )}
-                      <span className="scan-list-info">
-                        <strong>{l.line.name}</strong>
-                        <span className="scan-printing">
-                          {describeCopy(state, { ...l.line, quantity: l.line.quantity > 1 ? l.line.quantity : undefined })}
-                          {showBoards ? ` · ${BOARD_NOUN[l.board]}` : ''}
-                        </span>
-                      </span>
-                    </label>
-                  </li>
+                  <ScanListRow
+                    key={l.key}
+                    image={p?.imageSmall}
+                    name={l.line.name}
+                    sub={
+                      <>
+                        {describeCopy(state, { ...l.line, quantity: l.line.quantity > 1 ? l.line.quantity : undefined })}
+                        {showBoards ? ` · ${BOARD_NOUN[l.board]}` : ''}
+                      </>
+                    }
+                    check={{
+                      checked: decisionOf(state, l).collect === 'new',
+                      onChange: (on) => onSet(l.key, { collect: on ? 'new' : 'skip' }),
+                    }}
+                  />
                 );
               })}
             </ul>

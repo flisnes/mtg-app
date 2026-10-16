@@ -21,7 +21,7 @@ import {
   updateDeckCard,
   updateWishlistEntry,
 } from '../db/dataAccess.js';
-import { getPrintingsForOracle } from '../db/queries.js';
+import { sortOwnedCopies, usePrintingsForOracle } from '../db/usePrintings.js';
 import { canJoinCommandZone, isBasicLand, isCompanion, isNonDeckCard } from '../deck/legality.js';
 import { BOARD_LABEL, boardOptions } from '../deck/boards.js';
 import { CONTAINER_META } from '../deck/containers.js';
@@ -60,6 +60,7 @@ import type { HistoryEntry } from '../history/useHistoryEntries.js';
 import { formatPrice, pickPrice, pricedForFinish } from './CardSorting.js';
 import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
+import { EditionTile } from './EditionTile.js';
 import { Sheet } from './Sheet.js';
 import { TagField } from './TagField.js';
 import { sumQty } from '../util/groupBy.js';
@@ -361,7 +362,7 @@ export function CardSheet(props: CardSheetProps) {
   const showCondition = mode === 'session' ? sessionCard!.condition !== undefined : showCfl;
   const showFinish = mode === 'session' ? sessionCard!.finish !== undefined : showCfl;
   const showLang = mode === 'session' ? sessionCard!.lang !== undefined : showCfl;
-  const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
+  const { printings, loaded: printingsLoaded } = usePrintingsForOracle(oracleCard.oracleId);
   // A printing this card is already tied to: the copy in the collection, the
   // deck's recorded edition, a scanned card, or the one the caller was showing.
   const recordedId = entry?.scryfallId ?? deckCard?.scryfallId ?? sessionCard?.scryfallId ?? initialScryfallId;
@@ -370,7 +371,6 @@ export function CardSheet(props: CardSheetProps) {
   // lookup may still move us off the card DB's default. Painting before both
   // settle flashes the wrong edition for a frame, so the frame stays empty
   // until they do.
-  const [printingsLoaded, setPrintingsLoaded] = useState(false);
   // In wish mode (and for a lands-box basic) the empty string means "any
   // printing" — no specific edition.
   const startId = wishMode
@@ -509,22 +509,6 @@ export function CardSheet(props: CardSheetProps) {
     return () => window.clearTimeout(t);
   }, [added]);
 
-  useEffect(() => {
-    let live = true;
-    void getPrintingsForOracle(oracleCard.oracleId)
-      .then((ps) => {
-        if (live) setPrintings(ps);
-      })
-      // Even a failed read has to release the art: an empty frame forever is
-      // worse than the oracle's default image.
-      .finally(() => {
-        if (live) setPrintingsLoaded(true);
-      });
-    return () => {
-      live = false;
-    };
-  }, [oracleCard.oracleId]);
-
   // Nothing tied this sheet to an edition (adding a card the caller didn't
   // resolve a printing for), so honour the printing preference rather than
   // silently landing on the card DB's representative one. Skipped in wish mode,
@@ -648,13 +632,7 @@ export function CardSheet(props: CardSheetProps) {
   // The exact printings we own — the "view all editions" grid double-checks these.
   const ownedIds = useMemo(() => new Set((ownedEntries ?? []).map((e) => e.scryfallId)), [ownedEntries]);
   // The copies themselves, newest edition first, for "pick one from my collection".
-  const ownedCopies = useMemo(() => {
-    const order = new Map(printings.map((p, i) => [p.scryfallId, i]));
-    const rank = (e: CollectionEntry) => order.get(e.scryfallId) ?? printings.length;
-    return [...(ownedEntries ?? [])].sort(
-      (a, b) => rank(a) - rank(b) || CONDITIONS.indexOf(a.condition) - CONDITIONS.indexOf(b.condition),
-    );
-  }, [ownedEntries, printings]);
+  const ownedCopies = useMemo(() => sortOwnedCopies(ownedEntries ?? [], printings), [ownedEntries, printings]);
   // The "In your collection" badge jumps to a Collection search for this card's
   // name, never from a scan session — leaving that sheet mid-scan would throw
   // the session away — or edit mode, which already shows the entry itself.
@@ -1622,6 +1600,7 @@ export function CardSheet(props: CardSheetProps) {
           containerName={pickingCopies.name}
           kind={pickingCopies.kind}
           copies={ownedCopies}
+          printings={printings}
           startWith={entry?.id}
           onCancel={() => setPickingCopies(null)}
           onFile={(copies) => void fileCopies(pickingCopies.id, pickingCopies.kind, copies)}
@@ -1880,34 +1859,28 @@ export function EditionGrid({
               <span className="edition-tile-caption">No specific edition</span>
             </button>
           )}
-          {shown.map((p) => {
-            const img = p.imageSmall ?? p.imageNormal;
-            return (
-              <button
-                key={p.scryfallId}
-                className={p.scryfallId === selected ? 'edition-tile edition-tile-selected' : 'edition-tile'}
-                onClick={() => onSelect(p.scryfallId)}
-              >
-                <span className="edition-tile-art">
-                  {img ? <img src={img} alt={p.setName} loading="lazy" /> : <span className="edition-tile-ph">{p.setName}</span>}
-                  {ownedIds?.has(p.scryfallId) &&
-                    (ownedForTradeIds?.has(p.scryfallId) ? (
-                      <span className="tile-badge own-trade" title="You own this printing · marked for trade">
-                        <Icon name="tradelist" size={13} />
-                      </span>
-                    ) : (
-                      <span className="tile-badge own-yes" title="You own this exact printing">
-                        <Icon name="checkDouble" size={13} />
-                      </span>
-                    ))}
-                </span>
-                <span className="edition-tile-caption">
-                  <SetSymbol set={p.set} title={p.setName} /> {p.set.toUpperCase()} #{p.collectorNumber} · {p.releasedAt.slice(0, 4)}
-                </span>
-                <span className="edition-tile-sub">{notes?.get(p.scryfallId) ?? formatPrice(p) ?? ''}</span>
-              </button>
-            );
-          })}
+          {shown.map((p) => (
+            <EditionTile
+              key={p.scryfallId}
+              printing={p}
+              selected={p.scryfallId === selected}
+              year
+              onClick={() => onSelect(p.scryfallId)}
+              badges={
+                ownedIds?.has(p.scryfallId) &&
+                (ownedForTradeIds?.has(p.scryfallId) ? (
+                  <span className="tile-badge own-trade" title="You own this printing · marked for trade">
+                    <Icon name="tradelist" size={13} />
+                  </span>
+                ) : (
+                  <span className="tile-badge own-yes" title="You own this exact printing">
+                    <Icon name="checkDouble" size={13} />
+                  </span>
+                ))
+              }
+              sub={notes?.get(p.scryfallId) ?? formatPrice(p) ?? ''}
+            />
+          ))}
         </div>
     </Sheet>
   );

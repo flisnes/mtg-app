@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { ScanListRow } from './ScanListRow.js';
 import { Sheet } from './Sheet.js';
 import { plural } from '../util/format.js';
 
@@ -73,16 +74,13 @@ export function UnownedPromptSheet({
       </div>
       <ul className="scan-list">
         {cards.map((c) => (
-          <li key={c.key} className="scan-list-row">
-            <label className="scan-list-main" style={{ cursor: 'pointer' }}>
-              <input type="checkbox" checked={picked.has(c.key)} onChange={() => onToggle(c.key)} />
-              {c.image ? <img className="scan-list-thumb" src={c.image} alt="" /> : <span className="scan-list-thumb" />}
-              <span className="scan-list-info">
-                <strong>{c.name}</strong>
-                <span className="scan-printing">{c.sub}</span>
-              </span>
-            </label>
-          </li>
+          <ScanListRow
+            key={c.key}
+            image={c.image}
+            name={c.name}
+            sub={c.sub}
+            check={{ checked: picked.has(c.key), onChange: () => onToggle(c.key) }}
+          />
         ))}
       </ul>
       <div className="scan-confirm-actions">

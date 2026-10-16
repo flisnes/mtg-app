@@ -7,9 +7,7 @@ import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { createContainer } from '../db/dataAccess.js';
 import { Emblem } from './Emblem.js';
 import { Sheet } from './Sheet.js';
-import { useAsyncAction } from './useAsyncAction.js';
-import { Loading } from './Loading.js';
-import { MenuRow } from './MenuRow.js';
+import { ListPicker } from './ListPicker.js';
 
 /**
  * Bottom-sheet that lists the user's decks, binders and boxes and reports the
@@ -36,10 +34,7 @@ export function ContainerPickerSheet({
 }) {
   return (
     <Sheet onClose={onClose} title={title} label={label} className="container-picker">
-      <ContainerPickerBody onPick={onPick} {...body} />
-      <div className="sheet-actions">
-        <button onClick={onClose}>Cancel</button>
-      </div>
+      <ContainerPickerBody onPick={onPick} onCancel={onClose} {...body} />
     </Sheet>
   );
 }
@@ -62,11 +57,16 @@ interface ContainerPickerProps {
  * own sheet (give that sheet the `container-picker` class so only the list
  * scrolls).
  */
-export function ContainerPickerBody({ onPick, excludeId, only, noteFor, emptyText }: ContainerPickerProps) {
-  const action = useAsyncAction();
+export function ContainerPickerBody({
+  onPick,
+  excludeId,
+  only,
+  noteFor,
+  emptyText,
+  onCancel,
+}: ContainerPickerProps & { onCancel?: () => void }) {
   const navigate = useNavigate();
   const [kind, setKind] = useState<ContainerKind>('deck');
-  const [newName, setNewName] = useState('');
   const rows = useContainersByRecent();
   const meta = CONTAINER_META[kind];
   const restricted = !!only;
@@ -74,96 +74,74 @@ export function ContainerPickerBody({ onPick, excludeId, only, noteFor, emptyTex
     ?.filter((r) => r.id !== excludeId)
     .filter((r) => (only ? only.has(r.id) : containerKind(r) === kind));
 
-  async function createAndPick() {
-    const id = await createContainer(newName, kind);
-    setNewName('');
-    onPick(id, kind);
-  }
-
   return (
-    <>
-      {!restricted && (
-        <div className="seg-row" role="tablist" aria-label="Container kind">
-          {CONTAINER_KINDS.map((k) => (
-            <button
-              key={k}
-              role="tab"
-              aria-selected={kind === k}
-              className={kind === k ? 'seg seg-active' : 'seg'}
-              onClick={() => setKind(k)}
-            >
-              {CONTAINER_META[k].Plural}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Only the list scrolls: a shelf of thirty decks used to push the kind
-          tabs off the top of the sheet, and binders and boxes looked as if they
-          weren't on offer at all. */}
-      <div className="container-picker-list">
-        {shown === undefined ? (
-          <Loading />
-        ) : shown.length === 0 ? (
-          restricted ? (
-            <div className="empty-state">
-              <p>{emptyText ?? 'Nowhere else holds these.'}</p>
-            </div>
-          ) : (
-            <div className="empty-state">
-              <p>No {meta.Plural.toLowerCase()} yet.</p>
-              <p className="empty-phase">Name one below, or</p>
-              <p className="empty-phase">
-                <button className="linklike" onClick={() => navigate(meta.path)}>
-                  go to {meta.Plural}
-                </button>
-              </p>
-            </div>
-          )
+    <ListPicker
+      items={shown}
+      itemKey={(row) => row.id}
+      onPick={(row) => onPick(row.id, containerKind(row))}
+      render={(row) => {
+        const rowMeta = CONTAINER_META[containerKind(row)];
+        const note = noteFor?.(row.id);
+        return {
+          icon: <Emblem emblem={row.emblem} kind={rowMeta.kind} size={28} />,
+          label: row.name,
+          meta: (rowMeta.kind === 'deck' || note) && (
+            <>
+              {rowMeta.kind === 'deck' && <span className="deck-format">{formatLabel(row.format ?? 'casual')}</span>}
+              {note && <span className="search-meta">{note}</span>}
+            </>
+          ),
+        };
+      }}
+      head={
+        !restricted && (
+          <div className="seg-row" role="tablist" aria-label="Container kind">
+            {CONTAINER_KINDS.map((k) => (
+              <button
+                key={k}
+                role="tab"
+                aria-selected={kind === k}
+                className={kind === k ? 'seg seg-active' : 'seg'}
+                onClick={() => setKind(k)}
+              >
+                {CONTAINER_META[k].Plural}
+              </button>
+            ))}
+          </div>
+        )
+      }
+      // Only the list scrolls: a shelf of thirty decks used to push the kind
+      // tabs off the top of the sheet, and binders and boxes looked as if they
+      // weren't on offer at all.
+      scrollClassName="container-picker-list"
+      empty={
+        restricted ? (
+          <div className="empty-state">
+            <p>{emptyText ?? 'Nowhere else holds these.'}</p>
+          </div>
         ) : (
-          <ul className="menu-list">
-            {shown.map((row) => {
-              const rowMeta = CONTAINER_META[containerKind(row)];
-              const note = noteFor?.(row.id);
-              return (
-                <li key={row.id}>
-                  <MenuRow
-                    onClick={() => onPick(row.id, containerKind(row))}
-                    icon={<Emblem emblem={row.emblem} kind={rowMeta.kind} size={28} />}
-                    label={row.name}
-                    meta={
-                      (rowMeta.kind === 'deck' || note) && (
-                        <>
-                          {rowMeta.kind === 'deck' && (
-                            <span className="deck-format">{formatLabel(row.format ?? 'casual')}</span>
-                          )}
-                          {note && <span className="search-meta">{note}</span>}
-                        </>
-                      )
-                    }
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      {!restricted && (
-        <div className="list-toolbar">
-          <input
-            className="search-input grow"
-            placeholder={`New ${meta.noun} name…`}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && action.run(`create the ${kind}`, createAndPick)}
-            aria-label={`New ${meta.noun} name`}
-          />
-          <button className="primary" onClick={() => action.run(`create the ${kind}`, createAndPick)}>
-            Create &amp; add
-          </button>
-        </div>
-      )}
-    </>
+          <div className="empty-state">
+            <p>No {meta.Plural.toLowerCase()} yet.</p>
+            <p className="empty-phase">Name one below, or</p>
+            <p className="empty-phase">
+              <button className="linklike" onClick={() => navigate(meta.path)}>
+                go to {meta.Plural}
+              </button>
+            </p>
+          </div>
+        )
+      }
+      create={
+        restricted
+          ? undefined
+          : {
+              placeholder: `New ${meta.noun} name…`,
+              label: 'Create & add',
+              what: `create the ${kind}`,
+              onCreate: async (name) => onPick(await createContainer(name, kind), kind),
+            }
+      }
+      onCancel={onCancel}
+    />
   );
 }

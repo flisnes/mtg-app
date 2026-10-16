@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.200.10',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The scan list loads lighter thumbnails, and the import search results look like every other card list.',
+      },
+    ],
+  },
+  {
     version: '0.200.9',
     changes: [
       {

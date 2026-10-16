@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { CONDITIONS, type CollectionEntry, type ContainerKind, type Priced, type Printing } from '@mtg/shared';
+import { type CollectionEntry, type ContainerKind, type Priced, type Printing } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
 import { collectionKey } from '../db/dataAccess.js';
 import { roomForCopies, type FilingCopy } from '../deck/filing.js';
-import { getPrintingsForOracle } from '../db/queries.js';
 import { CopyGrid, copyDetail } from './CopyPicker.js';
 import { Sheet } from './Sheet.js';
 import { Loading } from './Loading.js';
@@ -32,6 +31,7 @@ export function FileCopiesSheet({
   containerName,
   kind,
   copies,
+  printings,
   startWith,
   onCancel,
   onFile,
@@ -41,8 +41,10 @@ export function FileCopiesSheet({
   containerId: string;
   containerName: string;
   kind: ContainerKind;
-  /** Every copy of this card you own. */
+  /** Every copy of this card you own, in sortOwnedCopies order. */
   copies: CollectionEntry[];
+  /** This card's printings, for the tiles. */
+  printings: Priced<Printing>[];
   /** The row the card sheet was opened on: one of it is taken to begin with, so
    *  the button they pressed ("file this copy") still means what it said. */
   startWith?: string;
@@ -54,26 +56,6 @@ export function FileCopiesSheet({
   // so a tile can never offer a copy the write would drop.
   const room = useLiveQuery(() => roomForCopies(containerId, [oracleId]), [containerId, oracleId]);
   const [picked, setPicked] = useState<Picked>(new Map());
-  const [printings, setPrintings] = useState<Priced<Printing>[]>([]);
-
-  useEffect(() => {
-    let live = true;
-    void getPrintingsForOracle(oracleId).then((p) => {
-      if (live) setPrintings(p);
-    });
-    return () => {
-      live = false;
-    };
-  }, [oracleId]);
-
-  // Newest edition first, best condition first — the copy you'd reach for.
-  const shown = useMemo(() => {
-    const order = new Map(printings.map((p, n) => [p.scryfallId, n]));
-    const rank = (e: CollectionEntry) => order.get(e.scryfallId) ?? printings.length;
-    return [...copies].sort(
-      (a, b) => rank(a) - rank(b) || CONDITIONS.indexOf(a.condition) - CONDITIONS.indexOf(b.condition),
-    );
-  }, [copies, printings]);
 
   // One of the copy they came from, as soon as we know there's room for it.
   useEffect(() => {
@@ -108,7 +90,7 @@ export function FileCopiesSheet({
   }
 
   const total = [...picked.values()].reduce((n, q) => n + q, 0);
-  const noRoom = !!room && shown.length > 0 && shown.every((e) => roomFor(e) === 0 && !picked.get(e.id));
+  const noRoom = !!room && copies.length > 0 && copies.every((e) => roomFor(e) === 0 && !picked.get(e.id));
 
   function confirm() {
     const out: FilingCopy[] = [];
@@ -143,7 +125,7 @@ export function FileCopiesSheet({
         <Loading />
       ) : (
         <CopyGrid
-          copies={shown}
+          copies={copies}
           printings={printings}
           hereId={containerId}
           picked={picked}

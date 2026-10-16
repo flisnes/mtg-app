@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.10
+
+- **Changed: one picker, one tile, one row.** The deck/binder/box picker, the folder picker, the emblem's set and card-art lists now share one list component; the edition grid and the "your copies" grid share one tile; the scan list, the "not in your collection" tick-lists and the import fix-a-line search use shared rows. On screen: scan list thumbnails are smaller images and load as you scroll, and the import search results look and behave like every other card list. Same spells, fewer copies of the card.
+
 ## 0.200.9
 
 - **Changed: every sheet closes the same way.** Each sheet now has its ✕ in the top-right corner, including Sort and filter, File away and a sealed product, which had none. The main button always sits bottom-right (Sort's Done and the price chart's Close used to drift left), a sheet that only had a Close button just keeps the ✕, and Remove on a sealed product is outlined red like every other delete. The plus/minus counters in the scan list, trade stacks and sealed products are now the same control as the card sheet's, picked options look alike in every tab row and sort chip, and Escape closes an open ⋯ menu instead of the whole card behind it. The full-screen card view no longer closes on the same tap that opened it. Same deck, sleeved to match.

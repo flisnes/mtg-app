@@ -3,6 +3,7 @@ import { EMBLEM_COLORS, type ContainerEmblem, type ContainerKind, type EmblemCol
 import { getSetList, type CardSetInfo } from '../db/queries.js';
 import { CardSearch, CropStage } from './AvatarEditorSheet.js';
 import { Emblem } from './Emblem.js';
+import { ListPicker } from './ListPicker.js';
 import { EMBLEM_COLOR_CSS, EMBLEM_MANA_PIPS, EMBLEM_SYMBOL_GROUPS, emblemColorLabel } from './emblemSymbols.js';
 import { SetSymbol } from './SetSymbol.js';
 import { Sheet } from './Sheet.js';
@@ -296,50 +297,28 @@ function SetPicker({
   }, [sets, query]);
 
   return (
-    <>
-      <input
-        className="search-input"
-        type="search"
-        placeholder="Search sets…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        aria-label="Search sets"
-      />
-      <ColorRow color={color} onPick={onPickColor} />
-      <div className="emblem-scroll">
-        {sets === null ? (
-          <p className="search-meta">Loading sets…</p>
-        ) : shown.length === 0 ? (
-          <p className="search-meta">No set by that name.</p>
-        ) : (
-          <ul className="menu-list">
-            {shown.map((s) => (
-              <li key={s.set}>
-                <button
-                  className={
-                    s.set === selected ? 'menu-item menu-item-btn emblem-set-selected' : 'menu-item menu-item-btn'
-                  }
-                  onClick={() => onPick(s.set)}
-                >
-                  <span className="menu-icon emblem-set-icon" style={{ color: tint }} aria-hidden>
-                    <SetSymbol set={s.set} />
-                  </span>
-                  <span className="deck-line">
-                    <span className="deck-name">{s.setName}</span>
-                    <span className="deck-meta">
-                      {s.set.toUpperCase()} · {s.releasedAt.slice(0, 4)}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div className="sheet-actions">
-        {onClear && <button onClick={onClear}>Remove emblem</button>}
-        <button onClick={onCancel}>{closeLabel}</button>
-      </div>
-    </>
+    <ListPicker
+      items={sets ? shown : undefined}
+      itemKey={(s) => s.set}
+      onPick={(s) => onPick(s.set)}
+      render={(s) => ({
+        className: s.set === selected ? 'menu-item menu-item-btn emblem-set-selected' : undefined,
+        icon: (
+          <span className="emblem-set-icon" style={{ color: tint }}>
+            <SetSymbol set={s.set} />
+          </span>
+        ),
+        label: s.setName,
+        note: `${s.set.toUpperCase()} · ${s.releasedAt.slice(0, 4)}`,
+        chevron: false,
+      })}
+      search={{ value: query, onChange: setQuery, placeholder: 'Search sets…' }}
+      head={<ColorRow color={color} onPick={onPickColor} />}
+      scrollClassName="emblem-scroll"
+      empty={<p className="search-meta">No set by that name.</p>}
+      actions={onClear && <button onClick={onClear}>Remove emblem</button>}
+      onCancel={onCancel}
+      cancelLabel={closeLabel}
+    />
   );
 }

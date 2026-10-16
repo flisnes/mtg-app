@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.200.11',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Settings has jump links at the top, and deleting your account or all your data asks in a proper confirm sheet. Agent connections are hidden on phones.',
+      },
+    ],
+  },
+  {
     version: '0.200.10',
     changes: [
       {
@@ -145,24 +154,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Community lists, profiles, trade matches and price charts are only downloaded again when they changed, so revisits load right away.',
-      },
-    ],
-  },
-  {
-    version: '0.198.10',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Mover arrows, value-change sorting, the value chart and Price movers share one read of your price history, so big collections stay quick.',
-      },
-    ],
-  },
-  {
-    version: '0.198.9',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Decks, binders, the wishlist, trades and price movers share one read of your cards instead of each looking them up again, so they open faster.',
       },
     ],
   },

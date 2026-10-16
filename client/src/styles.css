@@ -1155,6 +1155,22 @@ button.danger-outline {
 .about-section h2 {
   font-size: 1.05rem;
 }
+/* Settings: jump links to each section, and room above a section it lands on. */
+.settings-index {
+  margin: 0.25rem 0 1rem;
+}
+.settings-index .chip {
+  min-height: var(--tap-sm);
+  padding: 0 0.8rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.settings-index .chip:hover {
+  color: var(--text);
+}
+.about-section[id^='settings-'] {
+  scroll-margin-top: 4.5rem;
+}
 /* Section heading with its sort controls pushed to the right; wraps on narrow
    screens so the controls drop below the title instead of overflowing. */
 .list-section-head {

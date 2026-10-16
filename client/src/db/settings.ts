@@ -11,7 +11,8 @@ import { db } from './schema.js';
 //   activeSoloTrade — in-flight solo trade's snapshot, both sides (resume prompt)
 //   accountSession  — signed-in account {token, username} (account/session.ts)
 //   goblinMode      — unlocks the collection pile view (useGoblinMode.ts)
-//   ownProfileAvatar — cached own profile picture for the header (account/ownProfile.ts)
+//   ownProfile      — cached own profile {username, profile}: the header's picture and
+//     Share's favorite check (account/ownProfile.ts; replaces ownProfileAvatar)
 //   accountLastBackup / accountSyncConflict / accountAutoBackup /
 //   accountLastAutoBackupAt — backup bookkeeping (account/session.ts)
 //   lastSeenAppVersion — app version the "What's changed" popup has caught the

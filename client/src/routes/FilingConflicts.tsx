@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { REMOVAL_REASONS, type OracleCard, type Priced, type Printing, type RemovalReason } from '@mtg/shared';
 import { Page } from './Page.js';
 import { db } from '../db/schema.js';
-import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { useCardMaps } from '../db/useCardMaps.js';
 import { addToCollection, removeDeckCardsMatching, removeFromCollection } from '../db/dataAccess.js';
 import { usePlacementIndex, type FilingConflict } from '../db/usePlacements.js';
 import { CONTAINER_META } from '../deck/containers.js';
@@ -57,14 +56,7 @@ export function FilingConflicts() {
   const [removing, setRemoving] = useState(false);
   const [reason, setReason] = useState<RemovalReason>('sold');
 
-  const cards = useLiveQuery(async () => {
-    if (!conflicts || conflicts.length === 0) return { oracles: new Map(), printings: new Map() };
-    const [oracles, printings] = await Promise.all([
-      getOracleCardsByIds(conflicts.map((c) => c.oracleId)),
-      getPrintingsByIds(conflicts.map((c) => c.scryfallId)),
-    ]);
-    return { oracles, printings };
-  }, [conflicts]);
+  const cards = useCardMaps(conflicts ?? []);
 
   const joined = useMemo((): Joined[] => {
     if (!conflicts) return [];
@@ -72,8 +64,8 @@ export function FilingConflicts() {
       .map((conflict) => ({
         conflict,
         key: keyOf(conflict),
-        oracle: cards?.oracles.get(conflict.oracleId),
-        printing: cards?.printings.get(conflict.scryfallId),
+        oracle: cards.oracleMap?.get(conflict.oracleId),
+        printing: cards.printMap?.get(conflict.scryfallId),
       }))
       .sort((a, b) => (a.oracle?.name ?? '').localeCompare(b.oracle?.name ?? ''));
   }, [conflicts, cards]);

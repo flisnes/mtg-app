@@ -102,34 +102,44 @@ export function StackToggle({ on, onChange }: { on: boolean; onChange: (v: boole
   );
 }
 
-const VIEW_LABELS: Record<ViewMode, { icon: IconName; title: string }> = {
+export type ViewLabels<M extends string> = Record<M, { icon: IconName; title: string }>;
+
+const VIEW_LABELS: ViewLabels<ViewMode> = {
   list: { icon: 'list', title: 'List view' },
   grid: { icon: 'grid', title: 'Grid view' },
   stack: { icon: 'piles', title: 'Visual stacks' },
 };
 
-export function ViewToggle({
+const DEFAULT_VIEWS: readonly ViewMode[] = ['list', 'grid'];
+
+/** Segmented icon toggle. Card views by default; `labels` makes it any other
+ *  set of modes (Community's row/stack layout). */
+export function ViewToggle<M extends string = ViewMode>({
   mode,
   onChange,
-  options = ['list', 'grid'],
+  options = DEFAULT_VIEWS as unknown as readonly M[],
+  labels = VIEW_LABELS as unknown as ViewLabels<M>,
+  label = 'View mode',
 }: {
-  mode: ViewMode;
-  onChange: (m: ViewMode) => void;
-  /** Which views this surface offers, in order. */
-  options?: readonly ViewMode[];
+  mode: M;
+  onChange: (m: M) => void;
+  /** Which modes this surface offers, in order. */
+  options?: readonly M[];
+  labels?: ViewLabels<M>;
+  label?: string;
 }) {
   return (
-    <div className="view-toggle" role="group" aria-label="View mode">
+    <div className="view-toggle" role="group" aria-label={label}>
       {options.map((opt) => (
         <button
           key={opt}
           className={mode === opt ? 'active' : ''}
           onClick={() => onChange(opt)}
           aria-pressed={mode === opt}
-          title={VIEW_LABELS[opt].title}
-          aria-label={VIEW_LABELS[opt].title}
+          title={labels[opt].title}
+          aria-label={labels[opt].title}
         >
-          <Icon name={VIEW_LABELS[opt].icon} size={16} />
+          <Icon name={labels[opt].icon} size={16} />
         </button>
       ))}
     </div>

@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import type { OracleCard, Priced, Printing } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
-import { getOracleCardsByIds } from '../db/queries.js';
+import { useCardMaps } from '../db/useCardMaps.js';
 import { getDebutIndex, getSetIndex, type Debut } from '../cardDb/search.js';
 import { CardItems, useViewMode, ViewToggle, type CardItem } from '../components/CardViews.js';
 import { CardSheet } from '../components/CardSheet.js';
@@ -171,10 +171,7 @@ export function Spoilers() {
 
   // Names live on the oracle card, not the printing, and CardSheet needs the
   // priced oracle card — join only the selected sets' cards.
-  const oracleMap = useLiveQuery(
-    async () => (cards ? getOracleCardsByIds(cards.map((c) => c.oracleId)) : undefined),
-    [cards],
-  );
+  const { oracleMap } = useCardMaps(useMemo(() => (cards ?? []).map((c) => ({ oracleId: c.oracleId })), [cards]));
 
   const items = useMemo<CardItem[]>(() => {
     if (!cards || !oracleMap) return [];
@@ -296,7 +293,7 @@ export function Spoilers() {
                 </button>
               </div>
 
-              {oracleMap === undefined ? (
+              {!cards || oracleMap === undefined ? (
                 <p className="search-meta">Loading cards…</p>
               ) : items.length === 0 ? (
                 <p className="search-meta">

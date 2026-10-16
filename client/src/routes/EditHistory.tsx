@@ -67,7 +67,7 @@ export function EditHistory() {
 
   // Enrich the visible entries with images/names for the rows.
   const allEvents = useMemo(() => entries.flatMap(entryEvents), [entries]);
-  const { printMap, oracleMap } = useCardMaps(allEvents.map((e) => ({ scryfallId: e.scryfallId ?? '', oracleId: e.oracleId })));
+  const { printMap, oracleMap } = useCardMaps(allEvents);
 
   const [openEntry, setOpenEntry] = useState<HistoryEntry | null>(null);
   const [card, setCard] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);

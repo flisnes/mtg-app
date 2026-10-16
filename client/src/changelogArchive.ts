@@ -9,6 +9,24 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.198.10',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Mover arrows, value-change sorting, the value chart and Price movers share one read of your price history, so big collections stay quick.',
+      },
+    ],
+  },
+  {
+    version: '0.198.9',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Decks, binders, the wishlist, trades and price movers share one read of your cards instead of each looking them up again, so they open faster.',
+      },
+    ],
+  },
+  {
     version: '0.198.8',
     changes: [
       {

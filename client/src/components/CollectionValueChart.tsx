@@ -346,7 +346,7 @@ function DayEvents({
   // An import or a trade is one thing that happened, not forty — same grouping
   // the edit-history list uses.
   const entries = useMemo(() => groupEntries([...events].sort((a, b) => b.ts - a.ts)), [events]);
-  const { printMap, oracleMap } = useCardMaps(events.map((e) => ({ scryfallId: e.scryfallId ?? '', oracleId: e.oracleId })));
+  const { printMap, oracleMap } = useCardMaps(events);
 
   if (day == null) {
     return <p className="fine-print">{words.pickHint}</p>;

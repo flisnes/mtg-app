@@ -61,7 +61,7 @@ import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { useFiling } from '../deck/useFiling.js';
 import { buildDeckText } from '../deck/deckText.js';
 import { shareDeckLink } from '../deck/share.js';
-import { getUserProfile } from '../account/api.js';
+import { isFavoriteDeck } from '../account/ownProfile.js';
 import { useAccount } from '../account/useAccount.js';
 import { downloadText } from '../import/export.js';
 import { ImportPanel } from '../import/ImportPanel.js';
@@ -238,7 +238,6 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const toast = useToast();
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const account = useAccount();
-  const [favDeckIds, setFavDeckIds] = useState<Set<string> | null>(null);
   const [showImport, setShowImport] = useState(false);
   // A pasted decklist: hands ContainerImport its text so it can go straight to the
   // review rather than making you paste again into its own box.
@@ -326,31 +325,6 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         : undefined,
     [slotData, ownership],
   );
-
-  // Fetch our own favorited-deck ids so the share action knows whether this
-  // deck is actually browsable — only favorited decks resolve at a share link.
-  useEffect(() => {
-    const session = account.session;
-    if (!account.enabled || !session) {
-      setFavDeckIds(null);
-      return;
-    }
-    let cancelled = false;
-    getUserProfile(session.token, session.username)
-      .then((res) => {
-        if (cancelled) return;
-        const ids = (res.profile?.favoriteDecks ?? [])
-          .map((f) => f.deckId)
-          .filter((x): x is string => typeof x === 'string');
-        setFavDeckIds(new Set(ids));
-      })
-      .catch(() => {
-        if (!cancelled) setFavDeckIds(new Set()); // offline/error — treat as "none known"
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [account.enabled, account.session?.token, account.session?.username]);
 
   // Arriving straight from "Add deck"/"Add binder"/"Add box" (Containers.tsx):
   // the name field is the first thing worth typing into, so focus and select
@@ -906,7 +880,8 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   async function shareDeck() {
     const session = account.session;
     if (!session) return;
-    if (!favDeckIds?.has(deck.id)) {
+    // Only favorited decks resolve at a share link.
+    if (!(await isFavoriteDeck(session, deck.id))) {
       toast('Favorite this deck on your profile to share it');
       return;
     }

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.11
+
+- **Changed: Settings you can find your way around.** Settings now opens with a row of jump links (Account, Prices, Filing, Your data and so on), so you no longer scroll five screens to reach the bottom. Deleting your account or all your local data asks in the same confirm sheet as every other irreversible action, instead of swapping the button for an inline "Yes, delete". Agent connections are hidden on phones, where they can't work anyway (still shown if you switched them on). On Community, the rows/stacks switch got proper icons instead of ⇄ and ≣. Under the hood, the account pages share one sign-in gate and one way of loading from the server, and your own profile is cached on the device, so opening a deck no longer downloads your whole profile just in case you tap Share. Tapping Share still checks the server when the deck isn't in the cache yet.
+
 ## 0.200.10
 
 - **Changed: one picker, one tile, one row.** The deck/binder/box picker, the folder picker, the emblem's set and card-art lists now share one list component; the edition grid and the "your copies" grid share one tile; the scan list, the "not in your collection" tick-lists and the import fix-a-line search use shared rows. On screen: scan list thumbnails are smaller images and load as you scroll, and the import search results look and behave like every other card list. Same spells, fewer copies of the card.

@@ -39,6 +39,12 @@ export class ApiError extends Error {
   }
 }
 
+/** What to show for a failed call: the server's own words when it sent any. */
+export function apiErrorText(err: unknown, fallback = 'Something went wrong.'): string {
+  if (err instanceof ApiError) return err.friendlyMessage;
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
 async function request<T>(
   path: string,
   opts: { method?: string; token?: string; body?: unknown } = {},

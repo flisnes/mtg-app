@@ -44,6 +44,8 @@ export type IconName =
   | 'qr'
   | 'list'
   | 'grid'
+  | 'carousel'
+  | 'sections'
   | 'flip'
   | 'spoilers'
   | 'share'
@@ -356,6 +358,22 @@ const PATHS: Record<IconName, ReactElement> = {
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="14" y="14" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
+    </>
+  ),
+  // One card full on, its neighbours peeking in from the sides: a swipeable row.
+  carousel: (
+    <>
+      <rect x="7" y="4" width="10" height="16" rx="1" />
+      <path d="M3 6v12" />
+      <path d="M21 6v12" />
+    </>
+  ),
+  // Three bands stacked down the page: lists laid out one under another.
+  sections: (
+    <>
+      <rect x="3" y="3" width="18" height="5" rx="1" />
+      <rect x="3" y="10" width="18" height="5" rx="1" />
+      <path d="M3 19h18" />
     </>
   ),
   // Two curved arrows turning around — flip a double-faced card over.

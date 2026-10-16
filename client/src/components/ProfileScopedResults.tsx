@@ -9,7 +9,7 @@ import { ResultsList, resultCount } from './ResultsList.js';
 import { SortControls, priceValue, releaseFields, sortCards, useCardSort, type SortFields } from './CardSorting.js';
 import {
   useUserLists,
-  useResolvedCards,
+  useListCardMaps,
   useMyWants,
   useMyCollection,
   tradeLineItem,
@@ -41,7 +41,7 @@ export function ProfileScopedResults({
   showWish: boolean;
 }) {
   const { lists, error } = useUserLists(token, username);
-  const cards = useResolvedCards(lists);
+  const cards = useListCardMaps(lists);
   const iWant = useMyWants();
   const { have: iHave, own: iOwn } = useMyCollection();
   const [sort, setSort] = useCardSort('profile');
@@ -60,7 +60,7 @@ export function ProfileScopedResults({
         q.matches(
           toSearchableEntry(
             oracle,
-            rowPrintingSummary(line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined, line.finish),
+            rowPrintingSummary(line.scryfallId ? cards.printMap?.get(line.scryfallId) : undefined, line.finish),
           ),
         ));
 
@@ -69,7 +69,7 @@ export function ProfileScopedResults({
     const showYear = sort.key === 'released';
     const out: { item: CardItem; fields: SortFields }[] = [];
     const fieldsFor = (oracle: Priced<OracleCard> | undefined, scryfallId: string | null): SortFields => {
-      const printing = scryfallId ? cards?.printings.get(scryfallId) : undefined;
+      const printing = scryfallId ? cards.printMap?.get(scryfallId) : undefined;
       return {
         name: oracle?.name,
         cmc: oracle?.cmc,
@@ -79,7 +79,7 @@ export function ProfileScopedResults({
     };
     if (showTrade) {
       lists.tradelist.forEach((line, i) => {
-        const oracle = cards?.oracles.get(line.oracleId);
+        const oracle = cards.oracleMap?.get(line.oracleId);
         if (!matchesQuery(oracle, line)) return;
         out.push({
           item: tradeLineItem(line, `t:${line.scryfallId}-${i}`, cards, { match: iWant(line), hi: false, showYear }, (o) =>
@@ -91,7 +91,7 @@ export function ProfileScopedResults({
     }
     if (showWish) {
       lists.wishlist.forEach((line, i) => {
-        const oracle = cards?.oracles.get(line.oracleId);
+        const oracle = cards.oracleMap?.get(line.oracleId);
         if (!matchesQuery(oracle, line)) return;
         const match = iHave(line);
         const own = !match && iOwn(line);

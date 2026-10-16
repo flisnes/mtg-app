@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Finish, PublicUser, TradeLine, WishLine } from '@mtg/shared';
-import { ApiError, listUsers } from '../account/api.js';
-import { useAccount } from '../account/useAccount.js';
+import { listUsers } from '../account/api.js';
+import { useApiQuery } from '../account/useApiQuery.js';
+import { RequireAccount } from '../components/RequireAccount.js';
 import { Avatar } from '../components/Avatar.js';
 import { CardRow } from '../components/CardRow.js';
 import { CardSheet } from '../components/CardSheet.js';
@@ -12,6 +13,7 @@ import {
   useGridColumns,
   useViewMode,
   type CardItem,
+  type ViewLabels,
   type ViewMode,
 } from '../components/CardViews.js';
 import {
@@ -32,12 +34,12 @@ import {
   wishLineItem,
   useMyCollection,
   useMyWants,
-  useResolvedCards,
+  useListCardMaps,
   useUserLists,
-  type CardMaps,
   type InfoTarget,
 } from '../community/userLists.js';
 import { fmtDate, plural } from '../util/format.js';
+import type { CardMaps } from '../db/useCardMaps.js';
 import { EmptyState, Page, usePageMeta } from './Page.js';
 import { Loading } from '../components/Loading.js';
 
@@ -64,6 +66,11 @@ function rankOf(r: { hi: boolean; match: boolean; own: boolean }): number {
 /** Two layouts for a user's lists: swipeable rows (default) or the old stacks. */
 type Layout = 'row' | 'stack';
 const LAYOUT_KEY = 'communityLayout';
+const LAYOUT_OPTIONS: readonly Layout[] = ['row', 'stack'];
+const LAYOUT_LABELS: ViewLabels<Layout> = {
+  row: { icon: 'carousel', title: 'Swipeable rows' },
+  stack: { icon: 'sections', title: 'Stacked grid' },
+};
 
 function useLayout(): [Layout, (l: Layout) => void] {
   const [layout, setLayout] = useState<Layout>(() => {
@@ -90,9 +97,9 @@ function useLayout(): [Layout, (l: Layout) => void] {
 // that card, a specific-printing wish matches only itself.
 
 /** Sort fields for a trade line, resolved against the viewer's card DB. */
-function tradeFields(line: TradeLine, cards: CardMaps | undefined): SortFields {
-  const oracle = cards?.oracles.get(line.oracleId);
-  const printing = cards?.printings.get(line.scryfallId);
+function tradeFields(line: TradeLine, cards: CardMaps): SortFields {
+  const oracle = cards.oracleMap?.get(line.oracleId);
+  const printing = cards.printMap?.get(line.scryfallId);
   return {
     name: oracle?.name ?? line.name,
     cmc: oracle?.cmc,
@@ -102,9 +109,9 @@ function tradeFields(line: TradeLine, cards: CardMaps | undefined): SortFields {
 }
 
 /** Sort fields for a wish line (may be "any printing" and have no finish). */
-function wishFields(line: WishLine, cards: CardMaps | undefined): SortFields {
-  const oracle = cards?.oracles.get(line.oracleId);
-  const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
+function wishFields(line: WishLine, cards: CardMaps): SortFields {
+  const oracle = cards.oracleMap?.get(line.oracleId);
+  const printing = line.scryfallId ? cards.printMap?.get(line.scryfallId) : undefined;
   return {
     name: oracle?.name ?? line.name,
     cmc: oracle?.cmc,
@@ -114,27 +121,23 @@ function wishFields(line: WishLine, cards: CardMaps | undefined): SortFields {
 }
 
 export function Community() {
-  const account = useAccount();
-
-  if (!account.enabled || account.session === null) {
-    return (
-      <Page title="Community" subtitle="Browse other users’ trade and wishlists.">
-        <EmptyState hint={<Link to="/settings">Go to Settings</Link>}>
-          {account.enabled
-            ? 'Sign in to browse other users’ lists. Your own trade and wishlist are shared when you back up.'
-            : 'Accounts aren’t configured for this build yet.'}
-        </EmptyState>
-      </Page>
-    );
-  }
-  if (account.session === undefined) return <Page title="Community">{null}</Page>;
-
-  return <CommunityBrowser token={account.session.token} me={account.session.username} />;
+  return (
+    <RequireAccount
+      title="Community"
+      subtitle="Browse other users’ trade and wishlists."
+      signedOutText="Sign in to browse other users’ lists. Your own trade and wishlist are shared when you back up."
+    >
+      {(session) => <CommunityBrowser token={session.token} me={session.username} />}
+    </RequireAccount>
+  );
 }
 
 function CommunityBrowser({ token, me }: { token: string; me: string }) {
-  const [users, setUsers] = useState<PublicUser[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data: users, error } = useApiQuery(
+    () => listUsers(token).then((res): PublicUser[] => res.users),
+    [token],
+    { fallback: 'Could not load users.' },
+  );
   // Selection lives in the URL (/community/:username) so notifications can
   // deep-link straight to a user. The matched oracleIds come in per direction —
   // ?hiTrade=… for their tradelist, ?hiWish=… for their wishlist.
@@ -150,20 +153,6 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
     }),
     [hiTrade, hiWish],
   );
-
-  useEffect(() => {
-    let cancelled = false;
-    listUsers(token)
-      .then((res) => {
-        if (!cancelled) setUsers(res.users);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.friendlyMessage : 'Could not load users.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
 
   if (selected) {
     return (
@@ -223,7 +212,7 @@ function CommunityBrowser({ token, me }: { token: string; me: string }) {
 
 function buildTradeItems(
   rows: TradeEntry[],
-  cards: CardMaps | undefined,
+  cards: CardMaps,
   onOpen: (t: InfoTarget) => void,
   showYear?: boolean,
 ): CardItem[] {
@@ -236,7 +225,7 @@ function buildTradeItems(
 
 function buildWishItems(
   rows: WishEntry[],
-  cards: CardMaps | undefined,
+  cards: CardMaps,
   onOpen: (t: InfoTarget) => void,
   showYear?: boolean,
 ): CardItem[] {
@@ -271,7 +260,7 @@ function UserLists({
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { lists, error } = useUserLists(token, username);
-  const cards = useResolvedCards(lists);
+  const cards = useListCardMaps(lists);
   const [layout, setLayout] = useLayout();
   const [view, setView] = useViewMode();
   const [info, setInfo] = useState<InfoTarget | null>(null);
@@ -426,7 +415,7 @@ function UserLists({
               <span />
             )}
             <div className="meta-actions">
-              <LayoutToggle layout={layout} onChange={setLayout} />
+              <ViewToggle mode={layout} onChange={setLayout} options={LAYOUT_OPTIONS} labels={LAYOUT_LABELS} label="Layout" />
               {layout === 'stack' && <ViewToggle mode={view} onChange={setView} />}
             </div>
           </div>
@@ -462,30 +451,6 @@ function UserLists({
       )}
       {sheet}
     </Page>
-  );
-}
-
-/** Row/stack toggle mirroring ViewToggle's look. */
-function LayoutToggle({ layout, onChange }: { layout: Layout; onChange: (l: Layout) => void }) {
-  return (
-    <div className="view-toggle" role="group" aria-label="Layout">
-      <button
-        className={layout === 'row' ? 'active' : ''}
-        onClick={() => onChange('row')}
-        aria-pressed={layout === 'row'}
-        title="Swipeable rows"
-      >
-        ⇄
-      </button>
-      <button
-        className={layout === 'stack' ? 'active' : ''}
-        onClick={() => onChange('stack')}
-        aria-pressed={layout === 'stack'}
-        title="Stacked grid"
-      >
-        ≣
-      </button>
-    </div>
   );
 }
 

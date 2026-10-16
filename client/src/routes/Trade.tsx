@@ -6,7 +6,7 @@ import { CODE_LENGTH, wishPrefsMet, type CollectionEntry, type Condition, type F
 import { Page, EmptyState } from './Page.js';
 import { db } from '../db/schema.js';
 import { collectionKey } from '../db/dataAccess.js';
-import { getOracleCardsByIds, getPrintingsByIds, type JoinedEntry } from '../db/queries.js';
+import type { JoinedEntry } from '../db/queries.js';
 import { useCollectionEntries, useJoinedCollection, useWishes } from '../db/collectionSnapshot.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { useCardMaps } from '../db/useCardMaps.js';
@@ -1149,16 +1149,9 @@ function BalancePanel({
 }) {
   // My tradelist (with prices) plus display data for their tradelist.
   const mine = useTradelistRows();
-  const data = useLiveQuery(async () => {
-    const peerLines = peerTradelist ?? [];
-    const [printings, oracles] = await Promise.all([
-      getPrintingsByIds(peerLines.map((l) => l.scryfallId)),
-      getOracleCardsByIds(peerLines.map((l) => l.oracleId)),
-    ]);
-    return { printings, oracles };
-  }, [(peerTradelist ?? []).map((l) => l.scryfallId).join(',')]);
+  const { printMap, oracleMap } = useCardMaps(peerTradelist ?? []);
 
-  if (!data || !mine) return <Loading fine />;
+  if (!printMap || !oracleMap || !mine) return <Loading fine />;
 
   const gap = Math.abs(diff);
   if (gap < BALANCE_EPSILON) {
@@ -1178,7 +1171,7 @@ function BalancePanel({
   const pool: BalanceCandidate[] = (
     iGiveMore
       ? (peerTradelist ?? []).map((l): BalanceCandidate => {
-          const printing = data.printings.get(l.scryfallId);
+          const printing = printMap.get(l.scryfallId);
           const line = { ...l, quantity: 1 };
           return {
             key: lineKey(l),
@@ -1188,7 +1181,7 @@ function BalancePanel({
             price: pricedForFinish(printing, l.finish)?.priceEur ?? 0,
             qty: l.quantity - (offered.get(lineKey(l)) ?? 0),
             wanted: myWanted(l),
-            oracle: data.oracles.get(l.oracleId),
+            oracle: oracleMap.get(l.oracleId),
             printing,
           };
         })

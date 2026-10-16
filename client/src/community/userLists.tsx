@@ -1,17 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useMemo } from 'react';
 import {
   wishMatchesCopy,
   type CollectionEntry,
   type OracleCard,
   type Priced,
-  type Printing,
   type TradeLine,
   type WishLine,
   type WishlistEntry,
 } from '@mtg/shared';
-import { ApiError, getUserLists } from '../account/api.js';
-import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { getUserLists } from '../account/api.js';
+import { useApiQuery } from '../account/useApiQuery.js';
+import { useCardMaps, type CardMaps } from '../db/useCardMaps.js';
 import { useCollectionEntries, useWishes } from '../db/collectionSnapshot.js';
 
 /** Stable while the snapshot loads, so the matcher memo doesn't churn. */
@@ -28,12 +27,6 @@ import type { CardItem } from '../components/CardViews.js';
 // fetch + card-DB resolution, the "does this match my own stuff" matchers, and
 // the row builders. Used by the Community page and by the global search when it
 // scopes into the profile you're browsing.
-
-/** Resolved card-DB data for the lines we're showing, from the viewer's local DB. */
-export interface CardMaps {
-  oracles: Map<string, Priced<OracleCard>>;
-  printings: Map<string, Priced<Printing>>;
-}
 
 interface UserListsData {
   updatedAt: number;
@@ -64,46 +57,24 @@ function wishDetail(l: WishLine): string {
 
 /** Fetch + sanitize another user's published lists. Untrusted input, same as trade shares. */
 export function useUserLists(token: string, username: string): { lists: UserListsData | null; error: string | null } {
-  const [lists, setLists] = useState<UserListsData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    setLists(null);
-    setError(null);
-    getUserLists(token, username)
-      .then((res) => {
-        if (cancelled) return;
-        setLists({
+  const { data, error } = useApiQuery(
+    () =>
+      getUserLists(token, username).then(
+        (res): UserListsData => ({
           updatedAt: res.updatedAt,
           tradelist: sanitizePublicTradelist(res.tradelist),
           wishlist: sanitizePublicWishlist(res.wishlist),
-        });
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.friendlyMessage : 'Could not load lists.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, username]);
-  return { lists, error };
+        }),
+      ),
+    [token, username],
+    { fallback: 'Could not load lists.' },
+  );
+  return { lists: data, error };
 }
 
-/** Resolve images and set/printing detail from the viewer's own synced card DB. */
-export function useResolvedCards(lists: UserListsData | null): CardMaps | undefined {
-  return useLiveQuery<CardMaps>(async () => {
-    if (!lists) return { oracles: new Map(), printings: new Map() };
-    const oracleIds = [...lists.tradelist, ...lists.wishlist].map((l) => l.oracleId);
-    const scryfallIds = [
-      ...lists.tradelist.map((l) => l.scryfallId),
-      ...lists.wishlist.map((l) => l.scryfallId),
-    ].filter((id): id is string => id !== null);
-    const [oracles, printings] = await Promise.all([
-      getOracleCardsByIds(oracleIds),
-      getPrintingsByIds(scryfallIds),
-    ]);
-    return { oracles, printings };
-  }, [lists]);
+/** Every line of both lists, for resolving their cards against the viewer's DB. */
+export function useListCardMaps(lists: UserListsData | null): CardMaps {
+  return useCardMaps(useMemo(() => [...(lists?.tradelist ?? []), ...(lists?.wishlist ?? [])], [lists]));
 }
 
 /** Matcher over their wishlist lines (null = any printing of the card). */
@@ -151,12 +122,12 @@ export function useMyCollection(): { have: HaveFn; own: HaveFn } {
 export function tradeLineItem(
   line: TradeLine,
   key: string,
-  cards: CardMaps | undefined,
+  cards: CardMaps,
   flags: { match: boolean; hi: boolean; showYear?: boolean },
   onOpen?: (oracle: Priced<OracleCard>) => void,
 ): CardItem {
-  const oracle = cards?.oracles.get(line.oracleId);
-  const printing = cards?.printings.get(line.scryfallId);
+  const oracle = cards.oracleMap?.get(line.oracleId);
+  const printing = cards.printMap?.get(line.scryfallId);
   const lang = langMark(line.lang);
   const year = yearMark(printing, flags.showYear);
   return {
@@ -188,12 +159,12 @@ export function tradeLineItem(
 export function wishLineItem(
   line: WishLine,
   key: string,
-  cards: CardMaps | undefined,
+  cards: CardMaps,
   flags: { match: boolean; own: boolean; hi: boolean; showYear?: boolean },
   onOpen?: (oracle: Priced<OracleCard>) => void,
 ): CardItem {
-  const oracle = cards?.oracles.get(line.oracleId);
-  const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
+  const oracle = cards.oracleMap?.get(line.oracleId);
+  const printing = line.scryfallId ? cards.printMap?.get(line.scryfallId) : undefined;
   const detail = wishDetail(line);
   const printingSub = line.scryfallId ? (
     printing ? (

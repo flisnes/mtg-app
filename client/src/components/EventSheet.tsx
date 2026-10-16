@@ -25,7 +25,7 @@ export function EventSheet({
   onUndo?: () => void;
 }) {
   const events = entryEvents(entry);
-  const { printMap, oracleMap } = useCardMaps(events.map((e) => ({ scryfallId: e.scryfallId ?? '', oracleId: e.oracleId })));
+  const { printMap, oracleMap } = useCardMaps(events);
 
   const display = entry.kind === 'batch' ? describeBatch(entry.source, entry.label, entry.events) : describeEvent(entry.event);
   const totalCards = batchCount(events);

@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   sanitizeDeckLines,
   type DeckFormat,
@@ -9,9 +8,10 @@ import {
   type Printing,
   type PublicDeckLine,
 } from '@mtg/shared';
-import { ApiError, getUserDeck } from '../account/api.js';
-import { useAccount } from '../account/useAccount.js';
-import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
+import { getUserDeck } from '../account/api.js';
+import { useApiQuery } from '../account/useApiQuery.js';
+import { RequireAccount } from '../components/RequireAccount.js';
+import { useCardMaps } from '../db/useCardMaps.js';
 import { formatLabel } from '../deck/legality.js';
 import { deckSize } from '../deck/boards.js';
 import { CardSheet } from '../components/CardSheet.js';
@@ -58,77 +58,45 @@ interface DeckEntry {
 
 export function ProfileDeck() {
   const { username = '', deckId = '' } = useParams<{ username: string; deckId: string }>();
-  const account = useAccount();
-
-  if (!account.enabled || account.session === null) {
-    return (
-      <Page title="Deck">
-        <EmptyState hint={<Link to="/settings">Go to Settings</Link>}>
-          {account.enabled ? 'Sign in to view decks.' : 'Accounts aren’t configured for this build yet.'}
-        </EmptyState>
-      </Page>
-    );
-  }
-  if (account.session === undefined) return <Page title="Deck">{null}</Page>;
-
-  return <ProfileDeckView token={account.session.token} username={username} deckId={deckId} />;
+  return (
+    <RequireAccount title="Deck" signedOutText="Sign in to view decks.">
+      {(session) => <ProfileDeckView token={session.token} username={username} deckId={deckId} />}
+    </RequireAccount>
+  );
 }
 
 function ProfileDeckView({ token, username, deckId }: { token: string; username: string; deckId: string }) {
   const navigate = useNavigate();
   const toast = useToast();
-  const [deck, setDeck] = useState<LoadedDeck | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useViewMode();
-  const [sort, setSort] = useCardSort('profileDeck', { group: 'type' });
-  const [info, setInfo] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getUserDeck(token, username, deckId)
-      .then((res) => {
-        if (cancelled) return;
+  const { data: deck, error } = useApiQuery(
+    () =>
+      getUserDeck(token, username, deckId).then(
         // Another user's deck is untrusted input, same as their profile.
-        setDeck({
+        (res): LoadedDeck => ({
           name: typeof res.name === 'string' ? res.name.slice(0, 80) : '(unnamed deck)',
           format: typeof res.format === 'string' ? res.format.slice(0, 20) : 'casual',
           description: typeof res.description === 'string' ? res.description.slice(0, 1000) : undefined,
           updatedAt: Number(res.updatedAt) || 0,
           lines: sanitizeDeckLines(res.lines),
-        });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(
-          err instanceof ApiError && err.status === 404
-            ? 'This deck isn’t shared (or isn’t synced to the server yet).'
-            : err instanceof ApiError
-              ? err.friendlyMessage
-              : 'Could not load the deck.',
-        );
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, username, deckId]);
+        }),
+      ),
+    [token, username, deckId],
+    { fallback: 'Could not load the deck.', notFound: 'This deck isn’t shared (or isn’t synced to the server yet).' },
+  );
+  const [view, setView] = useViewMode();
+  const [sort, setSort] = useCardSort('profileDeck', { group: 'type' });
+  const [info, setInfo] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
 
   // Resolve names/images from the viewer's own card DB by id.
-  const cards = useLiveQuery(async () => {
-    const lines = deck?.lines ?? [];
-    const [oracles, printings] = await Promise.all([
-      getOracleCardsByIds(lines.map((l) => l.oracleId)),
-      getPrintingsByIds(lines.map((l) => l.scryfallId).filter((id): id is string => !!id)),
-    ]);
-    return { oracles, printings };
-  }, [deck]);
+  const cards = useCardMaps(deck?.lines ?? []);
 
   const boards = useMemo(() => {
     if (!deck) return [];
     return BOARD_ORDER.map(({ board, title }) => {
       const lines = deck.lines.filter((l) => l.board === board);
       const entries: DeckEntry[] = lines.map((line, i) => {
-        const oracle = cards?.oracles.get(line.oracleId);
-        const printing = line.scryfallId ? cards?.printings.get(line.scryfallId) : undefined;
+        const oracle = cards.oracleMap?.get(line.oracleId);
+        const printing = line.scryfallId ? cards.printMap?.get(line.scryfallId) : undefined;
         const year = yearMark(printing, sort.key === 'released');
         const item: CardItem = {
           key: `${line.oracleId}-${line.scryfallId ?? ''}-${i}`,

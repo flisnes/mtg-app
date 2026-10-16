@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   MAX_FAVORITES,
   sanitizeProfile,
@@ -13,10 +12,12 @@ import {
   type ProfileAvatar,
   type UserProfile,
 } from '@mtg/shared';
-import { ApiError, getUserProfile, putProfile } from '../account/api.js';
-import { rememberOwnAvatar } from '../account/ownProfile.js';
-import { useAccount } from '../account/useAccount.js';
-import { getOracleCardsByIds, getPrintingsByIds, getPrintingsForOracle } from '../db/queries.js';
+import { apiErrorText, getUserProfile, putProfile } from '../account/api.js';
+import { rememberOwnProfile } from '../account/ownProfile.js';
+import { useApiQuery } from '../account/useApiQuery.js';
+import { RequireAccount } from '../components/RequireAccount.js';
+import { getPrintingsForOracle } from '../db/queries.js';
+import { useCardMaps } from '../db/useCardMaps.js';
 import { formatLabel } from '../deck/legality.js';
 import { containerKind } from '../deck/containers.js';
 import { useDeckSummaries } from '../deck/deckSummary.js';
@@ -42,62 +43,37 @@ import { plural } from '../util/format.js';
 
 export function Profile() {
   const { username = '' } = useParams<{ username: string }>();
-  const account = useAccount();
-
-  if (!account.enabled || account.session === null) {
-    return (
-      <Page title="Profile">
-        <EmptyState hint={<Link to="/settings">Go to Settings</Link>}>
-          {account.enabled ? 'Sign in to view profiles.' : 'Accounts aren’t configured for this build yet.'}
-        </EmptyState>
-      </Page>
-    );
-  }
-  if (account.session === undefined) return <Page title="Profile">{null}</Page>;
-
   return (
-    <ProfileView
-      token={account.session.token}
-      username={username}
-      isMe={account.session.username.toLowerCase() === username.toLowerCase()}
-    />
+    <RequireAccount title="Profile" signedOutText="Sign in to view profiles.">
+      {(session) => (
+        <ProfileView
+          token={session.token}
+          username={username}
+          isMe={session.username.toLowerCase() === username.toLowerCase()}
+        />
+      )}
+    </RequireAccount>
   );
 }
 
 function ProfileView({ token, username, isMe }: { token: string; username: string; isMe: boolean }) {
   const navigate = useNavigate();
   const toast = useToast();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data: profile, error, setData: setProfile } = useApiQuery(
+    () =>
+      getUserProfile(token, username).then((res) => {
+        // Another user's profile is untrusted input, same as trade shares.
+        const clean = sanitizeProfile(res.profile);
+        if (isMe) void rememberOwnProfile(username, clean);
+        return clean;
+      }),
+    [token, username],
+    { fallback: 'Could not load the profile.', notFound: 'No such user.' },
+  );
   const [editingAvatar, setEditingAvatar] = useState(false);
   const [cardSlot, setCardSlot] = useState<number | null>(null);
   const [deckSlot, setDeckSlot] = useState<number | null>(null);
   const [info, setInfo] = useState<{ oracle: Priced<OracleCard>; scryfallId?: string } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getUserProfile(token, username)
-      .then((res) => {
-        if (cancelled) return;
-        // Another user's profile is untrusted input, same as trade shares.
-        const clean = sanitizeProfile(res.profile);
-        setProfile(clean);
-        if (isMe) void rememberOwnAvatar(clean.avatar);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(
-          err instanceof ApiError && err.status === 404
-            ? 'No such user.'
-            : err instanceof ApiError
-              ? err.friendlyMessage
-              : 'Could not load the profile.',
-        );
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, username]);
 
   /** Apply an edit locally and push the whole profile to the server. */
   function save(update: (p: UserProfile) => UserProfile) {
@@ -105,29 +81,21 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
     const prev = profile;
     const next = update(profile);
     setProfile(next);
-    void rememberOwnAvatar(next.avatar); // keep the header's cached copy current
+    void rememberOwnProfile(username, next); // keep the header's and Share's cached copy current
     putProfile(token, next)
       .then(() => toast('Profile saved'))
       .catch((err) => {
         // Roll back the optimistic change (and the header cache) so the UI
         // doesn't keep showing an edit the server rejected.
         setProfile(prev);
-        void rememberOwnAvatar(prev.avatar);
-        toast(err instanceof ApiError ? err.friendlyMessage : 'Could not save your profile.');
+        void rememberOwnProfile(username, prev);
+        toast(apiErrorText(err, 'Could not save your profile.'));
       });
   }
 
   // Resolve favorite-card art from the viewer's own card DB (ids travel, pixels don't).
-  const cards = useLiveQuery(async () => {
-    const favs = profile?.favoriteCards ?? [];
-    const [oracles, printings] = await Promise.all([
-      getOracleCardsByIds(favs.map((f) => f.oracleId)),
-      getPrintingsByIds(favs.map((f) => f.scryfallId)),
-    ]);
-    return { oracles, printings };
-  }, [profile]);
-
   const favCards = profile?.favoriteCards ?? [];
+  const cards = useCardMaps(favCards);
   const favDecks = profile?.favoriteDecks ?? [];
   // Own profile always shows all three slots (empty ones invite a pick).
   const cardSlots = isMe ? MAX_FAVORITES : favCards.length;
@@ -181,8 +149,8 @@ function ProfileView({ token, username, isMe }: { token: string; username: strin
                       </button>
                     );
                   }
-                  const oracle = cards?.oracles.get(fav.oracleId);
-                  const printing = cards?.printings.get(fav.scryfallId);
+                  const oracle = cards.oracleMap?.get(fav.oracleId);
+                  const printing = cards.printMap?.get(fav.scryfallId);
                   const image = printing?.imageNormal ?? oracle?.imageNormal ?? null;
                   const open = isMe
                     ? () => setCardSlot(i)

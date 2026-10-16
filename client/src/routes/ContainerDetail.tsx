@@ -55,7 +55,7 @@ import {
   pairButtonLabel,
   type LegalityReport,
 } from '../deck/legality.js';
-import { useOpenPairSearch, useOpenSearch } from '../components/GlobalSearch.js';
+import { useOpenPairSearch, useOpenSearch } from '../search/searchContext.js';
 import { DeckSummary, StorageSummary } from '../components/ContainerSummary.js';
 import { CONTAINER_META, containerKind } from '../deck/containers.js';
 import { useFiling } from '../deck/useFiling.js';

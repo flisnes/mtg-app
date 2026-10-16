@@ -26,7 +26,7 @@ export type Scope = 'collection' | 'wishlist' | 'tradelist';
 // tapping through to the same editor. An empty query lists everything in scope.
 //
 // This is the *away* case only — search scoped to the page you're already on
-// filters that page in place instead (see GlobalSearch). Multi-select and the
+// filters that page in place instead (see search/searchContext). Multi-select and the
 // bulk actions still live on the list pages, but sorting doesn't: it's the same
 // rows in the same order, so it reads the list's own `cardSort:<scope>`
 // preference and offers the same options. Reorder your tradelist from a deck

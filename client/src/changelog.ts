@@ -32,6 +32,14 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.200.14',
+    changes: [
+      { kind: 'fixed', text: 'Searching "bolt" ranks Lightning Bolt with the other Bolts, and cards you own first among equals.' },
+      { kind: 'fixed', text: 'Find a partner shows the legal partners again.' },
+      { kind: 'changed', text: 'The empty search screen lists your recent searches. One close button in the search bar, not two.' },
+    ],
+  },
+  {
     version: '0.200.13',
     changes: [
       { kind: 'changed', text: 'With Stack printings on, the trade pickers show one row per card. Trade history shows each card\'s set.' },

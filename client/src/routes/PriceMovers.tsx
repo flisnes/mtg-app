@@ -15,7 +15,7 @@ import { getPrefs } from '../prefs.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { ListSortControls, sortRows, useListSort, type ListSortPrefs } from '../components/CardSorting.js';
-import { ListSearchButton, useListFilter } from '../components/GlobalSearch.js';
+import { ListSearchButton, useListFilter } from '../search/searchContext.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { Sparkline } from '../components/Sparkline.js';
 import { SetSymbol } from '../components/SetSymbol.js';

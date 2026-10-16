@@ -46,7 +46,7 @@ import { FINISH_LABELS, LANGS } from './copyTraits.js';
 import { FileCopiesSheet } from './FileCopiesSheet.js';
 import { SheetSelectField, SheetSelectList, type SheetSelectOption } from './SheetSelect.js';
 import { EventSheet } from './EventSheet.js';
-import { useOpenCollectionSearch, useOpenDbSearch } from './GlobalSearch.js';
+import { useOpenCollectionSearch, useOpenDbSearch } from '../search/searchContext.js';
 import { Icon, type IconName } from './icons.js';
 import { OptionsMenu } from './OptionsMenu.js';
 import { CardLegalitySheet } from './CardLegalitySheet.js';

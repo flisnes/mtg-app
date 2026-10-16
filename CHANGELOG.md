@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.14
+
+- **Fixed: "bolt" finds Lightning Bolt.** Best match now ranks a card that has your word as a whole word ahead of one that only starts with it, so "bolt" puts Lightning Bolt with the other Bolts instead of behind every Boltwave and Boltfire, and cards you own come first among equals. With a Lightning Bolt in your collection, it is the first result.
+- **Fixed: Find a partner.** The Commander section's Find a partner button opened a normal search instead of the list of legal partners. It shows the partners again.
+- **Changed: search tidy-up.** The empty search screen lists your recent searches, so you can rerun one without typing. The search bar has one close button instead of two X's side by side. Under the hood, the search bar is split into smaller pieces; every way into search should open it exactly as before.
+
 ## 0.200.13
 
 - **Changed: the trade pickers stack printings too.** With Stack printings on, "Add cards you give" and "Add cards you get" show one row per card instead of one per edition and grade, with the copies for trade summed ("2 editions · 6 for trade"); tapping it starts from the edition your printing preference picks. The stack button now sits beside the tradelist in both pickers. Trade history and the balance suggestions show each card's set and number like the rest of the app, and the recent trades on the Trade page look like the rows in Trade history. Under the hood, the two pickers are one, and the trade screen is split into smaller pieces. If a trade acts up, tell us; nothing about how trades work should have changed.

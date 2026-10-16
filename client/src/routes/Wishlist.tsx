@@ -18,7 +18,7 @@ import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { SortControls, sortCards, useCardSort } from '../components/CardSorting.js';
 import { wishSortFields } from '../components/useEntrySort.js';
 import { HeaderValue, headerValue, useWishlistValue } from '../components/ValueSummary.js';
-import { ListSearchButton, useListFilter, useOpenSearch } from '../components/GlobalSearch.js';
+import { ListSearchButton, useListFilter, useOpenSearch } from '../search/searchContext.js';
 import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheetLazy.js';

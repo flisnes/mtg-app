@@ -162,9 +162,20 @@ button.danger-outline {
 .app-header .search-input {
   padding: 0.55rem 1rem;
 }
+/* The header's close button already clears the query, so the browser's own
+   clear X would sit right next to it as a second X. */
+.app-header .search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
 .header-close {
   flex-shrink: 0;
-  padding: 0.5rem 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tap-sm);
+  min-height: var(--tap-sm);
+  padding: 0.5rem;
   border-radius: 12px;
 }
 .header-account {
@@ -376,7 +387,17 @@ button.danger-outline {
 /* Recent searches live in the overlay, under the scope chips. Hanging off the
    bar they covered the chips and the hint read through the glass. In the flow
    it's a plain panel: nothing underneath to show through. */
-.search-overlay-inner > .search-history {
+.search-recent {
+  margin-top: 1rem;
+}
+.search-recent-head {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.search-overlay-inner > .search-history,
+.search-recent > .search-history {
   position: static;
   background: var(--surface);
   backdrop-filter: none;

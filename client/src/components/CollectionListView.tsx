@@ -27,7 +27,7 @@ import { useEntrySortData } from './useEntrySort.js';
 import { useMoverFlags } from '../price/useMoverFlags.js';
 import { useGoblinMode } from './useGoblinMode.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
-import { ListSearchButton, useListFilter, useOpenSearch } from './GlobalSearch.js';
+import { ListSearchButton, useListFilter, useOpenSearch } from '../search/searchContext.js';
 import { useToast } from './Toast.js';
 import { Icon } from './icons.js';
 import { usePageMeta } from '../routes/Page.js';

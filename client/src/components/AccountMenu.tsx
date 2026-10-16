@@ -1,24 +1,39 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { ProfileAvatar } from '@mtg/shared';
+import { useAccount } from '../account/useAccount.js';
+import { useOwnAvatar } from '../account/ownProfile.js';
 import { Avatar } from './Avatar.js';
 import { Icon, type IconName } from './icons.js';
 import { usePopover } from './usePopover.js';
+import { plural } from '../util/format.js';
 
 // The header avatar is the front door to everything "about you": your public
 // Profile, your Settings (account, sync, data, preferences), and the About
 // page. Clicking it opens this little menu instead of jumping straight to one
 // page — Profile used to be buried two taps deep in Community.
 
-interface Props {
-  signedIn: boolean;
-  username: string | undefined;
-  ownAvatar: ProfileAvatar | null;
-  syncTone: 'ok' | 'busy' | 'err';
-  syncLabel: string;
-}
+export function AccountMenu() {
+  const { session, syncReady, pendingChanges, sync } = useAccount();
+  const signedIn = !!session;
+  const username = session?.username;
+  const ownAvatar = useOwnAvatar(session);
 
-export function AccountMenu({ signedIn, username, ownAvatar, syncTone, syncLabel }: Props) {
+  // Subtle sync indicator on the account button: green = synced, amber =
+  // syncing or changes waiting (or the join-account decision pending), red =
+  // sync error. Signed out shows no dot at all.
+  const syncTone =
+    sync.phase === 'error' ? 'err' : sync.phase === 'syncing' || pendingChanges > 0 || !syncReady ? 'busy' : 'ok';
+  const syncLabel =
+    sync.phase === 'error'
+      ? 'sync problem'
+      : sync.phase === 'syncing'
+        ? 'syncing…'
+        : pendingChanges > 0
+          ? `${pendingChanges} ${plural(pendingChanges, 'change')} waiting to sync`
+          : !syncReady
+            ? 'sync setup pending'
+            : 'synced';
+
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();

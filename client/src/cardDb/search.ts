@@ -36,6 +36,9 @@ export interface SearchFilters {
   /** Only cards this predicate accepts — the "can partner with X" browse, which
    *  replaces the identity filter (the second commander is what widens it). */
   pairOnly?: (card: OracleCard) => boolean;
+  /** Owned cards win ties within a best-match tier: "bolt" finds your Lightning
+   *  Bolt before Bolt Hound. Ranking only, never membership. */
+  preferOwned?: (oracleId: string) => boolean;
 }
 
 type Indexed = SearchableEntry;
@@ -286,6 +289,21 @@ function byCollectorNumber(a: Printing, b: Printing): number {
   );
 }
 
+/** How well a normalized name matches one name phrase (see searchCards). Names
+ *  normalize to words split by single spaces, so a space or either end is a
+ *  word boundary. */
+export function phraseScore(name: string, phrase: string): number {
+  if (name === phrase) return 6;
+  let best = 1;
+  for (let idx = name.indexOf(phrase); idx !== -1 && best < 5; idx = name.indexOf(phrase, idx + 1)) {
+    const starts = idx === 0 || name[idx - 1] === ' ';
+    const end = idx + phrase.length;
+    const ends = end === name.length || name[end] === ' ';
+    best = Math.max(best, starts && ends ? 5 : idx === 0 ? 4 : starts ? 3 : 2);
+  }
+  return best;
+}
+
 /**
  * How the results are ordered. 'relevance' is the default and the only key the
  * card database can rank by on its own; the rest are the ordinary card sorts.
@@ -337,22 +355,14 @@ export async function searchCards(
     if (filters.pairOnly && !filters.pairOnly(entry.card)) continue;
     if (!matchesQuery(entry, parsed)) continue;
 
-    // Rank: exact > prefix > word-start > substring > scattered words. Terms
-    // other than name text don't affect ranking, only membership; an OR query
-    // ranks by its best-matching branch.
+    // Rank: exact > whole word > prefix > word-start > substring > scattered
+    // words. A whole word anywhere beats a bare prefix, so "bolt" ranks
+    // Lightning Bolt with Bolt Hound, ahead of Boltwave. Terms other than name
+    // text don't affect ranking, only membership; an OR query ranks by its
+    // best-matching branch. Owning the card is worth half a tier: a tiebreak.
     let score = 0;
-    for (const phrase of parsed.namePhrases) {
-      const name = entry.normName;
-      const idx = name.indexOf(phrase);
-      let phraseScore = 1;
-      if (idx !== -1) {
-        if (name === phrase) phraseScore = 5;
-        else if (idx === 0) phraseScore = 4;
-        else if (name[idx - 1] === ' ') phraseScore = 3;
-        else phraseScore = 2;
-      }
-      score = Math.max(score, phraseScore);
-    }
+    for (const phrase of parsed.namePhrases) score = Math.max(score, phraseScore(entry.normName, phrase));
+    if (score && filters.preferOwned?.(entry.card.oracleId)) score += 0.5;
     // Pinned to a set: the card's printings *in that set* are the rows. A card
     // that matched but has nothing showable there still gets its one plain row.
     const prints = pinned?.get(entry.card.oracleId);

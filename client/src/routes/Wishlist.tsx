@@ -10,14 +10,14 @@ import { useConfirm } from '../components/ConfirmSheet.js';
 import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import { CardItems, ViewToggle, useViewMode } from '../components/CardViews.js';
 import { wishCardItem } from '../components/cardRows.js';
-import { BulkActionBar } from '../components/BulkActionBar.js';
+import { SelectionBar } from '../components/BulkActionBar.js';
 import { useMultiSelect } from '../components/useMultiSelect.js';
 import { SelectToggle } from '../components/SelectToggle.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
-import { addToTotal, formatTotal, SortControls, sortCards, useCardSort, type PriceTotal } from '../components/CardSorting.js';
+import { SortControls, sortCards, useCardSort } from '../components/CardSorting.js';
 import { wishSortFields } from '../components/useEntrySort.js';
-import { HeaderValue } from '../components/ValueSummary.js';
+import { HeaderValue, headerValue, useWishlistValue } from '../components/ValueSummary.js';
 import { ListSearchButton, useListFilter, useOpenSearch } from '../components/GlobalSearch.js';
 import { Icon } from '../components/icons.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
@@ -63,12 +63,7 @@ export function Wishlist() {
   }, [rows, matchesQuery, sort]);
 
   // Value covers the whole wishlist, not just the filtered view.
-  const value = useMemo(() => {
-    if (!rows) return undefined;
-    const total: PriceTotal = { eur: 0, usd: 0 };
-    for (const r of rows) addToTotal(total, r.entry.quantity, r.printing ?? shown.get(r.entry.oracleId), r.oracle);
-    return formatTotal(total);
-  }, [rows, shown]);
+  const value = useWishlistValue(shown);
 
   const selectedRows = filtered.filter((r) => sel.selected.has(r.entry.id));
   const allKeys = filtered.map((r) => r.entry.id);
@@ -76,14 +71,14 @@ export function Wishlist() {
   async function bulkDelete() {
     const n = selectedRows.length;
     const ok = await confirm({
-      title: `Remove ${n} ${n === 1 ? 'card' : 'cards'}?`,
+      title: `Remove ${n} ${plural(n, 'card')}?`,
       body: `${n === 1 ? 'It comes' : 'They come'} off your wishlist. Nothing else changes.`,
       confirmLabel: 'Remove from wishlist',
       danger: true,
     });
     if (!ok) return;
     for (const r of selectedRows) await removeFromWishlist(r.entry.id);
-    toast(`Removed ${n} ${n === 1 ? 'card' : 'cards'} from wishlist`);
+    toast(`Removed ${n} ${plural(n, 'card')} from wishlist`);
     sel.exit();
   }
 
@@ -139,7 +134,7 @@ export function Wishlist() {
           ? fmtCardCount(filtered.reduce((s, r) => s + r.entry.quantity, 0), filtered.length)
           : undefined
       }
-      aside={<HeaderValue value={value} />}
+      aside={<HeaderValue value={headerValue(value)} />}
       menu={
         <OptionsMenu
           label="Wishlist options"
@@ -192,18 +187,15 @@ export function Wishlist() {
         </>
       )}
 
-      {sel.active && (
-        <BulkActionBar
-          count={selectedRows.length}
-          allSelected={allKeys.length > 0 && allKeys.every((k) => sel.selected.has(k))}
-          onToggleAll={() => sel.toggleAll(allKeys)}
-          onCancel={sel.exit}
-          actions={[
-            { label: 'I bought these', icon: 'collection', onClick: () => void bulkAcquire() },
-            { label: 'Remove from wishlist', icon: 'trash', danger: true, onClick: () => void bulkDelete() },
-          ]}
-        />
-      )}
+      <SelectionBar
+        sel={sel}
+        keys={allKeys}
+        count={selectedRows.length}
+        actions={[
+          { label: 'I bought these', icon: 'collection', onClick: () => void bulkAcquire() },
+          { label: 'Remove from wishlist', icon: 'trash', danger: true, onClick: () => void bulkDelete() },
+        ]}
+      />
 
       {editing?.oracle && (
         <CardSheet mode="wish" oracleCard={editing.oracle} wishEntry={editing.entry} onClose={() => setEditing(null)} />

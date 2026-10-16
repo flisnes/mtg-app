@@ -4,11 +4,13 @@ import type { ContainerKind } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { containerKind } from '../deck/containers.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
-import { useContainers, useJoinedCollection } from '../db/collectionSnapshot.js';
+import { useContainers, useJoinedCollection, useJoinedWishes } from '../db/collectionSnapshot.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { addToTotal, formatTotal, pricedForFinish, type PriceTotal } from './CardSorting.js';
 import { getCachedSealedPrices } from '../sealed/store.js';
 import { sealedPriceOf } from '../sealed/product.js';
+
+type PriceSource = { priceEur: number | null; priceUsd: number | null } | undefined;
 
 // Compact "total value" readout for page headers. It sits in the empty space
 // beside a page's options menu, so it costs no extra vertical room.
@@ -67,6 +69,19 @@ export function useCollectionValue(onlyTrade = false): PriceTotal | undefined {
   }, [rows, onlyTrade]);
 }
 
+/** Total value of the whole wishlist, whatever the list is filtered to. An
+ *  "any printing" wish is priced as the printing it displays as: pass the
+ *  page's useDisplayPrintings map so that lookup runs once, not twice. */
+export function useWishlistValue(shown: Map<string, PriceSource>): PriceTotal | undefined {
+  const rows = useJoinedWishes();
+  return useMemo(() => {
+    if (!rows) return undefined;
+    const total: PriceTotal = { eur: 0, usd: 0 };
+    for (const r of rows) addToTotal(total, r.entry.quantity, r.printing ?? shown.get(r.entry.oracleId), r.oracle);
+    return total;
+  }, [rows, shown]);
+}
+
 /**
  * Value of the unopened sealed products on the shelf. A PriceTotal like every
  * other value in the app: TCGplayer quotes the USD side, Cardmarket the EUR
@@ -97,8 +112,6 @@ export function useSealedValue(): { total: PriceTotal; unpriced: number; boxes: 
 // A container is worth two different numbers and only one of them is real money:
 // what the copies you actually have are worth, and what the whole list would
 // cost. Owned leads everywhere; the gap follows as context.
-
-type PriceSource = { priceEur: number | null; priceUsd: number | null } | undefined;
 
 export interface ContainerValue {
   /** Value of the copies of these cards you hold in the collection. */

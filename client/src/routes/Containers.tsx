@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { FilterSelect } from '../components/FilterSelect.js';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -34,6 +35,7 @@ import { Emblem } from '../components/Emblem.js';
 import { EmblemPickerSheet } from '../components/EmblemPickerSheet.js';
 import { ManaCost } from '../components/ManaCost.js';
 import { HeaderValue, missingValue, useContainersValue, valueText, type ContainerValue } from '../components/ValueSummary.js';
+import { sortRows } from '../components/cardSort.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { DeckFolderPickerSheet } from '../components/DeckFolderPickerSheet.js';
 import { ArchiveDeckSheet } from '../components/ArchiveDeckSheet.js';
@@ -182,22 +184,19 @@ export function Containers({ kind }: { kind: ContainerKind }) {
     if (filterFormat) out = out.filter(({ deck }) => (deck.format ?? 'casual') === filterFormat);
     if (filterColor) out = out.filter(({ colors }) => colors.includes(filterColor));
     if (sortKey === 'recent') return out;
-    const mul = sortDir === 'desc' ? -1 : 1;
-    return [...out].sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === 'format') cmp = (a.deck.format ?? 'casual').localeCompare(b.deck.format ?? 'casual') * mul;
-      else if (sortKey === 'color') cmp = colorSortKey(a.colors).localeCompare(colorSortKey(b.colors)) * mul;
-      else if (sortKey === 'value') {
-        cmp = (ownedValueNumber(value?.byId.get(a.deck.id)) - ownedValueNumber(value?.byId.get(b.deck.id))) * mul;
-      }
-      // Ties (and a plain name sort) fall back to name; direction only applies
-      // when name IS the primary key, same as the card-list sort convention.
-      if (cmp === 0) {
-        cmp = a.deck.name.localeCompare(b.deck.name);
-        if (sortKey === 'name') cmp *= mul;
-      }
-      return cmp;
-    });
+    return sortRows(
+      out,
+      { key: sortKey, dir: sortDir },
+      (r, key) =>
+        key === 'format'
+          ? (r.deck.format ?? 'casual')
+          : key === 'color'
+            ? colorSortKey(r.colors)
+            : key === 'value'
+              ? ownedValueNumber(value?.byId.get(r.deck.id))
+              : null,
+      (r) => r.deck.name,
+    );
   }, [rows, isDeck, query, filterFormat, filterColor, sortKey, sortDir, value]);
   // Header leads with what the copies you actually hold are worth; the cards on
   // a list you don't own yet aren't money on your shelf.
@@ -346,22 +345,20 @@ export function Containers({ kind }: { kind: ContainerKind }) {
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Filter decks by name"
           />
-          <select value={filterFormat} onChange={(e) => setFilterFormat(e.target.value as DeckFormat | '')} aria-label="Filter by format">
-            <option value="">Any format</option>
-            {DECK_FORMATS.map((f) => (
-              <option key={f} value={f}>
-                {formatLabel(f)}
-              </option>
-            ))}
-          </select>
-          <select value={filterColor} onChange={(e) => setFilterColor(e.target.value as Color | '')} aria-label="Filter by color">
-            <option value="">Any color</option>
-            {COLORS.map((c) => (
-              <option key={c} value={c}>
-                {COLOR_NAME[c]}
-              </option>
-            ))}
-          </select>
+          <FilterSelect<DeckFormat | ''>
+            value={filterFormat}
+            onChange={setFilterFormat}
+            neutral=""
+            options={[['', 'Any format'], ...DECK_FORMATS.map((f) => [f, formatLabel(f)] as const)]}
+            label="Filter by format"
+          />
+          <FilterSelect<Color | ''>
+            value={filterColor}
+            onChange={setFilterColor}
+            neutral=""
+            options={[['', 'Any color'], ...COLORS.map((c) => [c, COLOR_NAME[c]] as const)]}
+            label="Filter by color"
+          />
           <div className="sort-controls" role="group" aria-label="Sort decks">
             <select value={sortKey} onChange={(e) => setSortKey(e.target.value as DeckSortKey)} aria-label="Sort by">
               <option value="recent">Sort: Recent</option>

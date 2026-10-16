@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { FilterSelect } from '../components/FilterSelect.js';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { OracleCard, Priced, Printing } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
@@ -13,7 +14,7 @@ import { convertToDisplay, currencySymbol, fmtPriceIn } from '../price/rates.js'
 import { getPrefs } from '../prefs.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
 import { CardSheet } from '../components/CardSheet.js';
-import { ListSortControls, compareNullable, useListSort, type ListSortPrefs } from '../components/CardSorting.js';
+import { ListSortControls, sortRows, useListSort, type ListSortPrefs } from '../components/CardSorting.js';
 import { ListSearchButton, useListFilter } from '../components/GlobalSearch.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { Sparkline } from '../components/Sparkline.js';
@@ -204,54 +205,34 @@ export function PriceMovers() {
       ) : (
         <>
           <div className="filter-row">
-            <select
+            <FilterSelect
               value={String(windowDays)}
-              onChange={(e) => setWindowDays(Number(e.target.value))}
-              aria-label="Time window"
-            >
-              {WINDOWS.map(([days, label]) => (
-                <option key={label} value={String(days)}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <select
-              className={section === 'all' ? '' : 'filter-on'}
+              onChange={(v) => setWindowDays(Number(v))}
+              options={WINDOWS.map(([days, label]) => [String(days), label] as const)}
+              label="Time window"
+            />
+            <FilterSelect
               value={section}
-              onChange={(e) => setSection(e.target.value as SectionKey | 'all')}
-              aria-label="Which sections to show"
-            >
-              {SECTION_OPTIONS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <select
-              className={listFilter === 'all' ? '' : 'filter-on'}
+              onChange={setSection}
+              neutral="all"
+              options={SECTION_OPTIONS}
+              label="Which sections to show"
+            />
+            <FilterSelect
               value={listFilter}
-              onChange={(e) => setListFilter(e.target.value as ListFilter)}
-              aria-label="Filter by which list the card is on"
-            >
-              {LIST_OPTIONS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <select
-              className={minValue === 0 ? '' : 'filter-on'}
+              onChange={setListFilter}
+              neutral="all"
+              options={LIST_OPTIONS}
+              label="Filter by which list the card is on"
+            />
+            <FilterSelect
               value={String(minValue)}
-              onChange={(e) => setMinValue(Number(e.target.value))}
-              aria-label="Minimum value held"
+              onChange={(v) => setMinValue(Number(v))}
+              neutral="0"
+              options={MIN_VALUES.map((p) => [String(p), p === 0 ? 'Value: Any' : `Value: ${symbol}${p}+`] as const)}
+              label="Minimum value held"
               title="Hide cards whose copies are worth less than this together, whichever way they moved"
-            >
-              {MIN_VALUES.map((p) => (
-                <option key={p} value={String(p)}>
-                  {p === 0 ? 'Value: Any' : `Value: ${symbol}${p}+`}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <div className="meta-row">
@@ -483,14 +464,10 @@ function sortMovers(
   rank: (m: Mover) => number | null,
   swing: boolean,
 ): Mover[] {
-  const mul = prefs.dir === 'desc' ? -1 : 1;
-  const value = (m: Mover) => (prefs.key === 'notable' ? rank(m) : sortField(m, prefs.key, swing));
-  return [...movers].sort((a, b) => {
-    let cmp = prefs.key === 'name' ? 0 : compareNullable(value(a), value(b), mul);
-    if (cmp === 0) {
-      cmp = (a.oracle?.name ?? '').localeCompare(b.oracle?.name ?? '');
-      if (prefs.key === 'name') cmp *= mul;
-    }
-    return cmp;
-  });
+  return sortRows(
+    movers,
+    prefs,
+    (m, key) => (key === 'notable' ? rank(m) : sortField(m, key, swing)),
+    (m) => m.oracle?.name ?? '',
+  );
 }

@@ -90,8 +90,7 @@ import {
   groupCards,
   GroupCountBadge,
   extraLands,
-  priceValue,
-  releaseFields,
+  cardSortFields,
   pricedForFinish,
   sortCards,
   useCardSort,
@@ -106,12 +105,13 @@ import { ScanSheet } from '../components/ScanSheetLazy.js';
 import { CardDropZone } from '../components/CardDropZone.js';
 import { Sheet } from '../components/Sheet.js';
 import { DeckHistory, HISTORY_ANCHOR } from '../components/DeckHistory.js';
-import { BulkActionBar, type BulkAction } from '../components/BulkActionBar.js';
+import { SelectionBar, type BulkAction } from '../components/BulkActionBar.js';
 import { BOARD_LABEL, boardOptions, type BoardOption } from '../deck/boards.js';
 import { ContainerPickerSheet } from '../components/ContainerPickerSheet.js';
 import { ArchiveDeckSheet } from '../components/ArchiveDeckSheet.js';
 import { TagSheet } from '../components/TagSheet.js';
 import { useMultiSelect, type MultiSelect } from '../components/useMultiSelect.js';
+import { useKeySet } from '../components/useKeySet.js';
 import { SelectToggle } from '../components/SelectToggle.js';
 import { usePlacementIndex, type PlacementIndex } from '../db/usePlacements.js';
 import { Icon } from '../components/icons.js';
@@ -247,7 +247,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   // of a deck (`leaving`), and on demand from the ⋯ menu — same sheet, but asking
   // for it deliberately shouldn't also walk you off the page.
   const [wishSheet, setWishSheet] = useState<{ cards: MissingCard[]; leaving: boolean } | null>(null);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const picked = useKeySet();
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [emblemOpen, setEmblemOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -431,7 +431,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
 
   function openWishSheet(candidates: MissingCard[], leaving: boolean) {
     setWishSheet({ cards: candidates, leaving });
-    setPicked(new Set(candidates.map((c) => c.oracleId))); // all ticked by default
+    picked.reset(candidates.map((c) => c.oracleId)); // all ticked by default
   }
 
   /** ⋯ menu: wishlist whatever this deck still needs, without leaving the page. */
@@ -629,7 +629,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
   const selectAll = allKeys.length
     ? () => {
         if (!sel.active) sel.enter();
-        if (!allKeys.every((k) => sel.selected.has(k))) sel.toggleAll(allKeys);
+        if (!sel.allSelected(allKeys)) sel.toggleAll(allKeys);
       }
     : null;
 
@@ -1151,15 +1151,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         />
       )}
 
-      {sel.active && (
-        <BulkActionBar
-          count={selectedRows.length}
-          allSelected={allKeys.length > 0 && allKeys.every((k) => sel.selected.has(k))}
-          onToggleAll={() => sel.toggleAll(allKeys)}
-          onCancel={sel.exit}
-          actions={bulkActions}
-        />
-      )}
+      <SelectionBar sel={sel} keys={allKeys} count={selectedRows.length} actions={bulkActions} />
 
       {moving && (
         <MoveZoneSheet
@@ -1265,16 +1257,10 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
         (() => {
           const { cards, leaving } = wishSheet;
           const dismiss = () => (leaving ? navigate(meta.path) : setWishSheet(null));
-          const allPicked = cards.every((c) => picked.has(c.oracleId));
+          const keys = cards.map((c) => c.oracleId);
+          const allPicked = picked.all(keys);
           const chosen = cards.filter((c) => picked.has(c.oracleId));
-          const toggle = (oracleId: string) =>
-            setPicked((prev) => {
-              const next = new Set(prev);
-              if (next.has(oracleId)) next.delete(oracleId);
-              else next.add(oracleId);
-              return next;
-            });
-          const toggleAll = () => setPicked(allPicked ? new Set() : new Set(cards.map((c) => c.oracleId)));
+          const toggleAll = () => picked.toggleAll(keys);
           return (
             <Sheet onClose={dismiss} label="Add missing cards to wishlist" title="Add missing cards to wishlist?">
               <p className="fine-print">
@@ -1297,7 +1283,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
                       className="result-main"
                       style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
                     >
-                      <input type="checkbox" checked={picked.has(c.oracleId)} onChange={() => toggle(c.oracleId)} />
+                      <input type="checkbox" checked={picked.has(c.oracleId)} onChange={() => picked.toggle(c.oracleId)} />
                       <span className="result-name">
                         {c.name} {c.addQty !== 1 && <span className="badge">×{c.addQty}</span>}
                       </span>
@@ -1329,13 +1315,8 @@ const EMPTY_ISSUES = new Map<string, string>();
 function sortRows(rows: Row[], prefs: CardSortPrefs): Row[] {
   return sortCards(
     rows,
-    (r) => ({
-      name: r.oracle?.name,
-      cmc: r.oracle?.cmc,
-      // A lands-box basic costs the deck nothing, so it sorts by nothing.
-      price: r.anyBasic ? 0 : priceValue(r.printing, r.oracle),
-      ...releaseFields(r.printing),
-    }),
+    // A lands-box basic costs the deck nothing, so it sorts by nothing.
+    (r) => ({ ...cardSortFields(r.oracle, r.printing), ...(r.anyBasic ? { price: 0 } : {}) }),
     prefs,
   );
 }
@@ -1760,7 +1741,7 @@ function ContainerImport({
   const [overlap, setOverlap] = useState<OverlapMode>('add');
   // The written lines, waiting on the "you don't own these" tick-list.
   const [unowned, setUnowned] = useState<{ cards: UnownedCard[]; lines: ResolvedLine[]; added: number } | null>(null);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const picked = useKeySet();
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
@@ -1820,7 +1801,7 @@ function ContainerImport({
         qty: l.quantity,
       };
     });
-    setPicked(new Set(cards.map((c) => c.key)));
+    picked.reset(cards.map((c) => c.key));
     setUnowned({ cards, lines: missing, added });
   }
 
@@ -1847,7 +1828,7 @@ function ContainerImport({
       <div className="about-section">
         <UnownedPromptSheet
           cards={unowned.cards}
-          picked={picked}
+          picked={picked.set}
           busy={busy}
           intro={
             <>
@@ -1858,19 +1839,8 @@ function ContainerImport({
           }
           confirmLabel={(q) => (q > 0 ? `Add ${q} to collection` : 'Not now')}
           backLabel="Skip"
-          onToggle={(key) =>
-            setPicked((prev) => {
-              const next = new Set(prev);
-              if (next.has(key)) next.delete(key);
-              else next.add(key);
-              return next;
-            })
-          }
-          onToggleAll={() =>
-            setPicked((prev) =>
-              prev.size === unowned.cards.length ? new Set() : new Set(unowned.cards.map((c) => c.key)),
-            )
-          }
+          onToggle={picked.toggle}
+          onToggleAll={() => picked.toggleAll(unowned.cards.map((c) => c.key))}
           onBack={() => {
             const added = unowned.added;
             setUnowned(null);

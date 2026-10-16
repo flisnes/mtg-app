@@ -19,7 +19,7 @@ import { CONTAINER_META } from '../deck/containers.js';
 import { CardSheet, type AddTarget } from './CardSheet.js';
 import { CardSearchView, splitResultKey } from './CardSearchView.js';
 import { useShortcuts } from './useShortcuts.js';
-import { BulkActionBar } from './BulkActionBar.js';
+import { SelectionBar } from './BulkActionBar.js';
 import { useMultiSelect } from './useMultiSelect.js';
 import {
   SearchHistoryDropdown,
@@ -905,15 +905,11 @@ function SearchOverlay({ history }: { history: ReactNode }) {
           />
         )}
 
-        {sel.active && (
-          <BulkActionBar
-            count={sel.count}
-            allSelected={resultKeys.length > 0 && resultKeys.every((k) => sel.selected.has(k))}
-            onToggleAll={() => sel.toggleAll(resultKeys)}
-            onCancel={sel.exit}
-            actions={[{ label: 'Add to wishlist', icon: 'wishlist', onClick: () => void bulkWish() }]}
-          />
-        )}
+        <SelectionBar
+          sel={sel}
+          keys={resultKeys}
+          actions={[{ label: 'Add to wishlist', icon: 'wishlist', onClick: () => void bulkWish() }]}
+        />
 
         {sheetCard && (
           <CardSheet

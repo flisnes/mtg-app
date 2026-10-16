@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
 import { useShortcuts } from './useShortcuts.js';
+import { useKeySet } from './useKeySet.js';
 
 /**
  * Local UI state for multi-selecting cards in a list (Collection, Tradelist,
  * Wishlist). Selection is keyed by CardItem.key (= the entry id) and is never
- * persisted — leaving the view drops it. Pair with <BulkActionBar> and the
+ * persisted — leaving the view drops it. Pair with <SelectionBar> and the
  * selection props on <CardItems>.
  */
 export interface MultiSelect {
@@ -19,32 +20,22 @@ export interface MultiSelect {
   /** Turn it off and clear the selection. */
   exit: () => void;
   /** Select all of `keys` if not all are already selected, else clear. */
-  toggleAll: (keys: string[]) => void;
+  toggleAll: (keys: readonly string[]) => void;
+  /** Every one of `keys` is selected (false for an empty list). */
+  allSelected: (keys: readonly string[]) => boolean;
 }
 
 export function useMultiSelect(): MultiSelect {
   const [active, setActive] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-
-  const toggle = useCallback((key: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
+  const keys = useKeySet();
+  const { reset } = keys;
 
   const enter = useCallback(() => setActive(true), []);
 
   const exit = useCallback(() => {
     setActive(false);
-    setSelected(new Set());
-  }, []);
-
-  const toggleAll = useCallback((keys: string[]) => {
-    setSelected((prev) => (keys.every((k) => prev.has(k)) ? new Set() : new Set(keys)));
-  }, []);
+    reset();
+  }, [reset]);
 
   // Escape backs out of select mode, same as the ✕ on the bulk bar. Mapped to
   // null when it's off so the key falls through to whatever else wants it —
@@ -52,5 +43,14 @@ export function useMultiSelect(): MultiSelect {
   // once there's no selection left to cancel.
   useShortcuts({ Escape: active ? exit : null });
 
-  return { active, selected, count: selected.size, toggle, enter, exit, toggleAll };
+  return {
+    active,
+    selected: keys.set,
+    count: keys.set.size,
+    toggle: keys.toggle,
+    enter,
+    exit,
+    toggleAll: keys.toggleAll,
+    allSelected: keys.all,
+  };
 }

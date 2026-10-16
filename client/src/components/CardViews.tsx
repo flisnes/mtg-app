@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { sharedLocalStorage } from '../util/localStore.js';
 import { Icon, type IconName } from './icons.js';
 import { ManaCost } from './ManaCost.js';
 import { NO_PRICE } from './cardSort.js';
@@ -21,50 +22,16 @@ import { useCardCursorCtx } from './useCardCursor.js';
 
 export type ViewMode = 'list' | 'grid' | 'stack';
 
-/**
- * A view preference, shared across every mounted instance: toggling the view in
- * one place (e.g. the search overlay) must update the list behind it, not just
- * until remount. Anything stored that isn't offered here reads back as the
- * default, which is also how a legacy 'pile' was retired.
- */
-function sharedPref<T>(key: string, parse: (stored: string | null) => T, serialize: (v: T) => string) {
-  const read = (): T => {
-    try {
-      return parse(localStorage.getItem(key));
-    } catch {
-      return parse(null);
-    }
-  };
-  let current = read();
-  const listeners = new Set<(v: T) => void>();
-  return function usePref(): [T, (v: T) => void] {
-    const [value, setValue] = useState<T>(current);
-    useEffect(() => {
-      listeners.add(setValue);
-      setValue(current); // catch a change between first render and subscribe
-      return () => {
-        listeners.delete(setValue);
-      };
-    }, []);
-    const set = (v: T) => {
-      current = v;
-      try {
-        localStorage.setItem(key, serialize(v));
-      } catch {
-        /* ignore */
-      }
-      listeners.forEach((cb) => cb(v));
-    };
-    return [value, set];
-  };
-}
-
+// A view preference is shared across every mounted instance: toggling the view
+// in one place (e.g. the search overlay) must update the list behind it, not
+// just until remount. Anything stored that isn't offered here reads back as the
+// default, which is also how a legacy 'pile' was retired.
 function viewPref(key: string, allowed: readonly ViewMode[], dflt: ViewMode) {
-  return sharedPref<ViewMode>(
+  return sharedLocalStorage<ViewMode>(
     key,
     (stored) => (stored && allowed.includes(stored as ViewMode) ? (stored as ViewMode) : dflt),
     (v) => v,
-  );
+  ).use;
 }
 
 /** The app-wide list⇄grid preference, used by every card list that has one. */
@@ -80,11 +47,11 @@ export const useScanViewMode = viewPref('scanViewMode', ['list', 'stack'], 'stac
  * like list⇄grid, because "how do I count my cards" is one answer, not one per
  * screen. Off by default: the per-copy rows are what the app has always shown.
  */
-export const useStackPrintings = sharedPref<boolean>(
+export const useStackPrintings = sharedLocalStorage<boolean>(
   'stackPrintings',
   (stored) => stored === '1',
   (v) => (v ? '1' : '0'),
-);
+).use;
 
 /** The stack-printings switch, sitting beside the view toggle. */
 export function StackToggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {

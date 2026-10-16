@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.12
+
+- **Changed: list screens share their plumbing.** The deck list's format and color filters now light up when they are hiding decks, like the filters on Sealed, Price movers and Edit history already did. Under the hood, the wishlist's select bar, every filter dropdown, the sorts on Sealed, Price movers and the deck list, and the remembered view, sort and recent-search settings each run on one shared piece instead of a copy per screen. Nothing else should look different; if a sort or a remembered setting acts up, that's on us.
+
 ## 0.200.11
 
 - **Changed: Settings you can find your way around.** Settings now opens with a row of jump links (Account, Prices, Filing, Your data and so on), so you no longer scroll five screens to reach the bottom. Deleting your account or all your local data asks in the same confirm sheet as every other irreversible action, instead of swapping the button for an inline "Yes, delete". Agent connections are hidden on phones, where they can't work anyway (still shown if you switched them on). On Community, the rows/stacks switch got proper icons instead of ⇄ and ≣. Under the hood, the account pages share one sign-in gate and one way of loading from the server, and your own profile is cached on the device, so opening a deck no longer downloads your whole profile just in case you tap Share. Tapping Share still checks the server when the deck isn't in the cache yet.

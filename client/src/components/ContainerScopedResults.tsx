@@ -8,7 +8,7 @@ import { CardSheet } from './CardSheet.js';
 import type { CardItem } from './CardViews.js';
 import { ResultsList, resultCount } from './ResultsList.js';
 import { deckCardItem } from './cardRows.js';
-import { SortControls, priceValue, releaseFields, sortCards, useCardSort } from './CardSorting.js';
+import { SortControls, cardSortFields, sortCards, useCardSort } from './CardSorting.js';
 
 // The global search, scoped into the deck/binder/box you're standing on: it
 // searches that container's own cards instead of the whole database. Mirrors
@@ -40,13 +40,8 @@ export function ContainerScopedResults({
     const matched = (rows ?? []).filter(matches);
     return sortCards(
       matched,
-      (r) => ({
-        name: r.oracle?.name,
-        cmc: r.oracle?.cmc,
-        // A lands-box basic costs the container nothing, so it sorts by nothing.
-        price: r.entry.anyBasic ? 0 : priceValue(r.printing, r.oracle),
-        ...releaseFields(r.printing),
-      }),
+      // A lands-box basic costs the container nothing, so it sorts by nothing.
+      (r) => ({ ...cardSortFields(r.oracle, r.printing), ...(r.entry.anyBasic ? { price: 0 } : {}) }),
       sort,
     ).map((r): CardItem => ({
       ...deckCardItem(r, { kind, showYear: sort.key === 'released', onClick: () => setEditing(r) }),

@@ -16,7 +16,7 @@ import { formatLabel } from '../deck/legality.js';
 import { deckSize } from '../deck/boards.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
-import { extraLands, formatPrice, GroupCountBadge, NO_PRICE, SortControls, groupCards, priceValue, releaseFields, sortCards, useCardSort } from '../components/CardSorting.js';
+import { extraLands, formatPrice, GroupCountBadge, NO_PRICE, SortControls, groupCards, cardSortFields, sortCards, useCardSort } from '../components/CardSorting.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { yearMark } from '../components/cardRows.js';
 import { Icon } from '../components/icons.js';
@@ -121,12 +121,7 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
       });
       const sorted = sortCards(
         entries,
-        (e) => ({
-          name: e.oracle?.name,
-          cmc: e.oracle?.cmc,
-          price: priceValue(e.printing, e.oracle),
-          ...releaseFields(e.printing),
-        }),
+        (e) => cardSortFields(e.oracle, e.printing),
         sort,
       );
       return { board, title, entries: sorted, count: sumQty(lines) };

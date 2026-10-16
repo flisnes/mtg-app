@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useSharedLocalStorage } from '../util/localStore.js';
 import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
 import {
@@ -21,45 +22,25 @@ import { usePopover } from './usePopover.js';
 
 export * from './cardSort.js';
 
-// Two components can be holding the same key at once — a list page and the
-// search overlay scoped into that very list, which is stacked on top of it.
-// Writes are broadcast so the one underneath isn't left showing the old order
-// when the overlay closes.
-const listeners = new Map<string, Set<(v: never) => void>>();
+// Two components can be holding the same key at once: a list page and the
+// search overlay scoped into that very list, which is stacked on top of it. The
+// store is shared, so the one underneath isn't left showing the old order when
+// the overlay closes.
 
-/** Read-through localStorage state; a stored partial is merged over the initial. */
+/**
+ * Persisted prefs. The store holds what was saved; each caller merges it over
+ * its own initial, since two lists can share a key with different defaults
+ * (the deck page groups by type, the search scoped into it doesn't).
+ */
 function usePersisted<T extends object>(full: string, initial: T): [T, (v: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const raw = localStorage.getItem(full);
-      if (raw) return { ...initial, ...(JSON.parse(raw) as Partial<T>) };
-    } catch {
-      /* ignore */
-    }
-    return initial;
-  });
-
-  useEffect(() => {
-    const peers = listeners.get(full) ?? new Set();
-    peers.add(setValue as (v: never) => void);
-    listeners.set(full, peers);
-    return () => {
-      peers.delete(setValue as (v: never) => void);
-      if (peers.size === 0) listeners.delete(full);
-    };
-  }, [full]);
-
-  const set = (v: T) => {
-    setValue(v);
-    // Own setter is in the set too once the effect has run; skip it rather than
-    // queue the same update twice.
-    for (const peer of listeners.get(full) ?? []) if (peer !== (setValue as unknown)) (peer as (x: T) => void)(v);
-    try {
-      localStorage.setItem(full, JSON.stringify(v));
-    } catch {
-      /* ignore */
-    }
-  };
+  const [stored, set] = useSharedLocalStorage<Partial<T> | null>(
+    full,
+    (raw) => (raw ? (JSON.parse(raw) as Partial<T>) : null),
+    (v) => JSON.stringify(v),
+  );
+  const initialSig = JSON.stringify(initial);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const value = useMemo(() => ({ ...initial, ...stored }), [stored, initialSig]);
   return [value, set];
 }
 

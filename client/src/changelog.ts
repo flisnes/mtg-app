@@ -32,6 +32,12 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.200.12',
+    changes: [
+      { kind: 'changed', text: "The deck list's format and color filters light up while they hide decks, like every other filter." },
+    ],
+  },
+  {
     version: '0.200.11',
     changes: [
       {

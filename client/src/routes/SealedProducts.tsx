@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { FilterSelect } from '../components/FilterSelect.js';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { SealedItem, SealedPriceMap, SealedProduct } from '@mtg/shared';
 import { db } from '../db/schema.js';
@@ -11,17 +12,10 @@ import { SealedValueChartSheet } from '../components/ChartSheetsLazy.js';
 import { categoryLabel, fmtSealedPrice, isRandomOnly, itemImage, sealedPriceOf } from '../sealed/product.js';
 import { AddSealedProductSheet } from '../components/AddSealedProductSheet.js';
 import { useConfirm } from '../components/ConfirmSheet.js';
-import {
-  ListSortControls,
-  addToTotal,
-  compareNullable,
-  priceValue,
-  useListSort,
-  type PriceTotal,
-} from '../components/CardSorting.js';
+import { ListSortControls, priceValue, sortRows, useListSort } from '../components/CardSorting.js';
 import { ViewToggle, useViewMode, type ViewMode } from '../components/CardViews.js';
 import { Icon } from '../components/icons.js';
-import { HeaderValue, headerValue } from '../components/ValueSummary.js';
+import { HeaderValue, headerValue, useSealedValue } from '../components/ValueSummary.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { historyChange } from '../price/history.js';
 import { useSealedHistories } from '../price/sealedValue.js';
@@ -115,13 +109,9 @@ export function SealedProducts() {
     return m;
   }, [histories]);
 
-  const total: PriceTotal = { eur: 0, usd: 0 };
-  let unpriced = 0;
-  for (const item of items ?? []) {
-    const price = sealedPriceOf(prices, item.productId);
-    if (!price) unpriced += item.quantity;
-    else addToTotal(total, item.quantity, price);
-  }
+  // The same total the collection header folds in, so the two never disagree.
+  const value = useSealedValue();
+  const unpriced = value?.unpriced ?? 0;
 
   // Only what's actually on the shelf gets an option — a set list of every
   // Magic set would be a scroll, and every entry but a handful would be empty.
@@ -180,7 +170,7 @@ export function SealedProducts() {
       aside={
         <HeaderValue
           label="Sealed value"
-          value={headerValue(total)}
+          value={headerValue(value?.total)}
           note={unpriced > 0 ? `${unpriced} unpriced` : undefined}
           onClick={() => setChartOpen(true)}
           title="Open the sealed value chart"
@@ -214,47 +204,30 @@ export function SealedProducts() {
               aria-label="Filter sealed products by name"
             />
             {sets.length > 1 && (
-              <select
-                className={setFilter === 'all' ? '' : 'filter-on'}
+              <FilterSelect
                 value={setFilter}
-                onChange={(e) => setSetFilter(e.target.value)}
-                aria-label="Filter by set"
-              >
-                <option value="all">Set: Any</option>
-                {sets.map(([code, name]) => (
-                  <option key={code} value={code}>
-                    Set: {name}
-                  </option>
-                ))}
-              </select>
+                onChange={setSetFilter}
+                neutral="all"
+                options={[['all', 'Set: Any'], ...sets.map(([code, name]) => [code, `Set: ${name}`] as const)]}
+                label="Filter by set"
+              />
             )}
             {categories.length > 1 && (
-              <select
-                className={categoryFilter === 'all' ? '' : 'filter-on'}
+              <FilterSelect
                 value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                aria-label="Filter by product type"
-              >
-                <option value="all">Type: Any</option>
-                {categories.map((c) => (
-                  <option key={c} value={c}>
-                    Type: {categoryLabel(c)}
-                  </option>
-                ))}
-              </select>
+                onChange={setCategoryFilter}
+                neutral="all"
+                options={[['all', 'Type: Any'], ...categories.map((c) => [c, `Type: ${categoryLabel(c)}`] as const)]}
+                label="Filter by product type"
+              />
             )}
-            <select
-              className={priceFilter === 'all' ? '' : 'filter-on'}
+            <FilterSelect
               value={priceFilter}
-              onChange={(e) => setPriceFilter(e.target.value as PriceFilter)}
-              aria-label="Filter by whether a market price is known"
-            >
-              {PRICE_OPTIONS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              onChange={setPriceFilter}
+              neutral="all"
+              options={PRICE_OPTIONS}
+              label="Filter by whether a market price is known"
+            />
           </div>
 
           <div className="meta-row">
@@ -423,47 +396,34 @@ function sortSealed(
   catalog: Map<string, SealedProduct>,
   changes: Map<string, Change>,
 ): SealedItem[] {
-  const mul = prefs.dir === 'desc' ? -1 : 1;
   const each = (i: SealedItem) => priceValue(sealedPriceOf(prices, i.productId));
-  const value = (i: SealedItem): number | null => {
-    switch (prefs.key) {
-      case 'price':
-        return each(i);
-      case 'value': {
-        const p = each(i);
-        return p == null ? null : p * i.quantity;
+  return sortRows(
+    items,
+    prefs,
+    (i, key) => {
+      switch (key) {
+        case 'price':
+          return each(i);
+        case 'value': {
+          const p = each(i);
+          return p == null ? null : p * i.quantity;
+        }
+        case 'change':
+          return changes.get(i.productId)?.delta ?? null;
+        case 'changePct':
+          return changes.get(i.productId)?.pct ?? null;
+        case 'copies':
+          return i.quantity;
+        case 'added':
+          return i.createdAt;
+        case 'set':
+          return i.setName ?? i.set;
+        case 'released':
+          return catalog.get(i.productId)?.releaseDate ?? null;
+        default:
+          return null;
       }
-      case 'change':
-        return changes.get(i.productId)?.delta ?? null;
-      case 'changePct':
-        return changes.get(i.productId)?.pct ?? null;
-      case 'copies':
-        return i.quantity;
-      case 'added':
-        return i.createdAt;
-      default:
-        return null;
-    }
-  };
-  const text = (i: SealedItem): string | null => {
-    if (prefs.key === 'set') return i.setName ?? i.set;
-    if (prefs.key === 'released') return catalog.get(i.productId)?.releaseDate ?? null;
-    return null;
-  };
-  return [...items].sort((a, b) => {
-    let cmp = 0;
-    if (prefs.key === 'set' || prefs.key === 'released') {
-      const ta = text(a);
-      const tb = text(b);
-      // Same missing-last rule as the numeric keys.
-      cmp = ta == null || tb == null ? (ta == null ? (tb == null ? 0 : 1) : -1) : ta.localeCompare(tb) * mul;
-    } else if (prefs.key !== 'name') {
-      cmp = compareNullable(value(a), value(b), mul);
-    }
-    if (cmp === 0) {
-      cmp = a.name.localeCompare(b.name);
-      if (prefs.key === 'name') cmp *= mul;
-    }
-    return cmp;
-  });
+    },
+    (i) => i.name,
+  );
 }

@@ -7,7 +7,7 @@ import type { JoinedWish } from '../db/queries.js';
 import { acquisitionGain, costBasisOf } from '../price/costBasis.js';
 import { historyChange, readingsFor } from '../price/history.js';
 import { valueKeyOf } from '../price/collectionValue.js';
-import { pickPrice, priceValue, releaseFields, type CardSortPrefs, type SortFields } from './cardSort.js';
+import { pickPrice, cardSortFields, type CardSortPrefs, type SortFields } from './cardSort.js';
 
 // Sorting your own cards needs one thing the joined rows don't carry: the
 // recorded price change. It comes from priceHistories, the biggest user-data
@@ -118,12 +118,5 @@ export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortDat
 /** Sort fields for a wishlist row. The wishlist offers no price-change sorts,
  *  so unlike a collection row this needs nothing lazily loaded. */
 export function wishSortFields(r: JoinedWish): SortFields {
-  return {
-    name: r.oracle?.name,
-    cmc: r.oracle?.cmc,
-    price: priceValue(r.printing, r.oracle),
-    added: r.entry.createdAt,
-    updated: r.entry.updatedAt,
-    ...releaseFields(r.printing),
-  };
+  return { ...cardSortFields(r.oracle, r.printing), added: r.entry.createdAt, updated: r.entry.updatedAt };
 }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { FilterSelect } from '../components/FilterSelect.js';
 import type { OracleCard, Priced } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
 import { undoEntry } from '../db/dataAccess.js';
@@ -135,21 +136,20 @@ export function EditHistory() {
         />
       </div>
       <div className="filter-row">
-        <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Event type">
-          <option value="">All changes</option>
-          {FILTER_CATEGORIES.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-        <select value={preset} onChange={(e) => setPreset(e.target.value as DatePreset)} aria-label="Date range">
-          {DATE_PRESETS.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
-            </option>
-          ))}
-        </select>
+        <FilterSelect
+          value={category}
+          onChange={setCategory}
+          neutral=""
+          options={[['', 'All changes'], ...FILTER_CATEGORIES.map((c) => [c.value, c.label] as const)]}
+          label="Event type"
+        />
+        <FilterSelect
+          value={preset}
+          onChange={setPreset}
+          neutral="all"
+          options={DATE_PRESETS.map((p) => [p.value, p.label] as const)}
+          label="Date range"
+        />
       </div>
       {preset === 'custom' && (
         <div className="filter-row">

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './icons.js';
+import type { MultiSelect } from './useMultiSelect.js';
 
 export interface BulkAction {
   label: string;
@@ -71,5 +72,34 @@ export function BulkActionBar({
       {showActions && more && rest.length > 0 && <div className="bulk-more-actions">{rest.map(button)}</div>}
     </div>,
     document.body,
+  );
+}
+
+/**
+ * The bar wired to a list's selection: shown while select mode is on, with
+ * "Select all" covering `keys`, the keys the list is showing right now.
+ * `count` is what the actions will touch, which can be more than the ticks (a
+ * ticked stack is every copy under it).
+ */
+export function SelectionBar({
+  sel,
+  keys,
+  count = sel.count,
+  actions,
+}: {
+  sel: MultiSelect;
+  keys: readonly string[];
+  count?: number;
+  actions: BulkAction[];
+}) {
+  if (!sel.active) return null;
+  return (
+    <BulkActionBar
+      count={count}
+      allSelected={sel.allSelected(keys)}
+      onToggleAll={() => sel.toggleAll(keys)}
+      onCancel={sel.exit}
+      actions={actions}
+    />
   );
 }

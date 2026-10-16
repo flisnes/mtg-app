@@ -6,7 +6,7 @@ import { mentionsOtag } from '../cardDb/oracleTags.js';
 import { CardSheet } from './CardSheet.js';
 import type { CardItem } from './CardViews.js';
 import { ResultsList, resultCount } from './ResultsList.js';
-import { SortControls, priceValue, releaseFields, sortCards, useCardSort, type SortFields } from './CardSorting.js';
+import { SortControls, cardSortFields, sortCards, useCardSort, type SortFields } from './CardSorting.js';
 import {
   useUserLists,
   useListCardMaps,
@@ -70,12 +70,7 @@ export function ProfileScopedResults({
     const out: { item: CardItem; fields: SortFields }[] = [];
     const fieldsFor = (oracle: Priced<OracleCard> | undefined, scryfallId: string | null): SortFields => {
       const printing = scryfallId ? cards.printMap?.get(scryfallId) : undefined;
-      return {
-        name: oracle?.name,
-        cmc: oracle?.cmc,
-        price: priceValue(printing, oracle),
-        ...releaseFields(printing),
-      };
+      return cardSortFields(oracle, printing);
     };
     if (showTrade) {
       lists.tradelist.forEach((line, i) => {

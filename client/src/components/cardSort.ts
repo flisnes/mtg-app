@@ -128,6 +128,24 @@ export function priceValue(...sources: PricedSource[]): number | null {
   return convertToDisplay(picked.amount, picked.currency) ?? picked.amount;
 }
 
+/**
+ * The fields a plain card row sorts by: name and mana value off the card, the
+ * price off the printing (in `finish`, when the row holds one) falling back to
+ * the card's own, and the release fields off the printing.
+ */
+export function cardSortFields(
+  oracle: (NonNullable<PricedSource> & { name: string; cmc: number }) | undefined,
+  printing: (FinishPriced & { releasedAt: string; set: string; collectorNumber: string }) | undefined,
+  finish?: Finish,
+): SortFields {
+  return {
+    name: oracle?.name,
+    cmc: oracle?.cmc,
+    price: priceValue(finish ? pricedForFinish(printing, finish) : printing, oracle),
+    ...releaseFields(printing),
+  };
+}
+
 /** Display price in the user's currency; falls back to the raw quote when no rate is available. */
 export function formatPrice(...sources: PricedSource[]): string | undefined {
   const picked = pickPrice(sources);
@@ -209,6 +227,38 @@ export function compareNullable(a: number | null | undefined, b: number | null |
   if (a == null) return 1;
   if (b == null) return -1;
   return (a - b) * mul;
+}
+
+/**
+ * Sort a list that has its own keys (the sealed shelf, price movers, the deck
+ * list) by the card-list rules: a missing value sorts last whichever way the
+ * list runs, ties fall back to name A to Z, and the direction applies to the
+ * name only when name is the key. `valueOf` is never asked about 'name'.
+ * Strings compare as text, numbers as numbers.
+ */
+export function sortRows<T, K extends string>(
+  rows: readonly T[],
+  prefs: { key: K; dir: SortDir },
+  valueOf: (row: T, key: K) => number | string | null | undefined,
+  nameOf: (row: T) => string,
+): T[] {
+  const mul = prefs.dir === 'desc' ? -1 : 1;
+  const byName = prefs.key === 'name';
+  return [...rows].sort((a, b) => {
+    let cmp = byName ? 0 : compareValues(valueOf(a, prefs.key), valueOf(b, prefs.key), mul);
+    if (cmp === 0) {
+      cmp = nameOf(a).localeCompare(nameOf(b));
+      if (byName) cmp *= mul;
+    }
+    return cmp;
+  });
+}
+
+function compareValues(a: number | string | null | undefined, b: number | string | null | undefined, mul: number): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return (typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b))) * mul;
 }
 
 /** compareNullable for strings that sort as text — ISO dates and set codes. */

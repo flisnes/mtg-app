@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { readJson, readLocal, writeJson, writeLocal } from '../util/localStore.js';
 import { createPortal } from 'react-dom';
 import type { Condition, ContainerKind, DeckBoard, DeckCard, DeckFormat, Finish, OracleCard, Printing, Priced } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
@@ -192,20 +193,15 @@ const NO_LOCKS: ScanLocks = { lang: null, finish: null, set: null };
 /** Locks survive a reload (a pile takes more than one sitting); every active one
  *  shows as a chip over the camera, so a stale pin can't apply unnoticed. */
 function loadLocks(): ScanLocks {
-  try {
-    const raw = localStorage.getItem('scan-locks');
-    if (!raw) return NO_LOCKS;
-    const p = JSON.parse(raw) as Partial<Record<keyof ScanLocks, unknown>>;
-    return {
-      lang: typeof p.lang === 'string' && LANGS.includes(p.lang) ? p.lang : null,
-      finish: FINISHES.includes(p.finish as Finish) ? (p.finish as Finish) : null,
-      // '' was the old "waiting for the next card" state; there is no such
-      // thing now, and a blank pin would filter nothing while showing a chip.
-      set: typeof p.set === 'string' && p.set ? p.set : null,
-    };
-  } catch {
-    return NO_LOCKS;
-  }
+  const p = readJson('scan-locks') as Partial<Record<keyof ScanLocks, unknown>> | undefined;
+  if (!p || typeof p !== 'object') return NO_LOCKS;
+  return {
+    lang: typeof p.lang === 'string' && LANGS.includes(p.lang) ? p.lang : null,
+    finish: FINISHES.includes(p.finish as Finish) ? (p.finish as Finish) : null,
+    // '' was the old "waiting for the next card" state; there is no such
+    // thing now, and a blank pin would filter nothing while showing a chip.
+    set: typeof p.set === 'string' && p.set ? p.set : null,
+  };
 }
 
 /** +1/−1 tap feedback on a tray tile; seq remounts the animation per tap. */
@@ -350,18 +346,12 @@ function sessionStorageKey(target: ScanTarget): string | null {
 
 function loadStoredSession(key: string | null): SessionEntry[] {
   if (!key) return [];
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (e): e is SessionEntry =>
-        !!e && typeof e.scryfallId === 'string' && typeof e.oracleId === 'string' && typeof e.qty === 'number',
-    );
-  } catch {
-    return [];
-  }
+  const parsed = readJson(key);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(
+    (e): e is SessionEntry =>
+      !!e && typeof e.scryfallId === 'string' && typeof e.oracleId === 'string' && typeof e.qty === 'number',
+  );
 }
 
 /** One session line as an import line (the collection write is the import write). */
@@ -568,7 +558,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const [cameraId, setCameraId] = useState(() => getPreferredCameraId() ?? '');
   // When on, pinpointing an edition (OCR confirms the printing, the green check)
   // adds +1 of it on its own. Persisted so the preference sticks between scans.
-  const [autoAdd, setAutoAdd] = useState(() => localStorage.getItem('scan-autoadd') === '1');
+  const [autoAdd, setAutoAdd] = useState(() => readLocal('scan-autoadd') === '1');
   // What auto-add is doing for the card in frame, for the status pill.
   const [autoState, setAutoState] = useState<AutoAddState>('idle');
   // True while the session is being written — guards against the double-tap
@@ -755,20 +745,11 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // can blow the quota, which is fine — this is a convenience, not a guarantee.
   useEffect(() => {
     if (!storageKey) return;
-    try {
-      if (session.length === 0) localStorage.removeItem(storageKey);
-      else localStorage.setItem(storageKey, JSON.stringify(session));
-    } catch {
-      /* quota exceeded — skip persisting this session */
-    }
+    writeLocal(storageKey, session.length === 0 ? null : JSON.stringify(session));
   }, [session, storageKey]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('scan-autoadd', autoAdd ? '1' : '0');
-    } catch {
-      /* ignore */
-    }
+    writeLocal('scan-autoadd', autoAdd ? '1' : '0');
   }, [autoAdd]);
 
   // Fill the camera picker when the settings open, and re-read the pin: a
@@ -812,11 +793,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
 
   useEffect(() => {
     locksRef.current = locks;
-    try {
-      localStorage.setItem('scan-locks', JSON.stringify(locks));
-    } catch {
-      /* ignore */
-    }
+    writeJson('scan-locks', locks);
   }, [locks]);
 
   // Drive the padlock badge's countdown ring, and stop ticking the moment the
@@ -843,12 +820,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   }, []);
 
   const clearStored = () => {
-    if (!storageKey) return;
-    try {
-      localStorage.removeItem(storageKey);
-    } catch {
-      /* ignore */
-    }
+    if (storageKey) writeLocal(storageKey, null);
   };
 
   const download = async (manifest: ScanDataManifest) => {

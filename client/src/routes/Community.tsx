@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { sharedLocalStorage } from '../util/localStore.js';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Finish, PublicUser, TradeLine, WishLine } from '@mtg/shared';
 import { listUsers } from '../account/api.js';
@@ -19,9 +20,7 @@ import {
 import {
   SortControls,
   sortCards,
-  priceValue,
-  releaseFields,
-  pricedForFinish,
+  cardSortFields,
   useCardSort,
   type CardSortPrefs,
   type SortFields,
@@ -72,24 +71,11 @@ const LAYOUT_LABELS: ViewLabels<Layout> = {
   stack: { icon: 'sections', title: 'Stacked grid' },
 };
 
-function useLayout(): [Layout, (l: Layout) => void] {
-  const [layout, setLayout] = useState<Layout>(() => {
-    try {
-      return localStorage.getItem(LAYOUT_KEY) === 'stack' ? 'stack' : 'row';
-    } catch {
-      return 'row';
-    }
-  });
-  const set = (l: Layout) => {
-    setLayout(l);
-    try {
-      localStorage.setItem(LAYOUT_KEY, l);
-    } catch {
-      /* ignore */
-    }
-  };
-  return [layout, set];
-}
+const useLayout = sharedLocalStorage<Layout>(
+  LAYOUT_KEY,
+  (stored) => (stored === 'stack' ? 'stack' : 'row'),
+  (l) => l,
+).use;
 
 // Community: browse other users' published trade/wishlists (uploaded with
 // their backups) and highlight matches against your own data, using the same
@@ -100,24 +86,14 @@ function useLayout(): [Layout, (l: Layout) => void] {
 function tradeFields(line: TradeLine, cards: CardMaps): SortFields {
   const oracle = cards.oracleMap?.get(line.oracleId);
   const printing = cards.printMap?.get(line.scryfallId);
-  return {
-    name: oracle?.name ?? line.name,
-    cmc: oracle?.cmc,
-    price: priceValue(pricedForFinish(printing, line.finish), oracle),
-    ...releaseFields(printing),
-  };
+  return { ...cardSortFields(oracle, printing, line.finish), name: oracle?.name ?? line.name };
 }
 
 /** Sort fields for a wish line (may be "any printing" and have no finish). */
 function wishFields(line: WishLine, cards: CardMaps): SortFields {
   const oracle = cards.oracleMap?.get(line.oracleId);
   const printing = line.scryfallId ? cards.printMap?.get(line.scryfallId) : undefined;
-  return {
-    name: oracle?.name ?? line.name,
-    cmc: oracle?.cmc,
-    price: priceValue(pricedForFinish(printing, line.finish ?? 'nonfoil'), oracle),
-    ...releaseFields(printing),
-  };
+  return { ...cardSortFields(oracle, printing, line.finish ?? 'nonfoil'), name: oracle?.name ?? line.name };
 }
 
 export function Community() {

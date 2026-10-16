@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Icon, type IconName } from './icons.js';
+import { sharedLocalStorage } from '../util/localStore.js';
 
 // Recent card searches, offered the moment the search bar is focused.
 //
@@ -23,35 +24,19 @@ const SHOWN = 100;
 /** A single character is a slip of the finger, not a search worth keeping. */
 const MIN_LENGTH = 2;
 
-let cache: string[] | null = null;
-const listeners = new Set<(h: string[]) => void>();
-
-function read(): string[] {
-  try {
-    const raw = localStorage.getItem(KEY);
+/** Shared across mounted instances, so recording updates a visible panel. */
+const store = sharedLocalStorage<string[]>(
+  KEY,
+  (raw) => {
+    // Unparseable or unavailable storage: an empty history is fine.
     const parsed: unknown = raw ? JSON.parse(raw) : null;
-    if (Array.isArray(parsed)) {
-      return parsed.filter((q): q is string => typeof q === 'string' && !!q.trim()).slice(0, MAX);
-    }
-  } catch {
-    /* unparseable or unavailable storage — an empty history is fine */
-  }
-  return [];
-}
-
-function history(): string[] {
-  return (cache ??= read());
-}
-
-function write(next: string[]): void {
-  cache = next;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    /* quota/private mode — the in-memory list still serves this session */
-  }
-  for (const l of listeners) l(next);
-}
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((q): q is string => typeof q === 'string' && !!q.trim()).slice(0, MAX);
+  },
+  (v) => JSON.stringify(v),
+);
+const history = store.get;
+const write = store.set;
 
 /**
  * Remember a query the user actually used. Call this when a search *ends* — the
@@ -76,19 +61,6 @@ function clearSearchHistory(): void {
   write([]);
 }
 
-/** Shared across mounted instances, so recording updates a visible panel. */
-function useHistory(): string[] {
-  const [list, setList] = useState<string[]>(history);
-  useEffect(() => {
-    listeners.add(setList);
-    setList(history()); // catch a record between first render and subscribe
-    return () => {
-      listeners.delete(setList);
-    };
-  }, []);
-  return list;
-}
-
 /**
  * Past queries worth offering for what's typed so far. Empty input offers the
  * most recent; anything else narrows by substring, since "goblin" should find
@@ -96,7 +68,7 @@ function useHistory(): string[] {
  * dropped — suggesting it back is a wasted row.
  */
 export function useSearchHistory(query: string): string[] {
-  const list = useHistory();
+  const [list] = store.use();
   return useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return list.slice(0, SHOWN);

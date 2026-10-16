@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { FilterSelect } from './FilterSelect.js';
 import { useNavigate } from 'react-router-dom';
 import type { ContainerKind } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
@@ -15,7 +16,7 @@ import { useSetTypes } from '../cardDb/useSetTypes.js';
 import { usePrefs } from '../usePrefs.js';
 import { usePagedLimit } from './usePagedLimit.js';
 import { LoadMoreSentinel } from './LoadMoreSentinel.js';
-import { BulkActionBar, type BulkAction } from './BulkActionBar.js';
+import { SelectionBar, type BulkAction } from './BulkActionBar.js';
 import { ContainerPickerSheet } from './ContainerPickerSheet.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { useMultiSelect } from './useMultiSelect.js';
@@ -363,19 +364,14 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
           // Goblin mode has no order to sort by, so the Filed filter stands on
           // its own instead of riding in the sort sheet.
           <div className="sort-controls">
-            <select
-              className={placeFilter === 'all' ? '' : 'filter-on'}
+            <FilterSelect
               value={placeFilter}
-              onChange={(e) => setPlaceFilter(e.target.value as PlaceFilter)}
-              aria-label="Filter by where cards are filed"
+              onChange={setPlaceFilter}
+              neutral="all"
+              options={PLACE_OPTIONS.map(([value, label]) => [value, `Filed: ${label}`] as const)}
+              label="Filter by where cards are filed"
               title="Show only cards that are (or aren't) in a deck, binder or box"
-            >
-              {PLACE_OPTIONS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  Filed: {label}
-                </option>
-              ))}
-            </select>
+            />
           </div>
         ) : (
           <SortControls
@@ -439,15 +435,7 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
         />
       )}
 
-      {sel.active && (
-        <BulkActionBar
-          count={selectedRows.length}
-          allSelected={allKeys.length > 0 && allKeys.every((k) => sel.selected.has(k))}
-          onToggleAll={() => sel.toggleAll(allKeys)}
-          onCancel={sel.exit}
-          actions={bulkActions}
-        />
-      )}
+      <SelectionBar sel={sel} keys={allKeys} count={selectedRows.length} actions={bulkActions} />
       {pickingContainer && (
         <ContainerPickerSheet onPick={bulkAddContainer} onClose={() => setPickingContainer(false)} />
       )}

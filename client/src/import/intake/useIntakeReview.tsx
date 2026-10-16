@@ -37,6 +37,8 @@ export interface IntakeConfig {
   source: Extract<EventSource, 'import' | 'scan' | 'sealed'>;
   /** History label for the batch (e.g. the product name). */
   label?: string;
+  /** Join an existing batch instead of minting one (a purchase import files its adds under the order). */
+  batchId?: string;
   /** The container, for a container flow. */
   target?: IntakeTarget;
   /** A step shown first, before the cards: the re-scan diff. */
@@ -75,7 +77,11 @@ export function useIntakeReview(): {
     if (!cfg) return;
     setBusy(true);
     try {
-      const result = await commitIntake(st, { source: cfg.source, ...(cfg.label ? { label: cfg.label } : {}) }, answer);
+      const result = await commitIntake(
+        st,
+        { source: cfg.source, ...(cfg.label ? { label: cfg.label } : {}), ...(cfg.batchId ? { batchId: cfg.batchId } : {}) },
+        answer,
+      );
       finish(result);
     } finally {
       setBusy(false);

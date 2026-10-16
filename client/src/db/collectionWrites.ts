@@ -374,6 +374,8 @@ export interface ImportLine {
   lang: string;
   quantity: number;
   quantityForTrade: number;
+  /** Bought on a known day for a known price (a purchase receipt); see ResolvedLine.acquired. */
+  acquired?: { ts: number | null; priceEurCents: number };
 }
 
 /**
@@ -476,12 +478,16 @@ export async function applyImport(
         map.set(k, entry);
         touched.add(entry);
       }
-      ctx.emit(
-        copyEvent('collection.add', copy, l.quantity, now, {
-          priceEurCents: acquisitionCents(prices.get(l.scryfallId), l.finish),
+      // A receipt's line is dated and priced off the receipt; it's still
+      // written now, which is what updatedAt (the sync comparator) says.
+      const { acquired } = l;
+      ctx.emit({
+        ...copyEvent('collection.add', copy, l.quantity, acquired?.ts ?? now, {
+          priceEurCents: acquired ? acquired.priceEurCents : acquisitionCents(prices.get(l.scryfallId), l.finish),
           ...extra,
         }),
-      );
+        updatedAt: now,
+      });
       const wf = wishFulfilledEvent(wishesByOracle, l.oracleId, l.scryfallId, l.quantity, now, {
         source,
         batchId: ctx.batchId,

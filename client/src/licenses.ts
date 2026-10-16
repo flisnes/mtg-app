@@ -100,6 +100,15 @@ export const LICENSES: LicenseEntry[] = [
     "notice": null
   },
   {
+    "name": "pdfjs-dist",
+    "version": "4.10.38",
+    "spdx": "Apache-2.0",
+    "copyright": "\"Licensor\" shall mean the copyright owner or entity authorized by",
+    "url": null,
+    "note": null,
+    "notice": null
+  },
+  {
     "name": "react",
     "version": "19.2.7",
     "spdx": "MIT",

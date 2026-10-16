@@ -1,4 +1,4 @@
-import type { ContainerKind, EventSource, RemovalReason, UserEvent } from '@mtg/shared';
+import { isPurchaseBatch, type ContainerKind, type EventSource, type RemovalReason, type UserEvent } from '@mtg/shared';
 import type { IconName } from '../components/icons.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { BOARD_NOUN } from '../deck/boards.js';
@@ -63,6 +63,9 @@ function isTrade(e: UserEvent): boolean {
 export function describeEvent(e: UserEvent): EventDisplay {
   switch (e.kind) {
     case 'collection.add':
+      // Dated and priced off a marketplace order: says where it was bought,
+      // even when the copy was first registered by a scan or a trade backfill.
+      if (isPurchaseBatch(e.batchId)) return { verb: e.batchLabel ?? 'Bought', icon: 'receipt', direction: 'in' };
       // A backfill for a card given away but never registered — read it as a
       // plain add, not "Received in trade" (it left the collection, not entered).
       if (e.reconcile) return { verb: 'Added to collection', icon: 'plus', direction: 'in' };
@@ -129,6 +132,7 @@ export function batchCount(events: readonly UserEvent[]): number {
  */
 export function describeBatch(source: EventSource, label?: string, events: readonly UserEvent[] = []): EventDisplay {
   const kind = events[0]?.kind;
+  if (isPurchaseBatch(events[0]?.batchId)) return { verb: label ?? 'Bought', icon: 'receipt', direction: 'in' };
   // Only storage sets deckKind, so a batch without it keeps the deck icon it
   // always had.
   const deckKind = events[0]?.deckKind;

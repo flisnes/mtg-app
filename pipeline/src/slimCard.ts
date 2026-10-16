@@ -15,6 +15,8 @@ export interface RawCard {
   set: string;
   set_name: string;
   collector_number: string;
+  /** Cardmarket's product id for this printing, when Scryfall knows it. */
+  cardmarket_id?: number;
   promo?: boolean;
   /** Cosmetic frame treatments *and* functional frames, mixed together — see VARIANT_FRAME_EFFECTS. */
   frame_effects?: string[];
@@ -223,6 +225,8 @@ function oracleFields(card: RawCard): {
 
 export interface SlimResult {
   printing: Printing;
+  /** Cardmarket product id, kept out of the printing: only purchase import reads it (see CardmarketIdIndex). */
+  cardmarketId?: number;
   /**
    * Current prices, kept out of the printing so card data and prices version
    * independently. Nonfoil (eur/usd) plus foil/etched variants (Scryfall has no
@@ -306,6 +310,7 @@ export function slimCard(card: RawCard): SlimResult | null {
 
   return {
     printing,
+    ...(card.cardmarket_id ? { cardmarketId: card.cardmarket_id } : {}),
     prices: {
       eur: price(card.prices?.eur),
       usd: price(card.prices?.usd),

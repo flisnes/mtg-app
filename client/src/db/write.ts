@@ -64,7 +64,8 @@ export async function deleteSyncedMany(tbl: SyncTable, ids: string[]): Promise<v
 export interface WriteCtx {
   now: number;
   batchId: string;
-  emit(e: NewEvent, id?: string): void;
+  /** `updatedAt` defaults to the event's ts; pass it for an event dated in the past. */
+  emit(e: NewEvent & { updatedAt?: number }, id?: string): void;
   /** The deck, read once per transaction (and not stamped). */
   getDeck(id: string): Promise<Deck | undefined>;
   /** The deck, stamped as edited when the transaction ends. */

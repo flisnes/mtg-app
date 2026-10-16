@@ -52,10 +52,10 @@ export const policyMode = (): FilingMode => (getPrefs().filingPolicy === 'move' 
 
 export async function commitIntake(
   st: IntakeState,
-  meta: { source: Extract<EventSource, 'import' | 'scan' | 'sealed'>; label?: string },
+  meta: { source: Extract<EventSource, 'import' | 'scan' | 'sealed'>; label?: string; batchId?: string },
   answer: FilingAnswer | null,
 ): Promise<IntakeResult> {
-  const batchId = newId();
+  const batchId = meta.batchId ?? newId();
   const shared = { source: meta.source, batchId, ...(meta.label ? { batchLabel: meta.label } : {}) };
 
   const plans = plansOf(st);

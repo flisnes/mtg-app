@@ -552,6 +552,17 @@ export type EventSource = 'manual' | 'import' | 'sealed' | 'trade' | 'scan';
 
 export const EVENT_SOURCES: readonly EventSource[] = ['manual', 'import', 'sealed', 'trade', 'scan'];
 
+/**
+ * batchId prefix of a purchase import (a marketplace order read back in). Its
+ * events re-date and re-price collection.add events for copies that were
+ * already registered, so a purchase batch is never undone as a whole:
+ * reversing those adds would take away cards owned before the import.
+ */
+export const PURCHASE_BATCH_PREFIX = 'purchase-';
+
+export const isPurchaseBatch = (batchId: string | null | undefined): boolean =>
+  !!batchId && batchId.startsWith(PURCHASE_BATCH_PREFIX);
+
 export interface UserEvent {
   id: string;
   /** When it happened (ms epoch). */

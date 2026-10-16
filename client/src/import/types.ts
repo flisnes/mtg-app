@@ -40,6 +40,18 @@ export interface ResolvedLine {
    * printing only when it was actually asked for one.
    */
   pinnedPrinting?: boolean;
+  /**
+   * When and for what this copy was bought, for a line read off a purchase
+   * receipt: the add is dated and priced from it instead of now and today's
+   * market price. A null `ts` keeps "now" (a receipt with no date).
+   */
+  acquired?: Acquired;
+}
+
+/** A purchase's date (null: not known) and price per copy in EUR cents. */
+export interface Acquired {
+  ts: number | null;
+  priceEurCents: number;
 }
 
 /**

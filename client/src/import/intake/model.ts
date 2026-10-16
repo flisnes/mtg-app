@@ -140,6 +140,19 @@ export async function buildIntakeLines(lines: ResolvedLine[]): Promise<IntakeLin
         ...cur,
         quantity: cur.quantity + l.quantity,
         quantityForTrade: cur.quantityForTrade + l.quantityForTrade,
+        // Two receipt lines of one copy at two prices land as one add: at the
+        // average, which is all a cost basis reads anyway.
+        ...(cur.acquired && l.acquired
+          ? {
+              acquired: {
+                ts: cur.acquired.ts,
+                priceEurCents: Math.round(
+                  (cur.acquired.priceEurCents * cur.quantity + l.acquired.priceEurCents * l.quantity) /
+                    (cur.quantity + l.quantity),
+                ),
+              },
+            }
+          : {}),
       });
     } else merged.set(k, { ...l });
   }
@@ -280,6 +293,7 @@ export function importLines(st: IntakeState): ImportLine[] {
       lang: l.line.lang,
       quantity: plan.write,
       quantityForTrade: Math.min(plan.write, l.line.quantityForTrade),
+      ...(l.line.acquired ? { acquired: l.line.acquired } : {}),
     }));
 }
 

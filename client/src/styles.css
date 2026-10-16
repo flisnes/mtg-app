@@ -2520,6 +2520,40 @@ body:has(.select-float) .app-main {
 .import-panel .fine-print {
   margin: 0;
 }
+/* Purchase import review: one checkbox per order line. */
+.purchase-review h3 {
+  margin: 1rem 0 0.3rem;
+}
+.purchase-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.4rem 0.2rem;
+  cursor: pointer;
+}
+.purchase-check input {
+  margin-top: 0.2rem;
+  flex: none;
+}
+.purchase-line .result-sub {
+  white-space: normal;
+}
+.purchase-change strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.purchase-review .chips {
+  margin-bottom: 0.4rem;
+}
+.purchase-uptodate {
+  margin-top: 1rem;
+}
+.purchase-uptodate summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.3rem 0;
+}
 
 .deck-filter-toggle {
   display: inline-flex;

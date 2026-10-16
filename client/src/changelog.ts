@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.201.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Import an old Cardmarket or CardTrader order (CSV, XLS or PDF) under Import to set when you bought each card and what you paid, even for cards you have since traded away.',
+      },
+    ],
+  },
+  {
     version: '0.200.14',
     changes: [
       { kind: 'fixed', text: 'Searching "bolt" ranks Lightning Bolt with the other Bolts, and cards you own first among equals.' },
@@ -147,15 +156,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'One way of counting everywhere: "176 cards · 70 unique" on Collection, Tradelist, Wishlist and Sealed, and "60 cards · 15 side" on the deck list. Headers say "Value", with "Owned value" only where some cards are missing. List, grid and stack toggles and the back arrows are proper icons now.',
-      },
-    ],
-  },
-  {
-    version: '0.198.13',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Layout fixes: recent searches no longer cover the scope chips, Spoilers opens on a set with cards, the sealed steppers are centred, and Delete sits apart from Archive in the deck menu.',
       },
     ],
   },

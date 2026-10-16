@@ -30,7 +30,9 @@ export default defineConfig({
         // reads (a lazy JSON import in @mtg/sim). Precaching it would download
         // it on every install whether or not anyone opens analysis, so it is
         // cached on first use instead — see the runtime rule below.
-        globIgnores: ['**/edhDefaults-*.js'],
+        // pdf.js (~110 KB gzipped, plus a worker) is the same story: only a
+        // purchase import from a PDF receipt loads it.
+        globIgnores: ['**/edhDefaults-*.js', '**/pdf-*.js', '**/pdf.worker*', '**/pdfText-*.js'],
         // Card imagery is hotlinked from Scryfall's CDN; cache it bounded &
         // cache-first so the collection stays browsable offline (beta plan §3).
         // maxEntries here is the ceiling, not the setting: it is baked in at

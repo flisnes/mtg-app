@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page } from './Page.js';
 import { useToast } from '../components/Toast.js';
 import { ImportPanel } from '../import/ImportPanel.js';
+import { PurchaseImport } from '../import/purchase/PurchaseImport.js';
 import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import type { ResolvedLine } from '../import/types.js';
 import { plural } from '../util/format.js';
@@ -12,6 +14,8 @@ export function Import() {
   const { open: review, sheet: intakeSheet } = useIntakeReview();
   const toast = useToast();
   const navigate = useNavigate();
+  // While an order is being reviewed, it has the page to itself.
+  const [purchaseOpen, setPurchaseOpen] = useState(false);
 
   async function confirmImport(lines: ResolvedLine[]) {
     const res = await review({ flow: 'collection', lines, source: 'import', incomingLabel: 'Import' });
@@ -31,20 +35,23 @@ export function Import() {
 
   return (
     <Page title="Import" subtitle="Paste a list or upload a CSV, Moxfield, Archidekt, or plain text.">
-      <ImportPanel
-        tradelistMode="choose"
-        placeholder={'4 Lightning Bolt\n1 Sol Ring (C21) 263\n…or paste a Moxfield/Archidekt CSV'}
-        onConfirm={confirmImport}
-        extraSummary={(lines) => {
-          const forTrade = lines.reduce((s, l) => s + l.quantityForTrade, 0);
-          return (
-            <>
-              <dt>For trade</dt>
-              <dd>{forTrade === 0 ? 'nothing' : `${forTrade} cards`}</dd>
-            </>
-          );
-        }}
-      />
+      {!purchaseOpen && (
+        <ImportPanel
+          tradelistMode="choose"
+          placeholder={'4 Lightning Bolt\n1 Sol Ring (C21) 263\n…or paste a Moxfield/Archidekt CSV'}
+          onConfirm={confirmImport}
+          extraSummary={(lines) => {
+            const forTrade = lines.reduce((s, l) => s + l.quantityForTrade, 0);
+            return (
+              <>
+                <dt>For trade</dt>
+                <dd>{forTrade === 0 ? 'nothing' : `${forTrade} cards`}</dd>
+              </>
+            );
+          }}
+        />
+      )}
+      <PurchaseImport onActive={setPurchaseOpen} />
       {intakeSheet}
     </Page>
   );

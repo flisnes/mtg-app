@@ -11,6 +11,7 @@ const { parser: jsonlParser } = jsonlMod;
 import type {
   CardDbChunkMeta,
   CardDbManifest,
+  CardmarketIdIndex,
   OracleCard,
   PriceMap,
   PriceTuple,
@@ -20,6 +21,7 @@ import type {
   SetTypeMap,
 } from '@mtg/shared';
 import {
+  CARDMARKET_ID_PREFIX,
   EFFECT_REPEATABLE,
   EFFECT_TUTOR,
   EFFECT_UNKNOWN,
@@ -51,6 +53,8 @@ import { buildEffectTagIndex, effectProfileOf, type EffectTagIndex } from './eff
 //   - tags.<hash>.json.gz — the Scryfall Tagger oracle-tag vocabulary the
 //     numbers in each card's `tags` index into, for `otag:` search (~40 KB,
 //     fetched lazily). Refreshed weekly, not nightly — see oracleTags.ts;
+//   - cardmarket.<hash>.json.gz — Cardmarket product id → printing, for
+//     reading a Cardmarket order export (~0.5 MB, fetched lazily, only then);
 //   - manifest.json tying it all together.
 //
 // Superseded artifacts are pruned after each build (one build's grace window),
@@ -226,6 +230,7 @@ function referenced(m: CardDbManifest | null): Set<string> {
     m.v2?.sealedBoosters,
     m.v2?.sets,
     m.v2?.tags,
+    m.v2?.cardmarket,
   ]) {
     if (a) out.add(a.url);
   }
@@ -308,6 +313,10 @@ async function main(): Promise<void> {
 
   const printings: Printing[] = [];
   const prices: PriceMap = {};
+  // Cardmarket product id → printing. A few hundred ids are shared by two
+  // printings (a non-English printing Scryfall lists apart); the English one
+  // wins, since that's the row the client's printing lookups land on.
+  const cardmarket = new Map<number, Printing>();
   const reps = new Map<string, SlimResult>();
   // Scryfall bulk dumps occasionally contain the same card twice; a duplicate
   // scryfallId would make chunk counts disagree with what survives the
@@ -328,6 +337,10 @@ async function main(): Promise<void> {
         kept++;
         seenIds.add(slim.printing.scryfallId);
         printings.push(slim.printing);
+        if (slim.cardmarketId) {
+          const had = cardmarket.get(slim.cardmarketId);
+          if (!had || (had.lang !== 'en' && slim.printing.lang === 'en')) cardmarket.set(slim.cardmarketId, slim.printing);
+        }
         const tuple = priceTuple(slim.prices);
         if (tuple) prices[slim.printing.scryfallId] = tuple;
         const existing = reps.get(slim.printing.oracleId);
@@ -409,6 +422,24 @@ async function main(): Promise<void> {
   const dataVersion = createHash('sha256')
     .update([...oracleChunks, ...printingsChunks].map((c) => c.sha256).join(''))
     .digest('hex');
+
+  // Cardmarket ids (see CardmarketIdIndex): sorted, delta-encoded, with a
+  // ten-digit Scryfall id prefix each. Best-effort like sets/tags.
+  let cardmarketArtifact: Artifact | undefined;
+  if (cardmarket.size > 0) {
+    const ids = [...cardmarket.keys()].sort((a, b) => a - b);
+    let prev = 0;
+    const index: CardmarketIdIndex = {
+      d: ids.map((id) => {
+        const gap = id - prev;
+        prev = id;
+        return gap;
+      }),
+      s: ids.map((id) => cardmarket.get(id)!.scryfallId.replace(/-/g, '').slice(0, CARDMARKET_ID_PREFIX)).join(''),
+    };
+    cardmarketArtifact = emitHashed('cardmarket', index, ids.length);
+    console.log(`[pipeline]   cardmarket: ${ids.length} product ids (${cardmarketArtifact.bytes} B)`);
+  }
 
   // Prices, sorted by id for a stable hash on days prices don't move.
   const sortedPrices: PriceMap = Object.fromEntries(Object.entries(prices).sort(([a], [b]) => (a < b ? -1 : 1)));
@@ -532,6 +563,7 @@ async function main(): Promise<void> {
       ...(sealedBoostersArtifact ? { sealedBoosters: meta(sealedBoostersArtifact) } : {}),
       ...(setsArtifact ? { sets: meta(setsArtifact) } : {}),
       ...(tagsArtifact ? { tags: meta(tagsArtifact) } : {}),
+      ...(cardmarketArtifact ? { cardmarket: meta(cardmarketArtifact) } : {}),
     },
   };
   writeFileSync(join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));

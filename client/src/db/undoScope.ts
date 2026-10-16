@@ -1,4 +1,4 @@
-import type { UserEvent } from '@mtg/shared';
+import { isPurchaseBatch, type UserEvent } from '@mtg/shared';
 
 // Which rows an undo would write, and which page the change belongs to.
 //
@@ -131,7 +131,10 @@ export function undoableIds(groups: readonly UndoGroup[]): Set<string> {
   const out = new Set<string>();
   for (const g of groups) {
     const keys = g.events.flatMap(rowKeysOf);
-    if (!keys.some((k) => touched.has(k))) out.add(g.id);
+    // A purchase import corrected the history of copies you already had;
+    // "undoing" it would remove them (see PURCHASE_BATCH_PREFIX).
+    const purchase = g.events.some((e) => isPurchaseBatch(e.batchId));
+    if (!purchase && !keys.some((k) => touched.has(k))) out.add(g.id);
     for (const k of keys) touched.add(k);
   }
   return out;

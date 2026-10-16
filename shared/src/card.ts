@@ -725,8 +725,30 @@ export interface CardDbManifest {
      * the tag fetch failed — in which case `otag:` simply finds nothing.
      */
     tags?: CardDbArtifactMeta;
+    /**
+     * Cardmarket product id -> printing, for reading a Cardmarket order export,
+     * which names each card by product id and nothing else. A
+     * CardmarketIdIndex. ~0.5 MB gzipped, so fetched lazily, and only when such
+     * a file is imported. Absent on builds made before purchase import.
+     */
+    cardmarket?: CardDbArtifactMeta;
   };
 }
+
+/**
+ * Cardmarket product ids and the printings they name, sorted by product id.
+ * `d` is the ids delta-encoded (each entry is the gap from the previous id);
+ * `s` is the first ten hex digits of each printing's Scryfall id, concatenated
+ * in the same order. Ten digits are unique across every printing ever made
+ * and a full id would triple the download (UUIDs don't compress).
+ */
+export interface CardmarketIdIndex {
+  d: number[];
+  s: string;
+}
+
+/** How many hex digits of a Scryfall id CardmarketIdIndex.s keeps per entry. */
+export const CARDMARKET_ID_PREFIX = 10;
 
 /**
  * One oracle tag, positional to keep the artifact small: `[slug]`, or

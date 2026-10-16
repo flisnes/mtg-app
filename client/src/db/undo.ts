@@ -1,4 +1,4 @@
-import type { Trade, UserEvent } from '@mtg/shared';
+import { isPurchaseBatch, type Trade, type UserEvent } from '@mtg/shared';
 import { db } from './schema.js';
 import { rowKeysOf } from './undoScope.js';
 import { copiesAdjustRaw, tradeMarkAdjustRaw } from './collectionWrites.js';
@@ -104,6 +104,9 @@ export async function undoEntry(ref: UndoRef): Promise<UndoResult> {
       events = [one, ...paired];
     }
     if (events.length === 0) return { undone: false, reason: 'gone' as const };
+    // Never offered (undoScope.ts), and refused here too: these adds are copies
+    // you owned before the import, and reversing them would delete them.
+    if (events.some((e) => isPurchaseBatch(e.batchId))) return { undone: false, reason: 'conflict' as const };
 
     // Guard: nothing newer may have written the rows this undo is about to
     // write (db/undoScope.ts explains why that, and not "is it the newest?").

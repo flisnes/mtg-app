@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { DayReadings, Finish, UserEvent } from '@mtg/shared';
+import { isPurchaseBatch, type DayReadings, type Finish, type UserEvent } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
 import { centsNearest, dayKeyOf, readingsFor, type HistoryChange } from './history.js';
@@ -101,7 +101,9 @@ export function costBasisOf(
       cents = near.cents;
       estimated = true;
       if (copyFinish !== 'nonfoil' && !lane.foil) crossFinish = true;
-    } else if (copyFinish !== 'nonfoil' && e.ts < FOIL_PRICING_SINCE) {
+    } else if (copyFinish !== 'nonfoil' && e.ts < FOIL_PRICING_SINCE && !isPurchaseBatch(e.batchId)) {
+      // A purchase import dates the copy to when you bought it, years before
+      // foil pricing existed, but its price is off the receipt, not our stamp.
       crossFinish = true;
     }
     const qty = e.qty ?? 1;

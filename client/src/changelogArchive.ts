@@ -9,6 +9,24 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.198.8',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Deck pages, card details and owned counts no longer redo their work on every write during a sync or a big import, so the app stays snappy while cards pour in.',
+      },
+    ],
+  },
+  {
+    version: '0.198.7',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Select mode shows its two main actions as soon as you pick a card, with the rest under More. The check circle moved off the card name.',
+      },
+    ],
+  },
+  {
     version: '0.198.6',
     changes: [
       {

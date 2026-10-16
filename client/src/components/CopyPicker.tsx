@@ -184,13 +184,7 @@ export function CopyPicker({
   onClose: () => void;
 }) {
   return (
-    <Sheet onClose={onClose} className="edition-picker-sheet" label="Your copies">
-      <div className="edition-picker-head">
-        <h2>Your copies</h2>
-        <button onClick={onClose} aria-label="Close">
-          <Icon name="close" size={18} />
-        </button>
-      </div>
+    <Sheet onClose={onClose} className="edition-picker-sheet" title="Your copies">
       <CopyGrid copies={copies} printings={printings} selected={selected} onSelect={onSelect} />
       {onAddCopy && (
         <button

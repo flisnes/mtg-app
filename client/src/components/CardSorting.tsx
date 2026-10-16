@@ -11,6 +11,7 @@ import {
   type SortKey,
 } from './cardSort.js';
 import { sumQty } from '../util/groupBy.js';
+import { usePopover } from './usePopover.js';
 
 // Sort/group controls, and the per-view persistence behind them. Every card
 // list in the app (decks, collection, tradelist, wishlist, card search) renders
@@ -292,21 +293,7 @@ export function GroupCountBadge({ quantity, extras }: { quantity: number; extras
   const ref = useRef<HTMLSpanElement | null>(null);
   const extraQty = sumQty(extras ?? []);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  usePopover(ref, open, () => setOpen(false));
 
   if (extraQty === 0) return <span className="badge">{quantity}</span>;
   return (

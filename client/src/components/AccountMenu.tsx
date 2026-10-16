@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ProfileAvatar } from '@mtg/shared';
 import { Avatar } from './Avatar.js';
 import { Icon, type IconName } from './icons.js';
+import { usePopover } from './usePopover.js';
 
 // The header avatar is the front door to everything "about you": your public
 // Profile, your Settings (account, sync, data, preferences), and the About
@@ -22,21 +23,7 @@ export function AccountMenu({ signedIn, username, ownAvatar, syncTone, syncLabel
   const ref = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  usePopover(ref, open, () => setOpen(false));
 
   function go(to: string) {
     setOpen(false);

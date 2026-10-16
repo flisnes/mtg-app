@@ -266,16 +266,7 @@ export function PriceChartSheet({
   }, [focus, marks]);
 
   return (
-    <Sheet onClose={onClose} className="price-chart-sheet" label={`Price history of ${name}`}>
-        <div className="edition-picker-head">
-          <div className="price-chart-titles">
-            <h2>{name}</h2>
-            {subtitle && <div className="fine-print">{subtitle}</div>}
-          </div>
-          <button onClick={onClose} aria-label="Close">
-            <Icon name="close" size={18} />
-          </button>
-        </div>
+    <Sheet onClose={onClose} className="price-chart-sheet" label={`Price history of ${name}`} title={name} subtitle={subtitle}>
 
         {latest && heroV != null && (
           <div className="price-chart-hero">
@@ -465,11 +456,6 @@ export function PriceChartSheet({
           </p>
         )}
 
-        <div className="sheet-actions">
-          <button className="primary" onClick={onClose}>
-            Close
-          </button>
-        </div>
     </Sheet>
   );
 }

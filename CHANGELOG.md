@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.9
+
+- **Changed: every sheet closes the same way.** Each sheet now has its ✕ in the top-right corner, including Sort and filter, File away and a sealed product, which had none. The main button always sits bottom-right (Sort's Done and the price chart's Close used to drift left), a sheet that only had a Close button just keeps the ✕, and Remove on a sealed product is outlined red like every other delete. The plus/minus counters in the scan list, trade stacks and sealed products are now the same control as the card sheet's, picked options look alike in every tab row and sort chip, and Escape closes an open ⋯ menu instead of the whole card behind it. The full-screen card view no longer closes on the same tap that opened it. Same deck, sleeved to match.
+
 ## 0.200.8
 
 - **Changed: one import panel everywhere.** Pasting a list into your collection, tradelist, wishlist or a deck now uses the same panel. Condition, finish and language are proper labelled pickers instead of tiny browser dropdowns, the grey "Choose file" button is an Upload file button, and Analyze sits on the right where your thumb expects it. Under the hood, four copy-pasted import panels became one.

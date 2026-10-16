@@ -9,6 +9,7 @@ import { CardItems, useViewMode, ViewToggle, type CardItem } from '../components
 import { CardSheet } from '../components/CardSheet.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { Icon } from '../components/icons.js';
+import { usePopover } from '../components/usePopover.js';
 
 // Spoilers & reprints: browse the newest sets and see, per set, which cards are
 // brand new (their first printing) and which are reprints of older cards. All
@@ -156,21 +157,7 @@ export function Spoilers() {
   const single = selectedSummaries.length === 1 ? selectedSummaries[0] : null;
 
   // Close the picker on outside click or Escape.
-  useEffect(() => {
-    if (!pickerOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPickerOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [pickerOpen]);
+  usePopover(pickerRef, pickerOpen, () => setPickerOpen(false));
 
   function toggleSet(code: string) {
     setPickedCodes((prev) => {

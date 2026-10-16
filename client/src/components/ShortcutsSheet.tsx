@@ -87,9 +87,6 @@ export function ShortcutsSheet({ onClose }: { onClose: () => void }) {
           </ul>
         </div>
       ))}
-      <div className="sheet-actions">
-        <button onClick={onClose}>Close</button>
-      </div>
     </Sheet>
   );
 }

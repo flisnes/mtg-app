@@ -72,11 +72,16 @@ export function EmblemPickerSheet({
   const closeLabel = saved ? 'Done' : 'Cancel';
 
   return (
-    <Sheet onClose={onClose} label={`Emblem for ${name}`}>
-      <div className="sheet-name emblem-sheet-name">
-        <Emblem emblem={current} kind={kind} size={28} />
-        <span>{card ? 'Frame the art' : `Emblem for “${name}”`}</span>
-      </div>
+    <Sheet
+      onClose={onClose}
+      label={`Emblem for ${name}`}
+      title={
+        <span className="emblem-sheet-name">
+          <Emblem emblem={current} kind={kind} size={28} />
+          <span>{card ? 'Frame the art' : `Emblem for “${name}”`}</span>
+        </span>
+      }
+    >
 
       {!card && (
         <div className="seg-row sheet-tabs" role="tablist" aria-label="Emblem source">

@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
 import { plural } from '../util/format.js';
 
@@ -53,13 +52,9 @@ export function UnownedPromptSheet({
       dismiss={busy ? null : onBack}
       className="scan-list-sheet"
       label="Add these cards to your collection"
+      title="Add to collection?"
+      closeButton={{ label: backLabel }}
     >
-      <div className="scan-sheet-head">
-        <h2>Add to collection?</h2>
-        <button className="scan-close" onClick={onBack} aria-label={backLabel}>
-          <Icon name="close" size={18} />
-        </button>
-      </div>
       <p className="fine-print">
         {intro ?? (
           <>

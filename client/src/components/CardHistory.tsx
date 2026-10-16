@@ -9,7 +9,6 @@ import { pricedForFinish } from './cardSort.js';
 import { currencySymbol, moneyInput } from '../price/rates.js';
 import { describeEvent, qtyBadge, REASON_LABELS } from '../history/eventRegistry.js';
 import { fmtCents, fmtDate } from '../util/format.js';
-import { Icon } from './icons.js';
 import { Sheet } from './Sheet.js';
 import { useAsyncAction } from './useAsyncAction.js';
 
@@ -50,16 +49,13 @@ export function CardHistorySheet({
   // lives with the rows it fixes and dies with this sheet.
   const [editMode, setEditMode] = useState(false);
   return (
-    <Sheet onClose={onClose} className="card-history-sheet" label={`Collection history for ${oracleCard.name}`}>
-      <div className="edition-picker-head">
-        <div className="card-history-title">
-          <h2>Collection history</h2>
-          <p className="fine-print">Every change you've made to {oracleCard.name} in your collection.</p>
-        </div>
-        <button onClick={onClose} aria-label="Close">
-          <Icon name="close" size={18} />
-        </button>
-      </div>
+    <Sheet
+      onClose={onClose}
+      className="card-history-sheet"
+      label={`Collection history for ${oracleCard.name}`}
+      title="Collection history"
+      subtitle={`Every change you've made to ${oracleCard.name} in your collection.`}
+    >
       <CardHistory
         oracleCard={oracleCard}
         scryfallId={scryfallId}

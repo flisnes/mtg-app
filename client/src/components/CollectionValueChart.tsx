@@ -163,16 +163,13 @@ function ValueChartSheet({
   const dayEvents = focus ? (series?.eventsByDay.get(focus.day) ?? []) : [];
 
   return (
-    <Sheet onClose={onClose} className="price-chart-sheet" label={`${words.title} over time`}>
-      <div className="edition-picker-head">
-        <div className="price-chart-titles">
-          <h2>{words.title}</h2>
-          <div className="fine-print">{mode === 'total' ? words.totalNote : words.gainNote}</div>
-        </div>
-        <button onClick={onClose} aria-label="Close">
-          <Icon name="close" size={18} />
-        </button>
-      </div>
+    <Sheet
+      onClose={onClose}
+      className="price-chart-sheet"
+      label={`${words.title} over time`}
+      title={words.title}
+      subtitle={mode === 'total' ? words.totalNote : words.gainNote}
+    >
 
       <div className="seg-row sheet-tabs" role="tablist" aria-label="Chart mode">
         <button role="tab" aria-selected={mode === 'total'} className={mode === 'total' ? 'seg seg-active' : 'seg'} onClick={() => setMode('total')}>
@@ -316,11 +313,6 @@ function ValueChartSheet({
         </>
       )}
 
-      <div className="sheet-actions">
-        <button className="primary" onClick={onClose}>
-          Close
-        </button>
-      </div>
 
       {openEntry && (
         <EventSheet

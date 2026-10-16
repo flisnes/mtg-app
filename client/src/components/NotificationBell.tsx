@@ -7,6 +7,7 @@ import { useFilingConflictCount } from '../db/usePlacements.js';
 import { Icon } from './icons.js';
 import { useAsyncAction } from './useAsyncAction.js';
 import { plural } from '../util/format.js';
+import { usePopover } from './usePopover.js';
 
 // Bell in the header, next to the account icon. A red dot appears when there's
 // something waiting. Two kinds of thing land here:
@@ -52,21 +53,7 @@ export function NotificationBell({ signedIn }: { signedIn: boolean }) {
   }, [open]);
 
   // Close on outside click or Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  usePopover(wrapRef, open, () => setOpen(false));
 
   // Each direction highlights its own list: cards they have that I want belong
   // in their "Has for trade", cards I have that they want belong in their

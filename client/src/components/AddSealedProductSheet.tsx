@@ -20,6 +20,7 @@ import { LANGS } from './copyTraits.js';
 import { Sheet } from './Sheet.js';
 import { useToast } from './Toast.js';
 import { plural } from '../util/format.js';
+import { QtyStepper } from './QtyStepper.js';
 
 // "Add sealed product" (see sealed-products feature). Search any sealed product
 // MTGJSON knows, then choose what owning it means: keep the box sealed, or open
@@ -133,20 +134,16 @@ export function AddSealedProductSheet({ onClose }: { onClose: () => void }) {
       dismiss={adding ? null : selected ? () => setSelected(null) : onClose}
       className="sealed-sheet"
       label="Add sealed product"
-    >
-      <div className="scan-sheet-head">
-        <h2>{selected ? 'Add product' : 'Add sealed product'}</h2>
-        {selected && (
+      title={selected ? 'Add product' : 'Add sealed product'}
+      headerRight={
+        selected && (
           <button className="sealed-back" onClick={() => setSelected(null)} aria-label="Back to search">
             <Icon name="chevronLeft" size={16} className="chev" />
-
             Back
           </button>
-        )}
-        <button className="scan-close" onClick={onClose} aria-label="Close">
-          ✕
-        </button>
-      </div>
+        )
+      }
+    >
 
       {!selected && <SearchView load={load} query={query} setQuery={setQuery} results={results} onPick={(p) => void openProduct(p)} />}
 
@@ -337,13 +334,7 @@ function DetailView({
 
       <div className="sealed-copies">
         <span>Copies</span>
-        <button onClick={() => setCopies(Math.max(1, copies - 1))} aria-label="Fewer copies" disabled={copies <= 1}>
-          −
-        </button>
-        <span className="sealed-copies-n">{copies}</span>
-        <button onClick={() => setCopies(Math.min(99, copies + 1))} aria-label="More copies" disabled={copies >= 99}>
-          +
-        </button>
+        <QtyStepper compact value={copies} min={1} max={99} onChange={setCopies} label="copy" />
       </div>
 
       {showCards && (

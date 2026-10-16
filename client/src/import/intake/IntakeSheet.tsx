@@ -3,7 +3,6 @@ import type { CollectionEntry } from '@mtg/shared';
 import { specialLabel } from '@mtg/shared';
 import { ContainerPickerBody } from '../../components/ContainerPickerSheet.js';
 import { FilingChoiceBody } from '../../components/FilingChoiceSheet.js';
-import { Icon } from '../../components/icons.js';
 import { Sheet } from '../../components/Sheet.js';
 import type { FilingMode } from '../../deck/filing.js';
 import type { IntakeConfig } from './useIntakeReview.js';
@@ -108,18 +107,16 @@ export function IntakeSheet({
       className={`scan-list-sheet intake-sheet${step === 'where' ? ' container-picker' : ''}`}
       label={label}
       resetKey={state.step}
-    >
-      <div className="scan-sheet-head">
-        <h2>{title}</h2>
-        {steps.length > 1 && (
+      title={title}
+      headerRight={
+        steps.length > 1 && (
           <span className="scan-target">
             Step {state.step + 1} of {steps.length}
           </span>
-        )}
-        <button className="scan-close" onClick={onBack} aria-label={state.step === 0 ? 'Cancel' : 'Back'} disabled={busy}>
-          <Icon name="close" size={18} />
-        </button>
-      </div>
+        )
+      }
+      closeButton={{ label: state.step === 0 ? 'Cancel' : 'Back' }}
+    >
 
       {step === 'changes' && cfg.preface?.body}
 

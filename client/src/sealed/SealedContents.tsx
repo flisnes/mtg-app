@@ -6,7 +6,7 @@ import type { CardItem } from '../components/CardViews.js';
 import { Icon } from '../components/icons.js';
 import { ResultsList } from '../components/ResultsList.js';
 import { SetSymbol } from '../components/SetSymbol.js';
-import { Sheet } from '../components/Sheet.js';
+import { Sheet, SheetClose } from '../components/Sheet.js';
 import { SealedImage } from './SealedImage.js';
 import { loadContents, perCopyCount, type OpenContents, type OpenRow } from './open.js';
 import { productImage, subtitle } from './product.js';
@@ -128,6 +128,7 @@ export function SealedContentsSheet({
           <strong className="sealed-result-name">{product.name}</strong>
           <span className="sealed-result-sub">{subtitle(product)}</span>
         </div>
+        <SheetClose onClick={onClose} />
       </div>
 
       {product.omittedRandom ? (
@@ -152,10 +153,6 @@ export function SealedContentsSheet({
       ) : (
         <p className="sealed-msg">Loading contents…</p>
       )}
-
-      <div className="sheet-actions">
-        <button onClick={onClose}>Close</button>
-      </div>
     </Sheet>
   );
 }

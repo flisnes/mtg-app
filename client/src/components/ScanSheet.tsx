@@ -49,6 +49,7 @@ import { addToTotal, formatPrice, formatTotal, pricedForFinish, type PriceTotal 
 import { useCardMaps } from '../db/useCardMaps.js';
 import { plural } from '../util/format.js';
 import { BOARD_NOUN, scanBoards } from '../deck/boards.js';
+import { QtyStepper } from './QtyStepper.js';
 
 // Camera scanning flow (handover §S5), built for one-handed binder entry: the
 // camera fills the top of the screen and never pauses; each lock (S3 consensus
@@ -1924,15 +1925,19 @@ export function SessionSheet({
 
   // The per-line card sheet stacks above this one and dismisses first.
   return (
-    <Sheet onClose={onClose} dismiss={busy ? null : onClose} className="scan-list-sheet" label={title}>
-        <div className="scan-sheet-head">
-          <h2>{title}</h2>
+    <Sheet
+      onClose={onClose}
+      dismiss={busy ? null : onClose}
+      className="scan-list-sheet"
+      title={title}
+      headerRight={
+        <>
           <span className="scan-target">→ {targetLabel(target)}</span>
           <ViewToggle mode={view} onChange={setView} options={['list', 'stack']} />
-          <button className="scan-close" onClick={onClose} aria-label="Close list">
-            <Icon name="close" size={18} />
-          </button>
-        </div>
+        </>
+      }
+      closeButton={{ label: 'Close list' }}
+    >
 
         {notice}
 
@@ -1967,13 +1972,7 @@ export function SessionSheet({
                 onClick: () => void action.run('open that card', () => openEntry(i)),
                 actions: (
                   <>
-                    <button onClick={() => adjust(i, -1)} aria-label={`One less ${e.name}`}>
-                      <Icon name="minus" size={16} />
-                    </button>
-                    <span className="stack-qty">{e.qty}</span>
-                    <button onClick={() => adjust(i, 1)} aria-label={`One more ${e.name}`}>
-                      <Icon name="plus" size={16} />
-                    </button>
+                    <QtyStepper compact value={e.qty} min={0} onChange={(v) => adjust(i, v - e.qty)} label={e.name} />
                     {showBoards && (
                       <button className="scan-chip" onClick={() => cycleBoard(i)}>
                         {BOARD_NOUN[e.board]}
@@ -2005,15 +2004,7 @@ export function SessionSheet({
                     {BOARD_NOUN[e.board]}
                   </button>
                 )}
-                <div className="scan-list-qty">
-                  <button onClick={() => adjust(i, -1)} aria-label={`One less ${e.name}`}>
-                    <Icon name="minus" size={16} />
-                  </button>
-                  <span>{e.qty}</span>
-                  <button onClick={() => adjust(i, 1)} aria-label={`One more ${e.name}`}>
-                    <Icon name="plus" size={16} />
-                  </button>
-                </div>
+                <QtyStepper compact value={e.qty} min={0} onChange={(v) => adjust(i, v - e.qty)} label={e.name} />
               </li>
             ))}
           </ul>

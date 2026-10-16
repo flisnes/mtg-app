@@ -3,7 +3,6 @@ import { DAY_MS, type SealedItem } from '@mtg/shared';
 import { fmtMoney } from '../price/rates.js';
 import { useSealedValueSeries } from '../price/sealedValue.js';
 import { fmtDate, plural } from '../util/format.js';
-import { Icon } from '../components/icons.js';
 import { Sheet } from '../components/Sheet.js';
 import { LinePlot, useValueChart, ZoomHint, type ChartPt } from '../components/ValueLineChart.js';
 import { SealedImage } from './SealedImage.js';
@@ -37,16 +36,13 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
   const dayAdds = focus ? (series?.addsByDay.get(focus.day) ?? []) : [];
 
   return (
-    <Sheet onClose={onClose} className="price-chart-sheet" label="Sealed value over time">
-      <div className="edition-picker-head">
-        <div className="price-chart-titles">
-          <h2>Sealed value</h2>
-          <div className="fine-print">What the unopened products on your shelf were worth</div>
-        </div>
-        <button onClick={onClose} aria-label="Close">
-          <Icon name="close" size={18} />
-        </button>
-      </div>
+    <Sheet
+      onClose={onClose}
+      className="price-chart-sheet"
+      label="Sealed value over time"
+      title="Sealed value"
+      subtitle="What the unopened products on your shelf were worth"
+    >
 
       {series === undefined ? (
         <Loading fine />
@@ -140,11 +136,6 @@ export function SealedValueChartSheet({ onClose }: { onClose: () => void }) {
         </>
       )}
 
-      <div className="sheet-actions">
-        <button className="primary" onClick={onClose}>
-          Close
-        </button>
-      </div>
     </Sheet>
   );
 }

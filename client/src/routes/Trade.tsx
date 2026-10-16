@@ -41,6 +41,7 @@ import {
 } from '../trade/useTradeSession.js';
 import { sumQty } from '../util/groupBy.js';
 import { Loading } from '../components/Loading.js';
+import { QtyStepper } from '../components/QtyStepper.js';
 
 /** Offer lines merge on the same compound key as collection entries. */
 const lineKey = collectionKey;
@@ -1018,11 +1019,7 @@ function OfferPanel({
                 // the quantity between them instead.
                 actions: view === 'stack' ? (
                   editable ? (
-                    <>
-                      {less}
-                      <span className="stack-qty">{l.quantity}</span>
-                      {more}
-                    </>
+                    <QtyStepper compact value={l.quantity} min={0} onChange={(v) => onQty(side, lineKey(l), v)} label={l.name} />
                   ) : undefined
                 ) : (
                   <>
@@ -1053,13 +1050,7 @@ function OfferPanel({
 /** Generic bottom sheet for the trade tools. */
 function TradeSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <Sheet onClose={onClose} label={title}>
-      <div className="sheet-title-row">
-        <strong>{title}</strong>
-        <button className="chip" onClick={onClose}>
-          Close
-        </button>
-      </div>
+    <Sheet onClose={onClose} title={title}>
       {children}
     </Sheet>
   );

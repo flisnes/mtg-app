@@ -30,6 +30,7 @@ import { useAsyncAction } from '../components/useAsyncAction.js';
 import { fmtCardCount } from '../util/format.js';
 import { sumQty } from '../util/groupBy.js';
 import { Loading } from '../components/Loading.js';
+import { QtyStepper } from '../components/QtyStepper.js';
 
 // The sealed shelf: unopened boxes, displays, packs and precons. Deliberately
 // its own view rather than a section of the collection — these rows have no
@@ -389,20 +390,14 @@ function SealedShelf({
               </span>
             </button>
             <div className="sealed-owned-qty">
-              <button
-                onClick={() => action.run('change the count', () => setSealedItemQuantity(item.id, item.quantity - 1))}
-                aria-label={`One fewer ${item.name}`}
-              >
-                −
-              </button>
-              <span className="sealed-copies-n">{item.quantity}</span>
-              <button
-                onClick={() => action.run('change the count', () => setSealedItemQuantity(item.id, item.quantity + 1))}
-                aria-label={`One more ${item.name}`}
-                disabled={item.quantity >= 9999}
-              >
-                +
-              </button>
+              <QtyStepper
+                compact
+                value={item.quantity}
+                min={0}
+                max={9999}
+                onChange={(v) => action.run('change the count', () => setSealedItemQuantity(item.id, v))}
+                label={item.name}
+              />
             </div>
             <button className="linklike sealed-owned-remove" onClick={() => onRemove(item)}>
               Remove

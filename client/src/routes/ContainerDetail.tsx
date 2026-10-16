@@ -1301,8 +1301,7 @@ export function ContainerDetail({ kind }: { kind: ContainerKind }) {
             });
           const toggleAll = () => setPicked(allPicked ? new Set() : new Set(cards.map((c) => c.oracleId)));
           return (
-            <Sheet onClose={dismiss} label="Add missing cards to wishlist">
-              <h2 style={{ margin: 0 }}>Add missing cards to wishlist?</h2>
+            <Sheet onClose={dismiss} label="Add missing cards to wishlist" title="Add missing cards to wishlist?">
               <p className="fine-print">
                 This deck needs {cards.reduce((s, c) => s + c.addQty, 0)} {plural(cards.length, 'card')} you don’t
                 own and haven’t wishlisted. Pick which to add:

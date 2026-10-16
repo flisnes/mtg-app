@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Icon, type IconName } from './icons.js';
+import { usePopover } from './usePopover.js';
 
 // The per-page "⋯" options menu: rarely-used actions (import/export/delete)
 // live here so toolbars stay clear for the primary flow (search → add).
@@ -27,21 +28,7 @@ export function OptionsMenu({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  usePopover(ref, open, () => setOpen(false));
 
   return (
     <div className="options-menu" ref={ref}>

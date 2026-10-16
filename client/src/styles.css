@@ -16,6 +16,7 @@
   /* Minimum tap target. Toolbar controls use --tap-sm so a row lines up. */
   --tap: 44px;
   --tap-sm: 40px;
+  --active-fill: color-mix(in srgb, var(--accent) 26%, var(--surface));
   --ok: #4ec97b;
   /* --ok, dark enough to carry white text — filled "yes" badges, not glyphs. */
   --ok-solid: #1f7a47;
@@ -1365,7 +1366,7 @@ button.danger-outline {
 }
 .opt-chip.active {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
+  background: var(--active-fill);
   color: var(--text);
   font-weight: 600;
 }
@@ -3142,6 +3143,20 @@ body:has(.select-float) .app-main {
   background: rgba(0, 0, 0, 0.85);
   cursor: zoom-out;
 }
+/* The Sheet container, stripped back to nothing but the card. */
+.sheet.card-zoom {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+}
+.card-zoom-tap {
+  display: flex;
+  justify-content: center;
+}
 /* Fit the card to whichever axis runs out first: the viewport's width, or the
    height once the padding is paid for. Sizing the frame (not just the image)
    keeps the rounded corners and the foil sheen on the cardboard itself. */
@@ -3534,22 +3549,21 @@ body:has(.select-float) .app-main {
   place-items: center;
   padding: 0.35rem 0.55rem;
 }
+/* Rows that step by one: the number is text, the buttons the small tap size. */
+.qty-stepper-compact {
+  align-items: center;
+  gap: 0.3rem;
+  flex: none;
+}
+.qty-stepper-n {
+  min-width: 1.5rem;
+  text-align: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 /* ---- Edition picker (view all editions, layered over the card sheet) ---- */
 .edition-picker-sheet {
   height: 90dvh;
-}
-.edition-picker-head {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-.edition-picker-head h2 {
-  margin: 0;
-  flex: 1;
-  font-size: 1.15rem;
-}
-.edition-picker-head button {
-  padding: 0.3rem 0.6rem;
 }
 /* The way out of the copy picker when the edition you're holding was never
    added: pinned under the grid (which scrolls), so it's there whatever the
@@ -3854,7 +3868,9 @@ button.primary {
   border-color: var(--accent);
   color: #fff;
 }
-.sheet-actions button:first-child {
+/* Cancel or a secondary answer goes left; a lone action stays bottom-right
+   with the primary, where every sheet keeps it. */
+.sheet-actions button:first-child:not(:last-child) {
   margin-right: auto;
 }
 /* Two answers of the same kind (Wishlist/Collection, File away/Edit): they sit
@@ -3998,14 +4014,6 @@ button.primary {
 /* ---- Full price chart (layered over the card sheet) ---- */
 .price-chart-sheet {
   max-width: 620px;
-}
-.price-chart-titles {
-  flex: 1;
-  min-width: 0;
-}
-.price-chart-titles h2 {
-  margin: 0;
-  font-size: 1.1rem;
 }
 .price-chart-hero {
   display: flex;
@@ -4213,17 +4221,6 @@ button.primary {
    sheet with 700px of nothing under them (.sheet already caps it at 90dvh). */
 .card-history-sheet {
   min-height: 0;
-}
-.card-history-title {
-  flex: 1;
-  min-width: 0;
-}
-.card-history-title h2 {
-  margin: 0;
-  font-size: 1.15rem;
-}
-.card-history-title p {
-  margin: 0.15rem 0 0;
 }
 .history-summary {
   font-size: 0.9rem;
@@ -5932,12 +5929,6 @@ button.chip[aria-pressed='true'] {
 }
 
 /* Sheet header for the trade tool sheets. */
-.sheet-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
 
 /* Add-cards / peer-tradelist panels: never let a long list stretch the page. */
 .picker-scroll {
@@ -6184,8 +6175,11 @@ button.ghost.icon-only {
   background: var(--surface);
   color: var(--text-dim);
 }
+/* One "picked" look for every segmented control and choice chip: an accent
+   tint. Tabs, zones and sort options used to be grey, purple fill and purple
+   outline respectively. */
 .seg-active {
-  background: var(--surface-2);
+  background: var(--active-fill);
   color: var(--text);
   font-weight: 600;
 }
@@ -6202,12 +6196,6 @@ button.ghost.icon-only {
 }
 .zone-row .seg:disabled {
   opacity: 0.45;
-}
-/* The picked zone is a value, not a tab, so it's tinted rather than merely
-   raised — at a glance the field has to read as "this card is here". */
-.zone-row .seg-active {
-  background: color-mix(in srgb, var(--accent) 26%, var(--surface));
-  color: var(--text);
 }
 .zone-note {
   margin: 0.35rem 0 0;
@@ -7084,23 +7072,10 @@ a.seg {
 .scan-list-sheet {
   min-height: 40dvh;
 }
-.scan-sheet-head {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-.scan-sheet-head h2 {
-  margin: 0;
-  flex: 1;
-  font-size: 1.15rem;
-}
 .scan-target {
   color: var(--text-dim);
   font-size: 0.85rem;
   white-space: nowrap;
-}
-.scan-close {
-  padding: 0.3rem 0.6rem;
 }
 .scan-list {
   list-style: none;
@@ -7203,21 +7178,6 @@ a.seg {
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
-.scan-list-qty {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-.scan-list-qty button {
-  padding: 0.35rem;
-  display: grid;
-  place-items: center;
-}
-.scan-list-qty span {
-  min-width: 1.5rem;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
 .scan-confirm-actions {
   display: flex;
   gap: 0.75rem;
@@ -7229,7 +7189,6 @@ a.seg {
 /* ---- Intake questionnaire (import/intake) ---- */
 /* The sheet's own header, sections and footer keep their height; only the
    body scrolls, so a forty-card pile never squashes the buttons off a phone. */
-.intake-sheet > .scan-sheet-head,
 .intake-sheet > .sheet-actions {
   flex-shrink: 0;
 }
@@ -7538,13 +7497,6 @@ a.seg {
   align-items: center;
   gap: 0.3rem;
 }
-.sealed-owned-qty button {
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  display: grid;
-  place-items: center;
-}
 .sealed-owned-remove {
   font-size: 0.82rem;
 }
@@ -7564,6 +7516,14 @@ a.seg {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+/* Sheet's own header: title and fine print stacked, controls and ✕ beside. */
+.sheet-titles {
+  flex: 1;
+  min-width: 0;
+}
+.sheet-subtitle {
+  margin-top: 0.15rem;
+}
 .sealed-note {
   margin: 0;
   font-size: 0.85rem;
@@ -7577,23 +7537,6 @@ a.seg {
   align-items: center;
   gap: 0.6rem;
   font-size: 0.9rem;
-}
-/* No padding: the global button padding left a 2rem box ~13px for an 18px
-   line, so the glyphs hung off the bottom right. */
-.sealed-copies button {
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  font-size: 1.1rem;
-  line-height: 1;
-}
-.sealed-copies-n {
-  min-width: 1.5rem;
-  text-align: center;
-  font-weight: 600;
 }
 .sealed-open-btn {
   display: flex;
@@ -8397,7 +8340,7 @@ a.seg {
 .trace-sheet {
   padding-top: 0;
 }
-.trace-sheet > .sheet-name {
+.trace-sheet > .sheet-name-row {
   padding-top: 1rem;
 }
 /* The board, pinned. Scrolling the turns below is what advances it, so it has
@@ -9699,6 +9642,11 @@ a.seg {
 .qty-stepper input {
   min-height: var(--tap);
   min-width: 2.5rem;
+}
+.qty-stepper-compact button {
+  min-height: var(--tap-sm);
+  min-width: var(--tap-sm);
+  padding: 0;
 }
 button.ghost.icon-only {
   min-height: var(--tap-sm);

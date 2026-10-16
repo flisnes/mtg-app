@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.200.9',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Every sheet has its ✕ top-right and its main button bottom-right, the plus/minus counters all match, and Escape closes a ⋯ menu without closing the card behind it.',
+      },
+    ],
+  },
+  {
     version: '0.200.8',
     changes: [
       {
@@ -145,24 +154,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Decks, binders, the wishlist, trades and price movers share one read of your cards instead of each looking them up again, so they open faster.',
-      },
-    ],
-  },
-  {
-    version: '0.198.8',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Deck pages, card details and owned counts no longer redo their work on every write during a sync or a big import, so the app stays snappy while cards pour in.',
-      },
-    ],
-  },
-  {
-    version: '0.198.7',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Select mode shows its two main actions as soon as you pick a card, with the rest under More. The check circle moved off the card name.',
       },
     ],
   },

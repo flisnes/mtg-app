@@ -48,18 +48,16 @@ export function History() {
       )}
 
       {open && (
-        <Sheet onClose={() => setOpen(null)} label="Trade detail">
-          <h2 style={{ margin: 0 }}>Trade with {open.partner ?? 'Other User'}</h2>
-          <p className="fine-print">{new Date(open.completedAt).toLocaleString()}</p>
+        <Sheet
+          onClose={() => setOpen(null)}
+          label="Trade detail"
+          title={`Trade with ${open.partner ?? 'Other User'}`}
+          subtitle={new Date(open.completedAt).toLocaleString()}
+        >
           <h3>You gave</h3>
           <TradeLines lines={open.given} onInfo={(oracle, scryfallId) => setInfo({ oracle, scryfallId })} />
           <h3>You received</h3>
           <TradeLines lines={open.received} onInfo={(oracle, scryfallId) => setInfo({ oracle, scryfallId })} />
-          <div className="sheet-actions">
-            <button className="primary" onClick={() => setOpen(null)}>
-              Close
-            </button>
-          </div>
         </Sheet>
       )}
 

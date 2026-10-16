@@ -62,8 +62,8 @@ import { ManaCost, SymbolText } from './ManaCost.js';
 import { SetSymbol } from './SetSymbol.js';
 import { Sheet } from './Sheet.js';
 import { TagField } from './TagField.js';
-import { useDismiss } from './useDismiss.js';
 import { sumQty } from '../util/groupBy.js';
+import { QtyStepper } from './QtyStepper.js';
 
 // Bottom-sheet for a card's details, in six modes the caller names outright
 // (see CardSheetProps, which carries what each one needs and nothing else):
@@ -1668,50 +1668,6 @@ export function CardSheet(props: CardSheetProps) {
 /** Quantity field as a −/+ stepper: taps cover the common case, so the soft
  *  keyboard (which covers most of the sheet on phones) only appears when the
  *  user really wants to type — and then it's the numeric one. */
-function QtyStepper({
-  value,
-  min,
-  max,
-  disabled,
-  onChange,
-  onEnter,
-}: {
-  value: number;
-  min: number;
-  max?: number;
-  disabled?: boolean;
-  onChange: (v: number) => void;
-  onEnter?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-}) {
-  const clamp = (v: number) => Math.max(min, max !== undefined ? Math.min(max, v) : v);
-  return (
-    <div className="qty-stepper">
-      <button type="button" onClick={() => onChange(clamp(value - 1))} disabled={disabled || value <= min} aria-label="One less">
-        <Icon name="minus" size={16} />
-      </button>
-      <input
-        type="number"
-        inputMode="numeric"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(clamp(Number(e.target.value) || min))}
-        onFocus={(e) => e.currentTarget.select()}
-        onKeyDown={onEnter}
-        disabled={disabled}
-      />
-      <button
-        type="button"
-        onClick={() => onChange(clamp(value + 1))}
-        disabled={disabled || (max !== undefined && value >= max)}
-        aria-label="One more"
-      >
-        <Icon name="plus" size={16} />
-      </button>
-    </div>
-  );
-}
-
 /**
  * The "In your collection (×N)" badge under the card name. When `onOpen` is
  * given it's a button that jumps to that copy's sheet on the Collection screen
@@ -1839,38 +1795,32 @@ function CardZoom({
   foil: boolean;
   onClose: () => void;
 }) {
-  useDismiss(onClose);
+  // Through Sheet like every other overlay, so the tap that opened it can't
+  // also close it (the tap guard) and Escape/back peel it off first.
   return (
-    <div
-      className="card-zoom-backdrop"
-      role="dialog"
-      aria-label={alt}
-      onClick={(e) => {
-        // Nested inside the card sheet's own backdrop, whose click handler
-        // would otherwise close the sheet underneath us too.
-        e.stopPropagation();
-        onClose();
-      }}
-    >
-      <div className="card-zoom-frame">
-        <img className="card-zoom-img" src={image} alt={alt} />
-        {foil && <span className="foil-sheen" aria-hidden />}
-        {backImage && (
-          <button
-            type="button"
-            className="sheet-flip card-zoom-flip"
-            onClick={(e) => {
-              e.stopPropagation();
-              onFlip();
-            }}
-            aria-label="Flip card"
-            title="Flip card"
-          >
-            <Icon name="flip" size={18} />
-          </button>
-        )}
+    <Sheet onClose={onClose} label={alt} className="card-zoom" backdropClassName="card-zoom-backdrop">
+      {/* Tap anywhere to dismiss, the card included. */}
+      <div className="card-zoom-tap" onClick={onClose}>
+        <div className="card-zoom-frame">
+          <img className="card-zoom-img" src={image} alt={alt} />
+          {foil && <span className="foil-sheen" aria-hidden />}
+          {backImage && (
+            <button
+              type="button"
+              className="sheet-flip card-zoom-flip"
+              onClick={(e) => {
+                e.stopPropagation();
+                onFlip();
+              }}
+              aria-label="Flip card"
+              title="Flip card"
+            >
+              <Icon name="flip" size={18} />
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -1912,13 +1862,7 @@ export function EditionGrid({
       )
     : printings;
   return (
-    <Sheet onClose={onClose} className="edition-picker-sheet" label="All printings">
-        <div className="edition-picker-head">
-          <h2>All printings</h2>
-          <button onClick={onClose} aria-label="Close">
-            <Icon name="close" size={18} />
-          </button>
-        </div>
+    <Sheet onClose={onClose} className="edition-picker-sheet" title="All printings">
         <input
           type="search"
           className="edition-grid-search"

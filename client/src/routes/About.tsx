@@ -85,11 +85,6 @@ export function About() {
       {showChangelog && (
         <Sheet onClose={() => setShowChangelog(false)} title="What’s changed">
           <ChangelogList entries={fullChangelog ?? CHANGELOG_RECENT} />
-          <div className="sheet-actions">
-            <button className="primary" onClick={() => setShowChangelog(false)}>
-              Close
-            </button>
-          </div>
         </Sheet>
       )}
     </Page>

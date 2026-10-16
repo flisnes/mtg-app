@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Priced, Printing } from '@mtg/shared';
 import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
+import { usePopover } from './usePopover.js';
 
 // One-line edition picker. Closed, it is a single row showing the printing
 // you're looking at (set symbol + set name). Tap it and that row becomes the
@@ -131,24 +132,7 @@ export function EditionPicker({
   // Close on a tap outside. Escape is caught on `window` in the capture phase so
   // it lands before the sheet's own document-level handler: one Escape closes
   // the picker, the next closes the sheet.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) close();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      e.stopPropagation();
-      close();
-    };
-    document.addEventListener('mousedown', onDown);
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      window.removeEventListener('keydown', onKey, true);
-    };
-  }, [open]);
+  usePopover(rootRef, open, close);
 
   const step = (dir: 1 | -1) => {
     setActive((i) => {

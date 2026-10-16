@@ -126,10 +126,6 @@ export function SealedWithCardSheet({
         </>
       )}
 
-      <div className="sheet-actions">
-        <button onClick={onClose}>Close</button>
-      </div>
-
       {contents && (
         <SealedContentsSheet product={contents} highlightIds={highlightIds} onClose={() => setContents(null)} />
       )}

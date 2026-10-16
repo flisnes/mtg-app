@@ -8,6 +8,7 @@ import { describeFiling, useIntakeReview } from '../import/intake/useIntakeRevie
 import { SealedContentsList } from './SealedContents.js';
 import { loadContents, openedLines, perCopyCount, type OpenContents } from './open.js';
 import { plural } from '../util/format.js';
+import { QtyStepper } from '../components/QtyStepper.js';
 
 // Cracking a box you already own. The add sheet has always been able to open a
 // product on the way in; a box that sat on the shelf for a year had no way out
@@ -93,17 +94,7 @@ export function OpenSealedSheet({
 
         <div className="sealed-copies">
           <span>Open</span>
-          <button onClick={() => setCopies(Math.max(1, copies - 1))} aria-label="Open fewer copies" disabled={copies <= 1}>
-            −
-          </button>
-          <span className="sealed-copies-n">{copies}</span>
-          <button
-            onClick={() => setCopies(Math.min(max, copies + 1))}
-            aria-label="Open more copies"
-            disabled={copies >= max}
-          >
-            +
-          </button>
+          <QtyStepper compact value={copies} min={1} max={max} onChange={setCopies} label="copy to open" />
           <span className="fine-print">of {item.quantity}</span>
         </div>
 

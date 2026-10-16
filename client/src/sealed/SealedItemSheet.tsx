@@ -5,12 +5,13 @@ import { addToTotal, formatTotal, type PriceTotal } from '../components/CardSort
 import { Icon } from '../components/icons.js';
 import { PriceChartSheet } from '../components/ChartSheetsLazy.js';
 import { PriceTrend } from '../components/PriceTrend.js';
-import { Sheet } from '../components/Sheet.js';
+import { Sheet, SheetClose } from '../components/Sheet.js';
 import { historyChange } from '../price/history.js';
 import { getSealedPriceHistory } from '../price/sealedTracking.js';
 import { SealedImage } from './SealedImage.js';
 import { categoryLabel, fmtSealedPrice, isRandomOnly, itemImage, sealedPriceSourceLabel, type SealedPriceSource } from './product.js';
 import { useAsyncAction } from '../components/useAsyncAction.js';
+import { QtyStepper } from '../components/QtyStepper.js';
 
 // One unopened product on the shelf: what it's worth, what the copies you own
 // add up to, and how its price has moved since the app started watching it. The
@@ -74,6 +75,7 @@ export function SealedItemSheet({
             <span className="sealed-result-sub">Neither TCGplayer nor Cardmarket lists a price for this.</span>
           )}
         </div>
+        <SheetClose onClick={onClose} />
       </div>
 
       <div className="sealed-owned-stats">
@@ -99,21 +101,14 @@ export function SealedItemSheet({
 
       <div className="sealed-copies">
         <span>Copies</span>
-        <button
-          onClick={() => action.run('change the count', () => setSealedItemQuantity(item.id, item.quantity - 1))}
-          aria-label={`One fewer ${item.name}`}
-          disabled={item.quantity <= 1}
-        >
-          −
-        </button>
-        <span className="sealed-copies-n">{item.quantity}</span>
-        <button
-          onClick={() => action.run('change the count', () => setSealedItemQuantity(item.id, item.quantity + 1))}
-          aria-label={`One more ${item.name}`}
-          disabled={item.quantity >= 9999}
-        >
-          +
-        </button>
+        <QtyStepper
+          compact
+          value={item.quantity}
+          min={1}
+          max={9999}
+          onChange={(v) => action.run('change the count', () => setSealedItemQuantity(item.id, v))}
+          label={item.name}
+        />
       </div>
 
       {/* A box you own is a box you can crack: same operation the add sheet's
@@ -128,7 +123,7 @@ export function SealedItemSheet({
       )}
 
       <div className="sheet-actions">
-        <button className="danger" onClick={onRemove}>
+        <button className="danger-outline" onClick={onRemove}>
           <Icon name="trash" size={14} /> Remove
         </button>
         <button onClick={onClose}>Close</button>

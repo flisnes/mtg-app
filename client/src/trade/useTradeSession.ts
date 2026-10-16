@@ -43,7 +43,7 @@ interface ConnectIntent {
   code?: string;
 }
 
-interface TradeSession {
+export interface TradeSession {
   status: TradeStatus;
   seat: Seat | null;
   snapshot: SessionSnapshot | null;
@@ -640,24 +640,33 @@ export function useTradeSession(): TradeSession {
     const c = code();
     if (c) send({ v: PROTOCOL_VERSION, type: 'wishlist_request', sessionCode: c });
   }, [send]);
-  // Solo has no second party, so accept/confirm mirror the absent seat: one tap
-  // agrees for both, one tap confirms for both. The two-step flow is unchanged.
-  const accept = useCallback(() => {
-    if (soloRef.current) { const s = soloSnap.current; if (s) applySolo({ ...s, accepted: { a: true, b: true }, state: 'agreed' }); return; }
-    const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'accept', sessionCode: c });
-  }, [send, applySolo]);
-  const unaccept = useCallback(() => {
-    if (soloRef.current) { const s = soloSnap.current; if (s) applySolo({ ...s, accepted: { a: false, b: false }, confirmed: { a: false, b: false }, state: 'building' }); return; }
-    const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'unaccept', sessionCode: c });
-  }, [send, applySolo]);
-  const confirmComplete = useCallback(() => {
-    if (soloRef.current) { const s = soloSnap.current; if (s) applySolo({ ...s, confirmed: { a: true, b: true }, state: 'completed' }); return; }
-    const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'confirm_complete', sessionCode: c });
-  }, [send, applySolo]);
-  const cancel = useCallback(() => {
-    if (soloRef.current) { const s = soloSnap.current; if (s) applySolo({ ...s, state: 'cancelled' }); return; }
-    const c = code(); if (c) send({ v: PROTOCOL_VERSION, type: 'cancel', sessionCode: c });
-  }, [send, applySolo]);
+  /**
+   * A board action: in solo, patch the local snapshot (there is no second
+   * party, so accept/confirm mirror the absent seat: one tap agrees for both,
+   * one tap confirms for both); otherwise send it to the relay.
+   */
+  const soloOr = useCallback(
+    (patch: Partial<SessionSnapshot>, type: 'accept' | 'unaccept' | 'confirm_complete' | 'cancel') => {
+      if (soloRef.current) {
+        const s = soloSnap.current;
+        if (s) applySolo({ ...s, ...patch });
+        return;
+      }
+      const c = code();
+      if (c) send({ v: PROTOCOL_VERSION, type, sessionCode: c });
+    },
+    [send, applySolo],
+  );
+  const accept = useCallback(() => soloOr({ accepted: { a: true, b: true }, state: 'agreed' }, 'accept'), [soloOr]);
+  const unaccept = useCallback(
+    () => soloOr({ accepted: { a: false, b: false }, confirmed: { a: false, b: false }, state: 'building' }, 'unaccept'),
+    [soloOr],
+  );
+  const confirmComplete = useCallback(
+    () => soloOr({ confirmed: { a: true, b: true }, state: 'completed' }, 'confirm_complete'),
+    [soloOr],
+  );
+  const cancel = useCallback(() => soloOr({ state: 'cancelled' }, 'cancel'), [soloOr]);
 
   const reset = useCallback(() => {
     dropSocket();
@@ -688,16 +697,7 @@ export function useTradeSession(): TradeSession {
 
   // Close the socket (and cancel any pending auto-resume) if the component
   // using the hook unmounts — a stray reconnect would re-occupy the trade seat.
-  useEffect(() => {
-    return () => {
-      intentionalClose.current = true;
-      if (reconnectTimer.current) {
-        clearTimeout(reconnectTimer.current);
-        reconnectTimer.current = null;
-      }
-      ws.current?.close();
-    };
-  }, []);
+  useEffect(() => dropSocket, [dropSocket]);
 
   // Mobile OSes routinely suspend a backgrounded tab's network stack without
   // ever firing the socket's close event, so returning to the foreground can

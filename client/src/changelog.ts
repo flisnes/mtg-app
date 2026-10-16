@@ -32,6 +32,12 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.200.13',
+    changes: [
+      { kind: 'changed', text: 'With Stack printings on, the trade pickers show one row per card. Trade history shows each card\'s set.' },
+    ],
+  },
+  {
     version: '0.200.12',
     changes: [
       { kind: 'changed', text: "The deck list's format and color filters light up while they hide decks, like every other filter." },
@@ -142,24 +148,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Layout fixes: recent searches no longer cover the scope chips, Spoilers opens on a set with cards, the sealed steppers are centred, and Delete sits apart from Archive in the deck menu.',
-      },
-    ],
-  },
-  {
-    version: '0.198.12',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Easier to hit and easier to read: toolbar buttons, sheet close buttons, steppers and chips are bigger, and purple and red text and buttons have more contrast.',
-      },
-    ],
-  },
-  {
-    version: '0.198.11',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Community lists, profiles, trade matches and price charts are only downloaded again when they changed, so revisits load right away.',
       },
     ],
   },

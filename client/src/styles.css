@@ -846,38 +846,6 @@ button.danger-outline {
   margin: 0;
   font-size: 1rem;
 }
-.recent-trade-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-.recent-trade {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.4rem;
-  border-radius: 10px;
-  color: var(--text);
-  text-decoration: none;
-}
-.recent-trade:hover {
-  background: var(--surface-2, rgba(127, 127, 127, 0.12));
-}
-.recent-trade-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.recent-trade-partner {
-  font-weight: 500;
-}
-.recent-trade .badge {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-}
 .trade-home-links {
   display: flex;
   gap: 1rem;

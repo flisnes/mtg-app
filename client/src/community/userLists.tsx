@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import {
+  wishCountMatcher,
   wishMatchesCopy,
   type CollectionEntry,
   type OracleCard,
@@ -18,8 +19,7 @@ const EMPTY_ENTRIES: CollectionEntry[] = [];
 const EMPTY_WISHES: WishlistEntry[] = [];
 import { Icon } from '../components/icons.js';
 import { SetSymbol } from '../components/SetSymbol.js';
-import { langMark } from '../components/LangFlag.js';
-import { yearMark } from '../components/cardRows.js';
+import { baseCardItem, tradeLineCardItem } from '../components/cardRows.js';
 import { sanitizePublicTradelist, sanitizePublicWishlist } from '../trade/validate.js';
 import type { CardItem } from '../components/CardViews.js';
 
@@ -38,13 +38,6 @@ interface UserListsData {
  *  For a wishlist tile, `wish` carries their preferences so the sheet can show
  *  them read-only (any printing / min condition / finish / language). */
 export type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string; wish?: WishLine };
-
-function lineDetail(l: TradeLine): string {
-  const bits: string[] = [l.condition];
-  if (l.finish !== 'nonfoil') bits.push(l.finish);
-  if (l.lang !== 'en') bits.push(l.lang);
-  return bits.join(' · ');
-}
 
 /** A wish's preferences, spelled out for a trade partner (empty = no prefs). */
 function wishDetail(l: WishLine): string {
@@ -84,13 +77,8 @@ type HaveFn = (wish: WishLine) => boolean;
 export function useMyWants(): (line: TradeLine) => boolean {
   const wishes = useWishes() ?? EMPTY_WISHES;
   return useMemo(() => {
-    const byOracle = new Map<string, typeof wishes>();
-    for (const w of wishes) {
-      const list = byOracle.get(w.oracleId) ?? [];
-      list.push(w);
-      byOracle.set(w.oracleId, list);
-    }
-    return (line: TradeLine) => (byOracle.get(line.oracleId) ?? []).some((w) => wishMatchesCopy(w, line));
+    const wanted = wishCountMatcher(wishes);
+    return (line: TradeLine) => wanted(line) > 0;
   }, [wishes]);
 }
 
@@ -127,23 +115,8 @@ export function tradeLineItem(
   onOpen?: (oracle: Priced<OracleCard>) => void,
 ): CardItem {
   const oracle = cards.oracleMap?.get(line.oracleId);
-  const printing = cards.printMap?.get(line.scryfallId);
-  const lang = langMark(line.lang);
-  const year = yearMark(printing, flags.showYear);
   return {
-    key,
-    name: oracle?.name ?? line.name,
-    image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-    count: line.quantity,
-    ...(lang ? { lang } : {}),
-    ...(year ? { year } : {}),
-    sub: (
-      <>
-        {printing && <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />}
-        {printing ? `${printing.setName} · #${printing.collectorNumber} · ` : ''}
-        {lineDetail(line)}
-      </>
-    ),
+    ...tradeLineCardItem(line, key, cards, { showYear: flags.showYear }),
     badge: flags.match ? (
       <>
         <Icon name="wishlist" size={11} /> you want this
@@ -178,16 +151,8 @@ export function wishLineItem(
   ) : (
     'any printing'
   );
-  const lang = langMark(line.lang);
-  const year = yearMark(printing, flags.showYear);
   return {
-    key,
-    name: oracle?.name ?? line.name,
-    image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-    foil: !!line.finish && line.finish !== 'nonfoil',
-    count: line.quantity,
-    ...(lang ? { lang } : {}),
-    ...(year ? { year } : {}),
+    ...baseCardItem({ key, oracle, printing, name: line.name, finish: line.finish, quantity: line.quantity, lang: line.lang, showYear: flags.showYear }),
     sub: detail ? (
       <>
         {printingSub} · {detail}

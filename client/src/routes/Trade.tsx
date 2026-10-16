@@ -1,27 +1,18 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CODE_LENGTH, wishPrefsMet, type CollectionEntry, type Condition, type Finish, type OracleCard, type Priced, type Printing, type Seat, type SessionSnapshot, type TradeLine } from '@mtg/shared';
+import { CODE_LENGTH, wishCountMatcher, type OracleCard, type Priced, type Seat, type TradeLine } from '@mtg/shared';
 import { Page, EmptyState } from './Page.js';
-import { db } from '../db/schema.js';
 import { collectionKey } from '../db/dataAccess.js';
-import type { JoinedEntry } from '../db/queries.js';
-import { useCollectionEntries, useJoinedCollection, useWishes } from '../db/collectionSnapshot.js';
+import { useWishes } from '../db/collectionSnapshot.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
 import { useCardMaps } from '../db/useCardMaps.js';
-import type { SearchFilters } from '../cardDb/search.js';
 import { CardSheet, type SessionCardValues } from '../components/CardSheet.js';
-import { CardSearchView } from '../components/CardSearchView.js';
-import { NO_PRICE, formatPrice, pricedForFinish } from '../components/CardSorting.js';
+import { pricedForFinish } from '../components/CardSorting.js';
 import { fmtEur } from '../price/rates.js';
-import { CardItems, CardList, ViewToggle, useTradeViewMode, type CardItem, type ViewMode } from '../components/CardViews.js';
-import { CodeJoinForm } from '../components/CodeJoinForm.js';
+import { ViewToggle, useTradeViewMode } from '../components/CardViews.js';
 import { Icon } from '../components/icons.js';
-import { SetSymbol } from '../components/SetSymbol.js';
-import { ownedBadge, type OwnedBadgeSpec } from '../components/OwnedBadge.js';
-import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
-import { langMark } from '../components/LangFlag.js';
+import { useOwnershipIndex } from '../db/useOwnership.js';
 import { OptionsMenu } from '../components/OptionsMenu.js';
 import { ScanSheet } from '../components/ScanSheetLazy.js';
 import { Sheet } from '../components/Sheet.js';
@@ -30,111 +21,30 @@ import { TradeQr } from '../components/TradeQr.js';
 import { useDismiss } from '../components/useDismiss.js';
 import { TRADE_ENABLED } from '../trade/config.js';
 import { useTradePriceRefresh } from '../trade/usePriceRefresh.js';
+import { otherSeat, useTradeSession, type TradeSession } from '../trade/useTradeSession.js';
 import {
-  clearPersistedSoloTrade,
-  clearPersistedTrade,
-  getPersistedSoloTrade,
-  getPersistedTrade,
-  otherSeat,
-  useTradeSession,
-  type ActiveTrade,
-} from '../trade/useTradeSession.js';
-import { sumQty } from '../util/groupBy.js';
-import { Loading } from '../components/Loading.js';
-import { QtyStepper } from '../components/QtyStepper.js';
-
-/** Offer lines merge on the same compound key as collection entries. */
-const lineKey = collectionKey;
-
-/** Add-default preference: for-trade copies beat idle ones, then more copies win. */
-function betterAddDefault(a: CollectionEntry, b: CollectionEntry): boolean {
-  const at = a.quantityForTrade > 0 ? 1 : 0;
-  const bt = b.quantityForTrade > 0 ? 1 : 0;
-  return at !== bt ? at > bt : a.quantity > b.quantity;
-}
-
-/** The best entry to seed an add with (prefers for-trade copies, then the printing with most copies). */
-function bestAddDefault(entries: CollectionEntry[]): CollectionEntry | undefined {
-  let best: CollectionEntry | undefined;
-  for (const e of entries) if (!best || betterAddDefault(e, best)) best = e;
-  return best;
-}
-
-/** Their highest-quantity tradelist line for an oracle — the best printing guess for "you get". */
-function bestPeerLine(lines: TradeLine[] | null, oracleId: string): TradeLine | undefined {
-  let best: TradeLine | undefined;
-  for (const l of lines ?? []) {
-    if (l.oracleId === oracleId && (!best || l.quantity > best.quantity)) best = l;
-  }
-  return best;
-}
-
-/** The shared ownership checkmark for a card I might give (own exact/other, or for trade). */
-function ownIndicator(ownership: OwnershipIndex | undefined, oracleId: string, scryfallId?: string): OwnedBadgeSpec | null {
-  if (!ownership) return null;
-  const s = ownership.lookup(oracleId, scryfallId);
-  // No wishlist rung: this is the "you give" side, so what you're after is
-  // beside the point (the "you get" panel stars its own wishlist matches).
-  return ownedBadge({ qty: s.qty, forTrade: s.forTrade, ownsExact: s.ownsExact, wished: 0 });
-}
-
-/**
- * What the card-info sheet should show when a card is tapped. `side` says whose
- * printings to highlight in the edition dropdown ('give' = my collection,
- * 'get' = their tradelist).
- */
-type InfoCtx = { side: Side };
-type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string; ctx?: InfoCtx };
-type OpenInfo = (oracle: Priced<OracleCard>, scryfallId?: string, ctx?: InfoCtx) => void;
-/** A concrete card (offer line / collection entry) tested against a wishlist. */
-type HaveCard = { oracleId: string; scryfallId: string; condition: Condition; finish: Finish; lang: string };
-/** How many copies a wishlist wants of a given card (0 = no match). */
-type WantFn = (have: HaveCard) => number;
-
-/**
- * Wishlist⇄tradelist match rule: a wish with scryfallId null ("any printing")
- * matches every printing of that card; a wish for a specific printing matches
- * only that printing. The card must also meet the wish's finish/condition/
- * language preferences (condition is a minimum). Returns how many copies the
- * wishlist wants of a given card — 0 means no match.
- */
-type WishPrefs = { oracleId: string; scryfallId: string | null; quantity: number; condition?: Condition; finish?: Finish; lang?: string };
-function wishMatcher(lines: WishPrefs[]): WantFn {
-  const byOracle = new Map<string, WishPrefs[]>();
-  for (const w of lines) {
-    const list = byOracle.get(w.oracleId) ?? [];
-    list.push(w);
-    byOracle.set(w.oracleId, list);
-  }
-  return (have: HaveCard): number =>
-    (byOracle.get(have.oracleId) ?? []).reduce(
-      (sum, w) => sum + ((w.scryfallId === null || w.scryfallId === have.scryfallId) && wishPrefsMet(w, have) ? w.quantity : 0),
-      0,
-    );
-}
-
-/** Values below this (EUR) count as "the trade is even". */
-const BALANCE_EPSILON = 0.5;
+  BALANCE_EPSILON,
+  bestAddDefault,
+  bestPeerLine,
+  lineKey,
+  ownIndicator,
+  useOwnTradeLines,
+  type InfoTarget,
+  type OpenInfo,
+  type Side,
+} from '../trade/board.js';
+import { ReconnectBanner, TRADE_SUBTITLE, TradeConnecting, TradeHome } from '../trade/TradeHome.js';
+import { OfferPanel } from '../trade/OfferPanel.js';
+import { BalancePanel } from '../trade/BalancePanel.js';
+import { QuickPickPanel } from '../trade/QuickPickPanel.js';
 
 export function Trade() {
   const trade = useTradeSession();
-  const [resumable, setResumable] = useState<ActiveTrade | null>(null);
-  // A solo trade has no relay session to resume — the stored snapshot *is* the
-  // trade, so it comes back whole (both piles included).
-  const [soloResumable, setSoloResumable] = useState<SessionSnapshot | null>(null);
   // Creator chose "Start ahead": show the board while the seat is still open.
+  // Not reset on 'connecting': a mid-trade reconnect keeps the board up, and
+  // dropping "Start ahead" there would flip the creator back to the invite.
   const [startedAhead, setStartedAhead] = useState(false);
-
   useEffect(() => {
-    // Also refresh on 'error': a mid-trade drop that exhausts its reconnect
-    // attempts lands here directly (skipping 'idle'), and the persisted trade
-    // is still there to resume — the Resume prompt shouldn't be missing for it.
-    if (trade.status === 'idle' || trade.status === 'error') {
-      void getPersistedTrade().then((t) => setResumable(t ?? null));
-      void getPersistedSoloTrade().then((s) => setSoloResumable(s ?? null));
-    }
-    // Not on 'connecting': a mid-trade reconnect keeps the board up, and
-    // dropping "Start ahead" there would flip the creator back to the invite.
     if (trade.status === 'idle' || trade.status === 'error') setStartedAhead(false);
   }, [trade.status]);
 
@@ -157,7 +67,7 @@ export function Trade() {
 
   if (!TRADE_ENABLED) {
     return (
-      <Page title="Trade" subtitle="Trade in person: share a code, build offers, confirm after inspecting.">
+      <Page title="Trade" subtitle={TRADE_SUBTITLE}>
         <EmptyState hint="Coming in a later update.">
           Trading needs a secure connection to the trade server, which isn’t configured for this build yet.
         </EmptyState>
@@ -165,79 +75,7 @@ export function Trade() {
     );
   }
 
-  if (trade.status === 'idle' || trade.status === 'error') {
-    return (
-      <Page title="Trade" subtitle="Trade in person: share a code, build offers, confirm after inspecting.">
-        <div className="trade-home">
-          <section className="trade-home-start">
-            {trade.error && <p className="gate-error">{trade.error}</p>}
-            {resumable && (
-              <div className="empty-state">
-                <p>You have an unfinished trade ({resumable.code}).</p>
-                <div className="confirm-row" style={{ justifyContent: 'center' }}>
-                  <button className="primary" onClick={() => trade.resume(resumable)}>
-                    Resume
-                  </button>
-                  <button onClick={() => { void clearPersistedTrade(); setResumable(null); }}>Discard</button>
-                </div>
-              </div>
-            )}
-            {soloResumable && (
-              <div className="empty-state">
-                <p>
-                  You have an unfinished solo trade (
-                  {soloCards(soloResumable)} {soloCards(soloResumable) === 1 ? 'card' : 'cards'}).
-                </p>
-                <div className="confirm-row" style={{ justifyContent: 'center' }}>
-                  <button className="primary" onClick={() => trade.resumeSolo(soloResumable)}>
-                    Resume
-                  </button>
-                  <button
-                    onClick={() => {
-                      void clearPersistedSoloTrade();
-                      clearTradeScanSessions();
-                      setSoloResumable(null);
-                    }}
-                  >
-                    Discard
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="trade-actions">
-              <button className="primary" onClick={trade.create}>
-                Start a trade
-              </button>
-              <button onClick={trade.startSolo}>Trade solo</button>
-            </div>
-            <p className="fine-print">
-              Trading with someone who isn’t on the app? “Trade solo” lets you fill in both sides and record it yourself.
-            </p>
-            <CodeJoinForm label="Join code" submitLabel="Join" onSubmit={trade.join} />
-          </section>
-
-          <RecentTrades />
-
-          <div className="trade-home-links">
-            <Link className="trade-home-tile" to="/tradelist">
-              <span className="trade-home-tile-icon" aria-hidden>
-                <Icon name="tradelist" size={22} />
-              </span>
-              <strong>Your tradelist</strong>
-              <span className="fine-print">Cards you’ve marked for trade</span>
-            </Link>
-            <Link className="trade-home-tile" to="/community">
-              <span className="trade-home-tile-icon" aria-hidden>
-                <Icon name="community" size={22} />
-              </span>
-              <strong>Community trades</strong>
-              <span className="fine-print">Browse other collectors</span>
-            </Link>
-          </div>
-        </div>
-      </Page>
-    );
-  }
+  if (trade.status === 'idle' || trade.status === 'error') return <TradeHome trade={trade} />;
 
   // No session yet. A session that drops and reconnects keeps its snapshot,
   // so it skips this and stays on the board under a "Reconnecting" banner.
@@ -266,114 +104,9 @@ export function Trade() {
   return <TradeBoard trade={trade} seat={trade.seat} />;
 }
 
-/**
- * Between "Start a trade"/"Join" and a session: say what's happening, let the
- * user back out, and after a few seconds admit the server isn't answering
- * (venue wifi) with Retry and the solo fallback. Retries carry on meanwhile.
- */
-function TradeConnecting({ trade }: { trade: ReturnType<typeof useTradeSession> }) {
-  const { intent, slow } = trade;
-  const doing =
-    intent?.kind === 'join'
-      ? <>Joining <strong className="trade-code">{intent.code}</strong>…</>
-      : intent?.kind === 'resume'
-        ? <>Resuming trade <strong className="trade-code">{intent.code}</strong>…</>
-        : 'Starting a trade…';
-  return (
-    <Page title="Trade">
-      <div className="trade-connecting" role="status" aria-live="polite">
-        <span className="spinner" aria-hidden />
-        <p className="trade-connecting-doing">{doing}</p>
-        {slow ? (
-          <>
-            <p className="trade-connecting-fail">Can’t reach the trade server</p>
-            <p className="fine-print">Still trying in the background. Check your connection, or record the trade yourself.</p>
-            <div className="trade-actions">
-              <button className="primary" onClick={trade.retryConnect}>
-                Retry
-              </button>
-              <button onClick={trade.startSolo}>Trade solo instead</button>
-            </div>
-          </>
-        ) : (
-          <p className="fine-print">Connecting to the trade server…</p>
-        )}
-        <button className="trade-connecting-cancel" onClick={trade.abortConnect}>
-          Cancel
-        </button>
-      </div>
-    </Page>
-  );
-}
-
-/** A live trade whose socket dropped: the board stays, this says why edits may bounce. */
-function ReconnectBanner({ trade }: { trade: ReturnType<typeof useTradeSession> }) {
-  if (trade.status !== 'connecting') return null;
-  return (
-    <div className="trade-reconnecting" role="status" aria-live="polite">
-      <span className="spinner spinner-sm" aria-hidden />
-      <span>{trade.error ?? 'Reconnecting to the trade server…'}</span>
-    </div>
-  );
-}
-
-/** Total card count across a set of offer/history lines. */
-function countLines(lines: { quantity: number }[]): number {
-  return sumQty(lines);
-}
-
-/** Both piles of a stored solo trade — what the resume prompt offers back. */
-function soloCards(snap: SessionSnapshot): number {
-  return countLines(snap.offers.a) + countLines(snap.offers.b);
-}
-
-/**
- * The middle slab of the trade landing: the last few completed trades (device-
- * local, same store as the history view) with a shortcut to the full history.
- */
-function RecentTrades() {
-  const trades = useLiveQuery(() => db.trades.orderBy('completedAt').reverse().limit(3).toArray(), []);
-  return (
-    <section className="trade-home-recent">
-      <div className="trade-home-recent-head">
-        <h3>Recent trades</h3>
-        <Link className="chip" to="/history">
-          Trade history <Icon name="chevronRight" size={16} className="chev" />
-        </Link>
-      </div>
-      {trades === undefined ? (
-        <Loading fine />
-      ) : trades.length === 0 ? (
-        <p className="fine-print">No trades yet. Completed trades will show up here.</p>
-      ) : (
-        <ul className="recent-trade-list">
-          {trades.map((t) => (
-            <li key={t.id}>
-              <Link className="recent-trade" to="/history">
-                <span className="menu-icon" aria-hidden>
-                  <Icon name="trade" />
-                </span>
-                <span className="recent-trade-text">
-                  <span className="recent-trade-partner">Trade with {t.partner ?? 'Other User'}</span>
-                  <span className="result-sub">{new Date(t.completedAt).toLocaleDateString()}</span>
-                </span>
-                <span className="badge">
-                  −{countLines(t.given)} / +{countLines(t.received)}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-/** Which column an add/scan/balance action targets: 'give' = my offer, 'get' = theirs. */
-type Side = 'give' | 'get';
 type SheetKind = Side | 'balance';
 
-function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>; seat: Seat }) {
+function TradeBoard({ trade, seat }: { trade: TradeSession; seat: Seat }) {
   const snap = trade.snapshot!;
   const solo = trade.solo;
   const peer = otherSeat(seat);
@@ -477,7 +210,8 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
   }
 
   // Printings (images + prices) and oracle cards for both offers.
-  const { printMap, oracleMap } = useCardMaps([...myOffer, ...theirOffer], priceEpoch);
+  const cards = useCardMaps([...myOffer, ...theirOffer], priceEpoch);
+  const { printMap } = cards;
   const [view, setView] = useTradeViewMode();
   const eurOf = (l: TradeLine) => pricedForFinish(printMap?.get(l.scryfallId), l.finish)?.priceEur ?? 0;
   const totalOf = (lines: TradeLine[]) => lines.reduce((sum, l) => sum + eurOf(l) * l.quantity, 0);
@@ -543,11 +277,10 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
 
   // Wishlist⇄tradelist matchers, both directions (for ⭐ badges and balance).
   const myWishes = useWishes();
-  const entries = useCollectionEntries();
-  const myTradelist = useMemo(() => (entries ?? []).filter((e) => e.quantityForTrade > 0), [entries]);
-  const theirWanted = useMemo(() => wishMatcher(trade.peerWishlist ?? []), [trade.peerWishlist]);
-  const myWanted = useMemo(() => wishMatcher(myWishes ?? []), [myWishes]);
-  const theyWantCount = myTradelist.filter((e) => theirWanted(e) > 0).length;
+  const myTradelist = useOwnTradeLines();
+  const theirWanted = useMemo(() => wishCountMatcher(trade.peerWishlist ?? []), [trade.peerWishlist]);
+  const myWanted = useMemo(() => wishCountMatcher(myWishes ?? []), [myWishes]);
+  const theyWantCount = (myTradelist ?? []).filter((l) => theirWanted(l) > 0).length;
   const iWantCount = (trade.peerTradelist ?? []).filter((l) => myWanted(l) > 0).length;
 
   const myTotal = totalOf(myOffer);
@@ -703,8 +436,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
           onAdd={() => setSheet('give')}
           onScan={() => setScanFor('give')}
           badge={(l) => ownIndicator(ownership, l.oracleId, l.scryfallId)}
-          printings={printMap}
-          oracles={oracleMap}
+          cards={cards}
           onInfo={openInfo}
           onEdit={(side, line, oracle) => setEditingLine({ side, line, oracle })}
           view={view}
@@ -727,8 +459,7 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             const w = myWanted(l);
             return w > 0 ? { icon: '⭐', title: `On your wishlist (×${w})`, cls: 'badge-wish' } : null;
           }}
-          printings={printMap}
-          oracles={oracleMap}
+          cards={cards}
           onInfo={openInfo}
           onEdit={(side, line, oracle) => setEditingLine({ side, line, oracle })}
           view={view}
@@ -784,30 +515,57 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
 
       {sheet === 'give' && editable && (
         <TradePickerOverlay title="Add cards you give" onClose={() => setSheet(null)}>
-          <AddCardsPanel
-            ownership={ownership}
-            theirWanted={theirWanted}
+          <QuickPickPanel
+            lines={myTradelist}
+            wanted={theirWanted}
+            wantedText={(n) => `they want ×${n}`}
+            intro="From your tradelist (or search above for any card):"
+            waiting="Loading tradelist…"
+            emptyText="Your tradelist is empty. Search above to add any card."
+            placeholder="Search any card to add…"
+            // Owned cards seed the sheet with the copy you have; anything you
+            // don't own starts from the printing the search result showed.
+            prefillFor={(oracleId) => {
+              const e = bestAddDefault(ownership?.ownedCopies(oracleId) ?? []);
+              return e && { scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang };
+            }}
+            badgeFor={(card, printing) => ownIndicator(ownership, card.oracleId, printing?.scryfallId ?? card.defaultScryfallId)}
             onCompose={(oracle, prefill) => setComposing({ side: 'give', oracle, prefill })}
           />
         </TradePickerOverlay>
       )}
       {sheet === 'get' && editable && (
         <TradePickerOverlay title="Add cards you get" onClose={() => setSheet(null)}>
-          <AddTheirCardsPanel
+          <QuickPickPanel
             lines={trade.peerTradelist}
-            loading={trade.peerTradelistLoading}
-            myWanted={myWanted}
+            wanted={myWanted}
+            wantedText={(n) => `you want ×${n}`}
+            intro="From their tradelist (or search above for any card):"
+            headerEnd={
+              <button className="chip" onClick={requestTradelist} disabled={trade.peerTradelistLoading}>
+                {trade.peerTradelistLoading ? 'Loading…' : '↻ Refresh'}
+              </button>
+            }
+            waiting={trade.peerTradelistLoading ? 'Waiting for their tradelist…' : 'No tradelist received yet.'}
+            emptyText="Their tradelist is empty. Search above to add any card they hand you."
+            placeholder="Search any card they hand you…"
+            // Their tradelist knows the exact printing they registered (the
+            // card-DB default is the newest edition, usually the wrong guess).
+            prefillFor={(oracleId) => {
+              const l = bestPeerLine(trade.peerTradelist, oracleId);
+              return l && { scryfallId: l.scryfallId, condition: l.condition, finish: l.finish, lang: l.lang };
+            }}
             onCompose={(oracle, prefill) => setComposing({ side: 'get', oracle, prefill })}
-            onRefresh={requestTradelist}
           />
         </TradePickerOverlay>
       )}
       {sheet === 'balance' && (
-        <TradeSheet title="Balance the trade" onClose={() => setSheet(null)}>
+        <Sheet title="Balance the trade" onClose={() => setSheet(null)}>
           <BalancePanel
             diff={diff}
             myOffer={myOffer}
             theirOffer={theirOffer}
+            myTradelist={myTradelist}
             peerTradelist={trade.peerTradelist}
             theirWanted={theirWanted}
             myWanted={myWanted}
@@ -818,13 +576,13 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
             }}
             onInfo={openInfo}
           />
-        </TradeSheet>
+        </Sheet>
       )}
 
       {showQr && (
-        <TradeSheet title="Invite your trade partner" onClose={() => setShowQr(false)}>
+        <Sheet title="Invite your trade partner" onClose={() => setShowQr(false)}>
           <TradeQr code={snap.code} />
-        </TradeSheet>
+        </Sheet>
       )}
 
       {info && (
@@ -919,144 +677,6 @@ function TradeBoard({ trade, seat }: { trade: ReturnType<typeof useTradeSession>
 }
 
 /**
- * One side of the board: title + running total, the card tiles, and the
- * add/scan actions. Both sides are editable — you usually hold each other's
- * binders, so adding to "You get" is as normal as adding to "You give".
- */
-function OfferPanel({
-  side,
-  title,
-  total,
-  lines,
-  empty,
-  editable,
-  onQty,
-  onAdd,
-  onScan,
-  badge,
-  printings,
-  oracles,
-  onInfo,
-  onEdit,
-  view,
-}: {
-  side: Side;
-  title: string;
-  total: number;
-  lines: TradeLine[];
-  empty: string;
-  editable: boolean;
-  onQty: (side: Side, key: string, qty: number) => void;
-  onAdd: () => void;
-  onScan: () => void;
-  /** Per-line indicator: ownership for "You give", wishlist match for "You get". */
-  badge: (l: TradeLine) => { icon: ReactNode; cls?: string; title?: string } | null;
-  printings: Map<string, Priced<Printing>> | undefined;
-  oracles: Map<string, Priced<OracleCard>> | undefined;
-  /** Read-only card info (locked trades). */
-  onInfo: OpenInfo;
-  /** Tap a line in an editable trade: open the full edit sheet for it. */
-  onEdit: (side: Side, line: TradeLine, oracle: Priced<OracleCard>) => void;
-  /** Card tiles or visual stacks, chosen for the whole board. */
-  view: ViewMode;
-}) {
-  return (
-    <section className="trade-col" aria-label={`Cards ${title.toLowerCase()}`}>
-      <header className="trade-col-head">
-        <h3>{title}</h3>
-        <span className="trade-col-total" aria-label={`Total ${title.toLowerCase()}`}>
-          {fmtEur(total)}
-        </span>
-      </header>
-      <div className="trade-col-list">
-        {lines.length === 0 ? (
-          <p className="trade-empty">{empty}</p>
-        ) : (
-          <CardItems
-            view={view}
-            items={lines.map((l): CardItem => {
-              const ind = badge(l);
-              // The one place a flag earns its keep most: your partner hands you
-              // a card and you want to know it's the Spanish one before you take
-              // it, not after.
-              const lang = langMark(l.lang);
-              const printing = printings?.get(l.scryfallId);
-              const oracle = oracles?.get(l.oracleId);
-              const price = formatPrice(pricedForFinish(printing, l.finish));
-              const less = (
-                <button onClick={() => onQty(side, lineKey(l), l.quantity - 1)} aria-label="One fewer">
-                  −
-                </button>
-              );
-              const more = (
-                <button onClick={() => onQty(side, lineKey(l), l.quantity + 1)} aria-label="One more">
-                  ＋
-                </button>
-              );
-              return {
-                key: lineKey(l),
-                name: l.name,
-                // Stacks show the card's own title bar at close to full size,
-                // where the small scan turns to mush; tiles are fine with it.
-                image: (view === 'stack' ? printing?.imageNormal : null) ?? printing?.imageSmall ?? oracle?.imageSmall ?? null,
-                foil: l.finish !== 'nonfoil',
-                count: l.quantity,
-                badge: ind?.icon,
-                badgeClass: ind?.cls,
-                badgeTitle: ind?.title,
-                ...(lang ? { lang } : {}),
-                sub: printing ? (
-                  <>
-                    <SetSymbol set={printing.set} title={printing.setName} />
-                    <span className="stack-setname">{printing.setName}</span>
-                  </>
-                ) : undefined,
-                price: price ?? NO_PRICE,
-                onClick: oracle
-                  ? () => (editable ? onEdit(side, l, oracle) : onInfo(oracle, l.scryfallId, { side }))
-                  : undefined,
-                // Stacks carry the price beside the card, so their buttons keep
-                // the quantity between them instead.
-                actions: view === 'stack' ? (
-                  editable ? (
-                    <QtyStepper compact value={l.quantity} min={0} onChange={(v) => onQty(side, lineKey(l), v)} label={l.name} />
-                  ) : undefined
-                ) : (
-                  <>
-                    {editable && less}
-                    <span className="tile-price">{price ?? '—'}</span>
-                    {editable && more}
-                  </>
-                ),
-              };
-            })}
-          />
-        )}
-      </div>
-      {editable && (
-        <div className="trade-col-actions">
-          <button className="trade-add" onClick={onAdd}>
-            <Icon name="plus" size={15} /> Add
-          </button>
-          <button className="trade-add" onClick={onScan}>
-            <Icon name="camera" size={15} /> Scan
-          </button>
-        </div>
-      )}
-    </section>
-  );
-}
-
-/** Generic bottom sheet for the trade tools. */
-function TradeSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  return (
-    <Sheet onClose={onClose} title={title}>
-      {children}
-    </Sheet>
-  );
-}
-
-/**
  * Full-screen picker for adding cards to an offer. Unlike the bottom sheet, it
  * gives the reused card-search view (filters, list/grid toggle, paging) the
  * whole screen — searching for cards in a trade looks exactly like searching
@@ -1078,408 +698,4 @@ function TradePickerOverlay({ title, onClose, children }: { title: string; onClo
     </div>,
     document.body,
   );
-}
-
-/** A card that could help close the value gap. */
-interface BalanceCandidate {
-  key: string;
-  line: TradeLine;
-  max: number;
-  name: string;
-  price: number;
-  /** Copies still available (tradelist quantity minus copies already offered). */
-  qty: number;
-  /** Copies the receiving side's wishlist asks for (0 = no match). */
-  wanted: number;
-  oracle: Priced<OracleCard> | undefined;
-  printing: Priced<Printing> | undefined;
-}
-
-/**
- * Greedy best-fit: repeatedly pick the card that brings the remaining gap
- * closest to zero; stop when no card improves it. The pool is pre-sorted
- * wishlist-matches-first, so ties favor cards someone actually wants.
- */
-function suggestBalance(gap: number, pool: BalanceCandidate[]): Map<string, number> {
-  const picks = new Map<string, number>();
-  let remaining = gap;
-  for (let n = 0; n < 40; n++) {
-    let best: BalanceCandidate | undefined;
-    let bestAfter = Math.abs(remaining);
-    for (const c of pool) {
-      if ((picks.get(c.key) ?? 0) >= c.qty) continue;
-      const after = Math.abs(remaining - c.price);
-      if (after < bestAfter - 1e-9) {
-        best = c;
-        bestAfter = after;
-      }
-    }
-    if (!best) break;
-    picks.set(best.key, (picks.get(best.key) ?? 0) + 1);
-    remaining -= best.price;
-  }
-  return picks;
-}
-
-/**
- * The scales tool: suggests cards from the lighter side's tradelist to even
- * out the value. Suggestions can be added straight to that side's column —
- * either participant may edit either side.
- */
-function BalancePanel({
-  diff,
-  myOffer,
-  theirOffer,
-  peerTradelist,
-  theirWanted,
-  myWanted,
-  onAdd,
-  onAddMany,
-  onInfo,
-}: {
-  diff: number;
-  myOffer: TradeLine[];
-  theirOffer: TradeLine[];
-  peerTradelist: TradeLine[] | null;
-  theirWanted: WantFn;
-  myWanted: WantFn;
-  onAdd: (side: Side, line: TradeLine, max: number) => void;
-  onAddMany: (side: Side, adds: Array<{ line: TradeLine; count: number; max: number }>) => void;
-  onInfo: OpenInfo;
-}) {
-  // My tradelist (with prices) plus display data for their tradelist.
-  const mine = useTradelistRows();
-  const { printMap, oracleMap } = useCardMaps(peerTradelist ?? []);
-
-  if (!printMap || !oracleMap || !mine) return <Loading fine />;
-
-  const gap = Math.abs(diff);
-  if (gap < BALANCE_EPSILON) {
-    return <p className="fine-print">This trade is already balanced (difference {fmtEur(gap)}).</p>;
-  }
-  const iGiveMore = diff > 0;
-  if (iGiveMore && peerTradelist === null) {
-    return <p className="fine-print">You’re giving more, but their tradelist hasn’t arrived yet. Try again in a moment.</p>;
-  }
-
-  // What's already in the lighter side's offer can't be suggested again.
-  const offered = new Map<string, number>();
-  for (const l of iGiveMore ? theirOffer : myOffer) {
-    offered.set(lineKey(l), (offered.get(lineKey(l)) ?? 0) + l.quantity);
-  }
-
-  const pool: BalanceCandidate[] = (
-    iGiveMore
-      ? (peerTradelist ?? []).map((l): BalanceCandidate => {
-          const printing = printMap.get(l.scryfallId);
-          const line = { ...l, quantity: 1 };
-          return {
-            key: lineKey(l),
-            line,
-            max: l.quantity,
-            name: l.name,
-            price: pricedForFinish(printing, l.finish)?.priceEur ?? 0,
-            qty: l.quantity - (offered.get(lineKey(l)) ?? 0),
-            wanted: myWanted(l),
-            oracle: oracleMap.get(l.oracleId),
-            printing,
-          };
-        })
-      : mine.map(({ entry: e, oracle, printing }): BalanceCandidate => {
-          const line: TradeLine = {
-            oracleId: e.oracleId,
-            scryfallId: e.scryfallId,
-            name: oracle?.name ?? '(unknown card)',
-            quantity: 1,
-            condition: e.condition,
-            finish: e.finish,
-            lang: e.lang,
-          };
-          return {
-            key: lineKey(line),
-            line,
-            max: e.quantityForTrade,
-            name: line.name,
-            price: pricedForFinish(printing, e.finish)?.priceEur ?? 0,
-            qty: e.quantityForTrade - (offered.get(lineKey(line)) ?? 0),
-            wanted: theirWanted(e),
-            oracle,
-            printing,
-          };
-        })
-  )
-    .filter((c) => c.qty > 0 && c.price > 0)
-    .sort((a, b) => b.wanted - a.wanted || b.price - a.price);
-
-  const picks = suggestBalance(gap, pool);
-  const suggestions = pool.filter((c) => picks.has(c.key));
-  if (suggestions.length === 0) {
-    return (
-      <p className="fine-print">
-        Nothing on {iGiveMore ? 'their' : 'your'} tradelist (with a known price) can close the {fmtEur(gap)} gap.
-      </p>
-    );
-  }
-
-  const pickCount = suggestions.reduce((s, c) => s + picks.get(c.key)!, 0);
-  const pickedTotal = suggestions.reduce((s, c) => s + c.price * picks.get(c.key)!, 0);
-  const after = Math.abs(gap - pickedTotal);
-  const lightSide: Side = iGiveMore ? 'get' : 'give';
-
-  return (
-    <>
-      <p className="fine-print">
-        {iGiveMore ? (
-          <>
-            You’re giving <strong>{fmtEur(gap)}</strong> more. From <strong>their</strong> tradelist, you could add
-            to what you get:
-          </>
-        ) : (
-          <>
-            You’re getting <strong>{fmtEur(gap)}</strong> more. From <strong>your</strong> tradelist, you could add
-            to what you give:
-          </>
-        )}
-      </p>
-      <CardList
-        className="picker-scroll"
-        items={suggestions.map((c): CardItem => {
-          const oracle = c.oracle;
-          const lang = langMark(c.line.lang);
-          return {
-            key: c.key,
-            name: c.name,
-            image: c.printing?.imageSmall ?? oracle?.imageSmall ?? null,
-            foil: c.line.finish !== 'nonfoil',
-            count: picks.get(c.key),
-            ...(lang ? { lang } : {}),
-            badge: c.wanted > 0 ? '⭐' : undefined,
-            badgeClass: 'badge-wish',
-            badgeTitle:
-              c.wanted > 0 ? (iGiveMore ? `On your wishlist (×${c.wanted})` : `They want ×${c.wanted}`) : undefined,
-            sub: (
-              <>
-                {c.line.condition} · {c.line.finish}
-              </>
-            ),
-            price: fmtEur(c.price),
-            onClick: oracle ? () => onInfo(oracle, c.line.scryfallId, { side: lightSide }) : undefined,
-            actions: (
-              <button
-                title={iGiveMore ? 'Add to what you get' : 'Add to what you give'}
-                onClick={() => onAdd(lightSide, c.line, c.max)}
-              >
-                ＋
-              </button>
-            ),
-          };
-        })}
-      />
-      <p className="fine-print">
-        Adds {fmtEur(pickedTotal)}, bringing the difference from {fmtEur(gap)} down to {fmtEur(after)}. Prices are
-        estimates based on Scryfall’s EUR figures; unpriced cards are skipped.
-      </p>
-      <button
-        className="primary"
-        onClick={() => onAddMany(lightSide, suggestions.map((c) => ({ line: c.line, count: picks.get(c.key)!, max: c.max })))}
-      >
-        Add all ({pickCount} {pickCount === 1 ? 'card' : 'cards'})
-      </button>
-    </>
-  );
-}
-
-/**
- * Add cards to the offer: with no query, quick-picks from your tradelist
- * (partner-wishlist matches starred and sorted first); typing searches the
- * whole card database (you can offer cards you haven't registered). Every card
- * — tradelist pick or search result — opens the card sheet so you confirm the
- * edition, condition, finish, language and quantity before it joins the offer.
- */
-function AddCardsPanel({
-  ownership,
-  theirWanted,
-  onCompose,
-}: {
-  ownership: OwnershipIndex | undefined;
-  theirWanted: WantFn;
-  onCompose: (card: Priced<OracleCard>, prefill?: Partial<SessionCardValues>) => void;
-}) {
-  const [q, setQ] = useState('');
-  const [filters, setFilters] = useState<SearchFilters>({});
-
-  const tradelist = useTradelistRows();
-
-  // Owned cards seed the sheet with the copy you have (edition/condition/
-  // finish/language); anything you don't own starts from the printing the search
-  // result was showing, then the card's defaults.
-  const compose = (card: Priced<OracleCard>, printing?: Priced<Printing>) => {
-    const e = bestAddDefault(ownership?.ownedCopies(card.oracleId) ?? []);
-    if (e) {
-      onCompose(card, { scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang });
-      return;
-    }
-    onCompose(card, printing ? { scryfallId: printing.scryfallId } : undefined);
-  };
-
-  const sortedTradelist = (tradelist ?? [])
-    .map((t) => ({ ...t, wanted: theirWanted(t.entry) }))
-    .sort((a, b) => b.wanted - a.wanted);
-
-  // With no query, quick-picks from your own tradelist (partner-wishlist
-  // matches starred and sorted first).
-  const emptyState = !tradelist ? (
-    <p className="fine-print">Loading tradelist…</p>
-  ) : tradelist.length === 0 ? (
-    <p className="fine-print">Your tradelist is empty. Search above to add any card.</p>
-  ) : (
-    <>
-      <p className="fine-print">From your tradelist (or search above for any card):</p>
-      <CardList
-        items={sortedTradelist.map(({ entry: e, oracle, printing, wanted }): CardItem => {
-          const name = oracle?.name ?? '(unknown card)';
-          const lang = langMark(e.lang);
-          return {
-            key: e.id,
-            name,
-            image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-            foil: e.finish !== 'nonfoil',
-            ...(lang ? { lang } : {}),
-            badge: wanted > 0 ? '⭐' : undefined,
-            badgeClass: 'badge-wish',
-            badgeTitle: wanted > 0 ? `They want ×${wanted}` : undefined,
-            sub: (
-              <>
-                {e.condition} · {e.finish}
-                {lang ? ` · ${e.lang}` : ''} · {e.quantityForTrade} for trade
-                {wanted > 0 ? ` · they want ×${wanted}` : ''}
-              </>
-            ),
-            price: formatPrice(pricedForFinish(printing, e.finish)),
-            onClick: oracle
-              ? () => onCompose(oracle, { scryfallId: e.scryfallId, condition: e.condition, finish: e.finish, lang: e.lang })
-              : undefined,
-          };
-        })}
-      />
-    </>
-  );
-
-  return (
-    <CardSearchView
-      query={q}
-      onQueryChange={setQ}
-      inputPlaceholder="Search any card to add…"
-      filters={filters}
-      setFilters={setFilters}
-      emptyState={emptyState}
-      badgeFor={(card, printing) => ownIndicator(ownership, card.oracleId, printing?.scryfallId ?? card.defaultScryfallId)}
-      onCardClick={compose}
-    />
-  );
-}
-
-/**
- * Add cards to what you get: with no query, quick-picks from the partner's
- * tradelist (your wishlist matches starred and sorted first); typing searches
- * the whole card database, for cards they hand you that aren't on their list.
- * Every card opens the card sheet so you confirm edition, condition, finish,
- * language and quantity before it joins the offer.
- */
-function AddTheirCardsPanel({
-  lines,
-  loading,
-  myWanted,
-  onCompose,
-  onRefresh,
-}: {
-  lines: TradeLine[] | null;
-  loading: boolean;
-  myWanted: WantFn;
-  onCompose: (card: Priced<OracleCard>, prefill?: Partial<SessionCardValues>) => void;
-  onRefresh: () => void;
-}) {
-  const [q, setQ] = useState('');
-  const [filters, setFilters] = useState<SearchFilters>({});
-  // Their lines reference cards by id; the local card DB has the display data.
-  const { printMap, oracleMap } = useCardMaps(lines ?? []);
-
-  // Their tradelist knows the exact printing they registered — seed the sheet
-  // with it (the card-DB default is the newest edition, usually the wrong
-  // guess). Anything not on their list starts from the card's defaults.
-  const compose = (card: Priced<OracleCard>, printing?: Priced<Printing>) => {
-    const listed = bestPeerLine(lines, card.oracleId);
-    if (listed) {
-      onCompose(card, { scryfallId: listed.scryfallId, condition: listed.condition, finish: listed.finish, lang: listed.lang });
-      return;
-    }
-    onCompose(card, printing ? { scryfallId: printing.scryfallId } : undefined);
-  };
-
-  const sorted = [...(lines ?? [])]
-    .map((l) => ({ l, wanted: myWanted(l) }))
-    .sort((a, b) => b.wanted - a.wanted);
-
-  // With no query, quick-picks from their tradelist (your wishlist matches
-  // starred and sorted first).
-  const emptyState = !lines ? (
-    <p className="fine-print">{loading ? 'Waiting for their tradelist…' : 'No tradelist received yet.'}</p>
-  ) : lines.length === 0 ? (
-    <p className="fine-print">Their tradelist is empty. Search above to add any card they hand you.</p>
-  ) : (
-    <>
-      <div className="meta-row">
-        <span className="fine-print">From their tradelist (or search above for any card):</span>
-        <button className="chip" onClick={onRefresh} disabled={loading}>
-          {loading ? 'Loading…' : '↻ Refresh'}
-        </button>
-      </div>
-      <CardList
-        items={sorted.map(({ l, wanted }): CardItem => {
-          const printing = printMap?.get(l.scryfallId);
-          const oracle = oracleMap?.get(l.oracleId);
-          const lang = langMark(l.lang);
-          return {
-            key: lineKey(l),
-            name: l.name,
-            image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
-            foil: l.finish !== 'nonfoil',
-            ...(lang ? { lang } : {}),
-            badge: wanted > 0 ? '⭐' : undefined,
-            badgeClass: 'badge-wish',
-            badgeTitle: wanted > 0 ? `On your wishlist (×${wanted})` : undefined,
-            sub: (
-              <>
-                {l.condition} · {l.finish}
-                {lang ? ` · ${l.lang}` : ''} · {l.quantity} for trade
-                {wanted > 0 ? ` · you want ×${wanted}` : ''}
-              </>
-            ),
-            price: formatPrice(pricedForFinish(printing, l.finish)),
-            onClick: oracle
-              ? () => onCompose(oracle, { scryfallId: l.scryfallId, condition: l.condition, finish: l.finish, lang: l.lang })
-              : undefined,
-          };
-        })}
-      />
-    </>
-  );
-
-  return (
-    <CardSearchView
-      query={q}
-      onQueryChange={setQ}
-      inputPlaceholder="Search any card they hand you…"
-      filters={filters}
-      setFilters={setFilters}
-      emptyState={emptyState}
-      onCardClick={compose}
-    />
-  );
-}
-
-/** Your tradelist, joined, off the shared snapshot. */
-function useTradelistRows(): JoinedEntry[] | undefined {
-  const joined = useJoinedCollection();
-  return useMemo(() => joined?.filter((r) => r.entry.quantityForTrade > 0), [joined]);
 }

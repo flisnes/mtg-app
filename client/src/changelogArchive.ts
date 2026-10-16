@@ -9,6 +9,24 @@ import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
   {
+    version: '0.198.12',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Easier to hit and easier to read: toolbar buttons, sheet close buttons, steppers and chips are bigger, and purple and red text and buttons have more contrast.',
+      },
+    ],
+  },
+  {
+    version: '0.198.11',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Community lists, profiles, trade matches and price charts are only downloaded again when they changed, so revisits load right away.',
+      },
+    ],
+  },
+  {
     version: '0.198.10',
     changes: [
       {

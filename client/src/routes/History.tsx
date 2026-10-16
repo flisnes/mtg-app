@@ -7,9 +7,9 @@ import { useCardMaps } from '../db/useCardMaps.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardList, type CardItem } from '../components/CardViews.js';
 import { Sheet } from '../components/Sheet.js';
-import { sumQty } from '../util/groupBy.js';
 import { Loading } from '../components/Loading.js';
-import { MenuRow } from '../components/MenuRow.js';
+import { tradeLineCardItem } from '../components/cardRows.js';
+import { TradeRow } from '../trade/TradeRow.js';
 import { fmtDateTime } from '../util/format.js';
 
 export function History() {
@@ -27,21 +27,7 @@ export function History() {
         <ul className="menu-list">
           {trades.map((t) => (
             <li key={t.id}>
-              <MenuRow
-                className="menu-item menu-item-btn"
-                onClick={() => setOpen(t)}
-                icon="trade"
-                label={
-                  <>
-                    Trade with {t.partner ?? 'Other User'}
-                    <span className="badge">
-                      −{sumQty(t.given)} / +{sumQty(t.received)}
-                    </span>
-                  </>
-                }
-                plain
-                note={fmtDateTime(t.completedAt)}
-              />
+              <TradeRow trade={t} onClick={() => setOpen(t)} />
             </li>
           ))}
         </ul>
@@ -52,7 +38,7 @@ export function History() {
           onClose={() => setOpen(null)}
           label="Trade detail"
           title={`Trade with ${open.partner ?? 'Other User'}`}
-          subtitle={new Date(open.completedAt).toLocaleString()}
+          subtitle={fmtDateTime(open.completedAt)}
         >
           <h3>You gave</h3>
           <TradeLines lines={open.given} onInfo={(oracle, scryfallId) => setInfo({ oracle, scryfallId })} />
@@ -75,23 +61,14 @@ function TradeLines({
   lines: Trade['given'];
   onInfo: (oracle: Priced<OracleCard>, scryfallId?: string) => void;
 }) {
-  const { printMap, oracleMap } = useCardMaps(lines);
+  const cards = useCardMaps(lines);
   if (lines.length === 0) return <p className="fine-print">Nothing.</p>;
   return (
     <CardList
       items={lines.map((l, i): CardItem => {
-        const oracle = oracleMap?.get(l.oracleId);
+        const oracle = cards.oracleMap?.get(l.oracleId);
         return {
-          key: `${i}-${l.scryfallId}`,
-          name: l.name,
-          image: printMap?.get(l.scryfallId)?.imageSmall ?? oracle?.imageSmall ?? null,
-          count: l.quantity,
-          sub: (
-            <>
-              {l.condition} · {l.finish}
-              {l.lang !== 'en' ? ` · ${l.lang}` : ''}
-            </>
-          ),
+          ...tradeLineCardItem(l, `${i}-${l.scryfallId}`, cards),
           onClick: oracle ? () => onInfo(oracle, l.scryfallId) : undefined,
         };
       })}

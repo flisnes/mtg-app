@@ -71,3 +71,20 @@ export function wishMatchesCopy(want: WishTarget, have: HeldCopy): boolean {
   if (want.scryfallId && want.scryfallId !== have.scryfallId) return false;
   return wishPrefsMet(want, have);
 }
+
+/**
+ * A wishlist as a counter over concrete copies: how many copies the wishes
+ * that match this copy ask for, summed (0 = no match). Built once per list, so
+ * a long tradelist checks only the wishes for its own card.
+ */
+export function wishCountMatcher(
+  wishes: readonly (WishTarget & { quantity: number })[],
+): (have: HeldCopy) => number {
+  const byOracle = new Map<string, (WishTarget & { quantity: number })[]>();
+  for (const w of wishes) {
+    const list = byOracle.get(w.oracleId);
+    if (list) list.push(w);
+    else byOracle.set(w.oracleId, [w]);
+  }
+  return (have) => (byOracle.get(have.oracleId) ?? []).reduce((sum, w) => sum + (wishMatchesCopy(w, have) ? w.quantity : 0), 0);
+}

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.200.13
+
+- **Changed: the trade pickers stack printings too.** With Stack printings on, "Add cards you give" and "Add cards you get" show one row per card instead of one per edition and grade, with the copies for trade summed ("2 editions · 6 for trade"); tapping it starts from the edition your printing preference picks. The stack button now sits beside the tradelist in both pickers. Trade history and the balance suggestions show each card's set and number like the rest of the app, and the recent trades on the Trade page look like the rows in Trade history. Under the hood, the two pickers are one, and the trade screen is split into smaller pieces. If a trade acts up, tell us; nothing about how trades work should have changed.
+
 ## 0.200.12
 
 - **Changed: list screens share their plumbing.** The deck list's format and color filters now light up when they are hiding decks, like the filters on Sealed, Price movers and Edit history already did. Under the hood, the wishlist's select bar, every filter dropdown, the sorts on Sealed, Price movers and the deck list, and the remembered view, sort and recent-search settings each run on one shared piece instead of a copy per screen. Nothing else should look different; if a sort or a remembered setting acts up, that's on us.

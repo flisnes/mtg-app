@@ -1,10 +1,11 @@
-import type { ContainerKind, DeckBoard, Priced, Printing } from '@mtg/shared';
+import type { ContainerKind, DeckBoard, Finish, OracleCard, Priced, Printing, TradeLine } from '@mtg/shared';
 import { specialLabel } from '@mtg/shared';
 import type { JoinedEntry, JoinedWish, JoinedDeckCard } from '../db/queries.js';
 import type { CardItem } from './CardViews.js';
 import type { useMoverFlags } from '../price/useMoverFlags.js';
 import type { useOwnershipIndex } from '../db/useOwnership.js';
 import type { PlacementIndex } from '../db/usePlacements.js';
+import type { CardMaps } from '../db/useCardMaps.js';
 import { Icon } from './icons.js';
 import { SetSymbol } from './SetSymbol.js';
 import { ownedBadge } from './OwnedBadge.js';
@@ -39,6 +40,70 @@ export function yearMark(
   };
 }
 
+/**
+ * The head every card row starts from: which card, its picture, how many, and
+ * the cardboard marks (foil sheen, language flag, release year). The builders
+ * below add their own badge, subtitle and price on top.
+ */
+export function baseCardItem(o: {
+  key: string;
+  oracle?: Priced<OracleCard>;
+  printing?: Priced<Printing>;
+  /** Fallback name when the card isn't in this device's DB (a partner's line). */
+  name?: string;
+  /** Wins over the printing's small image (a stack wants the normal one). */
+  image?: string | null;
+  finish?: Finish | null;
+  quantity: number;
+  lang?: string | null;
+  showYear?: boolean;
+}): CardItem {
+  const lang = langMark(o.lang);
+  const year = yearMark(o.printing, o.showYear);
+  return {
+    key: o.key,
+    name: o.oracle?.name ?? o.name ?? '(unknown card)',
+    image: o.image ?? o.printing?.imageSmall ?? o.oracle?.imageSmall ?? null,
+    foil: !!o.finish && o.finish !== 'nonfoil',
+    count: o.quantity,
+    ...(lang ? { lang } : {}),
+    ...(year ? { year } : {}),
+  };
+}
+
+/** Condition, plus finish and language when they're not the plain ones. */
+export function lineDetail(l: { condition: string; finish: Finish; lang: string }): string {
+  const bits: string[] = [l.condition];
+  if (l.finish !== 'nonfoil') bits.push(l.finish);
+  if (l.lang !== 'en') bits.push(l.lang);
+  return bits.join(' · ');
+}
+
+/**
+ * A trade line (an offer, a tradelist, a past trade): the card it names, with
+ * its edition and grade under it. Callers spread their own badge, price,
+ * actions and onClick over this.
+ */
+export function tradeLineCardItem(
+  line: TradeLine,
+  key: string,
+  cards: CardMaps,
+  opts: { showYear?: boolean; image?: string | null } = {},
+): CardItem {
+  const oracle = cards.oracleMap?.get(line.oracleId);
+  const printing = cards.printMap?.get(line.scryfallId);
+  return {
+    ...baseCardItem({ key, oracle, printing, name: line.name, image: opts.image, finish: line.finish, quantity: line.quantity, lang: line.lang, showYear: opts.showYear }),
+    sub: (
+      <>
+        {printing && <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />}
+        {printing ? `${printing.setName} · #${printing.collectorNumber} · ` : ''}
+        {lineDetail(line)}
+      </>
+    ),
+  };
+}
+
 /** A collection/tradelist row: printing + condition + finish, with a "for trade" badge. */
 function collectionCardItem(
   r: JoinedEntry,
@@ -60,18 +125,11 @@ function collectionCardItem(
   // Same per-copy logic: a flag belongs on the Italian copy, not on the row
   // above it that happens to be the same card in English.
   const lang = langMark(r.entry.lang);
-  const year = yearMark(r.printing, opts.showYear);
   return {
+    ...baseCardItem({ key: r.entry.id, oracle: r.oracle, printing: r.printing, finish: r.entry.finish, quantity: r.entry.quantity, lang: r.entry.lang, showYear: opts.showYear }),
     ...(place ? { place } : {}),
     ...(special ? { special } : {}),
-    ...(lang ? { lang } : {}),
-    ...(year ? { year } : {}),
-    key: r.entry.id,
-    name: r.oracle?.name ?? '(unknown card)',
-    image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
     mana: r.oracle?.manaCost,
-    foil: r.entry.finish !== 'nonfoil',
-    count: r.entry.quantity,
     // Tradelist glyph + how many copies are up for grabs, same shape as the
     // "filed" badge next to it.
     badge:
@@ -196,7 +254,6 @@ export function wishCardItem(
   ]
     .filter(Boolean)
     .join(' · ');
-  const year = yearMark(r.printing, opts.showYear);
   const printingSub = r.entry.scryfallId ? (
     r.printing ? (
       <>
@@ -210,13 +267,16 @@ export function wishCardItem(
     'any printing'
   );
   return {
-    key: r.entry.id,
-    name: r.oracle?.name ?? '(unknown card)',
-    image: r.printing?.imageSmall ?? shownAny?.imageSmall ?? r.oracle?.imageSmall ?? null,
-    foil: !!r.entry.finish && r.entry.finish !== 'nonfoil',
-    count: r.entry.quantity,
-    ...(lang ? { lang } : {}),
-    ...(year ? { year } : {}),
+    ...baseCardItem({
+      key: r.entry.id,
+      oracle: r.oracle,
+      printing: r.printing,
+      image: r.printing?.imageSmall ?? shownAny?.imageSmall,
+      finish: r.entry.finish,
+      quantity: r.entry.quantity,
+      lang: r.entry.lang,
+      showYear: opts.showYear,
+    }),
     badge: ownBadge?.icon,
     badgeClass: ownBadge?.cls,
     badgeTitle: ownBadge?.title,
@@ -249,17 +309,9 @@ export function deckCardItem(
 ): CardItem {
   // A slot that named a language: the flag says which copy this binder page or
   // deck list is actually asking for.
-  const lang = langMark(r.entry.lang);
-  const year = yearMark(r.printing, opts.showYear);
   return {
-    key: r.entry.id,
-    name: r.oracle?.name ?? '(unknown card)',
-    image: r.printing?.imageSmall ?? r.oracle?.imageSmall ?? null,
+    ...baseCardItem({ key: r.entry.id, oracle: r.oracle, printing: r.printing, finish: r.entry.finish, quantity: r.entry.quantity, lang: r.entry.lang, showYear: opts.showYear }),
     mana: r.oracle?.manaCost,
-    foil: !!r.entry.finish && r.entry.finish !== 'nonfoil',
-    count: r.entry.quantity,
-    ...(lang ? { lang } : {}),
-    ...(year ? { year } : {}),
     sub:
       opts.kind === 'deck' ? (
         BOARD_LABEL[r.entry.board] || undefined

@@ -1,6 +1,7 @@
-// Persisted trade-scan session keys. This lives apart from ScanSheet.tsx so
-// Trade.tsx can clean up stale sessions without pulling the whole scanner
-// (camera, OCR, matcher) into its chunk — ScanSheet is lazy-loaded.
+// The persisted trade-scan session prefix and its cleanup. scan/session.ts
+// builds the keys; this lives apart from it so Trade.tsx can clean up stale
+// sessions without pulling the session module (and, through it, the intake
+// questionnaire) into its chunk.
 export const TRADE_SCAN_PREFIX = 'scan-session:trade:';
 
 /**

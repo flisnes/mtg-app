@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.201.3',
+    changes: [
+      {
+        kind: 'changed',
+        text: "A copy's traits read the same way everywhere now (condition, Foil, language, Signed), deck search results name the zone like the deck page does, deleting a container asks the same question from its page and its list, and the goblin-mode card back and history event sheets have a close button.",
+      },
+    ],
+  },
+  {
     version: '0.201.2',
     changes: [
       {
@@ -147,15 +156,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Deck pages start with your cards. Format, owned count and legality fold into one row you can tap open, and an "Add cards" button sits above the list.',
-      },
-    ],
-  },
-  {
-    version: '0.199.0',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Adding a card from search now says "+ Trade", "+ Wish" and "Add to collection" in words, and a toast after the add lets you Undo it if you grabbed the wrong printing.',
       },
     ],
   },

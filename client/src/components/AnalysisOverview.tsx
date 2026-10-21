@@ -5,7 +5,8 @@ import type { BracketReport, SimLimits, SimResult } from '@mtg/sim';
 import { heldBackBy } from './OnCurvePanel.js';
 import type { SimCoverage } from '@mtg/sim';
 import { FLOW_TURN } from './FlowTurnsPanel.js';
-import { plural } from '../util/format.js';
+import { fmtCount, plural } from '../util/format.js';
+import { pct, one } from './analysisFormat.js';
 
 // The Overview tab (rebuild plan A5): one row per question, each a status, a
 // sentence and the next thing to do, and each a way into the tab with the
@@ -22,10 +23,8 @@ const FLOOD = 0.3;
 /** Mana left on the table on turn six worth saying out loud. */
 const UNSPENT = 2;
 
-const pct = (p: number) => `${Math.round(p * 100)}%`;
 /** Below the bar never rounds onto it: "90%" on a row flagged for missing 90% reads as a bug. */
 const pctShort = (p: number) => (p >= THRESHOLD ? pct(p) : `${Math.min(Math.round(p * 100), Math.round(THRESHOLD * 100) - 1)}%`);
-const one = (n: number) => n.toFixed(1);
 
 type Tone = 'ok' | 'warn' | 'wait';
 
@@ -98,7 +97,7 @@ export function AnalysisOverview({
   );
 }
 
-const waiting = (games: number): Answer => ({ tone: 'wait', status: 'dealing', text: `Dealing ${games.toLocaleString()} games…` });
+const waiting = (games: number): Answer => ({ tone: 'wait', status: 'dealing', text: `Dealing ${fmtCount(games)} games…` });
 const noData: Answer = { tone: 'wait', status: 'no data', text: 'Your card database predates this. Refresh it from About.' };
 
 /**

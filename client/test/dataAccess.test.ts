@@ -652,7 +652,7 @@ describe('containers', () => {
     await setDeckFormat(d, 'commander');
     expect(await db.decks.get(d)).toMatchObject({ format: 'commander', updatedAt: clock });
     expect(await db.deckCards.get('side')).toMatchObject({ board: 'maybe' });
-    // moveSlotRaw collects events into an array tidyBoardsRaw throws away.
+    // tidyBoardsRaw moves the slot with no event extra, so moveSlotRaw emits nothing.
     expect(await events()).toEqual([]);
   });
 

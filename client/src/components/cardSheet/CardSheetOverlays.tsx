@@ -3,6 +3,7 @@ import type { FilingCopy } from '../../deck/filing.js';
 import { SealedWithCardSheet } from '../../sealed/SealedWithCardSheet.js';
 import { CardHistorySheet, PriceChartSheet } from '../ChartSheetsLazy.js';
 import { CardLegalitySheet } from '../CardLegalitySheet.js';
+import { printingLabel } from '../cardRows.js';
 import type { pickPrice } from '../CardSorting.js';
 import { CardSheet } from '../CardSheet.js';
 import { ContainerPickerSheet } from '../ContainerPickerSheet.js';
@@ -75,7 +76,7 @@ export function CardSheetOverlays({
       {overlay?.kind === 'chart' && priceHistory && (
         <PriceChartSheet
           name={oracleCard.name}
-          subtitle={printing ? `${printing.setName} · #${printing.collectorNumber}` : undefined}
+          subtitle={printing && printingLabel(printing)}
           oracleId={oracleCard.oracleId}
           scryfallId={shownId}
           history={priceHistory}

@@ -4,7 +4,7 @@ import { DAY_MS, type DayReadings, type Finish, type UserEvent, type UserEventKi
 import { db } from '../db/schema.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
 import { costBasisOf } from '../price/costBasis.js';
-import { monthlyBefore, readingsFor } from '../price/history.js';
+import { dayKeyOf, monthlyBefore, readingsFor } from '../price/history.js';
 import { convertToDisplay, fmtMoney } from '../price/rates.js';
 import { describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { fmtDate, plural } from '../util/format.js';
@@ -115,7 +115,7 @@ export function PriceChartSheet({
   const months = useMemo(() => {
     if (!cur) return [];
     const first = readings[cur].findIndex((v) => v != null);
-    const firstDay = new Date(Date.parse(readings.startDay) + Math.max(first, 0) * DAY_MS).toISOString().slice(0, 10);
+    const firstDay = dayKeyOf(Date.parse(readings.startDay) + Math.max(first, 0) * DAY_MS);
     return monthlyBefore(readings.monthly, cur, firstDay);
   }, [readings, cur]);
   const [span, setSpan] = useState<'daily' | 'all'>('daily');

@@ -3,10 +3,10 @@ import { useShortcuts } from './useShortcuts.js';
 import { useKeySet } from './useKeySet.js';
 
 /**
- * Local UI state for multi-selecting cards in a list (Collection, Tradelist,
- * Wishlist). Selection is keyed by CardItem.key (= the entry id) and is never
- * persisted — leaving the view drops it. Pair with <SelectionBar> and the
- * selection props on <CardItems>.
+ * Local UI state for multi-selecting cards in a list (the collection lists,
+ * a container's boards, search results). Selection is keyed by CardItem.key
+ * (an entry or slot id, a stack key) and is never persisted: leaving the view
+ * drops it. Pair with <SelectionBar> and the selection props on <CardItems>.
  */
 export interface MultiSelect {
   /** Selection mode is on (Select tapped, not yet cancelled). */

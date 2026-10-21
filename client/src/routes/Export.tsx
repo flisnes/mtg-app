@@ -4,6 +4,7 @@ import { Page } from './Page.js';
 import { db } from '../db/schema.js';
 import { buildCollectionCsv, downloadText } from '../import/export.js';
 import { useToast } from '../components/Toast.js';
+import { todayKey } from '../price/history.js';
 
 export function Export() {
   const count = useLiveQuery(() => db.collection.count(), []);
@@ -13,7 +14,7 @@ export function Export() {
   async function exportCsv() {
     setBusy(true);
     const csv = await buildCollectionCsv();
-    const stamp = new Date().toISOString().slice(0, 10);
+    const stamp = todayKey();
     downloadText(`mtg-collection-${stamp}.csv`, csv);
     setBusy(false);
     toast('Exported collection');

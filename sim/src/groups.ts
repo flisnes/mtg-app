@@ -1,5 +1,5 @@
 import type { DeckBoard, Finish, OracleCard } from '@mtg/shared';
-import { compileCardQuery, rowPrintingSummary, toSearchableEntry, type RowPrinting } from '@mtg/shared';
+import { compileCardQuery, isNonDeckCard, rowPrintingSummary, toSearchableEntry, type RowPrinting } from '@mtg/shared';
 
 // A "card group" is a search query run against one deck. That is the whole
 // design: the app already has a Scryfall-style query language with four
@@ -31,13 +31,8 @@ export interface ResolvedGroup {
   unknown: number;
 }
 
-/** Tokens and markers sit in the deck row but never in the library. */
-const isNotACard = (o: OracleCard) => {
-  const t = o.typeLine.toLowerCase();
-  return t.startsWith('token') || t.includes('emblem') || t === 'card';
-};
-
-const inLibrary = (r: GroupRow) => r.board === 'main' && r.quantity > 0 && !(r.oracle && isNotACard(r.oracle));
+// Tokens and markers (isNonDeckCard) sit in the deck row but never in the library.
+const inLibrary = (r: GroupRow) => r.board === 'main' && r.quantity > 0 && !(r.oracle && isNonDeckCard(r.oracle));
 
 /** Cards you shuffle up: the mainboard, and nothing else. */
 export function librarySize(rows: readonly GroupRow[]): number {
@@ -66,7 +61,7 @@ export function resolveGroup(rows: readonly GroupRow[], query: string): Resolved
       if (r.board === 'main') unknown += r.quantity;
       continue;
     }
-    if (isNotACard(r.oracle)) continue;
+    if (isNonDeckCard(r.oracle)) continue;
     if (!q.matches(toSearchableEntry(r.oracle, rowPrintingSummary(r.printing, r.finish)))) continue;
     if (r.board === 'commander') {
       inCommandZone += r.quantity;

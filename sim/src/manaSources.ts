@@ -2,6 +2,7 @@ import {
   BASIC_LAND_TYPES,
   decodeFetchProfile,
   decodeManaProfile,
+  isNonDeckCard,
   sourceColors,
   type DeckBoard,
   type DeckFormat,
@@ -161,10 +162,6 @@ export interface ManaReport {
 
 const faces = (typeLine: string) => typeLine.split('//').map((f) => f.trim());
 const isLandFace = (face: string) => /\bLand\b/.test(face);
-const isNotACard = (o: OracleCard) => {
-  const t = o.typeLine.toLowerCase();
-  return t.startsWith('token') || t.includes('emblem') || t === 'card';
-};
 
 export const pipColors = (produces: string | undefined): PipColor[] =>
   produces ? ([...produces].filter((c) => 'WUBRGC'.includes(c)) as PipColor[]) : [];
@@ -224,7 +221,7 @@ export function fetchTargets(rows: readonly SourceRow[]): FetchTarget[] {
   const targets: FetchTarget[] = [];
   for (const r of rows) {
     const o = r.oracle;
-    if (!o || r.quantity <= 0 || r.board !== 'main' || isNotACard(o)) continue;
+    if (!o || r.quantity <= 0 || r.board !== 'main' || isNonDeckCard(o)) continue;
     const colors = pipColors(o.produces);
     if (colors.length === 0 || !isLandFace(faces(o.typeLine)[0] ?? '')) continue;
     targets.push({ typeLine: o.typeLine, colors, basic: /^Basic\b/i.test(o.typeLine) });
@@ -254,7 +251,7 @@ function fetchSources(rows: readonly SourceRow[], produced: ReadonlyMap<string, 
     const o = r.oracle;
     if (!o || r.quantity <= 0) continue;
     if (r.board !== 'main' && r.board !== 'commander') continue;
-    if (isNotACard(o)) continue;
+    if (isNonDeckCard(o)) continue;
     if (o.fetch) fetches.push({ row: r, oracle: o });
   }
   if (fetches.length === 0 || targets.length === 0) return [];
@@ -331,7 +328,7 @@ export function deckSources(rows: readonly SourceRow[]): DeckSource[] {
     const o = r.oracle;
     if (!o || r.quantity <= 0) continue;
     if (r.board !== 'main' && r.board !== 'commander') continue;
-    if (isNotACard(o)) continue;
+    if (isNonDeckCard(o)) continue;
     const profile = decodeManaProfile(o.mana);
     if (!profile) continue;
     const ready = readyTurn(profile.kind, o.cmc, profile.tapped);
@@ -476,7 +473,7 @@ export function manaReport(
     const o = r.oracle;
     if (!o || r.quantity <= 0) continue;
     if (r.board !== 'main' && r.board !== 'commander') continue;
-    if (isNotACard(o)) continue;
+    if (isNonDeckCard(o)) continue;
     // A land has no mana cost; a modal card with a land on the back has one.
     if (isLandFace(faces(o.typeLine)[0] ?? '')) continue;
     if (seenOracle.has(o.oracleId)) continue;

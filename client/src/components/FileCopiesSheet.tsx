@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { type CollectionEntry, type ContainerKind, type Priced, type Printing } from '@mtg/shared';
+import { traitsLine, type CollectionEntry, type ContainerKind, type Priced, type Printing } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
 import { collectionKey } from '../db/dataAccess.js';
-import { roomForCopies, type FilingCopy } from '../deck/filing.js';
-import { CopyGrid, copyDetail } from './CopyPicker.js';
+import { roomForCopies, rowToFilingCopy, type FilingCopy } from '../deck/filing.js';
+import { CopyGrid } from './CopyPicker.js';
 import { Sheet } from './Sheet.js';
 import { Loading } from './Loading.js';
 
@@ -97,15 +97,7 @@ export function FileCopiesSheet({
     for (const [id, quantity] of picked) {
       const e = copies.find((c) => c.id === id);
       if (!e || quantity <= 0) continue;
-      out.push({
-        oracleId: e.oracleId,
-        scryfallId: e.scryfallId,
-        quantity,
-        board: 'main',
-        wants: { condition: e.condition, finish: e.finish, lang: e.lang },
-        label: cardName,
-        sub: copyDetail(e),
-      });
+      out.push(rowToFilingCopy({ ...e, quantity }, 'main', { label: cardName, sub: traitsLine(e) }));
     }
     onFile(out);
   }

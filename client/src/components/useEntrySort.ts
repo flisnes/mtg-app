@@ -8,6 +8,7 @@ import { acquisitionGain, costBasisOf } from '../price/costBasis.js';
 import { historyChange, readingsFor } from '../price/history.js';
 import { valueKeyOf } from '../price/collectionValue.js';
 import { pickPrice, cardSortFields, type CardSortPrefs, type SortFields } from './cardSort.js';
+import { groupBy } from '../util/groupBy.js';
 
 // Sorting your own cards needs one thing the joined rows don't carry: the
 // recorded price change. It comes from priceHistories, the biggest user-data
@@ -59,12 +60,7 @@ export function useEntrySortData(sort: Pick<CardSortPrefs, 'key'>): EntrySortDat
     // Grouped by oracle because a printing-agnostic add (an "any printing" wish
     // fulfilled, a lands-box basic) counts towards every printing of that card.
     // costBasisOf applies that rule, so it wants the oracle's whole pile.
-    const eventsByOracle = new Map<string, typeof events>();
-    for (const e of events) {
-      const bucket = eventsByOracle.get(e.oracleId);
-      if (bucket) bucket.push(e);
-      else eventsByOracle.set(e.oracleId, [e]);
-    }
+    const eventsByOracle = groupBy(events, (e) => e.oracleId);
     // Driven off the collection, not the event log: the printings being sorted
     // are the ones worth the work, and a row whose only add was printing-
     // agnostic still needs an answer.

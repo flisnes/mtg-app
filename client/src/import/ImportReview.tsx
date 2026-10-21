@@ -7,11 +7,11 @@ import { useCardSearch } from '../cardDb/useCardSearch.js';
 import type { ResolveResult, ResolvedLine, UnmatchedLine } from './types.js';
 import { CardList } from '../components/CardViews.js';
 
-// Reusable import review screen (beta plan §5). Shows the resolve worker's
-// result — matched count plus every unmatched line with typo suggestions and a
-// search box to fix it by hand — then hands the final resolved lines back to
-// the caller. Callers decide what a resolved line becomes (collection entry vs
-// deck slot) via `makeResolved` and `onConfirm`.
+// The import review step. Shows the resolve worker's result (matched count plus
+// every unmatched line with typo suggestions and a search box to fix it by
+// hand), then hands the final resolved lines back to ImportPanel, which decides
+// what a resolved line becomes (collection entry, wish or container slot) via
+// `makeResolved` and `onConfirm`.
 
 export function ImportReview({
   result,

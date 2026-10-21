@@ -1,10 +1,10 @@
 import type { CollectionEntry, ContainerKind, DeckBoard, Printing } from '@mtg/shared';
 import { collectionKey, type CopyRef, type ImportLine, type MarkForTradeRequest } from '../../db/dataAccess.js';
 import { db } from '../../db/schema.js';
-import { FINISH_LABELS } from '../../components/copyTraits.js';
+import { traitsLine } from '@mtg/shared';
 import type { FilingClash, FilingCopy } from '../../deck/filing.js';
 import type { ResolvedLine } from '../types.js';
-import { sumQty } from '../../util/groupBy.js';
+import { groupBy, sumQty } from '../../util/groupBy.js';
 
 // The one intake questionnaire. Every bulk way cards can arrive (a scan, a
 // pasted list, a CSV, a wishlist purchase, a cracked box) used to end in two
@@ -158,12 +158,7 @@ export async function buildIntakeLines(lines: ResolvedLine[]): Promise<IntakeLin
   }
   const oracleIds = [...new Set([...merged.values()].map((l) => l.oracleId))];
   const owned = oracleIds.length ? await db.collection.where('oracleId').anyOf(oracleIds).toArray() : [];
-  const byOracle = new Map<string, CollectionEntry[]>();
-  for (const e of owned) {
-    const arr = byOracle.get(e.oracleId);
-    if (arr) arr.push(e);
-    else byOracle.set(e.oracleId, [e]);
-  }
+  const byOracle = groupBy(owned, (e) => e.oracleId);
   const out: IntakeLine[] = [];
   for (const [key, line] of merged) {
     const mine = byOracle.get(line.oracleId) ?? [];
@@ -316,14 +311,7 @@ export function describeCopy(
   v: { scryfallId: string; condition: string; finish: string; lang: string; quantity?: number },
 ): string {
   const p = st.printings.get(v.scryfallId);
-  const parts = [
-    p ? `${p.set.toUpperCase()} #${p.collectorNumber}` : null,
-    v.condition,
-    v.finish !== 'nonfoil' ? FINISH_LABELS[v.finish as keyof typeof FINISH_LABELS] ?? v.finish : null,
-    v.lang && v.lang !== 'en' ? v.lang : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const parts = traitsLine(v, { lead: p ? `${p.set.toUpperCase()} #${p.collectorNumber}` : null });
   return v.quantity !== undefined ? `${v.quantity}× ${parts}` : parts;
 }
 

@@ -4,8 +4,8 @@ import { addToWishlistBulk } from '../db/dataAccess.js';
 import { describeFiling, type IntakeResult } from '../import/intake/commit.js';
 import type { IntakeConfig } from '../import/intake/useIntakeReview.js';
 import type { ResolvedLine } from '../import/types.js';
-import { LANGS } from '../components/copyTraits.js';
-import { CONTAINER_META } from '../deck/containers.js';
+import { LANGS } from '@mtg/shared';
+import { containerMetaFor } from '../deck/containers.js';
 import { readJson } from '../util/localStore.js';
 import { plural } from '../util/format.js';
 import { TRADE_SCAN_PREFIX } from './tradeSessions.js';
@@ -47,9 +47,9 @@ export type ScanTarget =
     }
   // The whole session lands in one call: an offer is committed as a single
   // snapshot, so adding card-by-card would have each add overwrite the last.
-  // `sessionKey` scopes the persisted scan to one trade + side, so a restored
+  // `tradeKey` scopes the persisted scan to one trade + side, so a restored
   // scan can never land in somebody else's offer.
-  | { kind: 'trade'; label?: string; sessionKey?: string; onAdd: (cards: ScannedCard[]) => void };
+  | { kind: 'trade'; label?: string; tradeKey?: string; onAdd: (cards: ScannedCard[]) => void };
 
 /** One line of the scan session — what "complete" will write. */
 export interface SessionEntry {
@@ -118,6 +118,13 @@ export function mergeSession(entries: SessionEntry[]): SessionEntry[] {
   return [...map.values()];
 }
 
+/** Copies in the session, every line summed: the number on the "Add N cards" button. */
+export function sessionTotal(entries: readonly SessionEntry[]): number {
+  let n = 0;
+  for (const e of entries) n += e.qty;
+  return n;
+}
+
 /** Copies per printing across finishes and boards (the tray tile's badge). */
 export function countByPrinting(entries: SessionEntry[]): Map<string, number> {
   const out = new Map<string, number>();
@@ -137,7 +144,7 @@ function wishPreference<T extends string>(value: T, dflt: T): T | undefined {
 
 /** "deck" / "binder" / "box" for a container target; the target's own name otherwise. */
 export function targetNoun(target: ScanTarget): string {
-  if (target.kind === 'deck') return CONTAINER_META[target.containerKind ?? 'deck'].noun;
+  if (target.kind === 'deck') return containerMetaFor(target).noun;
   return target.kind === 'trade' ? 'offer' : target.kind;
 }
 
@@ -175,7 +182,7 @@ export function sessionStorageKey(target: ScanTarget): string | null {
     case 'deck':
       return `scan-session:${target.rescan ? 'rescan' : 'deck'}:${target.deckId}`;
     case 'trade':
-      return target.sessionKey ? `${TRADE_SCAN_PREFIX}${target.sessionKey}` : null;
+      return target.tradeKey ? `${TRADE_SCAN_PREFIX}${target.tradeKey}` : null;
   }
 }
 
@@ -218,7 +225,7 @@ export async function commitSession(
   incomingLabel: string,
 ): Promise<string | null> {
   const label = targetLabel(target);
-  const total = session.reduce((n, e) => n + e.qty, 0);
+  const total = sessionTotal(session);
   const lines = session.map((e) => entryLine(e, target));
   // A deck, binder or box: the pile is in your hands, so the questionnaire
   // asks which cards are yours and what the collection should make of them,

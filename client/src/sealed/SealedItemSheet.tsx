@@ -12,6 +12,7 @@ import { SealedImage } from './SealedImage.js';
 import { categoryLabel, fmtSealedPrice, isRandomOnly, itemImage, sealedPriceSourceLabel, type SealedPriceSource } from './product.js';
 import { useAsyncAction } from '../components/useAsyncAction.js';
 import { QtyStepper } from '../components/QtyStepper.js';
+import { plural } from '../util/format.js';
 
 // One unopened product on the shelf: what it's worth, what the copies you own
 // add up to, and how its price has moved since the app started watching it. The
@@ -82,7 +83,7 @@ export function SealedItemSheet({
         <div>
           <span className="fine-print">On the shelf</span>
           <strong>
-            {item.quantity} cop{item.quantity === 1 ? 'y' : 'ies'}
+            {item.quantity} {plural(item.quantity, 'copy', 'copies')}
           </strong>
         </div>
         <div>

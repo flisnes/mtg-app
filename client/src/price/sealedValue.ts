@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { DAY_MS, type SealedItem, type SealedPriceHistory } from '@mtg/shared';
 import { db } from '../db/schema.js';
 import { getPrefs } from '../prefs.js';
+import { dayNum } from './history.js';
 import { canConvert, convertToDisplay } from './rates.js';
 
 // What the sealed shelf has been worth, day by day — the series behind the
@@ -45,11 +46,6 @@ interface Reader {
   readings: readonly (number | null)[];
   /** Day number of readings[0]. */
   startDay: number;
-}
-
-/** Day number (whole UTC days since the epoch) of a "YYYY-MM-DD" day key. */
-function dayNum(day: string): number {
-  return Math.round(Date.parse(day) / DAY_MS);
 }
 
 /**

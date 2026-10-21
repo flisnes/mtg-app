@@ -16,8 +16,8 @@ import { normCondition, normLang, parseCsvRows } from '../parse.js';
 // ones take text already laid out in rows (pdfText.ts), the XLS one cells
 // (xls.ts), so all of them can be tested on plain data.
 
-export type PurchaseSource = 'cardmarket' | 'cardtrader';
-export type PurchaseFileKind = 'csv' | 'xls' | 'pdf';
+type PurchaseSource = 'cardmarket' | 'cardtrader';
+type PurchaseFileKind = 'csv' | 'xls' | 'pdf';
 
 export interface PurchaseLine {
   /** As the file prints it. Absent on a Cardmarket CSV, which only has ids. */

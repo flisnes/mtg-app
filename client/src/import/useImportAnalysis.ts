@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { getPrefs } from '../prefs.js';
 import type { ImportDefaults, ResolveRequest, ResolveResponse, ResolveResult, TradelistMode } from './types.js';
 
-// Shared import driver (beta plan §5). Owns the resolve worker's lifecycle so
-// both the collection Import route and the deck ImportPanel can reuse the same
-// parse → resolve → review pipeline instead of duplicating it.
+// The import driver behind ImportPanel (the one panel every list and container
+// imports through). Owns the resolve worker's lifecycle, so parse, resolve and
+// review are one pipeline wherever the panel is mounted.
 
 type ImportStatus =
   | { kind: 'idle' }

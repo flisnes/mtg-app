@@ -74,6 +74,25 @@ export interface WriteCtx {
   touchCopies(slots: Iterable<SlotCopyFields>): void;
 }
 
+/**
+ * Hand `wanted` copies out across candidates in rank order, each giving up to
+ * `roomOf` it, `take` applying the change. Returns how many copies were
+ * placed. The one loop behind marking copies for trade, taking them back off,
+ * and removing matching slots from a container.
+ */
+export function drainAcross<T>(ranked: readonly T[], wanted: number, roomOf: (c: T) => number, take: (c: T, n: number) => void): number {
+  let remaining = wanted;
+  for (const c of ranked) {
+    if (remaining <= 0) break;
+    const room = roomOf(c);
+    if (room <= 0) continue;
+    const n = Math.min(room, remaining);
+    take(c, n);
+    remaining -= n;
+  }
+  return wanted - remaining;
+}
+
 export async function write<R>(
   tables: Table[],
   fn: (ctx: WriteCtx) => Promise<R>,

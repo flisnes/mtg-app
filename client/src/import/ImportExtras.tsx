@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { CONDITIONS, FINISHES, type Condition, type Finish } from '@mtg/shared';
-import { FINISH_LABELS, LANGS } from '../components/copyTraits.js';
+import { FINISH_LABELS, LANGS } from '@mtg/shared';
 import type { ImportDefaults } from './types.js';
 import { plural } from '../util/format.js';
 

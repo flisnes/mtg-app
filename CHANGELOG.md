@@ -2,6 +2,12 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.201.3
+
+- **Changed: one spelling for a copy's traits.** Wherever a copy, a slot or a wish is described in a line (the copy chips on the card sheet, "Your copies", the filing prompts, trade lines, the scan list, a slot's wants, a partner's wishes), it now reads the same way: condition, then Foil or Etched, then the language, then Signed or Altered, with the plain defaults left unsaid. A slot or wish that pins a finish says so even when it is nonfoil. Trade lines say "Foil" instead of "foil".
+- **Changed: smaller things you might notice.** In a deck's search results, cards outside the mainboard are labelled "Command zone" and "Tokens" like the deck page itself. The favorite-deck picker on your profile is the same list sheet as the other pickers. Deleting a deck, binder or box asks the same question from its page as from the list, and both say "Deleted" afterwards. The draw-odds "At least" control and the trade offer list use the same stepper as everywhere else. The face-down card sheet in goblin mode and the history event sheet have a close button. Counts on the analysis pages, Settings and the import summary follow your display currency's region, like the prices next to them.
+- **Internal.** The tail of the refactor arc: one printing-stacking fold behind the collection, deck and trade quick-pick stacks, one filing-copy builder, one printing sub-line, one day-key, one "drain across candidates" loop, one card-DB bulk read, one default-traits constant, one non-deck-card rule shared with the simulator, and the hand-rolled grouping, pluralising, local-storage and loading leftovers converted.
+
 ## 0.201.2
 
 - **Fixed: search holds still while you add.** Tapping + on a search result no longer re-runs the search under your finger: the list stayed put only until the card you just added climbed a rank, which made the next tap land on the wrong card. Owned cards still win ties the next time you type.

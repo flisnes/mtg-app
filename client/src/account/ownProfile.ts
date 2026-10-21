@@ -37,7 +37,7 @@ async function readCached(username: string): Promise<UserProfile | null> {
 }
 
 /** Fetch your own profile, cache it, and hand it back. Throws like any API call. */
-export async function fetchOwnProfile(token: string, username: string): Promise<UserProfile> {
+async function fetchOwnProfile(token: string, username: string): Promise<UserProfile> {
   const res = await getUserProfile(token, username);
   const profile = sanitizeProfile(res.profile);
   await rememberOwnProfile(username, profile);
@@ -63,7 +63,7 @@ export async function isFavoriteDeck(session: { token: string; username: string 
 /** One background refresh per app launch (re-armed if it fails or the user changes). */
 let refreshedFor: string | null = null;
 
-export function useOwnProfile(session: Session): UserProfile | null {
+function useOwnProfile(session: Session): UserProfile | null {
   const username = session?.username;
   const token = session?.token;
   const cached = useLiveQuery(async () => (username ? readCached(username) : null), [username], null);

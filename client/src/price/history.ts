@@ -1,4 +1,4 @@
-import { dayOffset, type DayReadings, type Finish, type MonthlyReadings, type PriceHistory } from '@mtg/shared';
+import { DAY_MS, dayOffset, type DayReadings, type Finish, type MonthlyReadings, type PriceHistory } from '@mtg/shared';
 
 // Pure helpers for the compact daily-readings format (see shared/src/user.ts).
 // Everything that doesn't need the row's identity takes a bare DayReadings, so
@@ -191,6 +191,11 @@ export function centsNearest(h: DayReadings, day: string): { cents: number; away
     else if (i > idx) break;
   }
   return best;
+}
+
+/** Day number (whole UTC days since the epoch) of a "YYYY-MM-DD" day key. */
+export function dayNum(day: string): number {
+  return Math.round(Date.parse(day) / DAY_MS);
 }
 
 /** The UTC day key ("YYYY-MM-DD") an epoch-ms timestamp falls on. */

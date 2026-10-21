@@ -18,6 +18,7 @@ import type {
   UserEvent,
 } from '@mtg/shared';
 import { recordDay, toCents } from '../price/history.js';
+import { groupBy } from '../util/groupBy.js';
 
 // Local IndexedDB store (beta plan §4). Two kinds of data live here:
 //  - Card database (oracleCards, printings): read-only, replaced wholesale when
@@ -96,12 +97,7 @@ export class MtgDatabase extends Dexie {
       .upgrade(async (tx) => {
         const snaps: { scryfallId: string; day: string; eur: number | null; usd: number | null }[] =
           await tx.table('priceSnapshots').toArray();
-        const byCard = new Map<string, typeof snaps>();
-        for (const s of snaps) {
-          const arr = byCard.get(s.scryfallId);
-          if (arr) arr.push(s);
-          else byCard.set(s.scryfallId, [s]);
-        }
+        const byCard = groupBy(snaps, (s) => s.scryfallId);
         const histories: PriceHistory[] = [];
         byCard.forEach((list, scryfallId) => {
           list.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
@@ -251,6 +247,11 @@ export class MtgDatabase extends Dexie {
     // asks for one deck's worth every time it opens.
     this.version(17).stores({ deckBehaviors: 'id, deckId, oracleId' });
   }
+}
+
+/** bulkGet, minus the ids that have no row. */
+export async function bulkGetPresent<T>(table: Table<T, string>, ids: string[]): Promise<T[]> {
+  return (await table.bulkGet(ids)).filter((r): r is T => r !== undefined);
 }
 
 export const db = new MtgDatabase();

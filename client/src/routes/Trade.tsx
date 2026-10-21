@@ -37,6 +37,7 @@ import { ReconnectBanner, TRADE_SUBTITLE, TradeConnecting, TradeHome } from '../
 import { OfferPanel } from '../trade/OfferPanel.js';
 import { BalancePanel } from '../trade/BalancePanel.js';
 import { QuickPickPanel } from '../trade/QuickPickPanel.js';
+import { plural } from '../util/format.js';
 
 export function Trade() {
   const trade = useTradeSession();
@@ -325,7 +326,7 @@ function TradeBoard({ trade, seat }: { trade: TradeSession; seat: Seat }) {
         {tradeConflicts.length > 0 && (
           <p className="gate-msg">
             <Link to="/conflicts" state={{ tradedKeys: tradeConflicts.map((c) => collectionKey(c)) }}>
-              Sort out {tradeConflicts.length} filing {tradeConflicts.length === 1 ? 'conflict' : 'conflicts'}
+              Sort out {tradeConflicts.length} filing {plural(tradeConflicts.length, 'conflict')}
             </Link>
             {'. Looks like a copy was filed in two places.'}
           </p>
@@ -657,7 +658,7 @@ function TradeBoard({ trade, seat }: { trade: TradeSession; seat: Seat }) {
             label: scanFor === 'give' ? 'Trade: you give' : 'Trade: you get',
             // Scoped to this trade and this column, so an interrupted scan comes
             // back to the offer it was meant for and nowhere else.
-            sessionKey: `${snap.sessionId}:${scanFor}`,
+            tradeKey: `${snap.sessionId}:${scanFor}`,
             // One commit for the whole scan, with each card's scanned count.
             onAdd: (cards) =>
               addMany(
@@ -679,8 +680,14 @@ function TradeBoard({ trade, seat }: { trade: TradeSession; seat: Seat }) {
 /**
  * Full-screen picker for adding cards to an offer. Unlike the bottom sheet, it
  * gives the reused card-search view (filters, list/grid toggle, paging) the
- * whole screen — searching for cards in a trade looks exactly like searching
+ * whole screen: searching for cards in a trade looks exactly like searching
  * anywhere else in the app, instead of a cramped little list.
+ *
+ * Deliberately not a Sheet: it fills the viewport with its own scroll region
+ * (.picker-overlay, the CardZoom shape), has no backdrop to click away, and
+ * opens from a button in the trade column rather than under a finger on a
+ * card, so the sheet's 400ms tap guard would only make the search box feel
+ * dead. Escape/back still close it through useDismiss.
  */
 function TradePickerOverlay({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   useDismiss(onClose);

@@ -9,10 +9,11 @@ import { usePlacementIndex, type FilingConflict } from '../db/usePlacements.js';
 import { CONTAINER_META } from '../deck/containers.js';
 import { Icon } from '../components/icons.js';
 import { useToast } from '../components/Toast.js';
-import { SetSymbol } from '../components/SetSymbol.js';
+import { printingSub } from '../components/cardRows.js';
 import { REASON_ANSWERS } from '../history/eventRegistry.js';
 import { Loading } from '../components/Loading.js';
 import { MenuRow } from '../components/MenuRow.js';
+import { plural } from '../util/format.js';
 
 // "Where is this card, actually?" — one conflict at a time.
 //
@@ -177,7 +178,7 @@ export function FilingConflicts() {
           <p>That’s everything you wanted to deal with.</p>
           <p className="empty-phase">
             <button className="linklike" onClick={() => setSkipped(new Set())}>
-              Go through the {skippedCount} skipped {skippedCount === 1 ? 'card' : 'cards'} again
+              Go through the {skippedCount} skipped {plural(skippedCount, 'card')} again
             </button>
           </p>
         </div>
@@ -206,8 +207,8 @@ export function FilingConflicts() {
         <div className="conflict-detail">
           <h2 className="conflict-name">{oracle?.name ?? '(unknown card)'}</h2>
           <p className="result-sub">
-            {printing && <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />}
-            {printing ? `${printing.setName} · #${printing.collectorNumber} · ` : ''}
+            {printing && printingSub(printing)}
+            {printing && ' · '}
             {traits}
           </p>
           <p className="conflict-sum">

@@ -32,6 +32,8 @@ import { OverlapChoice, applyOverlap, type OverlapMode } from '../import/ImportE
 import type { ResolvedLine } from '../import/types.js';
 import { fmtCardCount, plural } from '../util/format.js';
 import { Loading } from '../components/Loading.js';
+import { todayKey } from '../price/history.js';
+import { sumQty } from '../util/groupBy.js';
 
 export function Wishlist() {
   const [view, setView] = useViewMode();
@@ -121,7 +123,7 @@ export function Wishlist() {
       return;
     }
     const text = await buildWishlistText();
-    const stamp = new Date().toISOString().slice(0, 10);
+    const stamp = todayKey();
     downloadText(`mtg-wishlist-${stamp}.txt`, text);
     toast('Exported wishlist');
   }
@@ -131,7 +133,7 @@ export function Wishlist() {
       title="Wishlist"
       meta={
         rows && rows.length > 0
-          ? fmtCardCount(filtered.reduce((s, r) => s + r.entry.quantity, 0), filtered.length)
+          ? fmtCardCount(sumQty(filtered.map((r) => r.entry)), filtered.length)
           : undefined
       }
       aside={<HeaderValue value={headerValue(value)} />}

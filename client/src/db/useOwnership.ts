@@ -1,5 +1,5 @@
 import type { CollectionEntry, Condition, Finish, WishlistEntry } from '@mtg/shared';
-import { wishPrefsMet } from '@mtg/shared';
+import { namesCopy, wishPrefsMet } from '@mtg/shared';
 import { useCollectionSnapshot } from './collectionSnapshot.js';
 
 // One shared answer to "where does this card stand with me?" for the checkmark
@@ -130,10 +130,10 @@ export function buildOwnershipIndex(rows: CollectionEntry[], wishes: WishlistEnt
       const wishesExact = wishCovers(w, wants.scryfallId);
       const g = byOracle.get(oracleId);
       if (!g) return wished ? { ...NONE, wished, wishesExact } : NONE;
-      // Exact means exact: the slot has to say which printing, finish,
-      // condition and language it means before we can claim you have *that*
-      // card. Leave anything on "any" and it's the single check.
-      const pinned = !!wants.scryfallId && !!wants.finish && !!wants.condition && !!wants.lang;
+      // Exact means exact: the slot has to name a copy (printing, finish,
+      // condition and language) before we can claim you have *that* card.
+      // Leave anything on "any" and it's the single check.
+      const pinned = namesCopy({ ...wants, scryfallId: wants.scryfallId ?? undefined });
       const met =
         pinned && g.entries.some((e) => wants.scryfallId === e.scryfallId && wishPrefsMet(wants, e));
       return {

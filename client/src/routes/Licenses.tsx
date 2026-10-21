@@ -8,16 +8,11 @@
 // scripts/gen-licenses.mjs. Nothing here is hand-maintained.
 import { Page } from './Page.js';
 import { LICENSES, LICENSE_TEXTS, type LicenseEntry } from '../licenses.js';
+import { groupBy } from '../util/groupBy.js';
 
 /** Group packages under their licence, licences with most packages first. */
 function groupBySpdx(entries: LicenseEntry[]): [string, LicenseEntry[]][] {
-  const groups = new Map<string, LicenseEntry[]>();
-  for (const e of entries) {
-    const list = groups.get(e.spdx);
-    if (list) list.push(e);
-    else groups.set(e.spdx, [e]);
-  }
-  return [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  return [...groupBy(entries, (e) => e.spdx).entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
 }
 
 export function Licenses() {

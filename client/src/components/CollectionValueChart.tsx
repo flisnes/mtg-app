@@ -307,7 +307,7 @@ function ValueChartSheet({
 
           {series.unpriced > 0 && (
             <p className="fine-print">
-              {series.unpriced} cop{series.unpriced === 1 ? 'y' : 'ies'} with no recorded price sit outside both lines.
+              {series.unpriced} {plural(series.unpriced, 'copy', 'copies')} with no recorded price sit outside both lines.
             </p>
           )}
         </>

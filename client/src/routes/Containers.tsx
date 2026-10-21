@@ -29,7 +29,7 @@ import {
 import { useContainers, useContainersByRecent } from '../db/collectionSnapshot.js';
 import { useDeckSummaries } from '../deck/deckSummary.js';
 import { formatLabel } from '../deck/legality.js';
-import { CONTAINER_META, containerKind } from '../deck/containers.js';
+import { CONTAINER_META, containerKind, deleteContainerConfirm } from '../deck/containers.js';
 import { Icon } from '../components/icons.js';
 import { Emblem } from '../components/Emblem.js';
 import { EmblemPickerSheet } from '../components/EmblemPickerSheet.js';
@@ -268,13 +268,8 @@ export function Containers({ kind }: { kind: ContainerKind }) {
     toast(where ? `Restored “${deck.name}” to “${where}”` : `Restored “${deck.name}”`);
   }
 
-  async function removeDeck(deck: { id: string; name: string }) {
-    const ok = await confirm({
-      title: `Delete “${deck.name}”?`,
-      body: 'Everything filed in it goes with it. Cards you own stay in your collection. This can’t be undone.',
-      confirmLabel: 'Delete',
-      danger: true,
-    });
+  async function removeDeck(deck: Pick<Deck, 'id' | 'name' | 'kind'>) {
+    const ok = await confirm(deleteContainerConfirm(deck));
     if (!ok) return;
     await deleteDeck(deck.id);
     toast(`Deleted “${deck.name}”`);

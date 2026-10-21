@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Sheet } from './Sheet.js';
+import { Sheet, SheetClose } from './Sheet.js';
 
 // Goblin mode's pile view: every copy of every card scattered face-up-or-down
 // across one big heap, like a shoebox dumped on the table. No sorting, no
@@ -539,6 +539,7 @@ export function CardBackSheet({ onClose }: { onClose: () => void }) {
           </div>
           <div className="result-price">Priceless</div>
         </div>
+        <SheetClose onClick={onClose} />
       </div>
       <p className="fine-print">
         This card is face down, so this is all you get. Double-tap it to see what it actually is or savor the

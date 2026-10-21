@@ -1,7 +1,9 @@
 import { getPrefs } from '../prefs.js';
 import { fmtEur, localeFor } from '../price/rates.js';
 
-export { plural } from '@mtg/shared';
+import { plural } from '@mtg/shared';
+
+export { plural };
 
 // Shared display formatters. Keep the date/money formatting identical
 // everywhere it appears (history, event sheet, community, account…).
@@ -41,7 +43,7 @@ export function fmtCount(n: number): string {
  * second half drops out when every row is a single copy.
  */
 export function fmtCardCount(cards: number, unique: number, noun: [string, string] = ['card', 'cards']): string {
-  const head = `${fmtCount(cards)} ${cards === 1 ? noun[0] : noun[1]}`;
+  const head = `${fmtCount(cards)} ${plural(cards, noun[0], noun[1])}`;
   return unique === cards ? head : `${head} · ${fmtCount(unique)} unique`;
 }
 

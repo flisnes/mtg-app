@@ -29,6 +29,7 @@ import { EditionGrid } from '../components/cardSheet/EditionGrid.js';
 import { Icon } from '../components/icons.js';
 import { ManaCost } from '../components/ManaCost.js';
 import { useCardArtist } from '../components/useCardArtist.js';
+import { ListPickerSheet } from '../components/ListPicker.js';
 import { Sheet } from '../components/Sheet.js';
 import { useToast } from '../components/Toast.js';
 import { EmptyState, Page } from './Page.js';
@@ -355,52 +356,39 @@ function FavoriteDeckPickerSheet({
   const decks = useDeckSummaries(list);
 
   return (
-    <Sheet onClose={onClose} title="Pick a favorite deck">
-      {decks === undefined ? (
-        <Loading />
-      ) : decks.length === 0 ? (
+    <ListPickerSheet
+      title="Pick a favorite deck"
+      onClose={onClose}
+      items={decks}
+      itemKey={({ deck }) => deck.id}
+      render={({ deck, main, colors }) => ({
+        icon: 'decks',
+        label: deck.name,
+        meta: (
+          <>
+            <span className="deck-format">{formatLabel(deck.format ?? 'casual')}</span>
+            <ManaCost cost={colors.length > 0 ? colors.map((c) => `{${c}}`).join('') : '{C}'} className="deck-colors" />
+            <span className="badge">{main} cards</span>
+          </>
+        ),
+      })}
+      onPick={({ deck, main, colors }) =>
+        onPick({ deckId: deck.id, name: deck.name, format: deck.format ?? 'casual', colors, cards: main })
+      }
+      empty={
         <div className="empty-state">
           <p>No decks yet.</p>
           <p className="empty-phase">Brew one on the Decks tab first.</p>
         </div>
-      ) : (
-        <ul className="menu-list">
-          {decks.map(({ deck, main, colors }) => (
-            <li key={deck.id}>
-              <button
-                className="menu-item menu-item-btn"
-                onClick={() =>
-                  onPick({ deckId: deck.id, name: deck.name, format: deck.format ?? 'casual', colors, cards: main })
-                }
-              >
-                <span className="menu-icon" aria-hidden>
-                  <Icon name="decks" />
-                </span>
-                <span className="deck-line">
-                  <span className="deck-name">{deck.name}</span>
-                  <span className="deck-meta">
-                    <span className="deck-format">{formatLabel(deck.format ?? 'casual')}</span>
-                    <ManaCost
-                      cost={colors.length > 0 ? colors.map((c) => `{${c}}`).join('') : '{C}'}
-                      className="deck-colors"
-                    />
-                    <span className="badge">{main} cards</span>
-                  </span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="fine-print">Favoriting a deck lets other signed-in users browse its decklist.</p>
-      <div className="sheet-actions">
-        {hasCurrent && (
+      }
+      foot={<p className="fine-print">Favoriting a deck lets other signed-in users browse its decklist.</p>}
+      actions={
+        hasCurrent && (
           <button className="danger-outline" onClick={onClear}>
             Clear slot
           </button>
-        )}
-        <button onClick={onClose}>Cancel</button>
-      </div>
-    </Sheet>
+        )
+      }
+    />
   );
 }

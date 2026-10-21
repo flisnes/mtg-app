@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { getPrefs } from '../prefs.js';
-import { langName } from './copyTraits.js';
+import { langName } from '@mtg/shared';
 
 // "This piece of cardboard isn't in my language." A tiny flag in the corner of a
 // card, next to the ownership checkmark and the filing badge, whenever a copy's

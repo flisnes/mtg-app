@@ -4,6 +4,8 @@ import { db } from '../db/schema.js';
 import type { OwnershipIndex } from '../db/useOwnership.js';
 import { getPrefs, type Prefs, type PrintingPref } from '../prefs.js';
 import { getPricesByIds, withPrices } from './prices.js';
+import { compareCollectorNumbers } from '../components/cardSort.js';
+import { groupBy } from '../util/groupBy.js';
 import { isPromoPrinting, loadSetTypes } from './setTypes.js';
 
 // Which printing stands in for a card when the user hasn't picked one.
@@ -88,9 +90,9 @@ function hasPlainNumber(p: Printing): boolean {
   return /^\d+$/.test(p.collectorNumber);
 }
 
-/** Lower collector number first ("87" before "177" before "475"). */
+/** Lower collector number first ("87" before "177" before "475"), the same order the search results use. */
 function byCollectorNumber(a: Printing, b: Printing): number {
-  return a.collectorNumber.localeCompare(b.collectorNumber, 'en', { numeric: true });
+  return compareCollectorNumbers(a.collectorNumber, b.collectorNumber);
 }
 
 /**
@@ -235,12 +237,7 @@ export async function resolveDisplayPrintings(
     preferOwned ? ownedPrintingsFor(ids, owned) : Promise.resolve(null),
   ]);
 
-  const byOracle = new Map<string, Printing[]>();
-  for (const p of rows) {
-    const list = byOracle.get(p.oracleId);
-    if (list) list.push(p);
-    else byOracle.set(p.oracleId, [p]);
-  }
+  const byOracle = groupBy(rows, (p) => p.oracleId);
 
   let priceOf: ((id: string) => number | null) | undefined;
   if (pref === 'cheapest') {

@@ -1,3 +1,4 @@
+import { DEFAULT_COPY_TRAITS } from '@mtg/shared';
 import { isPurchaseBatch, type UserEvent } from '@mtg/shared';
 
 // Which rows an undo would write, and which page the change belongs to.
@@ -41,7 +42,8 @@ export function rowKeysOf(e: UserEvent): string[] {
     case 'collection.remove':
     case 'tradelist.mark': {
       if (!e.scryfallId) return [];
-      const key = [e.scryfallId, e.condition ?? 'NM', e.finish ?? 'nonfoil', e.lang ?? 'en'].join('|');
+      const d = DEFAULT_COPY_TRAITS;
+      const key = [e.scryfallId, e.condition ?? d.condition, e.finish ?? d.finish, e.lang ?? d.lang].join('|');
       return [`collection:${key}`];
     }
     case 'deck.add':

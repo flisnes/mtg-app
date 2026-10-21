@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import {
   wishCountMatcher,
   wishMatchesCopy,
+  traitsLine,
   type CollectionEntry,
   type OracleCard,
   type Priced,
@@ -18,10 +19,11 @@ import { useCollectionEntries, useWishes } from '../db/collectionSnapshot.js';
 const EMPTY_ENTRIES: CollectionEntry[] = [];
 const EMPTY_WISHES: WishlistEntry[] = [];
 import { Icon } from '../components/icons.js';
-import { SetSymbol } from '../components/SetSymbol.js';
-import { baseCardItem, tradeLineCardItem } from '../components/cardRows.js';
+import { baseCardItem, printingSub, tradeLineCardItem } from '../components/cardRows.js';
+import { cardSortFields, type SortFields } from '../components/cardSort.js';
 import { sanitizePublicTradelist, sanitizePublicWishlist } from '../trade/validate.js';
 import type { CardItem } from '../components/CardViews.js';
+import { groupBy } from '../util/groupBy.js';
 
 // Shared machinery for viewing another user's published trade/wishlist: the
 // fetch + card-DB resolution, the "does this match my own stuff" matchers, and
@@ -39,13 +41,15 @@ interface UserListsData {
  *  them read-only (any printing / min condition / finish / language). */
 export type InfoTarget = { oracle: Priced<OracleCard>; scryfallId?: string; wish?: WishLine };
 
-/** A wish's preferences, spelled out for a trade partner (empty = no prefs). */
-function wishDetail(l: WishLine): string {
-  const bits: string[] = [];
-  if (l.finish && l.finish !== 'nonfoil') bits.push(l.finish);
-  if (l.condition) bits.push(`min ${l.condition}`);
-  if (l.lang && l.lang !== 'en') bits.push(l.lang);
-  return bits.join(' · ');
+/**
+ * Sort fields for one of their lines, resolved against the viewer's card DB.
+ * A wish may be "any printing" (no printing to price) and name no finish; a
+ * trade line always names both, and its price follows the finish it names.
+ */
+export function lineSortFields(line: TradeLine | WishLine, cards: CardMaps): SortFields {
+  const oracle = cards.oracleMap?.get(line.oracleId);
+  const printing = line.scryfallId ? cards.printMap?.get(line.scryfallId) : undefined;
+  return { ...cardSortFields(oracle, printing, line.finish ?? 'nonfoil'), name: oracle?.name ?? line.name };
 }
 
 /** Fetch + sanitize another user's published lists. Untrusted input, same as trade shares. */
@@ -94,12 +98,7 @@ export function useMyCollection(): { have: HaveFn; own: HaveFn } {
   const entries = useCollectionEntries() ?? EMPTY_ENTRIES;
   return useMemo(() => {
     const matcher = (rows: typeof entries): HaveFn => {
-      const byOracle = new Map<string, typeof rows>();
-      for (const e of rows) {
-        const list = byOracle.get(e.oracleId) ?? [];
-        list.push(e);
-        byOracle.set(e.oracleId, list);
-      }
+      const byOracle = groupBy(rows, (e) => e.oracleId);
       return (wish) => (byOracle.get(wish.oracleId) ?? []).some((e) => wishMatchesCopy(wish, e));
     };
     return { have: matcher(entries.filter((e) => e.quantityForTrade > 0)), own: matcher(entries) };
@@ -138,27 +137,17 @@ export function wishLineItem(
 ): CardItem {
   const oracle = cards.oracleMap?.get(line.oracleId);
   const printing = line.scryfallId ? cards.printMap?.get(line.scryfallId) : undefined;
-  const detail = wishDetail(line);
-  const printingSub = line.scryfallId ? (
-    printing ? (
-      <>
-        <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />
-        {`${printing.setName} · #${printing.collectorNumber}`}
-      </>
-    ) : (
-      'specific printing'
-    )
-  ) : (
-    'any printing'
-  );
+  // Their preferences, spelled out for a trade partner ('' = none).
+  const detail = traitsLine(line, { min: true, quiet: { finish: null } });
+  const edition = line.scryfallId ? (printing ? printingSub(printing) : 'specific printing') : 'any printing';
   return {
     ...baseCardItem({ key, oracle, printing, name: line.name, finish: line.finish, quantity: line.quantity, lang: line.lang, showYear: flags.showYear }),
     sub: detail ? (
       <>
-        {printingSub} · {detail}
+        {edition} · {detail}
       </>
     ) : (
-      printingSub
+      edition
     ),
     badge: flags.match ? (
       <>

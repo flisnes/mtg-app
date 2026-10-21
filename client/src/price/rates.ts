@@ -1,4 +1,5 @@
 import { getPrefs, notifyPrefsChanged, type BaseCurrency } from '../prefs.js';
+import { readJson, writeJson } from '../util/localStore.js';
 
 // Currency conversion for display. Scryfall gives us EUR and USD; everything
 // else is converted from those through European Central Bank daily reference
@@ -82,13 +83,8 @@ function today(): string {
 
 function load(): RateCache | null {
   if (cache !== undefined) return cache;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as RateCache) : null;
-    cache = parsed && parsed.rates && typeof parsed.rates === 'object' ? parsed : null;
-  } catch {
-    cache = null;
-  }
+  const parsed = readJson(STORAGE_KEY) as RateCache | undefined;
+  cache = parsed && parsed.rates && typeof parsed.rates === 'object' ? parsed : null;
   return cache;
 }
 
@@ -115,11 +111,7 @@ export function ensureRates(): Promise<void> {
       const body = (await res.json()) as { date?: string; rates?: Record<string, number> };
       if (!body.rates || typeof body.rates.USD !== 'number') throw new Error('rates payload missing USD');
       cache = { date: body.date ?? today(), rates: body.rates, fetchedOn: today() };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
-      } catch {
-        /* quota — this session still has the rates in memory */
-      }
+      writeJson(STORAGE_KEY, cache); // best-effort: this session has the rates in memory either way
       notifyPrefsChanged(); // re-render anything showing a converted price
     } catch {
       // Offline, blocked, or Frankfurter down. Keep whatever we had; the next

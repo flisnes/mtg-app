@@ -8,8 +8,7 @@ import type { SessionCardValues } from '../components/CardSheet.js';
 import { CardSearchView, type ResultBadge } from '../components/CardSearchView.js';
 import { CardList, StackToggle, useStackPrintings, type CardItem } from '../components/CardViews.js';
 import { addToTotal, formatPrice, formatTotal, pricedForFinish, type PriceTotal } from '../components/CardSorting.js';
-import { tradeLineCardItem } from '../components/cardRows.js';
-import { SetSymbol } from '../components/SetSymbol.js';
+import { printingSub, tradeLineCardItem } from '../components/cardRows.js';
 import { foldPicks, type WantFn } from './board.js';
 
 type Compose = (card: Priced<OracleCard>, prefill?: Partial<SessionCardValues>) => void;
@@ -114,13 +113,8 @@ export function QuickPickPanel({
                 {stacked ? (
                   <>
                     <span className="stack-kinds">{kinds}</span>
-                    {printing && (
-                      <>
-                        {' · '}
-                        <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />
-                        {printing.setName}
-                      </>
-                    )}
+                    {printing && ' · '}
+                    {printing && printingSub(printing)}
                   </>
                 ) : (
                   base.sub

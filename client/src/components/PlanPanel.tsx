@@ -18,7 +18,8 @@ import {
 } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
 import { Step } from './MulliganPanel.js';
-import { plural } from '../util/format.js';
+import { fmtCount, plural } from '../util/format.js';
+import { pct } from './analysisFormat.js';
 
 // The Plan tab (rebuild plan E1): the deck's game plan as goals, each a
 // sentence ("four lands and a creature on the battlefield by turn 4") and a
@@ -30,7 +31,6 @@ import { plural } from '../util/format.js';
 // piece the plan is missing (E2), so writing the plan down changes what the
 // tutors fetch.
 
-const pct = (p: number) => `${Math.round(p * 100)}%`;
 
 /** Below this at its turn, a goal reads as a problem rather than a plan. */
 const SHAKY = 0.5;
@@ -80,7 +80,7 @@ export function PlanPanel({
       ) : !hasManaData ? (
         <p className="fine-print">Your card database predates this data. Refresh it from About to see how the plan plays out.</p>
       ) : !result ? (
-        <p className="deck-stats-verdict sim-waiting">Dealing {games.toLocaleString()} games…</p>
+        <p className="deck-stats-verdict sim-waiting">Dealing {fmtCount(games)} games…</p>
       ) : (
         <p className={`deck-stats-verdict ${worst !== null && worst < SHAKY ? 'tone-warn' : 'tone-ok'}`}>
           <strong>
@@ -110,7 +110,7 @@ export function PlanPanel({
                     {r && <ByTurn byTurn={r.byTurn} turn={g.turn} maxTurn={maxTurn} />}
                     {r && result && result.games < DEFAULT_GAMES && (
                       <p className="fine-print">
-                        ±{Math.round(halfWidth(r.p, result.games) * 100)} points on {result.games.toLocaleString()} games so far.
+                        ±{Math.round(halfWidth(r.p, result.games) * 100)} points on {fmtCount(result.games)} games so far.
                       </p>
                     )}
                     <div className="plan-actions">

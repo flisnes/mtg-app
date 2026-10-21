@@ -13,7 +13,7 @@ import type {
   WishLine,
   WishlistEntry,
 } from '@mtg/shared';
-import { CONTAINER_META } from '../../deck/containers.js';
+import { containerMetaFor } from '../../deck/containers.js';
 import type { HistoryEntry } from '../../history/useHistoryEntries.js';
 import type { IconName } from '../icons.js';
 
@@ -40,7 +40,7 @@ const ADD_LABEL: Record<AddTarget['kind'], string> = {
  *  ("Add to box") where a deck names the board it's filling. */
 export function addLabel(target: AddTarget): string {
   if (target.kind === 'deck') {
-    const meta = CONTAINER_META[target.containerKind ?? 'deck'];
+    const meta = containerMetaFor(target);
     if (meta.kind !== 'deck') return `Add to ${meta.noun}`;
   }
   return ADD_LABEL[target.kind];

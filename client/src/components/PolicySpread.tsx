@@ -1,6 +1,8 @@
 import { SPEND_POLICIES, type SimResult, type SpendPolicy, type SpendRun } from '@mtg/sim';
 import { FLOW_TURN } from './FlowTurnsPanel.js';
 import { HowWorked } from './HowWorked.js';
+import { pct, one } from './analysisFormat.js';
+import { fmtCount } from '../util/format.js';
 
 // What the spend order is worth (rebuild plan C6). Every other number on the
 // page is read under one spend order; this is the same deck under all four, at
@@ -9,8 +11,6 @@ import { HowWorked } from './HowWorked.js';
 // its sequencing. One where it is large has a number that depends on how you
 // play it, and should know which way.
 
-const pct = (p: number) => `${Math.round(p * 100)}%`;
-const one = (n: number) => n.toFixed(1);
 
 interface Measure {
   key: string;
@@ -145,7 +145,7 @@ export function PolicySpread({
         </tbody>
       </table>
       <p className="fine-print">
-        {first.games.toLocaleString()} games each, same shuffles, combat and instants as set. Tap an order to play the deck that way.
+        {fmtCount(first.games)} games each, same shuffles, combat and instants as set. Tap an order to play the deck that way.
       </p>
       <HowWorked>
         <p className="fine-print">

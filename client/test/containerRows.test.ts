@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { clipSlot, groupSlots, rowToFilingCopy, type Row } from '../src/routes/container/rows.js';
+import { clipSlot, groupSlots, type Row } from '../src/routes/container/rows.js';
+import { rowToFilingCopy } from '../src/deck/filing.js';
 import { describeFilingResult } from '../src/deck/useFiling.js';
 
 const row = (extra: Partial<Row> = {}): Row => ({

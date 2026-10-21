@@ -4,6 +4,7 @@ import { HowWorked } from './HowWorked.js';
 import { Icon } from './icons.js';
 import type { SimContribution, SimResult } from '@mtg/sim';
 import type { IdleEngine, IdleEngines } from '@mtg/sim';
+import { one } from './analysisFormat.js';
 
 // Who made the trajectory lines — phase 13, and the first panel in this sheet
 // that answers "is this card pulling its weight" with a number.
@@ -34,7 +35,6 @@ import type { IdleEngine, IdleEngines } from '@mtg/sim';
 /** Which line we are decomposing. Two units, so never one list. */
 type Lens = 'mana' | 'cards';
 
-const one = (n: number) => n.toFixed(1);
 const two = (n: number) => n.toFixed(2);
 
 export function ContributionsSheet({

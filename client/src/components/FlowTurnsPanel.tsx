@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MANA_BINS, type SimResult } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
+import { pct, one } from './analysisFormat.js';
 
 // Screw and flood (rebuild plan B2): the same games as the trajectory charts,
 // sorted a turn at a time instead of averaged. An average of 4.7 mana on turn
@@ -10,8 +11,6 @@ import { HowWorked } from './HowWorked.js';
 /** The turn the verdict is read on, the same one the Overview's Flow row uses. */
 export const FLOW_TURN = 6;
 
-const pct = (p: number) => `${Math.round(p * 100)}%`;
-const one = (n: number) => n.toFixed(1);
 
 /** Turns 2 to `through`: turn one casts nothing in most decks and says nothing. */
 export function idleTurns(result: SimResult, through: number): number {

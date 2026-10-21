@@ -116,7 +116,7 @@ export function CardHistory({
    */
   const centsThen = (e: UserEvent): number | null => {
     if (!priceHistory || e.scryfallId !== priceHistory.scryfallId) return null;
-    return centsAround(readingsFor(priceHistory, e.finish).readings, new Date(e.ts).toISOString().slice(0, 10));
+    return centsAround(readingsFor(priceHistory, e.finish).readings, dayKeyOf(e.ts));
   };
 
   /** Current EUR cents for the printing an event names (oracle default as fallback). */

@@ -4,6 +4,9 @@ import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { librarySize, resolveGroup, type GroupRow } from '@mtg/sim';
 import { handSize, MAX_TURN } from '@mtg/sim';
 import { oddsCurve, turnReaching } from '@mtg/sim';
+import { QtyStepper } from './QtyStepper.js';
+import { plural } from '../util/format.js';
+import { pct } from './analysisFormat.js';
 
 // "What are the odds I've drawn N of these by turn T?" — phase 2 of the deck
 // analysis, and the first piece with a question in it rather than a count.
@@ -36,7 +39,6 @@ const PRESETS: readonly Preset[] = [
 /** Nobody asks "the odds of at least seven" of anything; the stepper stops before it gets silly. */
 const MAX_COPIES = 6;
 
-const pct = (p: number) => `${Math.round(p * 100)}%`;
 const turnLabel = (turn: number) => (turn === 0 ? 'Open' : String(turn));
 
 export function DrawOddsPanel({ rows, format, onPlay }: { rows: readonly GroupRow[]; format: DeckFormat | undefined; onPlay: boolean }) {
@@ -85,21 +87,8 @@ export function DrawOddsPanel({ rows, format, onPlay }: { rows: readonly GroupRo
         spellCheck={false}
       />
       <div className="odds-controls">
-        <div className="odds-stepper">
-          <span>At least</span>
-          <button type="button" onClick={() => setMin((n) => Math.max(1, n - 1))} disabled={min <= 1} aria-label="One fewer copy">
-            −
-          </button>
-          <strong aria-live="polite">{min}</strong>
-          <button
-            type="button"
-            onClick={() => setMin((n) => Math.min(MAX_COPIES, n + 1))}
-            disabled={min >= MAX_COPIES}
-            aria-label="One more copy"
-          >
-            +
-          </button>
-        </div>
+        <span className="fine-print">At least</span>
+        <QtyStepper compact value={min} min={1} max={MAX_COPIES} onChange={setMin} label="copy" />
       </div>
 
       <p className="deck-stats-verdict">{headline(query, group.copies, library, min, open.p, last.p, curve.impossible)}</p>
@@ -155,7 +144,7 @@ function headline(
     return (
       <>
         <strong>
-          {copies} cop{copies === 1 ? 'y' : 'ies'} in the deck.
+          {copies} {plural(copies, 'copy', 'copies')} in the deck.
         </strong>{' '}
         You can't draw {min} of them, so the answer is never.
       </>

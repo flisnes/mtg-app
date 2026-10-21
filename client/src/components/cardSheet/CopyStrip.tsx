@@ -1,6 +1,4 @@
-import type { CollectionEntry, Priced, Printing } from '@mtg/shared';
-import { copyDetail } from '../CopyPicker.js';
-import { FINISH_LABELS } from '../copyTraits.js';
+import { traitsLine, type CollectionEntry, type Priced, type Printing } from '@mtg/shared';
 import { SetSymbol } from '../SetSymbol.js';
 import type { DeckSlotEdit } from './types.js';
 
@@ -26,12 +24,7 @@ export function CopyStrip({
     <div className="copy-strip" role="tablist" aria-label="Your copies of this card">
       {copies.map((c) => {
         const p = c.scryfallId ? byId.get(c.scryfallId) : undefined;
-        const detail =
-          'quantityForTrade' in c
-            ? copyDetail(c)
-            : [c.condition, c.finish && c.finish !== 'nonfoil' ? FINISH_LABELS[c.finish] : null, c.lang && c.lang !== 'en' ? c.lang : null]
-                .filter(Boolean)
-                .join(' · ');
+        const detail = traitsLine(c);
         const current = c.id === currentId;
         return (
           <button

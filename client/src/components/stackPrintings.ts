@@ -1,6 +1,7 @@
 import type { OracleCard, Priced, Printing, SpecialCondition } from '@mtg/shared';
 import { normalizeSpecialConditions, type SetTypeMap } from '@mtg/shared';
 import { pickOwnedPrinting } from '../cardDb/preferredPrinting.js';
+import { groupBy } from '../util/groupBy.js';
 import type { JoinedEntry } from '../db/queries.js';
 import type { PlacementIndex, PlacementInfo } from '../db/usePlacements.js';
 import type { Prefs } from '../prefs.js';
@@ -82,28 +83,69 @@ function single(r: JoinedEntry): EntryStack {
   };
 }
 
+/** The rows of one card, folded: what every stacked list builds its tile from. */
+export interface OracleFold<T> {
+  oracleId: string;
+  /** Every row of the card, the shown printing's rows first. Never empty. */
+  members: T[];
+  /** The preferred printing among the ones the rows carry, when any carries one. */
+  shown: Priced<Printing> | undefined;
+  /** Distinct printings the rows name. */
+  printingCount: number;
+}
+
+export interface FoldOptions<T> {
+  oracleIdOf: (row: T) => string;
+  /** The printing a row names, when it's in this device's DB. */
+  printingOf: (row: T) => Priced<Printing> | undefined;
+  /** The id a row names even when the printing isn't in the DB (a partner's
+   *  line); defaults to the printing's own. Undefined for "any printing". */
+  scryfallIdOf?: (row: T) => string | undefined;
+  prefs: Pick<Prefs, 'printing' | 'baseCurrency'>;
+  setTypes: SetTypeMap | null;
+}
+
+/**
+ * Group rows by card and pick the edition the pile shows: the one the printing
+ * preference picks among the editions the rows actually name. The collection
+ * stacks, the deck tiles and the trade quick-pick all fold this way, so
+ * "which Bolt is on the tile" has one answer everywhere.
+ */
+export function foldByOracle<T>(rows: readonly T[], opts: FoldOptions<T>): OracleFold<T>[] {
+  const idOf = opts.scryfallIdOf ?? ((r: T) => opts.printingOf(r)?.scryfallId);
+  const out: OracleFold<T>[] = [];
+  groupBy(rows, opts.oracleIdOf).forEach((group, oracleId) => {
+    const ids = new Set<string>();
+    const printings = new Map<string, Priced<Printing>>();
+    for (const r of group) {
+      const id = idOf(r);
+      if (id) ids.add(id);
+      const p = opts.printingOf(r);
+      if (p) printings.set(p.scryfallId, p);
+    }
+    const shown =
+      group.length === 1 ? opts.printingOf(group[0]!) : pickOwnedPrinting([...printings.values()], opts.prefs, opts.setTypes);
+    // The shown printing's rows lead, so members[0] is the copy on the tile.
+    const members = shown
+      ? [...group.filter((r) => idOf(r) === shown.scryfallId), ...group.filter((r) => idOf(r) !== shown.scryfallId)]
+      : group;
+    out.push({ oracleId, members, shown, printingCount: ids.size });
+  });
+  return out;
+}
+
 /** Fold joined collection rows into stacks (or wrap each as its own). */
 export function stackEntries(rows: JoinedEntry[], opts: StackOptions): EntryStack[] {
   if (!opts.stack) return rows.map(single);
-  const byOracle = new Map<string, JoinedEntry[]>();
-  for (const r of rows) {
-    const list = byOracle.get(r.entry.oracleId);
-    if (list) list.push(r);
-    else byOracle.set(r.entry.oracleId, [r]);
-  }
-  const out: EntryStack[] = [];
-  byOracle.forEach((members, oracleId) => {
-    if (members.length === 1) {
-      out.push({ ...single(members[0]!), key: `s:${oracleId}` });
-      return;
-    }
-    const printings = new Map<string, Priced<Printing>>();
-    for (const m of members) if (m.printing) printings.set(m.printing.scryfallId, m.printing);
-    const shown = pickOwnedPrinting([...printings.values()], opts.prefs, opts.setTypes);
-    // The shown printing's rows lead, so members[0] is the copy on the tile.
-    const ordered = shown
-      ? [...members.filter((m) => m.entry.scryfallId === shown.scryfallId), ...members.filter((m) => m.entry.scryfallId !== shown.scryfallId)]
-      : members;
+  const folds = foldByOracle(rows, {
+    oracleIdOf: (r) => r.entry.oracleId,
+    printingOf: (r) => r.printing,
+    scryfallIdOf: (r) => r.entry.scryfallId,
+    prefs: opts.prefs,
+    setTypes: opts.setTypes,
+  });
+  return folds.map(({ oracleId, members: ordered, shown, printingCount }) => {
+    if (ordered.length === 1) return { ...single(ordered[0]!), key: `s:${oracleId}` };
     const value: PriceTotal = { eur: 0, usd: 0 };
     const langs: string[] = [];
     let special: SpecialCondition[] = [];
@@ -124,7 +166,7 @@ export function stackEntries(rows: JoinedEntry[], opts: StackOptions): EntryStac
       if (c != null && (added == null || c < added)) added = c;
       if (u != null && (updated == null || u > updated)) updated = u;
     }
-    out.push({
+    return {
       key: `s:${oracleId}`,
       oracleId,
       oracle: ordered[0]!.oracle,
@@ -132,16 +174,15 @@ export function stackEntries(rows: JoinedEntry[], opts: StackOptions): EntryStac
       members: ordered,
       quantity,
       quantityForTrade,
-      printingCount: new Set(members.map((m) => m.entry.scryfallId)).size,
+      printingCount,
       foil,
       langs,
       special,
       value,
       added,
       updated,
-    });
+    };
   });
-  return out;
 }
 
 /** A value total as one number in the display currency, for sorting. */

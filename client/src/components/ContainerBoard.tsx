@@ -1,14 +1,13 @@
 import { memo, useMemo, useState, type ReactNode } from 'react';
-import { COLOR_NAME, COLORS, isMarkerCard, namesCopy, type Color } from '@mtg/shared';
+import { COLOR_NAME, COLORS, isMarkerCard, namesCopy, traitsLine, type Color } from '@mtg/shared';
 import { setDeckCardChosenColor } from '../db/dataAccess.js';
 import type { OwnershipIndex } from '../db/useOwnership.js';
 import type { PlacementIndex } from '../db/usePlacements.js';
 import { needsColorChoice } from '../deck/legality.js';
 import { useDisplayPrintings } from '../cardDb/useDisplayPrintings.js';
-import type { DeckCardEdit, EditTarget, Row, SlotStack } from '../routes/container/rows.js';
+import { toDeckCardEdit, type EditTarget, type Row, type SlotStack } from '../routes/container/rows.js';
 import { CardItems, type CardItem, type ViewMode } from './CardViews.js';
 import { extraLands, groupCards, GroupCountBadge, type GroupKey } from './CardSorting.js';
-import { FINISH_LABELS } from './copyTraits.js';
 import { ownedBadge } from './OwnedBadge.js';
 import { langMark } from './LangFlag.js';
 import { yearMark } from './cardRows.js';
@@ -18,15 +17,6 @@ import { sumQty } from '../util/groupBy.js';
 
 /** Considering is outside the deck, so legality has nothing to say about it. */
 export const EMPTY_ISSUES = new Map<string, string>();
-
-/** A slot's wants, spelled out for the row's sub-line ('' = it wants nothing special). */
-function wantsDetail(r: Row): string {
-  const bits: string[] = [];
-  if (r.finish) bits.push(FINISH_LABELS[r.finish] ?? r.finish);
-  if (r.condition) bits.push(`min ${r.condition}`);
-  if (r.lang) bits.push(r.lang);
-  return bits.join(' · ');
-}
 
 /**
  * Tokens are named tersely by Scryfall ("Plant", "Zombie") — this rebuilds the
@@ -117,9 +107,7 @@ export const ContainerBoard = memo(function ContainerBoard({
 
   const imageOf = (r: Row) =>
     r.printing?.imageSmall ?? (r.scryfallId ? undefined : shownAny.get(r.oracleId)?.imageSmall) ?? r.oracle?.imageSmall ?? null;
-  // Same reason as the row spread in ContainerDetail: the slot's own fields
-  // come across whole, and only the deck context is added by hand.
-  const toEdit = (r: Row): DeckCardEdit => ({ ...r, deckId, commanderDeck });
+  const toEdit = (r: Row) => toDeckCardEdit(r, deckId, commanderDeck);
   /** What a tile and a stack tile share: the card, its art and its warning. */
   const baseItem = (r: Row, issue: string | undefined) => {
     const year = yearMark(r.printing, showYear);
@@ -167,7 +155,9 @@ export const ContainerBoard = memo(function ContainerBoard({
     const enough = r.anyBasic || r.owned >= r.quantity;
     const issue = issues.get(r.oracleId);
     const { issueChip, ...base } = baseItem(r, issue);
-    const wants = r.anyBasic ? '' : wantsDetail(r);
+    // The slot's wants ('' = it wants nothing special); a pinned finish is
+    // said even when it's nonfoil, since the slot chose it.
+    const wants = r.anyBasic ? '' : traitsLine(r, { min: true, quiet: { finish: null } });
     // Ownership checkmark (own this exact printing / another / for trade), same
     // as everywhere else. A legality problem still wins the badge slot (⚠). A
     // lands-box basic is had by definition, so it gets the plain check.

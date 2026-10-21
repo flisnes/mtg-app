@@ -14,6 +14,7 @@ import { ImportPanel } from '../import/ImportPanel.js';
 import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
 import type { ResolvedLine } from '../import/types.js';
 import { plural } from '../util/format.js';
+import { todayKey } from '../price/history.js';
 
 export function Tradelist() {
   const toast = useToast();
@@ -43,7 +44,7 @@ export function Tradelist() {
       toast('Your tradelist is empty');
       return;
     }
-    const stamp = new Date().toISOString().slice(0, 10);
+    const stamp = todayKey();
     downloadText(`mtg-tradelist-${stamp}.csv`, rows);
     toast('Exported tradelist');
   }

@@ -1,13 +1,13 @@
-import { normalizeSpecialConditions } from '@mtg/shared';
+import { DEFAULT_COPY_TRAITS, normalizeSpecialConditions } from '@mtg/shared';
 import type { CollectionEntry, Condition, DeckCard, EventSource, Finish, RemovalReason, SpecialCondition, UserEvent } from '@mtg/shared';
-import { db } from './schema.js';
+import { bulkGetPresent, db } from './schema.js';
 import { getPricesByIds } from '../cardDb/prices.js';
 import { acquisitionCents } from '../price/acquisition.js';
 import { batchFields, copyEvent, emitWishFulfilled, groupByOracle, priceCents, wishFulfilledEvent } from './events.js';
 import type { CopyFields } from './events.js';
 import { clamp, collectionKey, entryKey, exactSlotKey, findCollectionRow, newId, slotClaimKey } from './keys.js';
 import type { CopyRef, SlotWants } from './keys.js';
-import { adjustRow, COLLECTION_TABLES, deleteSynced, deleteSyncedMany, putSynced, putSyncedMany, write } from './write.js';
+import { adjustRow, COLLECTION_TABLES, deleteSynced, deleteSyncedMany, drainAcross, putSynced, putSyncedMany, write } from './write.js';
 import type { BatchMeta } from './write.js';
 import { sumQty } from '../util/groupBy.js';
 
@@ -320,18 +320,16 @@ export async function markOwnedForTrade(
         (e.condition === req.condition ? 2 : 0) +
         (e.special?.length ? 0 : 1);
       const ranked = [...entries].sort((a, b) => score(b) - score(a));
-      let remaining = req.quantity;
-      for (const e of ranked) {
-        if (remaining <= 0) break;
-        const room = e.quantity - e.quantityForTrade;
-        if (room <= 0) continue;
-        const take = Math.min(room, remaining);
-        e.quantityForTrade += take;
-        e.updatedAt = now;
-        remaining -= take;
-        flagged += take;
-        gained.set(e, (gained.get(e) ?? 0) + take);
-      }
+      flagged += drainAcross(
+        ranked,
+        req.quantity,
+        (e) => e.quantity - e.quantityForTrade,
+        (e, take) => {
+          e.quantityForTrade += take;
+          e.updatedAt = now;
+          gained.set(e, (gained.get(e) ?? 0) + take);
+        },
+      );
     }
     const writes = [...gained.keys()];
     await putSyncedMany('collection', writes);
@@ -339,6 +337,41 @@ export async function markOwnedForTrade(
     for (const e of writes) ctx.emit(copyEvent('tradelist.mark', e, gained.get(e)!, now, extra));
   }, meta);
   return flagged;
+}
+
+/**
+ * The inverse: take copies back off the tradelist, preferring the requested
+ * printing. Unmarking isn't an event (nothing entered or left the collection),
+ * the same as clearing the flag from the tradelist screen. Returns how many
+ * copies were unflagged.
+ */
+export async function unmarkOwnedForTrade(requests: MarkForTradeRequest[]): Promise<number> {
+  if (requests.length === 0) return 0;
+  let unflagged = 0;
+  await db.transaction('rw', [db.collection, db.outbox], async () => {
+    const now = Date.now();
+    const byOracle = await ownedByOracle(requests);
+    const touched = new Set<CollectionEntry>();
+    for (const req of requests) {
+      const entries = byOracle.get(req.oracleId);
+      if (!entries) continue;
+      const ranked = [...entries].sort(
+        (a, b) => Number(b.scryfallId === req.scryfallId) - Number(a.scryfallId === req.scryfallId),
+      );
+      unflagged += drainAcross(
+        ranked,
+        req.quantity,
+        (e) => e.quantityForTrade,
+        (e, take) => {
+          e.quantityForTrade -= take;
+          e.updatedAt = now;
+          touched.add(e);
+        },
+      );
+    }
+    await putSyncedMany('collection', [...touched]);
+  });
+  return unflagged;
 }
 
 /** The owned rows of every card the requests name, grouped by oracleId. */
@@ -351,7 +384,7 @@ export async function ownedByOracle(requests: { oracleId: string }[]): Promise<M
 export async function removeCollectionEntriesBulk(ids: string[], reason: RemovalReason = 'sold'): Promise<void> {
   if (ids.length === 0) return;
   await write(COLLECTION_TABLES, async (ctx) => {
-    const entries = (await db.collection.bulkGet(ids)).filter((e): e is CollectionEntry => !!e);
+    const entries = await bulkGetPresent(db.collection, ids);
     const prices = await getPricesByIds(entries.map((e) => e.scryfallId));
     await deleteSyncedMany('collection', entries.map((e) => e.id));
     for (const e of entries) {
@@ -513,14 +546,15 @@ export async function clearTradelist(): Promise<number> {
   });
 }
 
-/** The copy an event was about, as a row lookup. Events written before special
- *  conditions existed name no specials, which is exactly the ordinary copy. */
+/** The copy an event was about, as a row lookup. Events written before a trait
+ *  existed name the default copy; ones from before special conditions name no
+ *  specials, which is exactly the ordinary copy. */
 function eventCopy(e: UserEvent & { scryfallId: string }) {
   return {
     scryfallId: e.scryfallId,
-    condition: e.condition ?? ('NM' as Condition),
-    finish: e.finish ?? ('nonfoil' as Finish),
-    lang: e.lang ?? 'en',
+    condition: e.condition ?? DEFAULT_COPY_TRAITS.condition,
+    finish: e.finish ?? DEFAULT_COPY_TRAITS.finish,
+    lang: e.lang ?? DEFAULT_COPY_TRAITS.lang,
     special: e.special,
   };
 }

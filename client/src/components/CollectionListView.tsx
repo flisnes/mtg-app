@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
 import { FilterSelect } from './FilterSelect.js';
 import { useNavigate } from 'react-router-dom';
-import type { ContainerKind } from '@mtg/shared';
+import { traitsLine, type ContainerKind } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
 import type { JoinedEntry } from '../db/queries.js';
 import { useCollectionEntries, useJoinedCollection } from '../db/collectionSnapshot.js';
 import { removeCollectionEntriesBulk, removeDeckCardsMatching, setQuantityForTradeBulk } from '../db/dataAccess.js';
+import { rowToFilingCopy } from '../deck/filing.js';
 import { describeFilingResult, useFiling } from '../deck/useFiling.js';
 import { CardSheet } from './CardSheet.js';
 import { useConfirm } from './ConfirmSheet.js';
@@ -230,14 +231,14 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
   async function bulkDelete() {
     const n = selectedRows.length;
     const ok = await confirm({
-      title: `Delete ${n} ${n === 1 ? 'entry' : 'entries'}?`,
+      title: `Delete ${n} ${plural(n, 'entry', 'entries')}?`,
       body: `${n === 1 ? 'This copy' : 'These copies'} leave your collection, and any deck, binder or box holding ${n === 1 ? 'it' : 'them'} is left asking for a card you no longer have.`,
       confirmLabel: 'Delete from collection',
       danger: true,
     });
     if (!ok) return;
     await removeCollectionEntriesBulk(selectedRows.map((r) => r.entry.id));
-    toast(`Deleted ${n} ${n === 1 ? 'entry' : 'entries'}`);
+    toast(`Deleted ${n} ${plural(n, 'entry', 'entries')}`);
     sel.exit();
   }
 
@@ -277,17 +278,9 @@ export function CollectionListView({ onlyTrade = false }: { onlyTrade?: boolean 
     setPickingContainer(false);
     const filing = await file(
       containerId,
-      selectedRows.map((r) => ({
-        oracleId: r.entry.oracleId,
-        quantity: r.entry.quantity,
-        board: 'main' as const,
-        scryfallId: r.entry.scryfallId,
-        wants: { condition: r.entry.condition, finish: r.entry.finish, lang: r.entry.lang },
-        label: r.oracle?.name,
-        sub: [r.printing?.setName, r.entry.condition, r.entry.finish, r.entry.lang !== 'en' ? r.entry.lang : null]
-          .filter(Boolean)
-          .join(' · '),
-      })),
+      selectedRows.map((r) =>
+        rowToFilingCopy(r.entry, 'main', { label: r.oracle?.name, sub: traitsLine(r.entry, { lead: r.printing?.setName }) }),
+      ),
     );
     if (filing === null) return; // backed out of the prompt — selection stays put
     toast(describeFilingResult(filing, CONTAINER_META[kind].noun));

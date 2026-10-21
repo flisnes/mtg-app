@@ -1,3 +1,4 @@
+import { readJson, writeJson } from './util/localStore.js';
 // Device preferences: how money is displayed, which language and printing a card
 // is expected in, and how freely the app may spend the user's data plan.
 //
@@ -33,7 +34,7 @@ export interface Prefs {
   displayCurrency: string;
   /**
    * The language you collect in (a Scryfall code, see LANGS in
-   * components/copyTraits.ts). Copies in any other language wear a flag badge
+   * shared copyTraits.ts). Copies in any other language wear a flag badge
    * (components/LangFlag.tsx), which is built during render — same reason the
    * currency lives here.
    */
@@ -90,13 +91,9 @@ let cache: Prefs | null = null;
 const listeners = new Set<() => void>();
 
 function read(): Prefs {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Prefs>) };
-  } catch {
-    /* unparseable or unavailable storage — defaults are fine */
-  }
-  return DEFAULTS;
+  // Unparseable or unavailable storage: the defaults are fine.
+  const stored = readJson(STORAGE_KEY);
+  return stored && typeof stored === 'object' ? { ...DEFAULTS, ...(stored as Partial<Prefs>) } : DEFAULTS;
 }
 
 /** Current preferences. Synchronous and cached, so formatters can call it per row. */
@@ -106,11 +103,8 @@ export function getPrefs(): Prefs {
 
 export function setPrefs(patch: Partial<Prefs>): void {
   cache = { ...getPrefs(), ...patch };
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
-  } catch {
-    /* quota/private mode — the in-memory value still applies for this session */
-  }
+  // Best-effort: in private mode the in-memory value still applies this session.
+  writeJson(STORAGE_KEY, cache);
   for (const l of listeners) l();
 }
 

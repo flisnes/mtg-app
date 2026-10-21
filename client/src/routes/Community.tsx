@@ -20,7 +20,6 @@ import {
 import {
   SortControls,
   sortCards,
-  cardSortFields,
   useCardSort,
   type CardSortPrefs,
   type SortFields,
@@ -35,6 +34,7 @@ import {
   useMyWants,
   useListCardMaps,
   useUserLists,
+  lineSortFields,
   type InfoTarget,
 } from '../community/userLists.js';
 import { fmtDate, plural } from '../util/format.js';
@@ -81,20 +81,6 @@ const useLayout = sharedLocalStorage<Layout>(
 // their backups) and highlight matches against your own data, using the same
 // rule as in-person trades: an "any printing" wish matches every printing of
 // that card, a specific-printing wish matches only itself.
-
-/** Sort fields for a trade line, resolved against the viewer's card DB. */
-function tradeFields(line: TradeLine, cards: CardMaps): SortFields {
-  const oracle = cards.oracleMap?.get(line.oracleId);
-  const printing = cards.printMap?.get(line.scryfallId);
-  return { ...cardSortFields(oracle, printing, line.finish), name: oracle?.name ?? line.name };
-}
-
-/** Sort fields for a wish line (may be "any printing" and have no finish). */
-function wishFields(line: WishLine, cards: CardMaps): SortFields {
-  const oracle = cards.oracleMap?.get(line.oracleId);
-  const printing = line.scryfallId ? cards.printMap?.get(line.scryfallId) : undefined;
-  return { ...cardSortFields(oracle, printing, line.finish ?? 'nonfoil'), name: oracle?.name ?? line.name };
-}
 
 export function Community() {
   return (
@@ -277,11 +263,11 @@ function UserLists({
 
   // Matches-first order for the overview (the See-all view sorts its own copy).
   const tradeOrdered = useMemo(
-    () => orderRows(tradeBase, (t) => tradeFields(t.line, cards), tradeSort),
+    () => orderRows(tradeBase, (t) => lineSortFields(t.line, cards), tradeSort),
     [tradeBase, cards, tradeSort],
   );
   const wishOrdered = useMemo(
-    () => orderRows(wishBase, (w) => wishFields(w.line, cards), wishSort),
+    () => orderRows(wishBase, (w) => lineSortFields(w.line, cards), wishSort),
     [wishBase, cards, wishSort],
   );
 
@@ -335,7 +321,7 @@ function UserLists({
           <UserListAll
             heading="Has for trade"
             rows={tradeBase}
-            fieldsOf={(t) => tradeFields(t.line, cards)}
+            fieldsOf={(t) => lineSortFields(t.line, cards)}
             build={(rows, showYear) => buildTradeItems(rows, cards, setInfo, showYear)}
             sort={tradeSort}
             setSort={setTradeSort}
@@ -345,7 +331,7 @@ function UserLists({
           <UserListAll
             heading="Wants"
             rows={wishBase}
-            fieldsOf={(w) => wishFields(w.line, cards)}
+            fieldsOf={(w) => lineSortFields(w.line, cards)}
             build={(rows, showYear) => buildWishItems(rows, cards, setInfo, showYear)}
             sort={wishSort}
             setSort={setWishSort}

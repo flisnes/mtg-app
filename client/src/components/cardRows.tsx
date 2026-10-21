@@ -1,5 +1,6 @@
-import type { ContainerKind, DeckBoard, Finish, OracleCard, Priced, Printing, TradeLine } from '@mtg/shared';
-import { specialLabel } from '@mtg/shared';
+import type { ContainerKind, Finish, OracleCard, Priced, Printing, TradeLine } from '@mtg/shared';
+import { specialLabel, traitsLine } from '@mtg/shared';
+import { BOARD_LABEL } from '../deck/boards.js';
 import type { JoinedEntry, JoinedWish, JoinedDeckCard } from '../db/queries.js';
 import type { CardItem } from './CardViews.js';
 import type { useMoverFlags } from '../price/useMoverFlags.js';
@@ -71,12 +72,19 @@ export function baseCardItem(o: {
   };
 }
 
-/** Condition, plus finish and language when they're not the plain ones. */
-export function lineDetail(l: { condition: string; finish: Finish; lang: string }): string {
-  const bits: string[] = [l.condition];
-  if (l.finish !== 'nonfoil') bits.push(l.finish);
-  if (l.lang !== 'en') bits.push(l.lang);
-  return bits.join(' · ');
+/** "Set name · #123" as a string, for titles and subtitles. */
+export function printingLabel(p: Pick<Printing, 'setName' | 'collectorNumber'>): string {
+  return `${p.setName} · #${p.collectorNumber}`;
+}
+
+/** The edition under a card: its set symbol, set name and collector number. */
+export function printingSub(p: Pick<Printing, 'set' | 'setName' | 'collectorNumber'>) {
+  return (
+    <>
+      <SetSymbol set={p.set} className="sub-set-symbol" title={p.setName} />
+      {printingLabel(p)}
+    </>
+  );
 }
 
 /**
@@ -96,9 +104,9 @@ export function tradeLineCardItem(
     ...baseCardItem({ key, oracle, printing, name: line.name, image: opts.image, finish: line.finish, quantity: line.quantity, lang: line.lang, showYear: opts.showYear }),
     sub: (
       <>
-        {printing && <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />}
-        {printing ? `${printing.setName} · #${printing.collectorNumber} · ` : ''}
-        {lineDetail(line)}
+        {printing && printingSub(printing)}
+        {printing && ' · '}
+        {traitsLine(line)}
       </>
     ),
   };
@@ -145,8 +153,8 @@ function collectionCardItem(
     badgeTitle: r.entry.quantityForTrade > 0 ? `${r.entry.quantityForTrade} for trade` : undefined,
     sub: (
       <>
-        {r.printing && <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />}
-        {r.printing ? `${r.printing.setName} · #${r.printing.collectorNumber} · ` : ''}
+        {r.printing && printingSub(r.printing)}
+        {r.printing && ' · '}
         {r.entry.condition} · {r.entry.finish}
         {lang ? ` · ${r.entry.lang}` : ''}
         {r.entry.special?.length ? ` · ${specialLabel(r.entry.special)}` : ''}
@@ -210,8 +218,7 @@ export function stackCardItem(
           {kinds}
         </span>
         {s.printing && ' · '}
-        {s.printing && <SetSymbol set={s.printing.set} className="sub-set-symbol" title={s.printing.setName} />}
-        {s.printing ? `${s.printing.setName} · #${s.printing.collectorNumber}` : ''}
+        {s.printing && printingSub(s.printing)}
       </>
     ),
     // The pile's worth, not one copy's: ten Bolts is a number about ten Bolts.
@@ -247,25 +254,8 @@ export function wishCardItem(
   // Any finish/condition/lang the wish pins down (undefined = "any", shown as
   // nothing); condition is a minimum, and the language spells itself out only
   // when it's the one the flag is already flagging.
-  const prefs = [
-    r.entry.finish,
-    r.entry.condition ? `min ${r.entry.condition}` : undefined,
-    lang ? r.entry.lang : undefined,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-  const printingSub = r.entry.scryfallId ? (
-    r.printing ? (
-      <>
-        <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />
-        {`${r.printing.setName} · #${r.printing.collectorNumber}`}
-      </>
-    ) : (
-      'specific printing'
-    )
-  ) : (
-    'any printing'
-  );
+  const prefs = traitsLine({ ...r.entry, lang: lang ? r.entry.lang : undefined }, { min: true, quiet: { finish: null } });
+  const edition = r.entry.scryfallId ? (r.printing ? printingSub(r.printing) : 'specific printing') : 'any printing';
   return {
     ...baseCardItem({
       key: r.entry.id,
@@ -282,25 +272,16 @@ export function wishCardItem(
     badgeTitle: ownBadge?.title,
     sub: prefs ? (
       <>
-        {printingSub} · {prefs}
+        {edition} · {prefs}
       </>
     ) : (
-      printingSub
+      edition
     ),
     // "Any printing" wishes are tracked via the printing they show.
     trend: opts.moverFlags?.get(r.entry.scryfallId ?? shownAny?.scryfallId ?? r.oracle?.defaultScryfallId ?? ''),
     onClick: opts.onClick,
   };
 }
-
-const BOARD_LABEL: Record<DeckBoard, string> = {
-  main: '',
-  side: 'Sideboard',
-  commander: 'Commander',
-  companion: 'Companion',
-  maybe: 'Considering',
-  token: 'Token',
-};
 
 /** A deck/binder/box slot: which board it's in (deck), or its printing (storage). */
 export function deckCardItem(
@@ -313,18 +294,14 @@ export function deckCardItem(
     ...baseCardItem({ key: r.entry.id, oracle: r.oracle, printing: r.printing, finish: r.entry.finish, quantity: r.entry.quantity, lang: r.entry.lang, showYear: opts.showYear }),
     mana: r.oracle?.manaCost,
     sub:
-      opts.kind === 'deck' ? (
-        BOARD_LABEL[r.entry.board] || undefined
-      ) : r.entry.anyBasic ? (
-        'any printing'
-      ) : (
-        r.printing && (
-          <>
-            <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />
-            {r.printing.setName} · #{r.printing.collectorNumber}
-          </>
-        )
-      ),
+      // The mainboard goes without saying; every other zone names itself.
+      opts.kind === 'deck'
+        ? r.entry.board === 'main'
+          ? undefined
+          : BOARD_LABEL[r.entry.board]
+        : r.entry.anyBasic
+          ? 'any printing'
+          : r.printing && printingSub(r.printing),
     price: formatPrice(pricedForFinish(r.printing, r.entry.finish ?? 'nonfoil'), r.oracle) ?? NO_PRICE,
     onClick: opts.onClick,
   };

@@ -79,7 +79,7 @@ interface PrintedSignals {
 }
 
 /** Which of the three cross-check signals this printing physically carries. */
-export function printedSignals(releasedAt: string): PrintedSignals {
+function printedSignals(releasedAt: string): PrintedSignals {
   return {
     setCode: releasedAt >= PRINTED_SINCE.setCode,
     collectorNumber: releasedAt >= PRINTED_SINCE.collectorNumber,
@@ -106,7 +106,7 @@ const PRINTED_LANGS: Record<string, string> = {
 let workerPromise: Promise<Worker> | null = null;
 
 /** Lazy singleton worker, kept warm for the scan session (init is ~seconds). */
-export function initOcr(): Promise<Worker> {
+function initOcr(): Promise<Worker> {
   const p = (workerPromise ??= (async () => {
     const { createWorker } = await import('tesseract.js');
     const assets = SCAN_DATA_BASE
@@ -144,7 +144,7 @@ export function initOcr(): Promise<Worker> {
  * bright-on-dark text into clean black-on-white; the bright box region simply
  * comes out blank.
  */
-export function prepareStrip(strip: ImageData): ImageData {
+function prepareStrip(strip: ImageData): ImageData {
   const scale = 1.5; // strips arrive at 2× card scale already (stripAttempts)
   const w = Math.round(strip.width * scale);
   const h = Math.round(strip.height * scale);
@@ -252,7 +252,7 @@ function toImageLike(img: ImageData): OffscreenCanvas | Uint8Array {
 /** Page-segmentation modes swept per strip: neither wins alone on real photos. */
 type StripPsm = 'block' | 'sparse';
 
-export async function recognizeStrip(strip: ImageData, psm: StripPsm = 'block'): Promise<string> {
+async function recognizeStrip(strip: ImageData, psm: StripPsm = 'block'): Promise<string> {
   const worker = await initOcr();
   const { PSM } = await import('tesseract.js');
   await worker.setParameters({
@@ -273,7 +273,7 @@ const normalizeCollector = (s: string): string => s.replace(/^0+(?=\d)/, '').toL
  * would hand 1993 to every card printed after 1998. The separator is optional
  * because Tesseract drops thin dashes often enough to matter ("19932001").
  */
-export function printedYears(text: string): number[] {
+function printedYears(text: string): number[] {
   const out: number[] = [];
   for (const m of text.matchAll(/\b((?:19|20)\d{2})\s*[-–—]?\s*((?:19|20)\d{2})?\b/g)) {
     const year = Number(m[2] ?? m[1]);
@@ -297,7 +297,7 @@ function findYear(text: string, releasedAt: string): 'exact' | 'near' | null {
   return printed.some((y) => Math.abs(y - year) === 1) ? 'near' : null;
 }
 
-export function parseInfoStrip(raw: string): ParsedStrip {
+function parseInfoStrip(raw: string): ParsedStrip {
   const text = raw.toUpperCase();
 
   // "027/277" (or bare "0217" on frames without a total).
@@ -378,7 +378,7 @@ function findCollector(text: string, collectorNumber: string): boolean {
  * some unrelated digits, which on a pre-Exodus card is the difference between
  * "no answer" and a confidently wrong one.
  */
-export function scoreCandidate(text: string, c: OcrCandidate): number {
+function scoreCandidate(text: string, c: OcrCandidate): number {
   const has = printedSignals(c.releasedAt);
   const setHit = has.setCode ? findSet(text, c.set) : null;
   const collHit = has.collectorNumber && findCollector(text, c.collectorNumber);

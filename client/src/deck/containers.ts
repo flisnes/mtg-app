@@ -56,6 +56,17 @@ export const CONTAINER_META: Record<ContainerKind, ContainerMeta> = {
   },
 };
 
+/** The "are you sure" for deleting a container, worded once for every page that offers it. */
+export function deleteContainerConfirm(row: Pick<Deck, 'name' | 'kind'>) {
+  const meta = containerMeta(row);
+  return {
+    title: `Delete “${row.name}”?`,
+    body: `The ${meta.noun} and everything filed in it goes. Cards you own stay in your collection. This can’t be undone.`,
+    confirmLabel: `Delete ${meta.noun}`,
+    danger: true,
+  };
+}
+
 /** A row's kind, defaulting rows written before storage existed to 'deck'. */
 export function containerKind(row: Pick<Deck, 'kind'> | undefined | null): ContainerKind {
   return row?.kind ?? 'deck';
@@ -63,6 +74,15 @@ export function containerKind(row: Pick<Deck, 'kind'> | undefined | null): Conta
 
 export function containerMeta(row: Pick<Deck, 'kind'> | undefined | null): ContainerMeta {
   return CONTAINER_META[containerKind(row)];
+}
+
+/**
+ * The wording for an add or scan target: a container target names its kind
+ * (default deck); any other target reads as a deck, which is what the copy
+ * assumes when it isn't about a container at all.
+ */
+export function containerMetaFor(target: { kind: string; containerKind?: ContainerKind }): ContainerMeta {
+  return CONTAINER_META[(target.kind === 'deck' && target.containerKind) || 'deck'];
 }
 
 

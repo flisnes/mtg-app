@@ -10,6 +10,7 @@ import { CardSheet } from '../components/CardSheet.js';
 import { SetSymbol } from '../components/SetSymbol.js';
 import { Icon } from '../components/icons.js';
 import { usePopover } from '../components/usePopover.js';
+import { todayKey } from '../price/history.js';
 
 // Spoilers & reprints: browse the newest sets and see, per set, which cards are
 // brand new (their first printing) and which are reprints of older cards. All
@@ -82,7 +83,7 @@ export function Spoilers() {
     let cancelled = false;
     void (async () => {
       const [sets, debuts] = await Promise.all([getSetIndex(), getDebutIndex()]);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayKey();
       const summaries = [...sets]
         .sort((a, b) => b.releasedAt.localeCompare(a.releasedAt) || a.name.localeCompare(b.name))
         .slice(0, RECENT_SET_LIMIT)

@@ -49,7 +49,9 @@ import { librarySize, type GroupRow } from '@mtg/sim';
 import { manaReport } from '@mtg/sim';
 import type { ManaFix } from '../deck/manaFixes.js';
 import type { PlacementIndex } from '../db/usePlacements.js';
-import { plural } from '../util/format.js';
+import { fmtCount, plural } from '../util/format.js';
+import { readJson, writeJson } from '../util/localStore.js';
+import { one } from './analysisFormat.js';
 
 // What the deck's mana looks like before a single card is drawn: the curve, the
 // tempo the tapped lands cost you, and whether there are enough lands for what
@@ -60,7 +62,6 @@ import { plural } from '../util/format.js';
 // is a decklist. It used to be a sheet; notes/deck-analysis-rebuild.md has why
 // the sheet became a page with tabs.
 
-const one = (n: number) => n.toFixed(1);
 
 /**
  * A rule just saved, and the run it is measured against (rebuild plan C2).
@@ -99,26 +100,21 @@ const policyKey = (deckId: string) => `sim-policy:${deckId}`;
 
 function loadPolicy(deckId: string, format: DeckFormat | undefined): SimPolicy {
   const fallback = defaultPolicy(format);
-  try {
-    const raw = localStorage.getItem(policyKey(deckId));
-    if (!raw) return fallback;
-    const saved = JSON.parse(raw) as Partial<SimPolicy>;
-    // Merged over the default rather than trusted: a policy saved by a later
-    // release may name a spend order this build has never heard of, and the
-    // simulator would then quietly fall through to "ramp" without saying so.
-    // A policy saved before the table (rebuild plan E4) has no opponents in
-    // it and gets the format's default, which is how every deck met them.
-    return {
-      spend: SPEND_POLICIES.some((o) => o.id === saved.spend) ? saved.spend! : fallback.spend,
-      combat: COMBAT_POLICIES.some((o) => o.id === saved.combat) ? saved.combat! : fallback.combat,
-      interaction: INTERACTION_POLICIES.some((o) => o.id === saved.interaction) ? saved.interaction! : fallback.interaction,
-      opponents: OPPONENT_OPTIONS.some((o) => o.id === saved.opponents) ? saved.opponents! : fallback.opponents,
-      tempo: TEMPO_POLICIES.some((o) => o.id === saved.tempo) ? saved.tempo! : fallback.tempo,
-      pay: PAY_POLICIES.some((o) => o.id === saved.pay) ? saved.pay! : fallback.pay,
-    };
-  } catch {
-    return fallback;
-  }
+  const saved = readJson(policyKey(deckId)) as Partial<SimPolicy> | undefined;
+  if (!saved || typeof saved !== 'object') return fallback;
+  // Merged over the default rather than trusted: a policy saved by a later
+  // release may name a spend order this build has never heard of, and the
+  // simulator would then quietly fall through to "ramp" without saying so.
+  // A policy saved before the table (rebuild plan E4) has no opponents in
+  // it and gets the format's default, which is how every deck met them.
+  return {
+    spend: SPEND_POLICIES.some((o) => o.id === saved.spend) ? saved.spend! : fallback.spend,
+    combat: COMBAT_POLICIES.some((o) => o.id === saved.combat) ? saved.combat! : fallback.combat,
+    interaction: INTERACTION_POLICIES.some((o) => o.id === saved.interaction) ? saved.interaction! : fallback.interaction,
+    opponents: OPPONENT_OPTIONS.some((o) => o.id === saved.opponents) ? saved.opponents! : fallback.opponents,
+    tempo: TEMPO_POLICIES.some((o) => o.id === saved.tempo) ? saved.tempo! : fallback.tempo,
+    pay: PAY_POLICIES.some((o) => o.id === saved.pay) ? saved.pay! : fallback.pay,
+  };
 }
 
 /**
@@ -129,20 +125,15 @@ function loadPolicy(deckId: string, format: DeckFormat | undefined): SimPolicy {
 const keepKey = (deckId: string) => `sim-keep:${deckId}`;
 
 function loadKeepRule(deckId: string): KeepRule {
-  try {
-    const raw = localStorage.getItem(keepKey(deckId));
-    if (!raw) return DEFAULT_KEEP_RULE;
-    const saved = JSON.parse(raw) as Partial<KeepRule>;
-    const n = (v: unknown, fallback: number) => (typeof v === 'number' && v >= 0 && v <= 7 ? Math.round(v) : fallback);
-    const min = n(saved.min, DEFAULT_KEEP_RULE.min);
-    return {
-      query: typeof saved.query === 'string' ? saved.query : DEFAULT_KEEP_RULE.query,
-      min,
-      max: Math.max(min, n(saved.max, DEFAULT_KEEP_RULE.max)),
-    };
-  } catch {
-    return DEFAULT_KEEP_RULE;
-  }
+  const saved = readJson(keepKey(deckId)) as Partial<KeepRule> | undefined;
+  if (!saved || typeof saved !== 'object') return DEFAULT_KEEP_RULE;
+  const n = (v: unknown, fallback: number) => (typeof v === 'number' && v >= 0 && v <= 7 ? Math.round(v) : fallback);
+  const min = n(saved.min, DEFAULT_KEEP_RULE.min);
+  return {
+    query: typeof saved.query === 'string' ? saved.query : DEFAULT_KEEP_RULE.query,
+    min,
+    max: Math.max(min, n(saved.max, DEFAULT_KEEP_RULE.max)),
+  };
 }
 
 /**
@@ -152,12 +143,8 @@ function loadKeepRule(deckId: string): KeepRule {
 const goalsKey = (deckId: string) => `sim-goals:${deckId}`;
 
 function loadGoals(deckId: string): SimGoal[] {
-  try {
-    const raw = localStorage.getItem(goalsKey(deckId));
-    return raw ? cleanGoals(JSON.parse(raw), SIM_MAX_TURN) : [];
-  } catch {
-    return [];
-  }
+  const saved = readJson(goalsKey(deckId));
+  return saved === undefined ? [] : cleanGoals(saved, SIM_MAX_TURN);
 }
 
 /**
@@ -317,24 +304,18 @@ export function DeckAnalysis({
   // Lifted out of the panel because the fix panel answers the same report.
   const report = useMemo(() => manaReport(rows, librarySize(rows), format, { onPlay }), [rows, format, onPlay]);
   const [keepRule, setKeepRule] = useState<KeepRule>(() => loadKeepRule(deckId));
+  // Best-effort writes: a private window with storage off still gets the
+  // setting for this session; losing it on close beats refusing to change it.
   const saveKeepRule = (next: KeepRule) => {
     setKeepRule(next);
-    try {
-      localStorage.setItem(keepKey(deckId), JSON.stringify(next));
-    } catch {
-      // Same as the policy: the session keeps it even when storage refuses.
-    }
+    writeJson(keepKey(deckId), next);
   };
   // The game plan (E1). Part of the built deck, so a goal saved re-runs the
   // simulation: the goals are read inside the games and steer the searches.
   const [goals, setGoals] = useState<SimGoal[]>(() => loadGoals(deckId));
   const saveGoals = (next: SimGoal[]) => {
     setGoals(next);
-    try {
-      localStorage.setItem(goalsKey(deckId), JSON.stringify(next));
-    } catch {
-      // As above.
-    }
+    writeJson(goalsKey(deckId), next);
   };
 
   // The trace sheet, open or not, and the card it picks out when a rule's
@@ -350,12 +331,7 @@ export function DeckAnalysis({
   const [policy, setPolicy] = useState<SimPolicy>(() => loadPolicy(deckId, format));
   const savePolicy = (next: SimPolicy) => {
     setPolicy(next);
-    try {
-      localStorage.setItem(policyKey(deckId), JSON.stringify(next));
-    } catch {
-      // A private window with storage off still gets the setting for this
-      // session; losing it on close beats refusing to change it.
-    }
+    writeJson(policyKey(deckId), next);
   };
   // What the user said their cards do, which overrides the card database's
   // reading of them. Live, so saving a behavior re-runs the simulation.
@@ -666,7 +642,7 @@ export function DeckAnalysis({
             ) : sim.kind === 'error' ? (
               <p className="fine-print">The simulator stopped: {sim.message}</p>
             ) : !simResult ? (
-              <p className="deck-stats-verdict sim-waiting">Dealing {simOpts.games.toLocaleString()} games…</p>
+              <p className="deck-stats-verdict sim-waiting">Dealing {fmtCount(simOpts.games)} games…</p>
             ) : (
               <DeckTrajectory result={simResult} coverage={simDeck.coverage} missedDraw={missedDraw} />
             )}

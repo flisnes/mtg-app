@@ -4,7 +4,7 @@ import type { CollectionEntry, OracleCard } from '@mtg/shared';
 import type { OwnedSource } from '../deck/manaFixes.js';
 import type { PlacementIndex } from './usePlacements.js';
 import { db } from './schema.js';
-import { sumQty } from '../util/groupBy.js';
+import { groupBy, sumQty } from '../util/groupBy.js';
 
 // The collection half of the mana-fix panel: every card you own that makes
 // mana, with where its copies are and how many of them no deck is using.
@@ -34,13 +34,10 @@ export function useOwnedSources(
 ): OwnedSource[] | undefined {
   const owned = useLiveQuery(async (): Promise<OwnedCard[] | undefined> => {
     if (!enabled) return undefined;
-    const byOracle = new Map<string, CollectionEntry[]>();
-    for (const e of await db.collection.toArray()) {
-      if (e.quantity <= 0) continue;
-      const list = byOracle.get(e.oracleId);
-      if (list) list.push(e);
-      else byOracle.set(e.oracleId, [e]);
-    }
+    const byOracle = groupBy(
+      (await db.collection.toArray()).filter((e) => e.quantity > 0),
+      (e) => e.oracleId,
+    );
     const cards = await db.oracleCards.bulkGet([...byOracle.keys()]);
     const out: OwnedCard[] = [];
     // `mana` or `fetch` is the whole filter: everything else in the collection

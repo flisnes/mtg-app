@@ -18,7 +18,7 @@ import {
   installScanBlob,
   type ScanDataRow,
 } from '../scan/store.js';
-import { plural } from '../util/format.js';
+import { fmtCount, plural } from '../util/format.js';
 
 // Dev test harness for the scanning pipeline (handover §S2) — the regression
 // suite for the whole feature. Not linked from the nav; open #/scan-test.
@@ -318,7 +318,7 @@ export function ScanTest() {
         <h2>Scan data</h2>
         {installed ? (
           <p>
-            Installed: v{installed.version} · {installed.count.toLocaleString()} hashes (algo {installed.algo}) ·{' '}
+            Installed: v{installed.version} · {fmtCount(installed.count)} hashes (algo {installed.algo}) ·{' '}
             {(installed.blob.byteLength / 1e6).toFixed(1)} MB
           </p>
         ) : (

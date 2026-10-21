@@ -1,10 +1,9 @@
-import type { DeckBoard, OracleCard, Priced, Printing, SetTypeMap, SlotCopyFields, SlotShape } from '@mtg/shared';
-import { pickOwnedPrinting } from '../../cardDb/preferredPrinting.js';
+import type { DeckBoard, OracleCard, Priced, Printing, SetTypeMap, SlotShape } from '@mtg/shared';
 import { cardSortFields, sortCards, type CardSortPrefs } from '../../components/CardSorting.js';
+import { foldByOracle } from '../../components/stackPrintings.js';
 import type { ClipboardSlot } from '../../deck/cardClipboard.js';
-import type { FilingCopy } from '../../deck/filing.js';
 import type { Prefs } from '../../prefs.js';
-import { groupBy, sumQty } from '../../util/groupBy.js';
+import { sumQty } from '../../util/groupBy.js';
 
 /** One slot of this container, joined to its card and what the collection holds.
  *  Everything the slot itself says comes from SlotShape. */
@@ -53,24 +52,18 @@ export type StackCtx = { prefs: Pick<Prefs, 'printing' | 'baseCurrency'>; setTyp
 
 export function groupSlots(rows: Row[], stack: StackCtx): SlotStack[] {
   if (!stack) return rows.map((r) => ({ lead: r, rows: [r], quantity: r.quantity }));
-  const byOracle = groupBy(rows, (r) => r.oracleId);
-  const out: SlotStack[] = [];
-  byOracle.forEach((group) => {
-    if (group.length === 1) {
-      out.push({ lead: group[0]!, rows: group, quantity: group[0]!.quantity });
-      return;
-    }
-    const printings = new Map<string, Priced<Printing>>();
-    for (const r of group) if (r.printing) printings.set(r.printing.scryfallId, r.printing);
-    const shown = pickOwnedPrinting([...printings.values()], stack.prefs, stack.setTypes);
-    const lead = (shown && group.find((r) => r.scryfallId === shown.scryfallId)) ?? group[0]!;
-    out.push({
-      lead,
-      rows: [lead, ...group.filter((r) => r !== lead)],
-      quantity: sumQty(group),
-    });
-  });
-  return out;
+  // The fold puts the shown printing's slots first, so the lead is members[0].
+  return foldByOracle(rows, {
+    oracleIdOf: (r) => r.oracleId,
+    printingOf: (r) => r.printing,
+    prefs: stack.prefs,
+    setTypes: stack.setTypes,
+  }).map(({ members }) => ({ lead: members[0]!, rows: members, quantity: sumQty(members) }));
+}
+
+/** A slot as the card sheet edits it: the row whole, plus the deck context. */
+export function toDeckCardEdit(r: Row, deckId: string, commanderDeck: boolean): DeckCardEdit {
+  return { ...r, deckId, commanderDeck };
 }
 
 export function sortRows(rows: Row[], prefs: CardSortPrefs): Row[] {
@@ -95,28 +88,5 @@ export function clipSlot(r: Row): ClipboardSlot {
     ...(r.condition ? { condition: r.condition } : {}),
     ...(r.lang ? { lang: r.lang } : {}),
     ...(r.tags?.length ? { tags: r.tags } : {}),
-  };
-}
-
-/**
- * A slot (or a copied one) as a copy to file into `board` somewhere. A
- * lands-box basic names no edition; anything else carries its printing and the
- * traits it asks for, so the foil doesn't merge into the nonfoil's slot.
- */
-export function rowToFilingCopy(
-  r: SlotCopyFields & { oracleId: string; quantity: number },
-  board: DeckBoard,
-  extra: { label?: string; sub?: string } = {},
-): FilingCopy {
-  return {
-    oracleId: r.oracleId,
-    quantity: r.quantity,
-    board,
-    ...(r.anyBasic ? { anyBasic: true } : r.scryfallId ? { scryfallId: r.scryfallId } : {}),
-    ...(r.finish || r.condition || r.lang
-      ? { wants: { ...(r.finish ? { finish: r.finish } : {}), ...(r.condition ? { condition: r.condition } : {}), ...(r.lang ? { lang: r.lang } : {}) } }
-      : {}),
-    ...(extra.label ? { label: extra.label } : {}),
-    ...(extra.sub ? { sub: extra.sub } : {}),
   };
 }

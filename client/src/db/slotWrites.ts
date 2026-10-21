@@ -1,13 +1,13 @@
-import { normalizeCardTags, prefsCompatible, sameCardTags } from '@mtg/shared';
-import type { CollectionEntry, Color, CopyPrefs, DeckBoard, DeckCard, EventSource, UserEvent } from '@mtg/shared';
-import { db } from './schema.js';
-import { markOwnedForTrade, ownedByOracle } from './collectionWrites.js';
+import { DEFAULT_COPY_TRAITS, normalizeCardTags, prefsCompatible, sameCardTags } from '@mtg/shared';
+import type { Color, CopyPrefs, DeckBoard, DeckCard, EventSource, UserEvent } from '@mtg/shared';
+import { bulkGetPresent, db } from './schema.js';
+import { markOwnedForTrade, unmarkOwnedForTrade } from './collectionWrites.js';
 import type { MarkForTradeRequest } from './collectionWrites.js';
 import { batchFields, groupByOracle, slotEvent } from './events.js';
 import type { EventExtra } from './events.js';
 import { exactSlotKey, namedCopy, newId, slotKey } from './keys.js';
 import type { SlotWants } from './keys.js';
-import { adjustRow, DECK_TABLES, deleteSynced, deleteSyncedMany, patchSynced, putSynced, putSyncedMany, write } from './write.js';
+import { adjustRow, DECK_TABLES, deleteSynced, deleteSyncedMany, drainAcross, patchSynced, putSynced, putSyncedMany, write } from './write.js';
 import type { BatchMeta, WriteCtx } from './write.js';
 import { groupBy } from '../util/groupBy.js';
 
@@ -430,12 +430,6 @@ export async function moveDeckCardsBulk(ids: string[], board: DeckBoard): Promis
   return moved;
 }
 
-/**
- * Change a slot's quantity/printing/wants; quantity ≤ 0 deletes the slot.
- * `scryfallId` and `wants` are only touched when the patch names them, and an
- * empty string / an all-undefined `wants` clears them back to "any" — so the
- * edit sheet can move a slot from a pinned foil to "any edition, any finish".
- */
 /** How long a run of hand edits to one slot keeps folding into a single entry. */
 const SLOT_COALESCE_MS = 30_000;
 
@@ -486,6 +480,12 @@ async function emitSlotDelta(ctx: WriteCtx, card: DeckCard, kind: 'deck.add' | '
   ctx.emit(slotEvent(kind, card, qty, now, await ctx.getDeck(card.deckId)));
 }
 
+/**
+ * Change a slot's quantity/printing/wants; quantity ≤ 0 deletes the slot.
+ * `scryfallId` and `wants` are only touched when the patch names them, and an
+ * empty string / an all-undefined `wants` clears them back to "any", so the
+ * edit sheet can move a slot from a pinned foil to "any edition, any finish".
+ */
 async function patchDeckCard(
   id: string,
   patch: { quantity?: number; scryfallId?: string; anyBasic?: boolean; wants?: SlotWants; tags?: string[] },
@@ -596,7 +596,7 @@ export async function updateDeckCard(
 export async function setDeckCardsUnfiled(ids: string[], unfiled: boolean): Promise<number> {
   if (ids.length === 0) return 0;
   return write(DECK_TABLES, async (ctx) =>
-    setSlotsUnfiled(ctx, (await db.deckCards.bulkGet(ids)).filter((c): c is DeckCard => !!c), unfiled),
+    setSlotsUnfiled(ctx, await bulkGetPresent(db.deckCards, ids), unfiled),
   );
 }
 
@@ -634,7 +634,7 @@ export async function tagDeckCards(ids: string[], change: { add?: string[]; remo
   const remove = new Set((normalizeCardTags(change.remove ?? []) ?? []).map((t) => t.toLocaleLowerCase()));
   if (ids.length === 0 || (add.length === 0 && remove.size === 0)) return 0;
   return retagSlots(
-    async () => (await db.deckCards.bulkGet(ids)).filter((c): c is DeckCard => !!c),
+    () => bulkGetPresent(db.deckCards, ids),
     (tags) => [...tags.filter((t) => !remove.has(t.toLocaleLowerCase())), ...add],
   );
 }
@@ -697,7 +697,7 @@ export async function removeDeckCardsBulk(ids: string[]): Promise<number> {
   if (ids.length === 0) return 0;
   let removed = 0;
   await write(DECK_TABLES, async (ctx) => {
-    const slots = (await db.deckCards.bulkGet(ids)).filter((c): c is DeckCard => !!c);
+    const slots = await bulkGetPresent(db.deckCards, ids);
     await deleteSyncedMany('deckCards', slots.map((s) => s.id));
     ctx.touchCopies(slots);
     // Selection lives on one screen, so these are all one container's slots,
@@ -746,16 +746,12 @@ export async function removeDeckCardsMatching(
       const ranked = [...candidates].sort(
         (a, b) => Number(b.scryfallId === card.scryfallId) - Number(a.scryfallId === card.scryfallId),
       );
-      let remaining = card.quantity;
-      for (const s of ranked) {
-        if (remaining <= 0) break;
-        const room = s.quantity - (taken.get(s) ?? 0);
-        if (room <= 0) continue;
-        const take = Math.min(room, remaining);
-        taken.set(s, (taken.get(s) ?? 0) + take);
-        remaining -= take;
-        removed += take;
-      }
+      removed += drainAcross(
+        ranked,
+        card.quantity,
+        (s) => s.quantity - (taken.get(s) ?? 0),
+        (s, take) => taken.set(s, (taken.get(s) ?? 0) + take),
+      );
     }
     if (taken.size === 0) return;
     const deck = await ctx.touchDeck(containerId);
@@ -790,8 +786,7 @@ export async function setContainerForTrade(containerId: string, forTrade: boolea
  * or box). Returns how many copies changed.
  */
 export async function setDeckCardsForTrade(ids: string[], forTrade: boolean): Promise<number> {
-  const slots = (await db.deckCards.bulkGet(ids)).filter((s): s is DeckCard => !!s);
-  return setSlotsForTrade(slots, forTrade);
+  return setSlotsForTrade(await bulkGetPresent(db.deckCards, ids), forTrade);
 }
 
 async function setSlotsForTrade(slots: DeckCard[], forTrade: boolean): Promise<number> {
@@ -799,50 +794,14 @@ async function setSlotsForTrade(slots: DeckCard[], forTrade: boolean): Promise<n
     oracleId: s.oracleId,
     scryfallId: s.scryfallId ?? '',
     // A slot that names a finish/condition/language points at the copy it means;
-    // where it says "any", fall back to the usual defaults so the printing
+    // where it says "any", fall back to the default copy so the printing
     // decides the match and ties go to whatever's first.
-    condition: s.condition ?? 'NM',
-    finish: s.finish ?? 'nonfoil',
-    lang: s.lang ?? 'en',
+    condition: s.condition ?? DEFAULT_COPY_TRAITS.condition,
+    finish: s.finish ?? DEFAULT_COPY_TRAITS.finish,
+    lang: s.lang ?? DEFAULT_COPY_TRAITS.lang,
     quantity: s.quantity,
   }));
   return forTrade ? markOwnedForTrade(requests) : unmarkOwnedForTrade(requests);
-}
-
-/**
- * The inverse of markOwnedForTrade: take copies back off the tradelist,
- * preferring the requested printing. Unmarking isn't an event (nothing entered
- * or left the collection) — the same as clearing the flag from the tradelist
- * screen. Returns how many copies were unflagged.
- */
-async function unmarkOwnedForTrade(requests: MarkForTradeRequest[]): Promise<number> {
-  if (requests.length === 0) return 0;
-  let unflagged = 0;
-  await db.transaction('rw', [db.collection, db.outbox], async () => {
-    const now = Date.now();
-    const byOracle = await ownedByOracle(requests);
-    const touched = new Set<CollectionEntry>();
-    for (const req of requests) {
-      const entries = byOracle.get(req.oracleId);
-      if (!entries) continue;
-      const ranked = [...entries].sort(
-        (a, b) => Number(b.scryfallId === req.scryfallId) - Number(a.scryfallId === req.scryfallId),
-      );
-      let remaining = req.quantity;
-      for (const e of ranked) {
-        if (remaining <= 0) break;
-        if (e.quantityForTrade <= 0) continue;
-        const take = Math.min(e.quantityForTrade, remaining);
-        e.quantityForTrade -= take;
-        e.updatedAt = now;
-        remaining -= take;
-        unflagged += take;
-        touched.add(e);
-      }
-    }
-    await putSyncedMany('collection', [...touched]);
-  });
-  return unflagged;
 }
 
 /**

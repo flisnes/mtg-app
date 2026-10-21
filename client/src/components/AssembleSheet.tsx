@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { CONDITIONS, type CollectionEntry, type ContainerKind } from '@mtg/shared';
+import { CONDITIONS, traitsLine, type CollectionEntry, type ContainerKind } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
 import { useFiling } from '../deck/useFiling.js';
 import { sortOwnedCopies, usePrintingsForOracle } from '../db/usePrintings.js';
 import { useOwnershipIndex } from '../db/useOwnership.js';
 import { db } from '../db/schema.js';
-import { CopyGrid, copyDetail } from './CopyPicker.js';
+import { rowToFilingCopy } from '../deck/filing.js';
+import { CopyGrid } from './CopyPicker.js';
 import { Sheet } from './Sheet.js';
 import { plural } from '../util/format.js';
 
@@ -85,15 +86,7 @@ export function AssembleSheet({
     setBusy(true);
     const mode = await pin(
       { id: slot.id, deckId: containerId, oracleId: slot.oracleId, board: slot.board, quantity: slot.quantity },
-      {
-        oracleId: slot.oracleId,
-        scryfallId: copy.scryfallId,
-        quantity: take,
-        board: slot.board,
-        wants: { condition: copy.condition, finish: copy.finish, lang: copy.lang },
-        label: item?.name,
-        sub: copyDetail(copy),
-      },
+      rowToFilingCopy({ ...copy, quantity: take }, slot.board, { label: item?.name, sub: traitsLine(copy) }),
     );
     setBusy(false);
     if (mode === null) return; // backed out of the move question

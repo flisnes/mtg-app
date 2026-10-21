@@ -6,7 +6,7 @@ import { useContainers } from '../db/collectionSnapshot.js';
 import { needsColorChoice } from './legality.js';
 import { containerKind } from './containers.js';
 import { deckSize } from './boards.js';
-import { sumQty } from '../util/groupBy.js';
+import { groupBy, sumQty } from '../util/groupBy.js';
 
 // The one-line summary a deck list shows per row: how big it is, what colours
 // it is, how many copies it holds. The Decks page and the profile's favorite
@@ -26,7 +26,7 @@ function sideSize(cards: DeckCard[]): number {
  * Considering don't vote: a mono-white deck making a black-and-white cleric is
  * still mono-white. A choose-a-color commander is the color it chose.
  */
-export function deckColors(cards: DeckCard[], oracles: Map<string, SummaryOracle>): Color[] {
+function deckColors(cards: DeckCard[], oracles: Map<string, SummaryOracle>): Color[] {
   const present = new Set<Color>();
   for (const card of cards) {
     if (card.board === 'token' || card.board === 'maybe') continue;
@@ -50,7 +50,7 @@ const DOMINANT_SHARE = 0.1;
  * weight. Colourless cards and lands abstain rather than voting for nothing:
  * a box with no coloured cards falls back to {C}.
  */
-export function dominantColors(
+function dominantColors(
   cards: { oracleId: string; quantity: number }[],
   oracles: Map<string, { colors: Color[] }>,
 ): Color[] {
@@ -68,7 +68,7 @@ export function dominantColors(
 }
 
 /** Copies the container is actually holding (fully specified, not unfiled). */
-export function filedCount(cards: DeckCard[]): number {
+function filedCount(cards: DeckCard[]): number {
   return sumQty(cards.filter(holdsCopy));
 }
 
@@ -90,14 +90,10 @@ export function useDeckSummaries(decks: Deck[] | undefined): DeckSummary[] | und
   const byDeck = useMemo(() => {
     if (!decks || !slots) return undefined;
     const ids = new Set(decks.map((d) => d.id));
-    const map = new Map<string, DeckCard[]>();
-    for (const c of slots) {
-      if (!ids.has(c.deckId)) continue;
-      const list = map.get(c.deckId);
-      if (list) list.push(c);
-      else map.set(c.deckId, [c]);
-    }
-    return map;
+    return groupBy(
+      slots.filter((c) => ids.has(c.deckId)),
+      (c) => c.deckId,
+    );
   }, [decks, slots]);
   // A live query, not a memo, so a card-DB update recolours the pips.
   const oracles = useLiveQuery(

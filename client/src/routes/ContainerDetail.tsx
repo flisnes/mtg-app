@@ -17,7 +17,7 @@ import {
 import { checkDeckLegality, pairButtonLabel, type LegalityReport } from '../deck/legality.js';
 import { useOpenPairSearch, useOpenSearch } from '../search/searchContext.js';
 import { DeckSummary, StorageSummary } from '../components/ContainerSummary.js';
-import { CONTAINER_META, containerKind } from '../deck/containers.js';
+import { CONTAINER_META, containerKind, deleteContainerConfirm } from '../deck/containers.js';
 import { useFiling } from '../deck/useFiling.js';
 import { shareDeckLink } from '../deck/share.js';
 import { payloadText } from '../deck/cardClipboard.js';
@@ -61,6 +61,7 @@ import { MissingWishSheet } from './container/MissingWishSheet.js';
 import { TokenSuggestions } from './container/TokenSuggestions.js';
 import { useContainerBulkActions } from './container/useContainerBulkActions.js';
 import { CursorCardKeys, useContainerClipboard } from './container/useContainerClipboard.js';
+import { Loading } from '../components/Loading.js';
 
 /**
  * The one sheet a container page has open over it, if any. The import panel
@@ -343,7 +344,7 @@ function ContainerPage({ kind }: { kind: ContainerKind }) {
     [solo, pairLabel, openPairSearch],
   );
 
-  if (data === undefined) return <div className="page">Loading…</div>;
+  if (data === undefined) return <Loading />;
   // A row is only reachable under its own kind's route, so a mismatch (an old
   // bookmark, a hand-typed hash) is a miss rather than the wrong screen.
   if (!data.deck || containerKind(data.deck) !== kind) {
@@ -533,14 +534,10 @@ function ContainerPage({ kind }: { kind: ContainerKind }) {
               icon: 'trash',
               danger: true,
               onClick: async () => {
-                const ok = await confirm({
-                  title: `Delete “${deck.name}”?`,
-                  body: `The ${meta.noun} and everything filed in it goes. Cards you own stay in your collection. This can’t be undone.`,
-                  confirmLabel: `Delete ${meta.noun}`,
-                  danger: true,
-                });
+                const ok = await confirm(deleteContainerConfirm(deck));
                 if (!ok) return;
                 await deleteDeck(id);
+                toast(`Deleted “${deck.name}”`);
                 navigate(meta.path);
               },
             },

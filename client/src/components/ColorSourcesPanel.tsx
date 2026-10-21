@@ -5,7 +5,8 @@ import type { PipColor } from '@mtg/sim';
 import { MASK_BITS } from '@mtg/sim';
 import type { SimResult } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
-import { plural } from '../util/format.js';
+import { fmtCount, plural } from '../util/format.js';
+import { pct, one } from './analysisFormat.js';
 
 // The colored sources, printed and in play. Evidence, not a verdict: since
 // rebuild plan B1 "can I cast it on time" is answered once, by Cast on time
@@ -33,8 +34,6 @@ import { plural } from '../util/format.js';
  */
 const DEFAULT_TURN = 4;
 
-const pct = (p: number) => `${Math.round(p * 100)}%`;
-const one = (n: number) => n.toFixed(1);
 
 export function ColorSourcesPanel({ report, sim }: { report: ManaReport; sim: SimResult | null }) {
   return (
@@ -91,7 +90,7 @@ export function ColorSourcesPanel({ report, sim }: { report: ManaReport; sim: Si
             {sim && (
               <>
                 <p className="fine-print">
-                  In play is simulated over {sim.games.toLocaleString()} games, counted after your land drop and before the turn's
+                  In play is simulated over {fmtCount(sim.games)} games, counted after your land drop and before the turn's
                   mana is spent. The chips count every copy in the deck as though it were on the battlefield; the rows count the
                   ones that were. A fetchland is whatever it went and got, and a filter land makes nothing on its own.
                 </p>

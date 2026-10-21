@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Condition, Finish, SpecialCondition } from '@mtg/shared';
 import { CONDITIONS, SPECIAL_CONDITIONS, SPECIAL_CONDITION_LABELS, normalizeSpecialConditions, specialLabel } from '@mtg/shared';
-import { FINISH_LABELS, LANGS } from '../copyTraits.js';
+import { FINISH_LABELS, LANGS } from '@mtg/shared';
 import { Icon } from '../icons.js';
 import { SheetSelectField, SheetSelectList, type SheetSelectOption } from '../SheetSelect.js';
 import type { ModeFlags } from './modeFlags.js';

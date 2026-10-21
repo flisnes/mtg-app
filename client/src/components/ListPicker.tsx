@@ -35,6 +35,8 @@ export interface ListPickerProps<T> {
     what: string;
     onCreate: (name: string) => Promise<void>;
   };
+  /** Under the list, above the action row (a line of fine print). */
+  foot?: ReactNode;
   /** Buttons before Cancel. */
   actions?: ReactNode;
   /** Renders the action row with a Cancel button; leave out when the host has its own. */
@@ -53,6 +55,7 @@ export function ListPicker<T>({
   empty,
   scrollClassName,
   create,
+  foot,
   actions,
   onCancel,
   cancelLabel = 'Cancel',
@@ -88,6 +91,7 @@ export function ListPicker<T>({
         )}
       </div>
       {create && <CreateToolbar {...create} />}
+      {foot}
       {(actions || onCancel) && (
         <div className="sheet-actions">
           {actions}

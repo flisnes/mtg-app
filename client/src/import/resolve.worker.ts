@@ -6,7 +6,7 @@ import { resolveDisplayPrintings } from '../cardDb/preferredPrinting.js';
 import { db } from '../db/schema.js';
 import { parseImport } from './parse.js';
 import type { ParsedLine, ResolveRequest, ResolveResponse, ResolvedLine, UnmatchedLine } from './types.js';
-import { sumQty } from '../util/groupBy.js';
+import { groupBy, sumQty } from '../util/groupBy.js';
 
 function post(msg: ResolveResponse): void {
   (self as DedicatedWorkerGlobalScope).postMessage(msg);
@@ -110,13 +110,7 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
     const cards = await db.oracleCards.toArray();
     const nameMap = buildNameMultiIndex(cards);
     // Loose fallback: names reduced to alphanumerics, for punctuation mismatches.
-    const looseMap = new Map<string, OracleCard[]>();
-    for (const c of cards) {
-      const key = alnum(c.name);
-      const arr = looseMap.get(key);
-      if (arr) arr.push(c);
-      else looseMap.set(key, [c]);
-    }
+    const looseMap = groupBy(cards, (c) => alnum(c.name));
     for (const arr of looseMap.values()) arr.sort((a, b) => cardPriority(a) - cardPriority(b));
 
     // First pass: match lines to their candidate oracle cards (a name may be
@@ -165,12 +159,7 @@ self.onmessage = async (e: MessageEvent<ResolveRequest>) => {
     post({ type: 'progress', label: 'Resolving editions…', fraction: 0.7 });
     const oracleIds = [...new Set(candidateMatches.flatMap((m) => m.candidates.map((c) => c.oracleId)))];
     const allPrintings = await db.printings.where('oracleId').anyOf(oracleIds).toArray();
-    const byOracle = new Map<string, Printing[]>();
-    for (const p of allPrintings) {
-      const arr = byOracle.get(p.oracleId);
-      if (arr) arr.push(p);
-      else byOracle.set(p.oracleId, [p]);
-    }
+    const byOracle = groupBy(allPrintings, (p) => p.oracleId);
 
     // The user's preferred printing per oracle card, for lines that name no
     // edition. Empty (and free) on the default 'latest' preference.

@@ -1,7 +1,7 @@
 import { matchPath, useLocation } from 'react-router-dom';
 import { CONTAINER_KINDS } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
-import type { AddTarget } from '../components/CardSheet.js';
+import type { AddTarget } from '../components/cardSheet/types.js';
 import type { Scope } from '../components/ScopedResults.js';
 import type { IconName } from '../components/icons.js';
 

@@ -1,4 +1,4 @@
-import { namesCopy, type ContainerKind, type DeckBoard, type EventSource, type SlotShape } from '@mtg/shared';
+import { namesCopy, type ContainerKind, type DeckBoard, type EventSource, type SlotCopyFields, type SlotShape } from '@mtg/shared';
 import {
   addDeckCardsBulk,
   collectionKey,
@@ -59,6 +59,30 @@ export interface FilingCopy {
   label?: string;
   /** Set · condition · finish · language, for the prompt. */
   sub?: string;
+}
+
+/**
+ * A slot, a copied one or a collection entry as a copy to file into `board`
+ * somewhere. A lands-box basic names no edition; anything else carries its
+ * printing and the traits it asks for, so the foil doesn't merge into the
+ * nonfoil's slot. `wants` is left off when the row asks for nothing.
+ */
+export function rowToFilingCopy(
+  r: SlotCopyFields & { oracleId: string; quantity: number },
+  board: DeckBoard,
+  extra: { label?: string; sub?: string } = {},
+): FilingCopy {
+  return {
+    oracleId: r.oracleId,
+    quantity: r.quantity,
+    board,
+    ...(r.anyBasic ? { anyBasic: true } : r.scryfallId ? { scryfallId: r.scryfallId } : {}),
+    ...(r.finish || r.condition || r.lang
+      ? { wants: { ...(r.finish ? { finish: r.finish } : {}), ...(r.condition ? { condition: r.condition } : {}), ...(r.lang ? { lang: r.lang } : {}) } }
+      : {}),
+    ...(extra.label ? { label: extra.label } : {}),
+    ...(extra.sub ? { sub: extra.sub } : {}),
+  };
 }
 
 /** Somewhere a copy is filed right now. */

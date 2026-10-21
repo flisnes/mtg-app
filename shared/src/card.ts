@@ -515,6 +515,18 @@ export const BASIC_LAND_TYPES: Readonly<Record<string, string>> = {
  * substitute cards clear that bar too (every DFC links one), but they're a
  * sleeving aid, not part of the deck — hence the name check.
  */
+/**
+ * Tokens, emblems and art-series "cards" are not real deck cards: they never
+ * belong in the mainboard, command zone or sideboard (a deck's token board is
+ * exactly where they do belong), and the simulator never shuffles them up.
+ * Mirrors the collision ranking in the client's cardDb/search.ts (real cards
+ * beat these namesakes).
+ */
+export const isNonDeckCard = (o: Pick<OracleCard, 'typeLine'>): boolean => {
+  const t = o.typeLine.toLowerCase();
+  return t.startsWith('token') || t.includes('emblem') || t === 'card';
+};
+
 export function isMarkerCard(name: string, typeLine: string): boolean {
   if (/\b(Checklist|Substitute Card)\b/i.test(name)) return false;
   const faces = typeLine.split('//').map((f) => f.trim()).filter(Boolean);

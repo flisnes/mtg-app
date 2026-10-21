@@ -17,8 +17,7 @@ import { deckSize } from '../deck/boards.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardItems, ViewToggle, useViewMode, type CardItem } from '../components/CardViews.js';
 import { extraLands, formatPrice, GroupCountBadge, NO_PRICE, SortControls, groupCards, cardSortFields, sortCards, useCardSort } from '../components/CardSorting.js';
-import { SetSymbol } from '../components/SetSymbol.js';
-import { yearMark } from '../components/cardRows.js';
+import { baseCardItem, printingSub } from '../components/cardRows.js';
 import { Icon } from '../components/icons.js';
 import { useToast } from '../components/Toast.js';
 import { shareDeckLink } from '../deck/share.js';
@@ -97,24 +96,18 @@ function ProfileDeckView({ token, username, deckId }: { token: string; username:
       const entries: DeckEntry[] = lines.map((line, i) => {
         const oracle = cards.oracleMap?.get(line.oracleId);
         const printing = line.scryfallId ? cards.printMap?.get(line.scryfallId) : undefined;
-        const year = yearMark(printing, sort.key === 'released');
         const item: CardItem = {
-          key: `${line.oracleId}-${line.scryfallId ?? ''}-${i}`,
-          name: oracle?.name ?? '(unknown card)',
-          image: printing?.imageSmall ?? oracle?.imageSmall ?? null,
+          ...baseCardItem({
+            key: `${line.oracleId}-${line.scryfallId ?? ''}-${i}`,
+            oracle,
+            printing,
+            quantity: line.quantity,
+            showYear: sort.key === 'released',
+          }),
           // Same row as your own deck page: pips and price, not just a name.
           mana: oracle?.manaCost,
           price: formatPrice(printing, oracle) ?? NO_PRICE,
-          count: line.quantity,
-          ...(year ? { year } : {}),
-          sub: printing ? (
-            <>
-              <SetSymbol set={printing.set} className="sub-set-symbol" title={printing.setName} />
-              {`${printing.setName} · #${printing.collectorNumber}`}
-            </>
-          ) : (
-            oracle?.typeLine ?? ''
-          ),
+          sub: printing ? printingSub(printing) : (oracle?.typeLine ?? ''),
           onClick: oracle ? () => setInfo({ oracle, scryfallId: line.scryfallId }) : undefined,
         };
         return { item, oracle, printing, quantity: line.quantity };

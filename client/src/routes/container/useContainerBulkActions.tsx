@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { holdsCopy, type ContainerKind, type DeckBoard } from '@mtg/shared';
+import { holdsCopy, traitsLine, type ContainerKind, type DeckBoard } from '@mtg/shared';
 import {
   moveDeckCardsBulk,
   removeDeckCardsBulk,
@@ -10,6 +10,7 @@ import {
 import type { PlacementIndex } from '../../db/usePlacements.js';
 import { BOARD_LABEL, boardOptions } from '../../deck/boards.js';
 import { CONTAINER_META } from '../../deck/containers.js';
+import { rowToFilingCopy } from '../../deck/filing.js';
 import { describeFilingResult, type useFiling } from '../../deck/useFiling.js';
 import type { BulkAction } from '../../components/BulkActionBar.js';
 import type { useConfirm } from '../../components/ConfirmSheet.js';
@@ -19,7 +20,7 @@ import { useToast } from '../../components/Toast.js';
 import type { MultiSelect } from '../../components/useMultiSelect.js';
 import { plural } from '../../util/format.js';
 import { MoveZoneSheet } from './MoveZoneSheet.js';
-import { rowToFilingCopy, type Row } from './rows.js';
+import type { Row } from './rows.js';
 
 /** Which bulk sheet is open. 'file' picks somewhere to *also* put the
  *  selection, 'unfile' somewhere to take it out of: the two halves of sorting
@@ -119,12 +120,7 @@ export function useContainerBulkActions({
     const filing = await file(
       containerId,
       selectedRows.map((r) =>
-        rowToFilingCopy(r, 'main', {
-          label: r.oracle?.name,
-          sub: [r.printing?.setName, r.condition, r.finish, r.lang && r.lang !== 'en' ? r.lang : null]
-            .filter(Boolean)
-            .join(' · '),
-        }),
+        rowToFilingCopy(r, 'main', { label: r.oracle?.name, sub: traitsLine(r, { lead: r.printing?.setName }) }),
       ),
     );
     if (filing === null) return;

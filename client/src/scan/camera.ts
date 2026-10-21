@@ -1,5 +1,6 @@
 import type { ScanIndex } from './blob.js';
 import { runScanPipeline, type ScanPipelineResult } from './pipeline.js';
+import { readLocal, writeLocal } from '../util/localStore.js';
 
 // Live camera scanning (handover §S3). An explicit user tap calls start() —
 // never request the camera on mount. Frames are processed through the same
@@ -46,20 +47,12 @@ export interface CameraOption {
 const CAMERA_PREF_KEY = 'scan-camera-device';
 
 export function getPreferredCameraId(): string | null {
-  try {
-    return localStorage.getItem(CAMERA_PREF_KEY) || null;
-  } catch {
-    return null;
-  }
+  return readLocal(CAMERA_PREF_KEY) || null;
 }
 
+/** Best-effort: in private mode the pin just won't survive the session. */
 export function setPreferredCameraId(id: string | null): void {
-  try {
-    if (id) localStorage.setItem(CAMERA_PREF_KEY, id);
-    else localStorage.removeItem(CAMERA_PREF_KEY);
-  } catch {
-    /* private mode — the pin just won't survive the session */
-  }
+  writeLocal(CAMERA_PREF_KEY, id || null);
 }
 
 /**

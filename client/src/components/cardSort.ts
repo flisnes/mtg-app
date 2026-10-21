@@ -3,6 +3,7 @@ import { priceForFinish } from '../cardDb/prices.js';
 import { UNTAGGED } from '../deck/tags.js';
 import { getPrefs, type BaseCurrency } from '../prefs.js';
 import { convertToDisplay, fmtConverted, fmtMoney } from '../price/rates.js';
+import { groupBy } from '../util/groupBy.js';
 
 // The pure half of the shared sort/group machinery: comparators, price
 // resolution, grouping and land counting. No React, because the card-database
@@ -349,13 +350,7 @@ export function groupCards<T>(
   if (group === 'tag') return groupByTag(items, getTags);
   const order = group === 'type' ? TYPE_GROUP_ORDER : COLOR_GROUP_ORDER;
   const labelOf = group === 'type' ? (t: T) => typeGroup(getCard(t)?.typeLine) : (t: T) => colorGroup(getCard(t));
-  const buckets = new Map<string, T[]>();
-  for (const it of items) {
-    const label = labelOf(it);
-    const bucket = buckets.get(label);
-    if (bucket) bucket.push(it);
-    else buckets.set(label, [it]);
-  }
+  const buckets = groupBy(items, labelOf);
   return order.filter((l) => buckets.has(l)).map((l) => ({ label: l, items: buckets.get(l)! }));
 }
 

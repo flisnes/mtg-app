@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 // The "an update is waiting, may we?" ribbon, shared by the data feeds that can
 // spend the user's bandwidth (see cardDb/useCardDbUpdate.ts and the scan-data
-// path in ScanSheet.tsx). Nothing downloads on its own until someone says so
+// path in components/scan/useScanData.ts). Nothing downloads on its own until someone says so
 // here — and "don't ask again" turns that answer into the standing policy, so
 // the ribbon isn't a daily toll.
 

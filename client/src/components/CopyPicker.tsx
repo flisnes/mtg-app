@@ -1,8 +1,6 @@
-import type { CollectionEntry, Condition, Finish, Priced, Printing } from '@mtg/shared';
-import { specialLabel } from '@mtg/shared';
+import { traitsLine, type CollectionEntry, type Condition, type Finish, type Priced, type Printing } from '@mtg/shared';
 import { CONTAINER_META } from '../deck/containers.js';
 import { usePlacementIndex } from '../db/usePlacements.js';
-import { FINISH_LABELS } from './copyTraits.js';
 import { Icon } from './icons.js';
 import { EditionTile } from './EditionTile.js';
 import { Sheet } from './Sheet.js';
@@ -21,15 +19,6 @@ import { Sheet } from './Sheet.js';
 // filed right now. That last one is the point — picking the copy already sitting
 // in another deck means taking it out of that deck, and you should be able to
 // see that before you tap, not after.
-
-/** Condition · finish · language · special, leaving the unremarkable defaults unsaid. */
-export function copyDetail(e: CollectionEntry): string {
-  const bits: string[] = [e.condition];
-  if (e.finish !== 'nonfoil') bits.push(FINISH_LABELS[e.finish] ?? e.finish);
-  if (e.lang !== 'en') bits.push(e.lang);
-  if (e.special?.length) bits.push(specialLabel(e.special));
-  return bits.join(' · ');
-}
 
 /** What the caller currently asks for, so the matching tile reads as selected. */
 interface CopySelection {
@@ -120,7 +109,7 @@ export function CopyGrid({
                 )}
               </>
             }
-            sub={copyDetail(e)}
+            sub={traitsLine(e)}
           >
             <span className="copy-tile-where">
               {places.length === 0 ? (

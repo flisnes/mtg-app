@@ -13,3 +13,4 @@ export * from './match.js';
 export * from './date.js';
 export * from './querySyntax.js';
 export * from './strings.js';
+export * from './copyTraits.js';

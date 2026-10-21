@@ -22,6 +22,18 @@ export const CONDITIONS: readonly Condition[] = ['NM', 'LP', 'MP', 'HP', 'DMG'];
 export const FINISHES: readonly Finish[] = ['nonfoil', 'foil', 'etched'];
 
 /**
+ * The copy you get when nobody said otherwise: a Near Mint, nonfoil, English
+ * card. Every place that fills in a missing trait (an event written before the
+ * field existed, a slot that wants "any", an undo key) reads these, so they
+ * can never disagree.
+ */
+export const DEFAULT_COPY_TRAITS: { readonly condition: Condition; readonly finish: Finish; readonly lang: string } = {
+  condition: 'NM',
+  finish: 'nonfoil',
+  lang: 'en',
+};
+
+/**
  * Something remarkable about one piece of cardboard that its condition grade
  * can't say: someone painted the border out, the artist signed it, the factory
  * cut it crooked. Several can be true of the same card (a signed *and* altered

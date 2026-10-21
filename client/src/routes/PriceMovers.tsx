@@ -18,7 +18,7 @@ import { ListSortControls, sortRows, useListSort, type ListSortPrefs } from '../
 import { ListSearchButton, useListFilter } from '../search/searchContext.js';
 import { useEntryMatcher } from '../db/useEntryMatcher.js';
 import { Sparkline } from '../components/Sparkline.js';
-import { SetSymbol } from '../components/SetSymbol.js';
+import { printingSub } from '../components/cardRows.js';
 import { Icon } from '../components/icons.js';
 import { plural } from '../util/format.js';
 import { Loading } from '../components/Loading.js';
@@ -126,7 +126,8 @@ export function PriceMovers() {
     // Histories outlive ownership: a printing you once held keeps its recorded
     // days so the collection value chart can still draw them. This page is about
     // cards you hold or want, though: a mover you sold months ago is no news.
-    // An "any printing" wish covers every printing of its oracle (wishMatcher rule).
+    // An "any printing" wish covers every printing of its oracle (the
+    // ownership index's wishesExact applies the shared wish-matching rule).
     const histories = rows.histories.filter((h) => qtyById.has(h.scryfallId) || !!statusOf(h.scryfallId)?.wishesExact);
     const tracked = histories.length;
 
@@ -361,12 +362,8 @@ function MoverSub({ m }: { m: Mover }) {
   const dir = s.delta > 0 ? 'up' : s.delta < 0 ? 'down' : 'flat';
   return (
     <span className="mover-sub">
-      {m.printing && (
-        <>
-          <SetSymbol set={m.printing.set} className="sub-set-symbol" title={m.printing.setName} />
-          {`${m.printing.setName} · `}
-        </>
-      )}
+      {m.printing && printingSub(m.printing)}
+      {m.printing && ' · '}
       <span className={`price-${dir}`}>
         {dir === 'up' ? '▲' : '▼'} {formatMoney(s.cur, Math.abs(s.delta))}
         {s.pct != null && ` (${s.pct >= 0 ? '+' : '−'}${Math.abs(s.pct).toFixed(1)}%)`}
@@ -395,12 +392,8 @@ function SwingSub({ m }: { m: Mover }) {
   const s = m.swing!;
   return (
     <span className="mover-sub">
-      {m.printing && (
-        <>
-          <SetSymbol set={m.printing.set} className="sub-set-symbol" title={m.printing.setName} />
-          {`${m.printing.setName} · `}
-        </>
-      )}
+      {m.printing && printingSub(m.printing)}
+      {m.printing && ' · '}
       <span className={s.kind === 'dip' ? 'price-down' : 'price-up'}>
         {s.kind === 'dip' ? '▼ At a dip' : '▲ At a spike'}
       </span>{' '}

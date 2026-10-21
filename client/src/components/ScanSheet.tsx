@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import type { Condition, DeckBoard, Finish } from '@mtg/shared';
 import { CONDITIONS, FINISHES } from '@mtg/shared';
 import { useIntakeReview } from '../import/intake/useIntakeReview.js';
-import { FINISH_LABELS, LANGS } from './copyTraits.js';
+import { FINISH_LABELS, LANGS } from '@mtg/shared';
 import type { ScanIndex } from '../scan/blob.js';
 import { CameraScan, CONSENSUS_FRAMES, type LiveScanState } from '../scan/camera.js';
 import type { ScanPipelineResult } from '../scan/pipeline.js';
@@ -19,6 +19,7 @@ import {
   entryLine,
   loadStoredSession,
   sessionKey,
+  sessionTotal,
   sessionStorageKey,
   targetLabel,
   targetNoun,
@@ -167,7 +168,7 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // the render, once the functions it carries exist (see `Latest`).
   const latest = useRef<Latest>(null as unknown as Latest);
 
-  const total = session.reduce((n, e) => n + e.qty, 0);
+  const total = sessionTotal(session);
   const counts = useMemo(() => countByPrinting(session), [session]);
   /** Session copies of a printing across finishes/boards — the tile's badge. */
   const countOf = (scryfallId: string) => counts.get(scryfallId) ?? 0;

@@ -18,6 +18,7 @@ import { readOwnTradelist, readOwnWishlist } from '../db/ownLists.js';
 import { deleteSetting, getSetting, setSetting } from '../db/settings.js';
 import { TRADE_WS_URL } from './config.js';
 import { sanitizeOffer, sanitizeWishlist } from './validate.js';
+import { readLocal, writeLocal } from '../util/localStore.js';
 
 // Client trade transport (beta plan §7). Owns the WebSocket, mirrors the
 // server-authoritative snapshot, applies the completion mutation idempotently,
@@ -106,15 +107,12 @@ export function otherSeat(seat: Seat): Seat {
 /** Random per-install id so the relay can tell a signed-out creator from their own joiner. */
 const DEVICE_ID_KEY = 'tradeDeviceId';
 function tradeDeviceId(): string {
-  try {
-    const existing = localStorage.getItem(DEVICE_ID_KEY);
-    if (existing) return existing;
-    const fresh = crypto.randomUUID();
-    localStorage.setItem(DEVICE_ID_KEY, fresh);
-    return fresh;
-  } catch {
-    return crypto.randomUUID();
-  }
+  const existing = readLocal(DEVICE_ID_KEY);
+  if (existing) return existing;
+  // Blocked storage means a fresh id per call; the relay's check still holds within one session.
+  const fresh = crypto.randomUUID();
+  writeLocal(DEVICE_ID_KEY, fresh);
+  return fresh;
 }
 
 /** Who we are for the relay's self-join check: the account when signed in, else this install. */

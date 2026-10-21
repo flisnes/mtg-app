@@ -4,6 +4,7 @@ import { db } from '../db/schema.js';
 import { useCollectionEntries, usePriceHistories } from '../db/collectionSnapshot.js';
 import { getPricesByIds, priceForFinish, type CardPrice } from '../cardDb/prices.js';
 import { getPrefs } from '../prefs.js';
+import { dayNum } from './history.js';
 import { canConvert, convertToDisplay } from './rates.js';
 
 // What the whole collection has been worth, day by day — the series behind the
@@ -71,11 +72,6 @@ interface Reader {
   foil?: readonly (number | null)[];
   /** Day number of readings[0]. */
   startDay: number;
-}
-
-/** Day number (whole UTC days since the epoch) of a "YYYY-MM-DD" day key. */
-function dayNum(day: string): number {
-  return Math.round(Date.parse(day) / DAY_MS);
 }
 
 /** How a printing-and-finish is keyed everywhere in here. */

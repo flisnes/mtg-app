@@ -7,8 +7,9 @@ import type { WriteCtx } from './write.js';
 import { groupBy } from '../util/groupBy.js';
 
 // ---------------------------------------------------------------------------
-// Event emission. Events are immutable apart from the user-editable fields
-// (priceEurCents, reason) — updatedAt is bumped only by editUserEvent.
+// Event building and emission: the shapes every write hands to ctx.emit, plus
+// the wish.fulfilled lookup. Events are immutable apart from the user-editable
+// fields (priceEurCents, reason); only editUserEvent bumps updatedAt.
 // ---------------------------------------------------------------------------
 
 export type NewEvent = Omit<UserEvent, 'id' | 'updatedAt'>;

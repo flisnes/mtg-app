@@ -2,7 +2,7 @@ import type { OracleCard, Priced } from '@mtg/shared';
 import { CardList, type CardItem } from './CardViews.js';
 import { Icon } from './icons.js';
 import { useCardMaps } from '../db/useCardMaps.js';
-import { Sheet } from './Sheet.js';
+import { Sheet, SheetClose } from './Sheet.js';
 import { batchCount, describeBatch, describeEvent, qtyBadge } from '../history/eventRegistry.js';
 import { entryEvents, type HistoryEntry } from '../history/useHistoryEntries.js';
 import { fmtCents, fmtDateTime, plural } from '../util/format.js';
@@ -67,6 +67,7 @@ export function EventSheet({
             <div className="result-sub">{fmtCents(single.priceEurCents)}/ea</div>
           )}
         </div>
+        <SheetClose onClick={onClose} />
       </div>
 
       <CardList items={items} />

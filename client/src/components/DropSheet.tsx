@@ -4,7 +4,7 @@ import { useIntakeReview } from '../import/intake/useIntakeReview.js';
 import { identifyDrop, loadDropIndex, type DropMatch } from '../scan/dropIdentify.js';
 import type { DropItem } from '../scan/dropRead.js';
 import { checkScanDataUpdate, downloadScanData, type ScanDataManifest } from '../scan/store.js';
-import { commitSession, mergeSession, type ScanTarget, type SessionEntry } from '../scan/session.js';
+import { commitSession, mergeSession, sessionTotal, type ScanTarget, type SessionEntry } from '../scan/session.js';
 import { SessionSheet } from './SessionSheet.js';
 import { useConfirm } from './ConfirmSheet.js';
 import { useToast } from './Toast.js';
@@ -123,7 +123,7 @@ export function DropSheet({ target, batch, onClose }: { target: ScanTarget; batc
     }
   };
 
-  const total = entries.reduce((n, e) => n + e.qty, 0);
+  const total = sessionTotal(entries);
 
   const complete = async () => {
     if (committing || total === 0) return;

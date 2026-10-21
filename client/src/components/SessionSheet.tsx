@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { OracleCard, Priced } from '@mtg/shared';
+import { traitsLine, type OracleCard, type Priced } from '@mtg/shared';
 import { getOracleCard, getPrinting } from '../db/queries.js';
 import { useCardMaps } from '../db/useCardMaps.js';
 import { BOARD_NOUN, scanBoards } from '../deck/boards.js';
@@ -8,7 +8,6 @@ import { plural } from '../util/format.js';
 import { CardSheet, type SessionCardValues } from './CardSheet.js';
 import { CardStacks, ViewToggle, useScanViewMode, type CardItem } from './CardViews.js';
 import { addToTotal, formatPrice, formatTotal, pricedForFinish, type PriceTotal } from './cardSort.js';
-import { FINISH_LABELS } from './copyTraits.js';
 import { QtyStepper } from './QtyStepper.js';
 import { ScanListRow } from './ScanListRow.js';
 import { SetSymbol } from './SetSymbol.js';
@@ -132,11 +131,7 @@ export function SessionSheet({
             className="scan-stacks"
             items={entries.map((e, i): CardItem => {
               const printing = printMap?.get(e.scryfallId);
-              const extras = [
-                e.lang !== 'en' ? e.lang : null,
-                e.finish !== 'nonfoil' ? FINISH_LABELS[e.finish] : null,
-                e.condition !== 'NM' ? e.condition : null,
-              ].filter(Boolean);
+              const extras = traitsLine(e, { quiet: { condition: 'NM' } });
               return {
                 key: sessionKey(e),
                 name: e.name,
@@ -149,7 +144,7 @@ export function SessionSheet({
                     <SetSymbol set={e.set} title={printing?.setName ?? e.set.toUpperCase()} />
                     <span className="stack-setname">{printing?.setName ?? e.set.toUpperCase()}</span> #
                     {e.collectorNumber}
-                    {extras.length > 0 ? ` · ${extras.join(' · ')}` : ''}
+                    {extras ? ` · ${extras}` : ''}
                   </>
                 ),
                 price: formatPrice(...priceOf(e)),
@@ -176,9 +171,7 @@ export function SessionSheet({
                 name={e.name}
                 sub={
                   <>
-                    {e.set.toUpperCase()} #{e.collectorNumber} · {e.lang}
-                    {e.finish !== 'nonfoil' ? ` · ${FINISH_LABELS[e.finish]}` : ''}
-                    {e.condition !== 'NM' ? ` · ${e.condition}` : ''}
+                    {e.set.toUpperCase()} #{e.collectorNumber} · {traitsLine(e, { quiet: { condition: 'NM', lang: null } })}
                   </>
                 }
                 price={formatPrice(...priceOf(e))}

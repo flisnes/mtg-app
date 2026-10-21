@@ -8,6 +8,7 @@ import { useFiling } from '../deck/useFiling.js';
 import type { FilingCopy } from '../deck/filing.js';
 import type { ManaFix } from '../deck/manaFixes.js';
 import { deckManaStats } from '../deck/manaStats.js';
+import { Loading } from '../components/Loading.js';
 import { useToast } from '../components/Toast.js';
 import { ANALYSIS_TABS, DeckAnalysis, type AnalysisTab } from '../components/DeckAnalysis.js';
 import { Page } from './Page.js';
@@ -68,7 +69,7 @@ export function DeckAnalysisPage() {
     toast(filing.filed === 0 ? 'Already in this deck' : `Added ${filing.filed}× ${fix.candidate.name} to the deck`);
   }
 
-  if (data === undefined) return <div className="page">Loading…</div>;
+  if (data === undefined) return <div className="page"><Loading /></div>;
   if (!data.deck) {
     return (
       <Page title="Deck analysis">

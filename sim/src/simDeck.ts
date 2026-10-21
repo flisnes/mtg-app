@@ -31,7 +31,7 @@ import {
 } from '@mtg/shared';
 import { parseManaCost, type ParsedCost, type PipColor } from './manaCost.js';
 import type { ManaUnit } from './canPay.js';
-import { compileCardQuery, toSearchableEntry } from '@mtg/shared';
+import { compileCardQuery, isNonDeckCard, toSearchableEntry } from '@mtg/shared';
 import { cleanGoals, collectGoalQueries, type SimGoal } from './goals.js';
 
 // The deck, flattened into the shape the simulator wants: one entry per
@@ -509,10 +509,6 @@ const powerOf = (raw: string | null | undefined): number => {
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) && n > 0 ? n : 0;
 };
-const isNotACard = (o: OracleCard) => {
-  const t = o.typeLine.toLowerCase();
-  return t.startsWith('token') || t.includes('emblem') || t === 'card';
-};
 
 function roleOf(oracle: OracleCard, landFront: boolean, landAnywhere: boolean): SimRole {
   // Krosan Verge and the Landscape cycle both tap for {C} and search. They are
@@ -577,7 +573,7 @@ export function buildSimDeck(
     const o = r.oracle;
     if (!o || r.quantity <= 0) continue;
     if (r.board !== 'main' && r.board !== 'commander') continue;
-    if (isNotACard(o)) continue;
+    if (isNonDeckCard(o)) continue;
 
     const existing = byOracle.get(o.oracleId);
     if (existing !== undefined) {

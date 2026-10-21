@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { DEFAULT_TUNING, type MoverTuning } from './movers.js';
+import { readJson, writeJson, writeLocal } from '../util/localStore.js';
 
 // The user's own thresholds for the Price movers page. Device-local (same
 // reasoning as prefs.ts: this is "how loud do I want this phone to be about
@@ -168,13 +169,9 @@ function sanitize(patch: Partial<MoverTuning>): MoverTuning {
 }
 
 function read(): MoverTuning {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return sanitize(JSON.parse(raw) as Partial<MoverTuning>);
-  } catch {
-    /* unparseable or unavailable storage — defaults are fine */
-  }
-  return DEFAULT_TUNING;
+  // Unparseable or unavailable storage: the defaults are fine.
+  const stored = readJson(STORAGE_KEY);
+  return stored && typeof stored === 'object' ? sanitize(stored as Partial<MoverTuning>) : DEFAULT_TUNING;
 }
 
 export function getMoverTuning(): MoverTuning {
@@ -183,22 +180,14 @@ export function getMoverTuning(): MoverTuning {
 
 export function setMoverTuning(patch: Partial<MoverTuning>): void {
   cache = sanitize({ ...getMoverTuning(), ...patch });
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
-  } catch {
-    /* quota/private mode — the in-memory value still applies for this session */
-  }
+  writeJson(STORAGE_KEY, cache);
   for (const l of listeners) l();
 }
 
 /** Back to the shipped formula. */
 export function resetMoverTuning(): void {
   cache = DEFAULT_TUNING;
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    /* nothing to do */
-  }
+  writeLocal(STORAGE_KEY, null);
   for (const l of listeners) l();
 }
 

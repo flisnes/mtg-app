@@ -21,7 +21,7 @@ import { historyChange } from '../price/history.js';
 import { useSealedHistories } from '../price/sealedValue.js';
 import { EmptyState, Page } from './Page.js';
 import { useAsyncAction } from '../components/useAsyncAction.js';
-import { fmtCardCount } from '../util/format.js';
+import { fmtCardCount, plural } from '../util/format.js';
 import { sumQty } from '../util/groupBy.js';
 import { Loading } from '../components/Loading.js';
 import { QtyStepper } from '../components/QtyStepper.js';
@@ -153,7 +153,7 @@ export function SealedProducts() {
   const onRemove = async (item: SealedItem) => {
     const ok = await confirm({
       title: `Remove ${item.name}?`,
-      body: `All ${item.quantity} unopened cop${item.quantity === 1 ? 'y' : 'ies'} will be removed.`,
+      body: `All ${item.quantity} unopened ${plural(item.quantity, 'copy', 'copies')} will be removed.`,
       confirmLabel: 'Remove',
       danger: true,
     });

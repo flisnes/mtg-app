@@ -6,7 +6,7 @@ import { getPreferredCameraId, listCameras, type CameraOption } from '../../scan
 import { loadLocks, type ScanLocks } from '../../scan/session.js';
 import type { Candidate } from '../../scan/tray.js';
 import { writeJson } from '../../util/localStore.js';
-import { FINISH_LABELS, LANGS } from '../copyTraits.js';
+import { FINISH_LABELS, LANGS } from '@mtg/shared';
 import { EditionPicker } from '../EditionPicker.js';
 
 /** The pile pins, persisted as they change (they outlive the scan, see loadLocks). */

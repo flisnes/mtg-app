@@ -2,6 +2,7 @@ import { isUncheckedFormat, type Color, type DeckFormat, type Finish, type Forma
 import { db } from '../db/schema.js';
 import { getPricesByIds, withPrices } from './prices.js';
 import { loadOracleTags, mentionsOtag } from './oracleTags.js';
+import { groupBy } from '../util/groupBy.js';
 import { compareCollectorNumbers, priceValue, releaseFields, sortCards, type CardSortPrefs } from '../components/cardSort.js';
 import {
   matchesQuery,
@@ -270,14 +271,11 @@ async function printingsForSets(codes: string[]): Promise<Map<string, Printing[]
   // Codes come out of the parser lowercased; the table stores Scryfall's own
   // casing, which is lowercase today but isn't ours to promise.
   const rows = await db.printings.where('set').anyOfIgnoreCase(codes).toArray();
-  const out = new Map<string, Printing[]>();
-  for (const p of rows) {
-    // A printing with no art is a row the user can't tell from any other.
-    if (!p.imageSmall && !p.imageNormal) continue;
-    const list = out.get(p.oracleId);
-    if (list) list.push(p);
-    else out.set(p.oracleId, [p]);
-  }
+  // A printing with no art is a row the user can't tell from any other.
+  const out = groupBy(
+    rows.filter((p) => p.imageSmall || p.imageNormal),
+    (p) => p.oracleId,
+  );
   for (const list of out.values()) list.sort(byCollectorNumber);
   return out;
 }

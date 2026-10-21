@@ -5,7 +5,8 @@ import type { JoinedEntry } from '../db/queries.js';
 import { useJoinedCollection } from '../db/collectionSnapshot.js';
 import type { OwnershipIndex } from '../db/useOwnership.js';
 import { ownedBadge, type OwnedBadgeSpec } from '../components/OwnedBadge.js';
-import { pickOwnedPrinting } from '../cardDb/preferredPrinting.js';
+import { foldByOracle } from '../components/stackPrintings.js';
+import { sumQty } from '../util/groupBy.js';
 import type { Prefs } from '../prefs.js';
 
 // The trade board's shared vocabulary: which column, how lines are keyed, who
@@ -135,38 +136,26 @@ export function foldPicks(
     wanted: wanted(l),
     editions: 1,
   });
-  let rows: PickRow[];
-  if (!opts.stack) rows = lines.map((l) => single(l));
-  else {
-    const byOracle = new Map<string, TradeLine[]>();
-    for (const l of lines) {
-      const list = byOracle.get(l.oracleId);
-      if (list) list.push(l);
-      else byOracle.set(l.oracleId, [l]);
-    }
-    rows = [];
-    byOracle.forEach((members, oracleId) => {
-      if (members.length === 1) {
-        rows.push(single(members[0]!, `s:${oracleId}`));
-        return;
-      }
-      const printings = new Map<string, Priced<Printing>>();
-      for (const m of members) {
-        const p = opts.printMap?.get(m.scryfallId);
-        if (p) printings.set(p.scryfallId, p);
-      }
-      const shown = pickOwnedPrinting([...printings.values()], opts.prefs, opts.setTypes);
-      const pool = shown ? members.filter((m) => m.scryfallId === shown.scryfallId) : members;
-      const lead = (pool.length ? pool : members).reduce((a, b) => (b.quantity > a.quantity ? b : a));
-      rows.push({
-        key: `s:${oracleId}`,
-        lead,
-        members: [lead, ...members.filter((m) => m !== lead)],
-        quantity: members.reduce((s, m) => s + m.quantity, 0),
-        wanted: Math.max(...members.map(wanted)),
-        editions: new Set(members.map((m) => m.scryfallId)).size,
+  const rows: PickRow[] = !opts.stack
+    ? lines.map((l) => single(l))
+    : foldByOracle(lines, {
+        oracleIdOf: (l) => l.oracleId,
+        printingOf: (l) => opts.printMap?.get(l.scryfallId),
+        scryfallIdOf: (l) => l.scryfallId,
+        prefs: opts.prefs,
+        setTypes: opts.setTypes,
+      }).map(({ oracleId, members, shown, printingCount }) => {
+        if (members.length === 1) return single(members[0]!, `s:${oracleId}`);
+        const pool = shown ? members.filter((m) => m.scryfallId === shown.scryfallId) : members;
+        const lead = (pool.length ? pool : members).reduce((a, b) => (b.quantity > a.quantity ? b : a));
+        return {
+          key: `s:${oracleId}`,
+          lead,
+          members: [lead, ...members.filter((m) => m !== lead)],
+          quantity: sumQty(members),
+          wanted: Math.max(...members.map(wanted)),
+          editions: printingCount,
+        };
       });
-    });
-  }
   return rows.sort((a, b) => b.wanted - a.wanted);
 }

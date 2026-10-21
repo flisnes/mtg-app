@@ -1,4 +1,4 @@
-import { COLOR_NAME, isUncheckedFormat, type Color, type DeckBoard, type DeckFormat, type Format, type OracleCard } from '@mtg/shared';
+import { COLOR_NAME, isNonDeckCard, isUncheckedFormat, type Color, type DeckBoard, type DeckFormat, type Format, type OracleCard } from '@mtg/shared';
 
 // Deck legality checking. Covers per-card format legality (banned / not-legal /
 // restricted), the common construction rules (deck size, copy limits, singleton
@@ -234,16 +234,10 @@ export function commanderIdentity(
   return new Set<Color>(commanders.flatMap(slotIdentity));
 }
 
-/**
- * Tokens, emblems, and art-series "cards" are not real deck cards — they never
- * belong in the mainboard, command zone, or sideboard (a deck's token board is
- * exactly where they do belong — see checkDeckLegality). Mirrors the collision
- * ranking in cardDb/search.ts (real cards beat these namesakes).
- */
-export const isNonDeckCard = (o: Pick<OracleCard, 'typeLine'>) => {
-  const t = o.typeLine.toLowerCase();
-  return t.startsWith('token') || t.includes('emblem') || t === 'card';
-};
+// Tokens, emblems and art-series "cards" (see shared isNonDeckCard) never
+// belong in the mainboard, command zone or sideboard; checkDeckLegality keeps
+// them to the token board. Re-exported so the deck code has one import for it.
+export { isNonDeckCard };
 
 const isLandCard = (o: OracleCard) => /\bLand\b/.test(o.typeLine);
 

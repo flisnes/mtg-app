@@ -73,7 +73,7 @@ export function ManaFixPanel({
             <p className="fine-print">
               Tapping a row files those copies into the mainboard, out of the pile they're in now. It takes nothing out, so the odds above
               only move all the way once you cut {plan.added} {plural(plan.added, 'card')} to make room: a bigger deck draws its lands later,
-              which is the whole reason the count matters. Which {plan.added === 1 ? 'spell' : 'spells'} to cut isn't a question
+              which is the whole reason the count matters. Which {plural(plan.added, 'spell')} to cut isn't a question
               arithmetic answers.
             </p>
           )}

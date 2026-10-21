@@ -2,7 +2,8 @@ import { HowWorked } from './HowWorked.js';
 import { useEffect, useRef, useState } from 'react';
 import type { SimCoverage } from '@mtg/sim';
 import type { SimResult } from '@mtg/sim';
-import { plural } from '../util/format.js';
+import { fmtCount, plural } from '../util/format.js';
+import { one } from './analysisFormat.js';
 
 // How the game unfolds, turn by turn — phase 7, and the first thing in this
 // sheet that is about the *deck* rather than about a card in it.
@@ -33,7 +34,6 @@ const SERIES_B = '#c98230';
 /** Poison, the third line on the damage chart when a deck gives any. */
 const SERIES_C = '#4caf7d';
 
-const one = (n: number) => n.toFixed(1);
 
 interface Series {
   name: string;
@@ -103,7 +103,7 @@ export function DeckTrajectory({
       )}
 
       <p className="fine-print">
-        An average game, over {result.games.toLocaleString()} of them, played in the style named at the top.
+        An average game, over {fmtCount(result.games)} of them, played in the style named at the top.
       </p>
       <HowWorked>
         <p className="fine-print">

@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import type { Finish, OracleCard, Priced } from '@mtg/shared';
+import type { Finish, OracleCard } from '@mtg/shared';
 import { compileCardQuery, rowPrintingSummary, toSearchableEntry } from '@mtg/shared';
 import { useOracleTags } from '../cardDb/useOracleTags.js';
 import { mentionsOtag } from '../cardDb/oracleTags.js';
 import { CardSheet } from './CardSheet.js';
 import type { CardItem } from './CardViews.js';
 import { ResultsList, resultCount } from './ResultsList.js';
-import { SortControls, cardSortFields, sortCards, useCardSort, type SortFields } from './CardSorting.js';
+import { SortControls, sortCards, useCardSort, type SortFields } from './CardSorting.js';
 import {
   useUserLists,
   useListCardMaps,
@@ -14,6 +14,7 @@ import {
   useMyCollection,
   tradeLineItem,
   wishLineItem,
+  lineSortFields,
   type InfoTarget,
 } from '../community/userLists.js';
 
@@ -68,10 +69,6 @@ export function ProfileScopedResults({
     // but not a mana value or a price to order on.
     const showYear = sort.key === 'released';
     const out: { item: CardItem; fields: SortFields }[] = [];
-    const fieldsFor = (oracle: Priced<OracleCard> | undefined, scryfallId: string | null): SortFields => {
-      const printing = scryfallId ? cards.printMap?.get(scryfallId) : undefined;
-      return cardSortFields(oracle, printing);
-    };
     if (showTrade) {
       lists.tradelist.forEach((line, i) => {
         const oracle = cards.oracleMap?.get(line.oracleId);
@@ -80,7 +77,7 @@ export function ProfileScopedResults({
           item: tradeLineItem(line, `t:${line.scryfallId}-${i}`, cards, { match: iWant(line), hi: false, showYear }, (o) =>
             setInfo({ oracle: o, scryfallId: line.scryfallId }),
           ),
-          fields: fieldsFor(oracle, line.scryfallId),
+          fields: lineSortFields(line, cards),
         });
       });
     }
@@ -94,7 +91,7 @@ export function ProfileScopedResults({
           item: wishLineItem(line, `w:${line.oracleId}-${i}`, cards, { match, own, hi: false, showYear }, (o) =>
             setInfo({ oracle: o, scryfallId: line.scryfallId ?? undefined, wish: line }),
           ),
-          fields: fieldsFor(oracle, line.scryfallId),
+          fields: lineSortFields(line, cards),
         });
       });
     }

@@ -1,13 +1,13 @@
 import type { SimResult } from '@mtg/sim';
 import { FLOW_TURN } from './FlowTurnsPanel.js';
+import { pct, one } from './analysisFormat.js';
+import { fmtCount } from '../util/format.js';
 
 // What a saved rule did to the numbers (rebuild plan C2). Before and after are
 // the same seed, so the two runs deal the same games and the difference is the
 // rule rather than the shuffle. The quick pass answers first; the full run
 // replaces it when it lands.
 
-const pct = (p: number) => `${Math.round(p * 100)}%`;
-const one = (n: number) => n.toFixed(1);
 
 /** The most lines worth reading on a toast. The card's own come first. */
 const MAX_LINES = 4;
@@ -127,7 +127,7 @@ export function ModelChangeToast({
       )}
       {games !== null && (
         <p className="model-toast-note">
-          {games.toLocaleString()} games, same shuffles before and after{final ? '.' : '. The full run is on its way.'}
+          {fmtCount(games)} games, same shuffles before and after{final ? '.' : '. The full run is on its way.'}
         </p>
       )}
     </div>

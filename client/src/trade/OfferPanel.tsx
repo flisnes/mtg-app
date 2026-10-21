@@ -70,16 +70,6 @@ export function OfferPanel({
               const printing = cards.printMap?.get(l.scryfallId);
               const oracle = cards.oracleMap?.get(l.oracleId);
               const price = formatPrice(pricedForFinish(printing, l.finish));
-              const less = (
-                <button onClick={() => onQty(side, key, l.quantity - 1)} aria-label="One fewer">
-                  −
-                </button>
-              );
-              const more = (
-                <button onClick={() => onQty(side, key, l.quantity + 1)} aria-label="One more">
-                  ＋
-                </button>
-              );
               return {
                 // The flag earns its keep most here: your partner hands you a
                 // card and you want to know it's the Spanish one before you take
@@ -99,20 +89,11 @@ export function OfferPanel({
                 onClick: oracle
                   ? () => (editable ? onEdit(side, l, oracle) : onInfo(oracle, l.scryfallId, { side }))
                   : undefined,
-                // Stacks carry the price beside the card, so their buttons keep
-                // the quantity between them instead.
-                actions:
-                  view === 'stack' ? (
-                    editable ? (
-                      <QtyStepper compact value={l.quantity} min={0} onChange={(v) => onQty(side, key, v)} label={l.name} />
-                    ) : undefined
-                  ) : (
-                    <>
-                      {editable && less}
-                      <span className="tile-price">{price ?? '—'}</span>
-                      {editable && more}
-                    </>
-                  ),
+                // The row and the stack both show the price beside the card, so
+                // the stepper keeps the quantity between its buttons in either view.
+                actions: editable ? (
+                  <QtyStepper compact value={l.quantity} min={0} onChange={(v) => onQty(side, key, v)} label={l.name} />
+                ) : undefined,
               };
             })}
           />

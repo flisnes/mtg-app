@@ -16,10 +16,10 @@ import {
   subtitle,
 } from '../sealed/product.js';
 import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';
-import { LANGS } from './copyTraits.js';
+import { LANGS } from '@mtg/shared';
 import { Sheet } from './Sheet.js';
 import { useToast } from './Toast.js';
-import { plural } from '../util/format.js';
+import { fmtCount, plural } from '../util/format.js';
 import { QtyStepper } from './QtyStepper.js';
 
 // "Add sealed product" (see sealed-products feature). Search any sealed product
@@ -198,7 +198,7 @@ function SearchView({
       />
       {query.trim() === '' ? (
         <p className="sealed-msg">
-          Search {load.products.length.toLocaleString()} sealed products. Keep one unopened, or open it and add its cards.
+          Search {fmtCount(load.products.length)} sealed products. Keep one unopened, or open it and add its cards.
         </p>
       ) : results.length === 0 ? (
         <p className="sealed-msg">No products match “{query.trim()}”.</p>

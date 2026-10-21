@@ -6,7 +6,8 @@ import type { PipColor } from '@mtg/sim';
 import { MASK_BITS } from '@mtg/sim';
 import type { SimStatus } from '../analysis/useSimulation.js';
 import { HowWorked } from './HowWorked.js';
-import { plural } from '../util/format.js';
+import { fmtCount, plural } from '../util/format.js';
+import { pct, one } from './analysisFormat.js';
 
 // "Do I actually cast this on turn four?" — phase 5, and the first panel in
 // this sheet whose number is simulated rather than exact.
@@ -35,14 +36,12 @@ const THRESHOLD = 0.9;
 /** Enough rows to see a pattern, few enough that the sheet stays a sheet. */
 const MAX_ROWS = 6;
 
-const pct = (p: number) => `${Math.round(p * 100)}%`;
 /**
  * The same, except a number below the bar never rounds up onto it. A row listed
  * for missing 90% and labelled "90%" reads as a bug, and 89.98% is genuinely
  * short.
  */
 const pctShort = (p: number) => (p >= THRESHOLD ? pct(p) : `${Math.min(Math.round(p * 100), Math.round(THRESHOLD * 100) - 1)}%`);
-const one = (n: number) => n.toFixed(1);
 
 /**
  * The simulation itself now lives in the sheet, because the trajectory panel
@@ -79,7 +78,7 @@ export function OnCurvePanel({
       {status.kind === 'error' ? (
         <p className="fine-print">The simulator stopped: {status.message}</p>
       ) : !result ? (
-        <p className="deck-stats-verdict sim-waiting">Dealing {opts.games.toLocaleString()} games…</p>
+        <p className="deck-stats-verdict sim-waiting">Dealing {fmtCount(opts.games)} games…</p>
       ) : (
         <Report result={result} running={status.kind === 'running'} picked={picked} onPick={setPicked} />
       )}
@@ -172,7 +171,7 @@ function Report({
       <p className="fine-print">{cardCaption(card)}</p>
 
       <p className="fine-print">
-        Simulated, {result.games.toLocaleString()} games.{running && ' Re-dealing…'} Effects the simulator can't read yet do
+        Simulated, {fmtCount(result.games)} games.{running && ' Re-dealing…'} Effects the simulator can't read yet do
         nothing, so a deck built on them reads worse here than it plays.
       </p>
       <HowWorked>

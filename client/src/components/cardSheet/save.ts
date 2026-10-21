@@ -1,4 +1,4 @@
-import type { CollectionEntry, ContainerKind, DeckBoard, OracleCard, Printing, WishlistEntry } from '@mtg/shared';
+import { traitsLine, type CollectionEntry, type ContainerKind, type DeckBoard, type OracleCard, type Printing, type WishlistEntry } from '@mtg/shared';
 import {
   addDeckCard,
   addToCollection,
@@ -14,14 +14,14 @@ import {
 } from '../../db/dataAccess.js';
 import { db } from '../../db/schema.js';
 import { CONTAINER_META } from '../../deck/containers.js';
-import { claimKeyOf, type FilingCopy } from '../../deck/filing.js';
+import { claimKeyOf, rowToFilingCopy, type FilingCopy } from '../../deck/filing.js';
 import { describeFilingResult, type useFiling } from '../../deck/useFiling.js';
 import type { ModeFlags } from './modeFlags.js';
 import type { CardForm } from './useCardForm.js';
 import type { CopyTraits, DeckSlotEdit, ListKind, Overlay, SessionCardValues } from './types.js';
 
 /** Everything the sheet's writes read and the few things they set. */
-export interface SaveContext {
+interface SaveContext {
   oracleCard: OracleCard;
   flags: Pick<ModeFlags, 'mode' | 'addTo'>;
   /** The form as shown: finish clamped, for trade clamped to the quantity. */
@@ -81,15 +81,10 @@ export function cardSheetActions(ctx: SaveContext) {
 
   /** This sheet's card as cardboard being filed somewhere, for the prompt. */
   function filingCopy(board: DeckBoard = 'main'): FilingCopy {
-    return {
-      oracleId: oracleCard.oracleId,
-      scryfallId,
-      quantity,
-      board,
-      wants: wishPrefs,
+    return rowToFilingCopy({ oracleId: oracleCard.oracleId, scryfallId, quantity, ...wishPrefs }, board, {
       label: oracleCard.name,
-      sub: [printing?.setName, condition, finish, lang !== 'en' ? lang : null].filter(Boolean).join(' · '),
-    };
+      sub: traitsLine(form, { lead: printing?.setName }),
+    });
   }
 
   /** The add half of `save`. Returns false when the user backed out of the

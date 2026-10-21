@@ -5,7 +5,7 @@ import { NO_PRICE, formatPrice, pricedForFinish } from '../components/CardSortin
 import type { CardItem } from '../components/CardViews.js';
 import { Icon } from '../components/icons.js';
 import { ResultsList } from '../components/ResultsList.js';
-import { SetSymbol } from '../components/SetSymbol.js';
+import { printingSub } from '../components/cardRows.js';
 import { Sheet, SheetClose } from '../components/Sheet.js';
 import { SealedImage } from './SealedImage.js';
 import { loadContents, perCopyCount, type OpenContents, type OpenRow } from './open.js';
@@ -38,8 +38,7 @@ function contentItem(r: OpenRow, copies: number, highlight: boolean, onOpen: () 
       : {}),
     sub: (
       <>
-        <SetSymbol set={r.printing.set} className="sub-set-symbol" title={r.printing.setName} />
-        {r.printing.setName} · #{r.collectorNumber}
+        {printingSub({ ...r.printing, collectorNumber: r.collectorNumber })}
         {finishTag(r)}
       </>
     ),

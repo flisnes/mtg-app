@@ -8,7 +8,7 @@ import type {
   Printing,
   WishlistEntry,
 } from '@mtg/shared';
-import { db } from './schema.js';
+import { bulkGetPresent, db } from './schema.js';
 import { withPrices } from '../cardDb/prices.js';
 import type { OwnershipIndex } from './useOwnership.js';
 import { groupBy } from '../util/groupBy.js';
@@ -48,14 +48,14 @@ export async function getPrintingForSet(set: string): Promise<Priced<Printing> |
 
 export async function getOracleCardsByIds(ids: Iterable<string>): Promise<Map<string, Priced<OracleCard>>> {
   const unique = [...new Set(ids)];
-  const cards = (await db.oracleCards.bulkGet(unique)).filter((c): c is OracleCard => !!c);
+  const cards = await bulkGetPresent(db.oracleCards, unique);
   const priced = await withPrices(cards, (c) => c.defaultScryfallId);
   return new Map(priced.map((c) => [c.oracleId, c]));
 }
 
 /** The same, without prices: for the simulator, which never shows one. */
 export async function getOracleCardsRaw(ids: Iterable<string>): Promise<Map<string, OracleCard>> {
-  const cards = (await db.oracleCards.bulkGet([...new Set(ids)])).filter((c): c is OracleCard => !!c);
+  const cards = await bulkGetPresent(db.oracleCards, [...new Set(ids)]);
   return new Map(cards.map((c) => [c.oracleId, c]));
 }
 
@@ -73,7 +73,7 @@ export async function searchTokenCards(prefix: string, limit = 30): Promise<Orac
 
 export async function getPrintingsByIds(ids: Iterable<string>): Promise<Map<string, Priced<Printing>>> {
   const unique = [...new Set(ids)];
-  const printings = (await db.printings.bulkGet(unique)).filter((p): p is Printing => !!p);
+  const printings = await bulkGetPresent(db.printings, unique);
   const priced = await withPrices(printings, (p) => p.scryfallId);
   return new Map(priced.map((p) => [p.scryfallId, p]));
 }

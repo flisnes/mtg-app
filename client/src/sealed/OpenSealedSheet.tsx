@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CONDITIONS, type Condition, type SealedItem, type SealedProduct } from '@mtg/shared';
 import { setSealedItemQuantity } from '../db/dataAccess.js';
-import { LANGS } from '../components/copyTraits.js';
+import { LANGS } from '@mtg/shared';
 import { Sheet } from '../components/Sheet.js';
 import { useToast } from '../components/Toast.js';
 import { describeFiling, useIntakeReview } from '../import/intake/useIntakeReview.js';

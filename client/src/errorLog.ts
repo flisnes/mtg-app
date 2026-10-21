@@ -1,4 +1,5 @@
 import { APP_VERSION } from './version.js';
+import { readJson, writeJson } from './util/localStore.js';
 
 // Lightweight diagnostic log (beta plan §5): a small ring buffer in
 // localStorage that the user can copy-paste to the developer. No network, no
@@ -15,20 +16,13 @@ interface LogEntry {
 }
 
 function read(): LogEntry[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as LogEntry[]) : [];
-  } catch {
-    return [];
-  }
+  const stored = readJson(KEY);
+  return Array.isArray(stored) ? (stored as LogEntry[]) : [];
 }
 
+/** Best-effort: diagnostics are not worth a crash when storage is full. */
 function write(entries: LogEntry[]): void {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(entries.slice(-MAX)));
-  } catch {
-    /* storage full / unavailable — diagnostics are best-effort */
-  }
+  writeJson(KEY, entries.slice(-MAX));
 }
 
 export function logError(kind: string, message: string, stack?: string): void {

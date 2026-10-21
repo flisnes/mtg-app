@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 import type { DeckBoard, DeckFormat, OracleCard, Priced, Printing } from '@mtg/shared';
 import { addDeckCard, addToCollection, addToWishlist, newId } from '../db/dataAccess.js';
 import { isBasicLand, isCompanion } from '../deck/legality.js';
-import { CONTAINER_META } from '../deck/containers.js';
-import type { AddTarget } from '../components/CardSheet.js';
+import { containerMetaFor } from '../deck/containers.js';
+import type { AddTarget } from '../components/cardSheet/types.js';
 import { Icon } from '../components/icons.js';
 import { useToast } from '../components/Toast.js';
 import { useUndoToast } from '../components/useUndoToast.js';
@@ -35,7 +35,7 @@ export function useQuickAdd(
   const toast = useToast();
   const undoToast = useUndoToast();
   // Wording for the container being searched from (a deck, binder or box).
-  const containerMeta = CONTAINER_META[(target.kind === 'deck' && target.containerKind) || 'deck'];
+  const containerMeta = containerMetaFor(target);
 
   async function quickList(list: QuickList, card: OracleCard, printing?: Printing) {
     const eventId = newId();

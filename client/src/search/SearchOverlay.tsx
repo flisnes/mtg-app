@@ -7,7 +7,7 @@ import { db } from '../db/schema.js';
 import { useCommandZone } from '../db/useCommandZone.js';
 import { addToWishlistBulk } from '../db/dataAccess.js';
 import { formatLabel, isBackground, isValidCommanderPair, needsColorChoice } from '../deck/legality.js';
-import { CONTAINER_META } from '../deck/containers.js';
+import { containerMetaFor } from '../deck/containers.js';
 import { CardSheet } from '../components/CardSheet.js';
 import { CardSearchView, splitResultKey } from '../components/CardSearchView.js';
 import { SelectionBar } from '../components/BulkActionBar.js';
@@ -153,7 +153,7 @@ export function SearchOverlay({ history, recent }: { history: ReactNode; recent:
   }
 
   // Wording for the container being searched from (a deck, binder or box).
-  const containerMeta = CONTAINER_META[(target.kind === 'deck' && target.containerKind) || 'deck'];
+  const containerMeta = containerMetaFor(target);
 
   const deckId = target.kind === 'deck' ? target.deckId : undefined;
   const { deckCtx, effectiveFilters, pairDone } = useDeckSearchContext(deckId, pairWith, filters, deckLegalOnly);

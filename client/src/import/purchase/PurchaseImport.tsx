@@ -4,7 +4,7 @@ import { db } from '../../db/schema.js';
 import { Icon } from '../../components/icons.js';
 import { ScanListRow } from '../../components/ScanListRow.js';
 import { useToast } from '../../components/Toast.js';
-import { FINISH_LABELS } from '../../components/copyTraits.js';
+import { FINISH_LABELS } from '@mtg/shared';
 import { useKeySet } from '../../components/useKeySet.js';
 import { dayKeyOf, tsOfDayKey } from '../../price/history.js';
 import { fmtCents, fmtDate, plural } from '../../util/format.js';

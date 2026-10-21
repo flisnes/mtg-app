@@ -19,9 +19,9 @@ import { deleteAllUserData } from '../db/dataAccess.js';
 import { setGoblinMode, useGoblinMode } from '../components/useGoblinMode.js';
 import { formatDiagnostics } from '../errorLog.js';
 import { Page } from './Page.js';
-import { fmtDateTime as fmtWhen, fmtIsoDate } from '../util/format.js';
+import { fmtCount, fmtDateTime as fmtWhen, fmtIsoDate, plural } from '../util/format.js';
 import { setPrefs, type FilingPolicy, type PrintingPref, type UpdatePolicy } from '../prefs.js';
-import { LANGS, langName } from '../components/copyTraits.js';
+import { LANGS, langName } from '@mtg/shared';
 import { LangFlag } from '../components/LangFlag.js';
 import { usePrefs } from '../usePrefs.js';
 import { CURRENCIES, ensureRates, rateSummary } from '../price/rates.js';
@@ -416,8 +416,8 @@ function SignedIn() {
                   ? `Sync problem: ${sync.message ?? 'unknown error'} Changes are kept and retried automatically.`
                   : pendingChanges > 0
                     ? navigator.onLine
-                      ? `${pendingChanges} local ${pendingChanges === 1 ? 'change' : 'changes'} waiting to sync.`
-                      : `Offline: ${pendingChanges} ${pendingChanges === 1 ? 'change' : 'changes'} will sync when you’re back online.`
+                      ? `${pendingChanges} local ${plural(pendingChanges, 'change')} waiting to sync.`
+                      : `Offline: ${pendingChanges} ${plural(pendingChanges, 'change')} will sync when you’re back online.`
                     : sync.lastSyncAt
                       ? `Everything is synced. Last synced ${fmtWhen(sync.lastSyncAt)}.`
                       : 'Everything is synced.'}
@@ -791,8 +791,8 @@ function ImageCacheSection() {
       setStats(await imageCacheStats());
       toast(
         pruned
-          ? `Keeping ${value.toLocaleString()} images. Sent ${pruned.toLocaleString()} of the oldest to the graveyard.`
-          : `Keeping ${value.toLocaleString()} images.`,
+          ? `Keeping ${fmtCount(value)} images. Sent ${fmtCount(pruned)} of the oldest to the graveyard.`
+          : `Keeping ${fmtCount(value)} images.`,
       );
     } finally {
       setBusy(false);
@@ -834,7 +834,7 @@ function ImageCacheSection() {
       <p className="fine-print image-budget-estimate">
         About {fmtBytes(projectImageCacheBytes(value, stats))} of storage when full.
         {stats
-          ? ` ${stats.count.toLocaleString()} images cached right now, about ${fmtBytes(stats.bytes)}.`
+          ? ` ${fmtCount(stats.count)} images cached right now, about ${fmtBytes(stats.bytes)}.`
           : ''}
       </p>
       <button className="primary" onClick={() => void save()} disabled={busy || !dirty}>

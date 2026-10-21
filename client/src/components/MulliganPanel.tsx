@@ -5,6 +5,7 @@ import { librarySize, resolveGroup, type GroupRow } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
 import { KEEP_ANYTHING_AT, mulliganOutlook, type HandRow, type MulliganOutlook } from '@mtg/sim';
 import { plural } from '../util/format.js';
+import { pct } from './analysisFormat.js';
 
 // "How often does this deck give me a hand worth keeping?" — phase 4.
 //
@@ -40,7 +41,6 @@ const MAX_IN_HAND = 7;
 /** Below this, a row is a hand you will not be dealt this decade. */
 const RARE = 0.005;
 
-const pct = (p: number) => `${Math.round(p * 100)}%`;
 
 /** The keep rule: which cards a seven is judged on, and how many of them it wants. */
 export interface KeepRule {
@@ -90,7 +90,7 @@ export function MulliganPanel({
 
   const usable = library > 0 && group.copies > 0;
   const shown = out.rows.filter((r) => r.pDealt >= RARE);
-  const count = (n: number) => `${n} ${n === 1 ? noun : many}`;
+  const count = (n: number) => `${n} ${plural(n, noun, many)}`;
 
   const apply = (p: Preset) => {
     onRule({ query: p.query, min: p.min, max: p.max });

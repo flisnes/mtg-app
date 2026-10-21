@@ -1,5 +1,7 @@
 import { SPEED_NOTE, type BracketCard, type BracketReport, type BracketSpeed } from '@mtg/sim';
 import { HowWorked } from './HowWorked.js';
+import { pct } from './analysisFormat.js';
+import { fmtCount } from '../util/format.js';
 
 // The Bracket tab (rebuild plan D1): what the Commander Brackets count in this
 // deck, read off the cards, and the lowest bracket those counts fit. The
@@ -11,7 +13,6 @@ import { HowWorked } from './HowWorked.js';
 // about its edges: two-card combos (D3) are not read, so the bracket named is
 // a floor set by the cardboard and the clock.
 
-const pct = (p: number) => `${Math.round(p * 100)}%`;
 
 export function BracketPanel({ report, commander, games }: { report: BracketReport; commander: boolean; games: number }) {
   const { level, reasons } = report;
@@ -82,7 +83,7 @@ function Speed({ speed, games }: { speed: BracketSpeed | null; games: number }) 
     return (
       <>
         <h3 className="deck-stats-head">Speed</h3>
-        <p className="deck-stats-verdict sim-waiting">Dealing {games.toLocaleString()} games…</p>
+        <p className="deck-stats-verdict sim-waiting">Dealing {fmtCount(games)} games…</p>
       </>
     );
   }

@@ -3,6 +3,7 @@ import { AVATAR_MAX_ZOOM, type OracleCard, type Priced, type ProfileAvatar } fro
 import { useCardSearch } from '../cardDb/useCardSearch.js';
 import { usePrintingsForOracle } from '../db/usePrintings.js';
 import { artCropUrl, clampCropCenter, cropLayout } from './Avatar.js';
+import { printingLabel } from './cardRows.js';
 import { ListPicker } from './ListPicker.js';
 import { Sheet } from './Sheet.js';
 import { Icon } from './icons.js';
@@ -207,7 +208,7 @@ export function CropStage({
               key={p.scryfallId}
               className={p.scryfallId === scryfallId ? 'avatar-edition avatar-edition-selected' : 'avatar-edition'}
               onClick={() => setScryfallId(p.scryfallId)}
-              title={`${p.setName} · #${p.collectorNumber}`}
+              title={printingLabel(p)}
               role="option"
               aria-selected={p.scryfallId === scryfallId}
             >

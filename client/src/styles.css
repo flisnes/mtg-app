@@ -5258,29 +5258,6 @@ button.primary {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
-.odds-stepper {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.85rem;
-  color: var(--text-dim);
-  flex: none;
-}
-.odds-stepper button {
-  width: 1.9rem;
-  padding: 0.25rem 0;
-  font-size: 1rem;
-  line-height: 1;
-  background: var(--surface-2);
-}
-.odds-stepper button:disabled {
-  opacity: 0.4;
-}
-.odds-stepper strong {
-  min-width: 1ch;
-  text-align: center;
-  color: var(--text);
-}
 /* The seg row carries a bottom margin for its usual home in a form; here it
    sits in a flex row that already spaces things. */
 .odds-seg {
@@ -5850,12 +5827,6 @@ button.primary {
   border-style: dashed;
   background: transparent;
   color: var(--text-dim);
-}
-.tile-price {
-  font-size: 0.78rem;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 /* The value difference, a button in the dock that opens the balance tool. */

@@ -45,7 +45,7 @@ export function writeJson(key: string, value: unknown): void {
  * instead of leaving it on the old value until it remounts. Usable outside
  * React through get/set.
  */
-export interface SharedStore<T> {
+interface SharedStore<T> {
   get: () => T;
   set: (v: T) => void;
   /** The current value, re-rendering on every set. */

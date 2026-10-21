@@ -4,6 +4,7 @@ import { moveDeckCardsToContainer, removeDeckCard, setDeckCardQuantity } from '.
 import { isNonDeckCard } from '../../deck/legality.js';
 import { clearCut, type ClipboardPayload } from '../../deck/cardClipboard.js';
 import { useCardClipboard } from '../../deck/useCardClipboard.js';
+import { rowToFilingCopy } from '../../deck/filing.js';
 import type { useFiling } from '../../deck/useFiling.js';
 import { useToast } from '../../components/Toast.js';
 import { useAsyncAction } from '../../components/useAsyncAction.js';
@@ -12,7 +13,7 @@ import { useCardCursorCtx } from '../../components/useCardCursor.js';
 import type { MultiSelect } from '../../components/useMultiSelect.js';
 import { plural } from '../../util/format.js';
 import { sumQty } from '../../util/groupBy.js';
-import { clipSlot, rowToFilingCopy, type EditTarget, type Row } from './rows.js';
+import { clipSlot, toDeckCardEdit, type EditTarget, type Row } from './rows.js';
 
 /** What the card keys act on: a slot id, or null when the cursor is on nothing. */
 export interface CardKeys {
@@ -165,7 +166,7 @@ export function useContainerClipboard({
     },
     open: (key) => {
       const row = cardAt(key);
-      if (row?.oracle) onOpen({ card: row.oracle, deckCard: { ...row, deckId: id, commanderDeck: isCommander } });
+      if (row?.oracle) onOpen({ card: row.oracle, deckCard: toDeckCardEdit(row, id, isCommander) });
     },
     /** Tick the card for a bulk action, turning select mode on if it's off, so
      *  a selection can be built by pointing rather than by clicking sixty rows. */

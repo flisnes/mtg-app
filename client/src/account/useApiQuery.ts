@@ -1,11 +1,16 @@
 import { useEffect, useState, type DependencyList, type Dispatch, type SetStateAction } from 'react';
-import { ApiError } from './api.js';
+import { ApiError, apiErrorText } from './api.js';
 
 /**
  * One server read tied to a component: refetches when `deps` change, drops
  * answers that arrive after an unmount or a newer request, and turns failures
  * into a sentence. `notFound` replaces the message for a 404. `setData` is for
  * optimistic edits on top of what was loaded.
+ *
+ * `deps` is the whole contract: the effect re-runs on those and nothing else,
+ * so `fetcher` must only read values that are in `deps` or derived from them.
+ * A value it closes over that is missing from `deps` is read once and never
+ * refreshed.
  */
 export function useApiQuery<T>(
   fetcher: () => Promise<T>,
@@ -25,13 +30,8 @@ export function useApiQuery<T>(
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(
-          messages.notFound && err instanceof ApiError && err.status === 404
-            ? messages.notFound
-            : err instanceof ApiError
-              ? err.friendlyMessage
-              : messages.fallback,
-        );
+        const is404 = err instanceof ApiError && err.status === 404;
+        setError(messages.notFound && is404 ? messages.notFound : apiErrorText(err, messages.fallback));
       });
     return () => {
       cancelled = true;

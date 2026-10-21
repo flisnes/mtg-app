@@ -92,7 +92,8 @@ export async function write<R>(
     const ctx: WriteCtx = {
       now,
       batchId: meta.batchId ?? newId(),
-      emit: (e, id = newId()) => void events.push({ id, updatedAt: e.ts, ...e }),
+      // Spread first: the explicit id must win over any stray `id` on `e`.
+      emit: (e, id = newId()) => void events.push({ ...e, id, updatedAt: e.updatedAt ?? e.ts }),
       getDeck,
       touchDeck: async (id) => {
         const deck = await getDeck(id);

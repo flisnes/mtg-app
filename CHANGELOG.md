@@ -2,6 +2,13 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.201.2
+
+- **Fixed: search holds still while you add.** Tapping + on a search result no longer re-runs the search under your finger: the list stayed put only until the card you just added climbed a rank, which made the next tap land on the wrong card. Owned cards still win ties the next time you type.
+- **Fixed: the Commander zone stops redrawing.** On a deck page, every keystroke in the deck's name and every sheet you opened redrew the Commander cards; now they only redraw when they change.
+- **Fixed: undoing a big import is cheap again.** Undo and redo of a deck import wrote the deck once per card (60 cards, 60 deck writes); they write it once, like the import itself.
+- **Fixed: small things.** A server error on the Community and profile pages shows its own message instead of a generic one. The Community header no longer jumps when you sign in. Opening a card sheet from a deck looks up your preferred printing once instead of twice, and the editions grid doesn't re-sort on every repaint. In the scanner, a late edition read on a tray you've scrolled, and a −1 tap after a quick +1, both read the latest tray and session instead of a stale one.
+
 ## 0.201.1
 
 - **Fixed: purchase import, the follow-up.** An order line of a thousand euros or more was read as 1% of its price (1.234,56 came out as 12,34); both the German and the English way of writing thousands are read right now. A CardTrader packing slip in dollars or pounds is refused like the XLS already was, instead of being saved as euros, and a Cardmarket PDF in another currency says so rather than "No cards found". Unticking a line in the review really leaves that copy alone, also when you import the order again with a date. Japanese and Chinese lines from CardTrader get the right language. A damaged or cut-short .xls says "Couldn't read this .xls file" instead of a cryptic error, and cells holding formulas are read. The review lists the order's lines the way the scanner and the import questionnaire do, with each card's picture, and shows prices in your display currency, like "bought for" on the card sheet. It also says that the import can't be undone from Collection history. If ticked cards were added but the history update then failed, the message says exactly that. A PDF import keeps working offline right after an app update. The licence notices under About credit each library by its real copyright line.

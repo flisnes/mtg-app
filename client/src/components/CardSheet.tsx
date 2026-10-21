@@ -188,36 +188,26 @@ export function CardSheet(props: CardSheetProps) {
     return () => window.clearTimeout(t);
   }, [added]);
 
-  // The face an "any printing" wish or slot wears. Looked up for any wish or
-  // slot, not only one that starts on "any": picking "Any printing" in the
-  // edition picker should land on the same face.
+  // The preferred printing, looked up once per card and used for two things:
+  //  - the face an "any printing" wish or slot wears. Looked up for any wish or
+  //    slot, not only one that starts on "any": picking "Any printing" in the
+  //    edition picker should land on the same face;
+  //  - the form's edition when nothing tied this sheet to one (adding a card the
+  //    caller didn't resolve a printing for), so the printing preference wins
+  //    over the card DB's representative one. Skipped in wish mode, where "any
+  //    printing" is the point.
+  // One lookup, not one per use: an add into a deck wants both.
   useEffect(() => {
-    if (!anyPrefs) return;
+    const wantFace = anyPrefs;
+    const wantForm = !recordedId && !wishMode && mode !== 'deck';
+    if (!wantFace && !wantForm) return;
     let live = true;
     void preferredScryfallId(oracleCard)
       .then((id) => {
-        if (live) setAnyFaceId(id);
-      })
-      .finally(() => {
-        if (live) setPreferredSettled(true);
-      });
-    return () => {
-      live = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oracleCard.oracleId]);
-
-  // Nothing tied this sheet to an edition (adding a card the caller didn't
-  // resolve a printing for), so honour the printing preference rather than
-  // silently landing on the card DB's representative one. Skipped in wish mode,
-  // where "any printing" is the point.
-  useEffect(() => {
-    if (recordedId || wishMode || mode === 'deck') return;
-    let live = true;
-    void preferredScryfallId(oracleCard)
-      .then((id) => {
+        if (!live) return;
+        if (wantFace) setAnyFaceId(id);
         // Don't stomp a choice the user made in the edition picker meanwhile.
-        if (live && id !== oracleCard.defaultScryfallId) {
+        if (wantForm && id !== oracleCard.defaultScryfallId) {
           setForm((f) => (f.scryfallId === oracleCard.defaultScryfallId ? { ...f, scryfallId: id } : f));
         }
       })
@@ -330,11 +320,12 @@ export function CardSheet(props: CardSheetProps) {
   // Editions the caller flagged (owned / on a tradelist) group first in the
   // grid; within the rest, editions the user owns lead so their printing is
   // the easy pick (and its double-check badge is the first thing they see).
-  const highlighted = highlightPrintings ? printings.filter((p) => highlightPrintings.notes.has(p.scryfallId)) : [];
-  const otherPrintings = orderByOwned(
-    highlighted.length > 0 ? printings.filter((p) => !highlightPrintings!.notes.has(p.scryfallId)) : printings,
-    ownedIds,
-  );
+  const { highlighted, otherPrintings } = useMemo(() => {
+    const notes = highlightPrintings?.notes;
+    const highlighted = notes ? printings.filter((p) => notes.has(p.scryfallId)) : [];
+    const rest = highlighted.length > 0 ? printings.filter((p) => !notes!.has(p.scryfallId)) : printings;
+    return { highlighted, otherPrintings: orderByOwned(rest, ownedIds) };
+  }, [printings, highlightPrintings, ownedIds]);
   // A wish can want any finish (esp. an "any printing" wish, where no single
   // printing constrains the choice); a collection entry is limited to what the
   // selected printing actually comes in. A slot follows its edition where it pins

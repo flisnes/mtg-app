@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.201.2',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Tapping + on a search result no longer re-runs the search under your finger, the Commander zone stops redrawing on every keystroke, and undoing a deck import writes the deck once instead of once per card.',
+      },
+    ],
+  },
+  {
     version: '0.201.1',
     changes: [
       {
@@ -147,15 +156,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Adding a card from search now says "+ Trade", "+ Wish" and "Add to collection" in words, and a toast after the add lets you Undo it if you grabbed the wrong printing.',
-      },
-    ],
-  },
-  {
-    version: '0.198.15',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'List rows give the card name the whole top line: mana costs move down beside the set, badges never get cut off, and unpriced cards say "no price".',
       },
     ],
   },

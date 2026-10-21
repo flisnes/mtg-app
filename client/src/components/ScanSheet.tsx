@@ -22,6 +22,7 @@ import {
   sessionStorageKey,
   targetLabel,
   targetNoun,
+  type ScanLocks,
   type ScanTarget,
   type SessionEntry,
 } from '../scan/session.js';
@@ -30,7 +31,7 @@ import { setPrefs } from '../prefs.js';
 import { Icon } from './icons.js';
 import { useToast } from './Toast.js';
 import { ownedBadge } from './OwnedBadge.js';
-import { useOwnershipIndex } from '../db/useOwnership.js';
+import { useOwnershipIndex, type OwnershipIndex } from '../db/useOwnership.js';
 import { useDismiss } from './useDismiss.js';
 import { useConfirm } from './ConfirmSheet.js';
 import { useAsyncAction } from './useAsyncAction.js';
@@ -89,6 +90,23 @@ const AUTO_ADD_NOTES: Record<AutoAddState, string | null> = {
   stopped: 'Auto-add stopped: you added this one',
 };
 
+/**
+ * The one window onto the current render for code that outlives it: the camera
+ * callback is built once, and onLocked reads the tray again after its awaits.
+ * Anything read after an await, or from a callback built on an earlier render,
+ * goes through this and never through the render closure.
+ */
+interface Latest {
+  tray: Tray | null;
+  session: SessionEntry[];
+  locks: ScanLocks;
+  ownership: OwnershipIndex | undefined;
+  ring: ReturnType<typeof useLockRing>;
+  trayHold: ReturnType<typeof useTrayHold>;
+  onLocked: (result: ScanPipelineResult) => Promise<void>;
+  bump: (c: Candidate, delta: 1 | -1, auto?: boolean) => void;
+}
+
 export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target?: ScanTarget; onClose: () => void }) {
   const commitAction = useAsyncAction();
   const storageKey = sessionStorageKey(target);
@@ -145,6 +163,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   const ownership = useOwnershipIndex();
   const ring = useLockRing();
   const trayHold = useTrayHold(tray?.seq);
+  // Declared here so everything below can read it; filled in at the bottom of
+  // the render, once the functions it carries exist (see `Latest`).
+  const latest = useRef<Latest>(null as unknown as Latest);
 
   const total = session.reduce((n, e) => n + e.qty, 0);
   const counts = useMemo(() => countByPrinting(session), [session]);
@@ -304,7 +325,10 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
       // all sideways is how you end up tapping the reprint next to the one you
       // wanted; the green check has to carry the news instead.
       let trayOrder = current.candidates;
-      const at = hit && !trayHold.touchedRef.current ? trayOrder.findIndex((c) => c.scryfallId === hit.scryfallId) : -1;
+      const at =
+        hit && !latest.current.trayHold.touchedRef.current
+          ? trayOrder.findIndex((c) => c.scryfallId === hit.scryfallId)
+          : -1;
       if (at > 0) trayOrder = [trayOrder[at]!, ...trayOrder.filter((_, j) => j !== at)];
       updateTray({
         ...current,
@@ -393,7 +417,9 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
         ];
       });
     } else {
-      if (!session.some((e) => e.scryfallId === c.scryfallId)) return; // nothing to take back — no feedback either
+      // Nothing to take back: no feedback either. Read through `latest`, since
+      // a tile's tap handler is built on an earlier render than this one.
+      if (!latest.current.session.some((e) => e.scryfallId === c.scryfallId)) return;
       setSession((prev) => {
         let i = prev.findIndex((e) => sessionKey(e) === key);
         // Fall back to any entry of this printing (e.g. the foil toggle moved since the +1).
@@ -564,10 +590,8 @@ export function ScanSheet({ target = { kind: 'collection' }, onClose }: { target
   // inline layers need naming here. A commit in flight claims nothing.
   useDismiss(committing ? null : settingsOpen ? () => setSettingsOpen(false) : close);
 
-  // The one window onto this render for code that outlives it: the camera
-  // callback is built once, and onLocked reads the tray again after its awaits.
-  const latest = useRef({ tray, locks, ownership, ring, trayHold, onLocked, bump });
-  latest.current = { tray, locks, ownership, ring, trayHold, onLocked, bump };
+  // This render's values, for everything that reads `latest` (declared up top).
+  latest.current = { tray, session, locks, ownership, ring, trayHold, onLocked, bump };
   // Stable, so a memoized tile only repaints when its own props change.
   const onTileBump = useCallback((c: Candidate, delta: 1 | -1) => latest.current.bump(c, delta), []);
 

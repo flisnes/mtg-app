@@ -1143,13 +1143,27 @@ describe('undo and redo', () => {
       { ...GOYF, quantity: 1, board: 'main' },
     ], { batchId: 'B' });
     tick();
+    await db.outbox.clear();
+    // The deck is stamped once per undo, not once per line: same shape as the
+    // forward writers (the outbox collapses repeats, so count the writes too).
+    const deckPuts = vi.spyOn(db.decks, 'put');
     const undone = await undoEntry({ type: 'batch', batchId: 'B' });
     expect(undone.undone).toBe(true);
     if (!undone.undone) return;
     expect(await slots(d)).toEqual([]);
+    expect(deckPuts).toHaveBeenCalledTimes(1);
+    expect(await outboxOf('decks')).toEqual({ put: 1, del: 0 });
+    expect(await outboxOf('deckCards')).toEqual({ put: 0, del: 2 });
+    expect(await outboxOf('events')).toEqual({ put: 0, del: 2 });
+    expect((await db.decks.get(d))!.updatedAt).toBe(clock);
     tick();
+    deckPuts.mockClear();
+    await db.outbox.clear();
     const redone = await redoEntry({ events: undone.events, since: clock - 1 });
     expect(redone.redone).toBe(true);
+    expect(deckPuts).toHaveBeenCalledTimes(1);
+    expect(await outboxOf('decks')).toEqual({ put: 1, del: 0 });
+    expect(await outboxOf('events')).toEqual({ put: 2, del: 0 });
     // deckAdjustRaw re-adds as a bare slot: printing kept, no wants (none were set).
     expect(await slots(d)).toEqual([
       { ...BOLT, quantity: 2, board: 'main' },

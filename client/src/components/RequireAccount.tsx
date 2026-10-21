@@ -32,6 +32,8 @@ export function RequireAccount({
       </Page>
     );
   }
-  if (account.session === undefined) return <Page title={title}>{null}</Page>;
+  // Same title and subtitle as the loaded page, so the header doesn't jump when
+  // the session resolves.
+  if (account.session === undefined) return <Page title={title} subtitle={subtitle}>{null}</Page>;
   return <>{children(account.session)}</>;
 }

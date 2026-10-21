@@ -59,15 +59,22 @@ interface SearchCtx {
 const Ctx = createContext<SearchCtx | null>(null);
 
 export function useSearchCtx(): SearchCtx {
-  return useContext(Ctx)!;
+  const ctx = useContext(Ctx);
+  if (!ctx) throw new Error('useSearchCtx: no GlobalSearchProvider above this component');
+  return ctx;
 }
+
+// The entry-point hooks below hand back a stable function: callers memoize on
+// it (ContainerDetail's Commander footer, for one), and the context value
+// itself changes on every keystroke. So they close over the provider's
+// memoized openWith/queuePending, never over the whole ctx.
 
 /** Open (and focus) the global search from anywhere, e.g. "Add cards" buttons. */
 export function useOpenSearch(): () => void {
-  const ctx = useContext(Ctx);
+  const openWith = useContext(Ctx)?.openWith;
   // These entry points mean "go find a card", so they always search the whole
   // database, never the (usually empty) list that offered the button.
-  return () => ctx?.openWith({ focus: true });
+  return useCallback(() => openWith?.({ focus: true }), [openWith]);
 }
 
 /** Magnifying glass in a list's toolbar: search this list, not the database.
@@ -114,18 +121,23 @@ export function useListFilter(scope: PageScope): string {
  */
 export function useOpenCollectionSearch(): (cardName: string) => void {
   const ctx = useContext(Ctx);
+  const openWith = ctx?.openWith;
+  const queuePending = ctx?.queuePending;
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  return (cardName: string) => {
-    const query = `"${cardName}"`;
-    if (listScopeFor(pathname) === 'collection') {
-      // Already there: the pathname-change reset won't fire, so open directly.
-      ctx?.openWith({ scope: 'collection', query });
-    } else {
-      ctx?.queuePending({ scope: 'collection', query });
-      navigate('/collection');
-    }
-  };
+  return useCallback(
+    (cardName: string) => {
+      const query = `"${cardName}"`;
+      if (listScopeFor(pathname) === 'collection') {
+        // Already there: the pathname-change reset won't fire, so open directly.
+        openWith?.({ scope: 'collection', query });
+      } else {
+        queuePending?.({ scope: 'collection', query });
+        navigate('/collection');
+      }
+    },
+    [openWith, queuePending, navigate, pathname],
+  );
 }
 
 /**
@@ -135,8 +147,8 @@ export function useOpenCollectionSearch(): (cardName: string) => void {
  * hide Tana (see SearchFilters.pairOnly). No focus: the results ARE the answer.
  */
 export function useOpenPairSearch(): (commander: OracleCard) => void {
-  const ctx = useContext(Ctx);
-  return (commander: OracleCard) => ctx?.openWith({ query: '', filters: {}, pairWith: commander });
+  const openWith = useContext(Ctx)?.openWith;
+  return useCallback((commander: OracleCard) => openWith?.({ query: '', filters: {}, pairWith: commander }), [openWith]);
 }
 
 /**
@@ -146,8 +158,8 @@ export function useOpenPairSearch(): (commander: OracleCard) => void {
  * narrowing they can't see.
  */
 export function useOpenDbSearch(): (query: string) => void {
-  const ctx = useContext(Ctx);
-  return (query: string) => ctx?.openWith({ query, filters: {} });
+  const openWith = useContext(Ctx)?.openWith;
+  return useCallback((query: string) => openWith?.({ query, filters: {} }), [openWith]);
 }
 
 export function GlobalSearchProvider({ children }: { children: ReactNode }) {

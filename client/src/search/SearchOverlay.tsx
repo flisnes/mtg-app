@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useLocation } from 'react-router-dom';
 import { isUncheckedFormat, type Color, type DeckFormat, type OracleCard, type Priced } from '@mtg/shared';
@@ -162,11 +162,16 @@ export function SearchOverlay({ history, recent }: { history: ReactNode; recent:
   }, [pairDone, setPairWith]);
 
   // Owned cards win ties in best match: "bolt" with a Lightning Bolt in the
-  // binder should find that one first.
+  // binder should find that one first. Ownership is read through a ref so the
+  // filters keep their identity across collection writes: a quick-add from a
+  // result row must not cancel and re-run the search under the user's finger
+  // (the card just added would climb the list). The tiebreak catches up on the
+  // next typed query.
+  const ownershipRef = useRef(ownership);
+  ownershipRef.current = ownership;
   const rankedFilters = useMemo<SearchFilters>(
-    () =>
-      ownership ? { ...effectiveFilters, preferOwned: (id: string) => ownership.lookup(id).qty > 0 } : effectiveFilters,
-    [effectiveFilters, ownership],
+    () => ({ ...effectiveFilters, preferOwned: (id: string) => (ownershipRef.current?.lookup(id).qty ?? 0) > 0 }),
+    [effectiveFilters],
   );
 
   const { quickAdd, actionsFor, targetHint } = useQuickAdd(target, deckCtx?.format);

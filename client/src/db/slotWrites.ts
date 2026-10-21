@@ -1,5 +1,5 @@
 import { normalizeCardTags, prefsCompatible, sameCardTags } from '@mtg/shared';
-import type { CollectionEntry, Color, CopyPrefs, Deck, DeckBoard, DeckCard, EventSource, UserEvent } from '@mtg/shared';
+import type { CollectionEntry, Color, CopyPrefs, DeckBoard, DeckCard, EventSource, UserEvent } from '@mtg/shared';
 import { db } from './schema.js';
 import { markOwnedForTrade, ownedByOracle } from './collectionWrites.js';
 import type { MarkForTradeRequest } from './collectionWrites.js';
@@ -845,11 +845,16 @@ async function unmarkOwnedForTrade(requests: MarkForTradeRequest[]): Promise<num
   return unflagged;
 }
 
-/** Change a deck slot by delta (negative removes, positive re-adds). No-op if the deck is gone. */
-export async function deckAdjustRaw(e: UserEvent, delta: number, now: number): Promise<void> {
+/**
+ * Change a deck slot by delta (negative removes, positive re-adds). No-op if
+ * the deck is gone. The deck is read and stamped through the ctx, so undoing a
+ * 60-card import touches the deck row once, not sixty times.
+ */
+export async function deckAdjustRaw(ctx: WriteCtx, e: UserEvent, delta: number): Promise<void> {
   if (!e.deckId || !delta) return;
-  const deck = await db.decks.get(e.deckId);
+  const deck = await ctx.touchDeck(e.deckId);
   if (!deck) return;
+  const { now } = ctx;
   const board = e.board ?? 'main';
   const cards = await db.deckCards.where('[deckId+board]').equals([e.deckId, board]).toArray();
   const dc = cards.find((c) => c.oracleId === e.oracleId);
@@ -862,6 +867,4 @@ export async function deckAdjustRaw(e: UserEvent, delta: number, now: number): P
     board,
     updatedAt: now,
   }));
-  const touched: Deck = { ...deck, updatedAt: now };
-  await putSynced('decks', touched);
 }

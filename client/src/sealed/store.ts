@@ -2,8 +2,8 @@ import type { CardDbArtifactMeta, CardDbManifest, SealedBoosterMap, SealedPriceM
 import { db } from '../db/schema.js';
 import { CARD_DB_BASE } from '../cardDb/config.js';
 import { getManifest } from '../cardDb/manifest.js';
+import { fetchArtifactText } from '../cardDb/artifact.js';
 import { getPrefs } from '../prefs.js';
-import { sha256Hex } from '../util/sha256.js';
 
 // Sealed products (see sealed-products feature). The pipeline expands MTGJSON
 // sealed products into concrete Scryfall printings and ships them as one
@@ -53,19 +53,7 @@ type SealedLoad =
   /** No endpoint, the build has no sealed artifact, or we're offline with nothing cached. */
   | { kind: 'unavailable' };
 
-/** Fetch a .gz artifact and return the decompressed text (platform DecompressionStream). */
-async function downloadDecompressed(url: string): Promise<string> {
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok || !res.body) throw new Error(`sealed download HTTP ${res.status}`);
-  const gunzip = new DecompressionStream('gzip') as unknown as ReadableWritablePair<Uint8Array, Uint8Array>;
-  return await new Response(res.body.pipeThrough(gunzip)).text();
-}
-
-async function fetchVerified(meta: CardDbArtifactMeta): Promise<string> {
-  const text = await downloadDecompressed(new URL(meta.url, CARD_DB_BASE!).href);
-  if ((await sha256Hex(text)) !== meta.sha256) throw new Error('sealed checksum mismatch: download corrupt');
-  return text;
-}
+const fetchVerified = (meta: CardDbArtifactMeta) => fetchArtifactText(meta, 'sealed');
 
 // The catalog row is multi-megabyte and changes only when its hash moves, so
 // it's read from IndexedDB once per session and the copy reused until a put.

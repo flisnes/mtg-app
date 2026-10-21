@@ -132,7 +132,9 @@ export function batchCount(events: readonly UserEvent[]): number {
  */
 export function describeBatch(source: EventSource, label?: string, events: readonly UserEvent[] = []): EventDisplay {
   const kind = events[0]?.kind;
-  if (isPurchaseBatch(events[0]?.batchId)) return { verb: label ?? 'Bought', icon: 'receipt', direction: 'in' };
+  // A purchase import's batch can start with the questionnaire's swap (a
+  // collection.remove); any event under the order's id names the batch.
+  if (events.some((e) => isPurchaseBatch(e.batchId))) return { verb: label ?? 'Bought', icon: 'receipt', direction: 'in' };
   // Only storage sets deckKind, so a batch without it keeps the deck icon it
   // always had.
   const deckKind = events[0]?.deckKind;

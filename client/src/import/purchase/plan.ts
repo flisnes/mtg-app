@@ -1,4 +1,5 @@
 import { isPurchaseBatch, type CollectionEntry, type Condition, type Finish, type UserEvent } from '@mtg/shared';
+import { groupBy } from '../../util/groupBy.js';
 
 // Which copies a purchase was. Pure, so the matching rules can be tested on
 // plain arrays.
@@ -73,13 +74,10 @@ export function planPurchase(
   opts: { batchId: string; date: number | null },
 ): LinePlan[] {
   // Adds per copy identity, in the order they should be handed out.
-  const pools = new Map<string, UserEvent[]>();
-  for (const e of events) {
-    if (!eligible(e, opts.batchId, opts.date)) continue;
-    const k = copyKey(e);
-    if (!pools.has(k)) pools.set(k, []);
-    pools.get(k)!.push(e);
-  }
+  const pools = groupBy(
+    events.filter((e) => eligible(e, opts.batchId, opts.date)),
+    (e) => copyKey(e),
+  );
   for (const pool of pools.values()) {
     pool.sort((a, b) => Number(b.batchId === opts.batchId) - Number(a.batchId === opts.batchId) || a.ts - b.ts);
   }
@@ -132,4 +130,64 @@ export function planPurchase(
     });
   }
   return plans;
+}
+
+// ---------------------------------------------------------------------------
+// The review: what the screen lists under each heading, and the counts on
+// its summary and button. Pure, over the plans and the date in the field.
+// ---------------------------------------------------------------------------
+
+/** A matched add and what the order would set it to. */
+export interface MatchChange extends PlannedMatch {
+  /** The date and price this line sets: the order's date (or the add's own when there is none) and the paid price. */
+  toTs: number;
+  toCents: number;
+}
+
+export interface PurchaseReview {
+  /** Lines with at least one matched copy whose date or price the order would move: the "Found in your history" list. */
+  found: number[];
+  /** Lines whose matched copies already carry the order's date and price. */
+  upToDate: number[];
+  /** Lines with copies no add was found for: the "Not found" list. */
+  missing: number[];
+  /** Lines with no printing: skipped. */
+  unresolved: number[];
+  /** Per line, the matches that would change (empty for an up-to-date or missing line). */
+  changing: MatchChange[][];
+  /** Copies in the up-to-date lines. */
+  upToDateCopies: number;
+  /** The review's plans already pinned by an earlier import of this order. */
+  reimport: boolean;
+}
+
+/**
+ * A matched copy only counts as a change when the order would move its date
+ * or its price. A re-import, or a card you already fixed by hand, has none.
+ * `plans[i]` is null for a line that resolved to no printing.
+ */
+export function reviewOf(
+  lines: readonly { quantity: number; unitCents: number; printing: boolean }[],
+  plans: readonly (LinePlan | null)[],
+  date: number | null,
+): PurchaseReview {
+  const changing: MatchChange[][] = lines.map((l, i) =>
+    (plans[i]?.matches ?? []).flatMap((m) => {
+      const toTs = date ?? m.ts;
+      const toCents = l.unitCents;
+      return toTs !== m.ts || toCents !== m.priceEurCents ? [{ ...m, toTs, toCents }] : [];
+    }),
+  );
+  const all = lines.map((_, i) => i);
+  const found = all.filter((i) => changing[i]!.length > 0);
+  const upToDate = all.filter((i) => (plans[i]?.matches.length ?? 0) > 0 && changing[i]!.length === 0);
+  return {
+    found,
+    upToDate,
+    missing: all.filter((i) => (plans[i]?.missing ?? 0) > 0),
+    unresolved: all.filter((i) => !lines[i]!.printing),
+    changing,
+    upToDateCopies: upToDate.reduce((s, i) => s + plans[i]!.matches.reduce((n, m) => n + m.take, 0), 0),
+    reimport: plans.some((p) => p?.reimport),
+  };
 }

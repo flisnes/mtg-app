@@ -1,4 +1,6 @@
 import type { Condition, Finish } from '@mtg/shared';
+import { tsOfDay } from '../../price/history.js';
+import { normCondition, normLang, parseCsvRows } from '../parse.js';
 
 // Marketplace order files → one PurchaseOrder. Four shapes so far:
 //
@@ -53,34 +55,42 @@ export interface PdfRow {
   words: { x: number; s: string }[];
 }
 
-const noon = (y: number, m: number, d: number) => Date.UTC(y, m - 1, d, 12);
-const cents = (s: string) => Math.round(parseFloat(s.replace(/[^\d.,-]/g, '').replace(',', '.')) * 100);
+/**
+ * "12,96", "1.234,56", "€1,234.56", "4.68" → cents. The last separator is the
+ * decimal mark when one or two digits follow it; any other separator groups
+ * thousands. Cardmarket writes the German way, CardTrader the English way,
+ * and an order over a thousand euros has both marks in it.
+ */
+export function parseMoneyCents(s: string): number {
+  const t = s.replace(/[^\d.,-]/g, '');
+  const at = Math.max(t.lastIndexOf('.'), t.lastIndexOf(','));
+  const decimals = at >= 0 && t.length - at - 1 <= 2;
+  const whole = (decimals ? t.slice(0, at) : t).replace(/[.,]/g, '');
+  const frac = decimals ? t.slice(at + 1).padEnd(2, '0') : '00';
+  const n = Number(`${whole || '0'}.${frac}`);
+  return Number.isFinite(n) ? Math.round(n * 100) : 0;
+}
 
 // ---------------------------------------------------------------------------
-// Grades. Neither marketplace's scale is ours; these are the usual crossings.
+// Grades and languages. The words are shared with the list importers
+// (import/parse.ts); only what the marketplaces mean differently is here.
 // ---------------------------------------------------------------------------
 
-/** Cardmarket: Mint, Near Mint, Excellent, Good, Light Played, Played, Poor. */
-const CARDMARKET_GRADES: Record<string, Condition> = {
-  MT: 'NM', NM: 'NM', EX: 'LP', GD: 'MP', LP: 'MP', PL: 'HP', PO: 'DMG',
-};
-/** The CSV numbers the same scale 1-7. */
+/**
+ * Cardmarket's LP is Light Played, its fifth grade of seven (MT NM EX GD LP
+ * PL PO), a step below everyone else's Lightly Played; CardTrader's Played
+ * sits between its MP and HP. Both are a grade worse than the shared word.
+ */
+const MARKET_GRADES: Record<string, Condition> = { lp: 'MP', played: 'HP' };
+const gradeOf = (label: string): Condition => MARKET_GRADES[label.trim().toLowerCase()] ?? normCondition(label) ?? 'NM';
+/** The CSV numbers Cardmarket's scale 1-7. */
 const CARDMARKET_GRADE_CODES = ['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO'];
 
-const CARDTRADER_GRADES: Record<string, Condition> = {
-  'mint': 'NM', 'near mint': 'NM', 'slightly played': 'LP', 'moderately played': 'MP',
-  'played': 'HP', 'heavily played': 'HP', 'poor': 'DMG',
-  M: 'NM', NM: 'NM', SP: 'LP', MP: 'MP', PL: 'HP', HP: 'HP', PO: 'DMG',
-};
-
-/** Cardmarket's language ids (CSV) and the codes its PDF prints. */
+/** Cardmarket's language ids (the CSV has only those). */
 const CARDMARKET_LANG_IDS: Record<number, string> = {
   1: 'en', 2: 'fr', 3: 'de', 4: 'es', 5: 'it', 6: 'zhs', 7: 'ja', 8: 'pt', 9: 'ru', 10: 'ko', 11: 'zht',
 };
-const LANG_CODES: Record<string, string> = {
-  EN: 'en', FR: 'fr', DE: 'de', ES: 'es', IT: 'it', PT: 'pt', JP: 'ja', JA: 'ja', KO: 'ko', KR: 'ko', RU: 'ru',
-  CN: 'zhs', ZH: 'zhs', 'S-CN': 'zhs', TW: 'zht', 'T-CN': 'zht',
-};
+const langOf = (code: string | undefined): string => normLang(code) ?? 'en';
 
 const etched = (name: string) => /\(etched( foil)?\)/i.test(name);
 
@@ -91,6 +101,9 @@ export function cleanCardName(name: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+const notEur = (currency: string) =>
+  new Error(`This order is priced in ${currency}; only EUR orders can be imported so far`);
 
 // ---------------------------------------------------------------------------
 // Cardmarket CSV
@@ -103,24 +116,23 @@ export function isCardmarketCsv(text: string): boolean {
 }
 
 export function parseCardmarketCsv(text: string, fileName = ''): PurchaseOrder {
-  const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
-  const delim = (lines[0] ?? '').includes(';') ? ';' : ',';
-  const head = (lines[0] ?? '').split(delim).map((h) => h.trim().replace(/^"|"$/g, ''));
+  const body = text.replace(/^﻿/, '');
+  const rows = parseCsvRows(body, body.split(/\r?\n/, 1)[0]?.includes(';') ? ';' : ',');
+  const head = (rows[0] ?? []).map((h) => h.trim());
   const col = (name: string) => head.findIndex((h) => h.toLowerCase() === name.toLowerCase());
   const at = { id: col('idProduct'), qty: col('groupCount'), price: col('price'), lang: col('idLanguage'), cond: col('condition'), foil: col('isFoil') };
   if (at.id < 0 || at.price < 0) throw new Error("This CSV isn't a Cardmarket order export");
   const truthy = (v: string | undefined) => v === '1' || v?.toLowerCase() === 'true';
   const out: PurchaseLine[] = [];
-  for (const raw of lines.slice(1)) {
-    const f = raw.split(delim).map((v) => v.trim().replace(/^"|"$/g, ''));
+  for (const f of rows.slice(1)) {
     const id = Number(f[at.id]);
     if (!Number.isFinite(id) || id <= 0) continue;
     const grade = CARDMARKET_GRADE_CODES[Number(f[at.cond]) - 1] ?? 'NM';
     out.push({
       cardmarketId: id,
       quantity: Math.max(1, Number(f[at.qty]) || 1),
-      unitCents: cents(f[at.price] ?? '0'),
-      condition: CARDMARKET_GRADES[grade] ?? 'NM',
+      unitCents: parseMoneyCents(f[at.price] ?? '0'),
+      condition: gradeOf(grade),
       conditionLabel: grade,
       finish: truthy(f[at.foil]) ? 'foil' : 'nonfoil',
       lang: CARDMARKET_LANG_IDS[Number(f[at.lang])] ?? 'en',
@@ -147,7 +159,7 @@ export function parseCardtraderSheet(sheetName: string, rows: (string | number |
   const col = (name: string) => head.indexOf(name);
   const priceCol = head.findIndex((h) => /^Price in [A-Z]{3} Cents$/.test(h));
   const currency = head[priceCol]?.match(/^Price in ([A-Z]{3})/)?.[1];
-  if (currency !== 'EUR') throw new Error(`This order is priced in ${currency ?? 'an unknown currency'}; only EUR orders can be imported so far`);
+  if (currency !== 'EUR') throw notEur(currency ?? 'an unknown currency');
   const at = {
     name: col('Item Name'), set: col('Set Code'), setName: col('Set Name'), qty: col('Quantity'),
     cond: col('Condition'), lang: col('Language'), foil: col('Foil/Reverse'), cn: col('Collector Number'),
@@ -166,10 +178,10 @@ export function parseCardtraderSheet(sheetName: string, rows: (string | number |
       collectorNumber: str(r[at.cn]) || undefined,
       quantity: Math.max(1, Number(r[at.qty]) || 1),
       unitCents: Math.round(Number(r[priceCol]) || 0),
-      condition: CARDTRADER_GRADES[grade.toLowerCase()] ?? 'NM',
+      condition: gradeOf(grade),
       conditionLabel: grade || 'Near Mint',
       finish: foil ? (etched(name) ? 'etched' : 'foil') : 'nonfoil',
-      lang: str(r[at.lang]).toLowerCase() || 'en',
+      lang: langOf(str(r[at.lang])),
     });
   }
   const orderId = sheetName.match(/#\s*(\S+)/)?.[1] ?? null;
@@ -181,7 +193,7 @@ export function dateOfCardtraderCode(code: string | null): number | null {
   const m = code?.match(/^(20\d\d)(\d\d)(\d\d)/);
   if (!m) return null;
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 ? noon(y, mo, d) : null;
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 ? tsOfDay(y, mo, d) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +211,9 @@ export function isCardtraderPdf(rows: PdfRow[]): boolean {
   return /CardTrader/i.test(text) || (/Packing slip/.test(text) && /Item description/.test(text));
 }
 
+/** What a price token is denominated in, as the three-letter code; EUR for € and EUR. */
+const CURRENCY: Record<string, string> = { '€': 'EUR', EUR: 'EUR', $: 'USD', USD: 'USD', '£': 'GBP', GBP: 'GBP' };
+
 /**
  * A Cardmarket purchase page saved as PDF. Each article is one text line:
  *   1 Tangle Wire 139 EN EX NEM R 12,96 EUR
@@ -209,36 +224,43 @@ export function parseCardmarketPdf(rows: PdfRow[]): PurchaseOrder {
   let date: number | null = null;
   let orderId: string | null = null;
   let seller: string | undefined;
+  let foreign: string | null = null;
   const out: PurchaseLine[] = [];
   const article =
-    /^(\d+) (.+?)(?: (\S*\d\S*))? ([A-Z]{2}(?:-[A-Z]{2})?) (MT|NM|EX|GD|LP|PL|PO) (\S+) (\S+)((?: [A-Za-z]+)*) ([\d.,]+) (?:EUR|€)$/;
+    /^(\d+) (.+?)(?: (\S*\d\S*))? ([A-Z]{2}(?:-[A-Z]{2})?) (MT|NM|EX|GD|LP|PL|PO) (\S+) (\S+)((?: [A-Za-z]+)*) ([\d.,]+) (EUR|€|USD|\$|GBP|£)$/;
   for (const r of rows) {
     const t = rowText(r);
     orderId ??= t.match(/^Purchase #(\d+)/)?.[1] ?? null;
     seller ??= t.match(/^Seller - (.+?)(?:\s{2,}|\s+Buyer - |$)/)?.[1]?.trim();
     // Paid is when the money went; that's the day you bought it.
     const paid = t.match(/Paid:\s*(\d\d)\.(\d\d)\.(\d{4})/);
-    if (paid && date == null) date = noon(Number(paid[3]), Number(paid[2]), Number(paid[1]));
+    if (paid && date == null) date = tsOfDay(Number(paid[3]), Number(paid[2]), Number(paid[1]));
     const m = t.match(article);
     if (!m) continue;
+    const currency = CURRENCY[m[10]!] ?? m[10]!;
+    if (currency !== 'EUR') {
+      foreign = currency;
+      continue;
+    }
     const extras = (m[8] ?? '').toLowerCase();
     out.push({
       name: m[2]!,
       ...(m[3] ? { collectorNumber: m[3] } : {}),
       setCode: m[6]!,
       quantity: Number(m[1]),
-      unitCents: cents(m[9]!),
-      condition: CARDMARKET_GRADES[m[5]!] ?? 'NM',
+      unitCents: parseMoneyCents(m[9]!),
+      condition: gradeOf(m[5]!),
       conditionLabel: m[5]!,
       finish: extras.includes('foil') ? 'foil' : 'nonfoil',
-      lang: LANG_CODES[m[4]!] ?? 'en',
+      lang: langOf(m[4]),
     });
   }
+  if (foreign && !out.length) throw notEur(foreign);
   if (date == null) {
     for (const r of rows) {
       const m = rowText(r).match(/(?:Arrived|Sent|Unpaid)\s*:?\s*(\d\d)\.(\d\d)\.(\d{4})/);
       if (m) {
-        date = noon(Number(m[3]), Number(m[2]), Number(m[1]));
+        date = tsOfDay(Number(m[3]), Number(m[2]), Number(m[1]));
         break;
       }
     }
@@ -271,7 +293,7 @@ export function parseCardtraderPdf(rows: PdfRow[]): PurchaseOrder {
     const d = t.match(/Date:\s*(\d{1,2}) (\w{3})\w* (\d{4})/);
     if (d && date == null) {
       const mo = MONTHS.indexOf(d[2]!.toLowerCase()) + 1;
-      if (mo > 0) date = noon(Number(d[3]), mo, Number(d[1]));
+      if (mo > 0) date = tsOfDay(Number(d[3]), mo, Number(d[1]));
     }
     const header = r.words.find((w) => w.s === 'Item description');
     if (header) setX = header.x - 6;
@@ -284,6 +306,10 @@ export function parseCardtraderPdf(rows: PdfRow[]): PurchaseOrder {
     const price = r.words.find((w) => /^[€$£]\s?[\d.,]+$/.test(w.s));
     const info = r.words.find((w) => /^(?:M|NM|SP|MP|PL|HP|PO),/.test(w.s));
     if (first && /^\d+$/.test(first.s) && first.x < setX / 3 && price) {
+      // The slip prints the currency on every line; one that isn't euros
+      // would be stored as euro cents, so it's refused like the XLS is.
+      const currency = CURRENCY[price.s[0]!] ?? price.s[0]!;
+      if (currency !== 'EUR') throw notEur(currency);
       priceX = Math.min(priceX, price.x - 6);
       if (info) infoX = Math.min(infoX, info.x - 6);
       const pick = (lo: number, hi: number) => r.words.filter((w) => w !== first && w.x >= lo && w.x < hi).map((w) => w.s);
@@ -323,11 +349,11 @@ export function parseCardtraderPdf(rows: PdfRow[]): PurchaseOrder {
       ...(number ? { collectorNumber: number } : {}),
       quantity: raw.qty,
       // The slip prints what the line cost, not a copy.
-      unitCents: Math.round(cents(raw.price) / raw.qty),
-      condition: CARDTRADER_GRADES[grade] ?? 'NM',
+      unitCents: Math.round(parseMoneyCents(raw.price) / raw.qty),
+      condition: gradeOf(grade),
       conditionLabel: grade,
       finish: foil ? (etched(name) ? 'etched' : 'foil') : 'nonfoil',
-      lang: (parts[1] ?? 'en').toLowerCase(),
+      lang: langOf(parts[1]),
     };
   });
   return { source: 'cardtrader', fileKind: 'pdf', orderId, date: date ?? dateOfCardtraderCode(orderId), ...(seller ? { seller } : {}), lines };

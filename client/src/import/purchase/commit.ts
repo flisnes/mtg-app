@@ -1,7 +1,7 @@
 import type { UserEvent } from '@mtg/shared';
 import { db } from '../../db/schema.js';
 import { newId } from '../../db/keys.js';
-import { putSyncedMany } from '../../db/write.js';
+import { putSyncedMany, write } from '../../db/write.js';
 import type { PlannedMatch } from './plan.js';
 
 // Writing a purchase's corrections: matched copies' collection.add events get
@@ -28,10 +28,15 @@ export interface CommitLine {
 
 export async function commitPurchase(
   lines: readonly CommitLine[],
-  opts: { batchId: string; batchLabel: string; date: number | null },
+  opts: {
+    batchId: string;
+    batchLabel: string;
+    date: number | null;
+    /** Adds the review offered and the user unticked: left exactly as they are. */
+    exclude?: Iterable<string>;
+  },
 ): Promise<number> {
-  return db.transaction('rw', [db.events, db.outbox], async () => {
-    const now = Date.now();
+  return write([db.events, db.outbox], async ({ now }) => {
     const stamp = { batchId: opts.batchId, batchLabel: opts.batchLabel, updatedAt: now };
     const out: UserEvent[] = [];
     let updated = 0;
@@ -71,15 +76,16 @@ export async function commitPurchase(
     // One order, one date. Copies an earlier import of it pinned (a Cardmarket
     // CSV can name a card its PDF can't, but has no date) take this one too.
     // Adds only: a copy swapped out in the questionnaire left today, not then.
+    // Not the ones unticked in the review: "leave this one" means that.
     if (opts.date != null) {
-      const written = new Set(out.map((e) => e.id));
+      const leave = new Set([...out.map((e) => e.id), ...(opts.exclude ?? [])]);
       for (const e of await db.events.where('batchId').equals(opts.batchId).toArray()) {
         if (e.kind !== 'collection.add') continue;
-        if (!written.has(e.id) && e.ts !== opts.date) out.push({ ...e, ts: opts.date, updatedAt: now });
+        if (!leave.has(e.id) && e.ts !== opts.date) out.push({ ...e, ts: opts.date, updatedAt: now });
       }
     }
 
     await putSyncedMany('events', out);
     return updated;
-  });
+  }, { batchId: opts.batchId, batchLabel: opts.batchLabel });
 }

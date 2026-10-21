@@ -49,7 +49,7 @@ export const LICENSES: LicenseEntry[] = [
     "name": "dexie",
     "version": "4.4.4",
     "spdx": "Apache-2.0",
-    "copyright": "\"Licensor\" shall mean the copyright owner or entity authorized by",
+    "copyright": null,
     "url": null,
     "note": null,
     "notice": "Dexie.js\n\nCopyright (c) 2014-2017 David Fahlander\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License."
@@ -58,7 +58,7 @@ export const LICENSES: LicenseEntry[] = [
     "name": "dexie-react-hooks",
     "version": "1.1.7",
     "spdx": "Apache-2.0",
-    "copyright": "\"Licensor\" shall mean the copyright owner or entity authorized by",
+    "copyright": null,
     "url": null,
     "note": null,
     "notice": null
@@ -103,7 +103,7 @@ export const LICENSES: LicenseEntry[] = [
     "name": "pdfjs-dist",
     "version": "4.10.38",
     "spdx": "Apache-2.0",
-    "copyright": "\"Licensor\" shall mean the copyright owner or entity authorized by",
+    "copyright": null,
     "url": null,
     "note": null,
     "notice": null
@@ -175,7 +175,7 @@ export const LICENSES: LicenseEntry[] = [
     "name": "tesseract.js",
     "version": "7.0.0",
     "spdx": "Apache-2.0",
-    "copyright": "\"Licensor\" shall mean the copyright owner or entity authorized by",
+    "copyright": null,
     "url": null,
     "note": null,
     "notice": null
@@ -184,7 +184,7 @@ export const LICENSES: LicenseEntry[] = [
     "name": "tesseract.js-core",
     "version": "7.0.0",
     "spdx": "Apache-2.0",
-    "copyright": "\"Licensor\" shall mean the copyright owner or entity authorized by",
+    "copyright": null,
     "url": null,
     "note": null,
     "notice": null
@@ -211,7 +211,7 @@ export const LICENSES: LicenseEntry[] = [
     "name": "wasm-feature-detect",
     "version": "1.8.0",
     "spdx": "Apache-2.0",
-    "copyright": "\"Licensor\" shall mean the copyright owner or entity authorized by",
+    "copyright": "Copyright 2017 Google Inc.",
     "url": null,
     "note": null,
     "notice": null

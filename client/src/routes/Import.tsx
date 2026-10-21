@@ -51,7 +51,7 @@ export function Import() {
           }}
         />
       )}
-      <PurchaseImport onActive={setPurchaseOpen} />
+      <PurchaseImport intake={review} onActive={setPurchaseOpen} />
       {intakeSheet}
     </Page>
   );

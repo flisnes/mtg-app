@@ -1,11 +1,13 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { PURCHASE_BATCH_PREFIX, type CollectionEntry, type Printing, type UserEvent } from '@mtg/shared';
 import { db } from '../../db/schema.js';
 import { Icon } from '../../components/icons.js';
+import { ScanListRow } from '../../components/ScanListRow.js';
 import { useToast } from '../../components/Toast.js';
 import { FINISH_LABELS } from '../../components/copyTraits.js';
-import { fmtMoney } from '../../price/rates.js';
-import { fmtDate, plural } from '../../util/format.js';
+import { useKeySet } from '../../components/useKeySet.js';
+import { dayKeyOf, tsOfDayKey } from '../../price/history.js';
+import { fmtCents, fmtDate, plural } from '../../util/format.js';
 import { sha256Hex } from '../../util/sha256.js';
 import {
   isCardmarketCsv,
@@ -20,9 +22,10 @@ import {
   type PurchaseOrder,
 } from './parse.js';
 import { resolvePurchase, type ResolvedPurchaseLine } from './resolve.js';
-import { planPurchase, type LinePlan, type PlannedMatch } from './plan.js';
+import { planPurchase, reviewOf, type LinePlan } from './plan.js';
 import { commitPurchase, type CommitLine } from './commit.js';
-import { describeFiling, useIntakeReview } from '../intake/useIntakeReview.js';
+import { describeCopy } from '../intake/model.js';
+import { describeFiling, type IntakeConfig, type IntakeResult } from '../intake/useIntakeReview.js';
 import type { ResolvedLine } from '../types.js';
 
 // Import a marketplace order: set when each card was bought and what it cost.
@@ -60,12 +63,8 @@ async function batchIdOf(order: PurchaseOrder): Promise<string> {
   return `${PURCHASE_BATCH_PREFIX}${order.source}-${key}`;
 }
 
-const isoDay = (ts: number | null) => (ts == null ? '' : new Date(ts).toISOString().slice(0, 10));
-const fromIsoDay = (s: string): number | null => {
-  const m = s.match(/^(\d{4})-(\d\d)-(\d\d)$/);
-  return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12) : null;
-};
-const eur = (cents: number | null | undefined) => (cents == null ? 'no price' : fmtMoney(cents / 100, 'EUR'));
+/** Stored EUR cents in the display currency, like "bought for" on the card sheet. */
+const money = (cents: number | null | undefined) => (cents == null ? 'no price' : fmtCents(cents));
 
 interface Loaded {
   order: PurchaseOrder;
@@ -79,7 +78,10 @@ interface Loaded {
 
 type State = { kind: 'idle' } | { kind: 'reading' } | { kind: 'review'; data: Loaded } | { kind: 'error'; message: string };
 
-export function PurchaseImport({ onActive }: { onActive?: (active: boolean) => void }) {
+/** The page's intake questionnaire: ticked cards go in through it like every bulk add. */
+export type IntakeOpen = (cfg: IntakeConfig) => Promise<IntakeResult | null>;
+
+export function PurchaseImport({ intake, onActive }: { intake: IntakeOpen; onActive?: (active: boolean) => void }) {
   const [state, setStateRaw] = useState<State>({ kind: 'idle' });
   const fileRef = useRef<HTMLInputElement | null>(null);
   const setState = (s: State) => {
@@ -109,7 +111,7 @@ export function PurchaseImport({ onActive }: { onActive?: (active: boolean) => v
     }
   }
 
-  if (state.kind === 'review') return <PurchaseReview data={state.data} onDone={() => setState({ kind: 'idle' })} />;
+  if (state.kind === 'review') return <PurchaseReview data={state.data} intake={intake} onDone={() => setState({ kind: 'idle' })} />;
 
   return (
     <div className="about-section">
@@ -129,18 +131,76 @@ export function PurchaseImport({ onActive }: { onActive?: (active: boolean) => v
   );
 }
 
-function PurchaseReview({ data, onDone }: { data: Loaded; onDone: () => void }) {
+/** One heading of the review: a title, a line of help, and the order's lines under it as list rows. */
+function LineList({
+  title,
+  hint,
+  toolbar,
+  ids,
+  lines,
+  printings,
+  row,
+}: {
+  title: ReactNode;
+  hint?: ReactNode;
+  toolbar?: ReactNode;
+  ids: number[];
+  lines: ResolvedPurchaseLine[];
+  printings: Map<string, Printing>;
+  /** How many copies the row is about, what to say under the name, and its tick when it has one. */
+  row: (i: number) => { count: number; sub?: ReactNode; check?: { checked: boolean; onChange: (on: boolean) => void } };
+}) {
+  if (!ids.length) return null;
+  return (
+    <>
+      <h3>{title}</h3>
+      {hint && <p className="fine-print">{hint}</p>}
+      {toolbar}
+      <ul className="scan-list">
+        {ids.map((i) => {
+          const l = lines[i]!;
+          const r = row(i);
+          return (
+            <ScanListRow
+              key={i}
+              image={l.printing?.imageSmall}
+              name={`${r.count}× ${l.name}`}
+              sub={
+                <>
+                  {describeLine(l, printings)}
+                  {r.sub}
+                </>
+              }
+              check={r.check}
+            />
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+/** Set · number · the seller's grade · finish · language · price, as the filing prompt words a copy. */
+function describeLine(l: ResolvedPurchaseLine, printings: Map<string, Printing>): string {
+  const copy = describeCopy(
+    { printings },
+    { scryfallId: l.printing?.scryfallId ?? '', condition: l.line.conditionLabel, finish: l.finish, lang: l.line.lang },
+  );
+  const set = l.printing ? null : (l.line.setCode ?? l.line.setName);
+  const price = `${money(l.line.unitCents)}${l.line.quantity > 1 ? ' each' : ''}`;
+  return [set, copy, price].filter(Boolean).join(' · ');
+}
+
+function PurchaseReview({ data, intake, onDone }: { data: Loaded; intake: IntakeOpen; onDone: () => void }) {
   const { order, lines } = data;
   const toast = useToast();
-  // Ticked cards go in the way every bulk add does: "is this the copy you
-  // have?", then where it lives.
-  const { open: intake, sheet: intakeSheet } = useIntakeReview();
-  const [day, setDay] = useState(isoDay(order.date));
-  const date = fromIsoDay(day);
-  // Per line: update its matched copies (default on), add the missing ones (default off).
-  const [skipUpdate, setSkipUpdate] = useState<Set<number>>(new Set());
-  const [addMissing, setAddMissing] = useState<Set<number>>(new Set());
+  const [day, setDay] = useState(order.date == null ? '' : dayKeyOf(order.date));
+  const date = tsOfDayKey(day);
+  // Per line: update its matched copies (ticked unless skipped), add the missing ones (unticked unless picked).
+  const skip = useKeySet();
+  const add = useKeySet();
   const [busy, setBusy] = useState(false);
+  const key = (i: number) => String(i);
 
   const plans: (LinePlan | null)[] = useMemo(() => {
     const resolved = lines.flatMap((l, i) => (l.printing ? [{ i, l, p: l.printing }] : []));
@@ -161,33 +221,22 @@ function PurchaseReview({ data, onDone }: { data: Loaded; onDone: () => void }) 
     resolved.forEach(({ i }, k) => (out[i] = planned[k]!));
     return out;
   }, [lines, data, date]);
+  const review = useMemo(
+    () => reviewOf(lines.map((l) => ({ quantity: l.line.quantity, unitCents: l.line.unitCents, printing: !!l.printing })), plans, date),
+    [lines, plans, date],
+  );
+  const { found, upToDate, missing, unresolved, changing } = review;
+  const printings = useMemo(
+    () => new Map(lines.flatMap((l) => (l.printing ? [[l.printing.scryfallId, l.printing] as const] : []))),
+    [lines],
+  );
 
-  const toggle = (set: Set<number>, i: number, on: boolean) => {
-    const next = new Set(set);
-    if (on) next.add(i);
-    else next.delete(i);
-    return next;
-  };
-
-  // A matched copy only counts as a change when the order would move its date
-  // or its price. A re-import, or a card you already fixed by hand, has none.
-  const changes = (i: number, m: PlannedMatch) => {
-    const ts = date ?? m.ts;
-    const cents = lines[i]!.line.unitCents;
-    return { ts, cents, any: ts !== m.ts || cents !== m.priceEurCents };
-  };
-  const changing = (i: number) => plans[i]?.matches.filter((m) => changes(i, m).any) ?? [];
-  const all = lines.map((_, i) => i);
-  const found = all.filter((i) => changing(i).length > 0);
-  const upToDate = all.filter((i) => (plans[i]?.matches.length ?? 0) > 0 && changing(i).length === 0);
-  const missing = all.filter((i) => (plans[i]?.missing ?? 0) > 0);
-  const unresolved = all.filter((i) => !lines[i]!.printing);
-  const copies = (i: number) => changing(i).reduce((s, m) => s + m.take, 0);
-  const upToDateCopies = upToDate.reduce((s, i) => s + plans[i]!.matches.reduce((n, m) => n + m.take, 0), 0);
-  const updating = found.filter((i) => !skipUpdate.has(i)).reduce((s, i) => s + copies(i), 0);
-  const adding = missing.filter((i) => addMissing.has(i)).reduce((s, i) => s + plans[i]!.missing, 0);
-  const gone = found.filter((i) => plans[i]!.owned === 0).reduce((s, i) => s + copies(i), 0);
-  const reimport = plans.some((p) => p?.reimport);
+  const copies = (i: number) => changing[i]!.reduce((s, m) => s + m.take, 0);
+  const updatingLines = found.filter((i) => !skip.has(key(i)));
+  const updating = updatingLines.reduce((s, i) => s + copies(i), 0);
+  const adding = missing.filter((i) => add.has(key(i))).reduce((s, i) => s + plans[i]!.missing, 0);
+  const gone = updatingLines.filter((i) => plans[i]!.owned === 0).reduce((s, i) => s + copies(i), 0);
+  const allPicked = updatingLines.length === found.length;
   const market = MARKET[order.source];
   const totalCopies = order.lines.reduce((s, l) => s + l.quantity, 0);
 
@@ -196,7 +245,7 @@ function PurchaseReview({ data, onDone }: { data: Loaded; onDone: () => void }) 
     try {
       const label = `Bought on ${market}${order.seller ? ` from ${order.seller}` : ''}`;
       const toAdd: ResolvedLine[] = missing
-        .filter((i) => addMissing.has(i))
+        .filter((i) => add.has(key(i)))
         .map((i) => {
           const l = lines[i]!;
           return {
@@ -229,10 +278,20 @@ function PurchaseReview({ data, onDone }: { data: Loaded; onDone: () => void }) 
         added = res.added;
         filing = describeFiling(res);
       }
-      const commit: CommitLine[] = found
-        .filter((i) => !skipUpdate.has(i))
-        .map((i) => ({ unitCents: lines[i]!.line.unitCents, matches: changing(i) }));
-      const updated = await commitPurchase(commit, { batchId: data.batchId, batchLabel: label, date });
+      const commit: CommitLine[] = updatingLines.map((i) => ({ unitCents: lines[i]!.line.unitCents, matches: changing[i]! }));
+      const exclude = found.filter((i) => skip.has(key(i))).flatMap((i) => changing[i]!.map((m) => m.eventId));
+      let updated = 0;
+      try {
+        updated = await commitPurchase(commit, { batchId: data.batchId, batchLabel: label, date, exclude });
+      } catch (err) {
+        // The adds above are written and stay written; say so instead of
+        // "couldn't import" over a half-done order.
+        toast(
+          `${added > 0 ? `Added ${added} ${plural(added, 'card')}, but the ` : "Couldn't update the "}updates to your history failed: ${(err as Error).message}`,
+        );
+        onDone();
+        return;
+      }
       const parts = [
         updated > 0 && `updated ${updated} ${plural(updated, 'card')}`,
         added > 0 && `added ${added}`,
@@ -265,16 +324,7 @@ function PurchaseReview({ data, onDone }: { data: Loaded; onDone: () => void }) 
     return `you have it as ${eds.slice(0, 3).join(', ')}`;
   };
 
-  const where = (l: ResolvedPurchaseLine) =>
-    [
-      l.printing ? `${l.printing.set.toUpperCase()} #${l.printing.collectorNumber}` : l.line.setCode ?? l.line.setName,
-      l.line.conditionLabel,
-      l.finish !== 'nonfoil' ? FINISH_LABELS[l.finish] : null,
-      l.line.lang !== 'en' ? l.line.lang.toUpperCase() : null,
-      `${eur(l.line.unitCents)}${l.line.quantity > 1 ? ' each' : ''}`,
-    ]
-      .filter(Boolean)
-      .join(' · ');
+  const note = (text: ReactNode) => <span className="purchase-note">{text}</span>;
 
   return (
     <div className="about-section purchase-review">
@@ -282,7 +332,7 @@ function PurchaseReview({ data, onDone }: { data: Loaded; onDone: () => void }) 
         {market} order{order.orderId ? ` ${order.orderId}` : ''}
       </h2>
       <p className="fine-print">
-        {[order.seller, `${totalCopies} ${plural(totalCopies, 'card')}`, eur(orderTotalCents(order)) + ' before shipping']
+        {[order.seller, `${totalCopies} ${plural(totalCopies, 'card')}`, money(orderTotalCents(order)) + ' before shipping']
           .filter(Boolean)
           .join(' · ')}
       </p>
@@ -300,7 +350,7 @@ function PurchaseReview({ data, onDone }: { data: Loaded; onDone: () => void }) 
             : 'From the order code.'
           : 'This file has no date. Leave it empty to keep the dates on record and only set the prices.'}
       </p>
-      {reimport && (
+      {review.reimport && (
         <p className="fine-print">You've imported this order before. Importing it again updates the same copies.</p>
       )}
 
@@ -310,10 +360,10 @@ function PurchaseReview({ data, onDone }: { data: Loaded; onDone: () => void }) 
           {updating} {plural(updating, 'card')}
           {gone > 0 ? `, ${gone} no longer in your collection` : ''}
         </dd>
-        {upToDateCopies > 0 && (
+        {review.upToDateCopies > 0 && (
           <>
             <dt>Up to date</dt>
-            <dd>{upToDateCopies}</dd>
+            <dd>{review.upToDateCopies}</dd>
           </>
         )}
         <dt>Not found</dt>
@@ -326,146 +376,93 @@ function PurchaseReview({ data, onDone }: { data: Loaded; onDone: () => void }) 
         )}
       </dl>
 
-      {found.length > 0 && (
-        <>
-          <h3>Found in your history</h3>
-          <p className="fine-print">Each copy's date and price as saved now, and what this order sets them to.</p>
-          <div className="chips" role="group" aria-label="Choose which cards to update">
-            <button className="chip" onClick={() => setSkipUpdate(new Set())} disabled={skipUpdate.size === 0}>
-              Select all
-            </button>
-            <button className="chip" onClick={() => setSkipUpdate(new Set(found))} disabled={updating === 0}>
-              Select none
-            </button>
+      <LineList
+        title="Found in your history"
+        hint="Each copy's date and price as saved now, and what this order sets them to."
+        toolbar={
+          <div className="list-toolbar">
+            <label className="chip" style={{ alignSelf: 'flex-start' }}>
+              <input type="checkbox" checked={allPicked} onChange={() => skip.reset(allPicked ? found.map(key) : [])} />{' '}
+              {allPicked ? 'Unselect all' : 'Select all'}
+            </label>
           </div>
-          <ul className="result-list">
-            {found.map((i) => {
-              const l = lines[i]!;
-              const plan = plans[i]!;
-              const ms = changing(i);
-              const grades = new Set(ms.map((m) => m.condition).filter(Boolean));
-              const notes = [
-                plan.owned === 0 && 'no longer in your collection',
-                grades.size > 0 && !grades.has(l.line.condition) && `you have it as ${[...grades].join('/')}`,
-              ].filter(Boolean);
-              return (
-                <li key={i} className="result-row purchase-line">
-                  <label className="purchase-check">
-                    <input
-                      type="checkbox"
-                      checked={!skipUpdate.has(i)}
-                      onChange={(e) => setSkipUpdate(toggle(skipUpdate, i, !e.target.checked))}
-                    />
-                    <div className="result-main">
-                      <div className="result-name">
-                        {copies(i)}× {l.name}
-                      </div>
-                      <div className="result-sub">{where(l)}</div>
-                      {ms.map((m) => {
-                        const c = changes(i, m);
-                        const after = [c.ts !== m.ts && fmtDate(c.ts), c.cents !== m.priceEurCents && eur(c.cents)].filter(Boolean);
-                        return (
-                          <div key={m.eventId} className="result-sub purchase-change">
-                            {ms.length > 1 ? `${m.take}× ` : ''}
-                            {fmtDate(m.ts)}, {eur(m.priceEurCents)} → <strong>{after.join(', ')}</strong>
-                          </div>
-                        );
-                      })}
-                      {notes.length > 0 && <div className="result-sub">{notes.join(' · ')}</div>}
-                    </div>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
+        }
+        ids={found}
+        lines={lines}
+        printings={printings}
+        row={(i) => {
+          const l = lines[i]!;
+          const ms = changing[i]!;
+          const grades = new Set(ms.map((m) => m.condition).filter(Boolean));
+          const notes = [
+            plans[i]!.owned === 0 && 'no longer in your collection',
+            grades.size > 0 && !grades.has(l.line.condition) && `you have it as ${[...grades].join('/')}`,
+          ].filter(Boolean);
+          return {
+            count: copies(i),
+            check: { checked: !skip.has(key(i)), onChange: () => skip.toggle(key(i)) },
+            sub: (
+              <>
+                {ms.map((m) => {
+                  const after = [m.toTs !== m.ts && fmtDate(m.toTs), m.toCents !== m.priceEurCents && money(m.toCents)].filter(Boolean);
+                  return note(
+                    <span key={m.eventId}>
+                      {ms.length > 1 ? `${m.take}× ` : ''}
+                      {fmtDate(m.ts)}, {money(m.priceEurCents)} → <strong>{after.join(', ')}</strong>
+                    </span>,
+                  );
+                })}
+                {notes.length > 0 && note(notes.join(' · '))}
+              </>
+            ),
+          };
+        }}
+      />
 
-      {missing.length > 0 && (
-        <>
-          <h3>Not found in your history</h3>
-          <p className="fine-print">
-            No copy of this edition, finish and language was ever registered. If you have them, tick to add them as
-            bought on this order.
-          </p>
-          <ul className="result-list">
-            {missing.map((i) => {
-              const l = lines[i]!;
-              const n = plans[i]!.missing;
-              return (
-                <li key={i} className="result-row purchase-line">
-                  <label className="purchase-check">
-                    <input
-                      type="checkbox"
-                      checked={addMissing.has(i)}
-                      onChange={(e) => setAddMissing(toggle(addMissing, i, e.target.checked))}
-                    />
-                    <div className="result-main">
-                      <div className="result-name">
-                        {n}× {l.name}
-                      </div>
-                      <div className="result-sub">{where(l)}</div>
-                      {ownedInstead(l) && <div className="result-sub">{ownedInstead(l)}</div>}
-                    </div>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
+      <LineList
+        title="Not found in your history"
+        hint="No copy of this edition, finish and language was ever registered. If you have them, tick to add them as bought on this order."
+        ids={missing}
+        lines={lines}
+        printings={printings}
+        row={(i) => ({
+          count: plans[i]!.missing,
+          check: { checked: add.has(key(i)), onChange: () => add.toggle(key(i)) },
+          sub: ownedInstead(lines[i]!) && note(ownedInstead(lines[i]!)),
+        })}
+      />
 
-      {unresolved.length > 0 && (
-        <>
-          <h3>Couldn't identify</h3>
-          <p className="fine-print">These are skipped.</p>
-          <ul className="result-list">
-            {unresolved.map((i) => {
-              const l = lines[i]!;
-              return (
-                <li key={i} className="result-row purchase-line">
-                  <div className="result-main">
-                    <div className="result-name">
-                      {l.line.quantity}× {l.name}
-                    </div>
-                    <div className="result-sub">
-                      {where(l)} · {l.problem}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-
+      <LineList
+        title="Couldn't identify"
+        hint="These are skipped."
+        ids={unresolved}
+        lines={lines}
+        printings={printings}
+        row={(i) => ({ count: lines[i]!.line.quantity, sub: note(lines[i]!.problem) })}
+      />
 
       {upToDate.length > 0 && (
         <details className="purchase-uptodate">
           <summary>
-            Already up to date ({upToDateCopies} {plural(upToDateCopies, 'card')})
+            Already up to date ({review.upToDateCopies} {plural(review.upToDateCopies, 'card')})
           </summary>
-          <ul className="result-list">
-            {upToDate.map((i) => {
-              const l = lines[i]!;
-              const m = plans[i]!.matches[0]!;
-              return (
-                <li key={i} className="result-row purchase-line">
-                  <div className="result-main">
-                    <div className="result-name">
-                      {plans[i]!.matches.reduce((n, x) => n + x.take, 0)}× {l.name}
-                    </div>
-                    <div className="result-sub">
-                      {where(l)} · {fmtDate(m.ts)}
-                    </div>
-                  </div>
-                </li>
-              );
+          <LineList
+            title={null}
+            ids={upToDate}
+            lines={lines}
+            printings={printings}
+            row={(i) => ({
+              count: plans[i]!.matches.reduce((n, x) => n + x.take, 0),
+              sub: note(fmtDate(plans[i]!.matches[0]!.ts)),
             })}
-          </ul>
+          />
         </details>
       )}
 
+      <p className="fine-print">
+        This corrects the history of copies you already have, so it can't be undone from Edit history. Importing the
+        order again sets the same copies again.
+      </p>
       <div className="sheet-actions">
         <button onClick={onDone} disabled={busy}>
           Back
@@ -477,7 +474,6 @@ function PurchaseReview({ data, onDone }: { data: Loaded; onDone: () => void }) 
               'Nothing to do'}
         </button>
       </div>
-      {intakeSheet}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import type { CardDbArtifactMeta, SetTypeMap } from '@mtg/shared';
 import { PROMO_SET_TYPES } from '@mtg/shared';
 import { db } from '../db/schema.js';
-import { sha256Hex } from '../util/sha256.js';
+import { fetchArtifactText } from './artifact.js';
 import { CARD_DB_BASE } from './config.js';
 import { getManifest } from './manifest.js';
 
@@ -23,11 +23,7 @@ export interface SetTypesRow {
 }
 
 async function download(meta: CardDbArtifactMeta): Promise<SetTypesRow> {
-  const res = await fetch(new URL(meta.url, CARD_DB_BASE!).href, { cache: 'no-store' });
-  if (!res.ok || !res.body) throw new Error(`set-types download HTTP ${res.status}`);
-  const gunzip = new DecompressionStream('gzip') as unknown as ReadableWritablePair<Uint8Array, Uint8Array>;
-  const text = await new Response(res.body.pipeThrough(gunzip)).text();
-  if ((await sha256Hex(text)) !== meta.sha256) throw new Error('set-types checksum mismatch: download corrupt');
+  const text = await fetchArtifactText(meta, 'set-types');
   const row: SetTypesRow = { key: 'current', sha256: meta.sha256, types: JSON.parse(text) as SetTypeMap };
   await db.setTypes.put(row);
   return row;

@@ -198,6 +198,21 @@ export function dayKeyOf(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
 }
 
+/**
+ * The timestamp a record that only knows its day gets (a purchase date off a
+ * receipt, a date typed into a form): noon UTC, so it reads as that calendar
+ * day in every timezone a phone can be in, and dayKeyOf gives the day back.
+ */
+export function tsOfDay(year: number, month: number, day: number): number {
+  return Date.UTC(year, month - 1, day, 12);
+}
+
+/** The inverse of dayKeyOf, for a date input's value; null for anything but "YYYY-MM-DD". */
+export function tsOfDayKey(key: string): number | null {
+  const m = key.match(/^(\d{4})-(\d\d)-(\d\d)$/);
+  return m ? tsOfDay(Number(m[1]), Number(m[2]), Number(m[3])) : null;
+}
+
 /** Summary of a card's recorded price movement, in currency units. */
 export interface HistoryChange {
   cur: 'eur' | 'usd';

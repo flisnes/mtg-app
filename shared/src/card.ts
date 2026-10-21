@@ -750,6 +750,33 @@ export interface CardmarketIdIndex {
 /** How many hex digits of a Scryfall id CardmarketIdIndex.s keeps per entry. */
 export const CARDMARKET_ID_PREFIX = 10;
 
+/** Product id → Scryfall id pairs, in any order, to the artifact the pipeline ships. */
+export function encodeCardmarketIndex(entries: Iterable<readonly [id: number, scryfallId: string]>): CardmarketIdIndex {
+  const byId = new Map<number, string>();
+  for (const [id, scryfallId] of entries) byId.set(id, scryfallId);
+  const ids = [...byId.keys()].sort((a, b) => a - b);
+  let prev = 0;
+  return {
+    d: ids.map((id) => {
+      const gap = id - prev;
+      prev = id;
+      return gap;
+    }),
+    s: ids.map((id) => byId.get(id)!.replace(/-/g, '').slice(0, CARDMARKET_ID_PREFIX)).join(''),
+  };
+}
+
+/** Product id → the first CARDMARKET_ID_PREFIX hex digits of its Scryfall id (dashes stripped). */
+export function decodeCardmarketIndex(index: CardmarketIdIndex): Map<number, string> {
+  const out = new Map<number, string>();
+  let id = 0;
+  for (let i = 0; i < index.d.length; i++) {
+    id += index.d[i]!;
+    out.set(id, index.s.slice(i * CARDMARKET_ID_PREFIX, (i + 1) * CARDMARKET_ID_PREFIX));
+  }
+  return out;
+}
+
 /**
  * One oracle tag, positional to keep the artifact small: `[slug]`, or
  * `[slug, parentIndices]`, or `[slug, parentIndices, aliasSlugs]`. The array's

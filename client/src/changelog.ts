@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.201.1',
+    changes: [
+      {
+        kind: 'fixed',
+        text: 'Purchase import: a price of a thousand euros or more was read as 1% of its value, unticked lines now stay untouched on a re-import, non-euro CardTrader slips are refused, and the review shows each card with its picture and prices in your display currency.',
+      },
+    ],
+  },
+  {
     version: '0.201.0',
     changes: [
       {
@@ -147,15 +156,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'List rows give the card name the whole top line: mana costs move down beside the set, badges never get cut off, and unpriced cards say "no price".',
-      },
-    ],
-  },
-  {
-    version: '0.198.14',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'One way of counting everywhere: "176 cards · 70 unique" on Collection, Tradelist, Wishlist and Sealed, and "60 cards · 15 side" on the deck list. Headers say "Value", with "Owned value" only where some cards are missing. List, grid and stack toggles and the back arrows are proper icons now.',
       },
     ],
   },

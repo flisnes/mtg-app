@@ -5,21 +5,31 @@ import type { ImportFormat, ParsedLine } from './types.js';
 // universal escape hatch; Moxfield and Archidekt CSV exports are mapped by
 // header. Tolerant: unknown columns are ignored, unparseable lines are skipped.
 
+// Every grade word and code a list or marketplace writes, on our five-step
+// scale. Cardmarket's (MT NM EX GD LP PL PO) and CardTrader's (M NM SP MP PL
+// HP PO) seven steps are squeezed in: EX and SP are our LP, GD our MP. Two
+// tokens mean different things on different scales and are not here: "LP" is
+// Light Played on Cardmarket (its fifth grade of seven) but Lightly Played
+// everywhere else, and CardTrader's "Played" sits between MP and HP. The
+// purchase parsers override those two (import/purchase/parse.ts).
 const CONDITION_MAP: Record<string, Condition> = {
-  'near mint': 'NM', nm: 'NM', mint: 'NM', m: 'NM',
-  'lightly played': 'LP', lp: 'LP', 'light played': 'LP',
-  'moderately played': 'MP', mp: 'MP', played: 'MP',
-  'heavily played': 'HP', hp: 'HP',
-  damaged: 'DMG', dmg: 'DMG', poor: 'DMG',
+  'near mint': 'NM', nm: 'NM', mint: 'NM', m: 'NM', mt: 'NM',
+  'lightly played': 'LP', lp: 'LP', 'light played': 'LP', 'slightly played': 'LP', sp: 'LP', excellent: 'LP', ex: 'LP',
+  'moderately played': 'MP', mp: 'MP', played: 'MP', good: 'MP', gd: 'MP',
+  'heavily played': 'HP', hp: 'HP', pl: 'HP',
+  damaged: 'DMG', dmg: 'DMG', poor: 'DMG', po: 'DMG',
 };
 
 const LANG_MAP: Record<string, string> = {
   english: 'en', german: 'de', french: 'fr', italian: 'it', spanish: 'es',
   portuguese: 'pt', japanese: 'ja', korean: 'ko', russian: 'ru',
   'chinese simplified': 'zhs', 'chinese traditional': 'zht',
+  // Marketplace codes that aren't Scryfall's: CardTrader's jp and zh-CN/zh-TW,
+  // the codes Cardmarket's purchase page prints (JP, KR, CN, S-CN, T-CN, TW).
+  jp: 'ja', kr: 'ko', cn: 'zhs', zh: 'zhs', 'zh-cn': 'zhs', 's-cn': 'zhs', tw: 'zht', 'zh-tw': 'zht', 't-cn': 'zht',
 };
 
-function normCondition(v: string | undefined): Condition | undefined {
+export function normCondition(v: string | undefined): Condition | undefined {
   if (!v) return undefined;
   return CONDITION_MAP[v.trim().toLowerCase()];
 }
@@ -33,7 +43,8 @@ function normFinish(v: string | undefined): Finish | undefined {
   return 'nonfoil';
 }
 
-function normLang(v: string | undefined): string | undefined {
+/** A language name or marketplace code as a Scryfall code; a Scryfall code passes through. */
+export function normLang(v: string | undefined): string | undefined {
   if (!v) return undefined;
   const s = v.trim().toLowerCase();
   if (!s) return undefined;
@@ -103,8 +114,8 @@ function parseText(text: string): ParsedLine[] {
 
 // ---- CSV ----
 
-/** RFC-ish CSV tokenizer that handles quoted fields, embedded commas, and newlines. */
-function parseCsvRows(text: string): string[][] {
+/** RFC-ish CSV tokenizer that handles quoted fields, embedded delimiters, and newlines. Blank rows are dropped. */
+export function parseCsvRows(text: string, delimiter = ','): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -119,7 +130,7 @@ function parseCsvRows(text: string): string[][] {
         } else inQuotes = false;
       } else field += c;
     } else if (c === '"') inQuotes = true;
-    else if (c === ',') {
+    else if (c === delimiter) {
       row.push(field);
       field = '';
     } else if (c === '\n' || c === '\r') {

@@ -52,6 +52,18 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          // pdf.js and its worker, excluded from precache above for the same
+          // reason. Three content-hashed files per build; room for two builds
+          // so a PDF import still works offline right after an update.
+          {
+            urlPattern: ({ url }) => /\/(pdf-[^/]+\.js|pdf\.worker[^/]*|pdfText-[^/]+\.js)$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'pdf-reader',
+              expiration: { maxEntries: 6 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             urlPattern: ({ url }) =>
               url.hostname.endsWith('scryfall.io') || url.hostname.endsWith('scryfall.com'),

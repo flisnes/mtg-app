@@ -11,7 +11,6 @@ const { parser: jsonlParser } = jsonlMod;
 import type {
   CardDbChunkMeta,
   CardDbManifest,
-  CardmarketIdIndex,
   OracleCard,
   PriceMap,
   PriceTuple,
@@ -21,11 +20,11 @@ import type {
   SetTypeMap,
 } from '@mtg/shared';
 import {
-  CARDMARKET_ID_PREFIX,
   EFFECT_REPEATABLE,
   EFFECT_TUTOR,
   EFFECT_UNKNOWN,
   MANA_UNKNOWN,
+  encodeCardmarketIndex,
   isMarkerCard,
   isVariantPrinting,
 } from '@mtg/shared';
@@ -427,18 +426,9 @@ async function main(): Promise<void> {
   // ten-digit Scryfall id prefix each. Best-effort like sets/tags.
   let cardmarketArtifact: Artifact | undefined;
   if (cardmarket.size > 0) {
-    const ids = [...cardmarket.keys()].sort((a, b) => a - b);
-    let prev = 0;
-    const index: CardmarketIdIndex = {
-      d: ids.map((id) => {
-        const gap = id - prev;
-        prev = id;
-        return gap;
-      }),
-      s: ids.map((id) => cardmarket.get(id)!.scryfallId.replace(/-/g, '').slice(0, CARDMARKET_ID_PREFIX)).join(''),
-    };
-    cardmarketArtifact = emitHashed('cardmarket', index, ids.length);
-    console.log(`[pipeline]   cardmarket: ${ids.length} product ids (${cardmarketArtifact.bytes} B)`);
+    const index = encodeCardmarketIndex([...cardmarket].map(([id, p]) => [id, p.scryfallId] as const));
+    cardmarketArtifact = emitHashed('cardmarket', index, cardmarket.size);
+    console.log(`[pipeline]   cardmarket: ${cardmarket.size} product ids (${cardmarketArtifact.bytes} B)`);
   }
 
   // Prices, sorted by id for a stable hash on days prices don't move.

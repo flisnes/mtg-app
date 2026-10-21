@@ -43,12 +43,13 @@ function readMatching(dir, re) {
 // credited even when several share one canonical text.
 function copyrightOf(text) {
   if (!text) return null;
-  const m = text.match(/^.*\bcopyright\b.*$/im);
-  if (!m) return null;
-  const line = m[0].trim().replace(/^[*#\s]+/, '');
-  // The Apache-2.0 boilerplate has a "Copyright [yyyy] [name]" placeholder in
-  // its appendix; that is not an attribution.
-  return /\[yyyy\]|\[name of copyright owner\]/i.test(line) ? null : line;
+  // An attribution line starts with the word and goes straight on to a year
+  // or a name; a line that merely mentions copyright is licence prose. The
+  // Apache-2.0 text has several of those ("Licensor" shall mean the copyright
+  // owner..., a wrapped "copyright license to reproduce") and a "Copyright
+  // [yyyy] [name]" placeholder in its appendix, none of which credit anyone.
+  const m = text.match(/^[*#\s]*((?:Copyright|COPYRIGHT)\s*(?:\(c\)|©)?\s*(?:\d{4}|[A-Z]).*)$/m);
+  return m ? m[1].trim() : null;
 }
 
 const pkgs = new Map();

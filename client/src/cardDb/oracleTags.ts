@@ -1,6 +1,6 @@
 import type { CardDbArtifactMeta, OracleTagDictionary } from '@mtg/shared';
 import { db } from '../db/schema.js';
-import { sha256Hex } from '../util/sha256.js';
+import { fetchArtifactText } from './artifact.js';
 import { CARD_DB_BASE } from './config.js';
 import { getManifest } from './manifest.js';
 import { setOracleTagResolver } from '@mtg/shared';
@@ -124,12 +124,7 @@ function register(dictionary: OracleTagDictionary | null): void {
 }
 
 async function download(meta: CardDbArtifactMeta): Promise<OracleTagDictionary> {
-  const res = await fetch(new URL(meta.url, CARD_DB_BASE!).href, { cache: 'no-store' });
-  if (!res.ok || !res.body) throw new Error(`oracle-tags download HTTP ${res.status}`);
-  const gunzip = new DecompressionStream('gzip') as unknown as ReadableWritablePair<Uint8Array, Uint8Array>;
-  const text = await new Response(res.body.pipeThrough(gunzip)).text();
-  if ((await sha256Hex(text)) !== meta.sha256) throw new Error('oracle-tags checksum mismatch: download corrupt');
-  const dictionary = JSON.parse(text) as OracleTagDictionary;
+  const dictionary = JSON.parse(await fetchArtifactText(meta, 'oracle-tags')) as OracleTagDictionary;
   await db.oracleTags.put({ key: 'current', sha256: meta.sha256, dictionary });
   return dictionary;
 }

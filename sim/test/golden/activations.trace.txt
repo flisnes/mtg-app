@@ -1,0 +1,858 @@
+e3-sim: Blood Artist + Viscera Seer + Bitterblossom, Mind Stone, Clues, Mox Opal, War Room, threshold, once a turn, pick most, life as a price, ten turns
+
+=== seed 51 | mulligans 0 ===
+opener: Bitterblossom, Black Bears, Graveyard Engine, Ornithopter, Swamp, Threshold Engine, War Room
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays War Room over Swamp
+  mana   1 mana untapped: War Room ({C})
+  cast   Casts Ornithopter {0}
+  effect Ornithopter will fire at every end step
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect End step: Ornithopter draws Investigator
+  board  lands: 1 War Room
+         permanents: 1 Ornithopter
+         hand: 1 Bitterblossom, 1 Black Bears, 1 Graveyard Engine, 1 Investigator, 1 Swamp, 1 Threshold Engine
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Landfall Draw
+  land   Plays Swamp
+  mana   2 mana untapped: War Room ({C}), Swamp ({B})
+  cast   Casts Landfall Draw {1}{B}
+         > War Room taps for generic
+         > Swamp taps for {B}
+  effect Landfall Draw is watching, and fires when it sees what it is waiting for
+  effect End step: Ornithopter draws Life Ring
+  board  lands: 1 Swamp, 1 War Room
+         permanents: 1 Landfall Draw, 1 Ornithopter
+         hand: 1 Bitterblossom, 1 Black Bears, 1 Graveyard Engine, 1 Investigator, 1 Life Ring, 1 Threshold Engine
+         graveyard: - | exile: -
+--- turn 3 | available 2 | spent 2 | damage 0
+  draw   Draws Blood Artist
+  land   No land to play
+  mana   2 mana untapped: War Room ({C}), Swamp ({B})
+  cast   Casts Investigator {1}{B}
+         > War Room taps for generic
+         > Swamp taps for {B}
+  effect Investigator creates 1 Clue
+  effect End step: Ornithopter draws Mox Opal
+  board  lands: 1 Swamp, 1 War Room
+         permanents: 1 Clue, 1 Investigator, 1 Landfall Draw, 1 Ornithopter
+         hand: 1 Bitterblossom, 1 Black Bears, 1 Blood Artist, 1 Graveyard Engine, 1 Life Ring, 1 Mox Opal, 1 Threshold Engine
+         graveyard: - | exile: -
+--- turn 4 | available 3 | spent 3 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  effect Landfall Draw draws Swamp
+  mana   3 mana untapped: War Room ({C}), Swamp ({B}), Swamp ({B})
+  cast   Casts Mox Opal {0} (ramp first)
+  mana   Mox Opal will tap for mana from this turn, as its rule says
+  effect Mox Opal resolves
+  cast   Casts Graveyard Engine {2}{B}
+         > War Room taps for generic
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Graveyard Engine will fire every upkeep from next turn
+  effect End step: Ornithopter draws Blood Artist
+  board  lands: 2 Swamp, 1 War Room
+         permanents: 1 Clue, 1 Graveyard Engine, 1 Investigator, 1 Landfall Draw, 1 Mox Opal, 1 Ornithopter
+         hand: 1 Bitterblossom, 1 Black Bears, 2 Blood Artist, 1 Life Ring, 1 Swamp, 1 Threshold Engine
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 5 | damage 0
+  effect Upkeep: Graveyard Engine mills Black Bears, Black Bears, Graveyard Engine, moves Black Bears to the battlefield
+  draw   Draws Exploration
+  land   Plays Swamp
+  effect Landfall Draw draws Bitterblossom
+  mana   5 mana untapped: War Room ({C}), Swamp ({B}), Swamp ({B}), Mox Opal ({W/U/B/R/G}), Swamp ({B})
+  cast   Casts Blood Artist {1}{B}
+         > War Room taps for generic
+         > Swamp taps for {B}
+  effect Blood Artist is watching, and fires when it sees what it is waiting for
+  cast   Casts Black Bears {1}{B}
+         > Swamp taps for {B}
+         > Mox Opal taps for generic
+  cast   Casts Life Ring {1}
+         > Swamp taps for generic
+  effect Life Ring has an ability, used when the turn has the mana spare
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Mind Stone
+  effect End step: Ornithopter draws Viscera Seer
+  note   Life total 38 (-2 this turn)
+  board  lands: 3 Swamp, 1 War Room
+         permanents: 2 Black Bears, 1 Blood Artist, 1 Clue, 1 Graveyard Engine, 1 Investigator, 1 Landfall Draw, 1 Life Ring, 1 Mox Opal, 1 Ornithopter
+         hand: 2 Bitterblossom, 1 Blood Artist, 1 Exploration, 1 Mind Stone, 1 Threshold Engine, 1 Viscera Seer
+         graveyard: 1 Black Bears, 1 Graveyard Engine | exile: -
+--- turn 6 | available 7 | spent 7 | damage 0
+  effect Upkeep: Graveyard Engine mills Graveyard Engine, Swamp, Swamp, moves Black Bears to the battlefield
+  draw   Draws Swamp
+  land   Plays Swamp
+  effect Landfall Draw draws Ornithopter
+  mana   6 mana untapped: War Room ({C}), Swamp ({B}), Swamp ({B}), Mox Opal ({W/U/B/R/G}), Swamp ({B}), Swamp ({B})
+  cast   Casts Mind Stone {2} (ramp first)
+         > War Room taps for generic
+         > Swamp taps for generic
+  mana   Mind Stone will add 1 {C} this turn
+  effect Mind Stone has an ability, used when the turn has the mana spare
+  cast   Casts Blood Artist {1}{B}
+         > Mox Opal taps for {B}
+         > Swamp taps for generic
+  effect Blood Artist is watching, and fires when it sees what it is waiting for
+  cast   Casts Threshold Engine {1}{B}
+         > Swamp taps for {B}
+         > Mind Stone taps for generic
+  effect Threshold Engine will fire every upkeep from next turn
+  cast   Casts Exploration {B}
+         > Swamp taps for {B}
+  mana   1 extra land drop every turn, from next turn
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Blood Artist
+  effect End step: Ornithopter draws Swamp
+  note   Life total 36 (-2 this turn)
+  board  lands: 4 Swamp, 1 War Room
+         permanents: 3 Black Bears, 2 Blood Artist, 1 Clue, 1 Exploration, 1 Graveyard Engine, 1 Investigator, 1 Landfall Draw, 1 Life Ring, 1 Mind Stone, 1 Mox Opal, 1 Ornithopter, 1 Threshold Engine
+         hand: 2 Bitterblossom, 1 Blood Artist, 1 Ornithopter, 1 Swamp, 1 Viscera Seer
+         graveyard: 2 Graveyard Engine, 2 Swamp | exile: -
+--- turn 7 | available 9 | spent 9 | damage 3
+  effect Upkeep: Graveyard Engine mills Swamp, Exploration, Mind Stone
+  effect Upkeep: Threshold Engine draws Bitterblossom
+  draw   Draws Swamp
+  land   Plays Swamp
+  effect Landfall Draw draws Viscera Seer
+  land   Plays Swamp (extra land drop)
+  mana   9 mana untapped: War Room ({C}), Swamp ({B}), Swamp ({B}), Mox Opal ({W/U/B/R/G}), Swamp ({B}), Swamp ({B}), Mind Stone ({C}), Swamp ({B}), Swamp ({B})
+  cast   Casts Bitterblossom {1}{B}
+         > War Room taps for generic
+         > Swamp taps for {B}
+  effect Bitterblossom will fire every upkeep from next turn
+  cast   Casts Blood Artist {1}{B}
+         > Swamp taps for {B}
+         > Mind Stone taps for generic
+  effect Blood Artist is watching, and fires when it sees what it is waiting for
+  cast   Casts Bitterblossom {1}{B}
+         > Mox Opal taps for {B}
+         > Swamp taps for generic
+  effect Bitterblossom will fire every upkeep from next turn
+  cast   Casts Bitterblossom {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Bitterblossom will fire every upkeep from next turn
+  cast   Casts Viscera Seer {B}
+         > Swamp taps for {B}
+  effect Viscera Seer has an ability, used when the turn has the mana spare
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Swamp
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  effect End step: Ornithopter draws Swamp
+  note   Life total 34 (-2 this turn)
+  board  lands: 6 Swamp, 1 War Room
+         permanents: 3 Bitterblossom, 3 Black Bears, 1 Clue, 1 Exploration, 1 Graveyard Engine, 1 Investigator, 1 Landfall Draw, 1 Life Ring, 1 Mind Stone, 1 Mox Opal, 1 Ornithopter, 1 Threshold Engine, 1 Viscera Seer
+         hand: 1 Ornithopter, 2 Swamp, 1 Viscera Seer
+         graveyard: 3 Blood Artist, 1 Exploration, 2 Graveyard Engine, 1 Mind Stone, 3 Swamp | exile: -
+--- turn 8 | available 10 | spent 9 | damage 0
+  effect Upkeep: Graveyard Engine mills Threshold Engine, Black Bears, Life Ring, moves Black Bears to the battlefield
+  effect Upkeep: Threshold Engine draws Swamp
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Ornithopter
+  land   Plays Swamp
+  effect Landfall Draw draws Swamp
+  land   Plays Swamp (extra land drop)
+  mana   11 mana untapped: War Room ({C}), Swamp ({B}), Swamp ({B}), Mox Opal ({W/U/B/R/G}), Swamp ({B}), Swamp ({B}), Mind Stone ({C}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Viscera Seer {B}
+         > Swamp taps for {B}
+  effect Viscera Seer has an ability, used when the turn has the mana spare
+  cast   Casts Ornithopter {0}
+  effect Ornithopter will fire at every end step
+  cast   Casts Ornithopter {0}
+  effect Ornithopter will fire at every end step
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Viscera Seer
+  cast   Casts Viscera Seer {B}
+         > Mox Opal taps for {B}
+  effect Viscera Seer has an ability, used when the turn has the mana spare
+  cast   Activates Mind Stone: {1}, {T}, sacrifice it
+         > War Room taps for generic
+  effect Ornithopter draws War Room
+  effect Ornithopter draws Landfall Draw
+  effect Ornithopter draws Swamp
+  effect Mind Stone draws Black Bears
+  cast   Casts Landfall Draw {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Landfall Draw is watching, and fires when it sees what it is waiting for
+  cast   Casts Black Bears {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  cast   Activates Clue: {2}, sacrifice it
+         > Swamp taps for generic
+         > Swamp taps for generic
+  effect Ornithopter draws Swamp
+  effect Ornithopter draws Swamp
+  effect Ornithopter draws Swamp
+  effect Clue draws Swamp
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Viscera Seer scry 1
+  note   Stops with 1 mana up and no spell in hand
+  effect End step: Ornithopter draws Swamp
+  effect End step: Ornithopter draws Ornithopter
+  effect End step: Ornithopter draws War Room
+  note   Discards Swamp, War Room, Swamp, Swamp down to 7 cards
+  note   Life total 29 (-5 this turn)
+  board  lands: 8 Swamp, 1 War Room
+         permanents: 3 Bitterblossom, 5 Black Bears, 1 Exploration, 1 Graveyard Engine, 1 Investigator, 2 Landfall Draw, 1 Life Ring, 1 Mox Opal, 3 Ornithopter, 1 Threshold Engine, 3 Viscera Seer
+         hand: 1 Ornithopter, 5 Swamp, 1 War Room
+         graveyard: 3 Blood Artist, 1 Exploration, 2 Graveyard Engine, 1 Life Ring, 2 Mind Stone, 6 Swamp, 1 Threshold Engine, 1 War Room | exile: -
+--- turn 9 | available 12 | spent 12 | damage 0
+  effect Upkeep: Graveyard Engine mills Blood Artist, Swamp, Black Bears, moves Black Bears to the battlefield
+  effect Upkeep: Threshold Engine draws Colossal Dreadmaw
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Swamp
+  land   Plays Swamp over War Room
+  effect Landfall Draw draws Investigator
+  land   Plays Swamp over War Room (extra land drop)
+  mana   12 mana untapped: War Room ({C}), Swamp ({B}), Swamp ({B}), Mox Opal ({W/U/B/R/G}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Colossal Dreadmaw {4}{B}{B}
+         > War Room taps for generic
+         > Mox Opal taps for {B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+  cast   Casts Investigator {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Investigator creates 1 Clue
+  cast   Casts Ornithopter {0}
+  effect Ornithopter will fire at every end step
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Black Bears
+  cast   Casts Black Bears {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  cast   Activates Clue: {2}, sacrifice it
+         > Swamp taps for generic
+         > Swamp taps for generic
+  effect Ornithopter draws Swamp
+  effect Ornithopter draws Colossal Dreadmaw
+  effect Ornithopter draws Black Bears
+  effect Ornithopter draws Swamp
+  effect Clue draws Blood Artist
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Viscera Seer scry 1
+  effect End step: Ornithopter draws Swamp
+  effect End step: Ornithopter draws War Room
+  effect End step: Ornithopter draws Threshold Engine
+  effect End step: Ornithopter draws Mind Stone
+  note   Discards Swamp, Swamp, War Room, War Room, Colossal Dreadmaw, Swamp, Mind Stone down to 7 cards
+  note   Life total 24 (-5 this turn)
+  board  lands: 10 Swamp, 1 War Room
+         permanents: 3 Bitterblossom, 7 Black Bears, 1 Colossal Dreadmaw, 1 Exploration, 1 Graveyard Engine, 2 Investigator, 2 Landfall Draw, 1 Life Ring, 1 Mox Opal, 4 Ornithopter, 1 Threshold Engine, 3 Viscera Seer
+         hand: 1 Black Bears, 1 Blood Artist, 4 Swamp, 1 Threshold Engine
+         graveyard: 4 Blood Artist, 1 Colossal Dreadmaw, 1 Exploration, 2 Graveyard Engine, 1 Life Ring, 3 Mind Stone, 10 Swamp, 1 Threshold Engine, 3 War Room | exile: -
+--- turn 10 | available 13 | spent 11 | damage 4
+  effect Upkeep: Graveyard Engine mills Investigator, Mind Stone, Life Ring, moves Colossal Dreadmaw to the battlefield
+  effect Upkeep: Threshold Engine draws Swamp
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Swamp
+  land   Plays Swamp
+  effect Landfall Draw draws Swamp
+  land   Plays Swamp (extra land drop)
+  mana   14 mana untapped: War Room ({C}), Swamp ({B}), Swamp ({B}), Mox Opal ({W/U/B/R/G}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Blood Artist {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Blood Artist is watching, and fires when it sees what it is waiting for
+  cast   Casts Black Bears {1}{B}
+         > Mox Opal taps for {B}
+         > Swamp taps for generic
+  cast   Casts Threshold Engine {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Threshold Engine will fire every upkeep from next turn
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Swamp
+  cast   Activates War Room: {3}, {T}, pay 1 life
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+  effect War Room draws Black Bears
+  cast   Casts Black Bears {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Blood Artist deals 1 damage
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Blood Artist deals 1 damage
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Blood Artist deals 1 damage
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  note   Stops with 2 mana up and no spell in hand
+  effect End step: Ornithopter draws Mox Opal
+  effect End step: Ornithopter draws Swamp
+  effect End step: Ornithopter draws Investigator
+  effect End step: Ornithopter draws Swamp
+  note   Discards Swamp, Swamp, Swamp down to 7 cards
+  note   Life total 18 (-6 this turn)
+  board  lands: 12 Swamp, 1 War Room
+         permanents: 3 Bitterblossom, 9 Black Bears, 2 Colossal Dreadmaw, 1 Exploration, 1 Graveyard Engine, 2 Investigator, 2 Landfall Draw, 1 Life Ring, 1 Mox Opal, 4 Ornithopter, 2 Threshold Engine, 3 Viscera Seer
+         hand: 1 Investigator, 1 Mox Opal, 5 Swamp
+         graveyard: 5 Blood Artist, 1 Exploration, 2 Graveyard Engine, 1 Investigator, 2 Life Ring, 4 Mind Stone, 13 Swamp, 1 Threshold Engine, 3 War Room | exile: -
+
+=== seed 16 | mulligans 0 ===
+opener: Exploration, Investigator, Landfall Draw, Mind Stone, Ornithopter, War Room, War Room
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays War Room
+  mana   1 mana untapped: War Room ({C})
+  note   Stops: Exploration {B} is not payable in these colours
+  board  lands: 1 War Room
+         permanents: -
+         hand: 1 Exploration, 1 Investigator, 1 Landfall Draw, 1 Mind Stone, 1 Ornithopter, 1 War Room
+         graveyard: - | exile: -
+--- turn 2 | available 3 | spent 3 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp over War Room
+  mana   2 mana untapped: War Room ({C}), Swamp ({B})
+  cast   Casts Mind Stone {2} (ramp first)
+         > War Room taps for generic
+         > Mind Stone taps for generic
+  mana   Mind Stone will add 1 {C} this turn
+  effect Mind Stone has an ability, used when the turn has the mana spare
+  cast   Casts Exploration {B}
+         > Swamp taps for {B}
+  mana   1 extra land drop every turn, from next turn
+  board  lands: 1 Swamp, 1 War Room
+         permanents: 1 Exploration, 1 Mind Stone
+         hand: 1 Investigator, 1 Landfall Draw, 1 Ornithopter, 1 War Room
+         graveyard: - | exile: -
+--- turn 3 | available 4 | spent 4 | damage 0
+  draw   Draws Viscera Seer
+  land   Plays War Room
+  mana   4 mana untapped: War Room ({C}), Swamp ({B}), Mind Stone ({C}), War Room ({C})
+  cast   Casts Investigator {1}{B}
+         > War Room taps for generic
+         > Swamp taps for {B}
+  effect Investigator creates 1 Clue
+  cast   Activates Clue: {2}, sacrifice it
+         > Mind Stone taps for generic
+         > War Room taps for generic
+  effect Clue draws Black Bears
+  board  lands: 1 Swamp, 2 War Room
+         permanents: 1 Exploration, 1 Investigator, 1 Mind Stone
+         hand: 1 Black Bears, 1 Landfall Draw, 1 Ornithopter, 1 Viscera Seer
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 2 | damage 0
+  draw   Draws Colossal Dreadmaw
+  land   No land to play
+  mana   4 mana untapped: War Room ({C}), Swamp ({B}), Mind Stone ({C}), War Room ({C})
+  cast   Casts Landfall Draw {1}{B}
+         > War Room taps for generic
+         > Swamp taps for {B}
+  effect Landfall Draw is watching, and fires when it sees what it is waiting for
+  note   Stops: Black Bears {1}{B} is not payable in these colours alongside what is already cast
+  board  lands: 1 Swamp, 2 War Room
+         permanents: 1 Exploration, 1 Investigator, 1 Landfall Draw, 1 Mind Stone
+         hand: 1 Black Bears, 1 Colossal Dreadmaw, 1 Ornithopter, 1 Viscera Seer
+         graveyard: - | exile: -
+--- turn 5 | available 4 | spent 2 | damage 0
+  draw   Draws Life Ring
+  land   No land to play
+  mana   4 mana untapped: War Room ({C}), Swamp ({B}), Mind Stone ({C}), War Room ({C})
+  cast   Casts Black Bears {1}{B}
+         > War Room taps for generic
+         > Swamp taps for {B}
+  note   Stops: Viscera Seer {B} is not payable in these colours alongside what is already cast
+  board  lands: 1 Swamp, 2 War Room
+         permanents: 1 Black Bears, 1 Exploration, 1 Investigator, 1 Landfall Draw, 1 Mind Stone
+         hand: 1 Colossal Dreadmaw, 1 Life Ring, 1 Ornithopter, 1 Viscera Seer
+         graveyard: - | exile: -
+--- turn 6 | available 6 | spent 6 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  effect Landfall Draw draws Swamp
+  land   Plays Swamp (extra land drop)
+  mana   6 mana untapped: War Room ({C}), Swamp ({B}), Mind Stone ({C}), War Room ({C}), Swamp ({B}), Swamp ({B})
+  cast   Casts Colossal Dreadmaw {4}{B}{B}
+         > War Room taps for generic
+         > Swamp taps for {B}
+         > Mind Stone taps for generic
+         > War Room taps for generic
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  board  lands: 3 Swamp, 2 War Room
+         permanents: 1 Black Bears, 1 Colossal Dreadmaw, 1 Exploration, 1 Investigator, 1 Landfall Draw, 1 Mind Stone
+         hand: 1 Life Ring, 1 Ornithopter, 1 Viscera Seer
+         graveyard: - | exile: -
+--- turn 7 | available 7 | spent 6 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  effect Landfall Draw draws Bitterblossom
+  mana   7 mana untapped: War Room ({C}), Swamp ({B}), Mind Stone ({C}), War Room ({C}), Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Bitterblossom {1}{B}
+         > War Room taps for generic
+         > Swamp taps for {B}
+  effect Bitterblossom will fire every upkeep from next turn
+  cast   Casts Life Ring {1}
+         > Mind Stone taps for generic
+  effect Life Ring has an ability, used when the turn has the mana spare
+  cast   Casts Viscera Seer {B}
+         > Swamp taps for {B}
+  effect Viscera Seer has an ability, used when the turn has the mana spare
+  cast   Casts Ornithopter {0}
+  effect Ornithopter will fire at every end step
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Investigator
+  cast   Casts Investigator {1}{B}
+         > Swamp taps for {B}
+         > War Room taps for generic
+  effect Investigator creates 1 Clue
+  note   Stops with 1 mana up and no spell in hand
+  effect End step: Ornithopter draws Swamp
+  note   Life total 38 (-2 this turn)
+  board  lands: 4 Swamp, 2 War Room
+         permanents: 1 Bitterblossom, 1 Black Bears, 1 Clue, 1 Colossal Dreadmaw, 1 Exploration, 2 Investigator, 1 Landfall Draw, 1 Life Ring, 1 Mind Stone, 1 Ornithopter, 1 Viscera Seer
+         hand: 1 Swamp
+         graveyard: - | exile: -
+--- turn 8 | available 8 | spent 6 | damage 0
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Black Bears
+  land   Plays Swamp
+  effect Landfall Draw draws Swamp
+  land   Plays Swamp (extra land drop)
+  mana   9 mana untapped: War Room ({C}), Swamp ({B}), Mind Stone ({C}), War Room ({C}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Black Bears {1}{B}
+         > War Room taps for generic
+         > Swamp taps for {B}
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Viscera Seer
+  cast   Casts Viscera Seer {B}
+         > Swamp taps for {B}
+  effect Viscera Seer has an ability, used when the turn has the mana spare
+  cast   Activates Mind Stone: {1}, {T}, sacrifice it
+         > War Room taps for generic
+  effect Ornithopter draws Ornithopter
+  effect Mind Stone draws Swamp
+  cast   Casts Ornithopter {0}
+  effect Ornithopter will fire at every end step
+  cast   Activates Clue: {2}, sacrifice it
+         > Swamp taps for generic
+         > Swamp taps for generic
+  effect Ornithopter draws Swamp
+  effect Ornithopter draws Ornithopter
+  effect Clue draws Ornithopter
+  cast   Casts Ornithopter {0}
+  effect Ornithopter will fire at every end step
+  cast   Casts Ornithopter {0}
+  effect Ornithopter will fire at every end step
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Viscera Seer scry 1
+  note   Stops with 2 mana up and no spell in hand
+  effect End step: Ornithopter draws Swamp
+  effect End step: Ornithopter draws Swamp
+  effect End step: Ornithopter draws Colossal Dreadmaw
+  effect End step: Ornithopter draws Swamp
+  note   Life total 35 (-3 this turn)
+  board  lands: 6 Swamp, 2 War Room
+         permanents: 1 Bitterblossom, 2 Black Bears, 1 Colossal Dreadmaw, 1 Exploration, 2 Investigator, 1 Landfall Draw, 1 Life Ring, 4 Ornithopter, 2 Viscera Seer
+         hand: 1 Colossal Dreadmaw, 5 Swamp
+         graveyard: 1 Mind Stone | exile: -
+--- turn 9 | available 10 | spent 9 | damage 2
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Blood Artist
+  land   Plays Swamp
+  effect Landfall Draw draws Viscera Seer
+  land   Plays Swamp (extra land drop)
+  mana   10 mana untapped: War Room ({C}), Swamp ({B}), Swamp ({B}), War Room ({C}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Colossal Dreadmaw {4}{B}{B}
+         > War Room taps for generic
+         > War Room taps for generic
+         > Swamp taps for {B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+  cast   Casts Blood Artist {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Blood Artist is watching, and fires when it sees what it is waiting for
+  cast   Casts Viscera Seer {B}
+         > Swamp taps for {B}
+  effect Viscera Seer has an ability, used when the turn has the mana spare
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Swamp
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Blood Artist deals 1 damage
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  note   Stops with 1 mana up and no spell in hand
+  effect End step: Ornithopter draws Threshold Engine
+  effect End step: Ornithopter draws Black Bears
+  effect End step: Ornithopter draws Threshold Engine
+  effect End step: Ornithopter draws Swamp
+  note   Discards Swamp down to 7 cards
+  note   Life total 32 (-3 this turn)
+  board  lands: 8 Swamp, 2 War Room
+         permanents: 1 Bitterblossom, 2 Black Bears, 2 Colossal Dreadmaw, 1 Exploration, 2 Investigator, 1 Landfall Draw, 1 Life Ring, 4 Ornithopter, 3 Viscera Seer
+         hand: 1 Black Bears, 4 Swamp, 2 Threshold Engine
+         graveyard: 1 Blood Artist, 1 Mind Stone, 1 Swamp | exile: -
+--- turn 10 | available 12 | spent 11 | damage 2
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Graveyard Engine
+  land   Plays Swamp
+  effect Landfall Draw draws Blood Artist
+  land   Plays Swamp (extra land drop)
+  mana   12 mana untapped: War Room ({C}), Swamp ({B}), Swamp ({B}), War Room ({C}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Graveyard Engine {2}{B}
+         > War Room taps for generic
+         > War Room taps for generic
+         > Swamp taps for {B}
+  effect Graveyard Engine will fire every upkeep from next turn
+  cast   Casts Blood Artist {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Blood Artist is watching, and fires when it sees what it is waiting for
+  cast   Casts Threshold Engine {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Threshold Engine will fire every upkeep from next turn
+  cast   Casts Threshold Engine {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Threshold Engine will fire every upkeep from next turn
+  cast   Casts Black Bears {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Landfall Draw
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Blood Artist deals 1 damage
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect End step: Ornithopter draws Black Bears
+  effect End step: Ornithopter draws Swamp
+  effect End step: Ornithopter draws Colossal Dreadmaw
+  effect End step: Ornithopter draws Black Bears
+  note   Life total 29 (-3 this turn)
+  board  lands: 10 Swamp, 2 War Room
+         permanents: 1 Bitterblossom, 3 Black Bears, 2 Colossal Dreadmaw, 1 Exploration, 1 Graveyard Engine, 2 Investigator, 1 Landfall Draw, 1 Life Ring, 4 Ornithopter, 2 Threshold Engine, 3 Viscera Seer
+         hand: 2 Black Bears, 1 Colossal Dreadmaw, 1 Landfall Draw, 3 Swamp
+         graveyard: 2 Blood Artist, 1 Mind Stone, 1 Swamp | exile: -
+
+=== seed 6 | mulligans 0 ===
+opener: Bitterblossom, Black Bears, Black Bears, Life Ring, Mind Stone, Ornithopter, Viscera Seer
+--- turn 1 | available 0 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   No land to play
+  mana   No mana available
+  board  lands: -
+         permanents: -
+         hand: 1 Bitterblossom, 2 Black Bears, 1 Life Ring, 1 Mind Stone, 1 Ornithopter, 1 Viscera Seer
+         graveyard: - | exile: -
+--- turn 2 | available 1 | spent 1 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  mana   1 mana untapped: Swamp ({B})
+  cast   Casts Life Ring {1}
+         > Swamp taps for generic
+  effect Life Ring has an ability, used when the turn has the mana spare
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Swamp
+  note   Life total 38 (-2 this turn)
+  board  lands: 1 Swamp
+         permanents: 1 Life Ring
+         hand: 1 Bitterblossom, 2 Black Bears, 1 Mind Stone, 1 Ornithopter, 1 Swamp, 1 Viscera Seer
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 3 | damage 0
+  draw   Draws Blood Artist
+  land   Plays Swamp
+  mana   2 mana untapped: Swamp ({B}), Swamp ({B})
+  cast   Casts Mind Stone {2} (ramp first)
+         > Swamp taps for generic
+         > Mind Stone taps for generic
+  mana   Mind Stone will add 1 {C} this turn
+  effect Mind Stone has an ability, used when the turn has the mana spare
+  cast   Casts Viscera Seer {B}
+         > Swamp taps for {B}
+  effect Viscera Seer has an ability, used when the turn has the mana spare
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Swamp
+  note   Life total 36 (-2 this turn)
+  board  lands: 2 Swamp
+         permanents: 1 Life Ring, 1 Mind Stone, 1 Viscera Seer
+         hand: 1 Bitterblossom, 2 Black Bears, 1 Blood Artist, 1 Ornithopter, 1 Swamp
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 4 | damage 1
+  draw   Draws Swamp
+  land   Plays Swamp
+  mana   4 mana untapped: Swamp ({B}), Swamp ({B}), Mind Stone ({C}), Swamp ({B})
+  cast   Casts Blood Artist {1}{B}
+         > Swamp taps for {B}
+         > Mind Stone taps for generic
+  effect Blood Artist is watching, and fires when it sees what it is waiting for
+  cast   Casts Black Bears {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Graveyard Engine
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  note   Life total 34 (-2 this turn)
+  board  lands: 3 Swamp
+         permanents: 1 Black Bears, 1 Life Ring, 1 Mind Stone, 1 Viscera Seer
+         hand: 1 Bitterblossom, 1 Black Bears, 1 Graveyard Engine, 1 Ornithopter, 1 Swamp
+         graveyard: 1 Blood Artist | exile: -
+--- turn 5 | available 5 | spent 5 | damage 0
+  draw   Draws Mox Opal
+  land   Plays Swamp
+  mana   5 mana untapped: Swamp ({B}), Swamp ({B}), Mind Stone ({C}), Swamp ({B}), Swamp ({B})
+  cast   Casts Mox Opal {0} (ramp first)
+  mana   Mox Opal will tap for mana from this turn, as its rule says
+  effect Mox Opal resolves
+  cast   Casts Graveyard Engine {2}{B}
+         > Swamp taps for {B}
+         > Mind Stone taps for generic
+         > Swamp taps for generic
+  effect Graveyard Engine will fire every upkeep from next turn
+  cast   Casts Bitterblossom {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Bitterblossom will fire every upkeep from next turn
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Swamp
+  note   Life total 32 (-2 this turn)
+  board  lands: 4 Swamp
+         permanents: 1 Bitterblossom, 1 Black Bears, 1 Graveyard Engine, 1 Life Ring, 1 Mind Stone, 1 Mox Opal, 1 Viscera Seer
+         hand: 1 Black Bears, 1 Ornithopter, 1 Swamp
+         graveyard: 1 Blood Artist | exile: -
+--- turn 6 | available 6 | spent 3 | damage 0
+  effect Upkeep: Graveyard Engine mills Investigator, Graveyard Engine, Black Bears, moves Black Bears to the battlefield
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Swamp
+  land   Plays Swamp
+  mana   7 mana untapped: Swamp ({B}), Swamp ({B}), Mind Stone ({C}), Swamp ({B}), Swamp ({B}), Mox Opal ({W/U/B/R/G}), Swamp ({B})
+  cast   Casts Black Bears {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  cast   Casts Ornithopter {0}
+  effect Ornithopter will fire at every end step
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Swamp
+  cast   Activates Mind Stone: {1}, {T}, sacrifice it
+         > Swamp taps for generic
+  effect Ornithopter draws War Room
+  effect Mind Stone draws Swamp
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Viscera Seer scry 1
+  note   Stops with 3 mana up and no spell in hand
+  effect End step: Ornithopter draws Ornithopter
+  note   Life total 29 (-3 this turn)
+  board  lands: 5 Swamp
+         permanents: 1 Bitterblossom, 3 Black Bears, 1 Graveyard Engine, 1 Life Ring, 1 Mox Opal, 1 Ornithopter, 1 Viscera Seer
+         hand: 1 Ornithopter, 3 Swamp, 1 War Room
+         graveyard: 1 Blood Artist, 1 Graveyard Engine, 1 Investigator, 1 Mind Stone | exile: -
+--- turn 7 | available 8 | spent 8 | damage 0
+  effect Upkeep: Graveyard Engine mills Swamp, Bitterblossom, Swamp, moves Investigator to the battlefield
+  effect Investigator creates 1 Clue
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Swamp
+  land   Plays Swamp over War Room
+  mana   7 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Mox Opal ({W/U/B/R/G}), Swamp ({B})
+  cast   Casts Ornithopter {0}
+  effect Ornithopter will fire at every end step
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Swamp
+  cast   Activates Clue: {2}, sacrifice it
+         > Swamp taps for generic
+         > Swamp taps for generic
+  effect Ornithopter draws Mind Stone
+  effect Ornithopter draws Threshold Engine
+  effect Clue draws Threshold Engine
+  cast   Casts Mind Stone {2} (ramp first)
+         > Swamp taps for generic
+         > Mox Opal taps for generic
+  mana   Mind Stone will add 1 {C} this turn
+  effect Mind Stone has an ability, used when the turn has the mana spare
+  cast   Casts Threshold Engine {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Threshold Engine will fire every upkeep from next turn
+  cast   Casts Threshold Engine {1}{B}
+         > Swamp taps for {B}
+         > Mind Stone taps for generic
+  effect Threshold Engine will fire every upkeep from next turn
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Viscera Seer scry 1
+  effect End step: Ornithopter draws Mind Stone
+  effect End step: Ornithopter draws Swamp
+  note   Life total 26 (-3 this turn)
+  board  lands: 6 Swamp
+         permanents: 1 Bitterblossom, 3 Black Bears, 1 Graveyard Engine, 1 Investigator, 1 Life Ring, 1 Mind Stone, 1 Mox Opal, 2 Ornithopter, 2 Threshold Engine, 1 Viscera Seer
+         hand: 1 Mind Stone, 5 Swamp, 1 War Room
+         graveyard: 1 Bitterblossom, 1 Blood Artist, 1 Graveyard Engine, 1 Mind Stone, 2 Swamp | exile: -
+--- turn 8 | available 9 | spent 9 | damage 4
+  effect Upkeep: Graveyard Engine mills Swamp, Exploration, Viscera Seer, moves Blood Artist to the battlefield
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  effect Upkeep: Threshold Engine draws Swamp
+  effect Upkeep: Threshold Engine draws Blood Artist
+  draw   Draws Swamp
+  land   Plays Swamp over War Room
+  mana   9 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Mox Opal ({W/U/B/R/G}), Swamp ({B}), Mind Stone ({C}), Swamp ({B})
+  cast   Casts Mind Stone {2} (ramp first)
+         > Swamp taps for generic
+         > Swamp taps for generic
+  mana   Mind Stone will add 1 {C} this turn
+  effect Mind Stone has an ability, used when the turn has the mana spare
+  cast   Casts Blood Artist {1}{B}
+         > Swamp taps for {B}
+         > Mox Opal taps for generic
+  effect Blood Artist is watching, and fires when it sees what it is waiting for
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Black Bears
+  cast   Casts Black Bears {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  cast   Activates Mind Stone: {1}, {T}, sacrifice it
+         > Mind Stone taps for generic
+  effect Ornithopter draws Swamp
+  effect Ornithopter draws Black Bears
+  effect Mind Stone draws Swamp
+  cast   Casts Black Bears {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Blood Artist deals 1 damage
+  effect Blood Artist deals 1 damage
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  effect End step: Ornithopter draws Black Bears
+  effect End step: Ornithopter draws Viscera Seer
+  note   Discards Swamp, Swamp, War Room, Swamp down to 7 cards
+  note   Life total 23 (-3 this turn)
+  board  lands: 7 Swamp
+         permanents: 1 Bitterblossom, 5 Black Bears, 1 Graveyard Engine, 1 Investigator, 1 Life Ring, 1 Mind Stone, 1 Mox Opal, 2 Ornithopter, 2 Threshold Engine, 1 Viscera Seer
+         hand: 1 Black Bears, 5 Swamp, 1 Viscera Seer
+         graveyard: 1 Bitterblossom, 2 Blood Artist, 1 Exploration, 1 Graveyard Engine, 2 Mind Stone, 6 Swamp, 1 Viscera Seer, 1 War Room | exile: -
+--- turn 9 | available 10 | spent 10 | damage 2
+  effect Upkeep: Graveyard Engine mills Swamp, Ornithopter, War Room, moves Blood Artist to the battlefield
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  effect Upkeep: Threshold Engine draws Investigator
+  effect Upkeep: Threshold Engine draws Swamp
+  draw   Draws Colossal Dreadmaw
+  land   Plays Swamp
+  mana   10 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Mox Opal ({W/U/B/R/G}), Swamp ({B}), Mind Stone ({C}), Swamp ({B}), Swamp ({B})
+  cast   Casts Colossal Dreadmaw {4}{B}{B}
+         > Swamp taps for {B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Mox Opal taps for generic
+         > Swamp taps for generic
+         > Mind Stone taps for generic
+  cast   Casts Investigator {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Investigator creates 1 Clue
+  cast   Casts Black Bears {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Blood Artist
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Blood Artist deals 1 damage
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  effect End step: Ornithopter draws Landfall Draw
+  effect End step: Ornithopter draws Swamp
+  note   Discards Swamp, Swamp down to 7 cards
+  note   Life total 20 (-3 this turn)
+  board  lands: 8 Swamp
+         permanents: 1 Bitterblossom, 6 Black Bears, 1 Clue, 1 Colossal Dreadmaw, 1 Graveyard Engine, 2 Investigator, 1 Life Ring, 1 Mind Stone, 1 Mox Opal, 2 Ornithopter, 2 Threshold Engine, 1 Viscera Seer
+         hand: 1 Blood Artist, 1 Landfall Draw, 4 Swamp, 1 Viscera Seer
+         graveyard: 1 Bitterblossom, 2 Blood Artist, 1 Exploration, 1 Graveyard Engine, 2 Mind Stone, 1 Ornithopter, 9 Swamp, 1 Viscera Seer, 2 War Room | exile: -
+--- turn 10 | available 11 | spent 11 | damage 6
+  effect Upkeep: Graveyard Engine mills Mind Stone, Swamp, Life Ring, moves Blood Artist to the battlefield
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  effect Upkeep: Threshold Engine draws War Room
+  effect Upkeep: Threshold Engine draws Colossal Dreadmaw
+  draw   Draws Blood Artist
+  land   Plays Swamp over War Room
+  mana   11 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Mox Opal ({W/U/B/R/G}), Swamp ({B}), Mind Stone ({C}), Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Colossal Dreadmaw {4}{B}{B}
+         > Swamp taps for {B}
+         > Swamp taps for {B}
+         > Mox Opal taps for generic
+         > Swamp taps for generic
+         > Mind Stone taps for generic
+         > Swamp taps for generic
+  cast   Casts Blood Artist {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Blood Artist is watching, and fires when it sees what it is waiting for
+  cast   Casts Blood Artist {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Blood Artist is watching, and fires when it sees what it is waiting for
+  cast   Casts Viscera Seer {B}
+         > Swamp taps for {B}
+  effect Viscera Seer has an ability, used when the turn has the mana spare
+  cast   Activates Life Ring: Pay 2 life
+  effect Life Ring draws Black Bears
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing 1/1 Creature token
+  effect Blood Artist deals 1 damage
+  effect Blood Artist deals 1 damage
+  effect Blood Artist deals 1 damage
+  effect Viscera Seer scry 1
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  cast   Activates Viscera Seer: Sacrifice 1 other permanent matching t:creature, sacrificing Blood Artist
+  effect Viscera Seer scry 1
+  effect Blood Artist deals 1 damage
+  effect End step: Ornithopter draws Swamp
+  effect End step: Ornithopter draws Black Bears
+  note   Discards Swamp down to 7 cards
+  note   Life total 17 (-3 this turn)
+  board  lands: 9 Swamp
+         permanents: 1 Bitterblossom, 6 Black Bears, 1 Clue, 2 Colossal Dreadmaw, 1 Graveyard Engine, 2 Investigator, 1 Life Ring, 1 Mind Stone, 1 Mox Opal, 2 Ornithopter, 2 Threshold Engine, 2 Viscera Seer
+         hand: 2 Black Bears, 1 Landfall Draw, 3 Swamp, 1 War Room
+         graveyard: 1 Bitterblossom, 4 Blood Artist, 1 Exploration, 1 Graveyard Engine, 1 Life Ring, 3 Mind Stone, 1 Ornithopter, 11 Swamp, 1 Viscera Seer, 2 War Room | exile: -

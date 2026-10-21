@@ -1,0 +1,1143 @@
+{
+ "cards": [
+  {
+   "oracleId": "05d24b0c-904a-46b6-b42a-96a4d91a0dd4",
+   "name": "Wastes",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Basic Land",
+   "oracleText": "{T}: Add {C}.",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "C",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "342199e0-15b6-4824-83da-25caef2592b3",
+   "name": "Hill Giant",
+   "manaCost": "{3}{R}",
+   "cmc": 4,
+   "typeLine": "Creature — Giant",
+   "oracleText": null,
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "power": "3",
+   "toughness": "3",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "a3a98bc9-caa0-49b7-951c-fe4e4f54e4ba",
+   "name": "Ornithopter",
+   "manaCost": "{0}",
+   "cmc": 0,
+   "typeLine": "Artifact Creature — Thopter",
+   "oracleText": "Flying",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "power": "0",
+   "toughness": "2",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "56719f6a-1a6c-4c0a-8d21-18f7d7350b68",
+   "name": "Swamp",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Basic Land — Swamp",
+   "oracleText": "({T}: Add {B}.)",
+   "colors": [],
+   "colorIdentity": [
+    "B"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "B",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "310f141c-7f37-4729-aed6-dd9c09db448d",
+   "name": "Blood Artist",
+   "manaCost": "{1}{B}",
+   "cmc": 2,
+   "typeLine": "Creature — Vampire",
+   "oracleText": "Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "power": "0",
+   "toughness": "1",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "f82a4e85-526d-4456-b700-7760043a31be",
+   "name": "Viscera Seer",
+   "manaCost": "{B}",
+   "cmc": 1,
+   "typeLine": "Creature — Vampire Wizard",
+   "oracleText": "Sacrifice a creature: Scry 1. (Look at the top card of your library. You may put that card on the bottom.)",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "power": "1",
+   "toughness": "1",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "fb868840-09fa-49b1-85cb-b08ad065e972",
+   "name": "Bitterblossom",
+   "manaCost": "{1}{B}",
+   "cmc": 2,
+   "typeLine": "Kindred Enchantment — Faerie",
+   "oracleText": "At the beginning of your upkeep, you lose 1 life and create a 1/1 black Faerie Rogue creature token with flying.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "rarity": "mythic",
+   "defaultScryfallId": "",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "14c8f55d-d177-4c25-a931-ebeb9e6062a0",
+   "name": "Grizzly Bears",
+   "manaCost": "{1}{G}",
+   "cmc": 2,
+   "typeLine": "Creature — Bear",
+   "oracleText": null,
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "power": "2",
+   "toughness": "2",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "c97361b5-af16-4a7b-af85-a429dbaf4ad2",
+   "name": "Mind Stone",
+   "manaCost": "{2}",
+   "cmc": 2,
+   "typeLine": "Artifact",
+   "oracleText": "{T}: Add {C}.\n{1}, {T}, Sacrifice this artifact: Draw a card.",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "C",
+   "mana": [
+    1,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "08c7db90-c0cf-4482-b7ee-bb033e5996d2",
+   "name": "Colossal Dreadmaw",
+   "manaCost": "{4}{G}{G}",
+   "cmc": 6,
+   "typeLine": "Creature — Dinosaur",
+   "oracleText": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "power": "6",
+   "toughness": "6",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "de2440de-e948-4811-903c-0bbe376ff64d",
+   "name": "Mox Opal",
+   "manaCost": "{0}",
+   "cmc": 0,
+   "typeLine": "Legendary Artifact",
+   "oracleText": "Metalcraft — {T}: Add one mana of any color. Activate only if you control three or more artifacts.",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "mythic",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "WUBRG"
+  },
+  {
+   "oracleId": "71c52bf5-2a5d-488e-8b15-7ef290e4b77d",
+   "name": "War Room",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "{T}: Add {C}.\n{3}, {T}, Pay life equal to the number of colors in your commanders' color identity: Draw a card.",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "rare",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "C",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "4ac9116f-36bc-4d71-b696-d6ee064e1d58",
+   "name": "Juggernaut",
+   "manaCost": "{4}",
+   "cmc": 4,
+   "typeLine": "Artifact Creature — Juggernaut",
+   "oracleText": "This creature attacks each combat if able.\nThis creature can't be blocked by Walls.",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "power": "5",
+   "toughness": "3",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6",
+   "name": "Forest",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Basic Land — Forest",
+   "oracleText": "({T}: Add {G}.)",
+   "colors": [],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "G",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "0c2841bb-038c-4fbf-8360-bc0a1522b58d",
+   "name": "Exploration",
+   "manaCost": "{G}",
+   "cmc": 1,
+   "typeLine": "Enchantment",
+   "oracleText": "You may play an additional land on each of your turns.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "rare",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "mana": [
+    5,
+    1,
+    16
+   ]
+  },
+  {
+   "oracleId": "d2075f58-b0e9-4e85-b7e6-0523a27a1d5b",
+   "name": "Bala Ged Recovery // Bala Ged Sanctuary",
+   "manaCost": "{2}{G}",
+   "cmc": 3,
+   "typeLine": "Sorcery // Land",
+   "oracleText": "Return target card from your graveyard to your hand.\n//\nThis land enters tapped.\n{T}: Add {G}.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "layout": "modal_dfc",
+   "produces": "G",
+   "mana": [
+    0,
+    1,
+    1
+   ]
+  },
+  {
+   "oracleId": "cc187110-1148-4090-bbb8-e205694a39f5",
+   "name": "Counterspell",
+   "manaCost": "{U}{U}",
+   "cmc": 2,
+   "typeLine": "Instant",
+   "oracleText": "Counter target spell.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "4669e8c7-fc37-4b97-9cb7-8d29b43d9176",
+   "name": "Overlord of the Hauntwoods",
+   "manaCost": "{3}{G}{G}",
+   "cmc": 5,
+   "typeLine": "Enchantment Creature — Avatar Horror",
+   "oracleText": "Impending 4—{1}{G}{G} (If you cast this spell for its impending cost, it enters with four time counters and isn't a creature until the last is removed. At the beginning of your end step, remove a time counter from it.)\nWhenever this permanent enters or attacks, create a tapped colorless land token named Everywhere that is every basic land type.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "mythic",
+   "defaultScryfallId": "",
+   "power": "6",
+   "toughness": "5",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "8973bd99-20f8-4867-90ef-50392147ee1b",
+   "name": "Wood Elves",
+   "manaCost": "{2}{G}",
+   "cmc": 3,
+   "typeLine": "Creature — Elf Scout",
+   "oracleText": "When this creature enters, search your library for a Forest card, put that card onto the battlefield, then shuffle.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "power": "1",
+   "toughness": "1",
+   "layout": "normal",
+   "mana": [
+    3,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "34994475-b914-44f6-8ca1-c2747b6d5956",
+   "name": "Mole Man, Moloid Master",
+   "manaCost": "{2}{G}",
+   "cmc": 3,
+   "typeLine": "Legendary Creature — Human Villain",
+   "oracleText": "You may play lands from your graveyard.\nLandfall — Whenever a land you control enters, create a 1/1 green Minion creature token named Moloid with \"Whenever this token attacks, you may mill a card.\"",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "rare",
+   "defaultScryfallId": "",
+   "power": "1",
+   "toughness": "1",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "a3fb7228-e76b-4e96-a40e-20b5fed75685",
+   "name": "Mountain",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Basic Land — Mountain",
+   "oracleText": "({T}: Add {R}.)",
+   "colors": [],
+   "colorIdentity": [
+    "R"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "R",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "12c03a03-36bf-487e-b8be-e55399525da5",
+   "name": "Mulch",
+   "manaCost": "{1}{G}",
+   "cmc": 2,
+   "typeLine": "Sorcery",
+   "oracleText": "Reveal the top four cards of your library. Put all land cards revealed this way into your hand and the rest into your graveyard.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "4457ed35-7c10-48c8-9776-456485fdf070",
+   "name": "Lightning Bolt",
+   "manaCost": "{R}",
+   "cmc": 1,
+   "typeLine": "Instant",
+   "oracleText": "Lightning Bolt deals 3 damage to any target.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "dbcbdf37-c40f-4068-b4a7-a849cab1056c",
+   "name": "Six",
+   "manaCost": "{2}{G}",
+   "cmc": 3,
+   "typeLine": "Legendary Creature — Treefolk",
+   "oracleText": "Reach\nWhenever Six attacks, mill three cards. You may put a land card from among them into your hand.\nDuring your turn, nonland permanent cards in your graveyard have retrace. (You may cast permanent cards from your graveyard by discarding a land card in addition to paying their other costs.)",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "rare",
+   "defaultScryfallId": "",
+   "power": "2",
+   "toughness": "4",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "7eff84f1-f772-497a-b350-bbc93d0230f7",
+   "name": "Harmonize",
+   "manaCost": "{2}{G}{G}",
+   "cmc": 4,
+   "typeLine": "Sorcery",
+   "oracleText": "Draw three cards.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "effect": [
+    0,
+    3
+   ]
+  },
+  {
+   "oracleId": "686f4a37-b5e4-46d4-9e0e-11794b2d12cd",
+   "name": "Golgari Grave-Troll",
+   "manaCost": "{4}{G}",
+   "cmc": 5,
+   "typeLine": "Creature — Troll Skeleton",
+   "oracleText": "This creature enters with a +1/+1 counter on it for each creature card in your graveyard.\n{1}, Remove a +1/+1 counter from this creature: Regenerate this creature.\nDredge 6 (If you would draw a card, you may mill six cards instead. If you do, return this card from your graveyard to your hand.)",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "rare",
+   "defaultScryfallId": "",
+   "power": "0",
+   "toughness": "0",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "ac8fba34-512c-4f24-999a-ab72f1ce4acb",
+   "name": "Life from the Loam",
+   "manaCost": "{1}{G}",
+   "cmc": 2,
+   "typeLine": "Sorcery",
+   "oracleText": "Return up to three target land cards from your graveyard to your hand.\nDredge 3 (If you would draw a card, you may mill three cards instead. If you do, return this card from your graveyard to your hand.)",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "rare",
+   "defaultScryfallId": "",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "cdc4048a-73ec-4ec1-a179-2b36c397bf1a",
+   "name": "Dakmor Salvage",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "This land enters tapped.\n{T}: Add {B}.\nDredge 2 (If you would draw a card, you may mill two cards instead. If you do, return this card from your graveyard to your hand.)",
+   "colors": [],
+   "colorIdentity": [
+    "B"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "B",
+   "mana": [
+    0,
+    1,
+    1
+   ]
+  },
+  {
+   "oracleId": "cc54fa4e-d1dd-4680-8a9e-1ed07d4df0f3",
+   "name": "Trash Panda",
+   "manaCost": "{4}{B}{G}",
+   "cmc": 6,
+   "typeLine": "Creature — Raccoon Bear",
+   "oracleText": "When Trash Panda enters the battlefield, exile target opponent's graveyard. Create a Food token for each creature card exiled this way.\nWhen Trash Panda dies, put it into target opponent's graveyard.\nOpponent dredge 4 (If an opponent would draw a card, instead you may have them mill exactly four cards and put this card into their hand from their graveyard.)",
+   "colors": [
+    "B",
+    "G"
+   ],
+   "colorIdentity": [
+    "B",
+    "G"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "power": "5",
+   "toughness": "5",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "b981af39-4ee6-4fbc-9a89-618dcad9dfbf",
+   "name": "The Necrobloom",
+   "manaCost": "{1}{W}{B}{G}",
+   "cmc": 4,
+   "typeLine": "Legendary Creature — Plant",
+   "oracleText": "Landfall — Whenever a land you control enters, create a 0/1 green Plant creature token. If you control seven or more lands with different names, create a 2/2 black Zombie creature token instead.\nLand cards in your graveyard have dredge 2. (You may return a land card from your graveyard to your hand and mill two cards instead of drawing a card.)",
+   "colors": [
+    "W",
+    "B",
+    "G"
+   ],
+   "colorIdentity": [
+    "W",
+    "B",
+    "G"
+   ],
+   "rarity": "rare",
+   "defaultScryfallId": "",
+   "power": "2",
+   "toughness": "7",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "3d6fa57a-aa53-4b5c-b8af-a7612c823117",
+   "name": "Faithless Looting",
+   "manaCost": "{R}",
+   "cmc": 1,
+   "typeLine": "Sorcery",
+   "oracleText": "Draw two cards, then discard two cards.\nFlashback {2}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "effect": [
+    0,
+    2,
+    2
+   ]
+  },
+  {
+   "oracleId": "bc71ebf6-2056-41f7-be35-b2e5c34afa99",
+   "name": "Plains",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Basic Land — Plains",
+   "oracleText": "({T}: Add {W}.)",
+   "colors": [],
+   "colorIdentity": [
+    "W"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "W",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "1cfc7b12-a595-492d-81ee-bd100ba7de6a",
+   "name": "Erebos, God of the Dead",
+   "manaCost": "{3}{B}",
+   "cmc": 4,
+   "typeLine": "Legendary Enchantment Creature — God",
+   "oracleText": "Indestructible\nAs long as your devotion to black is less than five, Erebos isn't a creature. (Each {B} in the mana costs of permanents you control counts toward your devotion to black.)\nYour opponents can't gain life.\n{1}{B}, Pay 2 life: Draw a card.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "rarity": "mythic",
+   "defaultScryfallId": "",
+   "power": "5",
+   "toughness": "7",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "41820f91-27cf-41c0-bb5e-9adf6845a6a4",
+   "name": "Phyrexian Obliterator",
+   "manaCost": "{B}{B}{B}{B}",
+   "cmc": 4,
+   "typeLine": "Creature — Phyrexian Horror",
+   "oracleText": "Trample\nWhenever a source deals damage to this creature, that source's controller sacrifices that many permanents of their choice.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "rarity": "mythic",
+   "defaultScryfallId": "",
+   "power": "5",
+   "toughness": "5",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "5f601f48-d24b-4883-9fde-b3f620e7c9ea",
+   "name": "Wall of Omens",
+   "manaCost": "{1}{W}",
+   "cmc": 2,
+   "typeLine": "Creature — Wall",
+   "oracleText": "Defender\nWhen this creature enters, draw a card.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "power": "0",
+   "toughness": "4",
+   "layout": "normal",
+   "effect": [
+    0,
+    1
+   ]
+  },
+  {
+   "oracleId": "38f3b157-0df4-409b-89cc-086e1531cd5b",
+   "name": "Gray Merchant of Asphodel",
+   "manaCost": "{3}{B}{B}",
+   "cmc": 5,
+   "typeLine": "Creature — Zombie",
+   "oracleText": "When this creature enters, each opponent loses X life, where X is your devotion to black. You gain life equal to the life lost this way. (Each {B} in the mana costs of permanents you control counts toward your devotion to black.)",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "power": "2",
+   "toughness": "4",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "5470dcfa-4eff-43da-abf7-19922841f719",
+   "name": "Kitchen Finks",
+   "manaCost": "{1}{G/W}{G/W}",
+   "cmc": 3,
+   "typeLine": "Creature — Ouphe",
+   "oracleText": "When this creature enters, you gain 2 life.\nPersist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.)",
+   "colors": [
+    "W",
+    "G"
+   ],
+   "colorIdentity": [
+    "W",
+    "G"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "power": "3",
+   "toughness": "2",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "a35c2e20-eb90-4132-b65f-be1fcb569819",
+   "name": "Watchwolf",
+   "manaCost": "{G}{W}",
+   "cmc": 2,
+   "typeLine": "Creature — Wolf",
+   "oracleText": null,
+   "colors": [
+    "W",
+    "G"
+   ],
+   "colorIdentity": [
+    "W",
+    "G"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "power": "3",
+   "toughness": "3",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "f8b9dd54-0837-47f4-ad14-7a0322d46d5f",
+   "name": "Birthing Pod",
+   "manaCost": "{3}{G/P}",
+   "cmc": 4,
+   "typeLine": "Artifact",
+   "oracleText": "({G/P} can be paid with either {G} or 2 life.)\n{1}{G/P}, {T}, Sacrifice a creature: Search your library for a creature card with mana value equal to 1 plus the sacrificed creature's mana value, put that card onto the battlefield, then shuffle. Activate only as a sorcery.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "rare",
+   "defaultScryfallId": "",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "70034860-5198-421f-871d-7c1676337b6e",
+   "name": "Reaper King",
+   "manaCost": "{2/W}{2/U}{2/B}{2/R}{2/G}",
+   "cmc": 10,
+   "typeLine": "Legendary Artifact Creature — Scarecrow",
+   "oracleText": "({2/W} can be paid with any two mana or with {W}. This card's mana value is 10.)\nOther Scarecrow creatures you control get +1/+1.\nWhenever another Scarecrow you control enters, destroy target permanent.",
+   "colors": [
+    "W",
+    "U",
+    "B",
+    "R",
+    "G"
+   ],
+   "colorIdentity": [
+    "W",
+    "U",
+    "B",
+    "R",
+    "G"
+   ],
+   "rarity": "rare",
+   "defaultScryfallId": "",
+   "power": "6",
+   "toughness": "6",
+   "layout": "normal"
+  },
+  {
+   "oracleId": "aa959340-c869-4caa-92c7-572bd8d23eef",
+   "name": "Field of the Dead",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "This land enters tapped.\n{T}: Add {C}.\nWhenever this land or another land you control enters, if you control seven or more lands with different names, create a 2/2 black Zombie creature token.",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "rare",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "gameChanger": true,
+   "produces": "C",
+   "mana": [
+    0,
+    1,
+    1
+   ]
+  },
+  {
+   "oracleId": "b2c6aa39-2d2a-459c-a555-fb48ba993373",
+   "name": "Island",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Basic Land — Island",
+   "oracleText": "({T}: Add {U}.)",
+   "colors": [],
+   "colorIdentity": [
+    "U"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "U",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "0895c9b7-ae7d-4bb3-af17-3b75deb50a25",
+   "name": "Command Tower",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "{T}: Add one mana of any color in your commander's color identity.",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "WUBRG",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "27b047e3-0d41-45e2-98e9-9391d7923a1e",
+   "name": "Exotic Orchard",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "{T}: Add one mana of any color that a land an opponent controls could produce.",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "rare",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "WUBRG",
+   "mana": [
+    0,
+    1,
+    256,
+    ""
+   ]
+  },
+  {
+   "oracleId": "c23e5b80-08d2-4e24-9908-fe2aa4f30f6f",
+   "name": "Reliquary Tower",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "You have no maximum hand size.\n{T}: Add {C}.",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "C",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "f29dc596-2121-4421-8463-15f6c2e8b9b3",
+   "name": "Rogue's Passage",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "{T}: Add {C}.\n{4}, {T}: Target creature can't be blocked this turn.",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "C",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "cfdd5dc6-593e-495a-8cfe-3a56b3c4c7df",
+   "name": "Temple of the False God",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "{T}: Add {C}{C}. Activate only if you control five or more lands.",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "C",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "oracleId": "b473e293-59e3-4e04-acf2-622604aeb25f",
+   "name": "Path of Ancestry",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "This land enters tapped.\n{T}: Add one mana of any color in your commander's color identity. When that mana is spent to cast a creature spell that shares a creature type with your commander, scry 1. (Look at the top card of your library. You may put that card on the bottom.)",
+   "colors": [],
+   "colorIdentity": [],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "WUBRG",
+   "mana": [
+    0,
+    1,
+    1
+   ]
+  },
+  {
+   "oracleId": "ec96cde2-f1e6-495c-94e2-3e8ae79e556c",
+   "name": "Thornwood Falls",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "This land enters tapped.\nWhen this land enters, you gain 1 life.\n{T}: Add {G} or {U}.",
+   "colors": [],
+   "colorIdentity": [
+    "U",
+    "G"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "UG",
+   "mana": [
+    0,
+    1,
+    1
+   ]
+  },
+  {
+   "oracleId": "6de714e1-446d-4fb9-9e3d-bcd3ec6af9ca",
+   "name": "Jungle Hollow",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "This land enters tapped.\nWhen this land enters, you gain 1 life.\n{T}: Add {B} or {G}.",
+   "colors": [],
+   "colorIdentity": [
+    "B",
+    "G"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "BG",
+   "mana": [
+    0,
+    1,
+    1
+   ]
+  },
+  {
+   "oracleId": "9f8fe514-77ed-41b4-a6f3-c6f095bb97be",
+   "name": "Tranquil Thicket",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "This land enters tapped.\n{T}: Add {G}.\nCycling {G} ({G}, Discard this card: Draw a card.)",
+   "colors": [],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "G",
+   "mana": [
+    0,
+    1,
+    1
+   ]
+  },
+  {
+   "oracleId": "45429b2c-be3b-4b2e-9bab-a059ccbda8cd",
+   "name": "Blossoming Sands",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "This land enters tapped.\nWhen this land enters, you gain 1 life.\n{T}: Add {G} or {W}.",
+   "colors": [],
+   "colorIdentity": [
+    "W",
+    "G"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "WG",
+   "mana": [
+    0,
+    1,
+    1
+   ]
+  },
+  {
+   "oracleId": "d37f858e-03c8-4594-9b92-cd03699a1591",
+   "name": "Scoured Barrens",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Land",
+   "oracleText": "This land enters tapped.\nWhen this land enters, you gain 1 life.\n{T}: Add {W} or {B}.",
+   "colors": [],
+   "colorIdentity": [
+    "W",
+    "B"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "normal",
+   "produces": "WB",
+   "mana": [
+    0,
+    1,
+    1
+   ]
+  },
+  {
+   "oracleId": "e8cf80a1-6908-4adb-88e7-2015672d4905",
+   "name": "Karametra's Acolyte",
+   "manaCost": "{3}{G}",
+   "cmc": 4,
+   "typeLine": "Creature — Human Druid",
+   "oracleText": "{T}: Add an amount of {G} equal to your devotion to green. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "power": "1",
+   "toughness": "4",
+   "layout": "normal",
+   "produces": "G",
+   "mana": [
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "oracleId": "0ee14128-3bec-4b65-8ee4-619337d4ed45",
+   "name": "Leatherback Baloth",
+   "manaCost": "{G}{G}{G}",
+   "cmc": 3,
+   "typeLine": "Creature — Beast",
+   "oracleText": null,
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "uncommon",
+   "defaultScryfallId": "",
+   "power": "4",
+   "toughness": "5",
+   "layout": "normal"
+  }
+ ],
+ "tokens": [
+  {
+   "oracleId": "26457778-9e7e-4de8-b5a9-78990b1fca13",
+   "name": "Moloid",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Token Creature — Minion",
+   "oracleText": "Whenever this token attacks, you may mill a card.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "power": "1",
+   "toughness": "1",
+   "layout": "token"
+  },
+  {
+   "oracleId": "77872673-2806-41ee-bc4c-57fbc488a40f",
+   "name": "Everywhere",
+   "manaCost": null,
+   "cmc": 0,
+   "typeLine": "Token Land",
+   "oracleText": "This land is a Plains, Island, Swamp, Mountain, and Forest. ({T}: Add {W}, {U}, {B}, {R}, or {G}.)",
+   "colors": [],
+   "colorIdentity": [
+    "W",
+    "U",
+    "B",
+    "R",
+    "G"
+   ],
+   "rarity": "common",
+   "defaultScryfallId": "",
+   "layout": "token",
+   "produces": "WUBRG",
+   "mana": [
+    0,
+    1,
+    0
+   ]
+  }
+ ]
+}

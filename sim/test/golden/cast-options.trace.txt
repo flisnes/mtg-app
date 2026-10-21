@@ -1,0 +1,427 @@
+cast-sim + object-sim F4/F5: every printed way to cast, plus authored flashback, suspend and multikicker, spend policy curve
+
+=== seed 227 | mulligans 0 ===
+opener: Everflowing Chalice, Faithless Looting, Island, Island, Island, Light Up the Stage, Think Twice
+--- turn 1 | available 1 | spent 1 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Island
+  mana   1 mana untapped: Island ({U})
+  cast   Suspends Ancestral Visions for 4 turns
+         > Island taps for {U}
+  board  lands: 1 Island
+         permanents: -
+         hand: 1 Everflowing Chalice, 1 Faithless Looting, 2 Island, 1 Light Up the Stage, 1 Think Twice
+         graveyard: - | exile: 1 Ancestral Visions
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Pyretic Charge
+  land   Plays Island
+  mana   2 mana untapped: Island ({U}), Island ({U})
+  cast   Casts Everflowing Chalice {0}, kicked (ramp first)
+         > Island taps for generic
+         > Island taps for generic
+  mana   Everflowing Chalice will tap for mana from this turn, as its rule says
+  effect Everflowing Chalice gets 1 charge counter
+  board  lands: 2 Island
+         permanents: 1 Everflowing Chalice
+         hand: 1 Faithless Looting, 1 Island, 1 Light Up the Stage, 1 Pyretic Charge, 1 Think Twice
+         graveyard: - | exile: 1 Ancestral Visions
+--- turn 3 | available 4 | spent 3 | damage 0
+  draw   Draws Faithless Looting
+  land   Plays Island
+  mana   4 mana untapped: Island ({U}), Island ({U}), Everflowing Chalice ({C}), Island ({U})
+  cast   Casts Faithless Looting {U}
+         > Island taps for {U}
+  effect Faithless Looting draws Opt, Treasure Cruise, discards Treasure Cruise, Pyretic Charge
+  cast   Casts Opt {U}
+         > Island taps for {U}
+  effect Opt draws Starbreach Whale
+  cast   Casts Faithless Looting {U}
+         > Island taps for {U}
+  effect Faithless Looting draws Opt, Island, discards Starbreach Whale, Think Twice
+  note   Stops: Opt {U} is not payable in these colours alongside what is already cast
+  board  lands: 3 Island
+         permanents: 1 Everflowing Chalice
+         hand: 1 Island, 1 Light Up the Stage, 1 Opt
+         graveyard: 2 Faithless Looting, 1 Opt, 1 Pyretic Charge, 1 Starbreach Whale, 1 Think Twice, 1 Treasure Cruise | exile: 1 Ancestral Visions
+--- turn 4 | available 5 | spent 4 | damage 0
+  draw   Draws Island
+  land   Plays Island
+  mana   5 mana untapped: Island ({U}), Island ({U}), Everflowing Chalice ({C}), Island ({U}), Island ({U})
+  cast   Casts Light Up the Stage {U}
+         > Island taps for {U}
+  effect Light Up the Stage moves Blue Bears, Mulldrifter to exile
+  cast   Casts Opt {U}
+         > Island taps for {U}
+  effect Opt draws Island
+  cast   Casts Blue Bears {1}{U} from exile (exiled)
+         > Island taps for {U}
+         > Everflowing Chalice taps for generic
+  note   Stops with 1 mana up and no spell in hand
+  board  lands: 4 Island
+         permanents: 1 Blue Bears, 1 Everflowing Chalice
+         hand: 2 Island
+         graveyard: 2 Faithless Looting, 1 Light Up the Stage, 2 Opt, 1 Pyretic Charge, 1 Starbreach Whale, 1 Think Twice, 1 Treasure Cruise | exile: 1 Ancestral Visions, 1 Mulldrifter
+--- turn 5 | available 6 | spent 5 | damage 0
+  cast   Ancestral Visions comes off suspend and is cast for free
+  effect Ancestral Visions draws Island, Island, Starbreach Whale
+  draw   Draws Kavu Primarch
+  land   Plays Island
+  mana   6 mana untapped: Island ({U}), Island ({U}), Everflowing Chalice ({C}), Island ({U}), Island ({U}), Island ({U})
+  cast   Suspends Ancestral Visions for 4 turns
+         > Island taps for {U}
+  cast   Casts Think Twice from the graveyard (flashback)
+         > Island taps for {U}
+         > Everflowing Chalice taps for generic
+         > Island taps for generic
+  effect Think Twice draws Island
+  effect Ancestral Visions goes back to the command zone
+  cast   Casts Starbreach Whale for its warp cost (2 mana), convoking 1 creature
+         > Island taps for {U}
+  effect Starbreach Whale draws Island
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  note   1 creature was tapped for mana, so it does not attack
+  note   Starbreach Whale is exiled at end of turn (warp); it can be cast again from exile
+  note   Mulldrifter stays in exile: the turn to play it has passed
+  board  lands: 5 Island
+         permanents: 1 Blue Bears, 1 Everflowing Chalice
+         hand: 5 Island, 1 Kavu Primarch
+         graveyard: 2 Faithless Looting, 1 Light Up the Stage, 2 Opt, 1 Pyretic Charge, 1 Starbreach Whale, 1 Treasure Cruise | exile: 1 Ancestral Visions, 1 Mulldrifter, 1 Starbreach Whale, 1 Think Twice
+--- turn 6 | available 7 | spent 3 | damage 0
+  draw   Draws Muck Drubb
+  land   Plays Island
+  mana   7 mana untapped: Island ({U}), Island ({U}), Everflowing Chalice ({C}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Kavu Primarch {3}{U}, convoking 1 creature
+         > Island taps for {U}
+         > Island taps for generic
+         > Everflowing Chalice taps for generic
+  note   Stops with 4 mana up: nothing left in hand costs 4 or less
+  note   1 creature was tapped for mana, so it does not attack
+  board  lands: 6 Island
+         permanents: 1 Blue Bears, 1 Everflowing Chalice, 1 Kavu Primarch
+         hand: 4 Island, 1 Muck Drubb
+         graveyard: 2 Faithless Looting, 1 Light Up the Stage, 2 Opt, 1 Pyretic Charge, 1 Starbreach Whale, 1 Treasure Cruise | exile: 1 Ancestral Visions, 1 Mulldrifter, 1 Starbreach Whale, 1 Think Twice
+--- turn 7 | available 8 | spent 8 | damage 5
+  draw   Draws Faithless Looting
+  land   Plays Island
+  mana   8 mana untapped: Island ({U}), Island ({U}), Everflowing Chalice ({C}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Faithless Looting {U}
+         > Island taps for {U}
+  effect Faithless Looting draws Blue Bears, Behold the Multiverse, discards Muck Drubb, Island
+  cast   Casts Blue Bears {1}{U}
+         > Island taps for {U}
+         > Everflowing Chalice taps for generic
+  cast   Casts Muck Drubb from the graveyard (madness)
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+  cast   Foretells Behold the Multiverse for {2}
+         > Island taps for generic
+         > Island taps for generic
+  effect Attacks with 2 creatures for 5
+  board  lands: 7 Island
+         permanents: 2 Blue Bears, 1 Everflowing Chalice, 1 Kavu Primarch, 1 Muck Drubb
+         hand: 2 Island
+         graveyard: 3 Faithless Looting, 1 Island, 1 Light Up the Stage, 2 Opt, 1 Pyretic Charge, 1 Starbreach Whale, 1 Treasure Cruise | exile: 1 Ancestral Visions, 1 Behold the Multiverse, 1 Mulldrifter, 1 Starbreach Whale, 1 Think Twice
+--- turn 8 | available 9 | spent 9 | damage 10
+  draw   Draws Treasure Cruise
+  land   Plays Island
+  mana   9 mana untapped: Island ({U}), Island ({U}), Everflowing Chalice ({C}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Behold the Multiverse from exile (foretold, for its foretell cost)
+         > Everflowing Chalice taps for generic
+         > Island taps for {U}
+  effect Behold the Multiverse draws Island, Faithless Looting
+  cast   Casts Faithless Looting {U}
+         > Island taps for {U}
+  effect Faithless Looting draws Island, Island, discards Island, Island
+  cast   Casts Starbreach Whale {4}{U} from exile (warped)
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+  effect Starbreach Whale draws Island
+  cast   Casts Treasure Cruise {6}{U}, delving 6 cards from the graveyard
+         > Island taps for {U}
+  effect Treasure Cruise draws Island, Mulldrifter, Starbreach Whale
+  effect Attacks with 4 creatures for 10
+  board  lands: 8 Island
+         permanents: 2 Blue Bears, 1 Everflowing Chalice, 1 Kavu Primarch, 1 Muck Drubb, 1 Starbreach Whale
+         hand: 4 Island, 1 Mulldrifter, 1 Starbreach Whale
+         graveyard: 3 Faithless Looting, 1 Light Up the Stage, 2 Opt, 1 Pyretic Charge, 1 Starbreach Whale, 1 Treasure Cruise | exile: 1 Ancestral Visions, 1 Behold the Multiverse, 1 Faithless Looting, 3 Island, 1 Mulldrifter, 1 Think Twice, 1 Treasure Cruise
+
+=== seed 386 | mulligans 0 ===
+opener: Blue Bears, Island, Island, Muck Drubb, Muck Drubb, Pyretic Charge, Pyretic Charge
+--- turn 1 | available 1 | spent 1 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Island
+  mana   1 mana untapped: Island ({U})
+  cast   Suspends Ancestral Visions for 4 turns
+         > Island taps for {U}
+  board  lands: 1 Island
+         permanents: -
+         hand: 1 Blue Bears, 1 Island, 2 Muck Drubb, 2 Pyretic Charge
+         graveyard: - | exile: 1 Ancestral Visions
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Island
+  land   Plays Island
+  mana   2 mana untapped: Island ({U}), Island ({U})
+  cast   Casts Blue Bears {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  board  lands: 2 Island
+         permanents: 1 Blue Bears
+         hand: 1 Island, 2 Muck Drubb, 2 Pyretic Charge
+         graveyard: - | exile: 1 Ancestral Visions
+--- turn 3 | available 3 | spent 0 | damage 2
+  draw   Draws Island
+  land   Plays Island
+  mana   3 mana untapped: Island ({U}), Island ({U}), Island ({U})
+  note   Stops with 3 mana up: nothing left in hand costs 3 or less
+  effect Attacks with 1 creature for 2
+  board  lands: 3 Island
+         permanents: 1 Blue Bears
+         hand: 1 Island, 2 Muck Drubb, 2 Pyretic Charge
+         graveyard: - | exile: 1 Ancestral Visions
+--- turn 4 | available 4 | spent 4 | damage 2
+  draw   Draws Island
+  land   Plays Island
+  mana   4 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Plots Pyretic Charge for 4 mana, to cast for free from next turn
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+  effect Attacks with 1 creature for 2
+  board  lands: 4 Island
+         permanents: 1 Blue Bears
+         hand: 1 Island, 2 Muck Drubb, 1 Pyretic Charge
+         graveyard: - | exile: 1 Ancestral Visions, 1 Pyretic Charge
+--- turn 5 | available 5 | spent 5 | damage 2
+  cast   Ancestral Visions comes off suspend and is cast for free
+  effect Ancestral Visions draws Think Twice, Everflowing Chalice, Behold the Multiverse
+  draw   Draws Blue Bears
+  land   Plays Island
+  mana   5 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Everflowing Chalice {0}, kicked 2 times (ramp first)
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+  mana   Everflowing Chalice will tap for mana from this turn, as its rule says
+  effect Everflowing Chalice gets 2 charge counters
+  effect Ancestral Visions goes back to the command zone
+  cast   Suspends Ancestral Visions for 4 turns
+         > Island taps for {U}
+  cast   Casts Pyretic Charge from exile (plotted, for free)
+  effect Pyretic Charge draws Light Up the Stage, Muck Drubb
+  effect Attacks with 1 creature for 2
+  note   Discards Muck Drubb down to 7 cards
+  board  lands: 5 Island
+         permanents: 1 Blue Bears, 1 Everflowing Chalice
+         hand: 1 Behold the Multiverse, 1 Blue Bears, 1 Light Up the Stage, 2 Muck Drubb, 1 Pyretic Charge, 1 Think Twice
+         graveyard: 1 Muck Drubb, 1 Pyretic Charge | exile: 1 Ancestral Visions
+--- turn 6 | available 7 | spent 7 | damage 2
+  draw   Draws Behold the Multiverse
+  land   No land to play
+  mana   7 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Everflowing Chalice ({C}), Everflowing Chalice ({C})
+  cast   Casts Light Up the Stage {U}
+         > Island taps for {U}
+  effect Light Up the Stage moves Island, Think Twice to exile
+  cast   Casts Think Twice {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Think Twice draws Island
+  cast   Casts Think Twice {1}{U} from exile (exiled)
+         > Island taps for {U}
+         > Everflowing Chalice taps for generic
+  effect Think Twice draws Pyretic Charge
+  cast   Casts Blue Bears {1}{U}
+         > Island taps for {U}
+         > Everflowing Chalice taps for generic
+  effect Attacks with 1 creature for 2
+  board  lands: 5 Island
+         permanents: 2 Blue Bears, 1 Everflowing Chalice
+         hand: 2 Behold the Multiverse, 1 Island, 2 Muck Drubb, 2 Pyretic Charge
+         graveyard: 1 Light Up the Stage, 1 Muck Drubb, 1 Pyretic Charge, 2 Think Twice | exile: 1 Ancestral Visions, 1 Island
+--- turn 7 | available 8 | spent 8 | damage 0
+  draw   Draws Faithless Looting
+  land   Plays Island
+  mana   8 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Everflowing Chalice ({C}), Everflowing Chalice ({C}), Island ({U})
+  cast   Casts Faithless Looting {U}
+         > Island taps for {U}
+  effect Faithless Looting draws Island, Kavu Primarch, discards Muck Drubb, Pyretic Charge
+  cast   Casts Muck Drubb from the graveyard (madness)
+         > Island taps for {U}
+         > Island taps for generic
+         > Everflowing Chalice taps for generic
+  cast   Casts Think Twice from the graveyard (flashback)
+         > Island taps for {U}
+         > Everflowing Chalice taps for generic
+         > Island taps for generic
+  effect Think Twice draws Starbreach Whale
+  cast   Casts Kavu Primarch {3}{U}, convoking 3 creatures
+         > Island taps for {U}
+  note   2 creatures were tapped for mana, so they do not attack
+  note   Island stays in exile: the turn to play it has passed
+  board  lands: 6 Island
+         permanents: 2 Blue Bears, 1 Everflowing Chalice, 1 Kavu Primarch, 1 Muck Drubb
+         hand: 2 Behold the Multiverse, 1 Island, 1 Muck Drubb, 1 Pyretic Charge, 1 Starbreach Whale
+         graveyard: 1 Faithless Looting, 1 Light Up the Stage, 1 Muck Drubb, 2 Pyretic Charge, 1 Think Twice | exile: 1 Ancestral Visions, 1 Island, 1 Think Twice
+--- turn 8 | available 9 | spent 9 | damage 10
+  draw   Draws Island
+  land   Plays Island
+  mana   9 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Everflowing Chalice ({C}), Everflowing Chalice ({C}), Island ({U}), Island ({U})
+  cast   Casts Think Twice from the graveyard (flashback)
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+  effect Think Twice draws Island
+  cast   Casts Behold the Multiverse {3}{U}
+         > Island taps for {U}
+         > Everflowing Chalice taps for generic
+         > Everflowing Chalice taps for generic
+         > Island taps for generic
+  effect Behold the Multiverse draws Island, Island
+  cast   Casts Starbreach Whale for its warp cost (2 mana)
+         > Island taps for {U}
+         > Island taps for generic
+  effect Starbreach Whale draws Island
+  effect Attacks with 4 creatures for 10
+  note   Starbreach Whale is exiled at end of turn (warp); it can be cast again from exile
+  note   Discards Island down to 7 cards
+  board  lands: 7 Island
+         permanents: 2 Blue Bears, 1 Everflowing Chalice, 1 Kavu Primarch, 1 Muck Drubb
+         hand: 1 Behold the Multiverse, 4 Island, 1 Muck Drubb, 1 Pyretic Charge
+         graveyard: 1 Behold the Multiverse, 1 Faithless Looting, 1 Island, 1 Light Up the Stage, 1 Muck Drubb, 2 Pyretic Charge | exile: 1 Ancestral Visions, 1 Island, 1 Starbreach Whale, 2 Think Twice
+
+=== seed 106 | mulligans 0 ===
+opener: Blue Bears, Island, Island, Light Up the Stage, Muck Drubb, Starbreach Whale, Village Rites
+--- turn 1 | available 1 | spent 1 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Island
+  mana   1 mana untapped: Island ({U})
+  cast   Suspends Ancestral Visions for 4 turns
+         > Island taps for {U}
+  board  lands: 1 Island
+         permanents: -
+         hand: 1 Blue Bears, 1 Island, 1 Light Up the Stage, 1 Muck Drubb, 1 Starbreach Whale, 1 Village Rites
+         graveyard: - | exile: 1 Ancestral Visions
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Muck Drubb
+  land   Plays Island
+  mana   2 mana untapped: Island ({U}), Island ({U})
+  cast   Casts Light Up the Stage {U}
+         > Island taps for {U}
+  effect Light Up the Stage moves Island, Light Up the Stage to exile
+  cast   Casts Light Up the Stage {U} from exile (exiled)
+         > Island taps for {U}
+  effect Light Up the Stage moves Opt, Faithless Looting to exile
+  board  lands: 2 Island
+         permanents: -
+         hand: 1 Blue Bears, 2 Muck Drubb, 1 Starbreach Whale, 1 Village Rites
+         graveyard: 2 Light Up the Stage | exile: 1 Ancestral Visions, 1 Faithless Looting, 1 Island, 1 Opt
+--- turn 3 | available 2 | spent 2 | damage 0
+  draw   Draws Mulldrifter
+  land   No land to play
+  mana   2 mana untapped: Island ({U}), Island ({U})
+  cast   Casts Opt {U} from exile (exiled)
+         > Island taps for {U}
+  effect Opt draws Behold the Multiverse
+  cast   Casts Faithless Looting {U} from exile (exiled)
+         > Island taps for {U}
+  effect Faithless Looting draws Blue Bears, Think Twice, discards Muck Drubb, Starbreach Whale
+  note   Island stays in exile: the turn to play it has passed
+  board  lands: 2 Island
+         permanents: -
+         hand: 1 Behold the Multiverse, 2 Blue Bears, 1 Muck Drubb, 1 Mulldrifter, 1 Think Twice, 1 Village Rites
+         graveyard: 1 Faithless Looting, 2 Light Up the Stage, 1 Muck Drubb, 1 Opt, 1 Starbreach Whale | exile: 1 Ancestral Visions, 1 Island
+--- turn 4 | available 3 | spent 3 | damage 0
+  draw   Draws Island
+  land   Plays Island
+  mana   3 mana untapped: Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Blue Bears {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  cast   Casts Village Rites {U}, sacrificing Blue Bears
+         > Island taps for {U}
+  board  lands: 3 Island
+         permanents: -
+         hand: 1 Behold the Multiverse, 1 Blue Bears, 1 Muck Drubb, 1 Mulldrifter, 1 Think Twice
+         graveyard: 1 Blue Bears, 1 Faithless Looting, 2 Light Up the Stage, 1 Muck Drubb, 1 Opt, 1 Starbreach Whale, 1 Village Rites | exile: 1 Ancestral Visions, 1 Island
+--- turn 5 | available 4 | spent 4 | damage 0
+  cast   Ancestral Visions comes off suspend and is cast for free
+  effect Ancestral Visions draws Behold the Multiverse, Island, Island
+  draw   Draws Faithless Looting
+  land   Plays Island
+  mana   4 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Suspends Ancestral Visions for 4 turns
+         > Island taps for {U}
+  cast   Casts Faithless Looting {U}
+         > Island taps for {U}
+  effect Faithless Looting draws Muck Drubb, Island, discards Mulldrifter, Muck Drubb
+  effect Ancestral Visions goes back to the command zone
+  cast   Casts Blue Bears {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  board  lands: 4 Island
+         permanents: 1 Blue Bears
+         hand: 2 Behold the Multiverse, 2 Island, 1 Muck Drubb, 1 Think Twice
+         graveyard: 1 Blue Bears, 2 Faithless Looting, 2 Light Up the Stage, 2 Muck Drubb, 1 Mulldrifter, 1 Opt, 1 Starbreach Whale, 1 Village Rites | exile: 1 Ancestral Visions, 1 Island
+--- turn 6 | available 5 | spent 5 | damage 2
+  draw   Draws Island
+  land   Plays Island
+  mana   5 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Think Twice {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Think Twice draws Island
+  cast   Casts Think Twice from the graveyard (flashback)
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+  effect Think Twice draws Muck Drubb
+  effect Attacks with 1 creature for 2
+  board  lands: 5 Island
+         permanents: 1 Blue Bears
+         hand: 2 Behold the Multiverse, 3 Island, 2 Muck Drubb
+         graveyard: 1 Blue Bears, 2 Faithless Looting, 2 Light Up the Stage, 2 Muck Drubb, 1 Mulldrifter, 1 Opt, 1 Starbreach Whale, 1 Village Rites | exile: 1 Ancestral Visions, 1 Island, 1 Think Twice
+--- turn 7 | available 6 | spent 6 | damage 2
+  draw   Draws Mulldrifter
+  land   Plays Island
+  mana   6 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Behold the Multiverse {3}{U}
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+  effect Behold the Multiverse draws Island, Blue Bears
+  cast   Casts Blue Bears {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Attacks with 1 creature for 2
+  board  lands: 6 Island
+         permanents: 2 Blue Bears
+         hand: 1 Behold the Multiverse, 3 Island, 2 Muck Drubb, 1 Mulldrifter
+         graveyard: 1 Behold the Multiverse, 1 Blue Bears, 2 Faithless Looting, 2 Light Up the Stage, 2 Muck Drubb, 1 Mulldrifter, 1 Opt, 1 Starbreach Whale, 1 Village Rites | exile: 1 Ancestral Visions, 1 Island, 1 Think Twice
+--- turn 8 | available 7 | spent 7 | damage 4
+  draw   Draws Treasure Cruise
+  land   Plays Island
+  mana   7 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Behold the Multiverse {3}{U}
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+  effect Behold the Multiverse draws Island, Island
+  cast   Casts Mulldrifter for its evoke cost (3 mana)
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+  effect Mulldrifter draws Muck Drubb, Faithless Looting
+  effect Mulldrifter is sacrificed (evoked)
+  effect Attacks with 2 creatures for 4
+  note   Discards Treasure Cruise, Muck Drubb down to 7 cards
+  board  lands: 7 Island
+         permanents: 2 Blue Bears
+         hand: 1 Faithless Looting, 4 Island, 2 Muck Drubb
+         graveyard: 2 Behold the Multiverse, 1 Blue Bears, 2 Faithless Looting, 2 Light Up the Stage, 3 Muck Drubb, 2 Mulldrifter, 1 Opt, 1 Starbreach Whale, 1 Treasure Cruise, 1 Village Rites | exile: 1 Ancestral Visions, 1 Island, 1 Think Twice

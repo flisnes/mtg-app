@@ -1,0 +1,648 @@
+object-sim F6: Ashaya, Badgermole, Reliquary Tower, Ramunap, an anthem, a haste grant, Craterhoof, a landfall watcher
+
+=== seed 99 | mulligans 0 ===
+opener: Badgermole Cub, Badgermole Cub, Count the Lands, Evolving Wilds, Evolving Wilds, Forest, Lotus Cobra
+--- turn 1 | available 1 | spent 1 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest over Evolving Wilds
+  mana   1 mana untapped: Forest ({G})
+  cast   Casts Lotus Cobra {G}
+         > Forest taps for {G}
+  effect Lotus Cobra is watching, and fires when it sees what it is waiting for
+  board  lands: 1 Forest
+         permanents: 1 Lotus Cobra
+         hand: 1 Ashaya, Soul of the Wild, 2 Badgermole Cub, 1 Count the Lands, 1 Craterhoof Behemoth, 2 Evolving Wilds
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 2
+  draw   Draws Forest
+  land   Plays Forest over Evolving Wilds
+  effect Lotus Cobra draws Brick
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Badgermole Cub {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Badgermole Cub resolves
+  effect Attacks with 1 creature for 2
+  board  lands: 2 Forest
+         permanents: 1 Badgermole Cub, 1 Lotus Cobra
+         hand: 1 Ashaya, Soul of the Wild, 1 Badgermole Cub, 1 Brick, 1 Count the Lands, 1 Craterhoof Behemoth, 2 Evolving Wilds
+         graveyard: - | exile: -
+--- turn 3 | available 2 | spent 2 | damage 4
+  draw   Draws Grizzly Bears
+  land   Plays Evolving Wilds (enters tapped)
+  land   Cracks for Forest (enters tapped)
+  effect Lotus Cobra draws Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Badgermole Cub {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Badgermole Cub resolves
+  effect Attacks with 2 creatures for 4
+  board  lands: 3 Forest
+         permanents: 2 Badgermole Cub, 1 Lotus Cobra
+         hand: 1 Ashaya, Soul of the Wild, 1 Brick, 1 Count the Lands, 1 Craterhoof Behemoth, 1 Evolving Wilds, 1 Forest, 1 Grizzly Bears
+         graveyard: 1 Evolving Wilds | exile: -
+--- turn 4 | available 3 | spent 3 | damage 6
+  draw   Draws Fires of Yavimaya
+  land   Plays Evolving Wilds (enters tapped) over Forest
+  land   Cracks for Forest (enters tapped)
+  effect Lotus Cobra draws Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Count the Lands {2}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Count the Lands draws Ramunap Excavator, Glorious Anthem, Badgermole Cub, Count the Lands
+  effect Attacks with 3 creatures for 6
+  note   Discards Brick, Count the Lands down to 7 cards
+  board  lands: 4 Forest
+         permanents: 2 Badgermole Cub, 1 Count the Lands, 1 Lotus Cobra
+         hand: 1 Ashaya, Soul of the Wild, 1 Badgermole Cub, 1 Craterhoof Behemoth, 1 Fires of Yavimaya, 2 Forest, 1 Glorious Anthem, 1 Grizzly Bears, 1 Ramunap Excavator
+         graveyard: 1 Brick, 1 Count the Lands, 2 Evolving Wilds | exile: -
+--- turn 5 | available 5 | spent 4 | damage 7
+  draw   Draws Llanowar Elves
+  land   Plays Forest
+  effect Lotus Cobra draws Brick
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Forest taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  cast   Casts Ramunap Excavator {2}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Ramunap Excavator resolves
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 4 creatures for 7
+  board  lands: 5 Forest
+         permanents: 2 Badgermole Cub, 1 Count the Lands, 1 Llanowar Elves, 1 Lotus Cobra, 1 Ramunap Excavator
+         hand: 1 Ashaya, Soul of the Wild, 1 Badgermole Cub, 1 Brick, 1 Craterhoof Behemoth, 1 Fires of Yavimaya, 1 Forest, 1 Glorious Anthem, 1 Grizzly Bears
+         graveyard: 1 Brick, 1 Count the Lands, 2 Evolving Wilds | exile: -
+--- turn 6 | available 8 | spent 8 | damage 56
+  draw   Draws Reliquary Tower
+  land   Plays Evolving Wilds from the graveyard (enters tapped) over Forest, Reliquary Tower
+  land   Cracks for Forest (enters tapped)
+  effect Lotus Cobra draws Forest
+  mana   8 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G})
+  cast   Casts Craterhoof Behemoth {5}{G}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Llanowar Elves taps for generic
+  effect Craterhoof Behemoth gives 7 creatures +7/+7
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 6 creatures for 56
+  note   An opponent would be dead: 75 damage so far
+  note   Discards Brick down to 7 cards
+  board  lands: 6 Forest
+         permanents: 2 Badgermole Cub, 1 Count the Lands, 1 Craterhoof Behemoth, 1 Llanowar Elves, 1 Lotus Cobra, 1 Ramunap Excavator
+         hand: 1 Ashaya, Soul of the Wild, 1 Badgermole Cub, 1 Fires of Yavimaya, 2 Forest, 1 Glorious Anthem, 1 Grizzly Bears, 1 Reliquary Tower
+         graveyard: 2 Brick, 1 Count the Lands, 2 Evolving Wilds | exile: -
+--- turn 7 | available 9 | spent 9 | damage 14
+  draw   Draws Llanowar Elves
+  land   Plays Evolving Wilds from the graveyard (enters tapped) over Forest, Reliquary Tower
+  land   Cracks for Forest (enters tapped)
+  effect Lotus Cobra draws Brick
+  mana   9 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Forest ({G})
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Forest taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Badgermole Cub taps for generic
+  cast   Casts Badgermole Cub {1}{G}
+         > Forest taps for {G}
+         > Badgermole Cub taps for generic
+  effect Badgermole Cub resolves
+  cast   Casts Ashaya, Soul of the Wild {1}{G}
+         > Forest taps for {G}
+         > Llanowar Elves taps for generic
+  effect Ashaya, Soul of the Wild resolves
+  effect Lotus Cobra draws Badgermole Cub
+  cast   Casts Badgermole Cub {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Badgermole Cub resolves
+  effect Lotus Cobra draws Forest
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 6 creatures for 14
+  board  lands: 7 Forest
+         permanents: 1 Ashaya, Soul of the Wild, 4 Badgermole Cub, 1 Count the Lands, 1 Craterhoof Behemoth, 1 Grizzly Bears, 2 Llanowar Elves, 1 Lotus Cobra, 1 Ramunap Excavator
+         hand: 1 Brick, 1 Fires of Yavimaya, 3 Forest, 1 Glorious Anthem, 1 Reliquary Tower
+         graveyard: 2 Brick, 1 Count the Lands, 2 Evolving Wilds | exile: -
+--- turn 8 | available 67 | spent 27 | damage 30
+  draw   Draws Grizzly Bears
+  land   Plays Evolving Wilds from the graveyard (enters tapped) over Forest, Reliquary Tower
+  land   Cracks for Forest (enters tapped)
+  effect Lotus Cobra draws Forest
+  mana   67 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Forest ({G}), Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Lotus Cobra ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Count the Lands ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Ramunap Excavator ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Craterhoof Behemoth ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Grizzly Bears ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Ashaya, Soul of the Wild ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Lotus Cobra draws Reliquary Tower
+  cast   Casts Brick {20}
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Llanowar Elves taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Llanowar Elves taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Lotus Cobra taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+  cast   Casts Glorious Anthem {1}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Badgermole Cub taps for generic
+  effect Glorious Anthem resolves
+  cast   Casts Fires of Yavimaya {1}{G}
+         > Forest taps for {G}
+         > Badgermole Cub taps for generic
+  effect Fires of Yavimaya resolves
+  note   Stops with 40 mana up and no spell in hand
+  note   4 creatures were tapped for mana, so they do not attack
+  effect Attacks with 9 creatures for 30
+  board  lands: 8 Forest
+         permanents: 1 Ashaya, Soul of the Wild, 4 Badgermole Cub, 1 Count the Lands, 1 Craterhoof Behemoth, 1 Fires of Yavimaya, 1 Glorious Anthem, 2 Grizzly Bears, 2 Llanowar Elves, 1 Lotus Cobra, 1 Ramunap Excavator
+         hand: 4 Forest, 2 Reliquary Tower
+         graveyard: 3 Brick, 1 Count the Lands, 2 Evolving Wilds | exile: -
+
+=== seed 116 | mulligans 0 ===
+opener: Evolving Wilds, Evolving Wilds, Forest, Forest, Forest, Grizzly Bears, Reliquary Tower
+--- turn 1 | available 0 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Evolving Wilds (enters tapped) over Forest, Reliquary Tower
+  land   Cracks for Forest (enters tapped)
+  mana   No mana available
+  board  lands: 1 Forest
+         permanents: -
+         hand: 1 Ashaya, Soul of the Wild, 1 Craterhoof Behemoth, 1 Evolving Wilds, 3 Forest, 1 Grizzly Bears, 1 Reliquary Tower
+         graveyard: 1 Evolving Wilds | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Forest
+  land   Plays Reliquary Tower over Forest, Evolving Wilds
+  mana   2 mana untapped: Forest ({G}), Reliquary Tower ({C})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Reliquary Tower taps for generic
+  board  lands: 1 Forest, 1 Reliquary Tower
+         permanents: 1 Grizzly Bears
+         hand: 1 Ashaya, Soul of the Wild, 1 Craterhoof Behemoth, 1 Evolving Wilds, 4 Forest
+         graveyard: 1 Evolving Wilds | exile: -
+--- turn 3 | available 2 | spent 2 | damage 2
+  draw   Draws Brick
+  land   Plays Evolving Wilds (enters tapped) over Forest
+  land   Cracks for Forest (enters tapped)
+  mana   2 mana untapped: Forest ({G}), Reliquary Tower ({C})
+  cast   Casts Ashaya, Soul of the Wild {1}{G}
+         > Forest taps for {G}
+         > Reliquary Tower taps for generic
+  effect Ashaya, Soul of the Wild resolves
+  effect Attacks with 1 creature for 2
+  board  lands: 2 Forest, 1 Reliquary Tower
+         permanents: 1 Ashaya, Soul of the Wild, 1 Grizzly Bears
+         hand: 1 Brick, 1 Craterhoof Behemoth, 4 Forest
+         graveyard: 2 Evolving Wilds | exile: -
+--- turn 4 | available 6 | spent 1 | damage 2
+  draw   Draws Lotus Cobra
+  land   Plays Forest
+  mana   6 mana untapped: Forest ({G}), Reliquary Tower ({C}), Forest ({G}), Grizzly Bears ({G}), Ashaya, Soul of the Wild ({G}), Forest ({G})
+  cast   Casts Lotus Cobra {G}
+         > Forest taps for {G}
+  effect Lotus Cobra is watching, and fires when it sees what it is waiting for
+  note   Stops with 5 mana up: nothing left in hand costs 5 or less
+  effect Attacks with 2 creatures for 2
+  board  lands: 3 Forest, 1 Reliquary Tower
+         permanents: 1 Ashaya, Soul of the Wild, 1 Grizzly Bears, 1 Lotus Cobra
+         hand: 1 Brick, 1 Craterhoof Behemoth, 3 Forest
+         graveyard: 2 Evolving Wilds | exile: -
+--- turn 5 | available 8 | spent 4 | damage 4
+  draw   Draws Grizzly Bears
+  land   Plays Forest
+  effect Lotus Cobra draws Llanowar Elves
+  mana   8 mana untapped: Forest ({G}), Reliquary Tower ({C}), Forest ({G}), Grizzly Bears ({G}), Ashaya, Soul of the Wild ({G}), Forest ({G}), Lotus Cobra ({G}), Forest ({G})
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Grizzly Bears taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  effect Lotus Cobra draws Lotus Cobra
+  cast   Casts Grizzly Bears {1}{G}
+         > Reliquary Tower taps for generic
+         > Forest taps for {G}
+  effect Lotus Cobra draws Forest
+  cast   Casts Lotus Cobra {G}
+         > Forest taps for {G}
+  effect Lotus Cobra is watching, and fires when it sees what it is waiting for
+  note   Stops with 4 mana up: nothing left in hand costs 4 or less
+  effect Attacks with 3 creatures for 4
+  board  lands: 4 Forest, 1 Reliquary Tower
+         permanents: 1 Ashaya, Soul of the Wild, 2 Grizzly Bears, 1 Llanowar Elves, 2 Lotus Cobra
+         hand: 1 Brick, 1 Craterhoof Behemoth, 3 Forest
+         graveyard: 2 Evolving Wilds | exile: -
+--- turn 6 | available 12 | spent 12 | damage 13
+  draw   Draws Forest
+  land   Plays Forest
+  effect Lotus Cobra draws Count the Lands
+  effect Lotus Cobra draws Llanowar Elves
+  mana   12 mana untapped: Forest ({G}), Reliquary Tower ({C}), Forest ({G}), Grizzly Bears ({G}), Ashaya, Soul of the Wild ({G}), Forest ({G}), Lotus Cobra ({G}), Forest ({G}), Llanowar Elves ({G}), Grizzly Bears ({G}), Lotus Cobra ({G}), Forest ({G})
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Forest taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  effect Lotus Cobra draws Forest
+  effect Lotus Cobra draws Lotus Cobra
+  cast   Casts Craterhoof Behemoth {5}{G}{G}{G}
+         > Reliquary Tower taps for generic
+         > Forest taps for {G}
+         > Grizzly Bears taps for {G}
+         > Ashaya, Soul of the Wild taps for {G}
+         > Lotus Cobra taps for generic
+         > Forest taps for generic
+         > Llanowar Elves taps for generic
+         > Grizzly Bears taps for generic
+  effect Craterhoof Behemoth gives 8 creatures +8/+8
+  effect Lotus Cobra draws Forest
+  effect Lotus Cobra draws Grizzly Bears
+  cast   Casts Count the Lands {2}{G}
+         > Forest taps for {G}
+         > Lotus Cobra taps for generic
+         > Forest taps for generic
+  effect Count the Lands draws Lotus Cobra, Evolving Wilds, Evolving Wilds, Forest, Llanowar Elves, Glorious Anthem, Grizzly Bears, Forest, Fires of Yavimaya, Forest, Forest, Badgermole Cub, Forest, Forest, Forest
+  effect Lotus Cobra draws Ramunap Excavator
+  effect Lotus Cobra draws Badgermole Cub
+  note   6 creatures were tapped for mana, so they do not attack
+  effect Attacks with 1 creature for 13
+  board  lands: 5 Forest, 1 Reliquary Tower
+         permanents: 1 Ashaya, Soul of the Wild, 1 Count the Lands, 1 Craterhoof Behemoth, 2 Grizzly Bears, 2 Llanowar Elves, 2 Lotus Cobra
+         hand: 2 Badgermole Cub, 1 Brick, 2 Evolving Wilds, 1 Fires of Yavimaya, 12 Forest, 1 Glorious Anthem, 2 Grizzly Bears, 1 Llanowar Elves, 2 Lotus Cobra, 1 Ramunap Excavator
+         graveyard: 2 Evolving Wilds | exile: -
+--- turn 7 | available 15 | spent 14 | damage 5
+  draw   Draws Reliquary Tower
+  land   Plays Evolving Wilds (enters tapped) over Forest, Reliquary Tower
+  land   Cracks for Forest (enters tapped)
+  effect Lotus Cobra draws Forest
+  effect Lotus Cobra draws Count the Lands
+  mana   15 mana untapped: Forest ({G}), Reliquary Tower ({C}), Forest ({G}), Grizzly Bears ({G}), Ashaya, Soul of the Wild ({G}), Forest ({G}), Lotus Cobra ({G}), Forest ({G}), Llanowar Elves ({G}), Grizzly Bears ({G}), Lotus Cobra ({G}), Forest ({G}), Llanowar Elves ({G}), Craterhoof Behemoth ({G}), Count the Lands ({G})
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Llanowar Elves taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  effect Lotus Cobra draws Count the Lands
+  effect Lotus Cobra draws Evolving Wilds
+  cast   Casts Ramunap Excavator {2}{G}
+         > Reliquary Tower taps for generic
+         > Forest taps for {G}
+         > Grizzly Bears taps for generic
+  effect Ramunap Excavator resolves
+  effect Lotus Cobra draws Forest
+  effect Lotus Cobra draws Brick
+  cast   Casts Count the Lands {2}{G}
+         > Lotus Cobra taps for {G}
+         > Lotus Cobra taps for generic
+         > Forest taps for generic
+  effect Count the Lands draws Brick, Forest, Evolving Wilds, Ramunap Excavator, Glorious Anthem, Grizzly Bears, Forest, Llanowar Elves, Count the Lands, Badgermole Cub, Forest, Brick, Forest, Forest, Fires of Yavimaya, Count the Lands, Ramunap Excavator, Forest, Brick
+  effect Lotus Cobra draws Lotus Cobra
+  effect Lotus Cobra draws Forest
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Forest taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  effect Lotus Cobra draws Grizzly Bears
+  effect Lotus Cobra draws Lotus Cobra
+  cast   Casts Count the Lands {2}{G}
+         > Ashaya, Soul of the Wild taps for {G}
+         > Llanowar Elves taps for generic
+         > Craterhoof Behemoth taps for generic
+  effect Count the Lands draws Fires of Yavimaya, Grizzly Bears, Forest, Forest, Forest, Llanowar Elves, Forest, Brick, Badgermole Cub, Grizzly Bears, Llanowar Elves, Grizzly Bears, Glorious Anthem, Forest, Forest, Glorious Anthem, Forest, Llanowar Elves, Ramunap Excavator, Badgermole Cub, Badgermole Cub
+  effect Lotus Cobra draws Forest
+  effect Lotus Cobra draws Llanowar Elves
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Grizzly Bears taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  effect Lotus Cobra draws Brick
+  effect Lotus Cobra draws Grizzly Bears
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Forest taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  effect Lotus Cobra draws Brick
+  effect Lotus Cobra draws Count the Lands
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Forest taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  effect Lotus Cobra draws Forest
+  note   8 creatures were tapped for mana, so they do not attack
+  effect Attacks with 1 creature for 5
+  board  lands: 6 Forest, 1 Reliquary Tower
+         permanents: 1 Ashaya, Soul of the Wild, 3 Count the Lands, 1 Craterhoof Behemoth, 2 Grizzly Bears, 7 Llanowar Elves, 2 Lotus Cobra, 1 Ramunap Excavator
+         hand: 6 Badgermole Cub, 8 Brick, 3 Count the Lands, 3 Evolving Wilds, 3 Fires of Yavimaya, 30 Forest, 4 Glorious Anthem, 8 Grizzly Bears, 1 Llanowar Elves, 4 Lotus Cobra, 3 Ramunap Excavator, 1 Reliquary Tower
+         graveyard: 3 Evolving Wilds | exile: -
+--- turn 8 | available 24 | spent 21 | damage 19
+  land   Plays Evolving Wilds from the graveyard (enters tapped) over Forest, Reliquary Tower
+  land   Nothing left in the library to fetch
+  mana   24 mana untapped: Forest ({G}), Reliquary Tower ({C}), Forest ({G}), Grizzly Bears ({G}), Ashaya, Soul of the Wild ({G}), Forest ({G}), Lotus Cobra ({G}), Forest ({G}), Llanowar Elves ({G}), Grizzly Bears ({G}), Lotus Cobra ({G}), Forest ({G}), Llanowar Elves ({G}), Craterhoof Behemoth ({G}), Count the Lands ({G}), Forest ({G}), Llanowar Elves ({G}), Ramunap Excavator ({G}), Count the Lands ({G}), Llanowar Elves ({G}), Count the Lands ({G}), Llanowar Elves ({G}), Llanowar Elves ({G}), Llanowar Elves ({G})
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Llanowar Elves taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  cast   Casts Count the Lands {2}{G}
+         > Reliquary Tower taps for generic
+         > Forest taps for {G}
+         > Grizzly Bears taps for generic
+  effect Count the Lands resolves
+  cast   Casts Count the Lands {2}{G}
+         > Lotus Cobra taps for {G}
+         > Lotus Cobra taps for generic
+         > Forest taps for generic
+  effect Count the Lands resolves
+  cast   Casts Ramunap Excavator {2}{G}
+         > Forest taps for {G}
+         > Llanowar Elves taps for generic
+         > Craterhoof Behemoth taps for generic
+  effect Ramunap Excavator resolves
+  cast   Casts Count the Lands {2}{G}
+         > Ashaya, Soul of the Wild taps for {G}
+         > Count the Lands taps for generic
+         > Forest taps for generic
+  effect Count the Lands resolves
+  cast   Casts Ramunap Excavator {2}{G}
+         > Grizzly Bears taps for {G}
+         > Llanowar Elves taps for generic
+         > Ramunap Excavator taps for generic
+  effect Ramunap Excavator resolves
+  cast   Casts Ramunap Excavator {2}{G}
+         > Forest taps for {G}
+         > Count the Lands taps for generic
+         > Llanowar Elves taps for generic
+  effect Ramunap Excavator resolves
+  cast   Casts Badgermole Cub {1}{G}
+         > Forest taps for {G}
+         > Count the Lands taps for generic
+  effect Badgermole Cub resolves
+  note   7 creatures were tapped for mana, so they do not attack
+  effect Attacks with 10 creatures for 19
+  note   An opponent would be dead: 45 damage so far
+  board  lands: 6 Forest, 1 Reliquary Tower
+         permanents: 1 Ashaya, Soul of the Wild, 1 Badgermole Cub, 6 Count the Lands, 1 Craterhoof Behemoth, 2 Grizzly Bears, 8 Llanowar Elves, 2 Lotus Cobra, 4 Ramunap Excavator
+         hand: 5 Badgermole Cub, 8 Brick, 3 Evolving Wilds, 3 Fires of Yavimaya, 30 Forest, 4 Glorious Anthem, 8 Grizzly Bears, 4 Lotus Cobra, 1 Reliquary Tower
+         graveyard: 2 Evolving Wilds | exile: -
+
+=== seed 15 | mulligans 0 ===
+opener: Brick, Count the Lands, Forest, Glorious Anthem, Grizzly Bears, Llanowar Elves, Lotus Cobra
+--- turn 1 | available 1 | spent 1 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Forest taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  board  lands: 1 Forest
+         permanents: 1 Llanowar Elves
+         hand: 1 Ashaya, Soul of the Wild, 1 Brick, 1 Count the Lands, 1 Craterhoof Behemoth, 1 Glorious Anthem, 1 Grizzly Bears, 1 Lotus Cobra
+         graveyard: - | exile: -
+--- turn 2 | available 3 | spent 3 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Llanowar Elves ({G}), Forest ({G})
+  cast   Casts Count the Lands {2}{G}
+         > Forest taps for {G}
+         > Llanowar Elves taps for generic
+         > Forest taps for generic
+  effect Count the Lands draws Ramunap Excavator, Lotus Cobra
+  note   1 creature was tapped for mana, so it does not attack
+  board  lands: 2 Forest
+         permanents: 1 Count the Lands, 1 Llanowar Elves
+         hand: 1 Ashaya, Soul of the Wild, 1 Brick, 1 Craterhoof Behemoth, 1 Glorious Anthem, 1 Grizzly Bears, 2 Lotus Cobra, 1 Ramunap Excavator
+         graveyard: - | exile: -
+--- turn 3 | available 4 | spent 4 | damage 1
+  draw   Draws Forest
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Llanowar Elves ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Ramunap Excavator {2}{G}
+         > Llanowar Elves taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Ramunap Excavator resolves
+  cast   Casts Lotus Cobra {G}
+         > Forest taps for {G}
+  effect Lotus Cobra is watching, and fires when it sees what it is waiting for
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 1 creature for 1
+  board  lands: 3 Forest
+         permanents: 1 Count the Lands, 1 Llanowar Elves, 1 Lotus Cobra, 1 Ramunap Excavator
+         hand: 1 Ashaya, Soul of the Wild, 1 Brick, 1 Craterhoof Behemoth, 1 Glorious Anthem, 1 Grizzly Bears, 1 Lotus Cobra
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 4 | damage 5
+  draw   Draws Badgermole Cub
+  land   No land to play
+  mana   4 mana untapped: Forest ({G}), Llanowar Elves ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Badgermole Cub {1}{G}
+         > Llanowar Elves taps for {G}
+         > Forest taps for generic
+  effect Badgermole Cub resolves
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 3 creatures for 5
+  board  lands: 3 Forest
+         permanents: 1 Badgermole Cub, 1 Count the Lands, 1 Grizzly Bears, 1 Llanowar Elves, 1 Lotus Cobra, 1 Ramunap Excavator
+         hand: 1 Ashaya, Soul of the Wild, 1 Brick, 1 Craterhoof Behemoth, 1 Glorious Anthem, 1 Lotus Cobra
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 5 | damage 9
+  draw   Draws Badgermole Cub
+  land   No land to play
+  mana   5 mana untapped: Forest ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Ashaya, Soul of the Wild {1}{G}
+         > Llanowar Elves taps for {G}
+         > Forest taps for generic
+  effect Ashaya, Soul of the Wild resolves
+  effect Lotus Cobra draws Forest
+  cast   Casts Badgermole Cub {1}{G}
+         > Badgermole Cub taps for {G}
+         > Forest taps for generic
+  effect Badgermole Cub resolves
+  effect Lotus Cobra draws Forest
+  cast   Casts Lotus Cobra {G}
+         > Forest taps for {G}
+  effect Lotus Cobra is watching, and fires when it sees what it is waiting for
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 5 creatures for 9
+  board  lands: 3 Forest
+         permanents: 1 Ashaya, Soul of the Wild, 2 Badgermole Cub, 1 Count the Lands, 1 Grizzly Bears, 1 Llanowar Elves, 2 Lotus Cobra, 1 Ramunap Excavator
+         hand: 1 Brick, 1 Craterhoof Behemoth, 2 Forest, 1 Glorious Anthem
+         graveyard: - | exile: -
+--- turn 6 | available 31 | spent 17 | damage 131
+  draw   Draws Forest
+  land   Plays Forest
+  effect Lotus Cobra draws Llanowar Elves
+  effect Lotus Cobra draws Forest
+  mana   31 mana untapped: Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Forest ({G}), Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Count the Lands ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Ramunap Excavator ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Lotus Cobra ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Grizzly Bears ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Ashaya, Soul of the Wild ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Lotus Cobra ({G}), Forest ({G})
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Badgermole Cub taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  effect Lotus Cobra draws Forest
+  effect Lotus Cobra draws Llanowar Elves
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Count the Lands taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  effect Lotus Cobra draws Llanowar Elves
+  effect Lotus Cobra draws Lotus Cobra
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Badgermole Cub taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  effect Llanowar Elves resolves
+  effect Lotus Cobra draws Forest
+  effect Lotus Cobra draws Fires of Yavimaya
+  cast   Casts Craterhoof Behemoth {5}{G}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Badgermole Cub taps for {G}
+         > Badgermole Cub taps for generic
+         > Ramunap Excavator taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Lotus Cobra taps for generic
+  effect Craterhoof Behemoth gives 13 creatures +13/+13
+  effect Lotus Cobra draws Forest
+  effect Lotus Cobra draws Forest
+  cast   Casts Lotus Cobra {G}
+         > Llanowar Elves taps for {G}
+  effect Lotus Cobra is watching, and fires when it sees what it is waiting for
+  cast   Casts Glorious Anthem {1}{G}{G}
+         > Badgermole Cub taps for {G}
+         > Badgermole Cub taps for {G}
+         > Badgermole Cub taps for generic
+  effect Glorious Anthem resolves
+  cast   Casts Fires of Yavimaya {1}{G}
+         > Forest taps for {G}
+         > Badgermole Cub taps for generic
+  effect Fires of Yavimaya resolves
+  note   Stops with 14 mana up: nothing left in hand costs 14 or less
+  note   5 creatures were tapped for mana, so they do not attack
+  effect Attacks with 9 creatures for 131
+  note   An opponent would be dead: 146 damage so far
+  note   Discards Forest down to 7 cards
+  board  lands: 4 Forest
+         permanents: 1 Ashaya, Soul of the Wild, 2 Badgermole Cub, 1 Count the Lands, 1 Craterhoof Behemoth, 1 Fires of Yavimaya, 1 Glorious Anthem, 1 Grizzly Bears, 4 Llanowar Elves, 3 Lotus Cobra, 1 Ramunap Excavator
+         hand: 1 Brick, 6 Forest
+         graveyard: 1 Forest | exile: -
+--- turn 7 | available 47 | spent 40 | damage 9
+  draw   Draws Brick
+  land   Plays Forest from the graveyard
+  effect Lotus Cobra draws Forest
+  effect Lotus Cobra draws Reliquary Tower
+  effect Lotus Cobra draws Forest
+  mana   47 mana untapped: Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Forest ({G}), Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Count the Lands ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Ramunap Excavator ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Lotus Cobra ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Grizzly Bears ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Ashaya, Soul of the Wild ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Lotus Cobra ({G}), Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Craterhoof Behemoth ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Lotus Cobra ({G}), Forest ({G})
+  cast   Casts Brick {20}
+         > Forest taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Llanowar Elves taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Count the Lands taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Ramunap Excavator taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Lotus Cobra taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+  cast   Casts Brick {20}
+         > Grizzly Bears taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Ashaya, Soul of the Wild taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Lotus Cobra taps for generic
+         > Forest taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Llanowar Elves taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Llanowar Elves taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Llanowar Elves taps for generic
+  note   Stops with 7 mana up and no spell in hand
+  note   12 creatures were tapped for mana, so they do not attack
+  effect Attacks with 2 creatures for 9
+  note   Discards Reliquary Tower, Forest down to 7 cards
+  board  lands: 5 Forest
+         permanents: 1 Ashaya, Soul of the Wild, 2 Badgermole Cub, 1 Count the Lands, 1 Craterhoof Behemoth, 1 Fires of Yavimaya, 1 Glorious Anthem, 1 Grizzly Bears, 4 Llanowar Elves, 3 Lotus Cobra, 1 Ramunap Excavator
+         hand: 7 Forest
+         graveyard: 2 Brick, 1 Forest, 1 Reliquary Tower | exile: -
+--- turn 8 | available 48 | spent 23 | damage 35
+  draw   Draws Forest
+  land   Plays Reliquary Tower from the graveyard over Forest
+  effect Lotus Cobra draws Glorious Anthem
+  effect Lotus Cobra draws Forest
+  effect Lotus Cobra draws Brick
+  mana   48 mana untapped: Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Forest ({G}), Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Count the Lands ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Ramunap Excavator ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Lotus Cobra ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Grizzly Bears ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Ashaya, Soul of the Wild ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Lotus Cobra ({G}), Forest ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Llanowar Elves ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Craterhoof Behemoth ({G}), Badgermole Cub ({G}), Badgermole Cub ({G}), Lotus Cobra ({G}), Forest ({G}), Reliquary Tower ({C})
+  cast   Casts Brick {20}
+         > Badgermole Cub taps for generic
+         > Llanowar Elves taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Count the Lands taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Ramunap Excavator taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Lotus Cobra taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Badgermole Cub taps for generic
+         > Grizzly Bears taps for generic
+         > Badgermole Cub taps for generic
+  cast   Casts Glorious Anthem {1}{G}{G}
+         > Forest taps for {G}
+         > Badgermole Cub taps for {G}
+         > Badgermole Cub taps for generic
+  effect Glorious Anthem resolves
+  note   Stops with 25 mana up and no spell in hand
+  note   6 creatures were tapped for mana, so they do not attack
+  effect Attacks with 8 creatures for 35
+  board  lands: 5 Forest, 1 Reliquary Tower
+         permanents: 1 Ashaya, Soul of the Wild, 2 Badgermole Cub, 1 Count the Lands, 1 Craterhoof Behemoth, 1 Fires of Yavimaya, 2 Glorious Anthem, 1 Grizzly Bears, 4 Llanowar Elves, 3 Lotus Cobra, 1 Ramunap Excavator
+         hand: 9 Forest
+         graveyard: 3 Brick, 1 Forest | exile: -

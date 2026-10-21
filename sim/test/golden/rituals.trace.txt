@@ -1,0 +1,377 @@
+ritual-sim: Dark Ritual into four-drops, a floored ritual, landfall mana vs Treasure, an X spell last
+
+=== seed 165 | mulligans 1 ===
+opener: Dark Ritual, Four Drop, Four Drop, Swamp, Swamp, Swamp, Treasure Dryad
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Swamp
+  mana   1 mana untapped: Swamp ({B})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Swamp
+         permanents: -
+         hand: 1 Dark Ritual, 2 Four Drop, 2 Swamp, 1 Treasure Dryad
+         graveyard: - | exile: -
+--- turn 2 | available 5 | spent 5 | damage 0
+  draw   Draws Fireball
+  land   Plays Swamp
+  mana   2 mana untapped: Swamp ({B}), Swamp ({B})
+  cast   Casts Dark Ritual {B} (ramp first)
+         > Swamp taps for {B}
+  mana   Dark Ritual adds 3 {B} to the pool, this turn only
+  cast   Casts Four Drop {3}{B}
+         > Swamp taps for {B}
+         > Dark Ritual adds generic
+         > Dark Ritual adds generic
+         > Dark Ritual adds generic
+  board  lands: 2 Swamp
+         permanents: -
+         hand: 1 Fireball, 1 Four Drop, 1 Swamp, 1 Treasure Dryad
+         graveyard: 1 Dark Ritual, 1 Four Drop | exile: -
+--- turn 3 | available 3 | spent 2 | damage 0
+  draw   Draws Treasure Dryad
+  land   Plays Swamp
+  mana   3 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Treasure Dryad {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Treasure Dryad is watching, and fires when it sees what it is waiting for
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 3 Swamp
+         permanents: 1 Treasure Dryad
+         hand: 1 Fireball, 1 Four Drop, 1 Treasure Dryad
+         graveyard: 1 Dark Ritual, 1 Four Drop | exile: -
+--- turn 4 | available 3 | spent 2 | damage 0
+  draw   Draws Lotus Cobra
+  land   No land to play
+  mana   3 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Lotus Cobra {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Lotus Cobra is watching, and fires when it sees what it is waiting for
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 3 Swamp
+         permanents: 1 Lotus Cobra, 1 Treasure Dryad
+         hand: 1 Fireball, 1 Four Drop, 1 Treasure Dryad
+         graveyard: 1 Dark Ritual, 1 Four Drop | exile: -
+--- turn 5 | available 6 | spent 6 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  effect Treasure Dryad makes 1 Treasure
+  effect Lotus Cobra adds 1 {W/U/B/R/G}
+  mana   6 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Treasure ({W/U/B/R/G}), Lotus Cobra ({W/U/B/R/G})
+  cast   Casts Four Drop {3}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Lotus Cobra adds generic
+  cast   Casts Treasure Dryad {1}{B}
+         > Swamp taps for {B}
+         > Treasure taps for generic
+  effect Treasure Dryad is watching, and fires when it sees what it is waiting for
+  mana   Sacrifices 1 Treasure to cover the turn
+  board  lands: 4 Swamp
+         permanents: 1 Lotus Cobra, 2 Treasure Dryad
+         hand: 1 Fireball
+         graveyard: 1 Dark Ritual, 2 Four Drop | exile: -
+--- turn 6 | available 4 | spent 4 | damage 0
+  draw   Draws Four Drop
+  land   No land to play
+  mana   4 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Four Drop {3}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+  board  lands: 4 Swamp
+         permanents: 1 Lotus Cobra, 2 Treasure Dryad
+         hand: 1 Fireball
+         graveyard: 1 Dark Ritual, 3 Four Drop | exile: -
+--- turn 7 | available 4 | spent 4 | damage 0
+  draw   Draws Lotus Cobra
+  land   No land to play
+  mana   4 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B})
+  cast   Casts Lotus Cobra {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Lotus Cobra is watching, and fires when it sees what it is waiting for
+  cast   Casts Fireball {X}{B} with X = 1
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Fireball draws Fireball
+  board  lands: 4 Swamp
+         permanents: 2 Lotus Cobra, 2 Treasure Dryad
+         hand: 1 Fireball
+         graveyard: 1 Dark Ritual, 1 Fireball, 3 Four Drop | exile: -
+--- turn 8 | available 9 | spent 9 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  effect Treasure Dryad makes 1 Treasure
+  effect Lotus Cobra adds 1 {W/U/B/R/G}
+  effect Treasure Dryad makes 1 Treasure
+  effect Lotus Cobra adds 1 {W/U/B/R/G}
+  mana   9 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Treasure ({W/U/B/R/G}), Lotus Cobra ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Lotus Cobra ({W/U/B/R/G})
+  cast   Casts Fireball {X}{B} with X = 8
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Lotus Cobra adds generic
+         > Lotus Cobra adds generic
+         > Treasure taps for generic
+         > Treasure taps for generic
+  effect Fireball draws Four Drop, Four Drop, Four Drop, Swamp, Lotus Cobra, Four Drop, Lotus Cobra, Four Drop
+  mana   Sacrifices 2 Treasures to cover the turn
+  note   Discards Four Drop down to 7 cards
+  board  lands: 5 Swamp
+         permanents: 2 Lotus Cobra, 2 Treasure Dryad
+         hand: 4 Four Drop, 2 Lotus Cobra, 1 Swamp
+         graveyard: 1 Dark Ritual, 2 Fireball, 4 Four Drop | exile: -
+
+=== seed 7 | mulligans 0 ===
+opener: Four Drop, Swamp, Swamp, Swamp, Swamp, Swamp, Treasure Dryad
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Swamp
+  mana   1 mana untapped: Swamp ({B})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Swamp
+         permanents: -
+         hand: 1 Four Drop, 4 Swamp, 1 Treasure Dryad
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Four Drop
+  land   Plays Swamp
+  mana   2 mana untapped: Swamp ({B}), Swamp ({B})
+  cast   Casts Treasure Dryad {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Treasure Dryad is watching, and fires when it sees what it is waiting for
+  board  lands: 2 Swamp
+         permanents: 1 Treasure Dryad
+         hand: 2 Four Drop, 3 Swamp
+         graveyard: - | exile: -
+--- turn 3 | available 4 | spent 4 | damage 0
+  draw   Draws Fireball
+  land   Plays Swamp
+  effect Treasure Dryad makes 1 Treasure
+  mana   4 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Treasure ({W/U/B/R/G})
+  cast   Casts Four Drop {3}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Treasure taps for generic
+  mana   Sacrifices 1 Treasure to cover the turn
+  board  lands: 3 Swamp
+         permanents: 1 Treasure Dryad
+         hand: 1 Fireball, 1 Four Drop, 2 Swamp
+         graveyard: 1 Four Drop | exile: -
+--- turn 4 | available 5 | spent 4 | damage 0
+  draw   Draws Four Drop
+  land   Plays Swamp
+  effect Treasure Dryad makes 1 Treasure
+  mana   5 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Treasure ({W/U/B/R/G})
+  cast   Casts Four Drop {3}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 4 Swamp
+         permanents: 1 Treasure Dryad | treasures: 1
+         hand: 1 Fireball, 1 Four Drop, 1 Swamp
+         graveyard: 2 Four Drop | exile: -
+--- turn 5 | available 7 | spent 7 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  effect Treasure Dryad makes 1 Treasure
+  mana   7 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Treasure ({W/U/B/R/G}), Swamp ({B}), Treasure ({W/U/B/R/G})
+  cast   Casts Four Drop {3}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+  cast   Casts Fireball {X}{B} with X = 2
+         > Swamp taps for {B}
+         > Treasure taps for generic
+         > Treasure taps for generic
+  effect Fireball draws Swamp, Swamp
+  mana   Sacrifices 2 Treasures to cover the turn
+  board  lands: 5 Swamp
+         permanents: 1 Treasure Dryad
+         hand: 3 Swamp
+         graveyard: 1 Fireball, 3 Four Drop | exile: -
+--- turn 6 | available 7 | spent 2 | damage 0
+  draw   Draws Treasure Dryad
+  land   Plays Swamp
+  effect Treasure Dryad makes 1 Treasure
+  mana   7 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Treasure ({W/U/B/R/G})
+  cast   Casts Treasure Dryad {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Treasure Dryad is watching, and fires when it sees what it is waiting for
+  note   Stops with 5 mana up and no spell in hand
+  board  lands: 6 Swamp
+         permanents: 2 Treasure Dryad | treasures: 1
+         hand: 2 Swamp
+         graveyard: 1 Fireball, 3 Four Drop | exile: -
+--- turn 7 | available 10 | spent 10 | damage 0
+  draw   Draws Fireball
+  land   Plays Swamp
+  effect Treasure Dryad makes 1 Treasure
+  effect Treasure Dryad makes 1 Treasure
+  mana   10 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Treasure ({W/U/B/R/G}), Swamp ({B}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G})
+  cast   Casts Fireball {X}{B} with X = 9
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Treasure taps for generic
+         > Treasure taps for generic
+         > Treasure taps for generic
+  effect Fireball draws Swamp, Fireball, Lotus Cobra, Swamp, Fireball, Dark Ritual, Swamp, Four Drop, Four Drop
+  mana   Sacrifices 3 Treasures to cover the turn
+  note   Discards Four Drop, Four Drop, Lotus Cobra down to 7 cards
+  board  lands: 7 Swamp
+         permanents: 2 Treasure Dryad
+         hand: 1 Dark Ritual, 2 Fireball, 4 Swamp
+         graveyard: 2 Fireball, 5 Four Drop, 1 Lotus Cobra | exile: -
+--- turn 8 | available 10 | spent 10 | damage 0
+  draw   Draws Four Drop
+  land   Plays Swamp
+  effect Treasure Dryad makes 1 Treasure
+  effect Treasure Dryad makes 1 Treasure
+  mana   10 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G})
+  cast   Casts Four Drop {3}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+  cast   Casts Fireball {X}{B} with X = 5
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Treasure taps for generic
+         > Treasure taps for generic
+  effect Fireball draws Swamp, Four Drop, Lotus Cobra, Swamp, Dark Ritual
+  mana   Sacrifices 2 Treasures to cover the turn
+  note   Discards Four Drop, Swamp, Lotus Cobra down to 7 cards
+  board  lands: 8 Swamp
+         permanents: 2 Treasure Dryad
+         hand: 2 Dark Ritual, 1 Fireball, 4 Swamp
+         graveyard: 3 Fireball, 7 Four Drop, 2 Lotus Cobra, 1 Swamp | exile: -
+
+=== seed 53 | mulligans 3 ===
+opener: Fireball, Fireball, Fireball, Four Drop, Lotus Cobra
+bottomed: Four Drop, Four Drop
+--- turn 1 | available 0 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   No land to play
+  mana   No mana available
+  board  lands: -
+         permanents: -
+         hand: 3 Fireball, 1 Four Drop, 1 Lotus Cobra
+         graveyard: - | exile: -
+--- turn 2 | available 1 | spent 0 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  mana   1 mana untapped: Swamp ({B})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Swamp
+         permanents: -
+         hand: 3 Fireball, 1 Four Drop, 1 Lotus Cobra
+         graveyard: - | exile: -
+--- turn 3 | available 2 | spent 2 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  mana   2 mana untapped: Swamp ({B}), Swamp ({B})
+  cast   Casts Lotus Cobra {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Lotus Cobra is watching, and fires when it sees what it is waiting for
+  board  lands: 2 Swamp
+         permanents: 1 Lotus Cobra
+         hand: 3 Fireball, 1 Four Drop
+         graveyard: - | exile: -
+--- turn 4 | available 5 | spent 5 | damage 0
+  draw   Draws Dark Ritual
+  land   No land to play
+  mana   2 mana untapped: Swamp ({B}), Swamp ({B})
+  cast   Casts Dark Ritual {B} (ramp first)
+         > Swamp taps for {B}
+  mana   Dark Ritual adds 3 {B} to the pool, this turn only
+  cast   Casts Four Drop {3}{B}
+         > Swamp taps for {B}
+         > Dark Ritual adds generic
+         > Dark Ritual adds generic
+         > Dark Ritual adds generic
+  board  lands: 2 Swamp
+         permanents: 1 Lotus Cobra
+         hand: 3 Fireball
+         graveyard: 1 Dark Ritual, 1 Four Drop | exile: -
+--- turn 5 | available 2 | spent 2 | damage 0
+  draw   Draws Treasure Dryad
+  land   No land to play
+  mana   2 mana untapped: Swamp ({B}), Swamp ({B})
+  cast   Casts Treasure Dryad {1}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Treasure Dryad is watching, and fires when it sees what it is waiting for
+  board  lands: 2 Swamp
+         permanents: 1 Lotus Cobra, 1 Treasure Dryad
+         hand: 3 Fireball
+         graveyard: 1 Dark Ritual, 1 Four Drop | exile: -
+--- turn 6 | available 2 | spent 2 | damage 0
+  draw   Draws Fireball
+  land   No land to play
+  mana   2 mana untapped: Swamp ({B}), Swamp ({B})
+  cast   Casts Fireball {X}{B} with X = 1
+         > Swamp taps for {B}
+         > Swamp taps for generic
+  effect Fireball draws Swamp
+  board  lands: 2 Swamp
+         permanents: 1 Lotus Cobra, 1 Treasure Dryad
+         hand: 3 Fireball, 1 Swamp
+         graveyard: 1 Dark Ritual, 1 Fireball, 1 Four Drop | exile: -
+--- turn 7 | available 5 | spent 5 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  effect Lotus Cobra adds 1 {W/U/B/R/G}
+  effect Treasure Dryad makes 1 Treasure
+  mana   5 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Lotus Cobra ({W/U/B/R/G}), Treasure ({W/U/B/R/G})
+  cast   Casts Fireball {X}{B} with X = 4
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Lotus Cobra adds generic
+         > Treasure taps for generic
+  effect Fireball draws Four Drop, Swamp, Swamp, Swamp
+  mana   Sacrifices 1 Treasure to cover the turn
+  board  lands: 3 Swamp
+         permanents: 1 Lotus Cobra, 1 Treasure Dryad
+         hand: 2 Fireball, 1 Four Drop, 4 Swamp
+         graveyard: 1 Dark Ritual, 2 Fireball, 1 Four Drop | exile: -
+--- turn 8 | available 6 | spent 6 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  effect Lotus Cobra adds 1 {W/U/B/R/G}
+  effect Treasure Dryad makes 1 Treasure
+  mana   6 mana untapped: Swamp ({B}), Swamp ({B}), Swamp ({B}), Swamp ({B}), Lotus Cobra ({W/U/B/R/G}), Treasure ({W/U/B/R/G})
+  cast   Casts Four Drop {3}{B}
+         > Swamp taps for {B}
+         > Swamp taps for generic
+         > Swamp taps for generic
+         > Lotus Cobra adds generic
+  cast   Casts Fireball {X}{B} with X = 1
+         > Swamp taps for {B}
+         > Treasure taps for generic
+  effect Fireball draws Four Drop
+  mana   Sacrifices 1 Treasure to cover the turn
+  board  lands: 4 Swamp
+         permanents: 1 Lotus Cobra, 1 Treasure Dryad
+         hand: 1 Fireball, 1 Four Drop, 4 Swamp
+         graveyard: 1 Dark Ritual, 3 Fireball, 2 Four Drop | exile: -

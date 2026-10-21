@@ -1,0 +1,346 @@
+goals-sim: eight goals, a creature tutor steered by the plan, a tutor to the top, Muxus looking at six, hasty giants for the clock
+
+=== seed 120 | mulligans 0 ===
+opener: Creature Tutor, Forest, Forest, Forest, Forest, Grizzly Bears, Grizzly Bears
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  note   Plan reached: 1 card matching t:land in hand, by turn 1
+  board  lands: 1 Forest
+         permanents: -
+         hand: 1 Bear Commander, 1 Creature Tutor, 3 Forest, 2 Grizzly Bears
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  note   Plan reached: 1 card matching t:creature cast or played, by turn 2
+  board  lands: 2 Forest
+         permanents: 1 Grizzly Bears
+         hand: 1 Bear Commander, 1 Creature Tutor, 3 Forest, 1 Grizzly Bears
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 3 | damage 2
+  draw   Draws Forest
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Creature Tutor {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Creature Tutor moves Goblin to your hand
+  cast   Casts Goblin {G}
+         > Forest taps for {G}
+  effect Attacks with 1 creature for 2
+  board  lands: 3 Forest
+         permanents: 1 Goblin, 1 Grizzly Bears
+         hand: 1 Bear Commander, 3 Forest, 1 Grizzly Bears
+         graveyard: 1 Creature Tutor | exile: -
+--- turn 4 | available 4 | spent 4 | damage 3
+  draw   Draws Grizzly Bears
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Bear Commander {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Attacks with 2 creatures for 3
+  note   Plan reached: 4 cards matching t:land on the battlefield, by turn 4
+  note   Plan reached: 4 mana available, by turn 4
+  note   Plan reached: your commander cast, by turn 4
+  board  lands: 4 Forest
+         permanents: 1 Bear Commander, 1 Goblin, 2 Grizzly Bears
+         hand: 2 Forest, 1 Grizzly Bears
+         graveyard: 1 Creature Tutor | exile: -
+--- turn 5 | available 5 | spent 4 | damage 7
+  draw   Draws Muxus
+  land   Plays Forest
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Muxus {2}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Muxus looks at the top 6 (Forest, Grizzly Bears, Creature Tutor, Grizzly Bears, Goblin, Grizzly Bears), moves Muxus, Goblin to the battlefield, the rest into the graveyard
+  effect Muxus looks at the top 6 (Forest, Grizzly Bears, Creature Tutor, Grizzly Bears, Goblin, Grizzly Bears), moves Goblin to the battlefield, the rest into the graveyard
+  effect Muxus looks at the top 6 (Forest, Grizzly Bears, Creature Tutor, Grizzly Bears, Goblin, Grizzly Bears), moves Muxus to the battlefield, the rest into the graveyard
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 4 creatures for 7
+  note   Plan reached: 10 cards matching t:creature seen, by turn 8
+  note   Plan reached: 6 cards matching t:goblin on the battlefield and 1 card matching t:creature cast or played, by turn 8
+  board  lands: 5 Forest
+         permanents: 1 Bear Commander, 3 Goblin, 2 Grizzly Bears, 3 Muxus
+         hand: 1 Forest, 1 Grizzly Bears
+         graveyard: 2 Creature Tutor, 5 Forest, 6 Grizzly Bears, 2 Hasty Giant | exile: -
+--- turn 6 | available 6 | spent 2 | damage 21
+  draw   Draws Forest
+  land   Plays Forest
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  note   Stops with 4 mana up and no spell in hand
+  effect Attacks with 9 creatures for 21
+  board  lands: 6 Forest
+         permanents: 1 Bear Commander, 3 Goblin, 3 Grizzly Bears, 3 Muxus
+         hand: 1 Forest
+         graveyard: 2 Creature Tutor, 5 Forest, 6 Grizzly Bears, 2 Hasty Giant | exile: -
+--- turn 7 | available 7 | spent 1 | damage 23
+  draw   Draws Top Tutor
+  land   Plays Forest
+  mana   7 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Top Tutor {G}
+         > Forest taps for {G}
+  effect Top Tutor moves Big Dragon to the top of your library
+  note   Stops with 6 mana up and no spell in hand
+  effect Attacks with 10 creatures for 23
+  note   An opponent would be dead: 56 damage so far
+  board  lands: 7 Forest
+         permanents: 1 Bear Commander, 3 Goblin, 3 Grizzly Bears, 3 Muxus
+         hand: -
+         graveyard: 2 Creature Tutor, 5 Forest, 6 Grizzly Bears, 2 Hasty Giant, 1 Top Tutor | exile: -
+--- turn 8 | available 7 | spent 5 | damage 23
+  draw   Draws Big Dragon
+  land   No land to play
+  mana   7 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Big Dragon {3}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  note   Stops with 2 mana up and no spell in hand
+  effect Attacks with 10 creatures for 23
+  note   Plan reached: 1 card matching t:dragon cast or played, by turn 8
+  board  lands: 7 Forest
+         permanents: 1 Bear Commander, 1 Big Dragon, 3 Goblin, 3 Grizzly Bears, 3 Muxus
+         hand: -
+         graveyard: 2 Creature Tutor, 5 Forest, 6 Grizzly Bears, 2 Hasty Giant, 1 Top Tutor | exile: -
+
+=== seed 53 | mulligans 3 ===
+opener: Goblin, Grizzly Bears, Grizzly Bears, Grizzly Bears, Grizzly Bears
+bottomed: Hasty Giant, Hasty Giant
+--- turn 1 | available 0 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   No land to play
+  mana   No mana available
+  board  lands: -
+         permanents: -
+         hand: 1 Bear Commander, 1 Goblin, 4 Grizzly Bears
+         graveyard: - | exile: -
+--- turn 2 | available 1 | spent 1 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  cast   Casts Goblin {G}
+         > Forest taps for {G}
+  note   Plan reached: 1 card matching t:creature cast or played, by turn 2
+  board  lands: 1 Forest
+         permanents: 1 Goblin
+         hand: 1 Bear Commander, 4 Grizzly Bears
+         graveyard: - | exile: -
+--- turn 3 | available 2 | spent 2 | damage 1
+  draw   Draws Forest
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Attacks with 1 creature for 1
+  board  lands: 2 Forest
+         permanents: 1 Goblin, 1 Grizzly Bears
+         hand: 1 Bear Commander, 3 Grizzly Bears
+         graveyard: - | exile: -
+--- turn 4 | available 2 | spent 2 | damage 3
+  draw   Draws Goblin
+  land   No land to play
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Attacks with 2 creatures for 3
+  board  lands: 2 Forest
+         permanents: 1 Goblin, 2 Grizzly Bears
+         hand: 1 Bear Commander, 1 Goblin, 2 Grizzly Bears
+         graveyard: - | exile: -
+--- turn 5 | available 2 | spent 2 | damage 5
+  draw   Draws Muxus
+  land   No land to play
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Bear Commander {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Attacks with 3 creatures for 5
+  note   Plan reached: your commander cast, by turn 4
+  board  lands: 2 Forest
+         permanents: 1 Bear Commander, 1 Goblin, 2 Grizzly Bears
+         hand: 1 Goblin, 2 Grizzly Bears, 1 Muxus
+         graveyard: - | exile: -
+--- turn 6 | available 2 | spent 2 | damage 7
+  draw   Draws Grizzly Bears
+  land   No land to play
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Attacks with 4 creatures for 7
+  note   Plan reached: 10 cards matching t:creature seen, by turn 8
+  board  lands: 2 Forest
+         permanents: 1 Bear Commander, 1 Goblin, 3 Grizzly Bears
+         hand: 1 Goblin, 2 Grizzly Bears, 1 Muxus
+         graveyard: - | exile: -
+--- turn 7 | available 3 | spent 3 | damage 9
+  draw   Draws Forest
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  cast   Casts Goblin {G}
+         > Forest taps for {G}
+  effect Attacks with 5 creatures for 9
+  board  lands: 3 Forest
+         permanents: 1 Bear Commander, 2 Goblin, 4 Grizzly Bears
+         hand: 1 Grizzly Bears, 1 Muxus
+         graveyard: - | exile: -
+--- turn 8 | available 4 | spent 4 | damage 12
+  draw   Draws Forest
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Muxus {2}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Muxus looks at the top 6 (Hasty Giant, Forest, Forest, Forest, Forest, Hasty Giant), finds nothing, all of them into the graveyard
+  effect Attacks with 7 creatures for 12
+  note   Plan reached: 4 cards matching t:land on the battlefield, by turn 4
+  note   Plan reached: 4 mana available, by turn 4
+  board  lands: 4 Forest
+         permanents: 1 Bear Commander, 2 Goblin, 4 Grizzly Bears, 1 Muxus
+         hand: 1 Grizzly Bears
+         graveyard: 4 Forest, 2 Hasty Giant | exile: -
+
+=== seed 11 | mulligans 0 ===
+opener: Big Dragon, Forest, Forest, Forest, Forest, Goblin, Hasty Giant
+--- turn 1 | available 1 | spent 1 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  cast   Casts Goblin {G}
+         > Forest taps for {G}
+  note   Plan reached: 1 card matching t:creature cast or played, by turn 2
+  note   Plan reached: 1 card matching t:land in hand, by turn 1
+  board  lands: 1 Forest
+         permanents: 1 Goblin
+         hand: 1 Bear Commander, 1 Big Dragon, 3 Forest, 1 Hasty Giant
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 1
+  draw   Draws Forest
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Bear Commander {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Attacks with 1 creature for 1
+  note   Plan reached: your commander cast, by turn 4
+  board  lands: 2 Forest
+         permanents: 1 Bear Commander, 1 Goblin
+         hand: 1 Big Dragon, 3 Forest, 1 Hasty Giant
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 3 | damage 8
+  draw   Draws Forest
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Hasty Giant {2}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Attacks with 3 creatures for 8
+  board  lands: 3 Forest
+         permanents: 1 Bear Commander, 1 Goblin, 1 Hasty Giant
+         hand: 1 Big Dragon, 3 Forest
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 2 | damage 8
+  draw   Draws Grizzly Bears
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  note   Stops with 2 mana up: nothing left in hand costs 2 or less
+  effect Attacks with 3 creatures for 8
+  note   Plan reached: 4 cards matching t:land on the battlefield, by turn 4
+  note   Plan reached: 4 mana available, by turn 4
+  board  lands: 4 Forest
+         permanents: 1 Bear Commander, 1 Goblin, 1 Grizzly Bears, 1 Hasty Giant
+         hand: 1 Big Dragon, 2 Forest
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 5 | damage 10
+  draw   Draws Hasty Giant
+  land   Plays Forest
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Big Dragon {3}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Attacks with 4 creatures for 10
+  note   Plan reached: 1 card matching t:dragon cast or played, by turn 8
+  board  lands: 5 Forest
+         permanents: 1 Bear Commander, 1 Big Dragon, 1 Goblin, 1 Grizzly Bears, 1 Hasty Giant
+         hand: 1 Forest, 1 Hasty Giant
+         graveyard: - | exile: -
+--- turn 6 | available 6 | spent 4 | damage 20
+  draw   Draws Top Tutor
+  land   Plays Forest
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Hasty Giant {2}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  cast   Casts Top Tutor {G}
+         > Forest taps for {G}
+  effect Top Tutor moves Big Dragon to the top of your library
+  note   Stops with 2 mana up and no spell in hand
+  effect Attacks with 6 creatures for 20
+  note   An opponent would be dead: 47 damage so far
+  board  lands: 6 Forest
+         permanents: 1 Bear Commander, 1 Big Dragon, 1 Goblin, 1 Grizzly Bears, 2 Hasty Giant
+         hand: -
+         graveyard: 1 Top Tutor | exile: -
+--- turn 7 | available 6 | spent 5 | damage 20
+  draw   Draws Big Dragon
+  land   No land to play
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Big Dragon {3}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  note   Stops with 1 mana up and no spell in hand
+  effect Attacks with 6 creatures for 20
+  board  lands: 6 Forest
+         permanents: 1 Bear Commander, 2 Big Dragon, 1 Goblin, 1 Grizzly Bears, 2 Hasty Giant
+         hand: -
+         graveyard: 1 Top Tutor | exile: -
+--- turn 8 | available 6 | spent 1 | damage 25
+  draw   Draws Top Tutor
+  land   No land to play
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Top Tutor {G}
+         > Forest taps for {G}
+  effect Top Tutor resolves
+  note   Stops with 5 mana up and no spell in hand
+  effect Attacks with 7 creatures for 25
+  board  lands: 6 Forest
+         permanents: 1 Bear Commander, 2 Big Dragon, 1 Goblin, 1 Grizzly Bears, 2 Hasty Giant
+         hand: -
+         graveyard: 2 Top Tutor | exile: -

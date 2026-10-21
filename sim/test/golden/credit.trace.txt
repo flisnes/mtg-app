@@ -1,0 +1,486 @@
+credit-sim: land ramp, rocks, a dork, cantrips and a magecraft watcher, spend policy draw
+
+=== seed 228 | mulligans 0 ===
+opener: Archmage Emeritus, Blank Spell, Divination, Forest, Forest, Rampant Growth, Sol Ring
+--- turn 1 | available 3 | spent 3 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  cast   Casts Sol Ring {1} (ramp first)
+         > Sol Ring taps for generic
+  mana   Sol Ring will add 2 {C} this turn
+  cast   Casts Rampant Growth {1}{G} (ramp first)
+         > Forest taps for {G}
+         > Sol Ring taps for generic
+  mana   Finds Island, which arrives tapped
+  note   Opponent 1 draws and casts a creature (mana value 1)
+  note   Opponent 2 draws and casts a creature (mana value 1)
+  note   Opponent 3 draws and casts a creature (mana value 1)
+  board  lands: 1 Forest, 1 Island
+         permanents: 1 Sol Ring
+         hand: 1 Archmage Emeritus, 1 Blank Spell, 1 Divination, 1 Forest
+         graveyard: 1 Rampant Growth | exile: -
+         opponents: 1 / 1 / 1
+--- turn 2 | available 5 | spent 0 | damage 0
+  draw   Draws Island
+  land   Plays Forest over Island
+  mana   5 mana untapped: Forest ({G}), Sol Ring ({C}), Sol Ring ({C}), Island ({U}), Forest ({G})
+  note   Stops: Archmage Emeritus {2}{U}{U} is not payable in these colours
+  note   Opponent 1 draws and casts a spell (mana value 2) and a spell (mana value 2)
+  note   Opponent 2 draws and casts a creature (mana value 1)
+  note   Opponent 3 draws and casts a creature (mana value 2)
+  board  lands: 2 Forest, 1 Island
+         permanents: 1 Sol Ring
+         hand: 1 Archmage Emeritus, 1 Blank Spell, 1 Divination, 1 Island
+         graveyard: 1 Rampant Growth | exile: -
+         opponents: 1 / 2 / 2
+--- turn 3 | available 6 | spent 6 | damage 0
+  draw   Draws Blank Spell
+  land   Plays Island
+  mana   6 mana untapped: Forest ({G}), Sol Ring ({C}), Sol Ring ({C}), Island ({U}), Forest ({G}), Island ({U})
+  cast   Casts Archmage Emeritus {2}{U}{U}
+         > Sol Ring taps for generic
+         > Sol Ring taps for generic
+         > Island taps for {U}
+         > Island taps for {U}
+  effect Archmage Emeritus is watching, and fires when it sees what it is waiting for
+  cast   Casts Blank Spell {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Archmage Emeritus draws Opt
+  note   Opponent 1 draws and casts a spell (mana value 1)
+  note   Opponent 2 draws and casts a spell (mana value 3) and a creature (mana value 3)
+  note   Opponent 3 draws and casts a creature (mana value 3) and a spell (mana value 3)
+  board  lands: 2 Forest, 2 Island
+         permanents: 1 Archmage Emeritus, 1 Sol Ring
+         hand: 1 Blank Spell, 1 Divination, 1 Opt
+         graveyard: 1 Blank Spell, 1 Rampant Growth | exile: -
+         opponents: 1 / 3 / 3
+--- turn 4 | available 6 | spent 4 | damage 0
+  draw   Draws Opt
+  land   No land to play
+  mana   6 mana untapped: Forest ({G}), Sol Ring ({C}), Sol Ring ({C}), Island ({U}), Forest ({G}), Island ({U})
+  cast   Casts Divination {2}{U}
+         > Forest taps for generic
+         > Sol Ring taps for generic
+         > Island taps for {U}
+  effect Archmage Emeritus draws Blank Spell
+  effect Divination draws Archmage Emeritus, Blank Spell
+  cast   Casts Opt {U}
+         > Island taps for {U}
+  effect Archmage Emeritus draws Rampant Growth
+  effect Opt draws Opt
+  note   Stops: Opt {U} is not payable in these colours alongside what is already cast
+  note   Opponent 1 draws and casts a creature (mana value 1)
+  note   Opponent 2 draws and casts a creature (mana value 1) and a creature (mana value 1)
+  note   Opponent 3 draws and casts a spell (mana value 1)
+  board  lands: 2 Forest, 2 Island
+         permanents: 1 Archmage Emeritus, 1 Sol Ring
+         hand: 1 Archmage Emeritus, 3 Blank Spell, 2 Opt, 1 Rampant Growth
+         graveyard: 1 Blank Spell, 1 Divination, 1 Opt, 1 Rampant Growth | exile: -
+         opponents: 2 / 5 / 3
+--- turn 5 | available 7 | spent 5 | damage 0
+  draw   Draws Island
+  land   Plays Island
+  mana   7 mana untapped: Forest ({G}), Sol Ring ({C}), Sol Ring ({C}), Island ({U}), Forest ({G}), Island ({U}), Island ({U})
+  cast   Casts Archmage Emeritus {2}{U}{U}
+         > Forest taps for generic
+         > Sol Ring taps for generic
+         > Island taps for {U}
+         > Island taps for {U}
+  effect Archmage Emeritus is watching, and fires when it sees what it is waiting for
+  cast   Casts Opt {U}
+         > Island taps for {U}
+  effect Archmage Emeritus draws Island
+  effect Archmage Emeritus draws Divination
+  effect Opt draws Llanowar Elves
+  note   Stops: Opt {U} is not payable in these colours alongside what is already cast
+  note   Discards Divination down to 7 cards
+  note   Opponent 1 draws and casts a spell (mana value 4) and a spell (mana value 4)
+  note   Opponent 2 draws and casts a creature (mana value 3) and a spell (mana value 1)
+  note   Opponent 3 draws and casts a spell (mana value 2) and a creature (mana value 4)
+  board  lands: 2 Forest, 3 Island
+         permanents: 2 Archmage Emeritus, 1 Sol Ring
+         hand: 3 Blank Spell, 1 Island, 1 Llanowar Elves, 1 Opt, 1 Rampant Growth
+         graveyard: 1 Blank Spell, 2 Divination, 2 Opt, 1 Rampant Growth | exile: -
+         opponents: 2 / 6 / 4
+--- turn 6 | available 8 | spent 4 | damage 0
+  draw   Draws Blank Spell
+  land   Plays Island
+  mana   8 mana untapped: Forest ({G}), Sol Ring ({C}), Sol Ring ({C}), Island ({U}), Forest ({G}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Opt {U}
+         > Island taps for {U}
+  effect Archmage Emeritus draws Forest
+  effect Archmage Emeritus draws Llanowar Elves
+  effect Opt draws Blank Spell
+  cast   Casts Rampant Growth {1}{G} (ramp first)
+         > Sol Ring taps for generic
+         > Forest taps for {G}
+  effect Archmage Emeritus draws Island
+  effect Archmage Emeritus draws Forest
+  mana   Finds Island, which arrives tapped
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Forest taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  note   Stops: Llanowar Elves {G} is not payable in these colours alongside what is already cast
+  note   Discards Blank Spell, Blank Spell down to 7 cards
+  note   Opponent 1 draws and casts a creature (mana value 2) and a creature (mana value 3)
+  note   Opponent 2 draws and casts a spell (mana value 1)
+  note   Opponent 3 draws and casts a creature (mana value 6) and a creature (mana value 5)
+  board  lands: 2 Forest, 5 Island
+         permanents: 2 Archmage Emeritus, 1 Llanowar Elves, 1 Sol Ring
+         hand: 3 Blank Spell, 2 Forest, 1 Island, 1 Llanowar Elves
+         graveyard: 3 Blank Spell, 2 Divination, 3 Opt, 2 Rampant Growth | exile: -
+         opponents: 4 / 6 / 6
+--- turn 7 | available 12 | spent 11 | damage 0
+  draw   Draws Island
+  land   Plays Forest over Island
+  mana   11 mana untapped: Forest ({G}), Sol Ring ({C}), Sol Ring ({C}), Island ({U}), Forest ({G}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Llanowar Elves ({G}), Forest ({G})
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Forest taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  cast   Casts Blank Spell {1}{G}
+         > Sol Ring taps for generic
+         > Llanowar Elves taps for {G}
+  effect Archmage Emeritus draws Rampant Growth
+  effect Archmage Emeritus draws Forest
+  cast   Casts Rampant Growth {1}{G} (ramp first)
+         > Sol Ring taps for generic
+         > Forest taps for {G}
+  effect Archmage Emeritus draws Simic Signet
+  effect Archmage Emeritus draws Skyshroud Claim
+  mana   Finds Forest, which arrives tapped
+  cast   Casts Skyshroud Claim {3}{G} (ramp first)
+         > Forest taps for {G}
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+  effect Archmage Emeritus draws Island
+  effect Archmage Emeritus draws Blank Spell
+  mana   Finds Island, which arrives tapped
+  mana   Finds Forest, which arrives tapped
+  cast   Casts Simic Signet {2} (ramp first)
+         > Island taps for generic
+         > Island taps for generic
+  mana   Simic Signet will add 1 {U/G} this turn
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  note   Discards Island down to 7 cards
+  note   Opponent 1 draws and casts a spell (mana value 4) and a creature (mana value 5)
+  note   Opponent 2 draws and casts a creature (mana value 5) and a creature (mana value 6)
+  note   Opponent 3 draws and casts a spell (mana value 1) and a creature (mana value 3)
+  board  lands: 5 Forest, 6 Island
+         permanents: 2 Archmage Emeritus, 2 Llanowar Elves, 1 Simic Signet, 1 Sol Ring
+         hand: 3 Blank Spell, 2 Forest, 2 Island
+         graveyard: 4 Blank Spell, 2 Divination, 1 Island, 3 Opt, 3 Rampant Growth, 1 Skyshroud Claim | exile: -
+         opponents: 5 / 8 / 7
+--- turn 8 | available 18 | spent 17 | damage 0
+  draw   Draws Island
+  land   Plays Island over Forest
+  mana   17 mana untapped: Forest ({G}), Sol Ring ({C}), Sol Ring ({C}), Island ({U}), Forest ({G}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Llanowar Elves ({G}), Forest ({G}), Llanowar Elves ({G}), Forest ({G}), Island ({U}), Forest ({G}), Simic Signet ({U/G}), Island ({U})
+  cast   Casts Blank Spell {1}{G}
+         > Sol Ring taps for generic
+         > Llanowar Elves taps for {G}
+  effect Archmage Emeritus draws Island
+  effect Archmage Emeritus draws Opt
+  cast   Casts Opt {U}
+         > Island taps for {U}
+  effect Archmage Emeritus draws Forest
+  effect Archmage Emeritus draws Forest
+  effect Opt draws Divination
+  cast   Casts Divination {2}{U}
+         > Sol Ring taps for generic
+         > Island taps for {U}
+         > Forest taps for generic
+  effect Archmage Emeritus draws Forest
+  effect Archmage Emeritus draws Archmage Emeritus
+  effect Divination draws Island, Simic Signet
+  cast   Casts Archmage Emeritus {2}{U}{U}
+         > Island taps for {U}
+         > Island taps for {U}
+         > Llanowar Elves taps for generic
+         > Forest taps for generic
+  effect Archmage Emeritus is watching, and fires when it sees what it is waiting for
+  cast   Casts Simic Signet {2} (ramp first)
+         > Island taps for generic
+         > Forest taps for generic
+  mana   Simic Signet will add 1 {U/G} this turn
+  cast   Casts Blank Spell {1}{G}
+         > Forest taps for {G}
+         > Simic Signet taps for generic
+  effect Archmage Emeritus draws Forest
+  effect Archmage Emeritus draws Rampant Growth
+  effect Archmage Emeritus draws Island
+  cast   Casts Rampant Growth {1}{G} (ramp first)
+         > Forest taps for {G}
+         > Island taps for generic
+  effect Archmage Emeritus draws Opt
+  effect Archmage Emeritus draws Simic Signet
+  effect Archmage Emeritus draws Blank Spell
+  mana   Finds Island, which arrives tapped
+  cast   Casts Opt {U}
+         > Island taps for {U}
+  effect Archmage Emeritus draws Blank Spell
+  effect Archmage Emeritus draws Forest
+  effect Archmage Emeritus draws Rampant Growth
+  effect Opt draws Opt
+  note   Discards Island, Island, Forest, Forest, Island, Forest, Rampant Growth, Island, Blank Spell, Forest, Blank Spell down to 7 cards
+  note   Opponent 1 draws and casts a creature (mana value 1) and a spell (mana value 5)
+  note   Opponent 2 draws and casts a creature (mana value 6) and a spell (mana value 1)
+  note   Opponent 3 draws and casts a creature (mana value 6)
+  board  lands: 5 Forest, 8 Island
+         permanents: 3 Archmage Emeritus, 2 Llanowar Elves, 2 Simic Signet, 1 Sol Ring
+         hand: 1 Blank Spell, 3 Forest, 1 Island, 1 Opt, 1 Simic Signet
+         graveyard: 8 Blank Spell, 3 Divination, 4 Forest, 5 Island, 5 Opt, 5 Rampant Growth, 1 Skyshroud Claim | exile: -
+         opponents: 6 / 9 / 8
+
+=== seed 1 | mulligans 0 ===
+opener: Island, Island, Island, Island, Llanowar Elves, Rampant Growth, Skyshroud Claim
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Island
+  mana   1 mana untapped: Island ({U})
+  note   Stops: Llanowar Elves {G} is not payable in these colours
+  note   Opponent 1 draws and casts a spell (mana value 1)
+  note   Opponent 2 draws and casts a spell (mana value 1)
+  note   Opponent 3 draws and casts a creature (mana value 1)
+  board  lands: 1 Island
+         permanents: -
+         hand: 3 Island, 1 Llanowar Elves, 1 Rampant Growth, 1 Skyshroud Claim
+         graveyard: - | exile: -
+         opponents: 0 / 0 / 1
+--- turn 2 | available 2 | spent 0 | damage 0
+  draw   Draws Blank Spell
+  land   Plays Island
+  mana   2 mana untapped: Island ({U}), Island ({U})
+  note   Stops: Rampant Growth {1}{G} is not payable in these colours
+  note   Opponent 1 draws and casts a spell (mana value 2) and a creature (mana value 1)
+  note   Opponent 2 draws and casts a spell (mana value 1)
+  note   Opponent 3 draws and casts a creature (mana value 1) and a creature (mana value 2)
+  board  lands: 2 Island
+         permanents: -
+         hand: 1 Blank Spell, 2 Island, 1 Llanowar Elves, 1 Rampant Growth, 1 Skyshroud Claim
+         graveyard: - | exile: -
+         opponents: 1 / 0 / 3
+--- turn 3 | available 3 | spent 0 | damage 0
+  draw   Draws Island
+  land   Plays Island
+  mana   3 mana untapped: Island ({U}), Island ({U}), Island ({U})
+  note   Stops: Rampant Growth {1}{G} is not payable in these colours
+  note   Opponent 1 draws and casts a spell (mana value 1) and a spell (mana value 1)
+  note   Opponent 2 draws and casts a spell (mana value 2)
+  note   Opponent 3 draws and casts a spell (mana value 2)
+  board  lands: 3 Island
+         permanents: -
+         hand: 1 Blank Spell, 2 Island, 1 Llanowar Elves, 1 Rampant Growth, 1 Skyshroud Claim
+         graveyard: - | exile: -
+         opponents: 1 / 0 / 3
+--- turn 4 | available 4 | spent 0 | damage 0
+  draw   Draws Blank Spell
+  land   Plays Island
+  mana   4 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  note   Stops: Skyshroud Claim {3}{G} is not payable in these colours
+  note   Opponent 1 draws and casts a spell (mana value 1)
+  note   Opponent 2 draws and casts a spell (mana value 1)
+  note   Opponent 3 draws and casts a spell (mana value 2) and a creature (mana value 4)
+  board  lands: 4 Island
+         permanents: -
+         hand: 2 Blank Spell, 1 Island, 1 Llanowar Elves, 1 Rampant Growth, 1 Skyshroud Claim
+         graveyard: - | exile: -
+         opponents: 1 / 0 / 4
+--- turn 5 | available 5 | spent 0 | damage 0
+  draw   Draws Rampant Growth
+  land   Plays Island
+  mana   5 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  note   Stops: Skyshroud Claim {3}{G} is not payable in these colours
+  note   Opponent 1 draws and casts a spell (mana value 1) and a creature (mana value 2)
+  note   Opponent 2 draws and casts a creature (mana value 3) and a spell (mana value 4)
+  note   Opponent 3 draws and casts a creature (mana value 5)
+  board  lands: 5 Island
+         permanents: -
+         hand: 2 Blank Spell, 1 Llanowar Elves, 2 Rampant Growth, 1 Skyshroud Claim
+         graveyard: - | exile: -
+         opponents: 2 / 1 / 5
+--- turn 6 | available 6 | spent 4 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   6 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Forest ({G})
+  cast   Casts Skyshroud Claim {3}{G} (ramp first)
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+         > Forest taps for {G}
+  mana   Finds Forest, which arrives tapped
+  mana   Finds Island, which arrives tapped
+  note   Stops: Rampant Growth {1}{G} is not payable in these colours alongside what is already cast
+  note   Opponent 1 draws and casts a spell (mana value 1) and a creature (mana value 6)
+  note   Opponent 2 draws and casts a spell (mana value 2)
+  note   Opponent 3 draws and casts a creature (mana value 4)
+  board  lands: 2 Forest, 6 Island
+         permanents: -
+         hand: 2 Blank Spell, 1 Llanowar Elves, 2 Rampant Growth
+         graveyard: 1 Skyshroud Claim | exile: -
+         opponents: 3 / 1 / 6
+--- turn 7 | available 9 | spent 7 | damage 0
+  draw   Draws Simic Signet
+  land   No land to play
+  mana   8 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Forest ({G}), Forest ({G}), Island ({U})
+  cast   Casts Rampant Growth {1}{G} (ramp first)
+         > Island taps for generic
+         > Simic Signet taps for {G}
+  mana   Finds Island, which arrives tapped
+  cast   Casts Simic Signet {2} (ramp first)
+         > Island taps for generic
+         > Island taps for generic
+  mana   Simic Signet will add 1 {U/G} this turn
+  cast   Casts Rampant Growth {1}{G} (ramp first)
+         > Island taps for generic
+         > Forest taps for {G}
+  mana   Finds Forest, which arrives tapped
+  cast   Casts Llanowar Elves {G} (ramp first)
+         > Forest taps for {G}
+  mana   Llanowar Elves will add 1 {G} from next turn
+  note   Stops: Blank Spell {1}{G} is not payable in these colours alongside what is already cast
+  note   Opponent 1 draws and casts a creature (mana value 6)
+  note   Opponent 2 draws and casts a spell (mana value 1) and a creature (mana value 4)
+  note   Opponent 3 draws and casts a spell (mana value 5) and a spell (mana value 5)
+  board  lands: 3 Forest, 7 Island
+         permanents: 1 Llanowar Elves, 1 Simic Signet
+         hand: 2 Blank Spell
+         graveyard: 2 Rampant Growth, 1 Skyshroud Claim | exile: -
+         opponents: 4 / 2 / 6
+--- turn 8 | available 12 | spent 8 | damage 0
+  draw   Draws Skyshroud Claim
+  land   No land to play
+  mana   12 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Forest ({G}), Forest ({G}), Island ({U}), Island ({U}), Simic Signet ({U/G}), Forest ({G}), Llanowar Elves ({G})
+  cast   Casts Skyshroud Claim {3}{G} (ramp first)
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+         > Simic Signet taps for {G}
+  mana   Finds Forest, which arrives tapped
+  mana   Finds Island, which arrives tapped
+  cast   Casts Blank Spell {1}{G}
+         > Island taps for generic
+         > Forest taps for {G}
+  cast   Casts Blank Spell {1}{G}
+         > Island taps for generic
+         > Forest taps for {G}
+  note   Stops with 4 mana up and no spell in hand
+  note   Opponent 1 draws and casts a creature (mana value 6)
+  note   Opponent 2 draws and casts a creature (mana value 5)
+  note   Opponent 3 draws and casts a creature (mana value 5)
+  board  lands: 4 Forest, 8 Island
+         permanents: 1 Llanowar Elves, 1 Simic Signet
+         hand: -
+         graveyard: 2 Blank Spell, 2 Rampant Growth, 2 Skyshroud Claim | exile: -
+         opponents: 5 / 3 / 7
+
+=== seed 91 | mulligans 1 ===
+opener: Archmage Emeritus, Blank Spell, Blank Spell, Blank Spell, Divination, Forest, Forest
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  note   Opponent 1 draws and casts a creature (mana value 1)
+  note   Opponent 2 draws and casts a creature (mana value 1)
+  note   Opponent 3 draws and casts a spell (mana value 1)
+  board  lands: 1 Forest
+         permanents: -
+         hand: 1 Archmage Emeritus, 3 Blank Spell, 1 Divination, 1 Forest
+         graveyard: - | exile: -
+         opponents: 1 / 1 / 0
+--- turn 2 | available 2 | spent 0 | damage 0
+  draw   Draws Opt
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  note   Stops: Opt {U} is not payable in these colours
+  note   Opponent 1 draws and casts a creature (mana value 2) and a creature (mana value 2)
+  note   Opponent 2 draws and casts a creature (mana value 2)
+  note   Opponent 3 draws and casts a spell (mana value 1)
+  board  lands: 2 Forest
+         permanents: -
+         hand: 1 Archmage Emeritus, 3 Blank Spell, 1 Divination, 1 Opt
+         graveyard: - | exile: -
+         opponents: 3 / 2 / 0
+--- turn 3 | available 2 | spent 0 | damage 0
+  draw   Draws Opt
+  land   No land to play
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  note   Stops: Opt {U} is not payable in these colours
+  note   Opponent 1 draws and casts a spell (mana value 2)
+  note   Opponent 2 draws and casts a creature (mana value 2) and a spell (mana value 1)
+  note   Opponent 3 draws and casts a spell (mana value 3)
+  board  lands: 2 Forest
+         permanents: -
+         hand: 1 Archmage Emeritus, 3 Blank Spell, 1 Divination, 2 Opt
+         graveyard: - | exile: -
+         opponents: 3 / 3 / 0
+--- turn 4 | available 3 | spent 0 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  note   Stops: Divination {2}{U} is not payable in these colours
+  note   Opponent 1 draws and casts a spell (mana value 3)
+  note   Opponent 2 draws and casts a creature (mana value 4) and a creature (mana value 3)
+  note   Opponent 3 draws and casts a creature (mana value 1)
+  board  lands: 3 Forest
+         permanents: -
+         hand: 1 Archmage Emeritus, 3 Blank Spell, 1 Divination, 2 Opt
+         graveyard: - | exile: -
+         opponents: 3 / 5 / 1
+--- turn 5 | available 3 | spent 0 | damage 0
+  draw   Draws Opt
+  land   No land to play
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  note   Stops: Divination {2}{U} is not payable in these colours
+  note   Discards Archmage Emeritus down to 7 cards
+  note   Opponent 1 draws and casts a spell (mana value 3)
+  note   Opponent 2 draws and casts a spell (mana value 4)
+  note   Opponent 3 draws and casts a spell (mana value 2) and a spell (mana value 5)
+  board  lands: 3 Forest
+         permanents: -
+         hand: 3 Blank Spell, 1 Divination, 3 Opt
+         graveyard: 1 Archmage Emeritus | exile: -
+         opponents: 3 / 5 / 1
+--- turn 6 | available 3 | spent 0 | damage 0
+  draw   Draws Rampant Growth
+  land   No land to play
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  note   Stops: Divination {2}{U} is not payable in these colours
+  note   Discards Divination down to 7 cards
+  note   Opponent 1 draws and casts a spell (mana value 3) and a creature (mana value 2)
+  note   Opponent 2 draws and casts a spell (mana value 6) and a spell (mana value 1)
+  note   Opponent 3 draws and casts a creature (mana value 3) and a creature (mana value 5)
+  board  lands: 3 Forest
+         permanents: -
+         hand: 3 Blank Spell, 3 Opt, 1 Rampant Growth
+         graveyard: 1 Archmage Emeritus, 1 Divination | exile: -
+         opponents: 4 / 5 / 3
+--- turn 7 | available 3 | spent 0 | damage 0
+  draw   Draws Blank Spell
+  land   No land to play
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  note   Stops: Opt {U} is not payable in these colours
+  note   Discards Blank Spell down to 7 cards
+  note   Opponent 1 draws and casts a spell (mana value 2) and a creature (mana value 3)
+  note   Opponent 2 draws and casts a spell (mana value 4)
+  note   Opponent 3 draws and casts a spell (mana value 2) and a spell (mana value 3)
+  board  lands: 3 Forest
+         permanents: -
+         hand: 3 Blank Spell, 3 Opt, 1 Rampant Growth
+         graveyard: 1 Archmage Emeritus, 1 Blank Spell, 1 Divination | exile: -
+         opponents: 5 / 5 / 3
+--- turn 8 | available 4 | spent 0 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  note   Stops: Opt {U} is not payable in these colours
+  note   Opponent 1 draws and casts a spell (mana value 3)
+  note   Opponent 2 draws and casts a creature (mana value 2) and a spell (mana value 7)
+  note   Opponent 3 draws and casts a creature (mana value 1)
+  board  lands: 4 Forest
+         permanents: -
+         hand: 3 Blank Spell, 3 Opt, 1 Rampant Growth
+         graveyard: 1 Archmage Emeritus, 1 Blank Spell, 1 Divination | exile: -
+         opponents: 5 / 6 / 4

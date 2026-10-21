@@ -1,0 +1,487 @@
+object-sim F3 + copy-sim: beasts off landfall, a creature watcher, Rite, Kiki, Clone, a sacrifice spell, Mahadi, Bitterblossom
+
+=== seed 275 | mulligans 0 ===
+opener: Bitterblossom, Forest, Forest, Grizzly Bears, Grizzly Bears, Guardian Project, Guardian Project
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Forest
+         permanents: -
+         hand: 1 Bitterblossom, 1 Forest, 2 Grizzly Bears, 2 Guardian Project, 1 Kiki-Jiki, 1 Mahadi
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Bitterblossom {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Bitterblossom will fire every upkeep from next turn
+  board  lands: 2 Forest
+         permanents: 1 Bitterblossom
+         hand: 1 Forest, 2 Grizzly Bears, 2 Guardian Project, 1 Kiki-Jiki, 1 Mahadi
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 3 | damage 0
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Forest
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Mahadi {1}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Mahadi will fire at every end step
+  note   Life total 39 (-1 this turn)
+  board  lands: 3 Forest
+         permanents: 1 1/1 Creature token, 1 Bitterblossom, 1 Mahadi
+         hand: 1 Forest, 2 Grizzly Bears, 2 Guardian Project, 1 Kiki-Jiki
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 4 | damage 4
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Drawloth
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Guardian Project {3}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Guardian Project is watching, and fires when it sees what it is waiting for
+  effect Attacks with 2 creatures for 4
+  note   Life total 38 (-1 this turn)
+  board  lands: 4 Forest
+         permanents: 2 1/1 Creature token, 1 Bitterblossom, 1 Guardian Project, 1 Mahadi
+         hand: 1 Drawloth, 2 Grizzly Bears, 1 Guardian Project, 1 Kiki-Jiki
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 5 | damage 6
+  effect Guardian Project draws Forest
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Forest
+  land   Plays Forest
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Kiki-Jiki {2}{G}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Kiki-Jiki has an ability, used when the turn has the mana spare
+  effect Guardian Project draws Rampaging Baloths
+  cast   Activates Kiki-Jiki: {T}
+  effect Guardian Project draws Eat
+  effect Kiki-Jiki creates 1 token copy of 1/1 Creature token until end of turn
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 4 creatures for 6
+  note   Life total 37 (-1 this turn)
+  board  lands: 5 Forest
+         permanents: 4 1/1 Creature token, 1 Bitterblossom, 1 Guardian Project, 1 Kiki-Jiki, 1 Mahadi
+         hand: 1 Drawloth, 1 Eat, 1 Forest, 2 Grizzly Bears, 1 Guardian Project, 1 Rampaging Baloths
+         graveyard: - | exile: -
+--- turn 6 | available 6 | spent 6 | damage 12
+  effect Guardian Project draws Drawloth
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Drawloth
+  land   Plays Forest
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Rampaging Baloths {4}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Rampaging Baloths is watching, and fires when it sees what it is waiting for
+  effect Guardian Project draws Raise the Alarm
+  cast   Activates Kiki-Jiki: {T}
+  effect Guardian Project draws Raise the Alarm
+  effect Kiki-Jiki creates 1 token copy of Rampaging Baloths until end of turn
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 5 creatures for 12
+  note   Discards Drawloth, Drawloth down to 7 cards
+  note   Life total 36 (-1 this turn)
+  board  lands: 6 Forest
+         permanents: 4 1/1 Creature token, 1 Bitterblossom, 1 Guardian Project, 1 Kiki-Jiki, 1 Mahadi, 2 Rampaging Baloths
+         hand: 1 Drawloth, 1 Eat, 2 Grizzly Bears, 1 Guardian Project, 2 Raise the Alarm
+         graveyard: 2 Drawloth | exile: -
+--- turn 7 | available 7 | spent 7 | damage 19
+  effect Guardian Project draws Clone
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Forest
+  land   Plays Forest
+  effect Guardian Project draws Eat
+  effect Rampaging Baloths creates 1 Beast
+  mana   7 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Drawloth {2}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Drawloth draws Clone
+  effect Guardian Project draws Eat
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Guardian Project draws Forest
+  cast   Casts Eat {G}
+         > Forest taps for {G}
+  effect Eat moves Grizzly Bears to your graveyard
+  cast   Activates Kiki-Jiki: {T}
+  effect Guardian Project draws Forest
+  effect Kiki-Jiki creates 1 token copy of Rampaging Baloths until end of turn
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 7 creatures for 19
+  effect End step: Mahadi makes 1 Treasure
+  note   An opponent would be dead: 41 damage so far
+  note   Discards Guardian Project, Clone, Clone down to 7 cards
+  note   Life total 35 (-1 this turn)
+  board  lands: 7 Forest
+         permanents: 5 1/1 Creature token, 1 Beast, 1 Bitterblossom, 1 Drawloth, 1 Guardian Project, 1 Kiki-Jiki, 1 Mahadi, 2 Rampaging Baloths | treasures: 1
+         hand: 2 Eat, 2 Forest, 1 Grizzly Bears, 2 Raise the Alarm
+         graveyard: 2 Clone, 2 Drawloth, 1 Eat, 1 Grizzly Bears, 1 Guardian Project | exile: -
+--- turn 8 | available 9 | spent 9 | damage 29
+  effect Guardian Project draws Forest
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Eat
+  land   Plays Forest
+  effect Guardian Project draws Clone
+  effect Rampaging Baloths creates 1 Beast
+  mana   9 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Forest ({G})
+  cast   Casts Clone {3}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Guardian Project draws Forest
+  effect Clone enters as a copy of Rampaging Baloths
+  effect Guardian Project draws Forest
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Treasure taps for generic
+  effect Guardian Project draws Forest
+  cast   Casts Eat {G}
+         > Forest taps for {G}
+  effect Eat moves Grizzly Bears to your graveyard
+  cast   Casts Raise the Alarm {G}
+         > Forest taps for {G}
+  effect Guardian Project draws Rampaging Baloths
+  effect Guardian Project draws Drawloth
+  effect Raise the Alarm creates 2 Soldiers
+  cast   Casts Eat {G}
+         > Forest taps for {G}
+  effect Eat resolves
+  cast   Activates Kiki-Jiki: {T}
+  effect Guardian Project draws Guardian Project
+  effect Kiki-Jiki creates 1 token copy of Rampaging Baloths until end of turn
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 10 creatures for 29
+  mana   Sacrifices 1 Treasure to cover the turn
+  effect End step: Mahadi makes 1 Treasure
+  note   Discards Rampaging Baloths, Forest, Guardian Project down to 7 cards
+  note   Life total 34 (-1 this turn)
+  board  lands: 8 Forest
+         permanents: 6 1/1 Creature token, 2 Beast, 1 Bitterblossom, 1 Drawloth, 1 Guardian Project, 1 Kiki-Jiki, 1 Mahadi, 3 Rampaging Baloths, 2 Soldier | treasures: 1
+         hand: 1 Drawloth, 1 Eat, 4 Forest, 1 Raise the Alarm
+         graveyard: 2 Clone, 2 Drawloth, 3 Eat, 1 Forest, 2 Grizzly Bears, 2 Guardian Project, 1 Raise the Alarm, 1 Rampaging Baloths | exile: -
+
+=== seed 390 | mulligans 0 ===
+opener: Brick, Clone, Drawloth, Forest, Forest, Forest, Grizzly Bears
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Forest
+         permanents: -
+         hand: 1 Brick, 1 Clone, 1 Drawloth, 2 Forest, 1 Grizzly Bears, 1 Kiki-Jiki, 1 Mahadi
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Eat
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  board  lands: 2 Forest
+         permanents: 1 Grizzly Bears
+         hand: 1 Brick, 1 Clone, 1 Drawloth, 1 Eat, 1 Forest, 1 Kiki-Jiki, 1 Mahadi
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 3 | damage 2
+  draw   Draws Forest
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Mahadi {1}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Mahadi will fire at every end step
+  effect Attacks with 1 creature for 2
+  board  lands: 3 Forest
+         permanents: 1 Grizzly Bears, 1 Mahadi
+         hand: 1 Brick, 1 Clone, 1 Drawloth, 1 Eat, 1 Forest, 1 Kiki-Jiki
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 4 | damage 5
+  draw   Draws Guardian Project
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Clone {3}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Clone enters as a copy of Mahadi
+  effect Attacks with 2 creatures for 5
+  board  lands: 4 Forest
+         permanents: 1 Grizzly Bears, 2 Mahadi
+         hand: 1 Brick, 1 Drawloth, 1 Eat, 1 Guardian Project, 1 Kiki-Jiki
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 5 | damage 10
+  draw   Draws Forest
+  land   Plays Forest
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Kiki-Jiki {2}{G}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Kiki-Jiki has an ability, used when the turn has the mana spare
+  cast   Activates Kiki-Jiki: {T}
+  effect Kiki-Jiki creates 1 token copy of Grizzly Bears until end of turn
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 4 creatures for 10
+  board  lands: 5 Forest
+         permanents: 2 Grizzly Bears, 1 Kiki-Jiki, 2 Mahadi
+         hand: 1 Brick, 1 Drawloth, 1 Eat, 1 Guardian Project
+         graveyard: - | exile: -
+--- turn 6 | available 5 | spent 5 | damage 13
+  draw   Draws Raise the Alarm
+  land   No land to play
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Drawloth {2}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Drawloth draws Forest
+  cast   Casts Raise the Alarm {G}
+         > Forest taps for {G}
+  effect Raise the Alarm creates 2 Soldiers
+  cast   Activates Kiki-Jiki: {T}
+  effect Kiki-Jiki creates 1 token copy of Drawloth until end of turn
+  effect Drawloth draws Brick
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 4 creatures for 13
+  board  lands: 5 Forest
+         permanents: 2 Drawloth, 1 Grizzly Bears, 1 Kiki-Jiki, 2 Mahadi, 2 Soldier
+         hand: 2 Brick, 1 Eat, 1 Forest, 1 Guardian Project
+         graveyard: 1 Raise the Alarm | exile: -
+--- turn 7 | available 6 | spent 5 | damage 18
+  draw   Draws Rite of Replication
+  land   Plays Forest
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Guardian Project {3}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Guardian Project is watching, and fires when it sees what it is waiting for
+  cast   Casts Eat {G}
+         > Forest taps for {G}
+  effect Eat moves Grizzly Bears to your graveyard
+  cast   Activates Kiki-Jiki: {T}
+  effect Drawloth draws Forest
+  effect Guardian Project draws Drawloth
+  effect Kiki-Jiki creates 1 token copy of Drawloth until end of turn
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 6 creatures for 18
+  effect End step: Mahadi makes 1 Treasure
+  effect End step: Mahadi makes 1 Treasure
+  note   An opponent would be dead: 48 damage so far
+  board  lands: 6 Forest
+         permanents: 2 Drawloth, 1 Guardian Project, 1 Kiki-Jiki, 2 Mahadi, 2 Soldier | treasures: 2
+         hand: 2 Brick, 1 Drawloth, 1 Forest, 1 Rite of Replication
+         graveyard: 1 Eat, 1 Grizzly Bears, 1 Raise the Alarm | exile: -
+--- turn 8 | available 9 | spent 9 | damage 18
+  draw   Draws Forest
+  land   Plays Forest
+  mana   9 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Forest ({G})
+  cast   Casts Rite of Replication {2}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Drawloth draws Forest
+  effect Guardian Project draws Rampaging Baloths
+  effect Rite of Replication creates 1 token copy of Drawloth
+  cast   Casts Drawloth {2}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Treasure taps for generic
+         > Treasure taps for generic
+  effect Drawloth draws Brick
+  effect Guardian Project draws Drawloth
+  cast   Activates Kiki-Jiki: {T}
+  effect Drawloth draws Eat
+  effect Guardian Project draws Rite of Replication
+  effect Kiki-Jiki creates 1 token copy of Drawloth until end of turn
+  cast   Casts Eat {G}
+         > Forest taps for {G}
+  effect Eat resolves
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 6 creatures for 18
+  mana   Sacrifices 2 Treasures to cover the turn
+  note   Discards Brick down to 7 cards
+  board  lands: 7 Forest
+         permanents: 4 Drawloth, 1 Guardian Project, 1 Kiki-Jiki, 2 Mahadi, 2 Soldier
+         hand: 2 Brick, 1 Drawloth, 2 Forest, 1 Rampaging Baloths, 1 Rite of Replication
+         graveyard: 1 Brick, 2 Eat, 1 Grizzly Bears, 1 Raise the Alarm, 1 Rite of Replication | exile: -
+
+=== seed 199 | mulligans 0 ===
+opener: Bitterblossom, Eat, Forest, Forest, Forest, Grizzly Bears, Grizzly Bears
+--- turn 1 | available 1 | spent 1 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  cast   Casts Eat {G}
+         > Forest taps for {G}
+  effect Eat resolves
+  board  lands: 1 Forest
+         permanents: -
+         hand: 1 Bitterblossom, 2 Forest, 2 Grizzly Bears, 1 Kiki-Jiki, 1 Mahadi
+         graveyard: 1 Eat | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Eat
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Bitterblossom {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Bitterblossom will fire every upkeep from next turn
+  board  lands: 2 Forest
+         permanents: 1 Bitterblossom
+         hand: 1 Eat, 1 Forest, 2 Grizzly Bears, 1 Kiki-Jiki, 1 Mahadi
+         graveyard: 1 Eat | exile: -
+--- turn 3 | available 3 | spent 3 | damage 0
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Rampaging Baloths
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Mahadi {1}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Mahadi will fire at every end step
+  note   Life total 39 (-1 this turn)
+  board  lands: 3 Forest
+         permanents: 1 1/1 Creature token, 1 Bitterblossom, 1 Mahadi
+         hand: 1 Eat, 2 Grizzly Bears, 1 Kiki-Jiki, 1 Rampaging Baloths
+         graveyard: 1 Eat | exile: -
+--- turn 4 | available 4 | spent 4 | damage 4
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Forest
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Attacks with 2 creatures for 4
+  note   Life total 38 (-1 this turn)
+  board  lands: 4 Forest
+         permanents: 2 1/1 Creature token, 1 Bitterblossom, 2 Grizzly Bears, 1 Mahadi
+         hand: 1 Eat, 1 Kiki-Jiki, 1 Rampaging Baloths
+         graveyard: 1 Eat | exile: -
+--- turn 5 | available 5 | spent 5 | damage 11
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Forest
+  land   Plays Forest
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Kiki-Jiki {2}{G}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Kiki-Jiki has an ability, used when the turn has the mana spare
+  cast   Activates Kiki-Jiki: {T}
+  effect Kiki-Jiki creates 1 token copy of Grizzly Bears until end of turn
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 6 creatures for 11
+  note   Life total 37 (-1 this turn)
+  board  lands: 5 Forest
+         permanents: 3 1/1 Creature token, 1 Bitterblossom, 3 Grizzly Bears, 1 Kiki-Jiki, 1 Mahadi
+         hand: 1 Eat, 1 Rampaging Baloths
+         graveyard: 1 Eat | exile: -
+--- turn 6 | available 5 | spent 2 | damage 7
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Eat
+  land   No land to play
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Eat {G}
+         > Forest taps for {G}
+  effect Eat moves Grizzly Bears to your graveyard
+  cast   Casts Eat {G}
+         > Forest taps for {G}
+  effect Eat moves Grizzly Bears to your graveyard
+  cast   Activates Kiki-Jiki: {T}
+  effect Kiki-Jiki creates 1 token copy of 1/1 Creature token until end of turn
+  note   Stops with 3 mana up: nothing left in hand costs 3 or less
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 5 creatures for 7
+  effect End step: Mahadi makes 2 Treasures
+  note   Life total 36 (-1 this turn)
+  board  lands: 5 Forest
+         permanents: 5 1/1 Creature token, 1 Bitterblossom, 1 Kiki-Jiki, 1 Mahadi | treasures: 2
+         hand: 1 Rampaging Baloths
+         graveyard: 3 Eat, 2 Grizzly Bears | exile: -
+--- turn 7 | available 7 | spent 7 | damage 13
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Raise the Alarm
+  land   No land to play
+  mana   7 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G})
+  cast   Casts Rampaging Baloths {4}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Treasure taps for generic
+         > Treasure taps for generic
+  effect Rampaging Baloths is watching, and fires when it sees what it is waiting for
+  cast   Casts Raise the Alarm {G}
+         > Forest taps for {G}
+  effect Raise the Alarm creates 2 Soldiers
+  cast   Activates Kiki-Jiki: {T}
+  effect Kiki-Jiki creates 1 token copy of Rampaging Baloths until end of turn
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 6 creatures for 13
+  mana   Sacrifices 2 Treasures to cover the turn
+  note   Life total 35 (-1 this turn)
+  board  lands: 5 Forest
+         permanents: 5 1/1 Creature token, 1 Bitterblossom, 1 Kiki-Jiki, 1 Mahadi, 2 Rampaging Baloths, 2 Soldier
+         hand: -
+         graveyard: 3 Eat, 2 Grizzly Bears, 1 Raise the Alarm | exile: -
+--- turn 8 | available 5 | spent 2 | damage 22
+  effect Upkeep: Bitterblossom loses 1 life, creates 1 1/1 Creature token
+  draw   Draws Bitterblossom
+  land   No land to play
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Bitterblossom {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Bitterblossom will fire every upkeep from next turn
+  cast   Activates Kiki-Jiki: {T}
+  effect Kiki-Jiki creates 1 token copy of Rampaging Baloths until end of turn
+  note   Stops with 3 mana up and no spell in hand
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 10 creatures for 22
+  note   An opponent would be dead: 57 damage so far
+  note   Life total 34 (-1 this turn)
+  board  lands: 5 Forest
+         permanents: 6 1/1 Creature token, 2 Bitterblossom, 1 Kiki-Jiki, 1 Mahadi, 2 Rampaging Baloths, 2 Soldier
+         hand: -
+         graveyard: 3 Eat, 2 Grizzly Bears, 1 Raise the Alarm | exile: -

@@ -1,0 +1,324 @@
+devotion-sim + floor-sim: Gray Merchant drains, an Acolyte tapping for devotion, Field of the Dead over eleven land names, hybrid and gold pips, Erebos under and over five, a Wall with defender
+
+=== seed 165 | mulligans 0 ===
+opener: Blossoming Sands, Blossoming Sands, Gray Merchant of Asphodel, Kitchen Finks, Leatherback Baloth, Swamp, Wall of Omens
+--- turn 1 | available 0 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Blossoming Sands (enters tapped) over Swamp
+  mana   No mana available
+  board  lands: 1 Blossoming Sands
+         permanents: -
+         hand: 1 Blossoming Sands, 1 Gray Merchant of Asphodel, 1 Kitchen Finks, 1 Leatherback Baloth, 1 Swamp, 1 Wall of Omens
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Kitchen Finks
+  land   Plays Swamp over Blossoming Sands
+  mana   2 mana untapped: Blossoming Sands ({W/G}), Swamp ({B})
+  cast   Casts Wall of Omens {1}{W}
+         > Blossoming Sands taps for {W}
+         > Swamp taps for generic
+  effect Wall of Omens draws Karametra's Acolyte
+  board  lands: 1 Blossoming Sands, 1 Swamp
+         permanents: 1 Wall of Omens
+         hand: 1 Blossoming Sands, 1 Gray Merchant of Asphodel, 1 Karametra's Acolyte, 2 Kitchen Finks, 1 Leatherback Baloth
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 3 | damage 0
+  draw   Draws Exotic Orchard
+  land   Plays Exotic Orchard over Blossoming Sands
+  mana   3 mana untapped: Blossoming Sands ({W/G}), Swamp ({B}), Exotic Orchard ({W/B/G})
+  cast   Casts Kitchen Finks {1}{G/W}{G/W}
+         > Blossoming Sands taps for {W/G}
+         > Swamp taps for generic
+         > Exotic Orchard taps for {W/G}
+  board  lands: 1 Blossoming Sands, 1 Exotic Orchard, 1 Swamp
+         permanents: 1 Kitchen Finks, 1 Wall of Omens
+         hand: 1 Blossoming Sands, 1 Gray Merchant of Asphodel, 1 Karametra's Acolyte, 1 Kitchen Finks, 1 Leatherback Baloth
+         graveyard: - | exile: -
+--- turn 4 | available 3 | spent 0 | damage 3
+  draw   Draws Karametra's Acolyte
+  land   Plays Blossoming Sands (enters tapped)
+  mana   3 mana untapped: Blossoming Sands ({W/G}), Swamp ({B}), Exotic Orchard ({W/B/G})
+  note   Stops: Leatherback Baloth {G}{G}{G} is not payable in these colours
+  effect Attacks with 1 creature for 3
+  board  lands: 2 Blossoming Sands, 1 Exotic Orchard, 1 Swamp
+         permanents: 1 Kitchen Finks, 1 Wall of Omens
+         hand: 1 Gray Merchant of Asphodel, 2 Karametra's Acolyte, 1 Kitchen Finks, 1 Leatherback Baloth
+         graveyard: - | exile: -
+--- turn 5 | available 4 | spent 4 | damage 3
+  draw   Draws Watchwolf
+  land   No land to play
+  mana   4 mana untapped: Blossoming Sands ({W/G}), Swamp ({B}), Exotic Orchard ({W/B/G}), Blossoming Sands ({W/G})
+  cast   Casts Karametra's Acolyte {3}{G} (ramp first)
+         > Blossoming Sands taps for {G}
+         > Swamp taps for generic
+         > Exotic Orchard taps for generic
+         > Blossoming Sands taps for generic
+  mana   Karametra's Acolyte will tap for mana from next turn, as its rule says
+  effect Karametra's Acolyte resolves
+  effect Attacks with 1 creature for 3
+  board  lands: 2 Blossoming Sands, 1 Exotic Orchard, 1 Swamp
+         permanents: 1 Karametra's Acolyte, 1 Kitchen Finks, 1 Wall of Omens
+         hand: 1 Gray Merchant of Asphodel, 1 Karametra's Acolyte, 1 Kitchen Finks, 1 Leatherback Baloth, 1 Watchwolf
+         graveyard: - | exile: -
+--- turn 6 | available 8 | spent 7 | damage 3
+  draw   Draws Forest
+  land   Plays Forest
+  mana   8 mana untapped: Blossoming Sands ({W/G}), Swamp ({B}), Exotic Orchard ({W/B/G}), Blossoming Sands ({W/G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Forest ({G})
+  cast   Casts Karametra's Acolyte {3}{G} (ramp first)
+         > Swamp taps for generic
+         > Karametra's Acolyte taps for {G}
+         > Karametra's Acolyte taps for generic
+         > Karametra's Acolyte taps for generic
+  mana   Karametra's Acolyte will tap for mana from next turn, as its rule says
+  effect Karametra's Acolyte resolves
+  cast   Casts Leatherback Baloth {G}{G}{G}
+         > Blossoming Sands taps for {G}
+         > Exotic Orchard taps for {G}
+         > Blossoming Sands taps for {G}
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 1 creature for 3
+  board  lands: 2 Blossoming Sands, 1 Exotic Orchard, 1 Forest, 1 Swamp
+         permanents: 2 Karametra's Acolyte, 1 Kitchen Finks, 1 Leatherback Baloth, 1 Wall of Omens
+         hand: 1 Gray Merchant of Asphodel, 1 Kitchen Finks, 1 Watchwolf
+         graveyard: - | exile: -
+--- turn 7 | available 19 | spent 14 | damage 9
+  draw   Draws Birthing Pod
+  land   No land to play
+  mana   19 mana untapped: Blossoming Sands ({W/G}), Swamp ({B}), Exotic Orchard ({W/B/G}), Blossoming Sands ({W/G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Forest ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G})
+  cast   Casts Gray Merchant of Asphodel {3}{B}{B}
+         > Swamp taps for {B}
+         > Exotic Orchard taps for {B}
+         > Karametra's Acolyte taps for generic
+         > Karametra's Acolyte taps for generic
+         > Karametra's Acolyte taps for generic
+  effect Gray Merchant of Asphodel deals 2 damage
+  cast   Casts Birthing Pod {3}{G/P}
+         > Karametra's Acolyte taps for generic
+         > Karametra's Acolyte taps for generic
+         > Forest taps for generic
+  cast   Casts Kitchen Finks {1}{G/W}{G/W}
+         > Karametra's Acolyte taps for {W/G}
+         > Karametra's Acolyte taps for {W/G}
+         > Karametra's Acolyte taps for generic
+  cast   Casts Watchwolf {G}{W}
+         > Blossoming Sands taps for {W}
+         > Blossoming Sands taps for {G}
+  note   Stops with 5 mana up and no spell in hand
+  note   2 creatures were tapped for mana, so they do not attack
+  effect Attacks with 2 creatures for 7
+  board  lands: 2 Blossoming Sands, 1 Exotic Orchard, 1 Forest, 1 Swamp
+         permanents: 1 Birthing Pod, 1 Gray Merchant of Asphodel, 2 Karametra's Acolyte, 2 Kitchen Finks, 1 Leatherback Baloth, 1 Wall of Omens, 1 Watchwolf
+         hand: -
+         graveyard: - | exile: -
+--- turn 8 | available 27 | spent 0 | damage 17
+  draw   Draws Field of the Dead
+  land   Plays Field of the Dead (enters tapped)
+  mana   27 mana untapped: Blossoming Sands ({W/G}), Swamp ({B}), Exotic Orchard ({W/B/G}), Blossoming Sands ({W/G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Forest ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G})
+  note   Stops with 27 mana up and no spell in hand
+  effect Attacks with 7 creatures for 17
+  board  lands: 2 Blossoming Sands, 1 Exotic Orchard, 1 Field of the Dead, 1 Forest, 1 Swamp
+         permanents: 1 Birthing Pod, 1 Gray Merchant of Asphodel, 2 Karametra's Acolyte, 2 Kitchen Finks, 1 Leatherback Baloth, 1 Wall of Omens, 1 Watchwolf
+         hand: -
+         graveyard: - | exile: -
+
+=== seed 74 | mulligans 0 ===
+opener: Blossoming Sands, Exotic Orchard, Forest, Leatherback Baloth, Path of Ancestry, Phyrexian Obliterator, Watchwolf
+--- turn 1 | available 0 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Path of Ancestry (enters tapped) over Forest, Blossoming Sands, Exotic Orchard
+  mana   No mana available
+  board  lands: 1 Path of Ancestry
+         permanents: -
+         hand: 1 Blossoming Sands, 1 Exotic Orchard, 1 Forest, 1 Leatherback Baloth, 1 Phyrexian Obliterator, 1 Watchwolf
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Karametra's Acolyte
+  land   Plays Forest over Exotic Orchard, Blossoming Sands
+  mana   2 mana untapped: Path of Ancestry ({W/B/G}), Forest ({G})
+  cast   Casts Watchwolf {G}{W}
+         > Path of Ancestry taps for {W}
+         > Forest taps for {G}
+  board  lands: 1 Forest, 1 Path of Ancestry
+         permanents: 1 Watchwolf
+         hand: 1 Blossoming Sands, 1 Exotic Orchard, 1 Karametra's Acolyte, 1 Leatherback Baloth, 1 Phyrexian Obliterator
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 3 | damage 3
+  draw   Draws Watchwolf
+  land   Plays Exotic Orchard over Blossoming Sands
+  mana   3 mana untapped: Path of Ancestry ({W/B/G}), Forest ({G}), Exotic Orchard ({W/B/G})
+  cast   Casts Leatherback Baloth {G}{G}{G}
+         > Path of Ancestry taps for {G}
+         > Forest taps for {G}
+         > Exotic Orchard taps for {G}
+  effect Attacks with 1 creature for 3
+  board  lands: 1 Exotic Orchard, 1 Forest, 1 Path of Ancestry
+         permanents: 1 Leatherback Baloth, 1 Watchwolf
+         hand: 1 Blossoming Sands, 1 Karametra's Acolyte, 1 Phyrexian Obliterator, 1 Watchwolf
+         graveyard: - | exile: -
+--- turn 4 | available 3 | spent 2 | damage 7
+  draw   Draws Reaper King
+  land   Plays Blossoming Sands (enters tapped)
+  mana   3 mana untapped: Path of Ancestry ({W/B/G}), Forest ({G}), Exotic Orchard ({W/B/G})
+  cast   Casts Watchwolf {G}{W}
+         > Path of Ancestry taps for {W}
+         > Forest taps for {G}
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 2 creatures for 7
+  board  lands: 1 Blossoming Sands, 1 Exotic Orchard, 1 Forest, 1 Path of Ancestry
+         permanents: 1 Leatherback Baloth, 2 Watchwolf
+         hand: 1 Karametra's Acolyte, 1 Phyrexian Obliterator, 1 Reaper King
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 4 | damage 10
+  draw   Draws Plains
+  land   Plays Plains
+  mana   5 mana untapped: Path of Ancestry ({W/B/G}), Forest ({G}), Exotic Orchard ({W/B/G}), Blossoming Sands ({W/G}), Plains ({W})
+  cast   Casts Karametra's Acolyte {3}{G} (ramp first)
+         > Path of Ancestry taps for {G}
+         > Forest taps for generic
+         > Exotic Orchard taps for generic
+         > Blossoming Sands taps for generic
+  mana   Karametra's Acolyte will tap for mana from next turn, as its rule says
+  effect Karametra's Acolyte resolves
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 3 creatures for 10
+  board  lands: 1 Blossoming Sands, 1 Exotic Orchard, 1 Forest, 1 Path of Ancestry, 1 Plains
+         permanents: 1 Karametra's Acolyte, 1 Leatherback Baloth, 2 Watchwolf
+         hand: 1 Phyrexian Obliterator, 1 Reaper King
+         graveyard: - | exile: -
+--- turn 6 | available 11 | spent 5 | damage 10
+  draw   Draws Gray Merchant of Asphodel
+  land   No land to play
+  mana   11 mana untapped: Path of Ancestry ({W/B/G}), Forest ({G}), Exotic Orchard ({W/B/G}), Blossoming Sands ({W/G}), Plains ({W}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G})
+  cast   Casts Reaper King {2/W}{2/U}{2/B}{2/R}{2/G}
+         > Path of Ancestry taps for generic
+         > Forest taps for generic
+         > Exotic Orchard taps for generic
+         > Blossoming Sands taps for generic
+         > Plains taps for generic
+         > Karametra's Acolyte taps for generic
+         > Karametra's Acolyte taps for generic
+         > Karametra's Acolyte taps for generic
+         > Karametra's Acolyte taps for generic
+         > Karametra's Acolyte taps for generic
+  note   Stops: Gray Merchant of Asphodel {3}{B}{B} is not payable in these colours alongside what is already cast
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 3 creatures for 10
+  board  lands: 1 Blossoming Sands, 1 Exotic Orchard, 1 Forest, 1 Path of Ancestry, 1 Plains
+         permanents: 1 Karametra's Acolyte, 1 Leatherback Baloth, 1 Reaper King, 2 Watchwolf
+         hand: 1 Gray Merchant of Asphodel, 1 Phyrexian Obliterator
+         graveyard: - | exile: -
+--- turn 7 | available 12 | spent 5 | damage 20
+  draw   Draws Leatherback Baloth
+  land   No land to play
+  mana   12 mana untapped: Path of Ancestry ({W/B/G}), Forest ({G}), Exotic Orchard ({W/B/G}), Blossoming Sands ({W/G}), Plains ({W}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G})
+  cast   Casts Gray Merchant of Asphodel {3}{B}{B}
+         > Path of Ancestry taps for {B}
+         > Forest taps for generic
+         > Exotic Orchard taps for {B}
+         > Blossoming Sands taps for generic
+         > Plains taps for generic
+  effect Gray Merchant of Asphodel deals 3 damage
+  note   Stops: Phyrexian Obliterator {B}{B}{B}{B} is not payable in these colours alongside what is already cast
+  effect Attacks with 5 creatures for 17
+  note   An opponent would be dead: 50 damage so far
+  board  lands: 1 Blossoming Sands, 1 Exotic Orchard, 1 Forest, 1 Path of Ancestry, 1 Plains
+         permanents: 1 Gray Merchant of Asphodel, 1 Karametra's Acolyte, 1 Leatherback Baloth, 1 Reaper King, 2 Watchwolf
+         hand: 1 Leatherback Baloth, 1 Phyrexian Obliterator
+         graveyard: - | exile: -
+--- turn 8 | available 13 | spent 0 | damage 19
+  draw   Draws Swamp
+  land   Plays Swamp
+  mana   13 mana untapped: Path of Ancestry ({W/B/G}), Forest ({G}), Exotic Orchard ({W/B/G}), Blossoming Sands ({W/G}), Plains ({W}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Karametra's Acolyte ({G}), Swamp ({B})
+  note   Stops: Phyrexian Obliterator {B}{B}{B}{B} is not payable in these colours
+  effect Attacks with 6 creatures for 19
+  board  lands: 1 Blossoming Sands, 1 Exotic Orchard, 1 Forest, 1 Path of Ancestry, 1 Plains, 1 Swamp
+         permanents: 1 Gray Merchant of Asphodel, 1 Karametra's Acolyte, 1 Leatherback Baloth, 1 Reaper King, 2 Watchwolf
+         hand: 1 Leatherback Baloth, 1 Phyrexian Obliterator
+         graveyard: - | exile: -
+
+=== seed 80 | mulligans 0 ===
+opener: Field of the Dead, Forest, Gray Merchant of Asphodel, Gray Merchant of Asphodel, Leatherback Baloth, Reaper King, Watchwolf
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest over Field of the Dead
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Forest
+         permanents: -
+         hand: 1 Field of the Dead, 2 Gray Merchant of Asphodel, 1 Leatherback Baloth, 1 Reaper King, 1 Watchwolf
+         graveyard: - | exile: -
+--- turn 2 | available 1 | spent 0 | damage 0
+  draw   Draws Wall of Omens
+  land   Plays Field of the Dead (enters tapped)
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Field of the Dead, 1 Forest
+         permanents: -
+         hand: 2 Gray Merchant of Asphodel, 1 Leatherback Baloth, 1 Reaper King, 1 Wall of Omens, 1 Watchwolf
+         graveyard: - | exile: -
+--- turn 3 | available 2 | spent 0 | damage 0
+  draw   Draws Phyrexian Obliterator
+  land   No land to play
+  mana   2 mana untapped: Forest ({G}), Field of the Dead ({C})
+  note   Stops: Watchwolf {G}{W} is not payable in these colours
+  board  lands: 1 Field of the Dead, 1 Forest
+         permanents: -
+         hand: 2 Gray Merchant of Asphodel, 1 Leatherback Baloth, 1 Phyrexian Obliterator, 1 Reaper King, 1 Wall of Omens, 1 Watchwolf
+         graveyard: - | exile: -
+--- turn 4 | available 2 | spent 0 | damage 0
+  draw   Draws Jungle Hollow
+  land   Plays Jungle Hollow (enters tapped)
+  mana   2 mana untapped: Forest ({G}), Field of the Dead ({C})
+  note   Stops: Wall of Omens {1}{W} is not payable in these colours
+  board  lands: 1 Field of the Dead, 1 Forest, 1 Jungle Hollow
+         permanents: -
+         hand: 2 Gray Merchant of Asphodel, 1 Leatherback Baloth, 1 Phyrexian Obliterator, 1 Reaper King, 1 Wall of Omens, 1 Watchwolf
+         graveyard: - | exile: -
+--- turn 5 | available 4 | spent 0 | damage 0
+  draw   Draws Exotic Orchard
+  land   Plays Exotic Orchard
+  mana   4 mana untapped: Forest ({G}), Field of the Dead ({C}), Jungle Hollow ({B/G}), Exotic Orchard ({W/B/G})
+  note   Stops: Phyrexian Obliterator {B}{B}{B}{B} is not payable in these colours
+  board  lands: 1 Exotic Orchard, 1 Field of the Dead, 1 Forest, 1 Jungle Hollow
+         permanents: -
+         hand: 2 Gray Merchant of Asphodel, 1 Leatherback Baloth, 1 Phyrexian Obliterator, 1 Reaper King, 1 Wall of Omens, 1 Watchwolf
+         graveyard: - | exile: -
+--- turn 6 | available 5 | spent 0 | damage 0
+  draw   Draws Plains
+  land   Plays Plains
+  mana   5 mana untapped: Forest ({G}), Field of the Dead ({C}), Jungle Hollow ({B/G}), Exotic Orchard ({W/B/G}), Plains ({W})
+  note   Stops: Reaper King {2/W}{2/U}{2/B}{2/R}{2/G} is not payable in these colours
+  board  lands: 1 Exotic Orchard, 1 Field of the Dead, 1 Forest, 1 Jungle Hollow, 1 Plains
+         permanents: -
+         hand: 2 Gray Merchant of Asphodel, 1 Leatherback Baloth, 1 Phyrexian Obliterator, 1 Reaper King, 1 Wall of Omens, 1 Watchwolf
+         graveyard: - | exile: -
+--- turn 7 | available 6 | spent 0 | damage 0
+  draw   Draws Swamp
+  land   Plays Swamp
+  mana   6 mana untapped: Forest ({G}), Field of the Dead ({C}), Jungle Hollow ({B/G}), Exotic Orchard ({W/B/G}), Plains ({W}), Swamp ({B})
+  note   Stops: Reaper King {2/W}{2/U}{2/B}{2/R}{2/G} is not payable in these colours
+  board  lands: 1 Exotic Orchard, 1 Field of the Dead, 1 Forest, 1 Jungle Hollow, 1 Plains, 1 Swamp
+         permanents: -
+         hand: 2 Gray Merchant of Asphodel, 1 Leatherback Baloth, 1 Phyrexian Obliterator, 1 Reaper King, 1 Wall of Omens, 1 Watchwolf
+         graveyard: - | exile: -
+--- turn 8 | available 7 | spent 7 | damage 2
+  draw   Draws Command Tower
+  land   Plays Command Tower
+  effect Field of the Dead creates 1 Zombie
+  mana   7 mana untapped: Forest ({G}), Field of the Dead ({C}), Jungle Hollow ({B/G}), Exotic Orchard ({W/B/G}), Plains ({W}), Swamp ({B}), Command Tower ({W/B/G})
+  cast   Casts Gray Merchant of Asphodel {3}{B}{B}
+         > Forest taps for generic
+         > Field of the Dead taps for generic
+         > Jungle Hollow taps for {B}
+         > Plains taps for generic
+         > Swamp taps for {B}
+  effect Gray Merchant of Asphodel deals 2 damage
+  cast   Casts Wall of Omens {1}{W}
+         > Exotic Orchard taps for {W}
+         > Command Tower taps for generic
+  effect Wall of Omens draws Wall of Omens
+  board  lands: 1 Command Tower, 1 Exotic Orchard, 1 Field of the Dead, 1 Forest, 1 Jungle Hollow, 1 Plains, 1 Swamp
+         permanents: 1 Gray Merchant of Asphodel, 1 Wall of Omens, 1 Zombie
+         hand: 1 Gray Merchant of Asphodel, 1 Leatherback Baloth, 1 Phyrexian Obliterator, 1 Reaper King, 1 Wall of Omens, 1 Watchwolf
+         graveyard: - | exile: -

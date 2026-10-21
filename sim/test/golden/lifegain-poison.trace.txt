@@ -1,0 +1,379 @@
+lifegain-sim: lifelinkers, infect, toxic, Pridemate, Sanguine Bond, a life-gained tally, Soul Warden, Triumph of the Hordes
+
+=== seed 392 | mulligans 0 ===
+opener: Plains, Plains, Plains, Plains, Soul Warden, Tally, Vampire Nighthawk
+--- turn 1 | available 1 | spent 1 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Plains
+  mana   1 mana untapped: Plains ({W})
+  cast   Casts Soul Warden {W}
+         > Plains taps for {W}
+  effect Soul Warden is watching, and fires when it sees what it is waiting for
+  board  lands: 1 Plains
+         permanents: 1 Soul Warden
+         hand: 3 Plains, 1 Pridemate, 1 Tally, 1 Vampire Nighthawk
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 1
+  draw   Draws Plains
+  land   Plays Plains
+  mana   2 mana untapped: Plains ({W}), Plains ({W})
+  cast   Casts Pridemate {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  effect Pridemate resolves
+  effect Pridemate gets 1 +1/+1 counter
+  effect Soul Warden gains 1 life
+  effect Attacks with 1 creature for 1
+  note   Life total 41 (+1 this turn)
+  board  lands: 2 Plains
+         permanents: 1 Pridemate, 1 Soul Warden
+         hand: 3 Plains, 1 Tally, 1 Vampire Nighthawk
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 2 | damage 5
+  draw   Draws Blight Mamba
+  land   Plays Plains
+  mana   3 mana untapped: Plains ({W}), Plains ({W}), Plains ({W})
+  cast   Casts Vampire Nighthawk {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  effect Pridemate gets 1 +1/+1 counter
+  effect Soul Warden gains 1 life
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 2 creatures for 5
+  note   Life total 42 (+1 this turn)
+  board  lands: 3 Plains
+         permanents: 1 Pridemate, 1 Soul Warden, 1 Vampire Nighthawk
+         hand: 1 Blight Mamba, 2 Plains, 1 Tally
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 4 | damage 11
+  draw   Draws Bond
+  land   Plays Plains
+  mana   4 mana untapped: Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W})
+  cast   Casts Blight Mamba {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  effect Pridemate gets 1 +1/+1 counter
+  effect Soul Warden gains 1 life
+  cast   Casts Tally {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  effect Tally will fire at every end step
+  effect Attacks with 3 creatures for 8, gaining 2 life
+  effect Pridemate gets 1 +1/+1 counter
+  effect End step: Tally deals 3 damage
+  note   Life total 45 (+3 this turn)
+  board  lands: 4 Plains
+         permanents: 1 Blight Mamba, 1 Pridemate, 1 Soul Warden, 1 Tally, 1 Vampire Nighthawk
+         hand: 1 Bond, 1 Plains
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 5 | damage 13
+  draw   Draws Triumph
+  land   Plays Plains
+  mana   5 mana untapped: Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W})
+  cast   Casts Bond {3}{W}{W}
+         > Plains taps for {W}
+         > Plains taps for {W}
+         > Plains taps for generic
+         > Plains taps for generic
+         > Plains taps for generic
+  effect Bond resolves
+  effect Attacks with 4 creatures for 9 and 1 poison, gaining 2 life
+  effect Pridemate gets 1 +1/+1 counter
+  effect Bond deals 2 damage
+  effect End step: Tally deals 2 damage
+  note   Life total 47 (+2 this turn)
+  note   Opponent has 1 poison counter
+  board  lands: 5 Plains
+         permanents: 1 Blight Mamba, 1 Bond, 1 Pridemate, 1 Soul Warden, 1 Tally, 1 Vampire Nighthawk
+         hand: 1 Triumph
+         graveyard: - | exile: -
+--- turn 6 | available 5 | spent 4 | damage 6
+  draw   Draws Venomous Rat
+  land   No land to play
+  mana   5 mana untapped: Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W})
+  cast   Casts Triumph {2}{W}{W}
+         > Plains taps for {W}
+         > Plains taps for {W}
+         > Plains taps for generic
+         > Plains taps for generic
+  effect Triumph gives 4 creatures +1/+1, gives 4 creatures infect
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 4 creatures for 0 and 15 poison, gaining 3 life
+  effect Pridemate gets 1 +1/+1 counter
+  effect Bond deals 3 damage
+  effect End step: Tally deals 3 damage
+  note   An opponent would be out on poison
+  note   Life total 50 (+3 this turn)
+  note   Opponent has 16 poison counters
+  board  lands: 5 Plains
+         permanents: 1 Blight Mamba, 1 Bond, 1 Pridemate, 1 Soul Warden, 1 Tally, 1 Vampire Nighthawk
+         hand: 1 Venomous Rat
+         graveyard: 1 Triumph | exile: -
+--- turn 7 | available 5 | spent 4 | damage 21
+  draw   Draws Vampire Nighthawk
+  land   No land to play
+  mana   5 mana untapped: Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W})
+  cast   Casts Venomous Rat {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  effect Pridemate gets 1 +1/+1 counter
+  effect Bond deals 1 damage
+  effect Soul Warden gains 1 life
+  cast   Casts Vampire Nighthawk {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  effect Pridemate gets 1 +1/+1 counter
+  effect Bond deals 1 damage
+  effect Soul Warden gains 1 life
+  note   Stops with 1 mana up and no spell in hand
+  effect Attacks with 4 creatures for 13 and 1 poison, gaining 2 life
+  effect Pridemate gets 1 +1/+1 counter
+  effect Bond deals 2 damage
+  effect End step: Tally deals 4 damage
+  note   Life total 54 (+4 this turn)
+  note   Opponent has 17 poison counters
+  board  lands: 5 Plains
+         permanents: 1 Blight Mamba, 1 Bond, 1 Pridemate, 1 Soul Warden, 1 Tally, 2 Vampire Nighthawk, 1 Venomous Rat
+         hand: -
+         graveyard: 1 Triumph | exile: -
+--- turn 8 | available 6 | spent 0 | damage 26
+  draw   Draws Plains
+  land   Plays Plains
+  mana   6 mana untapped: Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W})
+  note   Stops with 6 mana up and no spell in hand
+  effect Attacks with 6 creatures for 18 and 2 poison, gaining 4 life
+  effect Pridemate gets 1 +1/+1 counter
+  effect Bond deals 2 damage
+  effect Pridemate gets 1 +1/+1 counter
+  effect Bond deals 2 damage
+  effect End step: Tally deals 4 damage
+  note   Life total 58 (+4 this turn)
+  note   Opponent has 19 poison counters
+  board  lands: 6 Plains
+         permanents: 1 Blight Mamba, 1 Bond, 1 Pridemate, 1 Soul Warden, 1 Tally, 2 Vampire Nighthawk, 1 Venomous Rat
+         hand: -
+         graveyard: 1 Triumph | exile: -
+
+=== seed 340 | mulligans 0 ===
+opener: Blight Mamba, Blight Mamba, Brick, Brick, Vampire Nighthawk, Vampire Nighthawk, Venomous Rat
+--- turn 1 | available 0 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   No land to play
+  mana   No mana available
+  board  lands: -
+         permanents: -
+         hand: 2 Blight Mamba, 2 Brick, 1 Pridemate, 2 Vampire Nighthawk, 1 Venomous Rat
+         graveyard: - | exile: -
+--- turn 2 | available 0 | spent 0 | damage 0
+  draw   Draws White Bears
+  land   No land to play
+  mana   No mana available
+  note   Discards Brick down to 7 cards
+  board  lands: -
+         permanents: -
+         hand: 2 Blight Mamba, 1 Brick, 1 Pridemate, 2 Vampire Nighthawk, 1 Venomous Rat, 1 White Bears
+         graveyard: 1 Brick | exile: -
+--- turn 3 | available 1 | spent 0 | damage 0
+  draw   Draws Plains
+  land   Plays Plains
+  mana   1 mana untapped: Plains ({W})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Plains
+         permanents: -
+         hand: 2 Blight Mamba, 1 Brick, 1 Pridemate, 2 Vampire Nighthawk, 1 Venomous Rat, 1 White Bears
+         graveyard: 1 Brick | exile: -
+--- turn 4 | available 1 | spent 0 | damage 0
+  draw   Draws Brick
+  land   No land to play
+  mana   1 mana untapped: Plains ({W})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  note   Discards Brick down to 7 cards
+  board  lands: 1 Plains
+         permanents: -
+         hand: 2 Blight Mamba, 1 Brick, 1 Pridemate, 2 Vampire Nighthawk, 1 Venomous Rat, 1 White Bears
+         graveyard: 2 Brick | exile: -
+--- turn 5 | available 2 | spent 2 | damage 0
+  draw   Draws Plains
+  land   Plays Plains
+  mana   2 mana untapped: Plains ({W}), Plains ({W})
+  cast   Casts Venomous Rat {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  board  lands: 2 Plains
+         permanents: 1 Venomous Rat
+         hand: 2 Blight Mamba, 1 Brick, 1 Pridemate, 2 Vampire Nighthawk, 1 White Bears
+         graveyard: 2 Brick | exile: -
+--- turn 6 | available 2 | spent 2 | damage 2
+  draw   Draws Blight Mamba
+  land   No land to play
+  mana   2 mana untapped: Plains ({W}), Plains ({W})
+  cast   Casts Blight Mamba {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  effect Attacks with 1 creature for 2 and 1 poison
+  note   Opponent has 1 poison counter
+  board  lands: 2 Plains
+         permanents: 1 Blight Mamba, 1 Venomous Rat
+         hand: 2 Blight Mamba, 1 Brick, 1 Pridemate, 2 Vampire Nighthawk, 1 White Bears
+         graveyard: 2 Brick | exile: -
+--- turn 7 | available 3 | spent 2 | damage 2
+  draw   Draws Plains
+  land   Plays Plains
+  mana   3 mana untapped: Plains ({W}), Plains ({W}), Plains ({W})
+  cast   Casts Vampire Nighthawk {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 2 creatures for 2 and 2 poison
+  note   Opponent has 3 poison counters
+  board  lands: 3 Plains
+         permanents: 1 Blight Mamba, 1 Vampire Nighthawk, 1 Venomous Rat
+         hand: 2 Blight Mamba, 1 Brick, 1 Pridemate, 1 Vampire Nighthawk, 1 White Bears
+         graveyard: 2 Brick | exile: -
+--- turn 8 | available 3 | spent 2 | damage 6
+  draw   Draws Tally
+  land   No land to play
+  mana   3 mana untapped: Plains ({W}), Plains ({W}), Plains ({W})
+  cast   Casts Tally {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  effect Tally will fire at every end step
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 3 creatures for 4 and 2 poison, gaining 2 life
+  effect End step: Tally deals 2 damage
+  note   Life total 42 (+2 this turn)
+  note   Opponent has 5 poison counters
+  board  lands: 3 Plains
+         permanents: 1 Blight Mamba, 1 Tally, 1 Vampire Nighthawk, 1 Venomous Rat
+         hand: 2 Blight Mamba, 1 Brick, 1 Pridemate, 1 Vampire Nighthawk, 1 White Bears
+         graveyard: 2 Brick | exile: -
+
+=== seed 12 | mulligans 0 ===
+opener: Plains, Plains, Plains, Plains, Plains, Venomous Rat, White Bears
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Plains
+  mana   1 mana untapped: Plains ({W})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Plains
+         permanents: -
+         hand: 4 Plains, 1 Pridemate, 1 Venomous Rat, 1 White Bears
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Vampire Nighthawk
+  land   Plays Plains
+  mana   2 mana untapped: Plains ({W}), Plains ({W})
+  cast   Casts Vampire Nighthawk {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  board  lands: 2 Plains
+         permanents: 1 Vampire Nighthawk
+         hand: 3 Plains, 1 Pridemate, 1 Venomous Rat, 1 White Bears
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 2 | damage 2
+  draw   Draws Plains
+  land   Plays Plains
+  mana   3 mana untapped: Plains ({W}), Plains ({W}), Plains ({W})
+  cast   Casts Pridemate {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  effect Pridemate resolves
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 1 creature for 2, gaining 2 life
+  effect Pridemate gets 1 +1/+1 counter
+  note   Life total 42 (+2 this turn)
+  board  lands: 3 Plains
+         permanents: 1 Pridemate, 1 Vampire Nighthawk
+         hand: 3 Plains, 1 Venomous Rat, 1 White Bears
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 4 | damage 5
+  draw   Draws Vampire Nighthawk
+  land   Plays Plains
+  mana   4 mana untapped: Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W})
+  cast   Casts Vampire Nighthawk {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  cast   Casts Venomous Rat {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  effect Attacks with 2 creatures for 5, gaining 2 life
+  effect Pridemate gets 1 +1/+1 counter
+  note   Life total 44 (+2 this turn)
+  board  lands: 4 Plains
+         permanents: 1 Pridemate, 2 Vampire Nighthawk, 1 Venomous Rat
+         hand: 2 Plains, 1 White Bears
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 4 | damage 10
+  draw   Draws Blight Mamba
+  land   Plays Plains
+  mana   5 mana untapped: Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W})
+  cast   Casts White Bears {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  cast   Casts Blight Mamba {1}{W}
+         > Plains taps for {W}
+         > Plains taps for generic
+  note   Stops with 1 mana up and no spell in hand
+  effect Attacks with 4 creatures for 10 and 1 poison, gaining 4 life
+  effect Pridemate gets 1 +1/+1 counter
+  effect Pridemate gets 1 +1/+1 counter
+  note   Life total 48 (+4 this turn)
+  note   Opponent has 1 poison counter
+  board  lands: 5 Plains
+         permanents: 1 Blight Mamba, 1 Pridemate, 2 Vampire Nighthawk, 1 Venomous Rat, 1 White Bears
+         hand: 1 Plains
+         graveyard: - | exile: -
+--- turn 6 | available 6 | spent 0 | damage 14
+  draw   Draws Brick
+  land   Plays Plains
+  mana   6 mana untapped: Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W})
+  note   Stops with 6 mana up: nothing left in hand costs 6 or less
+  effect Attacks with 6 creatures for 14 and 2 poison, gaining 4 life
+  effect Pridemate gets 1 +1/+1 counter
+  effect Pridemate gets 1 +1/+1 counter
+  note   Life total 52 (+4 this turn)
+  note   Opponent has 3 poison counters
+  board  lands: 6 Plains
+         permanents: 1 Blight Mamba, 1 Pridemate, 2 Vampire Nighthawk, 1 Venomous Rat, 1 White Bears
+         hand: 1 Brick
+         graveyard: - | exile: -
+--- turn 7 | available 6 | spent 5 | damage 20
+  draw   Draws Bond
+  land   No land to play
+  mana   6 mana untapped: Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W})
+  cast   Casts Bond {3}{W}{W}
+         > Plains taps for {W}
+         > Plains taps for {W}
+         > Plains taps for generic
+         > Plains taps for generic
+         > Plains taps for generic
+  effect Bond resolves
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 6 creatures for 16 and 2 poison, gaining 4 life
+  effect Pridemate gets 1 +1/+1 counter
+  effect Bond deals 2 damage
+  effect Pridemate gets 1 +1/+1 counter
+  effect Bond deals 2 damage
+  note   An opponent would be dead: 51 damage so far
+  note   Life total 56 (+4 this turn)
+  note   Opponent has 5 poison counters
+  board  lands: 6 Plains
+         permanents: 1 Blight Mamba, 1 Bond, 1 Pridemate, 2 Vampire Nighthawk, 1 Venomous Rat, 1 White Bears
+         hand: 1 Brick
+         graveyard: - | exile: -
+--- turn 8 | available 7 | spent 0 | damage 22
+  draw   Draws Plains
+  land   Plays Plains
+  mana   7 mana untapped: Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W}), Plains ({W})
+  note   Stops with 7 mana up: nothing left in hand costs 7 or less
+  effect Attacks with 6 creatures for 18 and 2 poison, gaining 4 life
+  effect Pridemate gets 1 +1/+1 counter
+  effect Bond deals 2 damage
+  effect Pridemate gets 1 +1/+1 counter
+  effect Bond deals 2 damage
+  note   Life total 60 (+4 this turn)
+  note   Opponent has 7 poison counters
+  board  lands: 7 Plains
+         permanents: 1 Blight Mamba, 1 Bond, 1 Pridemate, 2 Vampire Nighthawk, 1 Venomous Rat, 1 White Bears
+         hand: 1 Brick
+         graveyard: - | exile: -

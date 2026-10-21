@@ -1,0 +1,374 @@
+grants-sim + dredge-sim: Six, Future Sight, Lier, The Necrobloom, Grave-Troll, Loam, an authored dredge, Mulch and Looting
+
+=== seed 358 | mulligans 0 ===
+opener: Forest, Forest, Forest, Forest, Grizzly Bears, Island, Lightning Bolt
+--- turn 1 | available 1 | spent 1 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Island over Forest
+  mana   1 mana untapped: Island ({U})
+  cast   Casts Lightning Bolt {U}
+         > Island taps for {U}
+  board  lands: 1 Island
+         permanents: -
+         hand: 4 Forest, 1 Grizzly Bears, 1 Six
+         graveyard: 1 Lightning Bolt | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws The Necrobloom
+  land   Plays Forest
+  mana   2 mana untapped: Island ({U}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Island taps for generic
+         > Forest taps for {G}
+  effect Grizzly Bears mills Future Sight, Forest
+  board  lands: 1 Forest, 1 Island
+         permanents: 1 Grizzly Bears
+         hand: 3 Forest, 1 Six, 1 The Necrobloom
+         graveyard: 1 Forest, 1 Future Sight, 1 Lightning Bolt | exile: -
+--- turn 3 | available 3 | spent 3 | damage 2
+  draw   Draws Island
+  land   Plays Forest over Island
+  mana   3 mana untapped: Island ({U}), Forest ({G}), Forest ({G})
+  cast   Casts Six {2}{G}
+         > Island taps for generic
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Six resolves
+  effect Attacks with 1 creature for 2
+  board  lands: 2 Forest, 1 Island
+         permanents: 1 Grizzly Bears, 1 Six
+         hand: 2 Forest, 1 Island, 1 The Necrobloom
+         graveyard: 1 Forest, 1 Future Sight, 1 Lightning Bolt | exile: -
+--- turn 4 | available 4 | spent 4 | damage 5
+  draw   Draws Lier
+  land   Plays Forest over Island
+  mana   4 mana untapped: Island ({U}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts The Necrobloom {2}{G}{G}
+         > Island taps for generic
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect The Necrobloom is watching, and fires when it sees what it is waiting for
+  effect Attacks with 2 creatures for 5
+  effect Attacks with Six: mills Stinkweed Imp, Grizzly Bears, Grizzly Bears
+  board  lands: 3 Forest, 1 Island
+         permanents: 1 Grizzly Bears, 1 Six, 1 The Necrobloom
+         hand: 1 Forest, 1 Island, 1 Lier
+         graveyard: 1 Forest, 1 Future Sight, 2 Grizzly Bears, 1 Lightning Bolt, 1 Stinkweed Imp | exile: -
+--- turn 5 | available 5 | spent 5 | damage 8
+  draw   Dredges back Stinkweed Imp (dredge 5, milling Grizzly Bears, Forest, Forest, Grizzly Bears, Grizzly Bears) instead of drawing
+  land   Plays Island over Forest
+  effect The Necrobloom creates 1 0/1 Creature token
+  mana   5 mana untapped: Island ({U}), Forest ({G}), Forest ({G}), Forest ({G}), Island ({U})
+  cast   Casts Lier {3}{U}{U}
+         > Island taps for {U}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+         > Island taps for {U}
+  effect Lier resolves
+  effect Attacks with 3 creatures for 8
+  effect Attacks with Six: mills Faithless Looting, Forest, Forest
+  board  lands: 3 Forest, 2 Island
+         permanents: 1 0/1 Creature token, 1 Grizzly Bears, 1 Lier, 1 Six, 1 The Necrobloom
+         hand: 1 Forest, 1 Stinkweed Imp
+         graveyard: 1 Faithless Looting, 5 Forest, 1 Future Sight, 5 Grizzly Bears, 1 Lightning Bolt | exile: -
+--- turn 6 | available 6 | spent 6 | damage 11
+  draw   Draws Grizzly Bears
+  land   Plays Forest
+  effect The Necrobloom creates 1 0/1 Creature token
+  mana   6 mana untapped: Island ({U}), Forest ({G}), Forest ({G}), Forest ({G}), Island ({U}), Forest ({G})
+  cast   Casts Stinkweed Imp {2}{U}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Island taps for {U}
+  effect Stinkweed Imp resolves
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Grizzly Bears mills Mulch, Grizzly Bears
+  cast   Casts Faithless Looting from the graveyard (flashback)
+         > Island taps for {U}
+  effect Faithless Looting draws Forest (dredge 2, milling Harmonize, Grizzly Bears), Island, discards Forest, Island
+  effect Attacks with 5 creatures for 11
+  effect Attacks with Six: mills Forest, Island, Island
+  board  lands: 4 Forest, 2 Island
+         permanents: 2 0/1 Creature token, 2 Grizzly Bears, 1 Lier, 1 Six, 1 Stinkweed Imp, 1 The Necrobloom
+         hand: -
+         graveyard: 6 Forest, 1 Future Sight, 7 Grizzly Bears, 1 Harmonize, 3 Island, 1 Lightning Bolt, 1 Mulch | exile: 1 Faithless Looting
+--- turn 7 | available 7 | spent 7 | damage 14
+  draw   Dredges back Forest (dredge 2, milling Faithless Looting, Island) instead of drawing
+  land   Plays Forest
+  effect The Necrobloom creates 1 0/1 Creature token
+  mana   7 mana untapped: Island ({U}), Forest ({G}), Forest ({G}), Forest ({G}), Island ({U}), Forest ({G}), Forest ({G})
+  cast   Casts Harmonize from the graveyard (flashback)
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Island taps for generic
+         > Forest taps for generic
+  effect Harmonize draws Island (dredge 2, milling Grizzly Bears, Island), Island, Grizzly Bears
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Grizzly Bears mills Faithless Looting, Future Sight
+  cast   Casts Faithless Looting from the graveyard (flashback)
+         > Island taps for {U}
+  effect Faithless Looting draws Lightning Bolt, Grizzly Bears, discards Grizzly Bears, Island
+  effect Attacks with 8 creatures for 14
+  effect Attacks with Six: mills Forest, Mulch, Forest
+  note   An opponent would be dead: 40 damage so far
+  board  lands: 5 Forest, 2 Island
+         permanents: 3 0/1 Creature token, 3 Grizzly Bears, 1 Lier, 1 Six, 1 Stinkweed Imp, 1 The Necrobloom
+         hand: 1 Island, 1 Lightning Bolt
+         graveyard: 1 Faithless Looting, 7 Forest, 2 Future Sight, 9 Grizzly Bears, 5 Island, 1 Lightning Bolt, 2 Mulch | exile: 2 Faithless Looting, 1 Harmonize
+--- turn 8 | available 8 | spent 7 | damage 16
+  draw   Draws Lightning Bolt
+  land   Plays Island
+  effect The Necrobloom creates 1 0/1 Creature token
+  mana   8 mana untapped: Island ({U}), Forest ({G}), Forest ({G}), Forest ({G}), Island ({U}), Forest ({G}), Forest ({G}), Island ({U})
+  cast   Casts Mulch from the graveyard (flashback)
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Mulch mills The Necrobloom, Harmonize, Island, Grizzly Bears, moves Forest, Forest, Island, Forest, Island, Forest, Forest, Island, Forest, Island, Island, Forest, Island to your hand
+  cast   Casts Future Sight from the graveyard (retrace, discarding Forest)
+         > Island taps for {U}
+         > Forest taps for generic
+         > Island taps for {U}
+         > Forest taps for generic
+         > Island taps for {U}
+  effect Future Sight resolves
+  note   Stops: Lightning Bolt {U} is not payable in these colours alongside what is already cast
+  effect Attacks with 10 creatures for 16
+  effect Attacks with Six: mills Forest, Grizzly Bears, Grizzly Bears
+  note   Discards Island, Forest, Island, Island, Forest, Island, Forest down to 7 cards
+  board  lands: 5 Forest, 3 Island
+         permanents: 4 0/1 Creature token, 1 Future Sight, 3 Grizzly Bears, 1 Lier, 1 Six, 1 Stinkweed Imp, 1 The Necrobloom
+         hand: 3 Forest, 2 Island, 2 Lightning Bolt
+         graveyard: 1 Faithless Looting, 5 Forest, 1 Future Sight, 12 Grizzly Bears, 1 Harmonize, 4 Island, 1 Lightning Bolt, 1 Mulch, 1 The Necrobloom | exile: 2 Faithless Looting, 1 Harmonize, 1 Mulch
+
+=== seed 343 | mulligans 0 ===
+opener: Faithless Looting, Forest, Forest, Forest, Future Sight, Future Sight, Harmonize
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  note   Stops: Faithless Looting {U} is not payable in these colours
+  board  lands: 1 Forest
+         permanents: -
+         hand: 1 Faithless Looting, 2 Forest, 2 Future Sight, 1 Harmonize, 1 Six
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Mulch
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Mulch {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Mulch mills The Necrobloom, Island, Life from the Loam, Mulch, moves Island to your hand
+  board  lands: 2 Forest
+         permanents: -
+         hand: 1 Faithless Looting, 1 Forest, 2 Future Sight, 1 Harmonize, 1 Island, 1 Six
+         graveyard: 1 Life from the Loam, 2 Mulch, 1 The Necrobloom | exile: -
+--- turn 3 | available 3 | spent 3 | damage 0
+  draw   Dredges back Life from the Loam (dredge 3, milling Grizzly Bears, Island, Island) instead of drawing
+  land   Plays Island over Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Island ({U})
+  cast   Casts Six {2}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Island taps for generic
+  effect Six resolves
+  board  lands: 2 Forest, 1 Island
+         permanents: 1 Six
+         hand: 1 Faithless Looting, 1 Forest, 2 Future Sight, 1 Harmonize, 1 Life from the Loam
+         graveyard: 1 Grizzly Bears, 2 Island, 2 Mulch, 1 The Necrobloom | exile: -
+--- turn 4 | available 4 | spent 4 | damage 3
+  draw   Draws Grizzly Bears
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Island ({U}), Forest ({G})
+  cast   Casts Harmonize {2}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Island taps for generic
+         > Forest taps for generic
+  effect Harmonize draws Island, Grizzly Bears, Grizzly Bears
+  effect Attacks with 1 creature for 3
+  effect Attacks with Six: mills Forest, Island, Island
+  note   Discards Future Sight down to 7 cards
+  board  lands: 3 Forest, 1 Island
+         permanents: 1 Six
+         hand: 1 Faithless Looting, 1 Future Sight, 3 Grizzly Bears, 1 Island, 1 Life from the Loam
+         graveyard: 1 Forest, 1 Future Sight, 1 Grizzly Bears, 1 Harmonize, 4 Island, 2 Mulch, 1 The Necrobloom | exile: -
+--- turn 5 | available 5 | spent 0 | damage 3
+  draw   Draws Island
+  land   Plays Island
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Island ({U}), Forest ({G}), Island ({U})
+  note   Stops: Future Sight {2}{U}{U}{U} is not payable in these colours
+  effect Attacks with 1 creature for 3
+  effect Attacks with Six: mills Grizzly Bears, Mulch, Grizzly Bears
+  board  lands: 3 Forest, 2 Island
+         permanents: 1 Six
+         hand: 1 Faithless Looting, 1 Future Sight, 3 Grizzly Bears, 1 Island, 1 Life from the Loam
+         graveyard: 1 Forest, 1 Future Sight, 3 Grizzly Bears, 1 Harmonize, 4 Island, 3 Mulch, 1 The Necrobloom | exile: -
+--- turn 6 | available 6 | spent 5 | damage 3
+  draw   Draws Grizzly Bears
+  land   Plays Island
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Island ({U}), Forest ({G}), Island ({U}), Island ({U})
+  cast   Casts Future Sight {2}{U}{U}{U}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Island taps for {U}
+         > Island taps for {U}
+         > Island taps for {U}
+  effect Future Sight resolves
+  note   Stops: Faithless Looting {U} is not payable in these colours alongside what is already cast
+  effect Attacks with 1 creature for 3
+  effect Attacks with Six: mills Grizzly Bears, Stinkweed Imp, Grizzly Bears
+  board  lands: 3 Forest, 3 Island
+         permanents: 1 Future Sight, 1 Six
+         hand: 1 Faithless Looting, 4 Grizzly Bears, 1 Life from the Loam
+         graveyard: 1 Forest, 1 Future Sight, 5 Grizzly Bears, 1 Harmonize, 4 Island, 3 Mulch, 1 Stinkweed Imp, 1 The Necrobloom | exile: -
+--- turn 7 | available 6 | spent 6 | damage 3
+  draw   Dredges back Stinkweed Imp (dredge 5, milling Forest, Stinkweed Imp, Forest, Forest, Lightning Bolt) instead of drawing
+  land   No land to play
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Island ({U}), Forest ({G}), Island ({U}), Island ({U})
+  cast   Casts Harmonize {2}{G}{G} from the top of the library
+         > Forest taps for {G}
+         > Island taps for generic
+         > Forest taps for {G}
+         > Island taps for generic
+  effect Harmonize draws Stinkweed Imp (dredge 5, milling Island, Forest, Grizzly Bears, Life from the Loam, Island), Life from the Loam (dredge 3, milling Forest, Grizzly Bears, Life from the Loam), Life from the Loam (dredge 3, milling Faithless Looting, Golgari Grave-Troll, Lier)
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Island taps for generic
+  effect Grizzly Bears mills Future Sight, Forest
+  effect Attacks with 1 creature for 3
+  effect Attacks with Six: mills Forest, Faithless Looting, Golgari Grave-Troll
+  note   Discards Stinkweed Imp, Stinkweed Imp down to 7 cards
+  board  lands: 3 Forest, 3 Island
+         permanents: 1 Future Sight, 1 Grizzly Bears, 1 Six
+         hand: 1 Faithless Looting, 3 Grizzly Bears, 3 Life from the Loam
+         graveyard: 2 Faithless Looting, 8 Forest, 2 Future Sight, 2 Golgari Grave-Troll, 7 Grizzly Bears, 2 Harmonize, 6 Island, 1 Lier, 1 Lightning Bolt, 3 Mulch, 2 Stinkweed Imp, 1 The Necrobloom | exile: -
+--- turn 8 | available 6 | spent 6 | damage 5
+  draw   Dredges back Golgari Grave-Troll (dredge 6, milling Grizzly Bears, Forest, Grizzly Bears, Faithless Looting, Grizzly Bears, Future Sight) instead of drawing
+  land   No land to play
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Island ({U}), Forest ({G}), Island ({U}), Island ({U})
+  cast   Casts Golgari Grave-Troll {4}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Island taps for generic
+         > Island taps for generic
+  cast   Casts Faithless Looting {U}
+         > Island taps for {U}
+  effect Faithless Looting draws Golgari Grave-Troll (dredge 6, milling Island, Island, Mulch, Island, Grizzly Bears, Forest), Stinkweed Imp (dredge 5, milling Lier, Grizzly Bears, The Necrobloom, Grizzly Bears, Faithless Looting), discards Golgari Grave-Troll, Stinkweed Imp
+  effect Attacks with 2 creatures for 5
+  effect Attacks with Six: mills Grizzly Bears, Forest, Grizzly Bears
+  board  lands: 3 Forest, 3 Island
+         permanents: 1 Future Sight, 1 Golgari Grave-Troll, 1 Grizzly Bears, 1 Six
+         hand: 3 Grizzly Bears, 3 Life from the Loam
+         graveyard: 5 Faithless Looting, 11 Forest, 3 Future Sight, 1 Golgari Grave-Troll, 15 Grizzly Bears, 2 Harmonize, 9 Island, 2 Lier, 1 Lightning Bolt, 4 Mulch, 2 Stinkweed Imp, 2 The Necrobloom | exile: -
+
+=== seed 128 | mulligans 0 ===
+opener: Future Sight, Grizzly Bears, Grizzly Bears, Grizzly Bears, Grizzly Bears, Island, Island
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Island
+  mana   1 mana untapped: Island ({U})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Island
+         permanents: -
+         hand: 1 Future Sight, 4 Grizzly Bears, 1 Island, 1 Six
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 0 | damage 0
+  draw   Draws Island
+  land   Plays Island
+  mana   2 mana untapped: Island ({U}), Island ({U})
+  note   Stops: Grizzly Bears {1}{G} is not payable in these colours
+  board  lands: 2 Island
+         permanents: -
+         hand: 1 Future Sight, 4 Grizzly Bears, 1 Island, 1 Six
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 0 | damage 0
+  draw   Draws Grizzly Bears
+  land   Plays Island
+  mana   3 mana untapped: Island ({U}), Island ({U}), Island ({U})
+  note   Stops: Six {2}{G} is not payable in these colours
+  board  lands: 3 Island
+         permanents: -
+         hand: 1 Future Sight, 5 Grizzly Bears, 1 Six
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 0 | damage 0
+  draw   Draws Island
+  land   Plays Island
+  mana   4 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  note   Stops: Six {2}{G} is not payable in these colours
+  board  lands: 4 Island
+         permanents: -
+         hand: 1 Future Sight, 5 Grizzly Bears, 1 Six
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 5 | damage 0
+  draw   Draws Island
+  land   Plays Island
+  mana   5 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Future Sight {2}{U}{U}{U}
+         > Island taps for {U}
+         > Island taps for {U}
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+  effect Future Sight resolves
+  board  lands: 5 Island
+         permanents: 1 Future Sight
+         hand: 5 Grizzly Bears, 1 Six
+         graveyard: - | exile: -
+--- turn 6 | available 6 | spent 3 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   6 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Forest ({G})
+  cast   Casts Six {2}{G}
+         > Island taps for generic
+         > Island taps for generic
+         > Forest taps for {G}
+  effect Six resolves
+  note   Stops: Grizzly Bears {1}{G} is not payable in these colours alongside what is already cast
+  board  lands: 1 Forest, 5 Island
+         permanents: 1 Future Sight, 1 Six
+         hand: 5 Grizzly Bears
+         graveyard: - | exile: -
+--- turn 7 | available 6 | spent 2 | damage 3
+  draw   Draws Grizzly Bears
+  land   No land to play
+  mana   6 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Island taps for generic
+         > Forest taps for {G}
+  effect Grizzly Bears mills Faithless Looting, Grizzly Bears
+  note   Stops: Grizzly Bears {1}{G} is not payable in these colours alongside what is already cast
+  effect Attacks with 1 creature for 3
+  effect Attacks with Six: mills Island, Faithless Looting, Grizzly Bears
+  board  lands: 1 Forest, 5 Island
+         permanents: 1 Future Sight, 1 Grizzly Bears, 1 Six
+         hand: 5 Grizzly Bears
+         graveyard: 2 Faithless Looting, 2 Grizzly Bears, 1 Island | exile: -
+--- turn 8 | available 6 | spent 6 | damage 5
+  draw   Draws Grizzly Bears
+  land   No land to play
+  mana   6 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Forest ({G})
+  cast   Casts Stinkweed Imp {2}{U} from the top of the library
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+  effect Stinkweed Imp resolves
+  cast   Casts Grizzly Bears {1}{G}
+         > Island taps for generic
+         > Forest taps for {G}
+  effect Grizzly Bears mills Grizzly Bears, Future Sight
+  cast   Casts Faithless Looting {U} from the top of the library
+         > Island taps for {U}
+  effect Faithless Looting draws Island, Lightning Bolt, discards Grizzly Bears, Grizzly Bears
+  effect Attacks with 2 creatures for 5
+  effect Attacks with Six: mills Grizzly Bears, Forest, Mulch
+  board  lands: 1 Forest, 5 Island
+         permanents: 1 Future Sight, 2 Grizzly Bears, 1 Six, 1 Stinkweed Imp
+         hand: 3 Grizzly Bears, 1 Island, 1 Lightning Bolt
+         graveyard: 3 Faithless Looting, 1 Forest, 1 Future Sight, 6 Grizzly Bears, 1 Island, 1 Mulch | exile: -

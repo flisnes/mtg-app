@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.201.6
+
+- **Under the hood: a safety net for the deck simulator.** Nothing changes in the app. The simulator behind the deck analysis now has a golden test set: eighteen fixed decks whose full results and game transcripts are stored and compared byte for byte on every test run, so the engine work planned next cannot quietly change a number. Five older check scripts that needed a full card database now run as ordinary tests too.
+
 ## 0.201.5
 
 - **Changed: the server address is no longer baked into the app.** Trade, sync, accounts, card scanning and OCR all talk to one server, and until now its address was compiled into every build. If that server had ever moved, all of those would have broken on every installed phone at once, and the fix would have been a new app version that each phone had to accept. The app now reads the address from a small file published next to it when it starts, remembers the answer, and refreshes it on every start. Moving the server is a one-line edit on our side; your app picks it up the next time it opens. Nothing changes in what you see.

@@ -1,0 +1,386 @@
+grammar6-sim: prowess, a +2/+0 anthem, a Lord pumping Elves, Thune counters, Warstorm Surge, Serra Ascendant, combat and attack tokens, a one-shot Saga, poison
+
+=== seed 139 | mulligans 0 ===
+opener: Captain, Elf, Forest, Forest, Forest, Forest, Stinger
+--- turn 1 | available 1 | spent 0 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Forest
+         permanents: -
+         hand: 1 Captain, 1 Elf, 4 Forest, 1 Lord, 1 Monk, 1 Stinger
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Serra
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Stinger {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Stinger resolves
+  board  lands: 2 Forest
+         permanents: 1 Stinger
+         hand: 1 Captain, 1 Elf, 3 Forest, 1 Lord, 1 Monk, 1 Serra
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 3 | damage 1
+  draw   Draws Angel
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Monk {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Monk is watching, and fires when it sees what it is waiting for
+  cast   Casts Serra {G}
+         > Forest taps for {G}
+  effect Serra loses 5 life
+  effect Attacks with 1 creature for 1
+  effect Attacks with Stinger: gives 1 poison counter
+  note   Life total 35 (-5 this turn)
+  note   Opponent has 1 poison counter
+  board  lands: 3 Forest
+         permanents: 1 Monk, 1 Serra, 1 Stinger
+         hand: 1 Angel, 1 Captain, 1 Elf, 2 Forest, 1 Lord
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 4 | damage 9
+  draw   Draws Saga
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Elf {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  cast   Casts Captain {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Captain resolves
+  effect Beginning of combat: Captain creates 1 Soldier, tapped
+  effect Attacks with 3 creatures for 9
+  effect Attacks with Stinger: gives 1 poison counter
+  note   Opponent has 2 poison counters
+  board  lands: 4 Forest
+         permanents: 1 Captain, 1 Elf, 1 Monk, 1 Serra, 1 Soldier, 1 Stinger
+         hand: 1 Angel, 1 Forest, 1 Lord, 1 Saga
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 5 | damage 13
+  draw   Draws Forest
+  land   Plays Forest
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Angel {3}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Angel will fire at every end step
+  effect Beginning of combat: Captain creates 1 Soldier, tapped
+  effect Attacks with 6 creatures for 13
+  effect Attacks with Stinger: gives 1 poison counter
+  effect Angel puts 1 +1/+1 counter on 8 creatures
+  effect End step: Angel gains 1 life
+  note   Life total 36 (+1 this turn)
+  note   Opponent has 3 poison counters
+  board  lands: 5 Forest
+         permanents: 1 Angel, 1 Captain, 1 Elf, 1 Monk, 1 Serra, 2 Soldier, 1 Stinger
+         hand: 1 Forest, 1 Lord, 1 Saga
+         graveyard: - | exile: -
+--- turn 6 | available 6 | spent 5 | damage 26
+  draw   Draws Warlord
+  land   Plays Forest
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Warlord {2}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Warlord resolves
+  cast   Casts Saga {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Monk gets +1/+1
+  effect Saga will fire every upkeep from next turn
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Beginning of combat: Captain creates 1 Soldier, tapped
+  effect Attacks with 8 creatures for 26
+  effect Attacks with Stinger: gives 1 poison counter
+  effect Angel puts 1 +1/+1 counter on 10 creatures
+  effect End step: Angel gains 1 life
+  note   An opponent would be dead: 49 damage so far
+  note   Life total 37 (+1 this turn)
+  note   Opponent has 4 poison counters
+  board  lands: 6 Forest
+         permanents: 1 Angel, 1 Captain, 1 Elf, 1 Monk, 1 Saga, 1 Serra, 3 Soldier, 1 Stinger, 1 Warlord
+         hand: 1 Lord
+         graveyard: - | exile: -
+--- turn 7 | available 6 | spent 6 | damage 40
+  effect Upkeep: Saga draws Elf, Bolt
+  draw   Draws Grizzly Bears
+  land   No land to play
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  cast   Casts Elf {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  cast   Casts Lord {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Lord has an ability, used when the turn has the mana spare
+  effect Beginning of combat: Captain creates 1 Soldier, tapped
+  effect Attacks with 10 creatures for 38
+  effect Attacks with Stinger: gives 1 poison counter
+  effect Attacks with Warlord: creates 2 Soldiers, attacking
+  effect Angel puts 1 +1/+1 counter on 16 creatures
+  effect End step: Angel gains 1 life
+  note   Life total 38 (+1 this turn)
+  note   Opponent has 5 poison counters
+  board  lands: 6 Forest
+         permanents: 1 Angel, 1 Captain, 2 Elf, 1 Grizzly Bears, 1 Lord, 1 Monk, 1 Saga, 1 Serra, 6 Soldier, 1 Stinger, 1 Warlord
+         hand: 1 Bolt
+         graveyard: - | exile: -
+--- turn 8 | available 6 | spent 3 | damage 68
+  draw   Draws Surge
+  land   No land to play
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Surge {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Monk gets +1/+1
+  effect Surge is watching, and fires when it sees what it is waiting for
+  cast   Casts Bolt {G}
+         > Forest taps for {G}
+  effect Monk gets +1/+1
+  cast   Activates Lord: {T}
+  effect Lord gives 3 creatures +1/+1, gives 3 creatures haste
+  note   Stops with 3 mana up and no spell in hand
+  effect Surge deals 1 damage
+  effect Beginning of combat: Captain creates 1 Soldier, tapped
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 15 creatures for 63
+  effect Attacks with Stinger: gives 1 poison counter
+  effect Surge deals 1 damage
+  effect Surge deals 1 damage
+  effect Attacks with Warlord: creates 2 Soldiers, attacking
+  effect Angel puts 1 +1/+1 counter on 19 creatures
+  effect End step: Angel gains 1 life
+  note   Life total 39 (+1 this turn)
+  note   Opponent has 6 poison counters
+  board  lands: 6 Forest
+         permanents: 1 Angel, 1 Captain, 2 Elf, 1 Grizzly Bears, 1 Lord, 1 Monk, 1 Saga, 1 Serra, 9 Soldier, 1 Stinger, 1 Surge, 1 Warlord
+         hand: -
+         graveyard: 1 Bolt | exile: -
+
+=== seed 60 | mulligans 0 ===
+opener: Banner, Banner, Bolt, Captain, Elf, Grizzly Bears, Surge
+--- turn 1 | available 0 | spent 0 | damage 0
+  draw   Draws Captain
+  land   No land to play
+  mana   No mana available
+  note   Discards Captain down to 7 cards
+  board  lands: -
+         permanents: -
+         hand: 2 Banner, 1 Bolt, 1 Captain, 1 Elf, 1 Grizzly Bears, 1 Lord, 1 Monk, 1 Surge
+         graveyard: 1 Captain | exile: -
+--- turn 2 | available 0 | spent 0 | damage 0
+  draw   Draws Angel
+  land   No land to play
+  mana   No mana available
+  note   Discards Angel down to 7 cards
+  board  lands: -
+         permanents: -
+         hand: 2 Banner, 1 Bolt, 1 Captain, 1 Elf, 1 Grizzly Bears, 1 Lord, 1 Monk, 1 Surge
+         graveyard: 1 Angel, 1 Captain | exile: -
+--- turn 3 | available 1 | spent 1 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  cast   Casts Bolt {G}
+         > Forest taps for {G}
+  board  lands: 1 Forest
+         permanents: -
+         hand: 2 Banner, 1 Captain, 1 Elf, 1 Grizzly Bears, 1 Lord, 1 Monk, 1 Surge
+         graveyard: 1 Angel, 1 Bolt, 1 Captain | exile: -
+--- turn 4 | available 2 | spent 2 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Captain {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Captain resolves
+  effect Beginning of combat: Captain creates 1 Soldier, tapped
+  board  lands: 2 Forest
+         permanents: 1 Captain, 1 Soldier
+         hand: 2 Banner, 1 Elf, 1 Grizzly Bears, 1 Lord, 1 Monk, 1 Surge
+         graveyard: 1 Angel, 1 Bolt, 1 Captain | exile: -
+--- turn 5 | available 2 | spent 2 | damage 7
+  draw   Draws Saga
+  land   No land to play
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Banner {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Banner resolves
+  effect Beginning of combat: Captain creates 1 Soldier, tapped
+  effect Attacks with 2 creatures for 7
+  board  lands: 2 Forest
+         permanents: 1 Banner, 1 Captain, 2 Soldier
+         hand: 1 Banner, 1 Elf, 1 Grizzly Bears, 1 Lord, 1 Monk, 1 Saga, 1 Surge
+         graveyard: 1 Angel, 1 Bolt, 1 Captain | exile: -
+--- turn 6 | available 3 | spent 2 | damage 10
+  draw   Draws Forest
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Lord {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Lord has an ability, used when the turn has the mana spare
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Beginning of combat: Captain creates 1 Soldier, tapped
+  effect Attacks with 3 creatures for 10
+  board  lands: 3 Forest
+         permanents: 1 Banner, 1 Captain, 1 Lord, 3 Soldier
+         hand: 1 Banner, 1 Elf, 1 Grizzly Bears, 1 Monk, 1 Saga, 1 Surge
+         graveyard: 1 Angel, 1 Bolt, 1 Captain | exile: -
+--- turn 7 | available 4 | spent 4 | damage 21
+  draw   Draws Forest
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  cast   Casts Banner {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Banner resolves
+  cast   Activates Lord: {T}
+  effect Lord gives 1 creature +1/+1, gives 1 creature haste
+  effect Beginning of combat: Captain creates 1 Soldier, tapped
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 4 creatures for 21
+  board  lands: 4 Forest
+         permanents: 2 Banner, 1 Captain, 1 Grizzly Bears, 1 Lord, 4 Soldier
+         hand: 1 Elf, 1 Monk, 1 Saga, 1 Surge
+         graveyard: 1 Angel, 1 Bolt, 1 Captain | exile: -
+--- turn 8 | available 5 | spent 4 | damage 32
+  draw   Draws Forest
+  land   Plays Forest
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Saga {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Saga will fire every upkeep from next turn
+  cast   Casts Monk {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Monk is watching, and fires when it sees what it is waiting for
+  cast   Activates Lord: {T}
+  effect Lord gives 1 creature +1/+1, gives 1 creature haste
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Beginning of combat: Captain creates 1 Soldier, tapped
+  note   1 creature was tapped for mana, so it does not attack
+  effect Attacks with 6 creatures for 32
+  note   An opponent would be dead: 70 damage so far
+  board  lands: 5 Forest
+         permanents: 2 Banner, 1 Captain, 1 Grizzly Bears, 1 Lord, 1 Monk, 1 Saga, 5 Soldier
+         hand: 1 Elf, 1 Surge
+         graveyard: 1 Angel, 1 Bolt, 1 Captain | exile: -
+
+=== seed 153 | mulligans 0 ===
+opener: Angel, Angel, Banner, Bolt, Bolt, Forest, Grizzly Bears
+--- turn 1 | available 1 | spent 1 | damage 0
+  draw   Draws Elf
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  cast   Casts Bolt {G}
+         > Forest taps for {G}
+  board  lands: 1 Forest
+         permanents: -
+         hand: 2 Angel, 1 Banner, 1 Bolt, 1 Elf, 1 Grizzly Bears, 1 Lord, 1 Monk
+         graveyard: 1 Bolt | exile: -
+--- turn 2 | available 1 | spent 1 | damage 0
+  draw   Draws Warlord
+  land   No land to play
+  mana   1 mana untapped: Forest ({G})
+  cast   Casts Bolt {G}
+         > Forest taps for {G}
+  board  lands: 1 Forest
+         permanents: -
+         hand: 2 Angel, 1 Banner, 1 Elf, 1 Grizzly Bears, 1 Lord, 1 Monk, 1 Warlord
+         graveyard: 2 Bolt | exile: -
+--- turn 3 | available 1 | spent 0 | damage 0
+  draw   Draws Elf
+  land   No land to play
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Forest
+         permanents: -
+         hand: 2 Angel, 1 Banner, 2 Elf, 1 Grizzly Bears, 1 Lord, 1 Monk, 1 Warlord
+         graveyard: 2 Bolt | exile: -
+--- turn 4 | available 1 | spent 0 | damage 0
+  draw   Draws Grizzly Bears
+  land   No land to play
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  note   Discards Angel down to 7 cards
+  board  lands: 1 Forest
+         permanents: -
+         hand: 1 Angel, 1 Banner, 2 Elf, 2 Grizzly Bears, 1 Lord, 1 Monk, 1 Warlord
+         graveyard: 1 Angel, 2 Bolt | exile: -
+--- turn 5 | available 2 | spent 2 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Lord {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Lord has an ability, used when the turn has the mana spare
+  board  lands: 2 Forest
+         permanents: 1 Lord
+         hand: 1 Angel, 1 Banner, 2 Elf, 2 Grizzly Bears, 1 Monk, 1 Warlord
+         graveyard: 1 Angel, 2 Bolt | exile: -
+--- turn 6 | available 2 | spent 2 | damage 0
+  draw   Draws Saga
+  land   No land to play
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Saga {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Saga will fire every upkeep from next turn
+  cast   Activates Lord: {T}
+  effect Lord gives 1 creature +1/+1, gives 1 creature haste
+  note   1 creature was tapped for mana, so it does not attack
+  board  lands: 2 Forest
+         permanents: 1 Lord, 1 Saga
+         hand: 1 Angel, 1 Banner, 2 Elf, 2 Grizzly Bears, 1 Monk, 1 Warlord
+         graveyard: 1 Angel, 2 Bolt | exile: -
+--- turn 7 | available 2 | spent 2 | damage 0
+  effect Upkeep: Saga draws Ox, Bolt
+  draw   Draws Captain
+  land   No land to play
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Banner {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Banner resolves
+  cast   Activates Lord: {T}
+  effect Lord gives 1 creature +1/+1, gives 1 creature haste
+  note   1 creature was tapped for mana, so it does not attack
+  note   Discards Angel, Warlord down to 7 cards
+  board  lands: 2 Forest
+         permanents: 1 Banner, 1 Lord, 1 Saga
+         hand: 1 Bolt, 1 Captain, 2 Elf, 2 Grizzly Bears, 1 Monk, 1 Ox
+         graveyard: 2 Angel, 2 Bolt, 1 Warlord | exile: -
+--- turn 8 | available 2 | spent 2 | damage 0
+  draw   Draws Grizzly Bears
+  land   No land to play
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  cast   Activates Lord: {T}
+  effect Lord gives 1 creature +1/+1, gives 1 creature haste
+  note   1 creature was tapped for mana, so it does not attack
+  board  lands: 2 Forest
+         permanents: 1 Banner, 1 Grizzly Bears, 1 Lord, 1 Saga
+         hand: 1 Bolt, 1 Captain, 2 Elf, 2 Grizzly Bears, 1 Monk, 1 Ox
+         graveyard: 2 Angel, 2 Bolt, 1 Warlord | exile: -

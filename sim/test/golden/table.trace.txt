@@ -1,0 +1,652 @@
+table-sim: three busy opponents who rarely pay, answers held
+
+=== seed 357 | mulligans 0 ===
+opener: Edict, Edict, Forest, Forest, Forest, Study, Tithe
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  note   Opponent 1 draws and casts a creature (mana value 1)
+  note   Opponent 2 draws and casts a spell (mana value 1)
+  note   Opponent 3 draws and casts a spell (mana value 1)
+  board  lands: 1 Forest
+         permanents: -
+         hand: 2 Edict, 2 Forest, 1 Study, 1 Tithe
+         graveyard: - | exile: -
+         opponents: 1 / 0 / 0
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Sheoldred
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Edict {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Edict makes the table sacrifice 1 creature
+  note   Opponent 1 draws and casts a creature (mana value 2) and a creature (mana value 1)
+  note   Opponent 2 draws and casts a spell (mana value 2) and a creature (mana value 2)
+  note   Opponent 3 draws and casts a spell (mana value 1) and a spell (mana value 2)
+  board  lands: 2 Forest
+         permanents: -
+         hand: 1 Edict, 1 Forest, 1 Sheoldred, 1 Study, 1 Tithe
+         graveyard: 1 Edict | exile: -
+         opponents: 2 / 1 / 0
+--- turn 3 | available 3 | spent 3 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Study {2}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Study is watching, and fires when it sees what it is waiting for
+  note   Opponent 1 draws and casts a spell (mana value 3) and a creature (mana value 2)
+  effect Study draws Forest
+  note   Opponent 2 draws and casts a spell (mana value 2) and a spell (mana value 2)
+  effect Study draws Tally
+  effect Study draws Wheel
+  note   Opponent 3 draws and casts a creature (mana value 2) and a spell (mana value 2)
+  effect Study draws Sentinel
+  effect Study draws Forest
+  board  lands: 3 Forest
+         permanents: 1 Study
+         hand: 1 Edict, 3 Forest, 1 Sentinel, 1 Sheoldred, 1 Tally, 1 Tithe, 1 Wheel
+         graveyard: 1 Edict | exile: -
+         opponents: 3 / 1 / 1
+--- turn 4 | available 4 | spent 4 | damage 2
+  draw   Draws Forest
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Sheoldred {2}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Sheoldred is watching, and fires when it sees what it is waiting for
+  note   Discards Tithe down to 7 cards
+  note   Opponent 1 draws and casts a spell (mana value 3) and a spell (mana value 3)
+  effect Sheoldred deals 2 damage
+  effect Study draws Priest
+  note   Opponent 2 draws and casts a spell (mana value 1) and a creature (mana value 4)
+  effect Sheoldred deals 2 damage
+  effect Study draws Tithe
+  effect Study draws Edict
+  note   Opponent 3 draws and casts a spell (mana value 3) and a spell (mana value 3)
+  effect Sheoldred deals 2 damage
+  effect Study draws Counter
+  effect Study draws Grizzly Bears
+  board  lands: 4 Forest
+         permanents: 1 Sheoldred, 1 Study
+         hand: 1 Counter, 2 Edict, 3 Forest, 1 Grizzly Bears, 1 Priest, 1 Sentinel, 1 Tally, 1 Tithe, 1 Wheel
+         graveyard: 1 Edict, 1 Tithe | exile: -
+         opponents: 3 / 2 / 1
+--- turn 5 | available 5 | spent 5 | damage 6
+  draw   Draws Sheoldred
+  land   Plays Forest
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Tithe {3}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Tithe is watching, and fires when it sees what it is waiting for
+  cast   Casts Sentinel {G}
+         > Forest taps for {G}
+  effect Sentinel is watching, and fires when it sees what it is waiting for
+  effect Attacks with 1 creature for 4
+  note   Discards Sheoldred, Wheel, Counter down to 7 cards
+  note   Opponent 1 draws and casts a spell (mana value 4) and a spell (mana value 5)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sentinel draws Forest
+  effect Study draws Artist
+  note   Opponent 2 draws and casts a spell (mana value 1) and a creature (mana value 1)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Study draws Swords
+  effect Study draws Counter
+  note   Opponent 3 draws and casts a creature (mana value 5) and a creature (mana value 1)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Study draws Grizzly Bears
+  board  lands: 5 Forest
+         permanents: 1 Sentinel, 1 Sheoldred, 1 Study, 1 Tithe | treasures: 3
+         hand: 1 Artist, 1 Counter, 2 Edict, 3 Forest, 2 Grizzly Bears, 1 Priest, 1 Swords, 1 Tally
+         graveyard: 1 Counter, 1 Edict, 1 Sheoldred, 1 Tithe, 1 Wheel | exile: -
+         opponents: 3 / 3 / 3
+--- turn 6 | available 9 | spent 9 | damage 13
+  draw   Draws Counter
+  land   Plays Forest
+  mana   9 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Forest ({G})
+  cast   Casts Edict {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Edict makes the table sacrifice 3 creatures
+  cast   Casts Tally {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Tally draws Grizzly Bears, Wheel, Forest
+  cast   Casts Wheel {2}{G}
+         > Forest taps for {G}
+         > Treasure taps for generic
+         > Treasure taps for generic
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sheoldred deals 2 damage
+  effect Wheel has each opponent draw 1
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Treasure taps for generic
+  effect Attacks with 2 creatures for 5
+  mana   Sacrifices 3 Treasures to cover the turn
+  note   Discards Priest, Edict, Grizzly Bears, Artist down to 7 cards
+  note   Opponent 1 draws and casts a creature (mana value 6) and a creature (mana value 1)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Study draws Forest
+  note   Opponent 2 draws and casts a spell (mana value 2) and a creature (mana value 1)
+  effect Sheoldred deals 2 damage
+  effect Sentinel draws Tithe
+  effect Study draws Artist
+  note   Opponent 3 draws and casts a creature (mana value 5) and a creature (mana value 6)
+  effect Sheoldred deals 2 damage
+  effect Study draws Grizzly Bears
+  board  lands: 6 Forest
+         permanents: 1 Grizzly Bears, 1 Sentinel, 1 Sheoldred, 1 Study, 1 Tithe | treasures: 3
+         hand: 1 Artist, 2 Counter, 4 Forest, 2 Grizzly Bears, 1 Swords, 1 Tithe
+         graveyard: 1 Artist, 1 Counter, 3 Edict, 1 Grizzly Bears, 1 Priest, 1 Sheoldred, 1 Tally, 1 Tithe, 2 Wheel | exile: -
+         opponents: 4 / 3 / 4
+--- turn 7 | available 10 | spent 10 | damage 9
+  draw   Draws Forest
+  land   Plays Forest
+  mana   10 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Forest ({G}), Treasure ({W/U/B/R/G}), Forest ({G})
+  cast   Casts Tithe {3}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Tithe is watching, and fires when it sees what it is waiting for
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Treasure taps for generic
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Treasure taps for generic
+  cast   Casts Artist {1}{G}
+         > Forest taps for {G}
+         > Treasure taps for generic
+  effect Artist is watching, and fires when it sees what it is waiting for
+  effect Attacks with 3 creatures for 7
+  mana   Sacrifices 3 Treasures to cover the turn
+  note   Opponent 1 draws and casts a spell (mana value 2) and a creature (mana value 2)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Tithe makes 1 Treasure
+  effect Sentinel draws Forest
+  effect Study draws Study
+  note   Opponent 2 draws and casts a spell (mana value 3) and a spell (mana value 3)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Study draws Forest
+  effect Study draws Forest
+  note   Opponent 3 draws and casts a spell (mana value 6) and a spell (mana value 2)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Tithe makes 1 Treasure
+  board  lands: 7 Forest
+         permanents: 1 Artist, 3 Grizzly Bears, 1 Sentinel, 1 Sheoldred, 1 Study, 2 Tithe | treasures: 5
+         hand: 2 Counter, 7 Forest, 1 Study, 1 Swords
+         graveyard: 1 Artist, 1 Counter, 3 Edict, 1 Grizzly Bears, 1 Priest, 1 Sheoldred, 1 Tally, 1 Tithe, 2 Wheel | exile: -
+         opponents: 5 / 3 / 4
+--- turn 8 | available 13 | spent 10 | damage 14
+  draw   Draws Counter
+  land   Plays Forest
+  mana   13 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Forest ({G})
+  cast   Casts Study {2}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Study is watching, and fires when it sees what it is waiting for
+  cast   Casts Swords {G}
+         > Forest taps for {G}
+  effect Artist deals 1 damage
+  effect Swords removes a creature across the table
+  note   Keeps 9 mana up, holding 3 answers
+  effect Attacks with 6 creatures for 11
+  note   An opponent would be dead: 42 damage so far
+  note   Discards Forest, Forest down to 7 cards
+  note   Opponent 1 draws and casts a spell (mana value 7) and a spell (mana value 6)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Tithe makes 1 Treasure
+  effect Study draws Priest
+  effect Sentinel draws Forest
+  effect Study draws Forest
+  cast   Counters Opponent 1's spell (mana value 7) with Counter
+  effect Study draws Forest
+  effect Study draws Priest
+  cast   Counters Opponent 1's spell (mana value 6) with Counter
+  note   Opponent 2 draws and casts a creature (mana value 5) and a creature (mana value 6)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Tithe makes 1 Treasure
+  effect Study draws Forest
+  effect Study draws Forest
+  mana   Sacrifices 2 Treasures to pay for it
+  cast   Counters Opponent 2's creature (mana value 5) with Counter
+  effect Study draws Forest
+  effect Study draws Forest
+  note   Opponent 3 draws and casts a spell (mana value 5) and a spell (mana value 1)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Study draws Study
+  effect Study draws Artist
+  effect Study draws Sentinel
+  board  lands: 8 Forest
+         permanents: 1 Artist, 3 Grizzly Bears, 1 Sentinel, 1 Sheoldred, 2 Study, 2 Tithe | treasures: 8
+         hand: 1 Artist, 11 Forest, 2 Priest, 1 Sentinel, 1 Study
+         graveyard: 1 Artist, 4 Counter, 3 Edict, 2 Forest, 1 Grizzly Bears, 1 Priest, 1 Sheoldred, 1 Swords, 1 Tally, 1 Tithe, 2 Wheel | exile: -
+         opponents: 4 / 4 / 4
+
+=== seed 13 | mulligans 2 ===
+opener: Counter, Forest, Forest, Forest, Priest, Swords
+bottomed: Forest
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  note   Keeps 1 mana up, holding 1 answer
+  note   Opponent 1 draws and casts a spell (mana value 1)
+  note   Opponent 2 draws and casts a creature (mana value 1)
+  note   Opponent 3 draws and casts a spell (mana value 1)
+  board  lands: 1 Forest
+         permanents: -
+         hand: 1 Counter, 2 Forest, 1 Priest, 1 Swords
+         graveyard: - | exile: -
+         opponents: 0 / 1 / 0
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Forest
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Priest {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Priest is watching, and fires when it sees what it is waiting for
+  note   Opponent 1 draws and casts a spell (mana value 2) and a spell (mana value 1)
+  note   Opponent 2 draws and casts a creature (mana value 1) and a creature (mana value 1)
+  effect Priest deals 1 damage
+  effect Priest deals 1 damage
+  note   Opponent 3 draws and casts a creature (mana value 1) and a creature (mana value 2)
+  effect Priest deals 1 damage
+  effect Priest deals 1 damage
+  board  lands: 2 Forest
+         permanents: 1 Priest
+         hand: 1 Counter, 2 Forest, 1 Swords
+         graveyard: - | exile: -
+         opponents: 0 / 3 / 2
+--- turn 3 | available 3 | spent 3 | damage 2
+  draw   Draws Tithe
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Swords {G}
+         > Forest taps for {G}
+  effect Swords removes a creature across the table
+  note   Keeps 2 mana up, holding 1 answer
+  effect Attacks with 1 creature for 1
+  note   Opponent 1 draws and casts a spell (mana value 3) and a creature (mana value 2)
+  cast   Counters Opponent 1's spell (mana value 3) with Counter
+  effect Priest deals 1 damage
+  note   Opponent 2 draws and casts a spell (mana value 1) and a creature (mana value 3)
+  effect Priest deals 1 damage
+  note   Opponent 3 draws and casts a creature (mana value 1) and a spell (mana value 3)
+  effect Priest deals 1 damage
+  board  lands: 3 Forest
+         permanents: 1 Priest
+         hand: 1 Forest, 1 Tithe
+         graveyard: 1 Counter, 1 Swords | exile: -
+         opponents: 1 / 3 / 3
+--- turn 4 | available 4 | spent 4 | damage 3
+  draw   Draws Wheel
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Tithe {3}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Tithe is watching, and fires when it sees what it is waiting for
+  effect Attacks with 1 creature for 1
+  note   Opponent 1 draws and casts a creature (mana value 3) and a creature (mana value 3)
+  effect Tithe makes 1 Treasure
+  effect Priest deals 1 damage
+  effect Priest deals 1 damage
+  note   Opponent 2 draws and casts a creature (mana value 2) and a creature (mana value 2)
+  effect Tithe makes 1 Treasure
+  effect Priest deals 1 damage
+  effect Priest deals 1 damage
+  note   Opponent 3 draws and casts a spell (mana value 2) and a spell (mana value 2)
+  board  lands: 4 Forest
+         permanents: 1 Priest, 1 Tithe | treasures: 2
+         hand: 1 Wheel
+         graveyard: 1 Counter, 1 Swords | exile: -
+         opponents: 3 / 5 / 3
+--- turn 5 | available 6 | spent 5 | damage 1
+  draw   Draws Grizzly Bears
+  land   No land to play
+  mana   6 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G})
+  cast   Casts Wheel {2}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Tithe makes 1 Treasure
+  effect Tithe makes 1 Treasure
+  effect Tithe makes 1 Treasure
+  effect Wheel has each opponent draw 1
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Treasure taps for generic
+  note   Stops with 1 mana up and no spell in hand
+  effect Attacks with 1 creature for 1
+  mana   Sacrifices 1 Treasure to cover the turn
+  note   Opponent 1 draws and casts a spell (mana value 3) and a spell (mana value 4)
+  effect Tithe makes 1 Treasure
+  note   Opponent 2 draws and casts a spell (mana value 2) and a creature (mana value 2)
+  effect Tithe makes 1 Treasure
+  effect Priest deals 1 damage
+  note   Opponent 3 draws and casts a creature (mana value 1) and a spell (mana value 1)
+  effect Tithe makes 1 Treasure
+  effect Priest deals 1 damage
+  board  lands: 4 Forest
+         permanents: 1 Grizzly Bears, 1 Priest, 1 Tithe | treasures: 7
+         hand: -
+         graveyard: 1 Counter, 1 Swords, 1 Wheel | exile: -
+         opponents: 3 / 6 / 4
+--- turn 6 | available 11 | spent 2 | damage 4
+  draw   Draws Artist
+  land   No land to play
+  mana   11 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G})
+  cast   Casts Artist {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Artist is watching, and fires when it sees what it is waiting for
+  note   Stops with 9 mana up and no spell in hand
+  effect Attacks with 2 creatures for 3
+  note   Opponent 1 draws and casts a creature (mana value 5) and a spell (mana value 3)
+  effect Tithe makes 1 Treasure
+  effect Priest deals 1 damage
+  note   Opponent 2 draws and casts a creature (mana value 6) and a creature (mana value 6)
+  effect Tithe makes 1 Treasure
+  effect Priest deals 1 damage
+  effect Priest deals 1 damage
+  note   Opponent 3 draws and casts a spell (mana value 3) and a creature (mana value 1)
+  effect Tithe makes 1 Treasure
+  effect Priest deals 1 damage
+  board  lands: 4 Forest
+         permanents: 1 Artist, 1 Grizzly Bears, 1 Priest, 1 Tithe | treasures: 10
+         hand: -
+         graveyard: 1 Counter, 1 Swords, 1 Wheel | exile: -
+         opponents: 4 / 8 / 5
+--- turn 7 | available 15 | spent 0 | damage 5
+  draw   Draws Forest
+  land   Plays Forest
+  mana   15 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Forest ({G})
+  note   Stops with 15 mana up and no spell in hand
+  effect Attacks with 3 creatures for 3
+  note   Opponent 1 draws and casts a creature (mana value 1) and a creature (mana value 1)
+  effect Tithe makes 1 Treasure
+  effect Priest deals 1 damage
+  effect Priest deals 1 damage
+  note   Opponent 2 draws and casts a creature (mana value 6) and a spell (mana value 7)
+  effect Tithe makes 1 Treasure
+  effect Priest deals 1 damage
+  note   Opponent 3 draws and casts a spell (mana value 7) and a creature (mana value 3)
+  effect Tithe makes 1 Treasure
+  effect Priest deals 1 damage
+  board  lands: 5 Forest
+         permanents: 1 Artist, 1 Grizzly Bears, 1 Priest, 1 Tithe | treasures: 13
+         hand: -
+         graveyard: 1 Counter, 1 Swords, 1 Wheel | exile: -
+         opponents: 6 / 9 / 6
+--- turn 8 | available 18 | spent 2 | damage 4
+  draw   Draws Grizzly Bears
+  land   No land to play
+  mana   18 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G})
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  note   Stops with 16 mana up and no spell in hand
+  effect Attacks with 3 creatures for 3
+  note   Opponent 1 draws and casts a spell (mana value 3) and a creature (mana value 1)
+  effect Priest deals 1 damage
+  note   Opponent 2 draws and casts a creature (mana value 1) and a spell (mana value 7)
+  effect Tithe makes 1 Treasure
+  effect Priest deals 1 damage
+  note   Opponent 3 draws and casts a spell (mana value 1) and a spell (mana value 4)
+  effect Tithe makes 1 Treasure
+  board  lands: 5 Forest
+         permanents: 1 Artist, 2 Grizzly Bears, 1 Priest, 1 Tithe | treasures: 15
+         hand: -
+         graveyard: 1 Counter, 1 Swords, 1 Wheel | exile: -
+         opponents: 7 / 10 / 6
+
+=== seed 7 | mulligans 0 ===
+opener: Edict, Forest, Forest, Forest, Forest, Forest, Sentinel
+--- turn 1 | available 1 | spent 1 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest
+  mana   1 mana untapped: Forest ({G})
+  cast   Casts Sentinel {G}
+         > Forest taps for {G}
+  effect Sentinel is watching, and fires when it sees what it is waiting for
+  note   Opponent 1 draws and casts a spell (mana value 1)
+  note   Opponent 2 draws and casts a spell (mana value 1)
+  effect Sentinel draws Swords
+  note   Opponent 3 draws and casts a creature (mana value 1)
+  board  lands: 1 Forest
+         permanents: 1 Sentinel
+         hand: 1 Edict, 4 Forest, 1 Swords
+         graveyard: - | exile: -
+         opponents: 0 / 0 / 1
+--- turn 2 | available 2 | spent 2 | damage 1
+  draw   Draws Tally
+  land   Plays Forest
+  mana   2 mana untapped: Forest ({G}), Forest ({G})
+  cast   Casts Tally {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Tally draws Artist, Forest, Forest
+  effect Attacks with 1 creature for 1
+  note   Discards Forest down to 7 cards
+  note   Opponent 1 draws and casts a creature (mana value 2) and a creature (mana value 2)
+  note   Opponent 2 draws and casts a creature (mana value 2) and a spell (mana value 2)
+  effect Sentinel draws Forest
+  note   Opponent 3 draws and casts a creature (mana value 2) and a creature (mana value 1)
+  board  lands: 2 Forest
+         permanents: 1 Sentinel
+         hand: 1 Artist, 1 Edict, 5 Forest, 1 Swords
+         graveyard: 1 Forest, 1 Tally | exile: -
+         opponents: 2 / 1 / 3
+--- turn 3 | available 3 | spent 3 | damage 1
+  draw   Draws Counter
+  land   Plays Forest
+  mana   3 mana untapped: Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Edict {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Edict makes the table sacrifice 3 creatures
+  cast   Casts Swords {G}
+         > Forest taps for {G}
+  effect Swords removes a creature across the table
+  effect Attacks with 1 creature for 1
+  note   Opponent 1 draws and casts a spell (mana value 2) and a spell (mana value 3)
+  effect Sentinel draws Sheoldred
+  note   Opponent 2 draws and casts a spell (mana value 1) and a creature (mana value 3)
+  note   Opponent 3 draws and casts a creature (mana value 1) and a creature (mana value 1)
+  board  lands: 3 Forest
+         permanents: 1 Sentinel
+         hand: 1 Artist, 1 Counter, 4 Forest, 1 Sheoldred
+         graveyard: 1 Edict, 1 Forest, 1 Swords, 1 Tally | exile: -
+         opponents: 1 / 1 / 3
+--- turn 4 | available 4 | spent 4 | damage 3
+  draw   Draws Forest
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Sheoldred {2}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Sheoldred is watching, and fires when it sees what it is waiting for
+  effect Attacks with 1 creature for 1
+  note   Opponent 1 draws and casts a spell (mana value 3) and a spell (mana value 3)
+  effect Sheoldred deals 2 damage
+  effect Sentinel draws Priest
+  note   Opponent 2 draws and casts a creature (mana value 4) and a creature (mana value 3)
+  effect Sheoldred deals 2 damage
+  note   Opponent 3 draws and casts a creature (mana value 2) and a creature (mana value 3)
+  effect Sheoldred deals 2 damage
+  board  lands: 4 Forest
+         permanents: 1 Sentinel, 1 Sheoldred
+         hand: 1 Artist, 1 Counter, 4 Forest, 1 Priest
+         graveyard: 1 Edict, 1 Forest, 1 Swords, 1 Tally | exile: -
+         opponents: 1 / 3 / 5
+--- turn 5 | available 5 | spent 4 | damage 7
+  draw   Draws Tithe
+  land   Plays Forest
+  mana   5 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G})
+  cast   Casts Tithe {3}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  effect Tithe is watching, and fires when it sees what it is waiting for
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 2 creatures for 5
+  note   Opponent 1 draws and casts a spell (mana value 3) and a creature (mana value 2)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sentinel draws Forest
+  note   Opponent 2 draws and casts a spell (mana value 4) and a spell (mana value 2)
+  effect Sheoldred deals 2 damage
+  note   Opponent 3 draws and casts a creature (mana value 2) and a spell (mana value 5)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  board  lands: 5 Forest
+         permanents: 1 Sentinel, 1 Sheoldred, 1 Tithe | treasures: 2
+         hand: 1 Artist, 1 Counter, 4 Forest, 1 Priest
+         graveyard: 1 Edict, 1 Forest, 1 Swords, 1 Tally | exile: -
+         opponents: 2 / 3 / 6
+--- turn 6 | available 8 | spent 8 | damage 9
+  draw   Draws Tally
+  land   Plays Forest
+  mana   8 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Forest ({G})
+  cast   Casts Tally {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Tally draws Grizzly Bears, Forest, Sheoldred
+  cast   Casts Sheoldred {2}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for generic
+         > Treasure taps for generic
+  effect Sheoldred is watching, and fires when it sees what it is waiting for
+  cast   Casts Grizzly Bears {1}{G}
+         > Forest taps for {G}
+         > Treasure taps for generic
+  effect Attacks with 2 creatures for 5
+  mana   Sacrifices 2 Treasures to cover the turn
+  note   Opponent 1 draws and casts a spell (mana value 4) and a creature (mana value 5)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sheoldred deals 2 damage
+  effect Sentinel draws Counter
+  note   Opponent 2 draws and casts a creature (mana value 6) and a spell (mana value 1)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sheoldred deals 2 damage
+  note   Opponent 3 draws and casts a creature (mana value 6) and a spell (mana value 2)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sheoldred deals 2 damage
+  board  lands: 6 Forest
+         permanents: 1 Grizzly Bears, 1 Sentinel, 2 Sheoldred, 1 Tithe | treasures: 3
+         hand: 1 Artist, 2 Counter, 4 Forest, 1 Priest
+         graveyard: 1 Edict, 1 Forest, 1 Swords, 2 Tally | exile: -
+         opponents: 3 / 4 / 7
+--- turn 7 | available 10 | spent 10 | damage 15
+  draw   Draws Artist
+  land   Plays Forest
+  mana   10 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Forest ({G})
+  cast   Casts Artist {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Artist is watching, and fires when it sees what it is waiting for
+  cast   Casts Artist {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Artist is watching, and fires when it sees what it is waiting for
+  cast   Casts Priest {1}{G}
+         > Forest taps for {G}
+         > Forest taps for generic
+  effect Priest is watching, and fires when it sees what it is waiting for
+  note   Keeps 4 mana up, holding 2 answers
+  effect Attacks with 4 creatures for 11
+  note   Opponent 1 draws and casts a spell (mana value 6) and a spell (mana value 3)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sheoldred deals 2 damage
+  effect Sentinel draws Forest
+  mana   Sacrifices 1 Treasure to pay for it
+  cast   Counters Opponent 1's spell (mana value 6) with Counter
+  mana   Sacrifices 3 Treasures to pay for it
+  cast   Counters Opponent 1's spell (mana value 3) with Counter
+  note   Opponent 2 draws and casts a creature (mana value 4) and a spell (mana value 2)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sheoldred deals 2 damage
+  effect Priest deals 1 damage
+  note   Opponent 3 draws and casts a creature (mana value 7) and a creature (mana value 3)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sheoldred deals 2 damage
+  effect Priest deals 1 damage
+  effect Priest deals 1 damage
+  board  lands: 7 Forest
+         permanents: 2 Artist, 1 Grizzly Bears, 1 Priest, 1 Sentinel, 2 Sheoldred, 1 Tithe | treasures: 2
+         hand: 4 Forest
+         graveyard: 2 Counter, 1 Edict, 1 Forest, 1 Swords, 2 Tally | exile: -
+         opponents: 3 / 5 / 9
+--- turn 8 | available 10 | spent 1 | damage 20
+  draw   Draws Swords
+  land   Plays Forest
+  mana   10 mana untapped: Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Forest ({G}), Treasure ({W/U/B/R/G}), Treasure ({W/U/B/R/G}), Forest ({G})
+  cast   Casts Swords {G}
+         > Forest taps for {G}
+  effect Artist deals 1 damage
+  effect Artist deals 1 damage
+  effect Swords removes a creature across the table
+  note   Stops with 9 mana up and no spell in hand
+  effect Attacks with 7 creatures for 12
+  note   An opponent would be dead: 50 damage so far
+  note   Opponent 1 draws and casts a creature (mana value 5) and a creature (mana value 4)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sheoldred deals 2 damage
+  effect Priest deals 1 damage
+  effect Priest deals 1 damage
+  note   Opponent 2 draws and casts a spell (mana value 6) and a creature (mana value 2)
+  effect Sheoldred deals 2 damage
+  effect Sheoldred deals 2 damage
+  effect Sentinel draws Tithe
+  effect Priest deals 1 damage
+  note   Opponent 3 draws and casts a spell (mana value 1) and a spell (mana value 7)
+  effect Sheoldred deals 2 damage
+  effect Tithe makes 1 Treasure
+  effect Sheoldred deals 2 damage
+  board  lands: 8 Forest
+         permanents: 2 Artist, 1 Grizzly Bears, 1 Priest, 1 Sentinel, 2 Sheoldred, 1 Tithe | treasures: 4
+         hand: 3 Forest, 1 Tithe
+         graveyard: 2 Counter, 1 Edict, 1 Forest, 2 Swords, 2 Tally | exile: -
+         opponents: 5 / 6 / 8

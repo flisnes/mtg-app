@@ -1,0 +1,272 @@
+limiter-sim + sources-sim: a two-color base with taplands, a Yavimaya, two fetches, costs that miss on color, mana and tapped
+
+=== seed 188 | mulligans 1 ===
+opener: Double Red Two, Evolving Wilds, Five Generic, Forest, Hybrid Three, Tapped Forest, Utility Land
+--- turn 1 | available 0 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Evolving Wilds (enters tapped) over Utility Land, Tapped Forest, Forest
+  land   Cracks for Mountain (enters tapped)
+  mana   No mana available
+  board  lands: 1 Mountain
+         permanents: -
+         hand: 1 Double Red Two, 1 Five Generic, 1 Forest, 1 Hybrid Three, 1 Tapped Forest, 1 Utility Land
+         graveyard: 1 Evolving Wilds | exile: -
+--- turn 2 | available 2 | spent 0 | damage 0
+  draw   Draws Five Generic
+  land   Plays Utility Land over Tapped Forest, Forest
+  mana   2 mana untapped: Mountain ({R}), Utility Land ({C})
+  note   Stops: Double Red Two {R}{R} is not payable in these colours
+  board  lands: 1 Mountain, 1 Utility Land
+         permanents: -
+         hand: 1 Double Red Two, 2 Five Generic, 1 Forest, 1 Hybrid Three, 1 Tapped Forest
+         graveyard: 1 Evolving Wilds | exile: -
+--- turn 3 | available 3 | spent 3 | damage 0
+  draw   Draws Forest
+  land   Plays Forest over Tapped Forest
+  mana   3 mana untapped: Mountain ({R}), Utility Land ({C}), Forest ({G})
+  cast   Casts Hybrid Three {1}{R/G}{R/G}
+         > Mountain taps for {R/G}
+         > Utility Land taps for generic
+         > Forest taps for {R/G}
+  board  lands: 1 Forest, 1 Mountain, 1 Utility Land
+         permanents: -
+         hand: 1 Double Red Two, 2 Five Generic, 1 Forest, 1 Tapped Forest
+         graveyard: 1 Evolving Wilds, 1 Hybrid Three | exile: -
+--- turn 4 | available 3 | spent 0 | damage 0
+  draw   Draws Triple Green
+  land   Plays Tapped Forest (enters tapped) over Forest
+  mana   3 mana untapped: Mountain ({R}), Utility Land ({C}), Forest ({G})
+  note   Stops: Triple Green {G}{G}{G} is not payable in these colours
+  board  lands: 1 Forest, 1 Mountain, 1 Tapped Forest, 1 Utility Land
+         permanents: -
+         hand: 1 Double Red Two, 2 Five Generic, 1 Forest, 1 Triple Green
+         graveyard: 1 Evolving Wilds, 1 Hybrid Three | exile: -
+--- turn 5 | available 5 | spent 5 | damage 0
+  draw   Draws Mountain
+  land   Plays Mountain over Forest
+  mana   5 mana untapped: Mountain ({R}), Utility Land ({C}), Forest ({G}), Tapped Forest ({G}), Mountain ({R})
+  cast   Casts Five Generic {4}{R}
+         > Mountain taps for {R}
+         > Utility Land taps for generic
+         > Forest taps for generic
+         > Tapped Forest taps for generic
+         > Mountain taps for generic
+  board  lands: 1 Forest, 2 Mountain, 1 Tapped Forest, 1 Utility Land
+         permanents: -
+         hand: 1 Double Red Two, 1 Five Generic, 1 Forest, 1 Triple Green
+         graveyard: 1 Evolving Wilds, 1 Five Generic, 1 Hybrid Three | exile: -
+--- turn 6 | available 6 | spent 5 | damage 0
+  draw   Draws Triple Green
+  land   Plays Forest
+  mana   6 mana untapped: Mountain ({R}), Utility Land ({C}), Forest ({G}), Tapped Forest ({G}), Mountain ({R}), Forest ({G})
+  cast   Casts Five Generic {4}{R}
+         > Mountain taps for {R}
+         > Utility Land taps for generic
+         > Forest taps for generic
+         > Tapped Forest taps for generic
+         > Mountain taps for generic
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 2 Forest, 2 Mountain, 1 Tapped Forest, 1 Utility Land
+         permanents: -
+         hand: 1 Double Red Two, 2 Triple Green
+         graveyard: 1 Evolving Wilds, 2 Five Generic, 1 Hybrid Three | exile: -
+--- turn 7 | available 6 | spent 3 | damage 0
+  draw   Draws Tapped Forest
+  land   Plays Tapped Forest (enters tapped)
+  mana   6 mana untapped: Mountain ({R}), Utility Land ({C}), Forest ({G}), Tapped Forest ({G}), Mountain ({R}), Forest ({G})
+  cast   Casts Triple Green {G}{G}{G}
+         > Forest taps for {G}
+         > Tapped Forest taps for {G}
+         > Forest taps for {G}
+  note   Stops: Triple Green {G}{G}{G} is not payable in these colours alongside what is already cast
+  board  lands: 2 Forest, 2 Mountain, 2 Tapped Forest, 1 Utility Land
+         permanents: -
+         hand: 1 Double Red Two, 1 Triple Green
+         graveyard: 1 Evolving Wilds, 2 Five Generic, 1 Hybrid Three, 1 Triple Green | exile: -
+--- turn 8 | available 7 | spent 3 | damage 0
+  draw   Draws Triple Green
+  land   No land to play
+  mana   7 mana untapped: Mountain ({R}), Utility Land ({C}), Forest ({G}), Tapped Forest ({G}), Mountain ({R}), Forest ({G}), Tapped Forest ({G})
+  cast   Casts Triple Green {G}{G}{G}
+         > Forest taps for {G}
+         > Tapped Forest taps for {G}
+         > Forest taps for {G}
+  note   Stops: Triple Green {G}{G}{G} is not payable in these colours alongside what is already cast
+  board  lands: 2 Forest, 2 Mountain, 2 Tapped Forest, 1 Utility Land
+         permanents: -
+         hand: 1 Double Red Two, 1 Triple Green
+         graveyard: 1 Evolving Wilds, 2 Five Generic, 1 Hybrid Three, 2 Triple Green | exile: -
+
+=== seed 44 | mulligans 0 ===
+opener: Double Red Two, Double Red Two, Double Red Two, Forest, Forest, Triple Green, Utility Land
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest over Utility Land
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Forest
+         permanents: -
+         hand: 3 Double Red Two, 1 Forest, 1 Triple Green, 1 Utility Land
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 0 | damage 0
+  draw   Draws Mountain
+  land   Plays Mountain over Utility Land, Forest
+  mana   2 mana untapped: Forest ({G}), Mountain ({R})
+  note   Stops: Double Red Two {R}{R} is not payable in these colours
+  board  lands: 1 Forest, 1 Mountain
+         permanents: -
+         hand: 3 Double Red Two, 1 Forest, 1 Triple Green, 1 Utility Land
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 0 | damage 0
+  draw   Draws Wooded Strand
+  land   Plays Wooded Strand over Utility Land, Forest
+  land   Cracks for Mountain
+  mana   3 mana untapped: Forest ({G}), Mountain ({R}), Mountain ({R})
+  note   Stops: Triple Green {G}{G}{G} is not payable in these colours
+  board  lands: 1 Forest, 2 Mountain
+         permanents: -
+         hand: 3 Double Red Two, 1 Forest, 1 Triple Green, 1 Utility Land
+         graveyard: 1 Wooded Strand | exile: -
+--- turn 4 | available 4 | spent 0 | damage 0
+  draw   Draws Forest
+  land   Plays Forest over Utility Land
+  mana   4 mana untapped: Forest ({G}), Mountain ({R}), Mountain ({R}), Forest ({G})
+  note   Stops: Triple Green {G}{G}{G} is not payable in these colours
+  board  lands: 2 Forest, 2 Mountain
+         permanents: -
+         hand: 3 Double Red Two, 1 Forest, 1 Triple Green, 1 Utility Land
+         graveyard: 1 Wooded Strand | exile: -
+--- turn 5 | available 5 | spent 5 | damage 0
+  draw   Draws Mountain
+  land   Plays Forest over Utility Land, Mountain
+  mana   5 mana untapped: Forest ({G}), Mountain ({R}), Mountain ({R}), Forest ({G}), Forest ({G})
+  cast   Casts Triple Green {G}{G}{G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+         > Forest taps for {G}
+  cast   Casts Double Red Two {R}{R}
+         > Mountain taps for {R}
+         > Mountain taps for {R}
+  board  lands: 3 Forest, 2 Mountain
+         permanents: -
+         hand: 2 Double Red Two, 1 Mountain, 1 Utility Land
+         graveyard: 1 Double Red Two, 1 Triple Green, 1 Wooded Strand | exile: -
+--- turn 6 | available 6 | spent 5 | damage 0
+  draw   Draws Five Generic
+  land   Plays Utility Land over Mountain
+  mana   6 mana untapped: Forest ({G}), Mountain ({R}), Mountain ({R}), Forest ({G}), Forest ({G}), Utility Land ({C})
+  cast   Casts Five Generic {4}{R}
+         > Forest taps for generic
+         > Mountain taps for {R}
+         > Mountain taps for generic
+         > Forest taps for generic
+         > Forest taps for generic
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 3 Forest, 2 Mountain, 1 Utility Land
+         permanents: -
+         hand: 2 Double Red Two, 1 Mountain
+         graveyard: 1 Double Red Two, 1 Five Generic, 1 Triple Green, 1 Wooded Strand | exile: -
+--- turn 7 | available 7 | spent 2 | damage 0
+  draw   Draws Double Red Two
+  land   Plays Mountain
+  mana   7 mana untapped: Forest ({G}), Mountain ({R}), Mountain ({R}), Forest ({G}), Forest ({G}), Utility Land ({C}), Mountain ({R})
+  cast   Casts Double Red Two {R}{R}
+         > Mountain taps for {R}
+         > Mountain taps for {R}
+  note   Stops: Double Red Two {R}{R} is not payable in these colours alongside what is already cast
+  board  lands: 3 Forest, 3 Mountain, 1 Utility Land
+         permanents: -
+         hand: 2 Double Red Two
+         graveyard: 2 Double Red Two, 1 Five Generic, 1 Triple Green, 1 Wooded Strand | exile: -
+--- turn 8 | available 8 | spent 4 | damage 0
+  draw   Draws Mountain
+  land   Plays Mountain
+  mana   8 mana untapped: Forest ({G}), Mountain ({R}), Mountain ({R}), Forest ({G}), Forest ({G}), Utility Land ({C}), Mountain ({R}), Mountain ({R})
+  cast   Casts Double Red Two {R}{R}
+         > Mountain taps for {R}
+         > Mountain taps for {R}
+  cast   Casts Double Red Two {R}{R}
+         > Mountain taps for {R}
+         > Mountain taps for {R}
+  note   Stops with 4 mana up and no spell in hand
+  board  lands: 3 Forest, 4 Mountain, 1 Utility Land
+         permanents: -
+         hand: -
+         graveyard: 4 Double Red Two, 1 Five Generic, 1 Triple Green, 1 Wooded Strand | exile: -
+
+=== seed 131 | mulligans 0 ===
+opener: Double Red Two, Double Red Two, Five Generic, Forest, Triple Green, Utility Land, Utility Land
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Forest over Utility Land
+  mana   1 mana untapped: Forest ({G})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Forest
+         permanents: -
+         hand: 2 Double Red Two, 1 Five Generic, 1 Triple Green, 2 Utility Land
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 0 | damage 0
+  draw   Draws Triple Green
+  land   Plays Utility Land
+  mana   2 mana untapped: Forest ({G}), Utility Land ({C})
+  note   Stops: Double Red Two {R}{R} is not payable in these colours
+  board  lands: 1 Forest, 1 Utility Land
+         permanents: -
+         hand: 2 Double Red Two, 1 Five Generic, 2 Triple Green, 1 Utility Land
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 0 | damage 0
+  draw   Draws Forest
+  land   Plays Utility Land over Forest
+  mana   3 mana untapped: Forest ({G}), Utility Land ({C}), Utility Land ({C})
+  note   Stops: Triple Green {G}{G}{G} is not payable in these colours
+  board  lands: 1 Forest, 2 Utility Land
+         permanents: -
+         hand: 2 Double Red Two, 1 Five Generic, 1 Forest, 2 Triple Green
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 0 | damage 0
+  draw   Draws Five Generic
+  land   Plays Forest
+  mana   4 mana untapped: Forest ({G}), Utility Land ({C}), Utility Land ({C}), Forest ({G})
+  note   Stops: Triple Green {G}{G}{G} is not payable in these colours
+  board  lands: 2 Forest, 2 Utility Land
+         permanents: -
+         hand: 2 Double Red Two, 2 Five Generic, 2 Triple Green
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 0 | damage 0
+  draw   Draws Utility Land
+  land   Plays Utility Land
+  mana   5 mana untapped: Forest ({G}), Utility Land ({C}), Utility Land ({C}), Forest ({G}), Utility Land ({C})
+  note   Stops: Five Generic {4}{R} is not payable in these colours
+  board  lands: 2 Forest, 3 Utility Land
+         permanents: -
+         hand: 2 Double Red Two, 2 Five Generic, 2 Triple Green
+         graveyard: - | exile: -
+--- turn 6 | available 5 | spent 0 | damage 0
+  draw   Draws Hybrid Three
+  land   No land to play
+  mana   5 mana untapped: Forest ({G}), Utility Land ({C}), Utility Land ({C}), Forest ({G}), Utility Land ({C})
+  note   Stops: Five Generic {4}{R} is not payable in these colours
+  board  lands: 2 Forest, 3 Utility Land
+         permanents: -
+         hand: 2 Double Red Two, 2 Five Generic, 1 Hybrid Three, 2 Triple Green
+         graveyard: - | exile: -
+--- turn 7 | available 5 | spent 0 | damage 0
+  draw   Draws Five Generic
+  land   No land to play
+  mana   5 mana untapped: Forest ({G}), Utility Land ({C}), Utility Land ({C}), Forest ({G}), Utility Land ({C})
+  note   Stops: Five Generic {4}{R} is not payable in these colours
+  note   Discards Five Generic down to 7 cards
+  board  lands: 2 Forest, 3 Utility Land
+         permanents: -
+         hand: 2 Double Red Two, 2 Five Generic, 1 Hybrid Three, 2 Triple Green
+         graveyard: 1 Five Generic | exile: -
+--- turn 8 | available 5 | spent 0 | damage 0
+  draw   Draws Double Red Two
+  land   No land to play
+  mana   5 mana untapped: Forest ({G}), Utility Land ({C}), Utility Land ({C}), Forest ({G}), Utility Land ({C})
+  note   Stops: Five Generic {4}{R} is not payable in these colours
+  note   Discards Five Generic down to 7 cards
+  board  lands: 2 Forest, 3 Utility Land
+         permanents: -
+         hand: 3 Double Red Two, 1 Five Generic, 1 Hybrid Three, 2 Triple Green
+         graveyard: 2 Five Generic | exile: -

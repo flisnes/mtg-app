@@ -1,0 +1,344 @@
+discount-sim: an Electromancer, Animar counting its counters, Myr Enforcers off a pile of rocks
+
+=== seed 397 | mulligans 0 ===
+opener: Big Bear, Command Tower, Mountain, Mountain, Mountain, Myr Enforcer, Rock
+--- turn 1 | available 2 | spent 1 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Command Tower over Mountain
+  mana   1 mana untapped: Command Tower ({U/R/G})
+  cast   Casts Rock {1} (ramp first)
+         > Command Tower taps for generic
+  mana   Rock will add 1 {C} this turn
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Command Tower
+         permanents: 1 Rock
+         hand: 1 Animar, 1 Big Bear, 1 Electromancer, 3 Mountain, 1 Myr Enforcer
+         graveyard: - | exile: -
+--- turn 2 | available 3 | spent 0 | damage 0
+  draw   Draws Big Bear
+  land   Plays Mountain
+  mana   3 mana untapped: Command Tower ({U/R/G}), Rock ({C}), Mountain ({R})
+  note   Stops: Animar {U}{R}{G} is not payable in these colours
+  board  lands: 1 Command Tower, 1 Mountain
+         permanents: 1 Rock
+         hand: 1 Animar, 2 Big Bear, 1 Electromancer, 2 Mountain, 1 Myr Enforcer
+         graveyard: - | exile: -
+--- turn 3 | available 5 | spent 5 | damage 0
+  draw   Draws Rock
+  land   Plays Mountain
+  mana   4 mana untapped: Command Tower ({U/R/G}), Rock ({C}), Mountain ({R}), Mountain ({R})
+  cast   Casts Rock {1} (ramp first)
+         > Rock taps for generic
+  mana   Rock will add 1 {C} this turn
+  cast   Casts Big Bear {3}{R}
+         > Command Tower taps for {R}
+         > Mountain taps for generic
+         > Mountain taps for generic
+         > Rock taps for generic
+  board  lands: 1 Command Tower, 2 Mountain
+         permanents: 1 Big Bear, 2 Rock
+         hand: 1 Animar, 1 Big Bear, 1 Electromancer, 1 Mountain, 1 Myr Enforcer
+         graveyard: - | exile: -
+--- turn 4 | available 6 | spent 5 | damage 4
+  draw   Draws Mountain
+  land   Plays Mountain
+  mana   6 mana untapped: Command Tower ({U/R/G}), Rock ({C}), Mountain ({R}), Mountain ({R}), Rock ({C}), Mountain ({R})
+  cast   Casts Myr Enforcer {7} for 2 less
+         > Command Tower taps for generic
+         > Rock taps for generic
+         > Mountain taps for generic
+         > Mountain taps for generic
+         > Rock taps for generic
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 1 creature for 4
+  board  lands: 1 Command Tower, 3 Mountain
+         permanents: 1 Big Bear, 1 Myr Enforcer, 2 Rock
+         hand: 1 Animar, 1 Big Bear, 1 Electromancer, 1 Mountain
+         graveyard: - | exile: -
+--- turn 5 | available 8 | spent 5 | damage 8
+  draw   Draws Rock
+  land   Plays Mountain
+  mana   7 mana untapped: Command Tower ({U/R/G}), Rock ({C}), Mountain ({R}), Mountain ({R}), Rock ({C}), Mountain ({R}), Mountain ({R})
+  cast   Casts Rock {1} (ramp first)
+         > Rock taps for generic
+  mana   Rock will add 1 {C} this turn
+  cast   Casts Big Bear {3}{R}
+         > Command Tower taps for {R}
+         > Mountain taps for generic
+         > Mountain taps for generic
+         > Rock taps for generic
+  note   Stops: Animar {U}{R}{G} is not payable in these colours alongside what is already cast
+  effect Attacks with 2 creatures for 8
+  board  lands: 1 Command Tower, 4 Mountain
+         permanents: 2 Big Bear, 1 Myr Enforcer, 3 Rock
+         hand: 1 Animar, 1 Electromancer
+         graveyard: - | exile: -
+--- turn 6 | available 9 | spent 5 | damage 12
+  draw   Draws Command Tower
+  land   Plays Command Tower
+  mana   9 mana untapped: Command Tower ({U/R/G}), Rock ({C}), Mountain ({R}), Mountain ({R}), Rock ({C}), Mountain ({R}), Mountain ({R}), Rock ({C}), Command Tower ({U/R/G})
+  cast   Casts Animar {U}{R}{G}
+         > Command Tower taps for {G}
+         > Mountain taps for {R}
+         > Command Tower taps for {U}
+  effect Animar is watching, and fires when it sees what it is waiting for
+  cast   Casts Electromancer {R}{R}
+         > Mountain taps for {R}
+         > Mountain taps for {R}
+  effect Animar gets 1 +1/+1 counter
+  effect Electromancer resolves
+  note   Stops with 4 mana up and no spell in hand
+  effect Attacks with 3 creatures for 12
+  board  lands: 2 Command Tower, 4 Mountain
+         permanents: 1 Animar, 2 Big Bear, 1 Electromancer, 1 Myr Enforcer, 3 Rock
+         hand: -
+         graveyard: - | exile: -
+--- turn 7 | available 9 | spent 3 | damage 16
+  draw   Draws Big Bolt
+  land   No land to play
+  mana   9 mana untapped: Command Tower ({U/R/G}), Rock ({C}), Mountain ({R}), Mountain ({R}), Rock ({C}), Mountain ({R}), Mountain ({R}), Rock ({C}), Command Tower ({U/R/G})
+  cast   Casts Big Bolt {3}{R} for 1 less
+         > Command Tower taps for {R}
+         > Rock taps for generic
+         > Mountain taps for generic
+  note   Stops with 6 mana up and no spell in hand
+  effect Attacks with 5 creatures for 16
+  note   An opponent would be dead: 40 damage so far
+  board  lands: 2 Command Tower, 4 Mountain
+         permanents: 1 Animar, 2 Big Bear, 1 Electromancer, 1 Myr Enforcer, 3 Rock
+         hand: -
+         graveyard: 1 Big Bolt | exile: -
+--- turn 8 | available 9 | spent 3 | damage 16
+  draw   Draws Big Bolt
+  land   No land to play
+  mana   9 mana untapped: Command Tower ({U/R/G}), Rock ({C}), Mountain ({R}), Mountain ({R}), Rock ({C}), Mountain ({R}), Mountain ({R}), Rock ({C}), Command Tower ({U/R/G})
+  cast   Casts Big Bolt {3}{R} for 1 less
+         > Command Tower taps for {R}
+         > Rock taps for generic
+         > Mountain taps for generic
+  note   Stops with 6 mana up and no spell in hand
+  effect Attacks with 5 creatures for 16
+  board  lands: 2 Command Tower, 4 Mountain
+         permanents: 1 Animar, 2 Big Bear, 1 Electromancer, 1 Myr Enforcer, 3 Rock
+         hand: -
+         graveyard: 2 Big Bolt | exile: -
+
+=== seed 60 | mulligans 0 ===
+opener: Big Bear, Big Bolt, Big Bolt, Myr Enforcer, Rock, Rock, Rock
+--- turn 1 | available 0 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   No land to play
+  mana   No mana available
+  board  lands: -
+         permanents: -
+         hand: 1 Animar, 1 Big Bear, 2 Big Bolt, 1 Electromancer, 1 Myr Enforcer, 3 Rock
+         graveyard: - | exile: -
+--- turn 2 | available 0 | spent 0 | damage 0
+  draw   Draws Myr Enforcer
+  land   No land to play
+  mana   No mana available
+  note   Discards Myr Enforcer down to 7 cards
+  board  lands: -
+         permanents: -
+         hand: 1 Animar, 1 Big Bear, 2 Big Bolt, 1 Electromancer, 1 Myr Enforcer, 3 Rock
+         graveyard: 1 Myr Enforcer | exile: -
+--- turn 3 | available 0 | spent 0 | damage 0
+  draw   Draws Rock
+  land   No land to play
+  mana   No mana available
+  note   Discards Myr Enforcer down to 7 cards
+  board  lands: -
+         permanents: -
+         hand: 1 Animar, 1 Big Bear, 2 Big Bolt, 1 Electromancer, 4 Rock
+         graveyard: 2 Myr Enforcer | exile: -
+--- turn 4 | available 5 | spent 4 | damage 0
+  draw   Draws Mountain
+  land   Plays Mountain
+  mana   1 mana untapped: Mountain ({R})
+  cast   Casts Rock {1} (ramp first)
+         > Mountain taps for generic
+  mana   Rock will add 1 {C} this turn
+  cast   Casts Rock {1} (ramp first)
+         > Rock taps for generic
+  mana   Rock will add 1 {C} this turn
+  cast   Casts Rock {1} (ramp first)
+         > Rock taps for generic
+  mana   Rock will add 1 {C} this turn
+  cast   Casts Rock {1} (ramp first)
+         > Rock taps for generic
+  mana   Rock will add 1 {C} this turn
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Mountain
+         permanents: 4 Rock
+         hand: 1 Animar, 1 Big Bear, 2 Big Bolt, 1 Electromancer
+         graveyard: 2 Myr Enforcer | exile: -
+--- turn 5 | available 6 | spent 4 | damage 0
+  draw   Draws Command Tower
+  land   Plays Command Tower
+  mana   6 mana untapped: Mountain ({R}), Rock ({C}), Rock ({C}), Rock ({C}), Rock ({C}), Command Tower ({U/R/G})
+  cast   Casts Big Bolt {3}{R}
+         > Mountain taps for {R}
+         > Rock taps for generic
+         > Rock taps for generic
+         > Rock taps for generic
+  note   Stops: Electromancer {R}{R} is not payable in these colours alongside what is already cast
+  board  lands: 1 Command Tower, 1 Mountain
+         permanents: 4 Rock
+         hand: 1 Animar, 1 Big Bear, 1 Big Bolt, 1 Electromancer
+         graveyard: 1 Big Bolt, 2 Myr Enforcer | exile: -
+--- turn 6 | available 6 | spent 4 | damage 0
+  draw   Draws Myr Enforcer
+  land   No land to play
+  mana   6 mana untapped: Mountain ({R}), Rock ({C}), Rock ({C}), Rock ({C}), Rock ({C}), Command Tower ({U/R/G})
+  cast   Casts Big Bolt {3}{R}
+         > Mountain taps for {R}
+         > Rock taps for generic
+         > Rock taps for generic
+         > Rock taps for generic
+  note   Stops: Electromancer {R}{R} is not payable in these colours alongside what is already cast
+  board  lands: 1 Command Tower, 1 Mountain
+         permanents: 4 Rock
+         hand: 1 Animar, 1 Big Bear, 1 Electromancer, 1 Myr Enforcer
+         graveyard: 2 Big Bolt, 2 Myr Enforcer | exile: -
+--- turn 7 | available 7 | spent 4 | damage 0
+  draw   Draws Command Tower
+  land   Plays Command Tower
+  mana   7 mana untapped: Mountain ({R}), Rock ({C}), Rock ({C}), Rock ({C}), Rock ({C}), Command Tower ({U/R/G}), Command Tower ({U/R/G})
+  cast   Casts Big Bear {3}{R}
+         > Mountain taps for {R}
+         > Rock taps for generic
+         > Rock taps for generic
+         > Rock taps for generic
+  note   Stops: Animar {U}{R}{G} is not payable in these colours alongside what is already cast
+  board  lands: 2 Command Tower, 1 Mountain
+         permanents: 1 Big Bear, 4 Rock
+         hand: 1 Animar, 1 Electromancer, 1 Myr Enforcer
+         graveyard: 2 Big Bolt, 2 Myr Enforcer | exile: -
+--- turn 8 | available 8 | spent 6 | damage 4
+  draw   Draws Command Tower
+  land   Plays Command Tower
+  mana   8 mana untapped: Mountain ({R}), Rock ({C}), Rock ({C}), Rock ({C}), Rock ({C}), Command Tower ({U/R/G}), Command Tower ({U/R/G}), Command Tower ({U/R/G})
+  cast   Casts Myr Enforcer {7} for 4 less
+         > Rock taps for generic
+         > Rock taps for generic
+         > Rock taps for generic
+  cast   Casts Animar {U}{R}{G}
+         > Mountain taps for {R}
+         > Command Tower taps for {G}
+         > Command Tower taps for {U}
+  effect Animar is watching, and fires when it sees what it is waiting for
+  note   Stops: Electromancer {R}{R} is not payable in these colours alongside what is already cast
+  effect Attacks with 1 creature for 4
+  board  lands: 3 Command Tower, 1 Mountain
+         permanents: 1 Animar, 1 Big Bear, 1 Myr Enforcer, 4 Rock
+         hand: 1 Electromancer
+         graveyard: 2 Big Bolt, 2 Myr Enforcer | exile: -
+
+=== seed 31 | mulligans 0 ===
+opener: Big Bolt, Brick, Mountain, Mountain, Mountain, Myr Enforcer, Myr Enforcer
+--- turn 1 | available 1 | spent 0 | damage 0
+  note   On the play, so no draw this turn
+  land   Plays Mountain
+  mana   1 mana untapped: Mountain ({R})
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  board  lands: 1 Mountain
+         permanents: -
+         hand: 1 Animar, 1 Big Bolt, 1 Brick, 1 Electromancer, 2 Mountain, 2 Myr Enforcer
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Command Tower
+  land   Plays Command Tower over Mountain
+  mana   2 mana untapped: Mountain ({R}), Command Tower ({U/R/G})
+  cast   Casts Electromancer {R}{R}
+         > Mountain taps for {R}
+         > Command Tower taps for {R}
+  effect Electromancer resolves
+  board  lands: 1 Command Tower, 1 Mountain
+         permanents: 1 Electromancer
+         hand: 1 Animar, 1 Big Bolt, 1 Brick, 2 Mountain, 2 Myr Enforcer
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 0 | damage 2
+  draw   Draws Mountain
+  land   Plays Mountain
+  mana   3 mana untapped: Mountain ({R}), Command Tower ({U/R/G}), Mountain ({R})
+  note   Stops: Animar {U}{R}{G} is not payable in these colours
+  effect Attacks with 1 creature for 2
+  board  lands: 1 Command Tower, 2 Mountain
+         permanents: 1 Electromancer
+         hand: 1 Animar, 1 Big Bolt, 1 Brick, 2 Mountain, 2 Myr Enforcer
+         graveyard: - | exile: -
+--- turn 4 | available 4 | spent 0 | damage 2
+  draw   Draws Mountain
+  land   Plays Mountain
+  mana   4 mana untapped: Mountain ({R}), Command Tower ({U/R/G}), Mountain ({R}), Mountain ({R})
+  note   Stops: Animar {U}{R}{G} is not payable in these colours
+  effect Attacks with 1 creature for 2
+  board  lands: 1 Command Tower, 3 Mountain
+         permanents: 1 Electromancer
+         hand: 1 Animar, 1 Big Bolt, 1 Brick, 2 Mountain, 2 Myr Enforcer
+         graveyard: - | exile: -
+--- turn 5 | available 5 | spent 3 | damage 2
+  draw   Draws Big Bolt
+  land   Plays Mountain
+  mana   5 mana untapped: Mountain ({R}), Command Tower ({U/R/G}), Mountain ({R}), Mountain ({R}), Mountain ({R})
+  cast   Casts Big Bolt {3}{R} for 1 less
+         > Mountain taps for {R}
+         > Command Tower taps for generic
+         > Mountain taps for generic
+  note   Stops with 2 mana up: nothing left in hand costs 2 or less
+  effect Attacks with 1 creature for 2
+  board  lands: 1 Command Tower, 4 Mountain
+         permanents: 1 Electromancer
+         hand: 1 Animar, 1 Big Bolt, 1 Brick, 1 Mountain, 2 Myr Enforcer
+         graveyard: 1 Big Bolt | exile: -
+--- turn 6 | available 6 | spent 6 | damage 2
+  draw   Draws Big Bolt
+  land   Plays Mountain
+  mana   6 mana untapped: Mountain ({R}), Command Tower ({U/R/G}), Mountain ({R}), Mountain ({R}), Mountain ({R}), Mountain ({R})
+  cast   Casts Big Bolt {3}{R} for 1 less
+         > Command Tower taps for {R}
+         > Mountain taps for generic
+         > Mountain taps for generic
+  cast   Casts Big Bolt {3}{R} for 1 less
+         > Mountain taps for {R}
+         > Mountain taps for generic
+         > Mountain taps for generic
+  effect Attacks with 1 creature for 2
+  board  lands: 1 Command Tower, 5 Mountain
+         permanents: 1 Electromancer
+         hand: 1 Animar, 1 Brick, 2 Myr Enforcer
+         graveyard: 3 Big Bolt | exile: -
+--- turn 7 | available 7 | spent 7 | damage 2
+  draw   Draws Mountain
+  land   Plays Mountain
+  mana   7 mana untapped: Mountain ({R}), Command Tower ({U/R/G}), Mountain ({R}), Mountain ({R}), Mountain ({R}), Mountain ({R}), Mountain ({R})
+  cast   Casts Myr Enforcer {7}
+         > Mountain taps for generic
+         > Command Tower taps for generic
+         > Mountain taps for generic
+         > Mountain taps for generic
+         > Mountain taps for generic
+         > Mountain taps for generic
+         > Mountain taps for generic
+  effect Attacks with 1 creature for 2
+  board  lands: 1 Command Tower, 6 Mountain
+         permanents: 1 Electromancer, 1 Myr Enforcer
+         hand: 1 Animar, 1 Brick, 1 Myr Enforcer
+         graveyard: 3 Big Bolt | exile: -
+--- turn 8 | available 7 | spent 6 | damage 6
+  draw   Draws Big Bear
+  land   No land to play
+  mana   7 mana untapped: Mountain ({R}), Command Tower ({U/R/G}), Mountain ({R}), Mountain ({R}), Mountain ({R}), Mountain ({R}), Mountain ({R})
+  cast   Casts Myr Enforcer {7} for 1 less
+         > Mountain taps for generic
+         > Command Tower taps for generic
+         > Mountain taps for generic
+         > Mountain taps for generic
+         > Mountain taps for generic
+         > Mountain taps for generic
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 2 creatures for 6
+  board  lands: 1 Command Tower, 6 Mountain
+         permanents: 1 Electromancer, 2 Myr Enforcer
+         hand: 1 Animar, 1 Big Bear, 1 Brick
+         graveyard: 3 Big Bolt | exile: -

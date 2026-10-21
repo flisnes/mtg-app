@@ -1,0 +1,430 @@
+behavior-sim: the derived profiles, Windfall, X and [X], tutors to top and bottom, self, a reanimation loop with the depth guard, flicker, bounce, an attack draw; sixty cards, no commander, on the draw
+
+=== seed 327 | mulligans 0 ===
+opener: Big Body, Blink, Edric, Island, Island, Temple of Epiphany, Windfall
+--- turn 1 | available 0 | spent 0 | damage 0
+  draw   Draws Blink
+  land   Plays Temple of Epiphany (enters tapped) over Island
+  effect Temple of Epiphany scry 1
+  mana   No mana available
+  board  lands: 1 Temple of Epiphany
+         permanents: -
+         hand: 1 Big Body, 2 Blink, 1 Edric, 2 Island, 1 Windfall
+         graveyard: - | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Temple of Epiphany
+  land   Plays Island over Temple of Epiphany
+  mana   2 mana untapped: Temple of Epiphany ({U}), Island ({U})
+  cast   Casts Edric {1}{U}
+         > Temple of Epiphany taps for {U}
+         > Island taps for generic
+  effect Edric resolves
+  board  lands: 1 Island, 1 Temple of Epiphany
+         permanents: 1 Edric
+         hand: 1 Big Body, 2 Blink, 1 Island, 1 Temple of Epiphany, 1 Windfall
+         graveyard: - | exile: -
+--- turn 3 | available 3 | spent 3 | damage 2
+  draw   Draws Divination
+  land   Plays Island over Temple of Epiphany
+  mana   3 mana untapped: Temple of Epiphany ({U}), Island ({U}), Island ({U})
+  cast   Casts Windfall {2}{U}
+         > Temple of Epiphany taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+  effect Windfall discards Big Body, Divination, Blink, Blink, Temple of Epiphany, draws Temple of Epiphany, Edric, Crucible of Worlds, Reanimator
+  effect Attacks with 1 creature for 2
+  effect Attacks with Edric: draws Reanimator
+  board  lands: 2 Island, 1 Temple of Epiphany
+         permanents: 1 Edric
+         hand: 1 Crucible of Worlds, 1 Edric, 2 Reanimator, 1 Temple of Epiphany
+         graveyard: 1 Big Body, 2 Blink, 1 Divination, 1 Temple of Epiphany, 1 Windfall | exile: -
+--- turn 4 | available 3 | spent 3 | damage 2
+  draw   Draws Windfall
+  land   Plays Temple of Epiphany (enters tapped)
+  effect Temple of Epiphany scry 1
+  mana   3 mana untapped: Temple of Epiphany ({U}), Island ({U}), Island ({U})
+  cast   Casts Crucible of Worlds {3}
+         > Temple of Epiphany taps for generic
+         > Island taps for generic
+         > Island taps for generic
+  effect Attacks with 1 creature for 2
+  effect Attacks with Edric: draws Island
+  board  lands: 2 Island, 2 Temple of Epiphany
+         permanents: 1 Crucible of Worlds, 1 Edric
+         hand: 1 Edric, 1 Island, 2 Reanimator, 1 Windfall
+         graveyard: 1 Big Body, 2 Blink, 1 Divination, 1 Temple of Epiphany, 1 Windfall | exile: -
+--- turn 5 | available 5 | spent 5 | damage 2
+  draw   Draws Phyrexian Arena
+  land   Plays Island
+  mana   5 mana untapped: Temple of Epiphany ({U}), Island ({U}), Island ({U}), Temple of Epiphany ({U}), Island ({U})
+  cast   Casts Phyrexian Arena {1}{U}{U}
+         > Island taps for {U}
+         > Island taps for {U}
+         > Temple of Epiphany taps for generic
+  effect Phyrexian Arena will fire every upkeep from next turn
+  cast   Casts Reanimator {1}{U}
+         > Temple of Epiphany taps for {U}
+         > Island taps for generic
+  effect Reanimator mills Colossus of Akros, Island, Island, Faithless Looting, moves Big Body to the battlefield
+  effect Big Body draws Island
+  effect Attacks with 1 creature for 2
+  effect Attacks with Edric: draws Island
+  board  lands: 3 Island, 2 Temple of Epiphany
+         permanents: 1 Big Body, 1 Crucible of Worlds, 1 Edric, 1 Phyrexian Arena
+         hand: 1 Edric, 2 Island, 1 Reanimator, 1 Windfall
+         graveyard: 2 Blink, 1 Colossus of Akros, 1 Divination, 1 Faithless Looting, 2 Island, 1 Reanimator, 1 Temple of Epiphany, 1 Windfall | exile: -
+--- turn 6 | available 6 | spent 5 | damage 6
+  effect Upkeep: Phyrexian Arena draws Island
+  draw   Draws Blank Spell
+  land   Plays Island
+  mana   6 mana untapped: Temple of Epiphany ({U}), Island ({U}), Island ({U}), Temple of Epiphany ({U}), Island ({U}), Island ({U})
+  cast   Casts Windfall {2}{U}
+         > Island taps for {U}
+         > Island taps for generic
+         > Temple of Epiphany taps for generic
+  effect Windfall discards Edric, Blank Spell, Island, Reanimator, Island, draws Island, Copper Myr, Durdle Engine, Island
+  cast   Casts Durdle Engine {1}{U}
+         > Temple of Epiphany taps for {U}
+         > Island taps for generic
+  effect Durdle Engine will fire every upkeep from next turn
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 2 creatures for 6
+  effect Attacks with Edric: draws Fireball
+  board  lands: 4 Island, 2 Temple of Epiphany
+         permanents: 1 Big Body, 1 Crucible of Worlds, 1 Durdle Engine, 1 Edric, 1 Phyrexian Arena
+         hand: 1 Copper Myr, 1 Fireball, 2 Island
+         graveyard: 1 Blank Spell, 2 Blink, 1 Colossus of Akros, 1 Divination, 1 Edric, 1 Faithless Looting, 4 Island, 2 Reanimator, 1 Temple of Epiphany, 2 Windfall | exile: -
+--- turn 7 | available 9 | spent 9 | damage 6
+  effect Upkeep: Phyrexian Arena draws Ping
+  effect Upkeep: Durdle Engine draws Pong, puts itself into your graveyard
+  draw   Draws Ping
+  land   Plays Island
+  mana   7 mana untapped: Temple of Epiphany ({U}), Island ({U}), Island ({U}), Temple of Epiphany ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Copper Myr {2}
+         > Temple of Epiphany taps for generic
+         > Island taps for generic
+  cast   Casts Ping {1}
+         > Island taps for generic
+  effect Ping draws Faithless Looting, moves Pong to the battlefield
+  effect Pong draws Big Score
+  cast   Casts Big Score {2}{U}
+         > Island taps for {U}
+         > Island taps for generic
+         > Treasure taps for generic
+  effect Big Score discards Pong, makes 2 Treasures
+  cast   Casts Ping {1}
+         > Treasure taps for generic
+  effect Ping draws Island
+  cast   Casts Faithless Looting {U}
+         > Island taps for {U}
+  effect Faithless Looting draws Copper Myr, Mystical Tutor, discards Copper Myr, Fireball
+  cast   Casts Mystical Tutor {U}
+         > Temple of Epiphany taps for {U}
+  effect Mystical Tutor resolves
+  effect Attacks with 2 creatures for 6
+  effect Attacks with Edric: draws Zenith
+  mana   Sacrifices 2 Treasures to cover the turn
+  board  lands: 5 Island, 2 Temple of Epiphany
+         permanents: 1 Big Body, 1 Copper Myr, 1 Crucible of Worlds, 1 Edric, 1 Phyrexian Arena, 2 Ping, 1 Pong
+         hand: 2 Island, 1 Zenith
+         graveyard: 1 Big Score, 1 Blank Spell, 2 Blink, 1 Colossus of Akros, 1 Copper Myr, 1 Divination, 1 Durdle Engine, 1 Edric, 2 Faithless Looting, 1 Fireball, 4 Island, 1 Mystical Tutor, 1 Pong, 2 Reanimator, 1 Temple of Epiphany, 2 Windfall | exile: -
+--- turn 8 | available 8 | spent 7 | damage 7
+  effect Upkeep: Phyrexian Arena draws Island
+  draw   Draws Big Body
+  land   Plays Island
+  mana   8 mana untapped: Temple of Epiphany ({U}), Island ({U}), Island ({U}), Temple of Epiphany ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Big Body {4}{U}
+         > Island taps for {U}
+         > Island taps for generic
+         > Temple of Epiphany taps for generic
+         > Island taps for generic
+         > Island taps for generic
+  effect Big Body draws Island, then draws Island
+  cast   Casts Zenith {1}{U}
+         > Temple of Epiphany taps for {U}
+         > Island taps for generic
+  effect Zenith moves Island to the bottom of your library, puts itself into a random spot in your library
+  note   Stops with 1 mana up and no spell in hand
+  effect Attacks with 3 creatures for 7
+  effect Attacks with Edric: draws Divination
+  note   An opponent would be dead: 25 damage so far
+  board  lands: 6 Island, 2 Temple of Epiphany
+         permanents: 2 Big Body, 1 Copper Myr, 1 Crucible of Worlds, 1 Edric, 1 Phyrexian Arena, 2 Ping, 1 Pong
+         hand: 1 Divination, 4 Island
+         graveyard: 1 Big Score, 1 Blank Spell, 2 Blink, 1 Colossus of Akros, 1 Copper Myr, 1 Divination, 1 Durdle Engine, 1 Edric, 2 Faithless Looting, 1 Fireball, 4 Island, 1 Mystical Tutor, 1 Pong, 2 Reanimator, 1 Temple of Epiphany, 2 Windfall | exile: -
+
+=== seed 62 | mulligans 1 ===
+opener: Big Score, Bounce, Island, Island, Ping, Zenith
+bottomed: Big Body
+--- turn 1 | available 1 | spent 1 | damage 0
+  draw   Draws Windfall
+  land   Plays Island
+  mana   1 mana untapped: Island ({U})
+  cast   Casts Ping {1}
+         > Island taps for generic
+  effect Ping draws Island, moves Pong to the battlefield
+  effect Ping draws Divination, moves Pong to the battlefield
+  effect Pong draws Divination, moves Ping to the battlefield
+  note   Discards Windfall down to 7 cards
+  board  lands: 1 Island
+         permanents: 2 Ping, 2 Pong
+         hand: 1 Big Score, 1 Bounce, 2 Divination, 2 Island, 1 Zenith
+         graveyard: 1 Windfall | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Copper Myr
+  land   Plays Island
+  mana   2 mana untapped: Island ({U}), Island ({U})
+  cast   Casts Copper Myr {2}
+         > Island taps for generic
+         > Island taps for generic
+  board  lands: 2 Island
+         permanents: 1 Copper Myr, 2 Ping, 2 Pong
+         hand: 1 Big Score, 1 Bounce, 2 Divination, 1 Island, 1 Zenith
+         graveyard: 1 Windfall | exile: -
+--- turn 3 | available 5 | spent 5 | damage 1
+  draw   Draws Island
+  land   Plays Island
+  mana   3 mana untapped: Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Big Score {2}{U}
+         > Island taps for {U}
+         > Island taps for generic
+         > Treasure taps for generic
+  effect Big Score discards Divination, makes 2 Treasures
+  cast   Casts Zenith {1}{U}
+         > Island taps for {U}
+         > Treasure taps for generic
+  effect Zenith moves Island to the bottom of your library, puts itself into a random spot in your library
+  effect Attacks with 1 creature for 1
+  mana   Sacrifices 2 Treasures to cover the turn
+  board  lands: 3 Island
+         permanents: 1 Copper Myr, 2 Ping, 2 Pong
+         hand: 1 Bounce, 1 Divination, 1 Island
+         graveyard: 1 Big Score, 1 Divination, 1 Windfall | exile: -
+--- turn 4 | available 4 | spent 4 | damage 1
+  draw   Draws Copper Myr
+  land   Plays Island
+  mana   4 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Divination {2}{U}
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+  effect Divination draws Peer Into the Abyss, Island
+  cast   Casts Bounce {U}
+         > Island taps for {U}
+  effect Bounce moves Island to your hand, draws Fireball
+  effect Attacks with 1 creature for 1
+  board  lands: 3 Island
+         permanents: 1 Copper Myr, 2 Ping, 2 Pong
+         hand: 1 Copper Myr, 1 Fireball, 2 Island, 1 Peer Into the Abyss
+         graveyard: 1 Big Score, 1 Bounce, 2 Divination, 1 Windfall | exile: -
+--- turn 5 | available 4 | spent 3 | damage 1
+  draw   Draws Hill Giant
+  land   Plays Island
+  mana   4 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Hill Giant {2}{U}
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+  effect Hill Giant resolves
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 1 creature for 1
+  board  lands: 4 Island
+         permanents: 1 Copper Myr, 1 Hill Giant, 2 Ping, 2 Pong
+         hand: 1 Copper Myr, 1 Fireball, 1 Island, 1 Peer Into the Abyss
+         graveyard: 1 Big Score, 1 Bounce, 2 Divination, 1 Windfall | exile: -
+--- turn 6 | available 5 | spent 5 | damage 4
+  draw   Draws Island
+  land   Plays Island
+  mana   5 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Copper Myr {2}
+         > Island taps for generic
+         > Island taps for generic
+  cast   Casts Fireball {X}{U} with X = 2
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+  effect Fireball mills Temple of Epiphany, Island, Island
+  effect Attacks with 2 creatures for 4
+  board  lands: 5 Island
+         permanents: 2 Copper Myr, 1 Hill Giant, 2 Ping, 2 Pong
+         hand: 1 Island, 1 Peer Into the Abyss
+         graveyard: 1 Big Score, 1 Bounce, 2 Divination, 1 Fireball, 2 Island, 1 Temple of Epiphany, 1 Windfall | exile: -
+--- turn 7 | available 6 | spent 6 | damage 5
+  draw   Draws Mystical Tutor
+  land   Plays Island
+  mana   6 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Peer Into the Abyss {4}{U}{U}
+         > Island taps for {U}
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+         > Island taps for generic
+  effect Peer Into the Abyss draws Temple of Epiphany, Island, Edric, Island, Durdle Engine, Reanimator, Fireball, Faithless Looting, Zenith, Blink, Colossus of Akros, Phyrexian Arena, Durdle Engine, Hill Giant, Zenith, Reanimator, Island, Island
+  effect Attacks with 3 creatures for 5
+  note   Discards Colossus of Akros, Phyrexian Arena, Hill Giant, Edric, Zenith, Reanimator, Durdle Engine, Durdle Engine, Reanimator, Blink, Temple of Epiphany, Zenith down to 7 cards
+  board  lands: 6 Island
+         permanents: 2 Copper Myr, 1 Hill Giant, 2 Ping, 2 Pong
+         hand: 1 Faithless Looting, 1 Fireball, 4 Island, 1 Mystical Tutor
+         graveyard: 1 Big Score, 1 Blink, 1 Bounce, 1 Colossus of Akros, 2 Divination, 2 Durdle Engine, 1 Edric, 1 Fireball, 1 Hill Giant, 2 Island, 1 Peer Into the Abyss, 1 Phyrexian Arena, 2 Reanimator, 2 Temple of Epiphany, 1 Windfall, 2 Zenith | exile: -
+--- turn 8 | available 7 | spent 7 | damage 5
+  draw   Draws Island
+  land   Plays Island
+  mana   7 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Mystical Tutor {U}
+         > Island taps for {U}
+  effect Mystical Tutor moves Crucible of Worlds to the top of your library
+  cast   Casts Faithless Looting {U}
+         > Island taps for {U}
+  effect Faithless Looting draws Crucible of Worlds, Edric, discards Island, Crucible of Worlds
+  cast   Casts Edric {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Edric resolves
+  cast   Casts Fireball {X}{U} with X = 2
+         > Island taps for {U}
+         > Island taps for generic
+         > Island taps for generic
+  effect Fireball mills Island, Island, Windfall, moves Edric to your hand
+  effect Attacks with 3 creatures for 5
+  board  lands: 7 Island
+         permanents: 2 Copper Myr, 1 Edric, 1 Hill Giant, 2 Ping, 2 Pong
+         hand: 1 Edric, 3 Island
+         graveyard: 1 Big Score, 1 Blink, 1 Bounce, 1 Colossus of Akros, 1 Crucible of Worlds, 2 Divination, 2 Durdle Engine, 1 Faithless Looting, 2 Fireball, 1 Hill Giant, 5 Island, 1 Mystical Tutor, 1 Peer Into the Abyss, 1 Phyrexian Arena, 2 Reanimator, 2 Temple of Epiphany, 2 Windfall, 2 Zenith | exile: -
+
+=== seed 313 | mulligans 1 ===
+opener: Copper Myr, Faithless Looting, Faithless Looting, Hill Giant, Island, Island
+bottomed: Divination
+--- turn 1 | available 1 | spent 1 | damage 0
+  draw   Draws Crucible of Worlds
+  land   Plays Island
+  mana   1 mana untapped: Island ({U})
+  cast   Casts Faithless Looting {U}
+         > Island taps for {U}
+  effect Faithless Looting draws Edric, Island, discards Crucible of Worlds, Hill Giant
+  board  lands: 1 Island
+         permanents: -
+         hand: 1 Copper Myr, 1 Edric, 1 Faithless Looting, 2 Island
+         graveyard: 1 Crucible of Worlds, 1 Faithless Looting, 1 Hill Giant | exile: -
+--- turn 2 | available 2 | spent 2 | damage 0
+  draw   Draws Reanimator
+  land   Plays Island
+  mana   2 mana untapped: Island ({U}), Island ({U})
+  cast   Casts Copper Myr {2}
+         > Island taps for generic
+         > Island taps for generic
+  board  lands: 2 Island
+         permanents: 1 Copper Myr
+         hand: 1 Edric, 1 Faithless Looting, 1 Island, 1 Reanimator
+         graveyard: 1 Crucible of Worlds, 1 Faithless Looting, 1 Hill Giant | exile: -
+--- turn 3 | available 3 | spent 3 | damage 1
+  draw   Draws Island
+  land   Plays Island
+  mana   3 mana untapped: Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Edric {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Edric resolves
+  cast   Casts Faithless Looting {U}
+         > Island taps for {U}
+  effect Faithless Looting draws Temple of Epiphany, Island, discards Temple of Epiphany, Island
+  effect Attacks with 1 creature for 1
+  board  lands: 3 Island
+         permanents: 1 Copper Myr, 1 Edric
+         hand: 1 Island, 1 Reanimator
+         graveyard: 1 Crucible of Worlds, 2 Faithless Looting, 1 Hill Giant, 1 Island, 1 Temple of Epiphany | exile: -
+--- turn 4 | available 4 | spent 4 | damage 3
+  draw   Draws Blank Spell
+  land   Plays Island
+  mana   4 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Reanimator {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Reanimator mills Island, Mystical Tutor, Island, Blink, moves Hill Giant to the battlefield
+  cast   Casts Blank Spell {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Attacks with 2 creatures for 3
+  effect Attacks with Edric: draws Zenith
+  board  lands: 4 Island
+         permanents: 1 Copper Myr, 1 Edric, 1 Hill Giant
+         hand: 1 Zenith
+         graveyard: 1 Blank Spell, 1 Blink, 1 Crucible of Worlds, 2 Faithless Looting, 3 Island, 1 Mystical Tutor, 1 Reanimator, 1 Temple of Epiphany | exile: -
+--- turn 5 | available 4 | spent 4 | damage 3
+  draw   Draws Blink
+  land   No land to play
+  mana   4 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Zenith {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Zenith moves Island to the bottom of your library, puts itself into a random spot in your library
+  cast   Casts Blink {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Blink flickers Hill Giant
+  effect Attacks with 2 creatures for 3
+  effect Attacks with Edric: draws Edric
+  board  lands: 4 Island
+         permanents: 1 Copper Myr, 1 Edric, 1 Hill Giant
+         hand: 1 Edric
+         graveyard: 1 Blank Spell, 2 Blink, 1 Crucible of Worlds, 2 Faithless Looting, 3 Island, 1 Mystical Tutor, 1 Reanimator, 1 Temple of Epiphany | exile: -
+--- turn 6 | available 4 | spent 4 | damage 6
+  draw   Draws Zenith
+  land   No land to play
+  mana   4 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Zenith {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Zenith moves Island to the bottom of your library, puts itself into a random spot in your library
+  cast   Casts Edric {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Edric resolves
+  effect Attacks with 3 creatures for 6
+  effect Attacks with Edric: draws Ping
+  board  lands: 4 Island
+         permanents: 1 Copper Myr, 2 Edric, 1 Hill Giant
+         hand: 1 Ping
+         graveyard: 1 Blank Spell, 2 Blink, 1 Crucible of Worlds, 2 Faithless Looting, 3 Island, 1 Mystical Tutor, 1 Reanimator, 1 Temple of Epiphany | exile: -
+--- turn 7 | available 4 | spent 3 | damage 8
+  draw   Draws Zenith
+  land   No land to play
+  mana   4 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Zenith {1}{U}
+         > Island taps for {U}
+         > Island taps for generic
+  effect Zenith moves Island to the bottom of your library, puts itself into a random spot in your library
+  cast   Casts Ping {1}
+         > Island taps for generic
+  effect Ping draws Island, moves Pong to the battlefield
+  effect Ping draws Temple of Epiphany, moves Pong to the battlefield
+  effect Pong draws Fireball, moves Ping to the battlefield
+  note   Stops with 1 mana up: nothing left in hand costs 1 or less
+  effect Attacks with 4 creatures for 8
+  effect Attacks with Edric: draws Bounce
+  effect Attacks with Edric: draws Big Score
+  note   An opponent would be dead: 21 damage so far
+  board  lands: 4 Island
+         permanents: 1 Copper Myr, 2 Edric, 1 Hill Giant, 2 Ping, 2 Pong
+         hand: 1 Big Score, 1 Bounce, 1 Fireball, 1 Island, 1 Temple of Epiphany
+         graveyard: 1 Blank Spell, 2 Blink, 1 Crucible of Worlds, 2 Faithless Looting, 3 Island, 1 Mystical Tutor, 1 Reanimator, 1 Temple of Epiphany | exile: -
+--- turn 8 | available 6 | spent 6 | damage 8
+  draw   Draws Peer Into the Abyss
+  land   Plays Temple of Epiphany (enters tapped) over Island
+  effect Temple of Epiphany scry 1
+  mana   4 mana untapped: Island ({U}), Island ({U}), Island ({U}), Island ({U})
+  cast   Casts Big Score {2}{U} (no tap breakdown available)
+  effect Big Score discards Peer Into the Abyss, makes 2 Treasures
+  cast   Casts Bounce {U} (no tap breakdown available)
+  effect Bounce moves Island to your hand, draws Island, Island, Island, Temple of Epiphany
+  cast   Casts Fireball {X}{U} with X = 1 (no tap breakdown available)
+  effect Fireball mills Windfall, Divination, Windfall
+  effect Attacks with 4 creatures for 8
+  effect Attacks with Edric: draws Island
+  effect Attacks with Edric: draws Big Body
+  mana   Sacrifices 2 Treasures to cover the turn
+  note   Discards Temple of Epiphany down to 7 cards
+  board  lands: 3 Island, 1 Temple of Epiphany
+         permanents: 1 Copper Myr, 2 Edric, 1 Hill Giant, 2 Ping, 2 Pong
+         hand: 1 Big Body, 6 Island
+         graveyard: 1 Big Score, 1 Blank Spell, 2 Blink, 1 Bounce, 1 Crucible of Worlds, 1 Divination, 2 Faithless Looting, 1 Fireball, 3 Island, 1 Mystical Tutor, 1 Peer Into the Abyss, 1 Reanimator, 2 Temple of Epiphany, 2 Windfall | exile: -

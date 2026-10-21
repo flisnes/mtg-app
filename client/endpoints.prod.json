@@ -1,0 +1,4 @@
+{
+  "$comment": "Production server address. deploy-pages.yml copies this file to the Pages site as endpoints.json, and client/src/endpoints.ts reads it when the app starts. When the VM moves, change `server` here and push: Pages redeploys and every installed app picks the new address up on its next start, no app update needed. Not in client/public on purpose, so local and rig builds never point at production.",
+  "server": "https://79-76-41-163.sslip.io"
+}

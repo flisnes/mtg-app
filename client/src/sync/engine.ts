@@ -10,11 +10,11 @@ import {
   type SyncTable,
 } from '@mtg/shared';
 import * as api from '../account/api.js';
-import { ACCOUNTS_ENABLED } from '../account/config.js';
+import { accountsEnabled } from '../account/config.js';
 import { db } from '../db/schema.js';
 import { readOwnTradelist, readOwnWishlist } from '../db/ownLists.js';
 import { getSetting, setSetting, deleteSetting } from '../db/settings.js';
-import { TRADE_ENABLED, TRADE_WS_URL } from '../trade/config.js';
+import { tradeEnabled, tradeWsUrl } from '../trade/config.js';
 import { sanitizeSyncedRow } from '../transfer/payload.js';
 import { stagePutMany } from './outbox.js';
 
@@ -271,7 +271,7 @@ function requestSync(delayMs = 2000): void {
  * uninitialized, offline, or already running in another tab.
  */
 export async function syncNow(): Promise<void> {
-  if (!ACCOUNTS_ENABLED) return;
+  if (!accountsEnabled()) return;
   const session = await getSetting<StoredSession>(KEY_SESSION);
   if (!session) return;
   const state = await getSyncState();
@@ -453,7 +453,7 @@ function closeSocket(): void {
 }
 
 async function ensureSocket(): Promise<void> {
-  if (!ACCOUNTS_ENABLED || !TRADE_ENABLED || socketAuthFailed) return;
+  if (!accountsEnabled() || !tradeEnabled() || socketAuthFailed) return;
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
   const session = await getSetting<StoredSession>(KEY_SESSION);
   const state = await getSyncState();
@@ -462,7 +462,7 @@ async function ensureSocket(): Promise<void> {
     return;
   }
 
-  const ws = new WebSocket(TRADE_WS_URL);
+  const ws = new WebSocket(tradeWsUrl());
   socket = ws;
   ws.onopen = () => {
     ws.send(
@@ -637,7 +637,7 @@ let initialized = false;
 
 /** Call once at app startup (replaces the old auto-backup-on-open). */
 export function initSyncEngine(): void {
-  if (initialized || !ACCOUNTS_ENABLED) return;
+  if (initialized || !accountsEnabled()) return;
   initialized = true;
 
   window.addEventListener('online', () => void syncNow());

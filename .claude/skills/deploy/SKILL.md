@@ -9,7 +9,9 @@ Both halves deploy automatically on push to `main`. This skill is for the detail
 
 ## Client → GitHub Pages
 
-Automatic on every push to `main` (`.github/workflows/deploy-pages.yml`, which also runs a nightly card-DB rebuild). The workflow sets the build env vars, including `VITE_TRADE_WS_URL` — so trade is live in production; the "not configured" empty state only shows in local dev when that var is unset. Live at https://flisnes.github.io/mtg-app/.
+Automatic on every push to `main` (`.github/workflows/deploy-pages.yml`, which also runs a nightly card-DB rebuild). Live at https://flisnes.github.io/mtg-app/.
+
+**The server address is not baked into the bundle.** The workflow copies `client/endpoints.prod.json` to the site as `endpoints.json`, and the app reads it at boot (`client/src/endpoints.ts`), remembers it in localStorage and refreshes it on every start. To move the server: edit `server` in that file and push. Pages redeploys and every installed app follows on its next start, no app update needed. Local builds get no `endpoints.json`, so trade shows its "not configured" state there unless `VITE_TRADE_WS_URL` is set (dev mode defaults to the local relay). The nightly run also re-enables its own schedule through the API, which resets GitHub's 60-day auto-disable for scheduled workflows in quiet public repos.
 
 ## Server → Oracle Cloud VM
 
@@ -27,3 +29,5 @@ curl https://79-76-41-163.sslip.io/healthz
 ```
 
 Caddy on the VM terminates TLS and reverse-proxies `/ws`, `/healthz`, `/api/*` → `localhost:8080`.
+
+The IP still appears in the ssh/scp steps of `deploy-server.yml`, `monthly-prices.yml` and this file. Those are operator paths, not shipped code: if the VM moves, update them alongside `client/endpoints.prod.json`.

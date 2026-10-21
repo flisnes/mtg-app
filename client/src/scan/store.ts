@@ -1,6 +1,6 @@
 import { db } from '../db/schema.js';
 import { sha256Hex } from '../util/sha256.js';
-import { SCAN_DATA_BASE } from './config.js';
+import { scanDataBase } from './config.js';
 import { BLOB_FORMAT_VERSION, parseHashBlob } from './blob.js';
 
 // Scan-data lifecycle (handover §S2): the VM's scanjob publishes
@@ -57,17 +57,19 @@ export async function getUsableScanData(): Promise<ScanDataRow | undefined> {
 }
 
 export async function fetchScanManifest(): Promise<ScanDataManifest> {
-  if (!SCAN_DATA_BASE) throw new Error('no scan-data endpoint configured');
-  const res = await fetch(new URL(MANIFEST_FILE, SCAN_DATA_BASE).href, { cache: 'no-store' });
+  const base = scanDataBase();
+  if (!base) throw new Error('no scan-data endpoint configured');
+  const res = await fetch(new URL(MANIFEST_FILE, base).href, { cache: 'no-store' });
   if (!res.ok) throw new Error(`scan manifest HTTP ${res.status}`);
   return (await res.json()) as ScanDataManifest;
 }
 
 /** Download + verify + install the blob the manifest describes. */
 export async function downloadScanData(manifest: ScanDataManifest): Promise<ScanDataRow> {
-  if (!SCAN_DATA_BASE) throw new Error('no scan-data endpoint configured');
+  const base = scanDataBase();
+  if (!base) throw new Error('no scan-data endpoint configured');
   // ?v= busts HTTP/SW caches when the beacon moves.
-  const url = new URL(`${BLOB_FILE}?v=${manifest.version}`, SCAN_DATA_BASE).href;
+  const url = new URL(`${BLOB_FILE}?v=${manifest.version}`, base).href;
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`scan blob HTTP ${res.status}`);
   const blob = await res.arrayBuffer();
@@ -99,7 +101,7 @@ export async function installScanBlob(blob: ArrayBuffer, version: number): Promi
 export async function checkScanDataUpdate(): Promise<
   { kind: 'none' } | { kind: 'update'; manifest: ScanDataManifest; installedVersion: number | null }
 > {
-  if (!SCAN_DATA_BASE) return { kind: 'none' };
+  if (!scanDataBase()) return { kind: 'none' };
   try {
     const [manifest, installed] = await Promise.all([fetchScanManifest(), getInstalledScanData()]);
     // A row left over from an older blob format is unusable even when its

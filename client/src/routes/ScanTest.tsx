@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Priced, Printing, OracleCard } from '@mtg/shared';
 import { Page } from './Page.js';
 import { getOracleCardsByIds, getPrintingsByIds } from '../db/queries.js';
-import { SCAN_DATA_BASE } from '../scan/config.js';
+import { scanDataBase } from '../scan/config.js';
 import { filterScanIndex, parseHashBlob, type ScanIndex } from '../scan/blob.js';
 import { getScanExcludedIds } from '../scan/exclusions.js';
 import { formatHash64, type DHash } from '../scan/hash.js';
@@ -325,7 +325,7 @@ export function ScanTest() {
           <p>No scan data installed yet.</p>
         )}
         <div className="scan-actions">
-          {SCAN_DATA_BASE && (
+          {scanDataBase() && (
             <button onClick={() => void checkServer()} disabled={busy}>
               Check server
             </button>

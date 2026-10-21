@@ -1,5 +1,5 @@
 import type { MonthlyReadings, PriceHistory } from '@mtg/shared';
-import { ACCOUNTS_ENABLED } from '../account/config.js';
+import { accountsEnabled } from '../account/config.js';
 import { getPrices } from '../account/api.js';
 import { getAccountSession } from '../account/session.js';
 import { db } from '../db/schema.js';
@@ -37,7 +37,7 @@ function cleanMonthly(v: unknown): MonthlyReadings | undefined {
 
 /** The server's history for one printing, or null when unavailable. */
 async function fetchServerHistory(scryfallId: string): Promise<PriceHistory | null> {
-  if (!ACCOUNTS_ENABLED) return null;
+  if (!accountsEnabled()) return null;
   const session = await getAccountSession();
   if (!session) return null;
   try {

@@ -19,7 +19,7 @@ import { Sheet } from '../components/Sheet.js';
 import { clearTradeScanSessions } from '../scan/tradeSessions.js';
 import { TradeQr } from '../components/TradeQr.js';
 import { useDismiss } from '../components/useDismiss.js';
-import { TRADE_ENABLED } from '../trade/config.js';
+import { tradeEnabled } from '../trade/config.js';
 import { useTradePriceRefresh } from '../trade/usePriceRefresh.js';
 import { otherSeat, useTradeSession, type TradeSession } from '../trade/useTradeSession.js';
 import {
@@ -56,7 +56,7 @@ export function Trade() {
   const joinParam = searchParams.get('join');
   const { status, join } = trade;
   useEffect(() => {
-    if (!TRADE_ENABLED || !joinParam) return;
+    if (!tradeEnabled() || !joinParam) return;
     // The status gate is also the re-entry guard: once join() flips us to
     // 'connecting' this can't fire again. No ref — StrictMode's double-invoke
     // must re-join, because the hook's unmount cleanup closed the first socket.
@@ -66,7 +66,7 @@ export function Trade() {
     if (code.length === CODE_LENGTH) join(code);
   }, [joinParam, status, join, setSearchParams]);
 
-  if (!TRADE_ENABLED) {
+  if (!tradeEnabled()) {
     return (
       <Page title="Trade" subtitle={TRADE_SUBTITLE}>
         <EmptyState hint="Coming in a later update.">

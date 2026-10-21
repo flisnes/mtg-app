@@ -1,5 +1,5 @@
 import type { Worker } from 'tesseract.js';
-import { SCAN_DATA_BASE } from './config.js';
+import { scanDataBase } from './config.js';
 import type { ScanPipelineResult } from './pipeline.js';
 import { stripAttempts } from './pipeline.js';
 
@@ -109,11 +109,12 @@ let workerPromise: Promise<Worker> | null = null;
 function initOcr(): Promise<Worker> {
   const p = (workerPromise ??= (async () => {
     const { createWorker } = await import('tesseract.js');
-    const assets = SCAN_DATA_BASE
+    const base = scanDataBase();
+    const assets = base
       ? {
-          workerPath: `${SCAN_DATA_BASE}ocr/worker.min.js`,
-          corePath: `${SCAN_DATA_BASE}ocr/`,
-          langPath: `${SCAN_DATA_BASE}ocr/`,
+          workerPath: `${base}ocr/worker.min.js`,
+          corePath: `${base}ocr/`,
+          langPath: `${base}ocr/`,
         }
       : {};
     const worker = await createWorker('eng', 1, assets);

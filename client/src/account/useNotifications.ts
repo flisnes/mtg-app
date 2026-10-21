@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getSetting } from '../db/settings.js';
-import { ACCOUNTS_ENABLED } from './config.js';
+import { accountsEnabled } from './config.js';
 import { KEY_SESSION, type AccountSession } from './session.js';
 import {
   KEY_NOTIFICATIONS,
@@ -30,7 +30,7 @@ export function useNotifications(): NotificationsView {
     return { items: activeItems(stored), hasNew: hasNew(stored), fetchedAt: stored?.fetchedAt };
   }, []);
   return {
-    enabled: ACCOUNTS_ENABLED,
+    enabled: accountsEnabled(),
     items: view?.items ?? [],
     hasNew: view?.hasNew ?? false,
     fetchedAt: view?.fetchedAt,

@@ -9,7 +9,7 @@ import {
   type TransferServerMessage,
 } from '@mtg/shared';
 import { replaceAllUserData } from '../db/dataAccess.js';
-import { TRADE_WS_URL } from '../trade/config.js';
+import { tradeWsUrl } from '../trade/config.js';
 import { sha256Hex } from '../util/sha256.js';
 import {
   countsOf,
@@ -257,7 +257,7 @@ export function useTransfer(): TransferSession {
       setRole(r);
       setError(null);
       setStat('connecting');
-      const socket = new WebSocket(TRADE_WS_URL);
+      const socket = new WebSocket(tradeWsUrl());
       ws.current = socket;
       socket.onopen = () => socket.send(JSON.stringify(initial));
       socket.onmessage = (e) => onMessage(typeof e.data === 'string' ? e.data : '');

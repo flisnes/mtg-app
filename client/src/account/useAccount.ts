@@ -9,7 +9,7 @@ import {
   type SyncState,
   type SyncStatus,
 } from '../sync/engine.js';
-import { ACCOUNTS_ENABLED } from './config.js';
+import { accountsEnabled } from './config.js';
 import { KEY_SESSION, type AccountSession } from './session.js';
 
 interface AccountState {
@@ -41,5 +41,5 @@ export function useAccount(): AccountState {
   const pendingChanges = useLiveQuery(() => db.outbox.count(), [], 0);
   const sync = useSyncExternalStore(subscribeSyncStatus, getSyncStatusSnapshot);
   const syncReady = !!session && !!syncState && syncState.account === session.username;
-  return { enabled: ACCOUNTS_ENABLED, session, syncReady, pendingChanges, sync };
+  return { enabled: accountsEnabled(), session, syncReady, pendingChanges, sync };
 }

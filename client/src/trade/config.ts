@@ -1,9 +1,17 @@
-// Trade relay endpoint. Dev defaults to the local server; the Pages build sets
-// VITE_TRADE_WS_URL to the VM's wss:// URL (needs a domain + TLS — Phase 5).
-// Optional chain: import.meta.env only exists under Vite — scan/config.ts
-// pulls this module into Node for the offline scan regression scripts.
-const raw = import.meta.env?.VITE_TRADE_WS_URL as string | undefined;
-export const TRADE_WS_URL: string = raw || 'ws://localhost:8080/ws';
+import { serverBase, serverUrls } from '../endpoints.js';
 
-/** Whether a trade endpoint is configured for this build (Pages needs wss). */
-export const TRADE_ENABLED: boolean = !!raw || !!import.meta.env?.DEV;
+// Trade relay endpoint. The server's address is resolved at run time (see
+// endpoints.ts): endpoints.json from the Pages site, else the baked
+// VITE_TRADE_WS_URL, else the dev relay. Read it when you connect, not at
+// module load, so a refreshed address applies to the next socket.
+
+/** The relay's WebSocket URL. The dev default stands in when none is configured. */
+export function tradeWsUrl(): string {
+  const base = serverBase();
+  return base ? serverUrls(base).ws : 'ws://localhost:8080/ws';
+}
+
+/** Whether a trade relay is configured for this device right now. */
+export function tradeEnabled(): boolean {
+  return serverBase() !== null;
+}

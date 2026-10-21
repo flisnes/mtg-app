@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAccount } from '../account/useAccount.js';
-import { TRADE_ENABLED } from '../trade/config.js';
+import { tradeEnabled } from '../trade/config.js';
 import { useTransfer } from '../transfer/useTransfer.js';
 import { CodeJoinForm } from './CodeJoinForm.js';
 import { fmtCount, plural } from '../util/format.js';
@@ -18,7 +18,7 @@ export function DataTransfer() {
   const { session } = useAccount();
   const [joining, setJoining] = useState(false);
 
-  if (!TRADE_ENABLED) {
+  if (!tradeEnabled()) {
     return (
       <p className="fine-print">
         Device-to-device transfer needs a connection to the trade server, which isn’t configured for this build.

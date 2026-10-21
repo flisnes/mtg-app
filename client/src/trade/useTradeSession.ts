@@ -16,7 +16,7 @@ import { getAccountSession } from '../account/session.js';
 import { applyCompletedTrade } from '../db/dataAccess.js';
 import { readOwnTradelist, readOwnWishlist } from '../db/ownLists.js';
 import { deleteSetting, getSetting, setSetting } from '../db/settings.js';
-import { TRADE_WS_URL } from './config.js';
+import { tradeWsUrl } from './config.js';
 import { sanitizeOffer, sanitizeWishlist } from './validate.js';
 import { readLocal, writeLocal } from '../util/localStore.js';
 
@@ -394,7 +394,7 @@ export function useTradeSession(): TradeSession {
       intentionalClose.current = false;
       setStatus('connecting');
       setError(null);
-      const socket = new WebSocket(TRADE_WS_URL);
+      const socket = new WebSocket(tradeWsUrl());
       ws.current = socket;
       socket.onopen = () => {
         reconnectAttempts.current = 0;

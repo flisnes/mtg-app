@@ -2,6 +2,11 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.201.5
+
+- **Changed: the server address is no longer baked into the app.** Trade, sync, accounts, card scanning and OCR all talk to one server, and until now its address was compiled into every build. If that server had ever moved, all of those would have broken on every installed phone at once, and the fix would have been a new app version that each phone had to accept. The app now reads the address from a small file published next to it when it starts, remembers the answer, and refreshes it on every start. Moving the server is a one-line edit on our side; your app picks it up the next time it opens. Nothing changes in what you see.
+- **Fixed: the nightly data refresh can no longer fall asleep.** GitHub switches off scheduled jobs after two months without a commit, which would have quietly frozen card data, prices and the sealed catalog if the project ever went quiet. The nightly run now resets that clock itself.
+
 ## 0.201.4
 
 - **Added: prices on grid tiles, if you want them.** Grid view has always shown the art alone; the price was a tap away on the card sheet. Settings → Prices now has "Show prices on grid tiles". With it on, every tile carries a small price chip in the corner where the copy count sits ("0,61 € ×2"), in your display currency, and the badges step up a notch so nothing overlaps. Off by default, so the clean grid stays the clean grid unless you ask.

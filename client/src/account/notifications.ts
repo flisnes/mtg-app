@@ -1,7 +1,7 @@
 import type { MatchEntry } from '@mtg/shared';
 import { getSetting, setSetting } from '../db/settings.js';
 import * as api from './api.js';
-import { ACCOUNTS_ENABLED } from './config.js';
+import { accountsEnabled } from './config.js';
 import { getAccountSession } from './session.js';
 
 // Match notifications — pull-based, no push. The server computes the current
@@ -63,7 +63,7 @@ export function hasNew(stored: StoredNotifications | null | undefined): boolean 
 
 /** Fetch matches now (unthrottled) and merge with existing seen/dismissed state. */
 export async function fetchMatchesNow(): Promise<void> {
-  if (!ACCOUNTS_ENABLED || !navigator.onLine) return;
+  if (!accountsEnabled() || !navigator.onLine) return;
   const session = await getAccountSession();
   if (!session) return;
   let res;
@@ -89,7 +89,7 @@ export async function fetchMatchesNow(): Promise<void> {
 
 /** Throttled fetch for the app-open path. */
 export async function maybeFetchMatches(): Promise<void> {
-  if (!ACCOUNTS_ENABLED || !navigator.onLine) return;
+  if (!accountsEnabled() || !navigator.onLine) return;
   if (!(await getAccountSession())) return;
   const lastAt = (await getSetting<number>(KEY_LAST_FETCH_AT)) ?? 0;
   if (Date.now() - lastAt < FETCH_MIN_INTERVAL_MS) return;

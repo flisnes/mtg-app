@@ -9,11 +9,13 @@ on:
   schedule:
     - cron: '0 5 * * *'
 
-# Permissions the official Pages deploy needs.
+# Permissions the official Pages deploy needs, plus actions: write for the
+# schedule keepalive below.
 permissions:
   contents: read
   pages: write
   id-token: write
+  actions: write
 
 # One deploy at a time; let a newer push supersede an in-flight one.
 concurrency:
@@ -24,6 +26,18 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # GitHub disables a public repo's scheduled workflows after 60 days
+      # without repository activity, and when that trips, card data, prices,
+      # the sealed catalog and the server's price archive all freeze silently.
+      # Re-enabling the workflow through the API resets that clock without a
+      # dummy commit, so every nightly run keeps the next one alive. Runs
+      # first, so a failing build does not also let the schedule lapse.
+      - name: Keep the nightly schedule alive
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/deploy-pages.yml/enable"
+
       - uses: actions/checkout@v4
         with:
           # Full history, so the card-DB rebuild decision below can diff this
@@ -102,17 +116,27 @@ jobs:
           path: pipeline/out
           key: carddb-${{ github.run_id }}
 
+      # No server address here on purpose: the app reads it at run time from
+      # endpoints.json (staged below), so a server move is an edit to
+      # client/endpoints.prod.json rather than a new bundle every device must
+      # accept. The card DB stays same-origin on Pages, so that one is fine.
       - name: Build client
         run: npm run build --workspace client
         env:
           VITE_BASE: /mtg-app/
           VITE_CARD_DB_URL: https://flisnes.github.io/mtg-app/carddb/
-          VITE_TRADE_WS_URL: wss://79-76-41-163.sslip.io/ws
 
       - name: Stage card DB into the site
         run: |
           mkdir -p client/dist/carddb
           cp pipeline/out/manifest.json pipeline/out/*.json.gz client/dist/carddb/
+
+      # The runtime server address (see client/src/endpoints.ts). Kept out of
+      # client/public so local and rig builds never point at production.
+      - name: Stage runtime endpoint config
+        run: |
+          node -e 'JSON.parse(require("fs").readFileSync("client/endpoints.prod.json", "utf8")).server || process.exit(1)'
+          cp client/endpoints.prod.json client/dist/endpoints.json
 
       # Keep the app-version beacon current even when the card DB came from
       # cache. latestAppVersion is a plain manifest field that doesn't feed the

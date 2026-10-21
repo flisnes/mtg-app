@@ -16,7 +16,7 @@ import type {
   UserProfile,
   UsersResponse,
 } from '@mtg/shared';
-import { API_URL } from './config.js';
+import { apiUrl } from './config.js';
 
 // Thin typed fetch wrapper for the accounts API. Every non-2xx response (and
 // network failure) throws an ApiError whose `body.error` is a stable code the
@@ -51,7 +51,7 @@ async function request<T>(
 ): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    res = await fetch(`${apiUrl()}${path}`, {
       method: opts.method ?? 'GET',
       headers: {
         ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),

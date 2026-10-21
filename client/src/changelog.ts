@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.201.5',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'The app now looks up the trade and sync server address when it starts instead of carrying it inside the app, so a server move no longer needs an app update.',
+      },
+    ],
+  },
+  {
     version: '0.201.4',
     changes: [
       {
@@ -138,24 +147,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'fixed',
         text: 'Moving to a new device no longer merges two printings of a card in the same deck into one line, or your own basics into the lands-box ones.',
-      },
-    ],
-  },
-  {
-    version: '0.200.2',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'The app starts a little faster again: the deck behavior editor now loads with deck analysis instead of at launch.',
-      },
-    ],
-  },
-  {
-    version: '0.200.1',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'The app starts faster: about a sixth less to download before the first screen. Settings, Sealed, Price movers, the price charts and other side pages now load when you open them.',
       },
     ],
   },

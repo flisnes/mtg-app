@@ -2336,6 +2336,23 @@ body:has(.select-float) .app-main {
   border-radius: 6px;
   line-height: 1.3;
 }
+/* Price chip (Settings → Prices → "Show prices on grid tiles"): the ×N chip
+   with the price in front. Never wraps, never wider than the tile. */
+.tile-price {
+  max-width: calc(100% - 8px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile-price .price-none {
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+}
+/* On a tile wearing a price chip, the marks row steps up one chip height so a
+   wide chip and a full row of badges on the same tile don't cover each other. */
+.card-tile-priced .tile-marks {
+  bottom: calc(1.15rem + 7px);
+}
 /* One row of marks hugging the art's bottom-left corner: ownership first, then
    where it's filed, then the price mover. Grouping them keeps every glyph off
    the card's own text and out of the tile-count's corner. */

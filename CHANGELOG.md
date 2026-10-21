@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.201.4
+
+- **Added: prices on grid tiles, if you want them.** Grid view has always shown the art alone; the price was a tap away on the card sheet. Settings → Prices now has "Show prices on grid tiles". With it on, every tile carries a small price chip in the corner where the copy count sits ("0,61 € ×2"), in your display currency, and the badges step up a notch so nothing overlaps. Off by default, so the clean grid stays the clean grid unless you ask.
+
 ## 0.201.3
 
 - **Changed: one spelling for a copy's traits.** Wherever a copy, a slot or a wish is described in a line (the copy chips on the card sheet, "Your copies", the filing prompts, trade lines, the scan list, a slot's wants, a partner's wishes), it now reads the same way: condition, then Foil or Etched, then the language, then Signed or Altered, with the plain defaults left unsaid. A slot or wish that pins a finish says so even when it is nonfoil. Trade lines say "Foil" instead of "foil".

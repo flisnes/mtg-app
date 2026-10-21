@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.201.4',
+    changes: [
+      {
+        kind: 'added',
+        text: 'Settings → Prices → "Show prices on grid tiles" puts a small price chip on every tile, next to the copy count. Off by default.',
+      },
+    ],
+  },
+  {
     version: '0.201.3',
     changes: [
       {
@@ -147,15 +156,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'The app starts faster: about a sixth less to download before the first screen. Settings, Sealed, Price movers, the price charts and other side pages now load when you open them.',
-      },
-    ],
-  },
-  {
-    version: '0.200.0',
-    changes: [
-      {
-        kind: 'changed',
-        text: 'Deck pages start with your cards. Format, owned count and legality fold into one row you can tap open, and an "Add cards" button sits above the list.',
       },
     ],
   },

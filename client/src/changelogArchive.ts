@@ -1,4 +1,4 @@
-// The older half of the changelog (0.199.0 down to 0.98.0), split out of
+// The older half of the changelog (0.200.0 down to 0.98.0), split out of
 // changelog.ts so its weight lands in its own chunk. Reached only through
 // loadChangelog() — the About page's full history, or a device that's been
 // offline for a very long time.
@@ -8,6 +8,15 @@
 import type { ChangelogEntry } from './changelog.js';
 
 export const CHANGELOG_ARCHIVE: ChangelogEntry[] = [
+  {
+    version: '0.200.0',
+    changes: [
+      {
+        kind: 'changed',
+        text: 'Deck pages start with your cards. Format, owned count and legality fold into one row you can tap open, and an "Add cards" button sits above the list.',
+      },
+    ],
+  },
   {
     version: '0.199.0',
     changes: [

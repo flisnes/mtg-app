@@ -474,7 +474,7 @@ function SignedIn() {
 const CURRENCY_OPTIONS: PrefOption<string>[] = CURRENCIES.map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` }));
 
 function CurrencySection() {
-  const { displayCurrency, baseCurrency } = usePrefs();
+  const { displayCurrency, baseCurrency, gridPrices } = usePrefs();
   const [checking, setChecking] = useState(false);
   const rate = rateSummary();
   const converting = displayCurrency !== baseCurrency;
@@ -523,6 +523,14 @@ function CurrencySection() {
               : `No exchange rate available yet, so prices are showing in ${baseCurrency}. Rates are fetched once a day and need a connection.`}
         </p>
       )}
+
+      <PrefToggle checked={gridPrices} onChange={(gridPrices) => setPrefs({ gridPrices })}>
+        Show prices on grid tiles
+      </PrefToggle>
+      <p className="fine-print">
+        Grid view shows the art alone. With this on, each tile gets a small price in its corner, next to the copy count,
+        for a quick look at the trade table.
+      </p>
     </PrefSection>
   );
 }

@@ -40,6 +40,12 @@ export interface Prefs {
    */
   preferredLang: string;
   baseCurrency: BaseCurrency;
+  /**
+   * Price chip on grid tiles (components/CardViews.tsx CardGrid), merged with
+   * the ×N count. Off by default: the grid is the clean-art view, and at a trade
+   * table the people who want "what's it worth" at a glance switch it on.
+   */
+  gridPrices: boolean;
   printing: PrintingPref;
   /** Layered on top of `printing`: show the printing you own, whatever the rule says. */
   preferOwnedPrinting: boolean;
@@ -72,6 +78,7 @@ const DEFAULTS: Prefs = {
   displayCurrency: 'EUR',
   preferredLang: 'en',
   baseCurrency: 'EUR',
+  gridPrices: false,
   printing: 'latest',
   preferOwnedPrinting: false,
   pricesPolicy: 'ask',

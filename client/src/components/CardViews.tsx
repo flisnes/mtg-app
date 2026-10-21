@@ -4,6 +4,7 @@ import { Icon, type IconName } from './icons.js';
 import { ManaCost } from './ManaCost.js';
 import { NO_PRICE } from './cardSort.js';
 import { useCardCursorCtx } from './useCardCursor.js';
+import { usePrefs } from '../usePrefs.js';
 
 // The one way cards are displayed anywhere in the app: a list of CardItems
 // rendered as rows (CardList), a tile grid (CardGrid) or overlapping visual
@@ -490,6 +491,11 @@ function CardGrid({
   gridRef?: (el: HTMLUListElement | null) => void;
 } & SelectProps) {
   const cursor = useCardCursorCtx();
+  // Settings → Prices → "Show prices on grid tiles". When on, a tile with a
+  // price wears it as a chip in the ×N corner (the count rides along in the
+  // same chip) and its marks row moves up a notch so the two never fight over
+  // the corner. Tiles without a price (deck boards) keep the plain ×N.
+  const priced = usePrefs().gridPrices;
   return (
     <ul
       ref={gridRef}
@@ -499,12 +505,13 @@ function CardGrid({
       {items.map((it) => {
         const selected = selectable && !!selectedKeys?.has(it.key);
         const active = cursor?.activeKey === it.key;
+        const priceChip = priced ? it.price : undefined;
         return (
           <li
             key={it.key}
             {...(cursor ? { 'data-card-key': it.key } : {})}
             onMouseEnter={cursor ? () => cursor.setActive(it.key) : undefined}
-            className={`card-tile${it.dim ? ' card-tile-dim' : ''}${it.cut ? ' card-cut' : ''}${active ? ' card-active' : ''}${selected ? ' selected' : ''}`}
+            className={`card-tile${priceChip ? ' card-tile-priced' : ''}${it.dim ? ' card-tile-dim' : ''}${it.cut ? ' card-cut' : ''}${active ? ' card-active' : ''}${selected ? ' selected' : ''}`}
           >
             <button
               className="card-tile-img"
@@ -551,7 +558,14 @@ function CardGrid({
                   {it.trend && <TrendMark dir={it.trend} tile />}
                 </span>
               )}
-              {it.count != null && it.count !== 1 && <span className="tile-count">×{it.count}</span>}
+              {priceChip ? (
+                <span className="tile-count tile-price">
+                  <PriceText price={priceChip} className="tile-price-text" />
+                  {it.count != null && it.count !== 1 && ` ×${it.count}`}
+                </span>
+              ) : (
+                it.count != null && it.count !== 1 && <span className="tile-count">×{it.count}</span>
+              )}
               {selectable && (
                 <span className={`tile-select${selected ? ' checked' : ''}`} aria-hidden>
                   {selected && <Icon name="check" size={16} />}

@@ -2,6 +2,10 @@
 
 Testers: the app shows an "Update now" banner when a new version is published.
 
+## 0.202.0
+
+- **Added: a server admin panel for the operator.** Settings now shows a "Server admin" entry for the operator account only. It opens a page with four sections: the server itself (uptime, memory, database sizes, whether registration is open), every account as metadata (when it joined, when it was last seen, how many devices sync, how much it stores, the size of its published lists, never the cards themselves), what is live on the relay right now (open trades, device transfers, sync listeners, counters since boot), and the price archive (last archived day with a warning when it falls behind, the daily and monthly jobs' last outcome, the backfill). From there the operator can run the archive or the monthly import on the spot, sign a user out everywhere, or delete an account. Everyone else sees nothing new; the server answers the admin routes with a plain refusal for any other account.
+
 ## 0.201.6
 
 - **Under the hood: a safety net for the deck simulator.** Nothing changes in the app. The simulator behind the deck analysis now has a golden test set: eighteen fixed decks whose full results and game transcripts are stored and compared byte for byte on every test run, so the engine work planned next cannot quietly change a number. Five older check scripts that needed a full card database now run as ordinary tests too.

@@ -32,6 +32,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG_RECENT: ChangelogEntry[] = [
   {
+    version: '0.202.0',
+    changes: [
+      {
+        kind: 'added',
+        text: 'A server admin panel behind Settings, visible to the operator account only: accounts as metadata, live trade sessions, and the health of the price archive.',
+      },
+    ],
+  },
+  {
     version: '0.201.5',
     changes: [
       {
@@ -138,15 +147,6 @@ export const CHANGELOG_RECENT: ChangelogEntry[] = [
       {
         kind: 'changed',
         text: 'Importing a list looks the same everywhere: labelled condition, finish and language pickers, an Upload file button, and Analyze on the right.',
-      },
-    ],
-  },
-  {
-    version: '0.200.6',
-    changes: [
-      {
-        kind: 'fixed',
-        text: 'Moving to a new device no longer merges two printings of a card in the same deck into one line, or your own basics into the lands-box ones.',
       },
     ],
   },

@@ -191,6 +191,19 @@ export function registerTradeRelay(app: FastifyInstance, accounts: AccountStore,
   app.get('/metrics', async () => ({ ...store.counters, ...transfers.counters }));
 }
 
+/** What is live on the relay right now, plus the since-boot counters (the admin panel). */
+export function relayStats(): {
+  sessions: Record<string, number>;
+  transfers: number;
+  counters: Record<string, number>;
+} {
+  const sessions: Record<string, number> = {};
+  for (const s of store.values()) sessions[s.state] = (sessions[s.state] ?? 0) + 1;
+  let live = 0;
+  for (const _ of transfers.values()) live++;
+  return { sessions, transfers: live, counters: { ...store.counters, ...transfers.counters } };
+}
+
 function isTransferMessage(msg: ClientMessage | TransferClientMessage): msg is TransferClientMessage {
   return msg.type.startsWith('transfer_');
 }

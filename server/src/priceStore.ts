@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { dayOffset, type MonthlyReadings, type PriceMap, type PricesResponse } from '@mtg/shared';
+import { dbSizeBytes } from './sqlite.js';
 
 // Server price archive (sync plan Phase E): one row per printing holding its
 // whole daily price history as parallel blobs of little-endian Uint32 cents —
@@ -395,6 +396,16 @@ export class PriceStore {
   stats(): { printings: number; lastDay: string } {
     const n = (this.db.prepare('SELECT COUNT(*) AS n FROM price_history').get() as { n: number }).n;
     return { printings: n, lastDay: this.lastDay() };
+  }
+
+  /** Printings with deep monthly history (the admin panel). */
+  monthlyCount(): number {
+    return (this.db.prepare('SELECT COUNT(*) AS n FROM price_monthly').get() as { n: number }).n;
+  }
+
+  /** Size of the database file proper (WAL not included). */
+  dbSizeBytes(): number {
+    return dbSizeBytes(this.db);
   }
 
   close(): void {

@@ -1,4 +1,7 @@
 import type {
+  AdminJobName,
+  AdminJobRunResponse,
+  AdminOverviewResponse,
   ApiErrorBody,
   AuthResponse,
   LoginRequest,
@@ -128,4 +131,22 @@ export function getMatches(token: string): Promise<MatchesResponse> {
 /** Server-archived daily price history for one printing (404 = none recorded). */
 export function getPrices(token: string, scryfallId: string): Promise<PricesResponse> {
   return request(`/prices/${encodeURIComponent(scryfallId)}`, { token });
+}
+
+// --- Admin panel (operator accounts only; 403 for everyone else) -------------
+
+export function adminOverview(token: string): Promise<AdminOverviewResponse> {
+  return request('/admin/overview', { token });
+}
+
+export function adminRunJob(token: string, job: AdminJobName): Promise<AdminJobRunResponse> {
+  return request(`/admin/jobs/${job}/run`, { method: 'POST', token, body: {} });
+}
+
+export function adminRevokeTokens(token: string, username: string): Promise<{ ok: boolean; revoked: number }> {
+  return request(`/admin/users/${encodeURIComponent(username)}/revoke-tokens`, { method: 'POST', token, body: {} });
+}
+
+export function adminDeleteUser(token: string, username: string): Promise<{ ok: boolean }> {
+  return request(`/admin/users/${encodeURIComponent(username)}`, { method: 'DELETE', token });
 }

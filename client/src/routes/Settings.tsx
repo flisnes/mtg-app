@@ -1,15 +1,18 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { MIN_PASSWORD_CHARS, USERNAME_RE } from '@mtg/shared';
-import { apiErrorText } from '../account/api.js';
+import { apiErrorText, me } from '../account/api.js';
 import {
   confirmReplaceWithAccount,
   deleteAccount,
   signIn,
   signOut,
   signUp,
+  type AccountSession,
 } from '../account/session.js';
 import { useAccount } from '../account/useAccount.js';
+import { useApiQuery } from '../account/useApiQuery.js';
+import { MenuRow } from '../components/MenuRow.js';
 import { syncNow } from '../sync/engine.js';
 import { getAgentStatusSnapshot, subscribeAgentStatus, type AgentStatus } from '../agent/status.js';
 import { useToast } from '../components/Toast.js';
@@ -349,6 +352,23 @@ function SignedOut() {
   );
 }
 
+/**
+ * The way into the server admin panel, shown only to the account(s) the server
+ * names admin. One /api/me per visit to Settings; a failed or offline check
+ * simply shows nothing, the panel itself gates again.
+ */
+function AdminLink({ session }: { session: AccountSession }) {
+  const { data } = useApiQuery(() => me(session.token), [session.token], { fallback: '' });
+  if (!data?.admin) return null;
+  return (
+    <ul className="menu-list">
+      <li>
+        <MenuRow to="/admin" icon="shield" label="Server admin" note="Accounts, live sessions, price archive" />
+      </li>
+    </ul>
+  );
+}
+
 function SignedIn() {
   const { session, syncReady, pendingChanges, sync } = useAccount();
   const toast = useToast();
@@ -452,6 +472,7 @@ function SignedIn() {
       />
 
       <PrefSection title="Account">
+        {session && <AdminLink session={session} />}
         <div className="confirm-row">
           <button onClick={() => void signOut().then(() => toast('Signed out.'))} disabled={busy}>
             Sign out on this device

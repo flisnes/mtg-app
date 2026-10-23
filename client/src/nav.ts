@@ -23,6 +23,7 @@ const TAB_PREFIXES: [string, Tab][] = [
   ['/history', '/more'],
   ['/conflicts', '/more'],
   ['/settings', '/more'],
+  ['/admin', '/more'],
   ['/about', '/more'],
   ['/licenses', '/more'],
 ];
@@ -57,6 +58,7 @@ const PARENTS: Record<string, BackTarget> = {
   '/history': MORE,
   '/conflicts': MORE,
   '/settings': MORE,
+  '/admin': { to: '/settings', label: 'Settings' },
   '/about': MORE,
   '/licenses': { to: '/about', label: 'About' },
   '/import': COLLECTION,

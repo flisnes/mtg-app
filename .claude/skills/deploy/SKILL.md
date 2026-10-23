@@ -28,6 +28,6 @@ ssh ubuntu@79.76.41.163 'sudo systemctl restart mtg-server'
 curl https://79-76-41-163.sslip.io/healthz
 ```
 
-Caddy on the VM terminates TLS and reverse-proxies `/ws`, `/healthz`, `/api/*` → `localhost:8080`.
+Caddy on the VM terminates TLS and reverse-proxies `/ws`, `/healthz`, `/api/*` → `localhost:8080`. The admin panel (Settings → Server admin, v0.202.0) lives under `/api/admin/*` for that reason; `ADMIN_USERNAMES` (comma-separated, default `flisnes`) names the account(s) that may open it. `/metrics` is not proxied and is only reachable from the VM itself.
 
 The IP still appears in the ssh/scp steps of `deploy-server.yml`, `monthly-prices.yml` and this file. Those are operator paths, not shipped code: if the VM moves, update them alongside `client/endpoints.prod.json`.

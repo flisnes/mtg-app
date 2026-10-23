@@ -32,6 +32,15 @@ export const config = {
    * registration is closed — existing accounts still work.
    */
   inviteCode: process.env.INVITE_CODE ?? '',
+  /**
+   * Comma-separated usernames allowed into the admin panel (/api/admin/*).
+   * Compared case-insensitively, like usernames themselves. Defaults to the
+   * operator's own account so a fresh deploy needs no VM-side setup.
+   */
+  adminUsernames: (process.env.ADMIN_USERNAMES ?? 'flisnes')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
   /** Failed/total auth attempts allowed per IP per window (register+login). */
   authAttemptsPerWindow: num('AUTH_ATTEMPTS_PER_WINDOW', 20),
   authWindowMs: num('AUTH_WINDOW_MS', 15 * 60 * 1000),
@@ -69,3 +78,8 @@ export const config = {
    */
   monthlyPricesFile: process.env.MONTHLY_PRICES_FILE ?? `${process.env.DATA_DIR ?? './data'}/monthly-prices.tsv.gz`,
 } as const;
+
+/** Whether this account may use the admin panel. */
+export function isAdminUsername(username: string): boolean {
+  return config.adminUsernames.includes(username.toLowerCase());
+}

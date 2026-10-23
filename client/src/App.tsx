@@ -52,6 +52,7 @@ const PriceMovers = lazy(() => import('./routes/PriceMovers.js').then((m) => ({ 
 const Spoilers = lazy(() => import('./routes/Spoilers.js').then((m) => ({ default: m.Spoilers })));
 const About = lazy(() => import('./routes/About.js').then((m) => ({ default: m.About })));
 const Settings = lazy(() => import('./routes/Settings.js').then((m) => ({ default: m.Settings })));
+const Admin = lazy(() => import('./routes/Admin.js').then((m) => ({ default: m.Admin })));
 const Community = lazy(() => import('./routes/Community.js').then((m) => ({ default: m.Community })));
 const Profile = lazy(() => import('./routes/Profile.js').then((m) => ({ default: m.Profile })));
 const ProfileDeck = lazy(() => import('./routes/ProfileDeck.js').then((m) => ({ default: m.ProfileDeck })));
@@ -270,6 +271,7 @@ function AppShell() {
             <Route path="/about" element={<About />} />
             <Route path="/licenses" element={<Licenses />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/admin" element={<Admin />} />
             {/* /account was the old combined page; Settings absorbed it. */}
             <Route path="/account" element={<Navigate to="/settings" replace />} />
             <Route path="/community" element={<Community />} />

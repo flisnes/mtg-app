@@ -62,7 +62,8 @@ export type IconName =
   | 'sliders'
   | 'keyboard'
   | 'piles'
-  | 'receipt';
+  | 'receipt'
+  | 'shield';
 
 // 24×24 viewBox, drawn to Feather's conventions (2px stroke, round joins).
 const PATHS: Record<IconName, ReactElement> = {
@@ -285,6 +286,8 @@ const PATHS: Record<IconName, ReactElement> = {
       <path d="M8 10V7a4 4 0 0 1 8 0v3" />
     </>
   ),
+  // Shield — the operator's admin panel.
+  shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
   // Same padlock, shackle swung open — "nothing is locked right now".
   unlock: (
     <>

@@ -39,6 +39,11 @@ export class SyncHub {
     this.bySocket.delete(socket);
   }
 
+  /** How many accounts have a device listening, and how many sockets in all. */
+  stats(): { users: number; sockets: number } {
+    return { users: this.subs.size, sockets: this.bySocket.size };
+  }
+
   notify(userId: number, seq: number, originClientId?: string): void {
     const sockets = this.subs.get(userId);
     if (!sockets) return;

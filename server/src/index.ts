@@ -3,6 +3,7 @@ import websocket from '@fastify/websocket';
 import { config } from './config.js';
 import { AccountStore } from './accountStore.js';
 import { registerAccountRoutes } from './accounts.js';
+import { registerAdminRoutes } from './admin.js';
 import { startPriceArchiver } from './priceArchive.js';
 import { startPriceBackfill } from './priceBackfill.js';
 import { startMonthlyImport } from './priceMonthly.js';
@@ -43,16 +44,16 @@ async function main() {
   const hub = new SyncHub();
   // Daily price archive (Phase E): its own SQLite file, appended in-process.
   const priceStore = new PriceStore(config.dataDir);
-  const stopArchiver = startPriceArchiver(priceStore, app.log);
+  const archiver = startPriceArchiver(priceStore, app.log);
   // One-shot: pull MTGJSON's rolling 90-day window in to cover the days before
   // the archiver existed. Self-guarding, so this is a no-op on later boots.
   const stopBackfill = startPriceBackfill(priceStore, app.log);
   // Monthly deep history: imports the prebuilt file whenever a new one lands.
-  const stopMonthly = startMonthlyImport(priceStore, app.log);
+  const monthly = startMonthlyImport(priceStore, app.log);
   app.addHook('onClose', () => {
-    stopArchiver();
+    archiver.stop();
     stopBackfill();
-    stopMonthly();
+    monthly.stop();
     store.close();
     priceStore.close();
   });
@@ -60,6 +61,7 @@ async function main() {
   registerTradeRelay(app, store, hub);
   registerAccountRoutes(app, store, hub);
   registerPriceRoutes(app, store, priceStore);
+  registerAdminRoutes(app, store, priceStore, hub, { archive: archiver, monthly });
 
   try {
     await app.listen({ host: config.host, port: config.port });

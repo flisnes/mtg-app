@@ -1203,6 +1203,21 @@ button.danger-outline {
 .about-section .trade-actions {
   margin-bottom: 1rem;
 }
+/* Server admin: long values (an error message, a list of counters) wrap inside
+   the key/value grid instead of pushing it past a phone's width. */
+.admin-section .kv dd {
+  overflow-wrap: anywhere;
+}
+.admin-section .menu-list {
+  margin-top: 0.5rem;
+}
+.admin-actions {
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+.admin-bad {
+  color: var(--danger);
+}
 
 /* ---- Card-DB gate ---- */
 .gate {

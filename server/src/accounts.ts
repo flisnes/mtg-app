@@ -36,7 +36,7 @@ import {
   type UsersResponse,
   type WishLine,
 } from '@mtg/shared';
-import { config } from './config.js';
+import { config, isAdminUsername } from './config.js';
 import { SyncCapError, type AccountStore, type AccountUser } from './accountStore.js';
 import type { SyncHub } from './syncHub.js';
 
@@ -206,6 +206,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: AccountStore,
     const res: MeResponse = {
       username: user.username,
       sync: { seq: store.syncSeq(user.id), usage: store.syncUsage(user.id) },
+      ...(isAdminUsername(user.username) ? { admin: true as const } : {}),
     };
     return res;
   });

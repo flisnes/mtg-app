@@ -11,6 +11,7 @@ import {
   sanitizeAvatar,
   sanitizeTradeLines,
   sanitizeWishLines,
+  type AdminUserRow,
   type ProfileAvatar,
   type PublicUser,
   type SyncChange,
@@ -18,7 +19,8 @@ import {
   type TradeLine,
   type WishLine,
 } from '@mtg/shared';
-import { config } from './config.js';
+import { config, isAdminUsername } from './config.js';
+import { dbSizeBytes } from './sqlite.js';
 
 // Account persistence: one SQLite file (node:sqlite, no native deps) holding
 // users, bearer tokens, opaque snapshot blobs, and the published trade/wish
@@ -339,6 +341,70 @@ export class AccountStore {
     this.db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     // Their published lists went with them; drop them from the match cache too.
     this.publicListsVersion += 1;
+  }
+
+  /** Sign a user out everywhere: every device has to log in again. */
+  revokeUserTokens(userId: number): number {
+    return Number(this.db.prepare('DELETE FROM tokens WHERE user_id = ?').run(userId).changes);
+  }
+
+  // --- Admin panel ------------------------------------------------------------
+
+  /**
+   * Every account with the metadata the operator may see: when it was made,
+   * when a device last authenticated, how much it stores, what it publishes.
+   * Never the rows themselves.
+   */
+  adminUsers(): AdminUserRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT u.username, u.created_at,
+                (SELECT MAX(last_used_at) FROM tokens t WHERE t.user_id = u.id) AS last_seen,
+                (SELECT COUNT(*) FROM tokens t WHERE t.user_id = u.id) AS tokens,
+                (SELECT COUNT(*) FROM sync_devices d WHERE d.user_id = u.id) AS devices,
+                COALESCE(su.rows, 0) AS rows, COALESCE(su.bytes, 0) AS bytes,
+                COALESCE(sq.max_seq, 0) AS seq,
+                COALESCE(p.tradelist_count, 0) AS tradelist_count,
+                COALESCE(p.wishlist_count, 0) AS wishlist_count,
+                p.updated_at AS lists_updated_at
+         FROM users u
+         LEFT JOIN sync_usage su ON su.user_id = u.id
+         LEFT JOIN sync_seq sq ON sq.user_id = u.id
+         LEFT JOIN public_lists p ON p.user_id = u.id
+         ORDER BY last_seen DESC NULLS LAST, u.created_at DESC`,
+      )
+      .all() as {
+      username: string;
+      created_at: number;
+      last_seen: number | null;
+      tokens: number;
+      devices: number;
+      rows: number;
+      bytes: number;
+      seq: number;
+      tradelist_count: number;
+      wishlist_count: number;
+      lists_updated_at: number | null;
+    }[];
+    return rows.map((r) => ({
+      username: r.username,
+      createdAt: r.created_at,
+      lastSeen: r.last_seen,
+      tokens: r.tokens,
+      devices: r.devices,
+      rows: r.rows,
+      bytes: r.bytes,
+      seq: r.seq,
+      tradelistCount: r.tradelist_count,
+      wishlistCount: r.wishlist_count,
+      listsUpdatedAt: r.lists_updated_at,
+      admin: isAdminUsername(r.username),
+    }));
+  }
+
+  /** Size of the accounts database file (WAL not included). */
+  dbSizeBytes(): number {
+    return dbSizeBytes(this.db);
   }
 
   private upsertPublicLists(

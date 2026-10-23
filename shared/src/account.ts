@@ -47,6 +47,96 @@ export interface MeResponse {
     /** Stored rows and row bytes, against SYNC_MAX_ROWS/BYTES_PER_USER. */
     usage?: { rows: number; bytes: number };
   };
+  /** Set only for the operator account(s); unlocks the admin panel (/api/admin/*). */
+  admin?: true;
+}
+
+// ---------------------------------------------------------------------------
+// Admin panel (GET /api/admin/overview and friends; operator accounts only)
+// ---------------------------------------------------------------------------
+//
+// Metadata about the server, never user content: counts, sizes and timestamps.
+// Synced rows are opaque to the server and stay that way for the operator.
+
+export type AdminJobName = 'archive' | 'monthly';
+
+/** A background job's last outcome, kept in memory since boot. */
+export interface AdminJobStatus {
+  running: boolean;
+  lastRunAt: number | null;
+  /** The job's own word for what happened ('appended', 'up-to-date', ...). */
+  lastResult: string | null;
+  lastError: string | null;
+}
+
+/** One account, as the operator sees it. */
+export interface AdminUserRow {
+  username: string;
+  createdAt: number;
+  /** Newest token use across their devices; null when no token is live (signed out or revoked everywhere). */
+  lastSeen: number | null;
+  /** Live bearer tokens (roughly, signed-in devices and tabs). */
+  tokens: number;
+  /** Devices that have synced at least once. */
+  devices: number;
+  /** Synced rows and their bytes, against SYNC_MAX_ROWS/BYTES_PER_USER. */
+  rows: number;
+  bytes: number;
+  /** Top of their change feed (0 = nothing synced yet). */
+  seq: number;
+  tradelistCount: number;
+  wishlistCount: number;
+  /** When their published lists last changed; null when never published. */
+  listsUpdatedAt: number | null;
+  admin: boolean;
+}
+
+export interface AdminOverviewResponse {
+  server: {
+    now: number;
+    startedAt: number;
+    nodeVersion: string;
+    rssBytes: number;
+    heapUsedBytes: number;
+    accountsDbBytes: number;
+    pricesDbBytes: number;
+    /** Whether an invite code is configured (registration open). */
+    registrationOpen: boolean;
+    admins: string[];
+  };
+  accounts: {
+    total: number;
+    newLast7d: number;
+    newLast30d: number;
+    activeLast7d: number;
+    users: AdminUserRow[];
+  };
+  live: {
+    /** Open trade sessions by state. */
+    sessions: Record<string, number>;
+    transfers: number;
+    syncSubscribers: { users: number; sockets: number };
+    /** Relay counters since boot. */
+    counters: Record<string, number>;
+  };
+  archive: {
+    /** Last archived day (YYYY-MM-DD), '' when never. */
+    lastDay: string;
+    printings: number;
+    job: AdminJobStatus;
+    monthly: {
+      printings: number;
+      /** The size:mtime stamp of the imported file, '' when none. */
+      imported: string;
+      job: AdminJobStatus;
+    };
+    backfill: { done: string; attempts: number };
+  };
+}
+
+export interface AdminJobRunResponse {
+  job: AdminJobName;
+  result: string;
 }
 
 /** One row on the Community screen. */
@@ -148,6 +238,8 @@ export interface ApiErrorBody {
     | 'invalid_invite'
     | 'username_taken'
     | 'unauthorized'
+    | 'forbidden'
+    | 'job_failed'
     | 'not_found'
     | 'rate_limited'
     | 'registration_closed'

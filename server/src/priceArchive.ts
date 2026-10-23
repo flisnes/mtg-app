@@ -3,6 +3,7 @@ import { gunzipSync } from 'node:zlib';
 import type { FastifyBaseLogger } from 'fastify';
 import type { CardDbManifest, PriceMap } from '@mtg/shared';
 import { config } from './config.js';
+import { startPeriodicJob, type PeriodicJob } from './jobs.js';
 import type { PriceStore } from './priceStore.js';
 
 // The daily price appender (sync plan Phase E). Runs inside the server process
@@ -51,26 +52,14 @@ async function fetchJson(url: string): Promise<unknown> {
 
 /**
  * Kick off the periodic archiver: one check shortly after boot (so a restart
- * never misses a day), then hourly. Timers are unref'd — they never hold the
- * process open. Returns a stop function for tests/shutdown.
+ * never misses a day), then hourly. The returned job also runs on demand and
+ * reports its last outcome (the admin panel).
  */
-export function startPriceArchiver(store: PriceStore, log: FastifyBaseLogger): () => void {
-  let running = false;
-  const tick = () => {
-    if (running) return;
-    running = true;
-    archiveOnce(store, log)
-      .catch((err) => log.warn({ err: (err as Error).message }, 'price archive run failed'))
-      .finally(() => {
-        running = false;
-      });
-  };
-  const startup = setTimeout(tick, config.priceArchiveDelayMs);
-  startup.unref();
-  const interval = setInterval(tick, config.priceArchiveIntervalMs);
-  interval.unref();
-  return () => {
-    clearTimeout(startup);
-    clearInterval(interval);
-  };
+export function startPriceArchiver(store: PriceStore, log: FastifyBaseLogger): PeriodicJob {
+  return startPeriodicJob(
+    'price archive',
+    () => archiveOnce(store, log),
+    { delayMs: config.priceArchiveDelayMs, intervalMs: config.priceArchiveIntervalMs },
+    log,
+  );
 }

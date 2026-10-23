@@ -60,9 +60,11 @@ export function clampImageCacheLimit(n: number): number {
   return Math.min(IMAGE_CACHE_CEILING, Math.max(IMAGE_CACHE_MIN, Math.round(n)));
 }
 
-/** Human-readable byte count. MB is the unit that matters here; GB past 1000. */
+/** Human-readable byte count. MB is the unit that matters here; GB past 1000, kB under 1. */
 export function fmtBytes(bytes: number): string {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  if (bytes < 1e6) return `${Math.round(bytes / 1e3)} kB`;
+  if (bytes < 1e7) return `${(bytes / 1e6).toFixed(1)} MB`;
   return `${Math.round(bytes / 1e6)} MB`;
 }
 

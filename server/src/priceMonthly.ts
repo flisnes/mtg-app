@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 import { createGunzip } from 'node:zlib';
 import type { FastifyBaseLogger } from 'fastify';
 import { config } from './config.js';
+import { startPeriodicJob, type PeriodicJob } from './jobs.js';
 import type { MonthlyRow, PriceStore } from './priceStore.js';
 
 // Monthly deep price history (v0.198.0). The daily archive reaches back to
@@ -26,7 +27,9 @@ import type { MonthlyRow, PriceStore } from './priceStore.js';
 
 const HEADER = '# mtg-monthly-prices v1';
 const BATCH = 2_000;
-const META_KEY = 'monthly_import';
+/** `meta` key holding the size:mtime stamp of the last imported file (read by the admin panel too). */
+export const MONTHLY_META_KEY = 'monthly_import';
+const META_KEY = MONTHLY_META_KEY;
 
 function cells(s: string | undefined): (number | null)[] | null {
   if (!s) return null;
@@ -75,23 +78,11 @@ export async function importMonthlyOnce(
 }
 
 /** Check for a new monthly file shortly after boot, then hourly. */
-export function startMonthlyImport(store: PriceStore, log: FastifyBaseLogger): () => void {
-  let running = false;
-  const tick = () => {
-    if (running) return;
-    running = true;
-    importMonthlyOnce(store, log)
-      .catch((err) => log.warn({ err: (err as Error).message }, 'monthly price import failed'))
-      .finally(() => {
-        running = false;
-      });
-  };
-  const startup = setTimeout(tick, config.priceArchiveDelayMs * 2);
-  startup.unref();
-  const interval = setInterval(tick, config.priceArchiveIntervalMs);
-  interval.unref();
-  return () => {
-    clearTimeout(startup);
-    clearInterval(interval);
-  };
+export function startMonthlyImport(store: PriceStore, log: FastifyBaseLogger): PeriodicJob {
+  return startPeriodicJob(
+    'monthly price import',
+    () => importMonthlyOnce(store, log),
+    { delayMs: config.priceArchiveDelayMs * 2, intervalMs: config.priceArchiveIntervalMs },
+    log,
+  );
 }

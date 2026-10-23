@@ -40,8 +40,11 @@ const LOG_EVERY = 25_000;
 // v2 (v0.198.0) adds the foil lanes. The v1 key is already set on the VM, so
 // a fresh key buys one more pass; splicing never overwrites a filled day, so
 // the nonfoil lanes it re-reads only fill holes.
-const DONE_KEY = 'backfill_mtgjson_v2';
-const ATTEMPTS_KEY = 'backfill_mtgjson_v2_attempts';
+/** `meta` keys: the day the backfill finished ('' = not yet) and how many runs it took. Read by the admin panel. */
+export const BACKFILL_DONE_KEY = 'backfill_mtgjson_v2';
+export const BACKFILL_ATTEMPTS_KEY = 'backfill_mtgjson_v2_attempts';
+const DONE_KEY = BACKFILL_DONE_KEY;
+const ATTEMPTS_KEY = BACKFILL_ATTEMPTS_KEY;
 
 /**
  * Give up after this many starts. The attempt is banked *before* the work, so

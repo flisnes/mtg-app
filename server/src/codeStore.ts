@@ -33,6 +33,11 @@ export abstract class CodeStore<T extends CodeEntry> {
     return this.entries.get(code);
   }
 
+  /** Every live entry (the admin panel's counts). */
+  values(): IterableIterator<T> {
+    return this.entries.values();
+  }
+
   /** Allocate a code, enforce the per-IP quota, insert the entry, arm its TTL. */
   protected register(ip: string, build: (code: string) => T): T {
     const count = this.ipCounts.get(ip) ?? 0;
